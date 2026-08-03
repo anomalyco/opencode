@@ -20,6 +20,7 @@ export type Locale =
   | "ru"
   | "uk"
   | "ar"
+  | "he"
   | "no"
   | "br"
   | "th"
@@ -49,6 +50,7 @@ const LOCALES: readonly Locale[] = [
   "uk",
   "bs",
   "ar",
+  "he",
   "no",
   "br",
   "th",
@@ -69,6 +71,7 @@ const INTL: Record<Locale, string> = {
   ru: "ru",
   uk: "uk",
   ar: "ar",
+  he: "he",
   no: "nb-NO",
   br: "pt-BR",
   th: "th",
@@ -90,6 +93,7 @@ const LABEL_KEY: Record<Locale, keyof Dictionary> = {
   ru: "language.ru",
   uk: "language.uk",
   ar: "language.ar",
+  he: "language.he",
   no: "language.no",
   br: "language.br",
   th: "language.th",
@@ -116,6 +120,7 @@ const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   ru: () => merge(import("@/i18n/ru"), import("@opencode-ai/ui/i18n/ru")),
   uk: () => merge(import("@/i18n/uk"), import("@opencode-ai/ui/i18n/uk")),
   ar: () => merge(import("@/i18n/ar"), import("@opencode-ai/ui/i18n/ar")),
+  he: () => merge(import("@/i18n/he"), import("@opencode-ai/ui/i18n/he")),
   no: () => merge(import("@/i18n/no"), import("@opencode-ai/ui/i18n/no")),
   br: () => merge(import("@/i18n/br"), import("@opencode-ai/ui/i18n/br")),
   th: () => merge(import("@/i18n/th"), import("@opencode-ai/ui/i18n/th")),
@@ -152,6 +157,7 @@ const localeMatchers: Array<{ locale: Locale; match: (language: string) => boole
   { locale: "ru", match: (language) => language.startsWith("ru") },
   { locale: "uk", match: (language) => language.startsWith("uk") },
   { locale: "ar", match: (language) => language.startsWith("ar") },
+  { locale: "he", match: (language) => language.startsWith("he") },
   {
     locale: "no",
     match: (language) => language.startsWith("no") || language.startsWith("nb") || language.startsWith("nn"),
@@ -225,6 +231,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document !== "object") return
       document.documentElement.lang = locale()
+      document.documentElement.dir = locale() === "ar" || locale() === "he" ? "rtl" : "ltr"
       document.cookie = cookie(locale())
     })
 

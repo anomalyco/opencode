@@ -1,0 +1,377 @@
+---
+title: מבוא
+description: התחל לעבוד עם OpenCode.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+import config from "../../../config.mjs"
+export const console = config.console
+
+[**OpenCode**](/) הוא סוכן קידוד AI בקוד פתוח. הוא זמין כממשק מבוסס טרמינל, אפליקציית שולחן עבודה, או הרחבה ל-IDE.
+
+![OpenCode TUI עם ערכת הנושא opencode](../../assets/lander/screenshot.png)
+
+בוא נתחיל.
+
+---
+
+#### דרישות מוקדמות
+
+כדי להשתמש ב-OpenCode בטרמינל שלך, תצטרך:
+
+1. אמולטור טרמינל מודרני כמו:
+   - [WezTerm](https://wezterm.org), חוצה פלטפורמות
+   - [Alacritty](https://alacritty.org), חוצה פלטפורמות
+   - [Ghostty](https://ghostty.org), Linux ו-macOS
+   - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux ו-macOS
+
+2. מפתחות API עבור ספקי ה-LLM שברצונך להשתמש בהם.
+
+---
+
+## התקנה
+
+הדרך הקלה ביותר להתקין את OpenCode היא באמצעות סקריפט ההתקנה.
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+אתה יכול גם להתקין אותו עם הפקודות הבאות:
+
+- **שימוש ב-Node.js**
+
+        <Tabs>
+
+      <TabItem label="npm">
+      ```bash
+      npm install -g opencode-ai
+      ```
+
+          </TabItem>
+
+        <TabItem label="Bun">
+        ```bash
+        bun install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="pnpm">
+        ```bash
+        pnpm install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="Yarn">
+        ```bash
+        yarn global add opencode-ai
+        ```
+
+      </TabItem>
+
+  </Tabs>
+
+- **שימוש ב-Homebrew ב-macOS ו-Linux**
+
+  ```bash
+  brew install anomalyco/tap/opencode
+  ```
+
+  > אנו ממליצים להשתמש ב-tap של OpenCode למהדורות העדכניות ביותר. הנוסחה הרשמית `brew install opencode` מתוחזקת על ידי צוות Homebrew ומתעדכנת לעיתים רחוקות יותר.
+
+- **התקנה ב-Arch Linux**
+
+  ```bash
+  sudo pacman -S opencode           # Arch Linux (יציב)
+  paru -S opencode-bin              # Arch Linux (העדכני מ-AUR)
+  ```
+
+#### Windows
+
+:::tip[מומלץ: השתמש ב-WSL]
+לחוויה הטובה ביותר ב-Windows, אנו ממליצים להשתמש ב-[Windows Subsystem for Linux (WSL)](/docs/windows-wsl). הוא מספק ביצועים טובים יותר ותאימות מלאה עם התכונות של OpenCode.
+:::
+
+- **שימוש ב-Chocolatey**
+
+  ```bash
+  choco install opencode
+  ```
+
+- **שימוש ב-Scoop**
+
+  ```bash
+  scoop install opencode
+  ```
+
+- **שימוש ב-NPM**
+
+  ```bash
+  npm install -g opencode-ai
+  ```
+
+- **שימוש ב-Mise**
+
+  ```bash
+  mise use -g github:anomalyco/opencode
+  ```
+
+- **שימוש ב-Docker**
+
+  ```bash
+  docker run -it --rm ghcr.io/anomalyco/opencode
+  ```
+
+תמיכה בהתקנת OpenCode ב-Windows באמצעות Bun נמצאת כרגע בפיתוח.
+
+אתה יכול גם להוריד את הקובץ הבינארי מ-[Releases](https://github.com/anomalyco/opencode/releases).
+
+---
+
+## הגדרה
+
+עם OpenCode אתה יכול להשתמש בכל ספק LLM על ידי הגדרת מפתחות ה-API שלהם.
+
+אם אתה חדש בשימוש בספקי LLM, אנו ממליצים להשתמש ב-[OpenCode Zen](/docs/zen).
+זה רשימה מאורגנת של מודלים שנבדקו ואומתו על ידי צוות OpenCode.
+
+1. הרץ את הפקודה `/connect` ב-TUI, בחר opencode, ועבור ל-[opencode.ai/auth](https://opencode.ai/auth).
+
+   ```txt
+   /connect
+   ```
+
+2. היכנס, הוסף את פרטי החיוב שלך, והעתק את מפתח ה-API שלך.
+
+3. הדבק את מפתח ה-API שלך.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+לחלופין, אתה יכול לבחור אחד מהספקים האחרים. [למד עוד](/docs/providers#directory).
+
+---
+
+## אתחול
+
+עכשיו שהגדרת ספק, אתה יכול לנווט לפרויקט שברצונך לעבוד עליו.
+
+```bash
+cd /path/to/project
+```
+
+והרץ את OpenCode.
+
+```bash
+opencode
+```
+
+לאחר מכן, אתחל את OpenCode עבור הפרויקט על ידי הרצת הפקודה הבאה.
+
+```bash frame="none"
+/init
+```
+
+זה יגרום ל-OpenCode לנתח את הפרויקט שלך וליצור קובץ `AGENTS.md` בשורש הפרויקט.
+
+:::tip
+עליך לבצע commit לקובץ `AGENTS.md` של הפרויקט שלך ל-Git.
+:::
+
+זה עוזר ל-OpenCode להבין את מבנה הפרויקט ואת דפוסי הקידוד בשימוש.
+
+---
+
+## שימוש
+
+עכשיו אתה מוכן להשתמש ב-OpenCode כדי לעבוד על הפרויקט שלך. אל תהסס לשאול אותו כל דבר!
+
+אם אתה חדש בשימוש בסוכן קידוד AI, הנה כמה דוגמאות שעשויות לעזור.
+
+---
+
+### שאל שאלות
+
+אתה יכול לבקש מ-OpenCode להסביר לך את בסיס הקוד.
+
+:::tip
+השתמש במקש `@` כדי לחפש קבצים בפרויקט בצורה מעורפלת.
+:::
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+איך האימות מטופל ב-@packages/functions/src/api/index.ts
+```
+
+זה מועיל אם יש חלק בבסיס הקוד שלא עבדת עליו.
+
+---
+
+### הוסף תכונות
+
+אתה יכול לבקש מ-OpenCode להוסיף תכונות חדשות לפרויקט שלך. אם כי אנו ממליצים קודם לבקש ממנו ליצור תוכנית.
+
+1. **צור תוכנית**
+
+   ל-OpenCode יש _מצב תכנון_ שמבטל את היכולת שלו לבצע שינויים
+   ובמקום זה מציע _איך_ הוא ייישם את התכונה.
+
+   עבור אליו באמצעות המקש **Tab**. תראה מחוון עבור זה בפינה הימנית התחתונה.
+
+   ```bash frame="none" title="עבור למצב תכנון"
+   <TAB>
+   ```
+
+   עכשיו בוא נתאר מה שאנחנו רוצים שהוא יעשה.
+
+   ```txt frame="none"
+   כאשר משתמש מוחק פתק, אנחנו רוצים לסמן אותו כמחוק במסד הנתונים.
+   לאחר מכן צור מסך שמציג את כל הפתקים שנמחקו לאחרונה.
+   ממסך זה, המשתמש יכול לשחזר פתק או למחוק אותו לצמיתות.
+   ```
+
+   אתה רוצה לתת ל-OpenCode מספיק פרטים כדי שהוא יבין מה אתה רוצה. זה עוזר
+   לדבר איתו כאילו אתה מדבר עם מפתח זוטר בצוות שלך.
+
+   :::tip
+   תן ל-OpenCode הרבה הקשר ודוגמאות כדי לעזור לו להבין מה
+   אתה רוצה.
+   :::
+
+2. **חזור על התוכנית**
+
+   ברגע שהוא נותן לך תוכנית, אתה יכול לתת לו משוב או להוסיף עוד פרטים.
+
+   ```txt frame="none"
+   אנחנו רוצים לעצב את המסך החדש הזה באמצעות עיצוב שהשתמשתי בו בעבר.
+   [תמונה #1] תסתכל על התמונה הזו והשתמש בה כהתייחסות.
+   ```
+
+   :::tip
+   גרור ושחרר תמונות לתוך הטרמינל כדי להוסיף אותן לפרומפט.
+   :::
+
+   OpenCode יכול לסרוק כל תמונה שתיתן לו ולהוסיף אותה לפרומפט. אתה יכול
+   לעשות זאת על ידי גרירה ושחרור של תמונה לתוך הטרמינל.
+
+3. **בנה את התכונה**
+
+   ברגע שאתה מרגיש בנוח עם התוכנית, חזור ל_מצב בנייה_ על ידי
+   לחיצה על המקש **Tab** שוב.
+
+   ```bash frame="none"
+   <TAB>
+   ```
+
+   ובקש ממנו לבצע את השינויים.
+
+   ```bash frame="none"
+   נשמע טוב! קדימה ובצע את השינויים.
+   ```
+
+---
+
+### בצע שינויים
+
+לשינויים פשוטים יותר, אתה יכול לבקש מ-OpenCode לבנות אותם ישירות
+מבלי לסקור את התוכנית קודם.
+
+```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
+אנחנו צריכים להוסיף אימות לנתיב /settings. תסתכל איך זה מטופל
+בנתיב /notes ב-@packages/functions/src/notes.ts ויישם
+את אותו לוגיקה ב-@packages/functions/src/settings.ts
+```
+
+אתה רוצה לוודא שאתה מספק כמות טובה של פרטים כדי ש-OpenCode יבצע את השינויים הנכונים.
+
+---
+
+### בטל שינויים
+
+נניח שאתה מבקש מ-OpenCode לבצע כמה שינויים.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+האם אתה יכול לבצע refactoring לפונקציה ב-@packages/functions/src/api/index.ts?
+```
+
+אבל אתה מבין שזה לא מה שרצית. אתה **יכול לבטל** את השינויים
+באמצעות הפקודה `/undo`.
+
+```bash frame="none"
+/undo
+```
+
+OpenCode עכשיו יחזור על השינויים שביצעת ויציג את ההודעה המקורית שלך שוב.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+האם אתה יכול לבצע refactoring לפונקציה ב-@packages/functions/src/api/index.ts?
+```
+
+מכאן אתה יכול לשנות את הפרומפט ולבקש מ-OpenCode לנסות שוב.
+
+:::tip
+אתה יכול להריץ `/undo` מספר פעמים כדי לבטל מספר שינויים.
+:::
+
+או אתה **יכול להתחיל מחדש** את הסשן על ידי הרצת הפקודה `/restart`.
+
+```bash frame="none"
+/restart
+```
+
+---
+
+### שלב משימות
+
+לפעמים אתה רוצה לשלב מספר משימות יחד. זה נקרא _שלבים_.
+
+:::tip
+זה מועיל כאשר יש לך מספר משימות שאתה רוצה לבצע בסדר מסוים.
+:::
+
+```txt frame="none"
+אני רוצה להוסיף תמיכה בגילוי אוטומטי של משתמשים חדשים. קודם תוסיף את הלוגיקה לגילוי משתמשים חדשים. לאחר מכן תוסיף את הלוגיקה לשליחת הודעות דוא\"ל למשתמשים חדשים. לבסוף, תוסיף את הלוגיקה לעקוב אחר משתמשים שנרשמו אך לא הפעילו את החשבון שלהם.
+```
+
+OpenCode יפרק את הבקשה שלך למשימות בנות ויבצע אותן בסדר הנכון.
+
+---
+
+### תיקון באגים
+
+אתה יכול לבקש מ-OpenCode לתקן באגים בפרויקט שלך.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+יש באג בפונקציה הזו. כאשר משתמש רושם כתובת דוא\"ל לא חוקית, הפונקציה מכניסה אותה למסד הנתונים בכל זאת. תתקן את זה.
+```
+
+---
+
+### הקפד על כללים
+
+OpenCode יכול לעזור לך לשמור על קוד נקי ומסודר על ידי הקפדה על כללים.
+
+:::tip
+אתה יכול להגדיר כללים בקובץ `AGENTS.md`.
+:::
+
+```txt frame="none"
+בדוק את הקוד ב-@packages/functions/src/api/index.ts וודא שהוא עוקב אחר הכללים ב-AGENTS.md
+```
+
+---
+
+## מה הלאה?
+
+כעת אתה יודע את היסודות של שימוש ב-OpenCode. הנה כמה דברים שאתה יכול לעשות להמשך:
+
+- [למד עוד על ספקים](/docs/providers)
+- [הכיר את הפקודות הזמינות](/docs/commands)
+- [התאם אישית את ההגדרות שלך](/docs/config)
+- [הוסף כלים מותאמים אישית](/docs/custom-tools)
+- [השתמש בכישורים](/docs/skills)

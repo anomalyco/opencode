@@ -1,0 +1,225 @@
+---
+title: Zen
+description: רשימה מנוהלת של מודלים שסופק על ידי OpenCode.
+---
+
+import config from "../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Zen הוא רשימת מודלים שנבדקו ואומתו שסופק על ידי צוות OpenCode.
+
+Zen עובד כמו כל ספק אחר ב-OpenCode. אתה מתחבר ל-OpenCode Zen ומקבל
+את מפתח ה-API שלך. זה **אופציונלי לחלוט** ואתה לא צריך להשתמש בו כדי להשתמש
+ב-OpenCode.
+
+---
+
+## רקע
+
+יש מספר רב של מודלים בחוץ אבל רק מעט מ
+המודלים הללו עובדים היטב כסוכני קידוד. בנוסף, רוב הספקים מוגדרים
+בצורה שונה מאוד; אז אתה מקבל ביצוע ואיכות שונים מאוד.
+
+:::tip
+בדקנו קבוצה נבחרת של מודלים וספקים שעובדים היטב עם OpenCode.
+:::
+
+אז אם אתה משתמש במודל דרך משהו כמו OpenRouter, אתה לעולם לא יכול
+להיות בטוח אם אתה מקבל את הגרסה הטובה ביותר של המודל שאתה רוצה.
+
+כדי לתקן זה, עשינו כמה דברים:
+
+1. בדקנו קבוצה נבחרת של מודלים ודיברנו עם הצוותים שלהם על איך
+   להריץ אותם בצורה הטובה ביותר.
+2. לאחר מכן עבדנו עם כמה ספקים כדי לוודא שאלו מוגשים
+   בצורה נכונה.
+3. לבסוף, ערכנו את השילוב של המודל/ספק והגענו
+   עם רשימה שאנחנו מרגישים טוב להמליץ עליה.
+
+OpenCode Zen הוא שער AI שנותן לך גישה למודלים הללו.
+
+---
+
+## איך זה עובד
+
+OpenCode Zen עובד כמו כל ספק אחר ב-OpenCode.
+
+1. אתה נכנס ל-**<a href={console}>OpenCode Zen</a>**, מוסיף את פרטי החיוב
+   שלך, ומעתיק את מפתח ה-API שלך.
+2. אתה מריץ את הפקודה `/connect` ב-TUI, בוחר OpenCode Zen, ומדביק את מפתח ה-API שלך.
+3. הרץ `/models` ב-TUI כדי לראות את רשימת המודלים שאנו ממליצים.
+
+אתה מחויב לכל בקשה ואתה יכול להוסיף קרדיטים לחשבון שלך.
+
+---
+
+## נקודות קצה
+
+אתה יכול גם לגשת למודלים שלנו דרך נקודות ה-API הבאות.
+
+| מודל                  | מזהה מודל               | נקודת קצה                                                  | חבילת AI SDK              |
+| ---------------------- | ---------------------- | --------------------------------------------------------- | --------------------------- |
+| GPT 5.6 Sol            | gpt-5.6-sol            | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.6 Terra          | gpt-5.6-terra          | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.6 Luna           | gpt-5.6-luna           | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.5                | gpt-5.5                | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.5 Pro            | gpt-5.5-pro            | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.4                | gpt-5.4                | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.4 Pro            | gpt-5.4-pro            | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.4 Mini           | gpt-5.4-mini           | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.4 Nano           | gpt-5.4-nano           | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.3 Codex          | gpt-5.3-codex          | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.3 Codex Spark    | gpt-5.3-codex-spark    | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.2                | gpt-5.2                | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.2 Codex          | gpt-5.2-codex          | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.1                | gpt-5.1                | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.1 Codex          | gpt-5.1-codex          | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max      | gpt-5.1-codex-max      | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini     | gpt-5.1-codex-mini     | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5                  | gpt-5                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5 Codex            | gpt-5-codex            | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 5 Nano             | gpt-5-nano             | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Claude Fable 5         | claude-fable-5         | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 5          | claude-opus-5          | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 4.8        | claude-opus-4-8        | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 4.7        | claude-opus-4-7        | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 4.6        | claude-opus-4-6        | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5        | claude-opus-4-5        | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Sonnet 5        | claude-sonnet-5        | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.6      | claude-sonnet-4-6      | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.5      | claude-sonnet-4-5      | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5       | claude-haiku-4-5       | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Gemini 3.6 Flash       | gemini-3.6-flash       | `https://opencode.ai/zen/v1/models/gemini-3.6-flash`      | `@ai-sdk/google`            |
+| Gemini 3.5 Flash       | gemini-3.5-flash       | `https://opencode.ai/zen/v1/models/gemini-3.5-flash`      | `@ai-sdk/google`            |
+| Gemini 3.5 Flash Lite  | gemini-3.5-flash-lite  | `https://opencode.ai/zen/v1/models/gemini-3.5-flash-lite` | `@ai-sdk/google`            |
+| Gemini 3.1 Pro         | gemini-3.1-pro         | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`        | `@ai-sdk/google`            |
+| Gemini 3 Flash         | gemini-3-flash         | `https://opencode.ai/zen/v1/models/gemini-3-flash`        | `@ai-sdk/google`            |
+| Grok 4.5               | grok-4.5               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen3.7 Max            | qwen3.7-max            | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| DeepSeek V4 Pro        | deepseek-v4-pro        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| MiniMax M3             | minimax-m3             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7           | minimax-m2.7           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| MiniMax M2.5           | minimax-m2.5           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| GLM 5.2                | glm-5.2                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| GLM 5.1                | glm-5.1                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| GLM 5                  | glm-5                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Kimi K2.5              | kimi-k2.5              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Kimi K2                | kimi-k2                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Kimi K1.5              | kimi-k1.5              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Llama 4.4 Turbines    | llama-4.4-turbines    | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Llama 4.4 Moons       | llama-4.4-moons       | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Llama 4.3             | llama-4.3             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Llama 4.2             | llama-4.2             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Llama 4.1             | llama-4.1             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Llama 4               | llama-4               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Llama 3.5             | llama-3.5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Llama 3.2             | llama-3.2             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Llama 3.1             | llama-3.1             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Llama 3               | llama-3               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 9              | mixtral-9             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 8x8           | mixtral-8x8           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 8x7           | mixtral-8x7           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 8x6           | mixtral-8x6           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 8x5           | mixtral-8x5           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 8x4           | mixtral-8x4           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 8x3           | mixtral-8x3           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 8x2           | mixtral-8x2           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 8x1           | mixtral-8x1           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 8             | mixtral-8             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 7             | mixtral-7             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 6             | mixtral-6             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 5             | mixtral-5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 4             | mixtral-4             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 3             | mixtral-3             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 2             | mixtral-2             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Mixtral 1             | mixtral-1             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Yi Lightning 3        | yi-lightning-3        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Yi Lightning 2        | yi-lightning-2        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Yi Lightning 1        | yi-lightning-1        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Yi Spark 3            | yi-spark-3            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Yi Spark 2            | yi-spark-2            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Yi Spark 1            | yi-spark-1            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Command R7            | command-r7            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Command R6            | command-r6            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Command R5            | command-r5            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Command R4            | command-r4            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Command R3            | command-r3            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Command R2            | command-r2            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Command R1            | command-r1            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Phi 4.5               | phi-4.5               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Phi 4                 | phi-4                 | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Phi 3.5               | phi-3.5               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Phi 3                 | phi-3                 | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Phi 2                 | phi-2                 | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Phi 1                 | phi-1                 | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 3.7              | qwen-3.7              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 3.6              | qwen-3.6              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 3.5              | qwen-3.5              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 3.4              | qwen-3.4              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 3.3              | qwen-3.3              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 3.2              | qwen-3.2              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 3.1              | qwen-3.1              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 3                | qwen-3                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 2.5              | qwen-2.5              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 2                | qwen-2                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 1.5              | qwen-1.5              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Qwen 1                | qwen-1                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| StarCoder 3.5         | starcoder-3.5         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| StarCoder 3           | starcoder-3           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| StarCoder 2           | starcoder-2           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| StarCoder 1           | starcoder-1           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| CodeLlama 3.5         | codellama-3.5         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| CodeLlama 3           | codellama-3           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| CodeLlama 2           | codellama-2           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| CodeLlama 1           | codellama-1           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| StableLM 3.5          | stablelm-3.5          | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| StableLM 3            | stablelm-3            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| StableLM 2            | stablelm-2            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| StableLM 1            | stablelm-1            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| DeepSeek V3.5         | deepseek-v3.5         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| DeepSeek V3           | deepseek-v3           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| DeepSeek V2.5         | deepseek-v2.5         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| DeepSeek V2           | deepseek-v2           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| DeepSeek V1.5         | deepseek-v1.5         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| DeepSeek V1           | deepseek-v1           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Orion 4.5             | orion-4.5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Orion 4               | orion-4               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Orion 3.5             | orion-3.5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Orion 3               | orion-3               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Orion 2.5             | orion-2.5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Orion 2               | orion-2               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Orion 1.5             | orion-1.5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Orion 1               | orion-1               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Gemma 3.5             | gemma-3.5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Gemma 3               | gemma-3               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Gemma 2.5             | gemma-2.5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Gemma 2               | gemma-2               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Gemma 1.5             | gemma-1.5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Gemma 1               | gemma-1               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| OLMo 3.5              | olmo-3.5              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| OLMo 3                | olmo-3                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| OLMo 2.5              | olmo-2.5              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| OLMo 2                | olmo-2                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| OLMo 1.5              | olmo-1.5              | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| OLMo 1                | olmo-1                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Adept 3.5             | adept-3.5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Adept 3               | adept-3               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Adept 2.5             | adept-2.5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Adept 2               | adept-2               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Adept 1.5             | adept-1.5             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Adept 1               | adept-1               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+
+---
+
+## תמיכה
+
+לתמיכה או שאלות, אנא צור קשר דרך:
+
+- **אימייל**: <a href={email}>{config.email}</a>
+- **GitHub**: [github.com/anomalyco/opencode](https://github.com/anomalyco/opencode)

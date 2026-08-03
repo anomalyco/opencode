@@ -13,6 +13,7 @@ export const LOCALES = [
   "ru",
   "uk",
   "ar",
+  "he",
   "no",
   "br",
   "th",
@@ -44,6 +45,7 @@ const LABEL = {
   ru: "Русский",
   uk: "Українська",
   ar: "العربية",
+  he: "עברית",
   no: "Norsk",
   br: "Português (Brasil)",
   th: "ไทย",
@@ -65,6 +67,7 @@ const TAG = {
   ru: "ru",
   uk: "uk",
   ar: "ar",
+  he: "he",
   no: "no",
   br: "pt-BR",
   th: "th",
@@ -86,6 +89,7 @@ const DOCS = {
   ru: "ru",
   uk: "uk",
   ar: "ar",
+  he: "he",
   no: "nb",
   br: "pt-br",
   th: "th",
@@ -99,6 +103,7 @@ const DOCS_SEGMENT = new Set([
   "de",
   "es",
   "fr",
+  "he",
   "it",
   "ja",
   "ko",
@@ -120,6 +125,7 @@ const DOCS_LOCALE = {
   en: "en",
   es: "es",
   fr: "fr",
+  he: "he",
   it: "it",
   ja: "ja",
   ko: "ko",
@@ -223,7 +229,7 @@ export function tag(locale: Locale) {
 }
 
 export function dir(locale: Locale) {
-  if (locale === "ar") return "rtl"
+  if (locale === "ar" || locale === "he") return "rtl"
   return "ltr"
 }
 
@@ -247,6 +253,7 @@ function match(input: string): Locale | null {
   if (value.startsWith("ru")) return "ru"
   if (value.startsWith("uk")) return "uk"
   if (value.startsWith("ar")) return "ar"
+  if (value.startsWith("he")) return "he"
   if (value.startsWith("tr")) return "tr"
   if (value.startsWith("th")) return "th"
   if (value.startsWith("pt")) return "br"

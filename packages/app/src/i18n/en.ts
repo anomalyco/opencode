@@ -502,6 +502,7 @@ export const dict = {
   "language.pl": "Polski",
   "language.ru": "Русский",
   "language.ar": "العربية",
+  "language.he": "Hebrew",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
   "language.bs": "Bosanski",

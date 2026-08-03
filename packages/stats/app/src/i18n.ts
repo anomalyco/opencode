@@ -5,6 +5,7 @@ import { dict as da } from "./i18n/da"
 import { dict as de } from "./i18n/de"
 import { dict as es } from "./i18n/es"
 import { dict as fr } from "./i18n/fr"
+import { dict as he } from "./i18n/he"
 import { dict as it } from "./i18n/it"
 import { dict as ja } from "./i18n/ja"
 import { dict as ko } from "./i18n/ko"
@@ -263,6 +264,7 @@ const dictionaries = {
   en,
   es,
   fr,
+  he,
   it,
   ja,
   ko,
