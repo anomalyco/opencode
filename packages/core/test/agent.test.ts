@@ -183,6 +183,11 @@ describe("Agent", () => {
       ).toBe("allow")
       expect(Permission.evaluate("external_directory", path.join(global.config, "*"), permissions).effect).toBe("allow")
       expect(Permission.evaluate("external_directory", path.join(global.tmp, "*"), permissions).effect).toBe("allow")
+      const explore = yield* agent.get(Agent.ID.make("explore"))
+      expect(Permission.evaluate("read", ".env", explore?.permissions ?? []).effect).toBe("ask")
+      expect(Permission.evaluate("read", ".env.local", explore?.permissions ?? []).effect).toBe("ask")
+      expect(Permission.evaluate("read", ".env.example", explore?.permissions ?? []).effect).toBe("allow")
+      expect(Permission.evaluate("read", "src/index.ts", explore?.permissions ?? []).effect).toBe("allow")
       for (const item of agents) {
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }
