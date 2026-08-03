@@ -4,7 +4,8 @@ import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import type { Content } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Cause, Config, Context, Effect, Layer, Result } from "effect"
+import { Cause, Config, Context, Effect, Layer, Result, Stream } from "effect"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app"
 import { Model } from "../model"
@@ -48,9 +49,7 @@ interface Prepared {
    * One request-scoped execution operation. Unknown, hook-removed, and
    * step-limit-violating calls fail individually through the same seam.
    */
-  readonly executeTool: (
-    input: Parameters<Tool.Snapshot["execute"]>[0],
-  ) => Effect.Effect<Tool.Result, ExecuteError>
+  readonly executeTool: (input: Parameters<Tool.Snapshot["execute"]>[0]) => Effect.Effect<Tool.Result, ExecuteError>
   /** True when this request is the final Step; violating calls are rejected and no continuation follows. */
   readonly stepLimitReached: boolean
 }
@@ -137,8 +136,7 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
           result: {
             ...part.result,
             value: part.result.value.map((item: Content) => {
-              if (item.type !== "file" || !isImage(item.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET)
-                return item
+              if (item.type !== "file" || !isImage(item.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET) return item
               removed += Buffer.byteLength(item.uri)
               return { type: "text" as const, text: IMAGE_REMOVED }
             }),
@@ -204,9 +202,7 @@ export const layer = Layer.effect(
       })
       const hookedTools = Object.entries(contextEvent.tools).flatMap(([name, tool]) => {
         const registered = toolsByName.get(name)
-        return registered
-          ? [{ ...registered, description: tool.description, inputSchema: tool.input }]
-          : []
+        return registered ? [{ ...registered, description: tool.description, inputSchema: tool.input }] : []
       })
       const request = LLM.request({
         model,
@@ -220,24 +216,37 @@ export const layer = Layer.effect(
         toolChoice: stepLimitReached ? "none" : undefined,
       })
       const options: StreamOptions = {
-        transform: (request) =>
-          hooks
-            .trigger("session", "request", {
+        http: (request, handler) =>
+          Effect.gen(function* () {
+            let sent = request
+            const origins = new WeakMap<Response, HttpClientRequest.HttpClientRequest>()
+            const web = yield* HttpClientRequest.toWeb(request)
+            const event = yield* hooks.trigger("session", "http", {
               sessionID: session.id,
               agent: agent.id,
               model: resolved.ref,
-              ...request,
-            })
-            .pipe(
-              Effect.tap((event) =>
-                Effect.sync(() => {
-                  request.url = event.url
-                  request.headers = event.headers
-                  request.body = event.body
+              request: (input) =>
+                Effect.gen(function* () {
+                  sent = HttpClientRequest.fromWeb(input)
+                  if (input.body)
+                    sent = HttpClientRequest.bodyUint8Array(
+                      sent,
+                      new Uint8Array(yield* Effect.promise(() => input.arrayBuffer())),
+                      input.headers.get("content-type") ?? undefined,
+                    )
+                  const response = yield* handler(sent)
+                  const body = [204, 205, 304].includes(response.status)
+                    ? null
+                    : yield* Stream.toReadableStreamEffect(response.stream)
+                  const output = new Response(body, { status: response.status, headers: response.headers })
+                  origins.set(output, sent)
+                  return output
                 }),
-              ),
-              Effect.asVoid,
-            ),
+            })
+            const response = yield* event.request(web)
+            const origin = origins.get(response) ?? sent
+            return HttpClientResponse.fromWeb(origin, response)
+          }).pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause))))),
       }
       if (promptCacheSnapshots) {
         const current = PromptCacheDiagnostics.snapshot(request)
@@ -257,8 +266,7 @@ export const layer = Layer.effect(
         )
       }
       const executeTool: Prepared["executeTool"] = (executeInput) => {
-        if (stepLimitReached)
-          return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
+        if (stepLimitReached) return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
         if (toolsByName.has(executeInput.call.name) && !Object.hasOwn(contextEvent.tools, executeInput.call.name))
           return new Tool.Error({ message: `Tool is not available for this request: ${executeInput.call.name}` })
         return tools

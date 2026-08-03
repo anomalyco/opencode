@@ -246,7 +246,8 @@ mutable fields:
 | ------------------------------------------- | ------------------------------------------------------------------------------ |
 | `ctx.aisdk.hook("sdk", callback)`           | `sdk`, after inspecting `model`, `package`, and `options`                      |
 | `ctx.aisdk.hook("language", callback)`      | `language`, after inspecting `model`, `sdk`, and `options`                     |
-| `ctx.session.hook("request", callback)`     | `system`, `messages`, and the `tools` record immediately before model dispatch |
+| `ctx.session.hook("context", callback)`     | `system`, `messages`, and the `tools` record immediately before model dispatch |
+| `ctx.session.hook("http", callback)`        | `request`, wrapping the model's HTTP request and response                       |
 | `ctx.tool.hook("execute.before", callback)` | `input`, before the selected tool executes                                     |
 | `ctx.tool.hook("execute.after", callback)`  | Terminal `result` on success or `error` on failure                            |
 
@@ -259,7 +260,7 @@ import { Plugin } from "@opencode-ai/plugin"
 export default Plugin.define({
   id: "acme.guards",
   setup: async (ctx) => {
-    await ctx.session.hook("request", (event) => {
+    await ctx.session.hook("context", (event) => {
       delete event.tools.write
     })
 

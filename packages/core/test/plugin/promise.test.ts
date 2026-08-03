@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Message, SystemPart } from "@opencode-ai/ai"
-import { DateTime, Effect, Schema } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Schema } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Model } from "@opencode-ai/core/model"
@@ -148,7 +148,9 @@ describe("fromPromise", () => {
             expect((await ctx.agent.get({ agentID: Agent.ID.make("reviewer") })).data).toMatchObject({
               description: "Reviews code",
             })
-            await expect(ctx.agent.get({ agentID: Agent.ID.make("missing") })).rejects.toThrow("Agent not found: missing")
+            await expect(ctx.agent.get({ agentID: Agent.ID.make("missing") })).rejects.toThrow(
+              "Agent not found: missing",
+            )
             const models = (await ctx.catalog.model.list()).data
             expect(models.find((model) => model.providerID === "test" && model.id === "alias")).toMatchObject({
               modelID: "gpt-5",
@@ -218,6 +220,77 @@ describe("fromPromise", () => {
 
       expect(event.system.map((part) => part.text)).toEqual(["Initial", "Promise hook"])
       expect(event.tools).toEqual({})
+    }),
+  )
+
+  it.effect("adapts promise session HTTP hooks", () =>
+    Effect.gen(function* () {
+      const plugin = yield* Plugin.Service
+      const hooks = yield* PluginHooks.Service
+      const host = yield* PluginHost.make(plugin)
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-session-http",
+          setup: async (ctx) => {
+            await ctx.session.hook("http", (event) => {
+              const request = event.request
+              event.request = async (input) => {
+                const response = await request(new Request(input, { headers: { "x-hook": "promise" } }))
+                return new Response(`${await response.text()}-response`)
+              }
+            })
+          },
+        }),
+      ).effect(host)
+      const event: SessionHooks["http"] = {
+        sessionID: Session.ID.make("ses_promise_session_http"),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("model") }),
+        request: (input) => Effect.succeed(new Response(input.headers.get("x-hook") ?? "missing")),
+      }
+
+      yield* hooks.trigger("session", "http", event)
+      const response = yield* event.request(new Request("https://provider.test"))
+
+      expect(yield* Effect.promise(() => response.text())).toBe("promise-response")
+    }),
+  )
+
+  it.effect("interrupts the Effect request through a promise session HTTP hook", () =>
+    Effect.gen(function* () {
+      const plugin = yield* Plugin.Service
+      const hooks = yield* PluginHooks.Service
+      const host = yield* PluginHost.make(plugin)
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-session-http-interrupt",
+          setup: async (ctx) => {
+            await ctx.session.hook("http", (event) => {
+              const request = event.request
+              event.request = (input) => request(input)
+            })
+          },
+        }),
+      ).effect(host)
+      const started = yield* Deferred.make<void>()
+      const interrupted = yield* Deferred.make<void>()
+      const event: SessionHooks["http"] = {
+        sessionID: Session.ID.make("ses_promise_session_http_interrupt"),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("model") }),
+        request: () =>
+          Deferred.succeed(started, undefined).pipe(
+            Effect.andThen(Effect.never),
+            Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
+          ),
+      }
+
+      yield* hooks.trigger("session", "http", event)
+      const fiber = yield* event.request(new Request("https://provider.test")).pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      yield* Fiber.interrupt(fiber)
+
+      expect(yield* Deferred.isDone(interrupted)).toBeTrue()
     }),
   )
 
@@ -315,19 +388,17 @@ describe("fromPromise", () => {
         id: "promise-tool",
         setup: async (ctx) => {
           await ctx.tool.transform((tools) => {
-            tools.add(
-              {
-                name: "hello",
-                options: { codemode: false },
-                description: "Hello",
-                input: Schema.Struct({ name: Schema.String }),
-                output: Schema.String,
-                execute: async ({ name }, context) => {
-                  await context.progress({ phase: "greeting" })
-                  return { output: `Hello, ${name}!` }
-                },
+            tools.add({
+              name: "hello",
+              options: { codemode: false },
+              description: "Hello",
+              input: Schema.Struct({ name: Schema.String }),
+              output: Schema.String,
+              execute: async ({ name }, context) => {
+                await context.progress({ phase: "greeting" })
+                return { output: `Hello, ${name}!` }
               },
-            )
+            })
           })
         },
       })
