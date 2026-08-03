@@ -134,6 +134,13 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
     }
   })
   const v2RightState = createMemo<TitlebarV2RightState>(() => ({
+    browserPreview: {
+      visible: platform.platform === "desktop" && !!platform.browserPreview && layout.route().type === "session",
+      opened: layout.browserPreview.opened(),
+      label: language.t("command.browserPreview.toggle"),
+      keybind: command.keybindParts("browserPreview.toggle"),
+      onToggle: () => layout.browserPreview.toggle(),
+    },
     update: updateState(),
   }))
 
@@ -669,6 +676,13 @@ type TitlebarUpdatePillState = {
 }
 
 type TitlebarV2RightState = {
+  browserPreview: {
+    visible: boolean
+    opened: boolean
+    label: string
+    keybind: string[]
+    onToggle: () => void
+  }
   update: TitlebarUpdatePillState
 }
 
@@ -677,6 +691,33 @@ function TitlebarV2Right(props: { state: TitlebarV2RightState }) {
     <div class="relative z-20 flex shrink-0 items-center justify-end gap-0 overflow-visible">
       <Show when={props.state.update.visible}>
         <TitlebarUpdateIconButton state={props.state.update} />
+      </Show>
+      <Show when={props.state.browserPreview.visible}>
+        <TooltipV2
+          class="shrink-0"
+          placement="bottom"
+          value={
+            <>
+              {props.state.browserPreview.label}
+              <Show when={props.state.browserPreview.keybind.length > 0}>
+                <KeybindV2 keys={props.state.browserPreview.keybind} variant="neutral" />
+              </Show>
+            </>
+          }
+        >
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!w-9 shrink-0"
+            state={props.state.browserPreview.opened ? "pressed" : undefined}
+            onClick={props.state.browserPreview.onToggle}
+            aria-label={props.state.browserPreview.label}
+            aria-expanded={props.state.browserPreview.opened}
+            aria-controls="browser-preview-panel"
+            icon={<IconV2 name="browser" />}
+          />
+        </TooltipV2>
       </Show>
       <div id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
     </div>

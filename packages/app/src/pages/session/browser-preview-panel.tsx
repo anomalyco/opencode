@@ -10,6 +10,7 @@ import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
+import { useParams } from "@solidjs/router"
 import { createSizing } from "./helpers"
 
 const emptyState: BrowserPreviewState = { visible: false, tabs: [] }
@@ -32,6 +33,7 @@ export function BrowserPreviewPanel() {
   const language = useLanguage()
   const settings = useSettings()
   const prompt = usePrompt()
+  const params = useParams<{ id: string }>()
   const size = createSizing()
   const preview = platform.browserPreview
   const opened = createMemo(() => !!preview && layout.browserPreview.opened())
@@ -174,30 +176,33 @@ export function BrowserPreviewPanel() {
   }
 
   createEffect(
-    on(opened, (isOpen) => {
-      const currentRevision = ++lifecycleRevision
-      if (!preview) return
-      if (!isOpen) {
-        if (viewport) resizeObserver?.unobserve(viewport)
-        viewport = undefined
-        setState(emptyState)
-        setArtifact()
-        pickerRevision += 1
-        setPicking(false)
-        return
-      }
-      void preview
-        .show(layout.browserPreview.url())
-        .then((next) => {
-          if (currentRevision !== lifecycleRevision || !opened()) return
-          setState(next)
-          syncBounds()
-        })
-        .catch((error) => {
-          if (currentRevision !== lifecycleRevision || !opened()) return
-          fail(error)
-        })
-    }),
+    on(
+      () => ({ isOpen: opened(), sessionID: params.id }),
+      ({ isOpen, sessionID }) => {
+        const currentRevision = ++lifecycleRevision
+        if (!preview || !sessionID) return
+        if (!isOpen) {
+          if (viewport) resizeObserver?.unobserve(viewport)
+          viewport = undefined
+          setState(emptyState)
+          setArtifact()
+          pickerRevision += 1
+          setPicking(false)
+          return
+        }
+        void preview
+          .show(sessionID, layout.browserPreview.url())
+          .then((next) => {
+            if (currentRevision !== lifecycleRevision || !opened() || sessionID !== params.id) return
+            setState(next)
+            syncBounds()
+          })
+          .catch((error) => {
+            if (currentRevision !== lifecycleRevision || !opened() || sessionID !== params.id) return
+            fail(error)
+          })
+      },
+    ),
   )
 
   createEffect(() => {

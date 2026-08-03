@@ -118,7 +118,7 @@ const api: ElectronAPI = {
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
   browserPreview: {
-    show: (url) => ipcRenderer.invoke("browser-preview-show", url),
+    show: (sessionID, url) => ipcRenderer.invoke("browser-preview-show", sessionID, url),
     hide: () => ipcRenderer.invoke("browser-preview-hide"),
     setBounds: (bounds) => ipcRenderer.invoke("browser-preview-set-bounds", bounds),
     command: (command) => ipcRenderer.invoke("browser-preview-command", command),

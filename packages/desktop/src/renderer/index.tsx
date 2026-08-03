@@ -308,7 +308,7 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     },
 
     browserPreview: {
-      show: (url) => window.api.browserPreview.show(url),
+      show: (sessionID, url) => window.api.browserPreview.show(sessionID, url),
       hide: () => window.api.browserPreview.hide(),
       setBounds: (bounds) => window.api.browserPreview.setBounds(bounds),
       command: (command) => window.api.browserPreview.command(command),

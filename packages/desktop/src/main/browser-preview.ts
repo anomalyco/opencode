@@ -8,9 +8,14 @@ import type {
   BrowserPreviewState,
   BrowserPreviewTab,
 } from "@opencode-ai/app"
-import { normalizePreviewBounds, normalizePreviewElement, normalizePreviewUrl } from "./browser-preview-policy"
+import {
+  normalizePreviewBounds,
+  normalizePreviewElement,
+  normalizePreviewUrl,
+  resolvePreviewNavigation,
+} from "./browser-preview-policy"
 
-const DEFAULT_URL = "http://localhost:3000/"
+const DEFAULT_URL = "https://www.google.com/"
 const MAX_TABS = 5
 const AUTO_REFRESH_MS = 2_000
 const MAX_DOM_BYTES = 2 * 1024 * 1024
@@ -147,6 +152,16 @@ const ELEMENT_PICKER_SCRIPT = String.raw`(() => new Promise((resolve) => {
 const CANCEL_ELEMENT_PICKER_SCRIPT = `globalThis.__opencodeBrowserPreviewPicker?.cancel?.()`
 
 type ConsoleEntry = { level: number; message: string; source: string; line: number }
+type BrowserPreviewWindow = {
+  contentView: {
+    children: readonly unknown[]
+    addChildView(view: WebContentsView): void
+    removeChildView(view: WebContentsView): void
+  }
+  webContents: Pick<WebContents, "send" | "isDestroyed" | "getZoomFactor">
+  getContentBounds(): Electron.Rectangle
+  isDestroyed(): boolean
+}
 type Tab = {
   state: BrowserPreviewTab
   view: WebContentsView
@@ -160,7 +175,12 @@ type Tab = {
   disposers: (() => void)[]
 }
 
-const controllers = new WeakMap<BrowserWindow, BrowserPreviewController>()
+type BrowserPreviewControllers = {
+  active?: BrowserPreviewController
+  sessions: Map<string, BrowserPreviewController>
+}
+
+const controllers = new WeakMap<BrowserWindow, BrowserPreviewControllers>()
 const controllerByContents = new Map<number, BrowserPreviewController>()
 
 function sanitizeErrorMessage(value: string) {
@@ -198,7 +218,10 @@ export class BrowserPreviewController {
   private transition = Promise.resolve()
   private retired = false
 
-  constructor(private readonly win: BrowserWindow) {
+  constructor(
+    private readonly win: BrowserPreviewWindow,
+    private readonly isActive = () => true,
+  ) {
     this.previewSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
     this.previewSession.setPermissionCheckHandler(() => false)
     this.previewSession.on("will-download", (event) => event.preventDefault())
@@ -226,6 +249,11 @@ export class BrowserPreviewController {
 
   async hide() {
     await this.lifecycle(() => this.destroyAll())
+  }
+
+  deactivate() {
+    this.visible = false
+    this.detachActive()
   }
 
   setBounds(input: BrowserPreviewBounds) {
@@ -263,7 +291,7 @@ export class BrowserPreviewController {
         await this.closeTab(command.tabId)
         return { type: "none" }
       case "activate-tab":
-        this.activate(command.tabId)
+        await this.activate(command.tabId)
         return { type: "none" }
     }
 
@@ -280,11 +308,11 @@ export class BrowserPreviewController {
         if (tab.view.webContents.canGoForward()) tab.view.webContents.goForward()
         break
       case "reload":
-        this.invalidateInspection(tab)
+        void this.invalidateInspection(tab)
         tab.view.webContents.reload()
         break
       case "hard-reload":
-        this.invalidateInspection(tab)
+        void this.invalidateInspection(tab)
         tab.view.webContents.reloadIgnoringCache()
         break
       case "set-auto-refresh":
@@ -374,7 +402,7 @@ export class BrowserPreviewController {
   }
 
   private async createTab(rawUrl: string) {
-    const url = normalizePreviewUrl(rawUrl)
+    const url = resolvePreviewNavigation(rawUrl)
     const id = randomUUID()
     const view = new WebContentsView({
       webPreferences: {
@@ -410,7 +438,7 @@ export class BrowserPreviewController {
     this.tabs.set(id, tab)
     controllerByContents.set(view.webContents.id, this)
     this.wireTab(tab)
-    this.activate(id)
+    await this.activate(id)
     await this.navigate(tab, url)
   }
 
@@ -433,7 +461,7 @@ export class BrowserPreviewController {
     const didStartLoading = () => {
       tab.state.loading = true
       tab.state.error = undefined
-      this.invalidateInspection(tab)
+      void this.invalidateInspection(tab)
       this.update(tab)
     }
     const didStopLoading = () => {
@@ -450,7 +478,7 @@ export class BrowserPreviewController {
     }
     const didNavigateInPage = (_event: Electron.Event, url: string, isMainFrame: boolean) => {
       if (!isMainFrame) return
-      this.invalidateInspection(tab)
+      void this.invalidateInspection(tab)
       didNavigate(_event, url)
     }
     const pageTitleUpdated = (event: Electron.Event, title: string) => {
@@ -507,10 +535,10 @@ export class BrowserPreviewController {
   }
 
   private async navigate(tab: Tab, rawUrl: string) {
-    const url = normalizePreviewUrl(rawUrl)
+    const url = resolvePreviewNavigation(rawUrl)
     const navigationRevision = ++tab.navigationRevision
     tab.state.error = undefined
-    this.invalidateInspection(tab)
+    await this.invalidateInspection(tab)
     await tab.view.webContents.loadURL(url).catch((error) => {
       if (navigationRevision !== tab.navigationRevision || String(error).includes("ERR_ABORTED")) return
       tab.state.loading = false
@@ -520,11 +548,11 @@ export class BrowserPreviewController {
     })
   }
 
-  private activate(id: string) {
+  private async activate(id: string) {
     const next = this.tabs.get(id)
     if (!next) throw new Error("Browser Preview tab not found")
     const current = this.active()
-    if (current && current !== next) void this.cancelElementPicker(current)
+    if (current && current !== next) await this.cancelElementPicker(current)
     this.detachActive()
     this.activeTabId = id
     this.attachActive()
@@ -551,7 +579,7 @@ export class BrowserPreviewController {
     if (tab.refreshTimer) clearInterval(tab.refreshTimer)
     tab.disposers.forEach((dispose) => dispose())
     controllerByContents.delete(tab.view.webContents.id)
-    this.invalidateInspection(tab)
+    void this.invalidateInspection(tab)
     if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
   }
 
@@ -583,7 +611,7 @@ export class BrowserPreviewController {
     if (!enabled) return
     tab.refreshTimer = setInterval(() => {
       if (!this.visible || this.activeTabId !== tab.state.id || tab.state.loading) return
-      this.invalidateInspection(tab)
+      void this.invalidateInspection(tab)
       tab.view.webContents.reload()
     }, AUTO_REFRESH_MS)
   }
@@ -626,9 +654,10 @@ export class BrowserPreviewController {
 
   private invalidateInspection(tab: Tab) {
     tab.revision += 1
-    void this.cancelElementPicker(tab)
+    const cancellation = this.cancelElementPicker(tab)
     tab.consoleEntries = []
     tab.consoleBytes = 0
+    return cancellation
   }
 
   private async inspect<T extends BrowserPreviewResult>(tab: Tab, operation: () => Promise<T>): Promise<T> {
@@ -714,7 +743,7 @@ export class BrowserPreviewController {
   }
 
   private emit() {
-    if (this.retired || this.win.isDestroyed() || this.win.webContents.isDestroyed()) return
+    if (this.retired || !this.isActive() || this.win.isDestroyed() || this.win.webContents.isDestroyed()) return
     this.win.webContents.send("browser-preview-state", this.state())
   }
 
@@ -724,19 +753,31 @@ export class BrowserPreviewController {
   }
 }
 
-export function getBrowserPreview(win: BrowserWindow) {
-  const current = controllers.get(win)
-  if (current) return current
-  const controller = new BrowserPreviewController(win)
-  controllers.set(win, controller)
+export function getBrowserPreview(win: BrowserWindow, sessionID?: string) {
+  let registry = controllers.get(win)
+  if (!registry) {
+    registry = { sessions: new Map() }
+    controllers.set(win, registry)
+  }
+  if (!sessionID && registry.active) return registry.active
+  sessionID ??= "default"
+  let controller = registry.sessions.get(sessionID)
+  if (!controller) {
+    controller = new BrowserPreviewController(win, () => registry?.active === controller)
+    registry.sessions.set(sessionID, controller)
+  }
+  if (registry.active !== controller) {
+    registry.active?.deactivate()
+    registry.active = controller
+  }
   return controller
 }
 
 export async function destroyBrowserPreview(win: BrowserWindow) {
-  const controller = controllers.get(win)
-  if (!controller) return
+  const registry = controllers.get(win)
+  if (!registry) return
   controllers.delete(win)
-  await controller.retire()
+  await Promise.all([...registry.sessions.values()].map((controller) => controller.retire()))
 }
 
 export function rejectBrowserPreviewCertificate(contents: WebContents) {

@@ -65,6 +65,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M4.05559 9.38889H0.500007C0.500007 9.38889 0.500017 8.59298 0.500017 7.61112V2.27778C0.500017 1.29594 0.500102 0.5 0.500102 0.5H13.3889C13.3889 0.5 13.3889 1.29594 13.3889 2.27778V7.61112C13.3889 8.59298 13.3889 9.38889 13.3889 9.38889H9.83336M4.05559 9.38889V11.6111H6.94448H9.83336V9.38889M4.05559 9.38889H9.83336" transform="translate(1.05556 1.94444)" stroke="currentColor"/>`,
   },
+  browser: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 5.25H14.5M4 3.5H4.01M6 3.5H6.01M8 3.5H8.01" stroke="currentColor" stroke-linecap="square"/><rect x="1.5" y="2" width="13" height="12" stroke="currentColor"/>`,
+  },
   "workspace-new": {
     viewBox: "0 0 16 16",
     body: `<path d="M2 10.7578V14.0011H5.24324M13.9991 5.24324V2H10.7559M13.9991 10.7578V14.0011H10.7559M2 5.24324V2H5.24324" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/><path d="M8 4.5V11.5M4.5 8H11.5" stroke="currentColor" stroke-linejoin="round"/>`,

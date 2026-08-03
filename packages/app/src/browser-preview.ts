@@ -74,7 +74,7 @@ export type BrowserPreviewResult =
   | { type: "element"; element: BrowserPreviewElement }
 
 export type BrowserPreviewPlatform = {
-  show(url?: string): Promise<BrowserPreviewState>
+  show(sessionID: string, url?: string): Promise<BrowserPreviewState>
   hide(): Promise<void>
   setBounds(bounds: BrowserPreviewBounds): Promise<void>
   command(command: BrowserPreviewCommand): Promise<BrowserPreviewResult>

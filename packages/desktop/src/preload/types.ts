@@ -107,7 +107,7 @@ export type ElectronAPI = {
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
   browserPreview: {
-    show: (url?: string) => Promise<BrowserPreviewState>
+    show: (sessionID: string, url?: string) => Promise<BrowserPreviewState>
     hide: () => Promise<void>
     setBounds: (bounds: BrowserPreviewBounds) => Promise<void>
     command: (command: BrowserPreviewCommand) => Promise<BrowserPreviewResult>

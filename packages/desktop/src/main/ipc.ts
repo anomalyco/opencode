@@ -320,10 +320,12 @@ export function registerIpcHandlers(deps: Deps) {
       relaunch: deps.relaunch,
     })
   })
-  ipcMain.handle("browser-preview-show", (event: IpcMainInvokeEvent, url?: string) => {
+  ipcMain.handle("browser-preview-show", (event: IpcMainInvokeEvent, sessionID: string, url?: string) => {
+    if (typeof sessionID !== "string" || sessionID.length === 0 || sessionID.length > 256)
+      throw new Error("Invalid Browser Preview session")
     if (url !== undefined && (typeof url !== "string" || url.length > 2048))
       throw new Error("Invalid Browser Preview URL")
-    return getBrowserPreview(trustedWindow(event)).show(url)
+    return getBrowserPreview(trustedWindow(event), sessionID).show(url)
   })
   ipcMain.handle("browser-preview-hide", async (event: IpcMainInvokeEvent) => {
     await destroyBrowserPreview(trustedWindow(event))

@@ -42,6 +42,7 @@ Hiding, collapsing, toggling off, or closing the panel destroys every tab and cl
 ## UX Contract
 
 - Routine navigation remains in the primary toolbar; destructive and diagnostic actions live in an overflow menu.
+- New previews open Google, and address-bar text that is not a recognizable web address becomes a Google search.
 - The panel action is labeled `Hide & reset preview` so teardown is not mistaken for a non-destructive hide.
 - Auto-refresh has a visible active state and applies only to the current tab.
 - Failure states distinguish unreachable servers, blocked URLs, TLS failures, and renderer crashes.

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { normalizePreviewBounds, normalizePreviewElement, normalizePreviewUrl } from "./browser-preview-policy"
+import {
+  normalizePreviewBounds,
+  normalizePreviewElement,
+  normalizePreviewUrl,
+  resolvePreviewNavigation,
+} from "./browser-preview-policy"
 
 describe("normalizePreviewUrl", () => {
   test("accepts local and public HTTP and HTTPS URLs", () => {
@@ -14,6 +19,20 @@ describe("normalizePreviewUrl", () => {
     expect(() => normalizePreviewUrl("http://user:pass@localhost:3000")).toThrow("credentials")
     expect(() => normalizePreviewUrl("javascript:alert(1)")).toThrow("HTTP")
     expect(() => normalizePreviewUrl(`https://example.com/${"x".repeat(2048)}`)).toThrow("too long")
+  })
+})
+
+describe("resolvePreviewNavigation", () => {
+  test("uses Google for text entered in the address bar", () => {
+    expect(resolvePreviewNavigation("solidjs create signal")).toBe(
+      "https://www.google.com/search?q=solidjs+create+signal",
+    )
+  })
+
+  test("preserves explicit and host-like web addresses", () => {
+    expect(resolvePreviewNavigation("localhost:3000/app")).toBe("http://localhost:3000/app")
+    expect(resolvePreviewNavigation("example.com/docs")).toBe("http://example.com/docs")
+    expect(resolvePreviewNavigation("https://example.com/docs")).toBe("https://example.com/docs")
   })
 })
 

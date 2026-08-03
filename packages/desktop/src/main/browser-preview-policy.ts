@@ -43,6 +43,22 @@ export function normalizePreviewUrl(value: string): string {
   return url.toString()
 }
 
+export function resolvePreviewNavigation(value: string): string {
+  const input = value.trim()
+  if (!input) throw new Error("Enter a web address or search term")
+  if (new TextEncoder().encode(input).length > MAX_URL_BYTES) throw new Error("Browser Preview URL is too long")
+  const address =
+    /^[a-z][a-z\d+.-]*:/i.test(input) ||
+    /^localhost(?::\d+)?(?:[/?#]|$)/i.test(input) ||
+    /^\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?(?:[/?#]|$)/.test(input) ||
+    /^\[[\da-f:]+\](?::\d+)?(?:[/?#]|$)/i.test(input) ||
+    /^(?:[a-z\d-]+\.)+[a-z\d-]+(?::\d+)?(?:[/?#]|$)/i.test(input)
+  if (address) return normalizePreviewUrl(input)
+  const url = new URL("https://www.google.com/search")
+  url.searchParams.set("q", input)
+  return url.toString()
+}
+
 export function normalizePreviewElement(value: unknown, url: string): BrowserPreviewElement {
   if (!value || typeof value !== "object") throw new Error("Invalid Browser Preview element")
   const selector = boundedString(
