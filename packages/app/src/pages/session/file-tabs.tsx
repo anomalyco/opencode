@@ -556,7 +556,10 @@ function SessionFileViewV2(props: { tab: string }) {
   }
 
   const buildPreview = (filePath: string, lines: SelectedLineRange) => {
-    const source = filePath === path() ? contents() : file.get(filePath)?.content?.content
+    const source =
+      filePath === path()
+        ? contents()
+        : file.get(filePath)?.content?.content
     if (!source) return undefined
     return selectionPreview(source, selectionFromLines(lines))
   }
