@@ -31,6 +31,7 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import { isMermaidLanguage, mermaidColorScheme, renderMermaid, type MermaidColorScheme } from "./markdown-mermaid"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -38,6 +39,7 @@ type RenderedBlock =
       key: string
       mode: "code"
       raw: string
+      src: string
       hash: string
       language: string
       complete: boolean
@@ -404,11 +406,15 @@ export function Markdown(
           if (block.mode === "code") {
             const cached = completedCode.get(blockKey)
             if (block.complete && cached?.raw === block.raw) return cached
-            const result = await code(block.src, block.language, blockKey, block.complete)
+            // Mermaid renders as a diagram from source, so it skips shiki tokenization.
+            const result = isMermaidLanguage(block.language)
+              ? { language: "mermaid", generation: 0, stable: [] as MarkdownToken[], unstable: [] as MarkdownToken[] }
+              : await code(block.src, block.language, blockKey, block.complete)
             const rendered = {
               key: blockKey,
               mode: block.mode,
               raw: block.raw,
+              src: block.src,
               hash: String(block.raw.length),
               complete: !!block.complete,
               ...result,
@@ -533,6 +539,7 @@ function pendingBlocks(
       key,
       mode: block.mode,
       raw: block.raw,
+      src: block.src,
       hash: String(block.raw.length),
       language: block.language ?? "text",
       complete: !!block.complete,
@@ -550,6 +557,10 @@ function disposeCode(key: string) {
 function updateBlock(container: HTMLDivElement, index: number, block: RenderedBlock, labels: CopyLabels) {
   const current = container.children[index]
   if (block.mode === "code") {
+    if (isMermaidLanguage(block.language)) {
+      updateMermaidBlock(container, current, block, labels)
+      return
+    }
     updateCodeBlock(container, current, block, labels)
     return
   }
@@ -664,6 +675,103 @@ function updateCodeBlock(
     return
   }
   container.appendChild(next)
+}
+
+// Records the source and color scheme of the last render started per block, so identical
+// effect re-runs (including after a deterministic parse failure) do not re-render.
+type MermaidRenderState = {
+  source: string
+  scheme: MermaidColorScheme
+  request: number
+}
+
+const mermaidBlocks = new WeakMap<HTMLElement, MermaidRenderState>()
+
+function updateMermaidBlock(
+  container: HTMLDivElement,
+  current: Element | undefined,
+  block: Extract<RenderedBlock, { mode: "code" }>,
+  labels: CopyLabels,
+) {
+  const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
+  const next = existing ?? document.createElement("div")
+  next.dataset.markdownBlock = ""
+  next.dataset.markdownKey = block.key
+  next.dataset.markdownHash = block.hash
+  next.dataset.markdownComplete = block.complete ? "true" : "false"
+  next.style.display = "contents"
+
+  const wrapper = ensureMermaidWrapper(next, labels)
+  const source = wrapper.querySelector<HTMLElement>('[data-slot="mermaid-source"] > code')
+  if (source && source.textContent !== block.src) source.textContent = block.src
+  renderMermaidBlock(next, wrapper, block.src, block.complete)
+
+  if (existing) return
+  if (current) {
+    disposeCopyButtons(current)
+    current.replaceWith(next)
+    return
+  }
+  container.appendChild(next)
+}
+
+function ensureMermaidWrapper(next: HTMLElement, labels: CopyLabels) {
+  const found = next.querySelector<HTMLElement>('[data-component="markdown-code"][data-code-kind="mermaid"]')
+  if (found) return found
+
+  disposeCopyButtons(next)
+  next.textContent = ""
+  const wrapper = document.createElement("div")
+  wrapper.setAttribute("data-component", "markdown-code")
+  wrapper.dataset.codeKind = "mermaid"
+  wrapper.dataset.mermaidState = "source"
+
+  // Source stays first so the shared copy handler's querySelector("code") always finds the
+  // mermaid source rather than anything inside the rendered SVG.
+  const pre = document.createElement("pre")
+  pre.className = "shiki OpenCode"
+  pre.setAttribute("data-slot", "mermaid-source")
+  const code = document.createElement("code")
+  code.className = "language-mermaid"
+  pre.appendChild(code)
+
+  const diagram = document.createElement("div")
+  diagram.setAttribute("data-slot", "mermaid-diagram")
+
+  wrapper.appendChild(pre)
+  wrapper.appendChild(diagram)
+  wrapper.appendChild(createCopyButton(labels))
+  next.appendChild(wrapper)
+  return wrapper
+}
+
+function renderMermaidBlock(next: HTMLElement, wrapper: HTMLElement, source: string, complete: boolean) {
+  if (!complete) {
+    wrapper.dataset.mermaidState = "source"
+    delete wrapper.dataset.mermaidError
+    return
+  }
+
+  const scheme = mermaidColorScheme()
+  const previous = mermaidBlocks.get(next)
+  if (previous && previous.source === source && previous.scheme === scheme) return
+
+  const request = (previous?.request ?? 0) + 1
+  mermaidBlocks.set(next, { source, scheme, request })
+  if (wrapper.dataset.mermaidState !== "rendered") wrapper.dataset.mermaidState = "source"
+
+  void renderMermaid(source, scheme).then((result) => {
+    if (mermaidBlocks.get(next)?.request !== request || !next.isConnected) return
+    if (!result.ok) {
+      wrapper.dataset.mermaidState = "source"
+      wrapper.dataset.mermaidError = "true"
+      return
+    }
+    const diagram = wrapper.querySelector<HTMLElement>('[data-slot="mermaid-diagram"]')
+    if (diagram) diagram.innerHTML = result.svg
+    delete wrapper.dataset.mermaidError
+    wrapper.dataset.mermaidState = "rendered"
+  })
 }
 
 function sameToken(left: MarkdownToken, right: MarkdownToken | undefined) {
