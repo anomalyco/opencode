@@ -263,6 +263,73 @@ function SessionFileViewV1(props: { tab: string }) {
     view,
   })
 
+  const isMarkdown = createMemo(() => {
+    const p = path()
+    return p ? /\.(?:md|markdown)$/i.test(p) : false
+  })
+  const [preview, setPreview] = createSignal(true)
+
+  let mermaidContainer: HTMLDivElement | undefined
+
+  const setupMermaidContainer = (el: HTMLDivElement) => {
+    mermaidContainer = el
+  }
+
+  createEffect(
+    on(
+      () => [mermaidContainer, preview(), contents()] as const,
+      ([container, isPreview]) => {
+        if (typeof window === "undefined") return
+        if (!container || !isPreview) return
+        if (!isMarkdown()) return
+
+        const renderMermaid = () => {
+          mermaid.initialize({ startOnLoad: false })
+
+          const preBlocks = container.querySelectorAll("pre.shiki")
+          if (preBlocks.length === 0) return
+
+          preBlocks.forEach((pre) => {
+            if (!(pre instanceof HTMLPreElement)) return
+
+            const code = pre.querySelector("code")
+            if (!code) return
+
+            const lines = code.querySelectorAll(".line")
+            const text = Array.from(lines).map((line) => line.textContent).join("\n")
+
+            const mermaidKeywords =
+              /\b(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|requirement|timeline|zenuml)\b|->>|-->>|Note\b|loop\b|alt\b|opt\b\par\b/i.test(
+                text,
+              )
+            if (!mermaidKeywords) return
+
+            const div = document.createElement("div")
+            div.className = "mermaid"
+            div.textContent = text
+
+            pre.replaceWith(div)
+          })
+
+          const blocks = container.querySelectorAll(".mermaid")
+          if (blocks.length === 0) return
+
+          mermaid.run({ nodes: Array.from(blocks) as HTMLElement[] }).catch(() => {})
+        }
+
+        const tryRender = () => {
+          renderMermaid()
+          if (container.querySelectorAll(".mermaid").length === 0) {
+            setTimeout(tryRender, 100)
+          }
+        }
+
+        setTimeout(tryRender, 0)
+      },
+      { defer: true },
+    ),
+  )
+
   const selectionPreview = (source: string, selection: FileSelection) => {
     return previewSelectedLines(source, {
       start: selection.startLine,
@@ -411,10 +478,20 @@ function SessionFileViewV1(props: { tab: string }) {
       path,
       () => {
         commentsUi.note.reset()
+        setPreview(true)
       },
       { defer: true },
     ),
   )
+
+  createEffect(() => {
+    const focus = comments.focus()
+    const p = path()
+    if (!focus || !p) return
+    if (focus.file !== p) return
+    if (activeFileTab() !== props.tab) return
+    if (preview()) setPreview(false)
+  })
 
   createEffect(() => {
     const focus = comments.focus()
@@ -494,7 +571,28 @@ function SessionFileViewV1(props: { tab: string }) {
   const content = () => (
     <div class="mt-3 relative h-full min-h-0">
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
+        <Show when={state()?.loaded && isMarkdown() && state()?.content?.type !== "binary"}>
+          <div class="sticky top-0 z-10 flex items-center gap-1 bg-background-base px-4 py-1.5 border-b border-border-base">
+            <button
+              class={"px-2 py-0.5 rounded text-sm " + (preview() ? "bg-surface-base-active text-text-base" : "text-text-weak hover:text-text-base")}
+              onClick={() => setPreview(true)}
+            >
+              {language.t("session.files.viewPreview")}
+            </button>
+            <button
+              class={"px-2 py-0.5 rounded text-sm " + (!preview() ? "bg-surface-base-active text-text-base" : "text-text-weak hover:text-text-base")}
+              onClick={() => setPreview(false)}
+            >
+              {language.t("session.files.viewSource")}
+            </button>
+          </div>
+        </Show>
         <Switch>
+          <Match when={state()?.loaded && isMarkdown() && preview() && state()?.content?.type !== "binary"}>
+            <div ref={setupMermaidContainer} class="px-6 py-4 pb-40">
+              <Markdown text={contents()} cacheKey={cacheKey()} />
+            </div>
+          </Match>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
