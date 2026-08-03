@@ -1,10 +1,15 @@
 export * as Agent from "./agent"
 
+import path from "path"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Array, Context, Effect, Layer, Types } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
+import { Global } from "@opencode-ai/util/global"
 import { Bus } from "./bus"
 import { State } from "./state"
+
+const SHELL_OUTPUT_GLOB = (data: string) => path.join(data, "shell", "*", "*")
+const TOOL_OUTPUT_GLOB = (data: string) => path.join(data, "tool-output", "*")
 
 export const ID = Agent.ID
 export type ID = typeof ID.Type
@@ -26,7 +31,6 @@ export interface Selection {
 
 type Data = {
   agents: Map<ID, Types.DeepMutable<Info>>
-  permissions: Types.DeepMutable<Info["permissions"]>
   default?: ID
 }
 
@@ -34,7 +38,6 @@ export type Draft = {
   list: () => readonly Info[]
   get: (id: ID) => Info | undefined
   default: (id: ID | undefined) => void
-  permissions: (permissions: Info["permissions"]) => void
   update: (id: ID, fn: (agent: Types.DeepMutable<Info>) => void) => void
   remove: (id: ID) => void
 }
@@ -53,18 +56,21 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const global = yield* Global.Service
+    const permissions: Info["permissions"] = [
+      { action: "external_directory", resource: SHELL_OUTPUT_GLOB(global.data), effect: "allow" },
+      { action: "external_directory", resource: TOOL_OUTPUT_GLOB(global.data), effect: "allow" },
+      { action: "external_directory", resource: path.join(global.tmp, "*"), effect: "allow" },
+      { action: "external_directory", resource: path.join(global.config, "*"), effect: "allow" },
+    ]
     const state = State.create<Data, Draft>({
       name: "agent",
-      initial: () => ({ agents: new Map(), permissions: [] }),
+      initial: () => ({ agents: new Map() }),
       draft: (draft) => ({
         list: () => Array.fromIterable(draft.agents.values()) as Info[],
         get: (id) => draft.agents.get(id),
         default: (id) => {
           draft.default = id
-        },
-        permissions: (permissions) => {
-          draft.permissions.push(...permissions)
-          for (const agent of draft.agents.values()) agent.permissions.push(...permissions)
         },
         update: (id, fn) => {
           const defaults = Info.default(id)
@@ -72,7 +78,7 @@ const layer = Layer.effect(
             draft.agents.get(id) ??
             ({
               ...defaults,
-              permissions: [...defaults.permissions, ...draft.permissions],
+              permissions: [...defaults.permissions, ...permissions],
             } as Types.DeepMutable<Info>)
           if (!draft.agents.has(id)) draft.agents.set(id, current)
           fn(current)
@@ -126,4 +132,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node, Global.node] })

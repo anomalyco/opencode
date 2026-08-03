@@ -1,14 +1,9 @@
 export * as AgentPlugin from "./agent"
 
-import path from "path"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
 import { Agent } from "../agent"
-import { Global } from "@opencode-ai/util/global"
 import { Permission } from "../permission"
-
-const SHELL_OUTPUT_GLOB = (data: string) => path.join(data, "shell", "*", "*")
-const TOOL_OUTPUT_GLOB = (data: string) => path.join(data, "tool-output", "*")
 
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
@@ -98,16 +93,7 @@ Rules:
 export const Plugin = define({
   id: "opencode.agent",
   effect: Effect.fn(function* (ctx) {
-    const global = yield* Global.Service
-    const externalDirectories = [
-      SHELL_OUTPUT_GLOB(global.data),
-      TOOL_OUTPUT_GLOB(global.data),
-      path.join(global.tmp, "*"),
-      path.join(global.config, "*"),
-    ].map((resource): Permission.Rule => ({ action: "external_directory", resource, effect: "allow" }))
-
     yield* ctx.agent.transform((draft) => {
-      draft.permissions(externalDirectories)
       draft.update(Agent.defaultID, (item) => {
         item.name = Agent.Name.make("Build")
         item.description = "The default agent. Executes tools based on configured permissions."
@@ -137,6 +123,9 @@ export const Plugin = define({
       })
 
       draft.update(Agent.ID.make("explore"), (item) => {
+        const externalDirectories = item.permissions.filter(
+          (rule) => rule.action === "external_directory" && rule.effect === "allow",
+        )
         item.name = Agent.Name.make("Explore")
         item.description =
           'Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'

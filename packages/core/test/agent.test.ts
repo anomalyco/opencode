@@ -18,9 +18,11 @@ import { agentHost, host } from "./plugin/host"
 const testLocation = location({ directory: AbsolutePath.make("/project") })
 const locationLayer = Layer.succeed(Location.Service, Location.Service.of(testLocation))
 const global = Global.make({ data: "/data", config: "/config", tmp: "/tmp/opencode" })
+const globalLayer = Layer.succeed(Global.Service, Global.Service.of(global))
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Agent.node, Bus.node, Location.node]), [
+    [Global.node, globalLayer],
     [Location.node, locationLayer],
   ]) as unknown as Layer.Layer<unknown, never>,
 )
@@ -123,28 +125,25 @@ describe("Agent", () => {
       const id = Agent.ID.make("custom")
 
       yield* agent.transform((editor) => editor.update(id, () => {}))
-      expect(yield* agent.get(id)).toEqual(Agent.Info.default(id))
+      const info = yield* agent.get(id)
+      expect(info?.permissions.slice(0, Agent.Info.default(id).permissions.length)).toEqual(
+        Agent.Info.default(id).permissions,
+      )
+      expect(Permission.evaluate("external_directory", path.join(global.data, "shell", "*", "*"), info?.permissions ?? []).effect).toBe(
+        "allow",
+      )
+      expect(Permission.evaluate("external_directory", path.join(global.data, "tool-output", "*"), info?.permissions ?? []).effect).toBe(
+        "allow",
+      )
+      expect(Permission.evaluate("external_directory", path.join(global.config, "*"), info?.permissions ?? []).effect).toBe(
+        "allow",
+      )
+      expect(Permission.evaluate("external_directory", path.join(global.tmp, "*"), info?.permissions ?? []).effect).toBe(
+        "allow",
+      )
 
       yield* agent.transform((editor) => editor.remove(id))
       expect(yield* agent.get(id)).toBeUndefined()
-    }),
-  )
-
-  it.effect("applies runtime permissions to existing and future agents", () =>
-    Effect.gen(function* () {
-      const agent = yield* Agent.Service
-      const existing = Agent.ID.make("existing")
-      const future = Agent.ID.make("future")
-      const permission = { action: "external_directory", resource: "/tmp/*", effect: "allow" } as const
-
-      yield* agent.transform((draft) => {
-        draft.update(existing, () => {})
-        draft.permissions([permission])
-        draft.update(future, () => {})
-      })
-
-      expect((yield* agent.get(existing))?.permissions).toContainEqual(permission)
-      expect((yield* agent.get(future))?.permissions).toContainEqual(permission)
     }),
   )
 
@@ -155,12 +154,6 @@ describe("Agent", () => {
         host({
           agent: agentHost(agent),
         }),
-      ).pipe(
-        Effect.provideService(Global.Service, Global.Service.of(global)),
-        Effect.provideService(
-          Location.Service,
-          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
-        ),
       )
 
       const agents = yield* agent.list()
@@ -201,12 +194,6 @@ describe("Agent", () => {
         host({
           agent: agentHost(agent),
         }),
-      ).pipe(
-        Effect.provideService(Global.Service, Global.Service.of(global)),
-        Effect.provideService(
-          Location.Service,
-          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
-        ),
       )
 
       yield* Effect.forEach(["general", "explore"], (id) =>
