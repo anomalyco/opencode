@@ -132,7 +132,9 @@ matching, so authorize only trusted directory boundaries.
 
 ## Defaults
 
-The evaluator's fallback is `ask`, but shipped agents include ordered defaults:
+Every agent, including custom agents, starts with ordered defaults that allow
+tools, ask for external directories, ask for `.env` reads, and allow
+`.env.example` reads. Shipped agents then add their own policies:
 
 | Agent | Effective default policy |
 | --- | --- |
@@ -153,8 +155,10 @@ The base read rules are ordered as follows:
 ]
 ```
 
-OpenCode also permits its managed tool-output and temporary directories where
-needed. These exceptions do not grant general external-directory access.
+OpenCode also permits its managed tool-output, shell-output, temporary, and
+configured reference directories. These exceptions apply to every agent but do
+not grant general external-directory access. Later global and agent-specific
+rules can override them.
 
 ## Agent overrides
 

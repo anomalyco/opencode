@@ -96,6 +96,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
             list: () => mutable(draft.list()),
             get: (id) => mutable(draft.get(Agent.ID.make(id))),
             default: (id) => draft.default(id === undefined ? undefined : Agent.ID.make(id)),
+            permissions: draft.permissions,
             update: (id, update) => draft.update(Agent.ID.make(id), update),
             remove: (id) => draft.remove(Agent.ID.make(id)),
           })

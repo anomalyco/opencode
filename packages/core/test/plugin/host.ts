@@ -145,6 +145,7 @@ export function agentHost(agent: Agent.Interface): Plugin.Context["agent"] {
             return value && agentInfo(value)
           },
           default: (id) => draft.default(id === undefined ? undefined : Agent.ID.make(id)),
+          permissions: draft.permissions,
           update: (id, update) =>
             draft.update(Agent.ID.make(id), (value) => {
               const current = agentInfo(value)

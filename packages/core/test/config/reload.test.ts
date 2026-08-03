@@ -14,6 +14,7 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Global } from "@opencode-ai/util/global"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
+import { Permission } from "@opencode-ai/core/permission"
 import { Provider } from "@opencode-ai/core/provider"
 import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
@@ -38,10 +39,10 @@ describe("config plugin reloads", () => {
       const host = yield* PluginHost.make(plugins)
       const test = yield* Config.Test
 
+      yield* ConfigReferencePlugin.Plugin.effect(host)
       yield* ConfigAgentPlugin.Plugin.effect(host)
       yield* ConfigCommandPlugin.Plugin.effect(host)
       yield* ConfigSkillPlugin.Plugin.effect(host)
-      yield* ConfigReferencePlugin.Plugin.effect(host)
       yield* ConfigProviderPlugin.Plugin.effect(host)
 
       expect((yield* agents.get(Agent.ID.make("first")))?.description).toBe("First agent")
@@ -50,6 +51,13 @@ describe("config plugin reloads", () => {
         (yield* skills.sources()).some((source) => source.type === "directory" && source.path === "/skills/first"),
       ).toBe(true)
       expect((yield* references.list()).map((reference) => reference.name)).toEqual(["first"])
+      expect(
+        Permission.evaluate(
+          "external_directory",
+          path.join("/references/first", "*"),
+          (yield* agents.get(Agent.ID.make("first")))?.permissions ?? [],
+        ).effect,
+      ).toBe("allow")
       expect(yield* catalog.provider.get(Provider.ID.make("first"))).toBeDefined()
 
       yield* test.setEntries([config("second")])
@@ -74,6 +82,13 @@ describe("config plugin reloads", () => {
       expect(
         (yield* skills.sources()).some((source) => source.type === "directory" && source.path === "/skills/second"),
       ).toBe(true)
+      const permissions = (yield* agents.get(Agent.ID.make("second")))?.permissions ?? []
+      expect(Permission.evaluate("external_directory", path.join("/references/first", "*"), permissions).effect).toBe(
+        "ask",
+      )
+      expect(Permission.evaluate("external_directory", path.join("/references/second", "*"), permissions).effect).toBe(
+        "allow",
+      )
     }).pipe(
       Effect.provide(Config.testLayer([config("first")])),
       Effect.provideService(Global.Service, Global.Service.of(Global.make())),

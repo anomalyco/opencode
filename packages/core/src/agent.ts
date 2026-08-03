@@ -26,6 +26,7 @@ export interface Selection {
 
 type Data = {
   agents: Map<ID, Types.DeepMutable<Info>>
+  permissions: Types.DeepMutable<Info["permissions"]>
   default?: ID
 }
 
@@ -33,6 +34,7 @@ export type Draft = {
   list: () => readonly Info[]
   get: (id: ID) => Info | undefined
   default: (id: ID | undefined) => void
+  permissions: (permissions: Info["permissions"]) => void
   update: (id: ID, fn: (agent: Types.DeepMutable<Info>) => void) => void
   remove: (id: ID) => void
 }
@@ -53,15 +55,25 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const state = State.create<Data, Draft>({
       name: "agent",
-      initial: () => ({ agents: new Map() }),
+      initial: () => ({ agents: new Map(), permissions: [] }),
       draft: (draft) => ({
         list: () => Array.fromIterable(draft.agents.values()) as Info[],
         get: (id) => draft.agents.get(id),
         default: (id) => {
           draft.default = id
         },
+        permissions: (permissions) => {
+          draft.permissions.push(...permissions)
+          for (const agent of draft.agents.values()) agent.permissions.push(...permissions)
+        },
         update: (id, fn) => {
-          const current = draft.agents.get(id) ?? (Info.default(id) as Types.DeepMutable<Info>)
+          const defaults = Info.default(id)
+          const current =
+            draft.agents.get(id) ??
+            ({
+              ...defaults,
+              permissions: [...defaults.permissions, ...draft.permissions],
+            } as Types.DeepMutable<Info>)
           if (!draft.agents.has(id)) draft.agents.set(id, current)
           fn(current)
           current.id = id

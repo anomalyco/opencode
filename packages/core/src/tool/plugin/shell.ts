@@ -6,6 +6,7 @@ import type { Content } from "@opencode-ai/schema/tool"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { Deferred, Effect, Schema, Scope } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Global } from "@opencode-ai/util/global"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
 import { PluginRuntime } from "../../plugin/runtime"
@@ -35,6 +36,7 @@ const description = (shell?: string) =>
     ...(shell ? [`Commands run on ${OS} using ${shell}.`] : []),
     "Quote file paths containing spaces or special characters.",
     "Prefer dedicated tools over shell commands when possible.",
+    `Use \`${Global.Path.tmp}\` for temporary work outside the workspace. It already exists and is pre-approved for external-directory access.`,
     "When output is large, the full result is saved to a file and a truncated preview is returned.",
     "Rely on automatic truncation unless filtering the output is more useful.",
     "Commands accept an optional timeout, background commands have no timeout by default.",

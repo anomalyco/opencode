@@ -127,6 +127,24 @@ describe("Agent", () => {
     }),
   )
 
+  it.effect("applies runtime permissions to existing and future agents", () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      const existing = Agent.ID.make("existing")
+      const future = Agent.ID.make("future")
+      const permission = { action: "external_directory", resource: "/tmp/*", effect: "allow" } as const
+
+      yield* agent.transform((draft) => {
+        draft.update(existing, () => {})
+        draft.permissions([permission])
+        draft.update(future, () => {})
+      })
+
+      expect((yield* agent.get(existing))?.permissions).toContainEqual(permission)
+      expect((yield* agent.get(future))?.permissions).toContainEqual(permission)
+    }),
+  )
+
   it.effect("does not ambiently opt built-in agents into bash", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service

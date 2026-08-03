@@ -7,6 +7,7 @@ export interface AgentDraft {
   list(): readonly Types.DeepMutable<Agent.Info>[]
   get(id: string): Types.DeepMutable<Agent.Info> | undefined
   default(id: string | undefined): void
+  permissions(permissions: Agent.Info["permissions"]): void
   update(id: string, update: (agent: Types.DeepMutable<Agent.Info>) => void): void
   remove(id: string): void
 }
