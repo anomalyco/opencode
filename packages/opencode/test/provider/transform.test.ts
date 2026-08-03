@@ -377,6 +377,15 @@ describe("ProviderTransform.options - gpt-5 reasoningEffort", () => {
 
     expect(result.reasoningEffort).toBeUndefined()
   })
+  test("gpt-5.6 should NOT set reasoningEffort", () => {
+    const result = ProviderTransform.options({
+      model: createModel("gpt-5.6"),
+      sessionID,
+      providerOptions: {},
+    })
+
+    expect(result.reasoningEffort).toBeUndefined()
+  })
 })
 
 describe("ProviderTransform.options - gateway", () => {
