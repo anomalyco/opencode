@@ -301,6 +301,10 @@ function useFileViewer(config: ViewerConfig) {
     const ranges = config.commentedLines()
     const root = getRoot()
     if (!root) return
+    if (ranges.length === 0) {
+      config.markCommented(root, ranges)
+      return
+    }
 
     let frame: number | undefined
     const mark = () => {
