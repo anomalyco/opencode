@@ -9,7 +9,6 @@ import { Reference } from "../../reference"
 import { AbsolutePath } from "../../schema"
 import { Global } from "@opencode-ai/util/global"
 import { Location } from "../../location"
-import { Permission } from "../../permission"
 
 export const Plugin = define({
   id: "opencode.config.reference",
@@ -17,9 +16,7 @@ export const Plugin = define({
     const config = yield* Config.Service
     const location = yield* Location.Service
     const global = yield* Global.Service
-    const references = yield* Reference.Service
     const loaded = { entries: yield* config.entries() }
-    const permissions: { current: Permission.Ruleset } = { current: [] }
     yield* ctx.reference.transform((draft) => {
       const entries = new Map<string, Reference.Source>()
       for (const doc of loaded.entries.filter((entry): entry is Config.Document => entry.type === "document")) {
@@ -51,31 +48,12 @@ export const Plugin = define({
       }
       for (const [name, source] of entries) draft.add(name, source)
     })
-    permissions.current = (yield* references.list()).map((reference) => ({
-      action: "external_directory",
-      resource: path.join(reference.path, "*"),
-      effect: "allow",
-    }))
-    yield* ctx.agent.transform((draft) => draft.permissions(permissions.current))
     yield* ctx.event.subscribe().pipe(
       Stream.filter((event) => event.type === "config.updated"),
       Stream.runForEach(() =>
         config.entries().pipe(
           Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
           Effect.andThen(ctx.reference.reload()),
-          Effect.tap(() =>
-            references.list().pipe(
-              Effect.map(
-                (references) =>
-                  (permissions.current = references.map((reference) => ({
-                    action: "external_directory" as const,
-                    resource: path.join(reference.path, "*"),
-                    effect: "allow" as const,
-                  }))),
-              ),
-            ),
-          ),
-          Effect.andThen(ctx.agent.reload()),
         ),
       ),
       Effect.forkScoped({ startImmediately: true }),

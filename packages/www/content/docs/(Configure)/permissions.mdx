@@ -154,10 +154,11 @@ The base read rules are ordered as follows:
 ]
 ```
 
-OpenCode also permits its managed tool-output, shell-output, temporary, and
-configured reference directories. These exceptions apply to every agent but do
-not grant general external-directory access. Later global and agent-specific
-rules can override them.
+OpenCode also permits its managed tool-output, shell-output, temporary, global
+configuration, configured reference, and discovered skill directories. These
+exceptions apply only to the external-directory boundary for every agent; the
+underlying action still uses its own permission rules. Later global and
+agent-specific rules can override them.
 
 ## Agent overrides
 

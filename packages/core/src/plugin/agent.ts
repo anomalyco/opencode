@@ -2,13 +2,12 @@ export * as AgentPlugin from "./agent"
 
 import path from "path"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Effect } from "effect"
+import { Effect, Stream } from "effect"
 import { Agent } from "../agent"
 import { Global } from "@opencode-ai/util/global"
 import { Permission } from "../permission"
-
-const SHELL_OUTPUT_GLOB = path.join(Global.Path.data, "shell", "*", "*")
-const TOOL_OUTPUT_GLOB = path.join(Global.Path.data, "tool-output", "*")
+import { Reference } from "../reference"
+import { Skill } from "../skill"
 
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
@@ -98,26 +97,39 @@ Rules:
 export const Plugin = define({
   id: "opencode.agent",
   effect: Effect.fn(function* (ctx) {
-    const managedDirectories = [SHELL_OUTPUT_GLOB, TOOL_OUTPUT_GLOB, path.join(Global.Path.tmp, "*")].map(
-      (resource): Permission.Rule => ({
-        action: "external_directory",
-        resource,
-        effect: "allow",
-      }),
-    )
+    const global = yield* Global.Service
+    const references = yield* Reference.Service
+    const skills = yield* Skill.Service
+    const externalDirectories: { current: Permission.Ruleset } = { current: [] }
+    const refreshExternalDirectories = Effect.fn("AgentPlugin.refreshExternalDirectories")(function* () {
+      const [referenceList, skillSources, skillList] = yield* Effect.all([
+        references.list(),
+        skills.sources(),
+        skills.list(),
+      ])
+      externalDirectories.current = Array.from(
+        new Set([
+          path.join(global.data, "shell", "*", "*"),
+          path.join(global.data, "tool-output", "*"),
+          path.join(global.tmp, "*"),
+          path.join(global.config, "*"),
+          ...referenceList.map((reference) => path.join(reference.path, "*")),
+          ...skillSources.flatMap((source) => (source.type === "directory" ? [path.join(source.path, "*")] : [])),
+          ...skillList.map((skill) => path.join(path.dirname(skill.location), "*")),
+        ]),
+        (resource): Permission.Rule => ({ action: "external_directory", resource, effect: "allow" }),
+      )
+    })
+
+    yield* refreshExternalDirectories()
 
     yield* ctx.agent.transform((draft) => {
-      draft.permissions(managedDirectories)
+      draft.permissions(externalDirectories.current)
       draft.update(Agent.defaultID, (item) => {
         item.name = Agent.Name.make("Build")
         item.description = "The default agent. Executes tools based on configured permissions."
         item.mode = "primary"
-        item.permissions.push(
-          ...Permission.merge([
-            { action: "question", resource: "*", effect: "deny" },
-            { action: "question", resource: "*", effect: "allow" },
-          ]),
-        )
+        item.permissions.push({ action: "question", resource: "*", effect: "allow" })
       })
 
       draft.update(Agent.ID.make("plan"), (item) => {
@@ -125,11 +137,8 @@ export const Plugin = define({
         item.description = "Plan mode. Disallows all edit tools."
         item.mode = "primary"
         item.permissions.push(
-          ...Permission.merge([
-            { action: "question", resource: "*", effect: "deny" },
-            { action: "question", resource: "*", effect: "allow" },
-            { action: "edit", resource: "*", effect: "deny" },
-          ]),
+          { action: "question", resource: "*", effect: "allow" },
+          { action: "edit", resource: "*", effect: "deny" },
         )
       })
 
@@ -161,7 +170,7 @@ export const Plugin = define({
               { action: "read", resource: "*", effect: "allow" },
               { action: "subagent", resource: "*", effect: "deny" },
             ],
-            [{ action: "external_directory", resource: "*", effect: "ask" }, ...managedDirectories],
+            [{ action: "external_directory", resource: "*", effect: "ask" }, ...externalDirectories.current],
           ),
         )
       })
@@ -190,5 +199,10 @@ export const Plugin = define({
         item.permissions.push({ action: "*", resource: "*", effect: "deny" })
       })
     })
+    yield* ctx.event.subscribe().pipe(
+      Stream.filter((event) => event.type === "reference.updated" || event.type === "skill.updated"),
+      Stream.runForEach(() => refreshExternalDirectories().pipe(Effect.andThen(ctx.agent.reload()))),
+      Effect.forkScoped({ startImmediately: true }),
+    )
   }),
 })
