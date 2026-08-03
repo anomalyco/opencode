@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { CronService } from "@opencode-ai/core/cron/service"
 import { parseDuration } from "@opencode-ai/core/cron/duration"
+import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 
 const AddParameters = Schema.Struct({
   interval: Schema.String.annotate({
@@ -38,12 +39,16 @@ export const CronAddTool = Tool.define<typeof AddParameters, Metadata, never>(
         Effect.gen(function* () {
           const cron = yield* CronService
           const intervalMs = yield* parseDuration(params.interval)
+          const context = yield* Effect.gen(function* () {
+            return { instance: yield* InstanceRef, workspace: yield* WorkspaceRef }
+          })
           const job = yield* cron.add({
             sessionID: _ctx.sessionID,
             prompt: params.prompt,
             intervalMs,
             agent: params.agent,
             model: params.model,
+            context,
           })
           return {
             title: `cron: every ${params.interval}`,
