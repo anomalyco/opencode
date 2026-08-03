@@ -480,7 +480,17 @@ function seekSequence(lines: string[], pattern: string[], startIndex: number, eo
     (a, b) => normalizeUnicode(a.trim()) === normalizeUnicode(b.trim()),
     eof,
   )
-  return normalized
+  if (normalized !== -1) return normalized
+
+  // Pass 5: NFC normalization (canonical Unicode equivalence)
+  const canonical = tryMatch(
+    lines,
+    pattern,
+    startIndex,
+    (a, b) => a.normalize("NFC").trim() === b.normalize("NFC").trim(),
+    eof,
+  )
+  return canonical
 }
 
 function generateUnifiedDiff(oldContent: string, newContent: string): string {
