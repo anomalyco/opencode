@@ -1,5 +1,7 @@
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import { existsSync } from "node:fs"
+import { applyEdits, modify } from "jsonc-parser"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -145,6 +147,7 @@ interface State {
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
   instructions: Record<string, string>
+  removed: Set<string>
 }
 
 export interface ServerInstructions {
@@ -172,6 +175,7 @@ export interface Interface {
     clientName?: string,
   ) => Effect.Effect<Record<string, ResourceTemplateInfo & { client: string }>>
   readonly add: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
+  readonly remove: (name: string) => Effect.Effect<void, NotFoundError>
   readonly connect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly getPrompt: (
@@ -415,6 +419,29 @@ const layer = Layer.effect(
     )
     const cfgSvc = yield* Config.Service
 
+    function projectConfigFile(dir: string) {
+      const jsonc = path.join(dir, "opencode.jsonc")
+      if (existsSync(jsonc)) return jsonc
+      return path.join(dir, "opencode.json")
+    }
+
+    const persistMcpConfig = Effect.fn("MCP.persistMcpConfig")(function* (
+      name: string,
+      config: ConfigMCPV1.Info | undefined,
+    ) {
+      const dir = yield* InstanceState.directory
+      const file = projectConfigFile(dir)
+      yield* Effect.promise(async () => {
+        const source = existsSync(file) ? await Bun.file(file).text() : "{}"
+        const edits = modify(source, ["mcp", name], config, {
+          formattingOptions: { insertSpaces: true, tabSize: 2 },
+        })
+        const updated = applyEdits(source, edits)
+        await Bun.write(file, updated)
+      })
+      yield* cfgSvc.invalidate()
+    })
+
     const descendants = Effect.fnUntraced(
       function* (pid: number) {
         if (process.platform === "win32") return [] as number[]
@@ -500,6 +527,7 @@ const layer = Layer.effect(
           clients: {},
           defs: {},
           instructions: {},
+          removed: new Set(),
         }
 
         yield* Effect.forEach(
@@ -597,6 +625,7 @@ const layer = Layer.effect(
 
       for (const [key, mcp] of Object.entries(config)) {
         if (!isMcpConfigured(mcp)) continue
+        if (s.removed.has(key)) continue
         result[key] = s.status[key] ?? { status: "disabled" }
       }
 
@@ -640,9 +669,23 @@ const layer = Layer.effect(
 
     const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCPV1.Info) {
       const s = yield* InstanceState.get(state)
+      s.removed.delete(name)
       s.config[name] = mcp
       yield* createAndStore(name, mcp)
+      yield* persistMcpConfig(name, mcp)
       return { status: s.status }
+    })
+
+    const remove = Effect.fn("MCP.remove")(function* (name: string) {
+      yield* requireMcpConfig(name)
+      const s = yield* InstanceState.get(state)
+      yield* closeClient(s, name)
+      delete s.clients[name]
+      delete s.status[name]
+      delete s.config[name]
+      s.removed.add(name)
+      yield* persistMcpConfig(name, undefined)
+      yield* events.publish(ToolsChanged, { server: name })
     })
 
     const connect = Effect.fn("MCP.connect")(function* (name: string) {
@@ -978,6 +1021,7 @@ const layer = Layer.effect(
       resources,
       resourceTemplates,
       add,
+      remove,
       connect,
       disconnect,
       getPrompt,

@@ -8491,6 +8491,40 @@ export type McpAddResponses = {
 
 export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
 
+export type McpRemoveData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/{name}"
+}
+
+export type McpRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * McpServerNotFoundError
+   */
+  404: McpServerNotFoundError
+}
+
+export type McpRemoveError = McpRemoveErrors[keyof McpRemoveErrors]
+
+export type McpRemoveResponses = {
+  /**
+   * MCP server removed successfully
+   */
+  200: boolean
+}
+
+export type McpRemoveResponse = McpRemoveResponses[keyof McpRemoveResponses]
+
 export type McpAuthRemoveData = {
   body?: never
   path: {
