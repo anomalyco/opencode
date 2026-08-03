@@ -54,7 +54,7 @@ describe("OpenAIPlugin", () => {
       const credentials = yield* Credential.Service
       yield* catalog.transform((catalog) => {
         const item = Provider.Info.make({
-          ...Provider.Info.default(Provider.ID.openai),
+          ...Provider.Info.empty(Provider.ID.openai),
           package: Provider.aisdk("@ai-sdk/openai"),
         })
         catalog.provider.update(item.id, (draft) => {
@@ -167,7 +167,7 @@ describe("OpenAIPlugin", () => {
       const credentials = yield* Credential.Service
       yield* catalog.transform((catalog) => {
         const item = Provider.Info.make({
-          ...Provider.Info.default(Provider.ID.openai),
+          ...Provider.Info.empty(Provider.ID.openai),
           package: Provider.aisdk("@ai-sdk/openai"),
         })
         catalog.provider.update(item.id, (draft) => {

@@ -93,7 +93,7 @@ const layer = Layer.effect(
               let current = draft.providers.get(providerID)
               if (!current) {
                 current = {
-                  provider: Provider.Info.default(providerID) as Provider.MutableInfo,
+                  provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
                   models: new Map<Model.ID, Model.MutableInfo>(),
                 }
                 draft.providers.set(providerID, current)
@@ -110,7 +110,7 @@ const layer = Layer.effect(
               let record = draft.providers.get(providerID)
               if (!record) {
                 record = {
-                  provider: Provider.Info.default(providerID) as Provider.MutableInfo,
+                  provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
                   models: new Map<Model.ID, Model.MutableInfo>(),
                 }
                 draft.providers.set(providerID, record)

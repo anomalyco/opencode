@@ -53,6 +53,6 @@ export const Info = Schema.Struct({
   .annotate({ identifier: "Provider.Info" })
   .pipe(
     statics(() => ({
-      default: (id: ID): Info => ({ id, name: id, package: "" }),
+      empty: (id: ID): Info => ({ id, name: id, package: "" }),
     })),
   )

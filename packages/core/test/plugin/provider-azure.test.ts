@@ -81,7 +81,7 @@ describe("AzurePlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           const azure = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.azure),
+            ...Provider.Info.empty(Provider.ID.azure),
             package: Provider.aisdk("@ai-sdk/azure"),
             settings: { resourceName: "from-config" },
           })
@@ -104,7 +104,7 @@ describe("AzurePlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           const azure = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.azure),
+            ...Provider.Info.empty(Provider.ID.azure),
             package: Provider.aisdk("@ai-sdk/azure"),
             settings: { resourceName: "" },
           })
@@ -125,7 +125,7 @@ describe("AzurePlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           const azure = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.azure),
+            ...Provider.Info.empty(Provider.ID.azure),
             package: Provider.aisdk("@ai-sdk/azure"),
             settings: { resourceName: "   " },
           })

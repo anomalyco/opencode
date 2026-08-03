@@ -289,7 +289,7 @@ describe("OpencodePlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           const provider = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.opencode),
+            ...Provider.Info.empty(Provider.ID.opencode),
             package: Provider.aisdk("test-provider"),
           })
           const model = Model.Info.make({
@@ -316,7 +316,7 @@ describe("OpencodePlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           const provider = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.opencode),
+            ...Provider.Info.empty(Provider.ID.opencode),
             package: Provider.aisdk("test-provider"),
           })
           const model = Model.Info.make({
@@ -343,7 +343,7 @@ describe("OpencodePlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           const provider = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.opencode),
+            ...Provider.Info.empty(Provider.ID.opencode),
             package: Provider.aisdk("test-provider"),
           })
           const model = Model.Info.make({
@@ -372,7 +372,7 @@ describe("OpencodePlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           const provider = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.opencode),
+            ...Provider.Info.empty(Provider.ID.opencode),
             package: Provider.aisdk("test-provider"),
           })
           const model = Model.Info.make({
@@ -406,7 +406,7 @@ describe("OpencodePlugin", () => {
         })
         yield* catalog.transform((catalog) => {
           const provider = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.opencode),
+            ...Provider.Info.empty(Provider.ID.opencode),
             package: Provider.aisdk("test-provider"),
           })
           const model = Model.Info.make({
@@ -433,7 +433,7 @@ describe("OpencodePlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           const provider = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.opencode),
+            ...Provider.Info.empty(Provider.ID.opencode),
             package: Provider.aisdk("test-provider"),
             settings: { apiKey: "configured" },
           })
@@ -464,7 +464,7 @@ describe("OpencodePlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           const provider = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.openai),
+            ...Provider.Info.empty(Provider.ID.openai),
             package: Provider.aisdk("test-provider"),
           })
           const model = Model.Info.make({

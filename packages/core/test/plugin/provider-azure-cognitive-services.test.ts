@@ -86,11 +86,11 @@ describe("AzureCognitiveServicesPlugin", () => {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
           const azure = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.make("azure-cognitive-services")),
+            ...Provider.Info.empty(Provider.ID.make("azure-cognitive-services")),
             package: "aisdk:@ai-sdk/openai-compatible",
           })
           const openai = Provider.Info.make({
-            ...Provider.Info.default(Provider.ID.openai),
+            ...Provider.Info.empty(Provider.ID.openai),
             package: "aisdk:test-provider",
           })
           catalog.provider.update(azure.id, (item) => {

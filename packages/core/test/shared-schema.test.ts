@@ -170,7 +170,7 @@ test("Core reuses the canonical shared schemas", async () => {
   expect(coreModel.Info.default(coreProvider.ID.make("test"), coreModel.ID.make("model"))).toEqual(
     Model.Info.default(Provider.ID.make("test"), Model.ID.make("model")),
   )
-  expect(coreProvider.Info.default(coreProvider.ID.make("test"))).toEqual(Provider.Info.default(Provider.ID.make("test")))
+  expect(coreProvider.Info.empty(coreProvider.ID.make("test"))).toEqual(Provider.Info.empty(Provider.ID.make("test")))
   expect(Skill.Source.key(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make("/tmp") }))).toBe(
     "directory:/tmp",
   )

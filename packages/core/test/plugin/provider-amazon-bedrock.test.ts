@@ -84,7 +84,7 @@ describe("AmazonBedrockPlugin", () => {
       const catalog = yield* Catalog.Service
       yield* catalog.transform((catalog) => {
         const bedrock = Provider.Info.make({
-          ...Provider.Info.default(Provider.ID.amazonBedrock),
+          ...Provider.Info.empty(Provider.ID.amazonBedrock),
           package: Provider.aisdk("@ai-sdk/amazon-bedrock"),
           settings: { endpoint: "https://bedrock.example" },
         })
