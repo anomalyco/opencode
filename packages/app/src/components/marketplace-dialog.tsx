@@ -25,7 +25,7 @@ import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useLanguage } from "@/context/language"
 import { useServerSync } from "@/context/server-sync"
 import { showToast } from "@/utils/toast"
-import { createEffect, createMemo, createResource, createSignal, For, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { preserveMarketplaceScroll } from "./marketplace-scroll"
 import "./marketplace-dialog.css"
@@ -38,6 +38,7 @@ type KindFilter = (typeof KINDS)[number]
 type PendingAction = "install" | "update" | "uninstall"
 
 type Pending = {
+  phase: "planning" | "ready"
   planId?: string
   listing: MarketplaceListing
   action: PendingAction
@@ -77,12 +78,15 @@ export function MarketplacePanel() {
     sourceHeaderName: "",
     sourceHeaderEnv: "",
   })
+  let planning: AbortController | undefined
 
   const state = () => view()?.state ?? { revision: 0 }
   const config = () => ({ marketplace: state() }) satisfies MarketplaceHostConfig
   const revision = () => state().revision ?? 0
   const listings = () => view()?.listings ?? []
   const status = (listing: MarketplaceListing) => marketplaceStatus(config(), listing)
+  const displayStatus = (listing: MarketplaceListing) =>
+    status(listing) !== "installed" && listing.compatibility?.compatible === false ? "incompatible" : status(listing)
   const updates = createMemo(() => listings().filter((listing) => status(listing) === "update"))
   const visible = createMemo(() => {
     const query = store.query.trim().toLowerCase()
@@ -114,6 +118,8 @@ export function MarketplacePanel() {
     const listing = current()
     if (listing && listing.key !== store.selected) setStore("selected", listing.key)
   })
+
+  onCleanup(() => planning?.abort())
 
   async function run(
     request: Promise<MarketplaceMutationResult>,
@@ -177,17 +183,41 @@ export function MarketplacePanel() {
   async function request(listing: MarketplaceListing) {
     const value = status(listing)
     if (value === "installed") {
-      setStore("pending", { listing, action: "uninstall", conflicts: [], trustWarning: false })
+      setStore("pending", { phase: "ready", listing, action: "uninstall", conflicts: [], trustWarning: false })
       return
     }
+    if (listing.compatibility?.compatible === false) {
+      showToast({
+        variant: "error",
+        title: `${listing.item.name} is incompatible`,
+        description: listing.compatibility.reasons.join("; "),
+      })
+      return
+    }
+    const controller = new AbortController()
+    planning?.abort()
+    planning = controller
+    setStore("pending", {
+      phase: "planning",
+      listing,
+      action: value === "update" ? "update" : "install",
+      conflicts: [],
+      trustWarning: false,
+    })
     setStore("busy", true)
     try {
-      const result = (await sync().marketplace.plan({ key: listing.key })) as MarketplacePlanResult
+      const result = (await sync().marketplace.plan(
+        { key: listing.key },
+        { signal: controller.signal },
+      )) as MarketplacePlanResult
+      if (controller.signal.aborted) return
       if (!result.ok) {
+        setStore("pending", undefined)
         showToast({ variant: "error", title: "Marketplace plan failed", description: result.message })
         return
       }
       setStore("pending", {
+        phase: "ready",
         planId: result.plan_id,
         listing,
         action: result.action,
@@ -196,14 +226,26 @@ export function MarketplacePanel() {
         summary: result.summary,
       })
     } catch (error) {
+      if (controller.signal.aborted) return
+      setStore("pending", undefined)
       showToast({
         variant: "error",
         title: "Marketplace plan failed",
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
-      setStore("busy", false)
+      if (planning === controller) {
+        planning = undefined
+        setStore("busy", false)
+      }
     }
+  }
+
+  function cancelPending() {
+    planning?.abort()
+    planning = undefined
+    setStore("pending", undefined)
+    setStore("busy", false)
   }
 
   async function confirm() {
@@ -397,7 +439,7 @@ export function MarketplacePanel() {
                           <div class="min-w-0 flex-1">
                             <div class="flex items-center justify-between gap-2">
                               <span class="truncate text-13-medium text-text-strong">{listing.item.name}</span>
-                              <Status value={status(listing)} />
+                              <Status value={displayStatus(listing)} />
                             </div>
                             <div class="mt-1 line-clamp-2 text-12-regular text-text-weak">
                               {listing.item.description}
@@ -504,17 +546,19 @@ export function MarketplacePanel() {
                 {pending().action} {pending().listing.item.name}
               </h3>
               <p class="mt-2 text-12-regular text-text-weak">
-                {pending().action === "uninstall"
-                  ? "The SQLite installation record will be removed. User configuration is not rewritten."
-                  : (pending().summary ?? marketplacePlanSummary(pending().listing.item.install))}
+                {pending().phase === "planning"
+                  ? "Preparing and verifying an immutable install plan. This can take a moment for large remote catalogs."
+                  : pending().action === "uninstall"
+                    ? "The SQLite installation record will be removed. User configuration is not rewritten."
+                    : (pending().summary ?? marketplacePlanSummary(pending().listing.item.install))}
               </p>
-              <Show when={pending().trustWarning}>
+              <Show when={pending().phase === "ready" && pending().trustWarning}>
                 <div class="mt-3 rounded-md border border-border-warning px-3 py-2 text-12-regular text-text-base">
                   This catalog is marked {pending().listing.source.trust ?? "community"}. Confirm to allow its code and
                   remote assets.
                 </div>
               </Show>
-              <Show when={pending().conflicts.length}>
+              <Show when={pending().phase === "ready" && pending().conflicts.length}>
                 <div class="mt-3 rounded-md border border-border-warning px-3 py-2 text-12-regular text-text-base">
                   <div class="font-medium">These settings will be shadowed:</div>
                   <For each={pending().conflicts}>
@@ -522,7 +566,13 @@ export function MarketplacePanel() {
                   </For>
                 </div>
               </Show>
-              <Show when={pending().action !== "uninstall" && marketplacePermissions(pending().listing.item).length}>
+              <Show
+                when={
+                  pending().phase === "ready" &&
+                  pending().action !== "uninstall" &&
+                  marketplacePermissions(pending().listing.item).length
+                }
+              >
                 <div class="mt-3 text-12-regular text-text-weak">
                   <div class="font-medium text-text-base">Requested capabilities</div>
                   <For each={marketplacePermissions(pending().listing.item)}>
@@ -531,16 +581,16 @@ export function MarketplacePanel() {
                 </div>
               </Show>
               <div class="mt-4 flex justify-end gap-2">
-                <ButtonV2 type="button" variant="ghost-muted" onClick={() => setStore("pending", undefined)}>
+                <ButtonV2 type="button" variant="ghost-muted" onClick={cancelPending}>
                   Cancel
                 </ButtonV2>
                 <ButtonV2
                   type="button"
                   variant={pending().action === "uninstall" ? "danger" : "neutral"}
-                  disabled={store.busy}
+                  disabled={pending().phase === "planning" || store.busy}
                   onClick={() => void confirm()}
                 >
-                  Confirm
+                  {pending().phase === "planning" ? "Preparing…" : "Confirm"}
                 </ButtonV2>
               </div>
             </div>
@@ -551,7 +601,7 @@ export function MarketplacePanel() {
   )
 }
 
-function Status(props: { value: ReturnType<typeof marketplaceStatus> }) {
+function Status(props: { value: ReturnType<typeof marketplaceStatus> | "incompatible" }) {
   return (
     <span data-slot="marketplace-status" class="shrink-0 rounded px-1.5 py-0.5 text-10-medium uppercase">
       {props.value}
@@ -603,6 +653,7 @@ function Details(props: {
 }) {
   const language = useLanguage()
   const status = () => marketplaceStatus(props.config, props.listing)
+  const incompatible = () => status() !== "installed" && props.listing.compatibility?.compatible === false
   const installed = () => props.config.marketplace?.installed?.[props.listing.key]
   const enabled = () => marketplaceItemEnabled(props.config, props.listing.key)
   const skills = () =>
@@ -616,7 +667,7 @@ function Details(props: {
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
             <h3 class="text-18-medium text-text-strong">{props.listing.item.name}</h3>
-            <Status value={status()} />
+            <Status value={incompatible() ? "incompatible" : status()} />
           </div>
           <div class="mt-1 text-12-regular text-text-weak">
             {props.listing.item.publisher?.name ?? props.listing.catalog.publisher?.name ?? "Unknown publisher"} · v
@@ -626,14 +677,27 @@ function Details(props: {
         <ButtonV2
           type="button"
           variant={status() === "installed" ? "danger" : "neutral"}
-          disabled={props.busy}
+          disabled={props.busy || incompatible()}
           class="shrink-0"
+          title={incompatible() ? props.listing.compatibility?.reasons.join("; ") : undefined}
           onClick={props.action}
         >
-          {status() === "available" ? "Install" : status() === "update" ? "Update" : "Uninstall"}
+          {incompatible()
+            ? "Incompatible"
+            : status() === "available"
+              ? "Install"
+              : status() === "update"
+                ? "Update"
+                : "Uninstall"}
         </ButtonV2>
       </div>
       <p class="mt-4 whitespace-pre-wrap text-13-regular leading-5 text-text-base">{props.listing.item.description}</p>
+      <Show when={incompatible()}>
+        <div class="mt-4 rounded-md border border-border-warning px-3 py-2 text-12-regular text-text-base">
+          <div class="font-medium">Not supported by this OpenCode build</div>
+          <For each={props.listing.compatibility?.reasons ?? []}>{(reason) => <div class="mt-1">{reason}</div>}</For>
+        </div>
+      </Show>
       <Show when={installed()}>
         <div data-slot="marketplace-component-list" class="mt-5 rounded-lg">
           <ToggleRow

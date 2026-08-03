@@ -694,8 +694,10 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       refresh: () => serverSDK.client.marketplace.refresh().then((result) => result.data!),
       icon: (input: { key: string; variant: "src-light" | "src-dark" }) =>
         serverSDK.client.marketplace.icon(input).then((result) => result.data!),
-      plan: (input: { key: string }) =>
-        serverSDK.client.marketplace.plan({ marketplacePlanInput: input }).then((result) => result.data!),
+      plan: (input: { key: string }, options?: { signal?: AbortSignal }) =>
+        serverSDK.client.marketplace
+          .plan({ marketplacePlanInput: input }, { signal: options?.signal })
+          .then((result) => result.data!),
       install: (input: { plan_id: string; expected_revision: number; force?: boolean; accept_untrusted?: boolean }) =>
         serverSDK.client.marketplace.install({ marketplaceInstallInput: input }).then((result) => result.data!),
       updateAll: (input: { expected_revision: number; force?: boolean; accept_untrusted?: boolean }) =>
