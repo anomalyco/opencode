@@ -31,6 +31,14 @@ export function reviewDiffDirectory(root: string, file: string) {
   return `${base.endsWith(separator) ? base : base + separator}${path.slice(0, index).replaceAll("/", separator)}`
 }
 
+export function reviewFilePath(root: string, file: string) {
+  if (file.startsWith("/") || /^[A-Za-z]:[\\/]/.test(file) || file.startsWith("\\\\")) return file
+  const path = normalizePath(file)
+  const separator = root.includes("\\") ? "\\" : "/"
+  const base = reviewRootDirectory(root)
+  return `${base.endsWith(separator) ? base : base + separator}${path.replaceAll("/", separator)}`
+}
+
 export function reviewDiffKinds(diffs: RenderDiff[]) {
   const merge = (a: Kind | undefined, b: Kind) => {
     if (!a) return b

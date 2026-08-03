@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process"
+import { execFile, spawn } from "node:child_process"
 import { stat } from "node:fs/promises"
 import { basename } from "node:path"
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
@@ -191,14 +191,27 @@ export function registerIpcHandlers(deps: Deps) {
     openLocalFileURL(url)
   })
 
-  ipcMain.handle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {
-    if (!app) return shell.openPath(path)
-    await new Promise<void>((resolve, reject) => {
-      const [cmd, args] =
-        process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
-      execFile(cmd, args, (err) => (err ? reject(err) : resolve()))
-    })
-  })
+  ipcMain.handle(
+    "open-path",
+    async (_event: IpcMainInvokeEvent, path: string, app?: string, options?: { cwd?: boolean }) => {
+      if (!app) return shell.openPath(path)
+      if (options?.cwd && process.platform !== "darwin") {
+        return new Promise<void>((resolve, reject) => {
+          const child = spawn(app, [], { cwd: path, detached: true, stdio: "ignore" })
+          child.once("error", reject)
+          child.once("spawn", () => {
+            child.unref()
+            resolve()
+          })
+        })
+      }
+      await new Promise<void>((resolve, reject) => {
+        const [cmd, args] =
+          process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
+        execFile(cmd, args, (err) => (err ? reject(err) : resolve()))
+      })
+    },
+  )
 
   ipcMain.handle("reveal-path", async (_event: IpcMainInvokeEvent, path: string) => {
     const exists = await stat(path).then(
@@ -208,6 +221,10 @@ export function registerIpcHandlers(deps: Deps) {
     if (!exists) return false
     shell.showItemInFolder(path)
     return true
+  })
+
+  ipcMain.handle("write-clipboard-text", (_event: IpcMainInvokeEvent, text: string) => {
+    clipboard.writeText(text)
   })
 
   ipcMain.handle("read-clipboard-image", () => {

@@ -214,15 +214,18 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     openLocalFile(url: string) {
       window.api.openLocalFile(url)
     },
-    async openPath(path: string, app?: string) {
+    async openPath(path: string, app?: string, options?: { cwd?: boolean }) {
       if (os === "windows") {
         const resolvedApp = app ? await window.api.resolveAppPath(app).catch(() => null) : null
-        return window.api.openPath(path, resolvedApp ?? undefined)
+        return window.api.openPath(path, resolvedApp ?? undefined, options)
       }
-      return window.api.openPath(path, app)
+      return window.api.openPath(path, app, options)
     },
     async revealPath(path: string) {
       return window.api.revealPath(path)
+    },
+    writeClipboardText(text: string) {
+      return window.api.writeClipboardText(text)
     },
 
     storage,

@@ -390,6 +390,7 @@
         "electron-store": "11.0.2",
         "electron-updater": "6.8.9",
         "electron-window-state": "^5.0.3",
+        "which": "6.0.1",
       },
       "devDependencies": {
         "@actions/artifact": "4.0.0",
@@ -404,6 +405,7 @@
         "@solidjs/router": "0.15.4",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+        "@types/which": "3.0.4",
         "@typescript/native-preview": "catalog:",
         "@valibot/to-json-schema": "1.6.0",
         "electron": "42.3.3",

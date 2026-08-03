@@ -128,6 +128,7 @@ export default function FileTreeV2(props: {
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
   onFileDoubleClick?: (file: FileNode) => void
+  onNodeContextMenu?: (file: FileNode) => void
 }) {
   const file = useFile()
   const live = () => props.allowed === undefined
@@ -251,6 +252,7 @@ export default function FileTreeV2(props: {
                           onBlur={() => setFocused(undefined)}
                           onClick={() => selectFile(row().node, props.onFileClick)}
                           onDblClick={() => selectFile(row().node, props.onFileDoubleClick)}
+                          onContextMenu={() => selectFile(row().node, props.onNodeContextMenu)}
                         >
                           <GuideLines level={row().level} />
                           <Show when={row().level > 0}>
@@ -276,6 +278,7 @@ export default function FileTreeV2(props: {
                         onBlur={() => setFocused(undefined)}
                         aria-expanded={expanded(row().node.path)}
                         onClick={() => toggleDirectory(row().node.path, row().node.originalPath)}
+                        onContextMenu={() => selectFile(row().node, props.onNodeContextMenu)}
                       >
                         <GuideLines level={row().level} />
                         <div

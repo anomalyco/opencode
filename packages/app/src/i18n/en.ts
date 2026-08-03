@@ -729,7 +729,11 @@ export const dict = {
   "session.header.open.app.xcode": "Xcode",
   "session.header.open.app.androidStudio": "Android Studio",
   "session.header.open.app.powershell": "PowerShell",
+  "session.header.open.app.windowsPowershell": "Windows PowerShell",
   "session.header.open.app.sublimeText": "Sublime Text",
+  "session.review.context.openDefault": "Default app",
+  "session.review.context.copyRelative": "Copy Relative Path",
+  "session.review.context.copyAbsolute": "Copy Absolute Path",
 
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Server configurations",

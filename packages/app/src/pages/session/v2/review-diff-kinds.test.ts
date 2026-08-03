@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { filterReviewFiles, reviewDiffDirectory, reviewDiffKinds, reviewDiffNeedsLoad } from "./review-diff-kinds"
+import { filterReviewFiles, reviewDiffDirectory, reviewDiffKinds, reviewDiffNeedsLoad, reviewFilePath } from "./review-diff-kinds"
 
 describe("reviewDiffKinds", () => {
   test("maps file and directory kinds", () => {
@@ -66,5 +66,20 @@ describe("reviewDiffDirectory", () => {
     expect(reviewDiffDirectory("C:\\", "README.md")).toBe("C:\\")
     expect(reviewDiffDirectory("/", "src/a.ts")).toBe("/src")
     expect(reviewDiffDirectory("C:\\", "src/a.ts")).toBe("C:\\src")
+  })
+})
+
+describe("reviewFilePath", () => {
+  test("joins relative review paths to POSIX and Windows roots", () => {
+    expect(reviewFilePath("/repo", "src/lib/a.ts")).toBe("/repo/src/lib/a.ts")
+    expect(reviewFilePath("/", "src/lib/a.ts")).toBe("/src/lib/a.ts")
+    expect(reviewFilePath("C:\\repo", "src/lib/a.ts")).toBe("C:\\repo\\src\\lib\\a.ts")
+    expect(reviewFilePath("C:\\", "src/lib/a.ts")).toBe("C:\\src\\lib\\a.ts")
+  })
+
+  test("preserves absolute paths", () => {
+    expect(reviewFilePath("/repo", "/tmp/a.ts")).toBe("/tmp/a.ts")
+    expect(reviewFilePath("C:\\repo", "D:\\tmp\\a.ts")).toBe("D:\\tmp\\a.ts")
+    expect(reviewFilePath("/repo", "//server/share/a.ts")).toBe("//server/share/a.ts")
   })
 })

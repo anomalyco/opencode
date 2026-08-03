@@ -729,7 +729,11 @@ export const dict = {
   "session.header.open.app.xcode": "Xcode",
   "session.header.open.app.androidStudio": "Android Studio",
   "session.header.open.app.powershell": "PowerShell",
+  "session.header.open.app.windowsPowershell": "Windows PowerShell",
   "session.header.open.app.sublimeText": "Sublime Text",
+  "session.review.context.openDefault": "Програма за замовчуванням",
+  "session.review.context.copyRelative": "Копіювати відносний шлях",
+  "session.review.context.copyAbsolute": "Копіювати абсолютний шлях",
 
   "status.popover.trigger": "Статус",
   "status.popover.ariaLabel": "Конфігурації серверів",

@@ -2,8 +2,11 @@ import { execFile } from "node:child_process"
 import { access, readFile, readdir } from "node:fs/promises"
 import { dirname, extname, join } from "node:path"
 import util from "node:util"
+import which from "which"
 
 const execFilePromise = util.promisify(execFile)
+const windowsApps = new Map<string, Promise<string | null>>()
+const linuxApps = new Map<string, Promise<boolean>>()
 
 const exists = (path: string) =>
   access(path)
@@ -11,8 +14,15 @@ const exists = (path: string) =>
     .catch(() => false)
 
 export function checkAppExists(appName: string) {
-  if (process.platform === "win32") return true
-  if (process.platform === "linux") return true
+  if (process.platform === "win32") return resolveWindowsAppPath(appName).then(Boolean)
+  if (process.platform === "linux") {
+    const key = appName.toLowerCase()
+    const cached = linuxApps.get(key)
+    if (cached) return cached
+    const result = which(appName, { nothrow: true }).then(Boolean)
+    linuxApps.set(key, result)
+    return result
+  }
   return checkMacosApp(appName)
 }
 
@@ -37,17 +47,18 @@ async function checkMacosApp(appName: string) {
 }
 
 async function resolveWindowsAppPath(appName: string): Promise<string | null> {
-  let output: string
-  try {
-    output = await execFilePromise("where", [appName]).then((r) => r.stdout.toString())
-  } catch {
-    return null
-  }
+  const key = appName.toLowerCase()
+  const cached = windowsApps.get(key)
+  if (cached) return cached
+  const result = findWindowsAppPath(appName)
+  windowsApps.set(key, result)
+  return result
+}
 
-  const paths = output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
+async function findWindowsAppPath(appName: string): Promise<string | null> {
+  const found = await which(appName, { all: true, nothrow: true })
+  const paths = Array.isArray(found) ? found : found ? [found] : []
+  if (paths.length === 0) return null
 
   const hasExt = (path: string, ext: string) => extname(path).toLowerCase() === `.${ext}`
 

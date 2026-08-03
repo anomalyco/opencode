@@ -48,6 +48,7 @@ export function SessionFileListV2(props: {
   optionID?: (path: string) => string
   onFileClick: (path: string) => void
   onFileDoubleClick?: (path: string) => void
+  onFileContextMenu?: (path: string) => void
 }) {
   const active = () => normalizePath(props.active ?? "")
   const highlighted = () => normalizePath(props.highlighted ?? "")
@@ -134,6 +135,7 @@ export function SessionFileListV2(props: {
                     onBlur={() => setFocused(undefined)}
                     onClick={() => props.onFileClick(path)}
                     onDblClick={() => props.onFileDoubleClick?.(path)}
+                    onContextMenu={() => props.onFileContextMenu?.(path)}
                   >
                     <span class="filetree-iconpair size-4">
                       <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--color" />

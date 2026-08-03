@@ -21,17 +21,21 @@ import type {
 import FileTreeV2 from "@/components/file-tree-v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
 import {
   filterRenderableDiff,
   filterReviewFiles,
+  normalizePath,
   reviewDiffKinds,
   reviewDiffNeedsLoad,
   type RenderDiff,
 } from "@/pages/session/v2/review-diff-kinds"
 import type { ReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
 import { applyFileListKeyDown, SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
+import { ReviewFileContextMenu } from "@/pages/session/v2/review-file-context-menu"
 
 type ReviewDiff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
+type ReviewContextTarget = { path: string; type: "file" | "directory"; deleted: boolean }
 
 export type ReviewPanelV2Props = {
   title?: JSX.Element
@@ -180,7 +184,14 @@ function ReviewPanelV2Sidebar(props: {
   activeDiff: () => string | undefined
 }) {
   const language = useLanguage()
+  const sdk = useSDK()
+  const sync = useSync()
   const [explicitHighlight, setExplicitHighlight] = createSignal<string | undefined>()
+  const [contextTarget, setContextTarget] = createSignal<ReviewContextTarget>({
+    path: "",
+    type: "file",
+    deleted: false,
+  })
   const highlightedPath = createMemo(() => {
     if (!props.searching()) return undefined
     const files = props.filteredFiles()
@@ -212,44 +223,59 @@ function ReviewPanelV2Sidebar(props: {
       minWidth={SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN}
       maxWidth={SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX}
     >
-      <Show
-        when={props.diffsReady()}
-        fallback={
-          <div class="px-2 py-2 text-12-regular text-text-weak">
-            {language.t("common.loading")}
-            {language.t("common.loading.ellipsis")}
-          </div>
-        }
+      <ReviewFileContextMenu
+        root={sync().data.path.worktree || sync().project?.worktree || sdk().directory}
+        target={contextTarget()}
       >
         <Show
-          when={props.searching()}
+          when={props.diffsReady()}
           fallback={
-            <FileTreeV2
-              allowed={props.filteredFiles()}
-              kinds={props.kinds()}
-              draggable={false}
-              active={props.activeDiff()}
-              onFileClick={(node) => props.onSelectFile(node.path)}
-            />
+            <div class="px-2 py-2 text-12-regular text-text-weak">
+              {language.t("common.loading")}
+              {language.t("common.loading.ellipsis")}
+            </div>
           }
         >
           <Show
-            when={props.filteredFiles().length > 0}
-            fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{language.t("palette.empty")}</div>}
+            when={props.searching()}
+            fallback={
+              <FileTreeV2
+                allowed={props.filteredFiles()}
+                kinds={props.kinds()}
+                draggable={false}
+                active={props.activeDiff()}
+                onFileClick={(node) => props.onSelectFile(node.path)}
+                onNodeContextMenu={(node) =>
+                  setContextTarget({
+                    path: node.path,
+                    type: node.type,
+                    deleted: node.type === "file" && props.kinds().get(normalizePath(node.path)) === "del",
+                  })
+                }
+              />
+            }
           >
-            <SessionFileListV2
-              files={props.filteredFiles()}
-              kinds={props.kinds()}
-              active={props.activeDiff()}
-              highlighted={highlightedPath()}
-              onFileClick={(path) => {
-                setExplicitHighlight(path)
-                props.onSelectFile(path)
-              }}
-            />
+            <Show
+              when={props.filteredFiles().length > 0}
+              fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{language.t("palette.empty")}</div>}
+            >
+              <SessionFileListV2
+                files={props.filteredFiles()}
+                kinds={props.kinds()}
+                active={props.activeDiff()}
+                highlighted={highlightedPath()}
+                onFileContextMenu={(path) =>
+                  setContextTarget({ path, type: "file", deleted: props.kinds().get(normalizePath(path)) === "del" })
+                }
+                onFileClick={(path) => {
+                  setExplicitHighlight(path)
+                  props.onSelectFile(path)
+                }}
+              />
+            </Show>
           </Show>
         </Show>
-      </Show>
+      </ReviewFileContextMenu>
     </SessionReviewV2Sidebar>
   )
 }

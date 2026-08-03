@@ -7,7 +7,7 @@ import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { SplitButtonV2, SplitButtonV2Action, SplitButtonV2MenuTrigger } from "@opencode-ai/ui/v2/split-button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useLanguage } from "@/context/language"
-import { type OpenApp, useOpenInApp } from "@/components/session/open-in-app"
+import { useOpenInApp } from "@/components/session/open-in-app"
 
 export function OpenInAppV2(props: { directory: () => string }) {
   const language = useLanguage()
@@ -58,7 +58,7 @@ export function OpenInAppV2(props: { directory: () => string }) {
                 <MenuV2.RadioGroup
                   value={state.current().id}
                   onChange={(value) => {
-                    state.selectApp(value as OpenApp)
+                    state.selectApp(value)
                   }}
                 >
                   <For each={state.options()}>

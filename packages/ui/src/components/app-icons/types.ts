@@ -15,6 +15,7 @@ export const iconNames = [
   "antigravity",
   "textmate",
   "powershell",
+  "windows-powershell",
   "sublime-text",
 ] as const
 

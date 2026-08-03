@@ -10,6 +10,7 @@ import finder from "../assets/icons/app/finder.png"
 import ghostty from "../assets/icons/app/ghostty.svg"
 import iterm2 from "../assets/icons/app/iterm2.svg"
 import powershell from "../assets/icons/app/powershell.svg"
+import windowsPowershell from "../assets/icons/app/windows-powershell.png"
 import terminal from "../assets/icons/app/terminal.png"
 import textmate from "../assets/icons/app/textmate.png"
 import vscode from "../assets/icons/app/vscode.svg"
@@ -34,6 +35,7 @@ const icons = {
   antigravity,
   textmate,
   powershell,
+  "windows-powershell": windowsPowershell,
   "sublime-text": sublimetext,
 } satisfies Record<IconName, string>
 
