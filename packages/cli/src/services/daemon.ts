@@ -146,8 +146,7 @@ export const layer = Layer.effect(
     const status = Effect.fn("cli.daemon.status")(function* () {
       const existing = yield* healthy().pipe(Effect.option)
       const found = Option.getOrUndefined(existing)
-      if (found?.version === InstallationVersion) return found.url
-      if (found) return undefined
+      if (found) return found.url
       yield* fs.remove(file).pipe(Effect.ignore)
       return undefined
     })
