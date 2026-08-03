@@ -89,11 +89,13 @@ function pastedFilepath(value: string, platform: string) {
 export type PromptRef = {
   focused: boolean
   current: PromptInfo
+  cursorAtStart: boolean
   set(prompt: PromptInfo): void
   reset(): void
   blur(): void
   focus(): void
   submit(): void
+  stashAndClear(): "armed" | "stashed"
 }
 
 const money = new Intl.NumberFormat("en-US", {
@@ -286,6 +288,8 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    stashArm: "esc" | "left" | null
+    historyBadge: { input: string; sameSession: boolean; origin?: "submit" | "stash" } | null
   }>({
     placeholder: randomIndex(list().length),
     prompt: {
@@ -295,6 +299,8 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    stashArm: null,
+    historyBadge: null,
   })
 
   createEffect(
@@ -393,13 +399,22 @@ export function Prompt(props: PromptProps) {
         name: "session.interrupt",
         category: "Session",
         hidden: true,
-        enabled: status().type !== "idle",
+        enabled: status().type !== "idle" || store.prompt.input !== "",
         run: () => {
           if (auto()?.visible) return
           if (!input.focused) return
           // TODO: this should be its own command
           if (store.mode === "shell") {
             setStore("mode", "normal")
+            return
+          }
+          // With text typed, escape stashes the draft into the prompt history
+          // on a confirmed double press instead of interrupting the session.
+          if (store.prompt.input !== "") {
+            if (!armStash("esc")) return
+            setStore("stashArm", null)
+            stashAndClear()
+            dialog.clear()
             return
           }
           if (!props.sessionID) return
@@ -584,6 +599,15 @@ export function Prompt(props: PromptProps) {
     },
     get current() {
       return store.prompt
+    },
+    get cursorAtStart() {
+      return input.visualCursor.offset === 0
+    },
+    stashAndClear() {
+      if (!armStash("left")) return "armed"
+      setStore("stashArm", null)
+      stashAndClear()
+      return "stashed"
     },
     focus() {
       input.focus()
@@ -876,13 +900,14 @@ export function Prompt(props: PromptProps) {
               return false
             }
 
-            const item = history.move(-1, input.plainText)
+            const item = history.move(-1, input.plainText, props.sessionID)
             if (!item) return false
             input.setText(item.input)
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
             restoreExtmarksFromParts(item.parts)
             input.cursorOffset = 0
+            setStore("historyBadge", historyBadgeFor(item))
           },
         },
       ],
@@ -912,13 +937,14 @@ export function Prompt(props: PromptProps) {
               return false
             }
 
-            const item = history.move(1, input.plainText)
+            const item = history.move(1, input.plainText, props.sessionID)
             if (!item) return false
             input.setText(item.input)
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
             restoreExtmarksFromParts(item.parts)
             input.cursorOffset = input.plainText.length
+            setStore("historyBadge", historyBadgeFor(item))
           },
         },
       ],
@@ -1121,7 +1147,10 @@ export function Prompt(props: PromptProps) {
     history.append({
       ...store.prompt,
       mode: currentMode,
+      sessionID: props.sessionID,
+      origin: "submit",
     })
+    setStore("historyBadge", null)
     input.extmarks.clear()
     setStore("prompt", {
       input: "",
@@ -1273,6 +1302,8 @@ export function Prompt(props: PromptProps) {
       history.append({
         ...store.prompt,
         mode: store.mode,
+        sessionID: props.sessionID,
+        origin: "stash",
       })
     }
     input.clear()
@@ -1282,6 +1313,43 @@ export function Prompt(props: PromptProps) {
       parts: [],
     })
     setStore("extmarkToPartIndex", new Map())
+  }
+
+  // Arms a double-press gesture; returns true when this press confirms it.
+  function armStash(gesture: "esc" | "left") {
+    const confirmed = store.stashArm === gesture
+    setStore("stashArm", gesture)
+    setTimeout(() => {
+      if (store.stashArm === gesture) setStore("stashArm", null)
+    }, 3000)
+    return confirmed
+  }
+
+  function stashAndClear() {
+    if (store.prompt.input === "" && store.prompt.parts.length === 0) return
+    history.append({
+      ...store.prompt,
+      mode: store.mode,
+      sessionID: props.sessionID,
+      origin: "stash",
+    })
+    setStore("historyBadge", null)
+    input.clear()
+    input.extmarks.clear()
+    setStore("prompt", {
+      input: "",
+      parts: [],
+    })
+    setStore("extmarkToPartIndex", new Map())
+  }
+
+  function historyBadgeFor(item: PromptInfo) {
+    if (item.input === "" && item.parts.length === 0) return null
+    return {
+      input: item.input,
+      sameSession: item.sessionID !== undefined && item.sessionID === props.sessionID,
+      origin: item.origin,
+    }
   }
 
   const highlight = createMemo(() => {
@@ -1389,6 +1457,8 @@ export function Prompt(props: PromptProps) {
                 auto()?.onInput(value)
                 syncExtmarksWithPromptParts()
                 setCursorVersion((value) => value + 1)
+                if (store.stashArm) setStore("stashArm", null)
+                if (store.historyBadge && store.historyBadge.input !== value) setStore("historyBadge", null)
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
               onKeyDown={(e: { preventDefault(): void }) => {
@@ -1586,13 +1656,45 @@ export function Prompt(props: PromptProps) {
                     })()}
                   </box>
                 </box>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                  esc{" "}
-                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                <Show
+                  when={store.prompt.input === ""}
+                  fallback={
+                    <text fg={store.stashArm === "esc" ? theme.primary : theme.text}>
+                      esc{" "}
+                      <span style={{ fg: store.stashArm === "esc" ? theme.primary : theme.textMuted }}>
+                        {store.stashArm === "esc" ? "again to clear · saves draft" : "clear draft"}
+                      </span>
+                    </text>
+                  }
+                >
+                  <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                    esc{" "}
+                    <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                      {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                    </span>
+                  </text>
+                </Show>
+              </box>
+            </Match>
+            <Match when={store.stashArm !== null}>
+              <box paddingLeft={3}>
+                <text fg={theme.primary}>
+                  {store.stashArm === "esc" ? "esc " : "← "}
+                  <span style={{ fg: theme.textMuted }}>
+                    {store.stashArm === "esc" ? "again to clear · saves draft" : "again for sessions · saves draft"}
                   </span>
                 </text>
               </box>
+            </Match>
+            <Match when={store.historyBadge}>
+              {(badge) => (
+                <box paddingLeft={3}>
+                  <text fg={badge().sameSession ? theme.accent : theme.textMuted}>
+                    ↑ {badge().sameSession ? "this session" : "other session"}
+                    {badge().origin === "stash" ? " · stashed" : ""}
+                  </text>
+                </box>
+              )}
             </Match>
             <Match when={workspace.notice()}>
               {(notice) => (

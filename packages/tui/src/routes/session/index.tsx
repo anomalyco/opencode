@@ -1109,11 +1109,19 @@ export function Session() {
       enabled: () => {
         if (session()?.parentID) return false
         if (dialog.stack.length > 0) return false
-        // Only with an empty prompt, focused or not: leaving mid-draft would
-        // surprise anyone who scrolled up with text typed.
-        return (promptRef.current?.current.input ?? "") === ""
+        // Empty prompt goes back immediately. With text typed, the gesture is
+        // only available with the cursor at the very start (where left is a
+        // no-op) and requires a confirming second press handled by the prompt.
+        const prompt = promptRef.current
+        if (!prompt) return false
+        if (prompt.current.input === "") return true
+        return prompt.cursorAtStart
       },
       run: () => {
+        const prompt = promptRef.current
+        if (prompt && prompt.current.input !== "") {
+          if (prompt.stashAndClear() === "armed") return
+        }
         navigate({ type: "sessions" })
       },
     },

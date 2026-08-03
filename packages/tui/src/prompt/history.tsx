@@ -9,6 +9,8 @@ import { appendText, readText, writeText } from "../util/persistence"
 export type PromptInfo = {
   input: string
   mode?: "normal" | "shell"
+  sessionID?: string
+  origin?: "submit" | "stash"
   parts: (
     | Omit<FilePart, "id" | "messageID" | "sessionID">
     | Omit<AgentPart, "id" | "messageID" | "sessionID">
@@ -46,6 +48,17 @@ export function isDuplicateEntry(previous: PromptInfo | undefined, next: PromptI
   return JSON.stringify(previous) === JSON.stringify(next)
 }
 
+// Browsing order: entries from the given session first (newest first), then
+// everything else (newest first). Entries without a sessionID never match.
+export function orderHistoryForSession(history: PromptInfo[], sessionID?: string) {
+  const reversed = history.toReversed()
+  if (!sessionID) return reversed
+  return [
+    ...reversed.filter((item) => item.sessionID === sessionID),
+    ...reversed.filter((item) => item.sessionID !== sessionID),
+  ]
+}
+
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
@@ -66,21 +79,18 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
     })
 
     return {
-      move(direction: 1 | -1, input: string) {
+      move(direction: 1 | -1, input: string, sessionID?: string) {
         if (!store.history.length) return undefined
-        const current = store.history.at(store.index)
+        const sequence = orderHistoryForSession(store.history, sessionID)
+        const current = store.index === 0 ? sequence.at(-1) : sequence.at(-store.index - 1)
         if (!current) return undefined
         if (current.input !== input && input.length) return
-        setStore(
-          produce((draft) => {
-            const next = store.index + direction
-            if (Math.abs(next) > store.history.length) return
-            if (next > 0) return
-            draft.index = next
-          }),
-        )
+        const next = store.index + direction
+        if (Math.abs(next) > sequence.length) return
+        if (next > 0) return
+        setStore("index", next)
         if (store.index === 0) return { input: "", parts: [] }
-        return store.history.at(store.index)
+        return sequence.at(-store.index - 1)
       },
       append(item: PromptInfo) {
         const entry = structuredClone(unwrap(item))
