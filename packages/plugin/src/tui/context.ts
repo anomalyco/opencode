@@ -19,6 +19,7 @@ import type {
   SessionPendingInfo,
   ShellInfo,
   SkillInfo,
+  VcsInfo,
 } from "@opencode-ai/client"
 import type { ResolvedTheme } from "@opencode-ai/theme/tui"
 import type { CliRenderer, KeyEvent, Renderable } from "@opentui/core"
@@ -113,6 +114,11 @@ export interface Data {
     default(): LocationRef
     sync(location?: LocationRef): Promise<void>
     invalidate(location?: LocationRef): void
+    readonly vcs: {
+      get(location?: LocationRef): VcsInfo | undefined
+      sync(location?: LocationRef): Promise<void>
+      invalidate(location?: LocationRef): void
+    }
     readonly agent: LocationCollection<AgentInfo>
     readonly command: LocationCollection<CommandInfo>
     readonly integration: LocationCollection<IntegrationInfo>

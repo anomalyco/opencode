@@ -127,6 +127,11 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       })
     if (url.pathname === "/api/reference")
       return json({ location: { directory, project: { id: "proj_test", directory, canonical: directory } }, data: [] })
+    if (url.pathname === "/api/vcs")
+      return json({
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
+        data: { branch: "main" },
+      })
     if (url.pathname === "/api/websearch/provider") {
       return json({ location: { directory, project: { id: "proj_test", directory, canonical: directory } }, data: [] })
     }

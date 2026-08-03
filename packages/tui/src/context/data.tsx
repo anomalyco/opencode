@@ -28,6 +28,7 @@ import type {
   ShellInfo,
   SkillInfo,
   OpenCodeEvent,
+  VcsInfo,
   WebSearchProvider,
 } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/tui"
@@ -49,6 +50,7 @@ type ShellWithLocation = ShellInfo & { readonly location: LocationRef }
 
 type LocationData = {
   info?: LocationGetOutput
+  vcs?: VcsInfo
   agent?: AgentInfo[]
   command?: CommandInfo[]
   integration?: IntegrationInfo[]
@@ -905,6 +907,15 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           result.location.mcp.resource.invalidate(event.location)
           void result.location.mcp.resource.sync(event.location)
           break
+        case "vcs.branch.updated": {
+          const ref = event.location ?? defaultLocation()
+          const key = locationKey(ref)
+          setStore("location", key, {
+            ...store.location[key],
+            vcs: { branch: event.data.branch },
+          })
+          break
+        }
       }
     }
 
@@ -1139,6 +1150,26 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         default() {
           return defaultLocation()
         },
+        vcs: {
+          get(ref?: LocationRef) {
+            return store.location[locationKey(ref ?? defaultLocation())]?.vcs
+          },
+          sync(ref?: LocationRef) {
+            const location = ref ?? defaultLocation()
+            const id = locationKey(location)
+            return sync.run(`location.vcs:${id}`, async () => {
+              const response = await client.api.vcs.get({ location: locationQuery(location) })
+              const key = locationKey(response.location)
+              setStore("location", key, {
+                ...store.location[key],
+                vcs: response.data,
+              })
+            })
+          },
+          invalidate(ref?: LocationRef) {
+            sync.invalidate(`location.vcs:${locationKey(ref ?? defaultLocation())}`)
+          },
+        },
         async sync(ref?: LocationRef) {
           const current = ref ?? defaultLocation()
           await sync.run(`location:${locationKey(current)}`, async () => {
@@ -1161,6 +1192,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             result.location.provider.sync(location),
             result.location.reference.sync(location),
             result.location.skill.sync(location),
+            result.location.vcs.sync(location),
             result.shell.sync(location),
             result.session.form.sync("global", location),
           ])
@@ -1177,6 +1209,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           result.location.provider.invalidate(location)
           result.location.reference.invalidate(location)
           result.location.skill.invalidate(location)
+          result.location.vcs.invalidate(location)
           result.shell.invalidate(location)
           result.session.form.invalidate("global", location)
         },

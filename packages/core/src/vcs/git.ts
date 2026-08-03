@@ -20,6 +20,9 @@ export function make(proc: AppProcess.Interface, input: { directory: string; wor
   const ctx: Ctx = { git: makeGit(proc), directory: input.directory, worktree: input.worktree }
 
   return {
+    branch: Effect.fn("VcsGit.branch")(function* () {
+      return yield* ctx.git.branch(ctx.directory)
+    }),
     status: Effect.fn("VcsGit.status")(function* () {
       const git = ctx.git
       const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined

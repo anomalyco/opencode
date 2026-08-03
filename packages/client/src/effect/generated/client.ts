@@ -210,6 +210,8 @@ import type {
   Endpoint25_0Output,
   Endpoint25_1Input,
   Endpoint25_1Output,
+  Endpoint25_2Input,
+  Endpoint25_2Output,
   Endpoint26_0Output,
   Endpoint26_1Input,
   Endpoint26_1Output,
@@ -1182,17 +1184,26 @@ const adaptGroup24 = (raw: RawClient["server.projectCopy"]) => ({
 
 const Endpoint25_0 = (raw: RawClient["server.vcs"]) => (input?: Endpoint25_0Input) =>
   preserveEffect<Endpoint25_0Output>()(
+    raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const Endpoint25_1 = (raw: RawClient["server.vcs"]) => (input?: Endpoint25_1Input) =>
+  preserveEffect<Endpoint25_1Output>()(
     raw["vcs.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint25_1 = (raw: RawClient["server.vcs"]) => (input: Endpoint25_1Input) =>
-  preserveEffect<Endpoint25_1Output>()(
+const Endpoint25_2 = (raw: RawClient["server.vcs"]) => (input: Endpoint25_2Input) =>
+  preserveEffect<Endpoint25_2Output>()(
     raw["vcs.diff"]({ query: { location: input["location"], mode: input["mode"], context: input["context"] } }).pipe(
       Effect.mapError(mapClientError),
     ),
   )
 
-const adaptGroup25 = (raw: RawClient["server.vcs"]) => ({ status: Endpoint25_0(raw), diff: Endpoint25_1(raw) })
+const adaptGroup25 = (raw: RawClient["server.vcs"]) => ({
+  get: Endpoint25_0(raw),
+  status: Endpoint25_1(raw),
+  diff: Endpoint25_2(raw),
+})
 
 const Endpoint26_0 = (raw: RawClient["server.debug"]) => () =>
   preserveEffect<Endpoint26_0Output>()(raw["debug.location"]({}).pipe(Effect.mapError(mapClientError)))

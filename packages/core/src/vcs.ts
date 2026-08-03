@@ -1,14 +1,17 @@
 export * as Vcs from "./vcs"
 
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Ref, Stream } from "effect"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
+import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { FileStatus, Mode } from "@opencode-ai/schema/vcs"
+import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "./location"
 import { AppProcess } from "@opencode-ai/util/process"
 import { VcsGit } from "./vcs/git"
 import { VcsHg } from "./vcs/hg"
+import { Bus } from "./bus"
 
 export { FileStatus, Mode }
 
@@ -17,6 +20,7 @@ export interface DiffOptions {
 }
 
 export interface Interface {
+  readonly branch: () => Effect.Effect<string | undefined>
   readonly status: () => Effect.Effect<FileStatus[]>
   readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[]>
 }
@@ -38,8 +42,30 @@ const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
+    const bus = yield* Bus.Service
     const impl = adapter(proc, fs, location)
+    const branch = yield* Ref.make(impl ? yield* impl.branch() : undefined)
+    if (impl && location.vcs?.type === "git") {
+      yield* bus.subscribe(FileSystem.Event.Changed).pipe(
+        Stream.filter((event) => event.data.file.endsWith("HEAD")),
+        Stream.runForEach(() =>
+          Effect.gen(function* () {
+            const next = yield* impl.branch()
+            if (next === (yield* Ref.get(branch))) return
+            yield* Ref.set(branch, next)
+            yield* bus.publish(VcsEvent.BranchUpdated, { branch: next }, {
+              location: { directory: location.directory, workspaceID: location.workspaceID },
+            })
+          }),
+        ),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+    }
     return Service.of({
+      branch: Effect.fn("Vcs.branch")(function* () {
+        if (!impl) return
+        return yield* impl.branch()
+      }),
       status: Effect.fn("Vcs.status")(function* () {
         if (!impl) return []
         return yield* impl.status()
@@ -55,5 +81,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer: layer,
-  deps: [AppProcess.node, FSUtil.node, Location.node],
+  deps: [AppProcess.node, FSUtil.node, Location.node, Bus.node],
 })

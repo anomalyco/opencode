@@ -7,6 +7,14 @@ import { response } from "../location"
 export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
   Effect.gen(function* () {
     return handlers
+      .handle("vcs.get", () =>
+        response(
+          Effect.gen(function* () {
+            const vcs = yield* Vcs.Service
+            return { branch: yield* vcs.branch() }
+          }),
+        ),
+      )
       .handle("vcs.status", () =>
         response(
           Effect.gen(function* () {
