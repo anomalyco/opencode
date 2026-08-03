@@ -70,6 +70,7 @@ La lista actual de modelos incluye:
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Qwen3.8 Max**
 - **Qwen3.7 Max**
 - **Qwen3.7 Plus**
 - **Qwen3.6 Plus**
@@ -106,7 +107,8 @@ La siguiente tabla proporciona una cantidad estimada de peticiones basada en los
 | MiMo-V2.5-Pro     | 3,250                  | 8,150                 | 16,300             |
 | MiniMax M3        | 3,200                  | 8,000                 | 16,000             |
 | MiniMax M2.7      | 3,400                  | 8,500                 | 17,000             |
-| Qwen3.7 Max       | 950                    | 2,390                 | 4,770              |
+| Qwen3.8 Max       | 160                    | 400                   | 810                |
+| Qwen3.7 Max       | 340                    | 840                   | 1,690              |
 | Qwen3.7 Plus      | 4,300                  | 10,800                | 21,600             |
 | Qwen3.6 Plus      | 3,300                  | 8,200                 | 16,300             |
 | DeepSeek V4 Pro   | 3,450                  | 8,550                 | 17,150             |
@@ -124,6 +126,7 @@ Las estimaciones se basan en los patrones de peticiones observados:
 - DeepSeek V4 Flash — 790 tokens de entrada, 68,000 en caché, 280 tokens de salida por petición
 - MiniMax M3 — 510 tokens de entrada, 56,000 en caché, 190 tokens de salida por petición
 - MiniMax M2.7 — 300 tokens de entrada, 55,000 en caché, 125 tokens de salida por petición
+- Qwen3.8 Max — 420 tokens de entrada, 66,000 en caché, 200 tokens de salida por petición
 - Qwen3.7 Max — 420 tokens de entrada, 66,000 en caché, 200 tokens de salida por petición
 - Qwen3.7 Plus — 500 tokens de entrada, 57,000 en caché, 190 tokens de salida por petición
 - Qwen3.6 Plus — 500 tokens de entrada, 57,000 en caché, 190 tokens de salida por petición
@@ -148,6 +151,7 @@ Las estimaciones también se basan en los siguientes precios por 1M tokens y en 
 | MiniMax M3                   | $0.30   | $1.20  | $0.06            | -                  | $60 |
 | MiniMax M2.7                 | $0.30   | $1.20  | $0.06            | $0.375             | $60 |
 | MiniMax M2.5                 | $0.30   | $1.20  | $0.06            | $0.375             | $60 |
+| Qwen3.8 Max                  | $2.00   | $6.00  | $0.25            | $2.50              | $15 |
 | Qwen3.7 Max                  | $2.50   | $7.50  | $0.50            | $3.125             | $60 |
 | Qwen3.7 Plus (≤ 256K tokens) | $0.40   | $1.60  | $0.04            | $0.50              | $60 |
 | Qwen3.7 Plus (> 256K tokens) | $1.20   | $4.80  | $0.12            | $1.50              | $60 |
@@ -207,6 +211,7 @@ También puedes acceder a los modelos de Go a través de los siguientes endpoint
 | MiniMax M3        | minimax-m3        | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.8 Max       | qwen3.8-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -241,17 +246,19 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K2.6         | No utilizado             | 0 días             |
 | MiMo-V2.5-Pro     | No utilizado             | 0 días             |
 | MiMo-V2.5         | No utilizado             | 0 días             |
+| Qwen3.8 Max       | No utilizado             | 0 días             |
 | Qwen3.7 Max       | No utilizado             | 0 días             |
 | Qwen3.7 Plus      | No utilizado             | 0 días             |
 | Qwen3.6 Plus      | No utilizado             | 0 días             |
 | MiniMax M3        | No utilizado             | 0 días             |
 | MiniMax M2.7      | No utilizado             | 0 días             |
 | DeepSeek V4 Pro   | No utilizado             | 0 días             |
-| DeepSeek V4 Flash | Utilizado                | Sin acuerdo        |
+| DeepSeek V4 Flash | No utilizado             | 0 días             |
 | Hy3               | No utilizado             | 0 días             |
 
 - **Grok 4.5:** ZDR deshabilita funciones importantes de la API que dependen de datos almacenados, incluidas la Responses API con estado, Files and Collections y la Batch API. [Más información](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Se generan registros de supervisión de abusos para todo el uso de funciones de la API y se conservan durante un máximo de 30 días. [Más información](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **DeepSeek V4 Flash:** El acuerdo de ZDR se renueva mensualmente. El acuerdo actual es válido hasta el 31 de agosto de 2026.
 
 ---
 

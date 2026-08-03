@@ -349,6 +349,7 @@ export const dict = {
     "ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。",
   "go.faq.a5.gptRetention": "不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。",
   "go.faq.a5.learnMore": "詳しく見る",
+  "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年8月31日まで有効です。",
   "go.faq.a5.beforeExceptions":
     "Goのモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "go.faq.a5.exceptionsLink": "以下の例外",
