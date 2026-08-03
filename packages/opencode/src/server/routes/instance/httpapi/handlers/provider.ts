@@ -58,6 +58,11 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       }
     })
 
+    const refresh = Effect.fn("ProviderHttpApi.refresh")(function* () {
+      yield* ModelsDev.Service.use((s) => s.refresh(true))
+      return yield* list()
+    })
+
     const auth = Effect.fn("ProviderHttpApi.auth")(function* () {
       return yield* svc.methods()
     })
@@ -106,6 +111,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
 
     return handlers
       .handle("list", list)
+      .handle("refresh", refresh)
       .handle("auth", auth)
       .handleRaw("authorize", authorizeRaw)
       .handle("callback", callback)

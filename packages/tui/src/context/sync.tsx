@@ -659,6 +659,18 @@ export const {
           return task
         },
       },
+      async refreshProviders() {
+        const workspace = project.workspace.current()
+        const [providerList, providers] = await Promise.all([
+          sdk.client.provider.refresh({ workspace }, { throwOnError: true }).then((x) => x.data!),
+          sdk.client.config.providers({ workspace }, { throwOnError: true }).then((x) => x.data!),
+        ])
+        batch(() => {
+          setStore("provider", reconcile(providers.providers))
+          setStore("provider_default", reconcile(providers.default))
+          setStore("provider_next", reconcile(providerList))
+        })
+      },
       bootstrap,
     }
     return result

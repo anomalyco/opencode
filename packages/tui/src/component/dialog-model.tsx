@@ -173,6 +173,13 @@ export function DialogModel(props: { providerID?: string }) {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },
         },
+        {
+          command: "model.dialog.refresh",
+          title: "Refresh models",
+          onTrigger() {
+            void sync.refreshProviders()
+          },
+        },
       ]}
       onFilter={setQuery}
       flat={true}
