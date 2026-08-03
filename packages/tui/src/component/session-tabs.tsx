@@ -15,7 +15,7 @@ import {
   type SessionTab,
   type SessionTabUnread,
 } from "../context/session-tabs-model"
-import { createAnimatable, spring, tween } from "../ui/animation"
+import { createAnimatable, spring } from "../ui/animation"
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
 import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
@@ -554,21 +554,6 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const glowColor = () => feedbackColor() ?? accent()
           const glows = () => !selected() && (status().attention || (!status().busy && status().unread !== undefined))
           const title = () => tab.title ?? "Untitled session"
-          const [outgoingTitle, setOutgoingTitle] = createSignal<string>()
-          const wipe = createAnimatable({ front: 1 }, { enabled: animations, transition: tween({ duration: 0.3 }) })
-          createEffect((previous: string) => {
-            const next = title()
-            if (next === previous) return next
-            if (previous === NEW_SESSION_TAB_TITLE) {
-              setOutgoingTitle(undefined)
-              wipe.jump({ front: 1 })
-              return next
-            }
-            setOutgoingTitle(previous)
-            wipe.jump({ front: 0 })
-            wipe.animate({ front: 1 })
-            return next
-          }, title())
           const tabNumber = createMemo(() => items().findIndex((item) => item.sessionID === tab.sessionID) + 1)
           // The number cell keeps one trailing space, even for double-digit tabs.
           const numberWidth = () => String(tabNumber()).length + 1
@@ -577,20 +562,6 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
             Math.max(1, width() - 1 - numberWidth() - (hovered() === tab.sessionID ? 2 : 0))
           const visibleTitle = createMemo(() => Locale.takeWidth(title(), availableTitleWidth()))
           const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
-          const outgoingTitleParts = createMemo(() => {
-            const outgoing = outgoingTitle()
-            if (outgoing === undefined) return undefined
-            return Locale.graphemes(Locale.takeWidth(outgoing, availableTitleWidth()))
-          })
-          // A new title wipes in from the left over the previous one.
-          const displayedParts = createMemo(() => {
-            const front = wipe.value().front
-            const parts = visibleTitleParts()
-            const previous = outgoingTitleParts()
-            if (previous === undefined || front >= 1) return parts
-            const cut = Math.round(front * Math.max(parts.length, previous.length))
-            return [...parts.slice(0, cut), ...previous.slice(cut)]
-          })
           const titleFades = createMemo(
             () => stringWidth(title()) >= availableTitleWidth() && availableTitleWidth() > FADE_WIDTH,
           )
@@ -603,8 +574,8 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const characterColor = (index: number) => {
             const base = foreground()
             const color = glows() ? glowTextColor(base, glowColor(), 1 + numberWidth() + index, width()) : base
-            if (!titleFades() || index < displayedParts().length - FADE_WIDTH) return color
-            const position = index - (displayedParts().length - FADE_WIDTH)
+            if (!titleFades() || index < visibleTitleParts().length - FADE_WIDTH) return color
+            const position = index - (visibleTitleParts().length - FADE_WIDTH)
             return tint(color, background(), 0.2 + 0.72 * (position / Math.max(1, FADE_WIDTH - 1)))
           }
           // The running sweep's level under the number cell, reported by the pulse renderable.
@@ -677,8 +648,8 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   selectable={false}
                   attributes={bold()}
                 >
-                  <Show when={glows() || titleFades()} fallback={displayedParts().join("")}>
-                    <For each={displayedParts()}>
+                  <Show when={glows() || titleFades()} fallback={visibleTitle()}>
+                    <For each={visibleTitleParts()}>
                       {(character, index) => <span style={{ fg: characterColor(index()) }}>{character}</span>}
                     </For>
                   </Show>
