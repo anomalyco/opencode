@@ -96,6 +96,7 @@ export const bodyFields = {
   stream: Schema.Literal(true),
   stream_options: Schema.optional(Schema.Struct({ include_usage: Schema.Boolean })),
   store: Schema.optional(Schema.Boolean),
+  prompt_cache_key: Schema.optional(Schema.String),
   reasoning_effort: Schema.optional(OpenAIOptions.OpenAIReasoningEffort),
   max_tokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
@@ -121,6 +122,7 @@ const OpenAIChatUsage = Schema.Struct({
   prompt_tokens_details: optionalNull(
     Schema.Struct({
       cached_tokens: Schema.optional(Schema.Number),
+      cache_write_tokens: Schema.optional(Schema.Number),
     }),
   ),
   completion_tokens_details: optionalNull(
@@ -332,11 +334,13 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
 
 const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LLMRequest) {
   const store = OpenAIOptions.store(request)
+  const promptCacheKey = OpenAIOptions.promptCacheKey(request)
   const reasoningEffort = OpenAIOptions.reasoningEffort(request)
   if (reasoningEffort && !OpenAIOptions.isReasoningEffort(reasoningEffort))
     return yield* invalid(`OpenAI Chat does not support reasoning effort ${reasoningEffort}`)
   return {
     ...(store !== undefined ? { store } : {}),
+    ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
     ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
   }
 })
@@ -384,20 +388,22 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 }
 
 // OpenAI Chat reports `prompt_tokens` (inclusive total) with a
-// `cached_tokens` subset, and `completion_tokens` (inclusive total) with
-// a `reasoning_tokens` subset. We pass the inclusive totals through and
-// derive the non-cached breakdown so the `LLM.Usage` contract is
-// satisfied on both sides.
+// `cached_tokens` and `cache_write_tokens` subsets, and `completion_tokens`
+// (inclusive total) with a `reasoning_tokens` subset. We pass the inclusive
+// totals through and derive the non-cached breakdown so the `LLM.Usage`
+// contract is satisfied on both sides.
 const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   if (!usage) return undefined
   const cached = usage.prompt_tokens_details?.cached_tokens
+  const cacheWrite = usage.prompt_tokens_details?.cache_write_tokens
   const reasoning = usage.completion_tokens_details?.reasoning_tokens
-  const nonCached = ProviderShared.subtractTokens(usage.prompt_tokens, cached)
+  const nonCached = ProviderShared.subtractTokens(usage.prompt_tokens, ProviderShared.sumTokens(cached, cacheWrite))
   return new Usage({
     inputTokens: usage.prompt_tokens,
     outputTokens: usage.completion_tokens,
     nonCachedInputTokens: nonCached,
     cacheReadInputTokens: cached,
+    cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.prompt_tokens, usage.completion_tokens, usage.total_tokens),
     providerMetadata: { openai: usage },

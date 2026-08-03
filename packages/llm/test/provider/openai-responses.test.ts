@@ -705,7 +705,7 @@ describe("OpenAI Responses route", () => {
               input_tokens: 5,
               output_tokens: 2,
               total_tokens: 7,
-              input_tokens_details: { cached_tokens: 1 },
+              input_tokens_details: { cached_tokens: 1, cache_write_tokens: 2 },
               output_tokens_details: { reasoning_tokens: 0 },
             },
           },
@@ -715,8 +715,9 @@ describe("OpenAI Responses route", () => {
       const usage = new Usage({
         inputTokens: 5,
         outputTokens: 2,
-        nonCachedInputTokens: 4,
+        nonCachedInputTokens: 2,
         cacheReadInputTokens: 1,
+        cacheWriteInputTokens: 2,
         reasoningTokens: 0,
         totalTokens: 7,
         providerMetadata: {
@@ -724,7 +725,7 @@ describe("OpenAI Responses route", () => {
             input_tokens: 5,
             output_tokens: 2,
             total_tokens: 7,
-            input_tokens_details: { cached_tokens: 1 },
+            input_tokens_details: { cached_tokens: 1, cache_write_tokens: 2 },
             output_tokens_details: { reasoning_tokens: 0 },
           },
         },
