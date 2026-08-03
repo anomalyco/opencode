@@ -4,6 +4,7 @@ import { createBindingLookup } from "@opentui/keymap/extras"
 import { Schema } from "effect"
 import { createContext, type JSX, useContext } from "solid-js"
 import { TuiKeybind } from "./keybind"
+import { resolveLocale } from "../i18n"
 
 export const AttentionSoundName = Schema.Literals([
   "default",
@@ -30,6 +31,8 @@ export const ScrollAcceleration = Schema.Struct({
 export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
   description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
 })
+export const Locale = Schema.Literals(["en", "zh-CN"]).annotate({ description: "TUI display language" })
+export type Locale = Schema.Schema.Type<typeof Locale>
 
 export const AttentionSounds = Schema.Record(AttentionSoundName, Schema.optionalKey(Schema.String))
 export type AttentionSoundPaths = Schema.Schema.Type<typeof AttentionSounds>
@@ -62,11 +65,12 @@ export const Info = Schema.Struct({
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
+  locale: Schema.optional(Locale),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "locale" | "mouse"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -77,6 +81,7 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   }
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
+  locale: Locale
   mouse: boolean
 }
 
@@ -112,6 +117,7 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
+    locale: resolveLocale(input.locale),
     mouse: input.mouse ?? true,
   }
 }

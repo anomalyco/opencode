@@ -141,6 +141,18 @@ it.instance("loads tui config with the same precedence order as server config pa
   ),
 )
 
+it.instance("loads the TUI locale from tui.json", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const test = yield* TestInstance
+      yield* fs.writeJson(path.join(test.directory, "tui.json"), { locale: "zh-CN" })
+
+      expect((yield* getTuiConfig(test.directory)).locale).toBe("zh-CN")
+    }),
+  ),
+)
+
 it.instance("resolves attention config defaults and overrides", () =>
   withCleanState(
     Effect.gen(function* () {

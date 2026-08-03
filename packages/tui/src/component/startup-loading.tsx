@@ -1,11 +1,13 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import { Spinner } from "./spinner"
+import { useTuiI18n } from "../i18n"
 
 export function StartupLoading(props: { ready: () => boolean }) {
   const theme = useTheme().theme
+  const i18n = useTuiI18n()
   const [show, setShow] = createSignal(false)
-  const text = createMemo(() => (props.ready() ? "Finishing startup..." : "Loading plugins..."))
+  const text = createMemo(() => (props.ready() ? i18n.t("startup.finishing") : i18n.t("startup.loadingPlugins")))
   let wait: NodeJS.Timeout | undefined
   let hold: NodeJS.Timeout | undefined
   let stamp = 0

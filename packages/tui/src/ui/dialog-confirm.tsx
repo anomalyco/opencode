@@ -5,6 +5,7 @@ import { createStore } from "solid-js/store"
 import { For } from "solid-js"
 import { Locale } from "../util/locale"
 import { useBindings } from "../keymap"
+import { useTuiI18n } from "../i18n"
 
 export type DialogConfirmProps = {
   title: string
@@ -19,6 +20,7 @@ export type DialogConfirmResult = boolean | undefined
 export function DialogConfirm(props: DialogConfirmProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const i18n = useTuiI18n()
   const [store, setStore] = createStore({
     active: "confirm" as "confirm" | "cancel",
   })
@@ -80,7 +82,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
               }}
             >
               <text fg={key === store.active ? theme.selectedListItemText : theme.textMuted}>
-                {Locale.titlecase(key === "cancel" ? (props.label ?? key) : key)}
+                {key === "cancel" && props.label ? Locale.titlecase(props.label) : i18n.t(`dialog.${key}`)}
               </text>
             </box>
           )}

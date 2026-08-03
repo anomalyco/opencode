@@ -12,13 +12,9 @@ import { useEditorContext } from "../context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../config"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
+import { useTuiI18n } from "../i18n"
 
 let once = false
-const placeholder = {
-  normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
-  shell: ["ls -la", "git status", "pwd"],
-}
-
 export function Home() {
   const pluginRuntime = usePluginRuntime()
   const sync = useSync()
@@ -30,6 +26,11 @@ export function Home() {
   const editor = useEditorContext()
   const dimensions = useTerminalDimensions()
   const tuiConfig = useTuiConfig()
+  const i18n = useTuiI18n()
+  const placeholder = {
+    normal: [i18n.t("home.placeholder.fixTodo"), i18n.t("home.placeholder.techStack"), i18n.t("home.placeholder.fixTests")],
+    shell: ["ls -la", "git status", "pwd"],
+  }
   const promptMaxWidth = createMemo(() => {
     const configured = tuiConfig.prompt?.max_width
     if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
