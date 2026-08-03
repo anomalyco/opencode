@@ -119,6 +119,37 @@ describe("gateway worker", () => {
     expect(store.getTask("uncertain")?.state).toBe("uncertain_delivery")
   })
 
+  test("recovers an unnamed group requester into delivery without changing the answer body", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "feishu-worker-mention-recovery-"))
+    directories.push(directory)
+    const path = join(directory, "gateway.sqlite")
+    const initial = openGatewayStore(path)
+    admit(initial, {
+      ...task("mention_recovery", "session_mention_recovery"),
+      replyMentionID: "ou_requester",
+    })
+    initial.close()
+    const store = openGatewayStore(path)
+    stores.push(store)
+    const body = "6001ZZ（货架号：A-2-1）库存177"
+    const feishu = fakeFeishu()
+    const worker = createWorker(store, fakeChat(async () => completed("mention_recovery", body)), feishu)
+
+    await worker.recover()
+
+    expect(feishu.calls).toHaveLength(1)
+    expect(feishu.calls[0]).toMatchObject({
+      task: { replyMentionID: "ou_requester", answer: "6001ZZ（货架号：A-2-1）库存177" },
+      text: "6001ZZ（货架号：A-2-1）库存177",
+    })
+    expect(feishu.calls[0]?.task).not.toHaveProperty("replyMentionName")
+    expect(store.getTask("mention_recovery")).toMatchObject({
+      state: "delivered",
+      replyMentionID: "ou_requester",
+      answer: "6001ZZ（货架号：A-2-1）库存177",
+    })
+  })
+
   test("uses a handled pre-model route byte-for-byte without calling chat", async () => {
     const store = await createStore()
     const inventoryTask = task("inventory", "session_inventory")
@@ -237,6 +268,56 @@ describe("gateway worker", () => {
     expect(store.getTask("timeout")).toEqual(expect.objectContaining({ state: "uncertain_delivery", sendAttempts: 1 }))
     expect(feishu.calls.filter((item) => item.task.id === "delivered")).toHaveLength(1)
   })
+
+  test("retries a named group requester with unchanged metadata and answer body", async () => {
+    const store = await createStore()
+    admit(store, {
+      ...task("mention_retry", "session_mention_retry"),
+      replyMentionID: "ou_requester",
+      replyMentionName: "求精轴承",
+    })
+    const body = "6001ZZ（货架号：A-2-1）库存177"
+    const outcomes: FeishuReplyResult[] = [
+      { kind: "not_sent", retryable: true, reason: "rate_limited" },
+      { kind: "delivered", externalReplyID: "reply_mention_retry" },
+    ]
+    const feishu = fakeFeishu(async () => outcomes.shift()!)
+    const worker = createWorker(store, fakeChat(async () => completed("mention_retry", body)), feishu, {
+      replyAttempts: 2,
+    })
+
+    worker.enqueue("mention_retry")
+    await worker.idle()
+
+    expect(
+      feishu.calls.map((item) => ({
+        replyMentionID: item.task.replyMentionID,
+        replyMentionName: item.task.replyMentionName,
+        answer: item.task.answer,
+        text: item.text,
+      })),
+    ).toEqual([
+      {
+        replyMentionID: "ou_requester",
+        replyMentionName: "求精轴承",
+        answer: "6001ZZ（货架号：A-2-1）库存177",
+        text: "6001ZZ（货架号：A-2-1）库存177",
+      },
+      {
+        replyMentionID: "ou_requester",
+        replyMentionName: "求精轴承",
+        answer: "6001ZZ（货架号：A-2-1）库存177",
+        text: "6001ZZ（货架号：A-2-1）库存177",
+      },
+    ])
+    expect(store.getTask("mention_retry")).toMatchObject({
+      state: "delivered",
+      sendAttempts: 2,
+      replyMentionID: "ou_requester",
+      replyMentionName: "求精轴承",
+      answer: "6001ZZ（货架号：A-2-1）库存177",
+    })
+  })
 })
 
 function createWorker(
@@ -300,11 +381,11 @@ function fakeFeishu(
   }
 }
 
-function completed(id: string) {
+function completed(id: string, text = `answer:${id}`) {
   return {
     ok: true as const,
     value: {
-      text: `answer:${id}`,
+      text,
       model: { providerID: "test", modelID: "test-model" },
       tokens: { input: 1, output: 1, reasoning: 0 },
       cost: 0,

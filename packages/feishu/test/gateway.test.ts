@@ -240,14 +240,14 @@ describe("Feishu chat gateway", () => {
       },
       text: inventoryBody,
     })
-    expect(recoveredStore.getTask(admitted!.id)?.answer).toBe(inventoryBody)
+    expect(recoveredStore.getTask(admitted.id)?.answer).toBe(inventoryBody)
     expect(inventoryBody).toBe(
       "6001ZZ（货架号：B-11-13）苏州精工轴承库存200，备注：现货\n6301（货架号：B-1-1）宁波宏达轴承库存12\n6401库存9，备注：2024-7-20",
     )
     expect(recoveredChannel.sent[0]?.text).not.toMatch(/@求精轴承|<at/)
     expect(recoveredChannel.sent[0]?.task.answer).not.toMatch(/@求精轴承|<at/)
     const answerEvents = recoveredStore
-      .eventsForTrace(admitted!.traceID)
+      .eventsForTrace(admitted.traceID)
       .filter((event) => event.eventType === "answer_recorded" || event.eventType === "answer_recorded_sentence")
     expect(answerEvents.map((event) => event.content)).toEqual([
       { outcome: "success", route: "inventory", text: inventoryBody },
