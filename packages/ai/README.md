@@ -3,8 +3,9 @@
 Schema-first AI primitives for opencode. Provider quirks live in adapters, not in calling code.
 
 ```ts
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { LLM, LLMClient } from "@opencode-ai/ai"
+import { RequestExecutor } from "@opencode-ai/ai/route"
 import { OpenAI } from "@opencode-ai/ai/providers"
 
 const model = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).responses("gpt-4o-mini")
@@ -20,6 +21,10 @@ const program = Effect.gen(function* () {
   const response = yield* LLMClient.generate(request)
   console.log(response.text)
 })
+
+const llmLayer = LLMClient.layer.pipe(Layer.provide(RequestExecutor.fetchLayer))
+
+await Effect.runPromise(program.pipe(Effect.provide(llmLayer)))
 ```
 
 Run `LLMClient.stream(request)` instead of `generate` when you want incremental `LLMEvent`s. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses, Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
@@ -199,6 +204,32 @@ The hosted result is represented as a provider-executed tool call and tool resul
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
 - **`Image.generate({...})`** — generate images through a provider-neutral image request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
+
+## Testing
+
+Use the deterministic test client from `@opencode-ai/ai/testing` to script provider-neutral responses and inspect
+the requests sent by code under test:
+
+```ts
+import { Effect } from "effect"
+import { TestLLM } from "@opencode-ai/ai/testing"
+
+const testLLM = TestLLM.layer({
+  fallback: TestLLM.text("Hello from the test model", "text-1"),
+})
+
+// TestLLM.clientLayer provides LLMClient.Service and consumes TestLLM.Service.
+const programWithTestClient = Effect.gen(function* () {
+  const result = yield* program
+  const test = yield* TestLLM.Service
+  console.log(test.requests)
+  return result
+}).pipe(Effect.provide(TestLLM.clientLayer), Effect.provide(testLLM))
+```
+
+`TestLLM.push(...)` scripts one-shot responses, `TestLLM.always(...)` changes the fallback, and
+`TestLLM.wait(...)` lets concurrent tests wait until a request has arrived. Every received canonical request is
+available on the yielded `TestLLM.Service`.
 
 ## Caching
 

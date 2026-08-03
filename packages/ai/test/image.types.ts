@@ -1,5 +1,7 @@
+import { Effect } from "effect"
 import {
   Image,
+  ImageClient,
   ImageInput,
   ImageModel,
   type ImageModelOptions,
@@ -7,7 +9,12 @@ import {
   type ImageRequestFor,
   type ImageRoute,
 } from "../src"
+import type { Service } from "../src/image-client"
 import { Google, OpenAI, XAI, ZAI } from "../src/providers"
+
+type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
+type Equal<A, B> = [A, B] extends [B, A] ? true : false
+type Assert<T extends true> = T
 
 type GoogleLikeOptions = {
   readonly aspectRatio?: "1:1" | "16:9"
@@ -146,6 +153,9 @@ const request = Image.request({
 })
 const typedRequest: ImageRequestFor<GoogleLikeOptions> = request
 void typedRequest
+const generated = ImageClient.generate(request)
+type GenerateRequirements = Assert<Equal<Requirements<typeof generated>, Service>>
+void (true satisfies GenerateRequirements)
 
 // @ts-expect-error Image requests no longer expose a common count option.
 Image.generate({ model: openai, prompt: "A lighthouse", count: 2 })

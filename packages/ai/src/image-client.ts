@@ -15,11 +15,11 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Im
 
 export const generate = <Options extends ImageOptions>(
   request: ImageRequestFor<Options>,
-): Effect.Effect<ImageResponse, AIError> =>
+): Effect.Effect<ImageResponse, AIError, Service> =>
   Effect.gen(function* () {
     const client = yield* Service
     return yield* client.generate(request)
-  }) as Effect.Effect<ImageResponse, AIError>
+  })
 
 export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
   Service,

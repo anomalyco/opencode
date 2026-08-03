@@ -422,18 +422,18 @@ const generateWith = (stream: Interface["stream"]) =>
     )
   })
 
-export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, AIError> {
+export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, AIError, Service> {
   return Stream.unwrap(
     Effect.gen(function* () {
       return (yield* Service).stream(request, options)
     }),
-  ) as Stream.Stream<LLMEvent, AIError>
+  )
 }
 
-export function generate(request: LLMRequest, options?: StreamOptions): Effect.Effect<LLMResponse, AIError> {
+export function generate(request: LLMRequest, options?: StreamOptions): Effect.Effect<LLMResponse, AIError, Service> {
   return Effect.gen(function* () {
     return yield* (yield* Service).generate(request, options)
-  }) as Effect.Effect<LLMResponse, AIError>
+  })
 }
 
 export const streamRequest = (request: LLMRequest, options?: StreamOptions) =>
