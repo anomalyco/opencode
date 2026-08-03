@@ -252,7 +252,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBeUndefined()
   })
 
-  test("should keep the Azure cache key for gpt-5.5 early return", () => {
+  test("should keep the Azure cache key for gpt-5.5 Responses defaults", () => {
     const result = ProviderTransform.options({
       model: {
         ...mockModel,
@@ -264,6 +264,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.store).toBe(false)
     expect(result.reasoningSummary).toBe("auto")
+    expect(result.reasoningEffort).toBe("medium")
     expect(result.promptCacheKey).toBe(sessionID)
   })
 
@@ -525,13 +526,13 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.include).toBeUndefined()
   })
 
-  test("azure chat completions omit Responses-only reasoning options after variants merge", async () => {
+  test("azure gpt-5.5 chat completions omit unsupported reasoning options after variants merge", async () => {
     const model = {
-      ...createGpt5Model("gpt-5.4"),
-      id: "azure/gpt-5.4",
+      ...createGpt5Model("gpt-5.5"),
+      id: "azure/gpt-5.5",
       providerID: "azure",
       api: {
-        id: "gpt-5.4",
+        id: "gpt-5.5",
         url: "https://azure.com",
         npm: "@ai-sdk/azure",
       },
@@ -551,7 +552,7 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
           role: "user",
           time: { created: Date.now() },
           agent: "test",
-          model: { providerID: "azure", modelID: "gpt-5.4", variant: "high" },
+          model: { providerID: "azure", modelID: "gpt-5.5", variant: "high" },
         } as any,
         sessionID,
         model,
@@ -580,7 +581,7 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
         isWorkflow: false,
       }),
     )
-    expect(result.params.options.reasoningEffort).toBe("high")
+    expect(result.params.options.reasoningEffort).toBeUndefined()
     expect(result.params.options.reasoningSummary).toBeUndefined()
     expect(result.params.options.include).toBeUndefined()
     expect(result.tools.lookup.strict).toBe(false)
@@ -681,14 +682,52 @@ describe("ProviderTransform.options - gpt-5 reasoningEffort", () => {
     expect(result.reasoningEffort).toBeUndefined()
   })
 
-  test("gpt-5.5 should NOT set reasoningEffort", () => {
+  test("gpt-5.5 should set Responses reasoning options", () => {
     const result = ProviderTransform.options({
       model: createModel("gpt-5.5"),
       sessionID,
       providerOptions: {},
     })
 
-    expect(result.reasoningEffort).toBeUndefined()
+    expect(result.reasoningEffort).toBe("medium")
+    expect(result.reasoningSummary).toBe("auto")
+  })
+})
+
+describe("ProviderTransform.requestOptions - Azure endpoints", () => {
+  const options = {
+    reasoningEffort: "high",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"],
+  }
+  test.each([
+    ["preserves Responses reasoning options", "gpt-5.5", {}, {}, options],
+    [
+      "preserves reasoning effort for gpt-5.4 Chat Completions",
+      "gpt-5.4",
+      { useCompletionUrls: true },
+      {},
+      { reasoningEffort: "high" },
+    ],
+    ["uses the model endpoint override", "gpt-5.5", { useCompletionUrls: true }, { useCompletionUrls: false }, options],
+    ["omits reasoning effort for gpt-5.5 Chat Completions", "gpt-5.5", { useCompletionUrls: true }, {}, {}],
+    ["omits reasoning effort for gpt-5.6 Chat Completions", "gpt-5.6", { useCompletionUrls: true }, {}, {}],
+    ["omits reasoning effort for gpt-6 Chat Completions", "gpt-6", { useCompletionUrls: true }, {}, {}],
+    [
+      "does not treat gpt-50 as a versioned GPT model",
+      "gpt-50",
+      { useCompletionUrls: true },
+      {},
+      { reasoningEffort: "high" },
+    ],
+  ])("%s", (_name, apiID, providerOptions, modelOptions, expected) => {
+    expect(
+      ProviderTransform.requestOptions({
+        model: { api: { id: apiID, npm: "@ai-sdk/azure" }, options: modelOptions } as any,
+        providerOptions,
+        options,
+      }),
+    ).toEqual(expected)
   })
 })
 

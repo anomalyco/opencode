@@ -1270,11 +1270,6 @@ export function options(input: {
     result["gateway"] = { caching: "auto" }
   }
 
-  if (input.model.api.npm === "@ai-sdk/azure" && input.model.api.id.includes("gpt-5.5")) {
-    result["reasoningSummary"] = "auto"
-    return result
-  }
-
   if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
     if (!input.model.api.id.includes("gpt-5-pro")) {
       result["reasoningEffort"] = "medium"
@@ -1310,6 +1305,32 @@ export function options(input: {
   }
 
   return result
+}
+
+export function requestOptions(input: {
+  model: Provider.Model
+  providerOptions: Record<string, any>
+  options: Record<string, any>
+}) {
+  if (
+    input.model.api.npm !== "@ai-sdk/azure" ||
+    !(input.model.options.useCompletionUrls ?? input.providerOptions.useCompletionUrls)
+  )
+    return input.options
+
+  const result = { ...input.options }
+  delete result.reasoningSummary
+  delete result.include
+  if (isGpt55OrNewer(input.model.api.id)) delete result.reasoningEffort
+  return result
+}
+
+function isGpt55OrNewer(modelID: string) {
+  const match = /gpt-(\d)(?:[.-](\d+))?(?:[.-]|$)/i.exec(modelID)
+  if (!match) return false
+  const major = Number(match[1])
+  const minor = Number(match[2] ?? 0)
+  return major > 5 || (major === 5 && minor >= 5)
 }
 
 export function smallOptions(model: Provider.Model) {
