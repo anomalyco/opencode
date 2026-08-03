@@ -187,7 +187,23 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
       appendMessage,
     }
     yield* SessionMessageUpdater.update(adapter, event)
+    if (bumpsSessionActivity(event)) {
+      yield* db
+        .update(SessionTable)
+        .set({ time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie)
+    }
   })
+}
+
+function bumpsSessionActivity(event: SessionEvent.Event) {
+  return (
+    event.type === "session.next.step.started" ||
+    event.type === "session.next.step.ended" ||
+    event.type === "session.next.step.failed"
+  )
 }
 
 function insertMessage(db: DatabaseService, event: SessionEvent.Event, message: SessionMessage.Message) {

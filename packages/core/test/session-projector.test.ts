@@ -377,6 +377,54 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("bumps session updated time when projecting step lifecycle events", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const events = yield* EventV2.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_step_lifecycle")
+      yield* events.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID,
+        timestamp: DateTime.makeUnsafe(5),
+        agent: "build",
+        model,
+      })
+      yield* events.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        assistantMessageID,
+        timestamp: DateTime.makeUnsafe(9),
+        finish: "stop",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+
+      expect(
+        (yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie))
+          ?.time_updated,
+      ).toBe(9)
+    }),
+  )
+
   it.effect("does not revive a stale incomplete in-memory assistant projection", () =>
     Effect.gen(function* () {
       const stale = SessionMessage.Assistant.make({
