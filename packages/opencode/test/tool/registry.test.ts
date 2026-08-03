@@ -194,6 +194,39 @@ describe("tool.registry", () => {
     }),
   )
 
+  it.instance("carries strict from a custom tool definition", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tool = path.join(test.directory, ".opencode", "tool")
+      yield* Effect.promise(() => fs.mkdir(tool, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tool, "strict_tool.ts"),
+          [
+            "export default {",
+            "  description: 'strict tool',",
+            "  args: {},",
+            "  strict: true,",
+            "  execute: async () => 'ok',",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const tools = yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: yield* agents.defaultInfo(),
+      })
+
+      expect(tools.find((item) => item.id === "strict_tool")?.strict).toBe(true)
+      expect(tools.filter((item) => item.id !== "strict_tool").every((item) => item.strict === undefined)).toBe(true)
+    }),
+  )
+
   it.instance("ignores non-tool exports in .opencode/tool files", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

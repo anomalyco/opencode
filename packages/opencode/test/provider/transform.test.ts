@@ -586,6 +586,60 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.tools.lookup.strict).toBe(false)
   })
 
+  test("a tool's strict flag survives on bedrock and is still overridden on mantle", async () => {
+    const prepare = (npm: string) =>
+      Effect.runPromise(
+        LLMRequestPrep.prepare({
+          user: {
+            id: "msg_user-test",
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: "test",
+            model: { providerID: "amazon-bedrock", modelID: "anthropic.claude-sonnet-4-6" },
+          } as any,
+          sessionID,
+          model: {
+            ...createGpt5Model("anthropic.claude-sonnet-4-6"),
+            id: "amazon-bedrock/anthropic.claude-sonnet-4-6",
+            providerID: "amazon-bedrock",
+            api: {
+              id: "anthropic.claude-sonnet-4-6",
+              url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+              npm,
+            },
+          },
+          agent: {
+            name: "test",
+            mode: "primary",
+            options: {},
+            permission: [],
+          } as any,
+          system: [],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {
+            lookup: {
+              description: "Look up a value",
+              inputSchema: jsonSchema({ type: "object", properties: {} }),
+              strict: true,
+            },
+          },
+          provider: { id: "amazon-bedrock", options: {} } as any,
+          auth: undefined,
+          plugin: {
+            trigger: (_name: string, _input: unknown, output: unknown) => Effect.succeed(output),
+            list: () => Effect.succeed([]),
+            init: () => Effect.void,
+          } as any,
+          flags: { outputTokenMax: 32_000, client: "test" } as any,
+          isWorkflow: false,
+        }),
+      )
+
+    expect((await prepare("@ai-sdk/amazon-bedrock")).tools.lookup.strict).toBe(true)
+    expect((await prepare("@ai-sdk/amazon-bedrock/mantle")).tools.lookup.strict).toBe(false)
+  })
+
   test("gpt-5.1 should have textVerbosity set to low", () => {
     const model = createGpt5Model("gpt-5.1")
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
