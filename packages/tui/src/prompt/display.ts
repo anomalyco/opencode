@@ -7,7 +7,20 @@ export function promptOffsetWidth(value: string) {
   for (const part of graphemes.segment(value)) {
     // Textarea offsets count newlines as one position and tabs as two, while
     // Bun.stringWidth counts both as zero.
-    width += part.segment === "\n" ? 1 : part.segment === "\t" ? 2 : Bun.stringWidth(part.segment)
+    if (part.segment === "\n") {
+      width += 1
+      continue
+    }
+    if (part.segment === "\t") {
+      width += 2
+      continue
+    }
+
+    // The widget measures a cluster by the width of the character it renders,
+    // so decomposed input (IME-committed hangul jamo, か + combining dakuten)
+    // has to be composed first or each piece gets counted on its own. Only
+    // multi-codepoint clusters can decompose, so single ones skip the work.
+    width += Bun.stringWidth(part.segment.length > 1 ? part.segment.normalize("NFC") : part.segment)
   }
   return width
 }

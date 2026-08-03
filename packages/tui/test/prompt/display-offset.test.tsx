@@ -64,6 +64,39 @@ test("promptOffsetWidth matches the textarea end-of-buffer offset", async () => 
   }
 })
 
+test("promptOffsetWidth measures decomposed clusters as the widget renders them", async () => {
+  const { app, area } = await mount()
+
+  try {
+    // An IME can commit hangul as separate jamo and Japanese kana as a base
+    // plus a combining mark. The widget draws one character and charges its
+    // width once, so the cluster has to be composed before measuring.
+    for (const text of [
+      "한국어",
+      "한국어".normalize("NFD"),
+      "가".normalize("NFD"),
+      "안녕하세요 테스트입니다",
+      "안녕하세요 테스트입니다".normalize("NFD"),
+      "안녕하세요\n테스트입니다\n마지막",
+      "안녕하세요\n테스트입니다\n마지막".normalize("NFD"),
+      "が",
+      "が".normalize("NFD"),
+      "こんにちは".normalize("NFD"),
+      "café".normalize("NFD"),
+      "👨‍👩‍👧‍👦",
+      "🇰🇷",
+      // Jamo typed on their own stay separate characters and keep their own widths.
+      "ᄀ",
+      "ᅡ",
+      "ㄱㅏ",
+    ]) {
+      expect(promptOffsetWidth(text)).toBe(await endOffset(app, area, text))
+    }
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("row predicates track document rows, not viewport rows", async () => {
   const { app, area } = await mount()
 
