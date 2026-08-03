@@ -84,6 +84,16 @@ describe.skipIf(!!process.env.CI)("i18n parity", () => {
     }
   })
 
+  test("Chinese locales distinguish continue from submit", async () => {
+    const expected = { zh: "继续", zht: "繼續" }
+    for (const locale of ["zh", "zht"] as const) {
+      const target = await dictionary(`./${locale}.ts`)
+      expect(target["common.continue"]).toBe(expected[locale])
+      expect(target["common.submit"]).toBeDefined()
+      expect(target["common.continue"]).not.toBe(target["common.submit"])
+    }
+  })
+
   test("changed-file summary keys preserve rendered English copy and localize complete phrases", async () => {
     const source = await dictionary("../../../ui/src/i18n/en.ts")
     expect(source["ui.sessionTurn.diffs.changed.one"].replace("{{count}}", "1")).toBe("1 Changed file")

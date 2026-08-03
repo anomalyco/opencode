@@ -231,7 +231,7 @@ export const dict = {
   "common.clear": "清除",
   "common.connect": "連線",
   "common.disconnect": "中斷連線",
-  "common.continue": "提交",
+  "common.continue": "繼續",
   "common.submit": "提交",
   "common.save": "儲存",
   "common.saving": "儲存中...",
