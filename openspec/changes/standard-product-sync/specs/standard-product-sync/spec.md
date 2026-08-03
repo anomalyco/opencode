@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Authoritative workbook admission
-The synchronizer SHALL accept only the workbook whose sheet has the exact headers `原始行号`, `商品编码`, `商品名称`, `产地`, `数量`, `货架号`, `规格`, `型号`, and `备注`; it SHALL compute a SHA-256 identity, reject empty or duplicate normalized product codes, and preserve every admitted cell as run evidence.
+The synchronizer SHALL accept only the workbook whose sheet has the exact headers `原始行号`, `商品编码`, `商品名称`, `产地`, `数量`, `盘点日期`, `货架号`, `规格`, `型号`, and `备注`; it SHALL compute a SHA-256 identity, reject empty or duplicate normalized product codes, and preserve every admitted cell as run evidence.
 
 #### Scenario: Approved workbook is admitted
-- **WHEN** the workbook contains the exact headers, 10,560 non-empty rows, and one unique normalized product code per row
+- **WHEN** the workbook contains the exact headers, 10,572 non-empty rows, and one unique normalized product code per row
 - **THEN** Preview records its file name, SHA-256, headers, row count, source rows, and normalized shelf tokens without writing business data
 
 #### Scenario: Workbook identity is invalid
@@ -31,7 +31,7 @@ The synchronizer SHALL reconcile authoritative rows to `Product.s_ID` without tr
 - **THEN** the row is stored as `MISSING` in the authoritative dataset and the synchronizer MUST NOT invent `s_ParentID` or insert an incomplete `Product` row
 
 ### Requirement: Protected Product field synchronization
-For every `MATCHED` row, Apply SHALL synchronize only `Product.u_Name`, `Product.ProdArea`, `Product.ProdType`, `Product.ProdSpec`, and `Product.u_Remark`; it SHALL map workbook `规格` to `ProdType` and workbook `型号` to `ProdSpec`, treat approved blanks as SQL `NULL`, and MUST NOT modify product keys, hierarchy, other legacy columns, or `Storage`.
+For every `MATCHED` row, Apply SHALL synchronize only `Product.u_Name`, `Product.ProdArea`, `Product.ProdType`, `Product.ProdSpec`, and `Product.u_Remark`; it SHALL map workbook `规格` to `ProdType`, workbook `型号` to `ProdSpec`, and the derived display remark to `u_Remark`, treat approved blanks as SQL `NULL`, and MUST NOT modify product keys, hierarchy, other legacy columns, or `Storage`.
 
 #### Scenario: Matched product is synchronized
 - **WHEN** a matched row contains approved name, origin, specification, model, and remark values
@@ -44,6 +44,25 @@ For every `MATCHED` row, Apply SHALL synchronize only `Product.u_Name`, `Product
 #### Scenario: Inventory is protected
 - **WHEN** Apply synchronizes any number of authoritative products
 - **THEN** the count and value fingerprint of all `Storage` rows is unchanged
+
+### Requirement: Inventory date and remark evidence
+The synchronizer SHALL preserve trimmed workbook `盘点日期` and trimmed workbook `备注` as separate authoritative evidence and SHALL derive one display remark by joining their non-empty values with `；` in that order. It MUST NOT parse, reformat, or infer either value.
+
+#### Scenario: Both values exist
+- **WHEN** `盘点日期` is `2019-05-21` and `备注` is `来货；白字`
+- **THEN** the run stores both source values separately and exposes `2019-05-21；来货；白字` as the display remark
+
+#### Scenario: Only inventory date exists
+- **WHEN** `盘点日期` is `2026-07-15` and `备注` is blank
+- **THEN** the display remark is exactly `2026-07-15`
+
+#### Scenario: Only source remark exists
+- **WHEN** `盘点日期` is blank and `备注` is `已盘点；UG 加`
+- **THEN** the display remark is exactly `已盘点；UG 加`
+
+#### Scenario: Both values are blank
+- **WHEN** `盘点日期` and `备注` are blank
+- **THEN** the display remark is SQL `NULL` and the robot omits it
 
 ### Requirement: Authoritative structured shelf replacement
 The synchronizer SHALL normalize workbook shelf tokens to uppercase ASCII A-D three-part codes and, for each `MATCHED` row, replace that product's structured shelf relations with exactly the approved set. It MUST back up previous relations and evidence and SHALL identify new evidence as `StandardWorkbook`.
@@ -102,7 +121,7 @@ Rollback SHALL require an applied `run_id`, restore every backed-up Product fiel
 - **THEN** rollback fails before changing business data
 
 ### Requirement: Exact validation and audit evidence
-The synchronizer SHALL validate workbook rows, unique codes, mapping statuses, mapped Product fields, authoritative and mapped shelf sets, unchanged Storage, view results, orphan/duplicate relations, transaction state, and rollback evidence. Write and high-risk gold cases MUST pass 100%; credentials and complete connection strings MUST never enter reports or database audit rows.
+The synchronizer SHALL validate workbook rows, unique codes, raw inventory dates, raw source remarks, derived display remarks, mapping statuses, mapped Product fields, authoritative and mapped shelf sets, unchanged Storage, view results, orphan/duplicate relations, transaction state, and rollback evidence. Write and high-risk gold cases MUST pass 100%; credentials and complete connection strings MUST never enter reports or database audit rows.
 
 #### Scenario: Applied run validates
 - **WHEN** every required invariant exactly matches the approved workbook and protected database state

@@ -1,6 +1,6 @@
 ## Context
 
-The approved workbook `商品信息(1)_结构化清洗.xlsx` contains 10,560 non-empty rows with unique product codes and normalized A-D three-part shelf codes. The live MySQL 8.4 schema `t1_full_20260717_133707` contains 10,958 `Product` rows, 106 approved codes are absent, 65 approved codes resolve to multiple legacy rows, and 411 non-empty legacy code groups plus seven blank-code rows are outside the workbook. Among the 10,389 one-to-one code matches, 1,120 shelf sets and 30 `ProdArea` supplier/origin values differ.
+The latest approved workbook `商品信息8.3_结构化清洗.xlsx` contains 10,572 non-empty rows with unique product codes and normalized A-D three-part shelf codes. It adds an explicit `盘点日期` column between `数量` and `货架号`; the previous active run came from the older 10,560-row, nine-column workbook. The new workbook is authoritative even when it changes quantities, shelves, inventory dates, or remarks from that previous run.
 
 The legacy `Product` table has 97 columns and requires `s_ParentID`, which the workbook does not contain. Creating the 106 missing rows directly in `Product` would therefore invent hierarchy data. The workbook's display fields are also structurally cleaned: workbook `规格` maps to legacy `Product.ProdType`, workbook `型号` maps to `Product.ProdSpec`, and shelves no longer belong in either text field.
 
@@ -16,6 +16,7 @@ The current Feishu inventory reader queries `Product`, `Storage`, `vw_productshe
 - Exclude database-only legacy rows from robot results without deleting them.
 - Serve all approved workbook products through one authoritative read view, using live `Storage` inventory when a unique legacy product mapping exists and the workbook quantity only when no live mapping exists.
 - Make workbook supplier/origin the only supplier display source and keep `Storage` unchanged.
+- Preserve the source inventory date and source remark independently while continuing to expose one reply-compatible remark.
 - Require 100% validation for every write, mapping decision, and rollback invariant.
 
 **Non-Goals:**
@@ -29,7 +30,7 @@ The current Feishu inventory reader queries `Product`, `Storage`, `vw_productshe
 
 ### 1. Add a versioned authoritative product dataset
 
-Create `erp_standard_product_sync_run`, `erp_standard_product`, `erp_standard_product_shelf`, and `erp_standard_product_map`. A run stores the workbook file name, SHA-256, exact headers, row count, status, previous active run, timestamps, and validation result. Product rows use `(run_id, source_row)` identity and require one unique normalized `product_code` per run. Shelf rows use normalized `A-<n>-<n>` through `D-<n>-<n>` codes.
+Create `erp_standard_product_sync_run`, `erp_standard_product`, `erp_standard_product_shelf`, and `erp_standard_product_map`. A run stores the workbook file name, SHA-256, exact headers, row count, status, previous active run, timestamps, and validation result. Product rows use `(run_id, source_row)` identity, require one unique normalized `product_code` per run, and store `inventory_date`, `source_remark`, and the derived `remark`. Shelf rows use normalized `A-<n>-<n>` through `D-<n>-<n>` codes.
 
 Alternative considered: update `Product` directly from Excel without staging. This cannot represent missing rows safely, cannot explain duplicate codes, and provides no durable source/version boundary.
 
@@ -41,7 +42,7 @@ Alternative considered: update every row sharing the code. That can corrupt dist
 
 ### 3. Overwrite only approved legacy display fields
 
-For `MATCHED` mappings, synchronize `u_Name`, `ProdArea`, `ProdType`, `ProdSpec`, and `u_Remark`. Workbook blank cells are authoritative and become SQL `NULL`. Mapping is intentionally `规格 -> ProdType` and `型号 -> ProdSpec`, matching the observed legacy data semantics. `u_Code`, `s_ID`, `s_ParentID`, the other 90 legacy columns, and all `Storage` rows remain unchanged.
+For `MATCHED` mappings, synchronize `u_Name`, `ProdArea`, `ProdType`, `ProdSpec`, and `u_Remark`. Normalize `盘点日期` and source `备注` only by trimming surrounding whitespace; preserve their text without date parsing or reformatting. Derive `u_Remark` by joining the non-empty inventory date and source remark with `；` in that order. If one is empty, use the other; if both are empty, write SQL `NULL`. Mapping is intentionally `规格 -> ProdType` and `型号 -> ProdSpec`, matching the observed legacy data semantics. `u_Code`, `s_ID`, `s_ParentID`, the other 90 legacy columns, and all `Storage` rows remain unchanged.
 
 Before updates, store the complete old values in `erp_standard_product_backup`. Do not insert missing `Product` rows because the workbook lacks the required legacy hierarchy field.
 
@@ -53,13 +54,13 @@ Alternative considered: continue extracting shelves from `ProdSpec` and `ProdTyp
 
 ### 5. Use an authoritative query projection
 
-Create `vw_standard_inventory_product` and `vw_standard_product_shelf` over the single active applied run. The inventory view exposes the standard product identity and fields, optional mapped `Product.s_ID`, live `SUM(Storage.Prod_Number1)` for mapped rows, and workbook quantity only for unmapped rows. Database-only legacy products do not appear.
+Create `vw_standard_inventory_product` and `vw_standard_product_shelf` over the single active applied run. The inventory view exposes the standard product identity and approved display fields, including the derived combined remark, optional mapped `Product.s_ID`, live `SUM(Storage.Prod_Number1)` for mapped rows, and workbook quantity only for unmapped rows. Database-only legacy products do not appear.
 
 The Feishu adapter queries this projection, obtains shelves from the standard shelf view, and maps supplier from `origin`. It no longer queries `erp_inventory_source_projection`, `erp_partner_overlay`, `ListBuy`, `MasterBill`, or `Units` for supplier display.
 
 ### 6. Separate DDL setup from transactional apply
 
-Idempotent setup creates only the new authoritative/audit objects and views. Apply then runs one DML transaction: lock the active-run row, stage and validate the new run, back up affected legacy values and shelf records, update matched products, replace mapped shelf relations, activate the run, and mark the previous run superseded. Any error rolls back the whole DML transaction.
+Idempotent setup creates or additively upgrades only the authoritative/audit objects and views. Existing standard tables gain nullable `inventory_date` and `source_remark` evidence columns before staging the latest run. Apply then runs one DML transaction: lock the active-run row, stage and validate the new run, back up affected legacy values and shelf records, update matched products, replace mapped shelf relations, activate the run, and mark the previous run superseded. Any error rolls back the whole DML transaction.
 
 ### 7. Make rollback and evidence first-class
 
@@ -72,6 +73,7 @@ Rollback requires an applied `run_id`, restores backed-up legacy fields and shel
 - [Blank approved cells erase legacy display text] -> Treat blanks as authoritative only for the five approved display fields, after database-side backup.
 - [Replacing shelf relations invalidates old extraction evidence] -> Back up evidence and write explicit `StandardWorkbook` evidence for every replacement.
 - [A newer workbook may arrive] -> Require a new hash/run and exact preview; never edit an applied run in place.
+- [Inventory dates include partial values such as `2017-06`] -> Preserve trimmed source text and never coerce it through a date type.
 - [The live MySQL account is writable] -> Restrict the utility to named tables, parameterized statements, expected affected-row bounds, transaction checks, and explicit modes.
 
 ## Migration Plan
@@ -80,10 +82,10 @@ Rollback requires an applied `run_id`, restores backed-up legacy fields and shel
 2. Run Preview to populate no tables and emit exact missing, ambiguous, extra, field, and shelf differences.
 3. Run idempotent setup for authoritative, mapping, backup, and audit objects.
 4. Apply one versioned run only when all invariants and affected-row bounds pass.
-5. Validate all 10,560 authoritative rows, unique codes, shelf equality, mapping statuses, Product field equality for mapped rows, unchanged Storage fingerprint/counts, query projections, and rollback evidence at 100%.
+5. Validate all 10,572 authoritative rows, unique codes, raw inventory dates, raw remarks, derived remarks, shelf equality, mapping statuses, Product field equality for mapped rows, unchanged Storage fingerprint/counts, query projections, and rollback evidence at 100%.
 6. Switch and test the Feishu reader, then restart the gateway only after database and package verification pass.
 7. If validation or robot acceptance fails, rollback by the same `run_id`, revalidate the restored state, and keep the failed run evidence.
 
 ## Open Questions
 
-None. The approved workbook is authoritative, workbook blanks clear approved display fields, missing legacy rows remain canonical-only because their required hierarchy is unavailable, and inventory is never written.
+None. The latest approved workbook is authoritative, `盘点日期` and `备注` merge as `盘点日期；备注` with blank parts omitted, workbook blanks clear approved display fields, missing legacy rows remain canonical-only because their required hierarchy is unavailable, and inventory is never written.

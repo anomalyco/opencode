@@ -12,7 +12,7 @@ The system SHALL verify the target MySQL database identity and required schema b
 - **THEN** the adapter fails closed without guessing a replacement field, querying legacy Product directly, or querying an old database
 
 ### Requirement: Product and inventory mapping
-The system SHALL use the active standard product identity as its internal result identity, SHALL obtain approved name, attribute, normalized size, remark, supplier/origin, and shelves only from the authoritative projections, and SHALL use the projection's inventory quantity. `Product.u_Code`, `Product.s_ID`, and the standard product identity MUST NOT be mapped into the answer domain.
+The system SHALL use the active standard product identity as its internal result identity, SHALL obtain approved name, attribute, normalized size, the derived `盘点日期；备注` display remark, supplier/origin, and shelves only from the authoritative projections, and SHALL use the projection's inventory quantity. Blank remark parts SHALL be omitted. `Product.u_Code`, `Product.s_ID`, and the standard product identity MUST NOT be mapped into the answer domain.
 
 #### Scenario: Product has live inventory and shelves
 - **WHEN** a matching authoritative product maps to a Product row with Storage and one or more approved shelf relations
