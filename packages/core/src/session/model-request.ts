@@ -191,22 +191,31 @@ export const layer = Layer.effect(
       const messages = stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history
       const toolDefinitions = tools.definitions
       const toolsByName = new Map(toolDefinitions.map((tool) => [tool.name, tool]))
+      // Object identity preserves registry provenance when a hook moves a definition to a new key.
+      const toolNamesByDefinition = new Map<object, string>()
       // Hooks may reshape available definitions but cannot advertise tools omitted by permissions or the Step limit.
+      const hookTools = Object.fromEntries(
+        toolDefinitions.map((tool) => {
+          const definition = { description: tool.description, input: { ...tool.inputSchema } }
+          toolNamesByDefinition.set(definition, tool.name)
+          return [tool.name, definition]
+        }),
+      )
       const contextEvent = yield* hooks.trigger("session", "context", {
         sessionID: session.id,
         agent: agent.id,
         model: resolved.ref,
         system,
         messages,
-        tools: Object.fromEntries(
-          toolDefinitions.map((tool) => [tool.name, { description: tool.description, input: { ...tool.inputSchema } }]),
-        ),
+        tools: hookTools,
       })
+      const executableTools = new Map<string, string>()
       const hookedTools = Object.entries(contextEvent.tools).flatMap(([name, tool]) => {
-        const registered = toolsByName.get(name)
-        return registered
-          ? [{ ...registered, description: tool.description, inputSchema: tool.input }]
-          : []
+        const registeredName = toolNamesByDefinition.get(tool)
+        const registered = registeredName ? toolsByName.get(registeredName) : undefined
+        if (!registered || !registeredName) return []
+        executableTools.set(name, registeredName)
+        return [{ ...registered, name, description: tool.description, inputSchema: tool.input }]
       })
       const request = LLM.request({
         model,
@@ -259,10 +268,14 @@ export const layer = Layer.effect(
       const executeTool: Prepared["executeTool"] = (executeInput) => {
         if (stepLimitReached)
           return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
-        if (toolsByName.has(executeInput.call.name) && !Object.hasOwn(contextEvent.tools, executeInput.call.name))
+        const registeredName = executableTools.get(executeInput.call.name)
+        if (!registeredName && toolsByName.has(executeInput.call.name))
           return new Tool.Error({ message: `Tool is not available for this request: ${executeInput.call.name}` })
         return tools
-          .execute(executeInput)
+          .execute({
+            ...executeInput,
+            call: { ...executeInput.call, name: registeredName ?? executeInput.call.name },
+          })
           .pipe(Effect.catchCauseFilter(declineDefect, (decline) => Effect.fail(decline)))
       }
       return {
