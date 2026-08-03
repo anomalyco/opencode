@@ -344,7 +344,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       if (item?.commentID) comments.remove(item.path, item.commentID)
     },
     openAttachment: (attachment) =>
-      dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />),
+      dialog.show(() => <ImagePreview src={attachment.blob.url} alt={attachment.filename} />),
     openContext(key) {
       const item = controller.contextItem(key)
       if (item) openComment(item, props, sync, layout, files, comments)
@@ -377,6 +377,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
         }),
       readClipboardImage: platform.readClipboardImage,
       getPathForFile: platform.getPathForFile,
+      store: platform.draftStore?.putBlob,
     },
     view: {
       placeholder: designPlaceholder,

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process"
 import { stat } from "node:fs/promises"
-import { basename } from "node:path"
+import { basename, join } from "node:path"
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
@@ -21,6 +21,7 @@ import {
 } from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
+import { createDesktopDraftStore } from "./draft-store"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -51,8 +52,12 @@ type Deps = {
 }
 
 export function registerIpcHandlers(deps: Deps) {
+  const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
   const updaterSubscriptions = createUpdaterSubscriptions()
   app.once("will-quit", updaterSubscriptions.clear)
+  app.on("before-quit", () => drafts.flush())
+  app.once("will-quit", () => drafts.close())
+  app.on("browser-window-created", (_event, win) => win.on("session-end", () => drafts.flush()))
 
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
   ipcMain.handle("await-initialization", () => deps.awaitInitialization())
@@ -122,6 +127,14 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("store-length", (_event: IpcMainInvokeEvent, name: string) => {
     const store = getStore(name)
     return Object.keys(store.store).length
+  })
+  ipcMain.handle("draft-get", (_event, key: string) => drafts.get(key))
+  ipcMain.handle("draft-set", (_event, key: string, value: string) => drafts.set(key, value))
+  ipcMain.handle("draft-delete", (_event, key: string) => drafts.set(key, null))
+  ipcMain.handle("draft-blob-put", (_event, data: ArrayBuffer) => drafts.putBlob(new Uint8Array(data)))
+  ipcMain.handle("draft-blob-get", (_event, id: string) => {
+    const data = drafts.getBlob(id)
+    return data ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
   })
 
   ipcMain.handle(

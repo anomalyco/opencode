@@ -63,6 +63,11 @@ export type ElectronAPI = {
   storeClear: (name: string) => Promise<void>
   storeKeys: (name: string) => Promise<string[]>
   storeLength: (name: string) => Promise<number>
+  draftGet: (key: string) => Promise<string | null>
+  draftSet: (key: string, value: string) => Promise<void>
+  draftDelete: (key: string) => Promise<void>
+  draftBlobPut: (data: ArrayBuffer) => Promise<string>
+  draftBlobGet: (id: string) => Promise<ArrayBuffer | null>
 
   getWindowID: () => Promise<string>
   onMenuCommand: (cb: (id: string) => void) => () => void
