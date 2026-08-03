@@ -313,6 +313,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>Kimi K2.6</li>
             <li>MiniMax M3</li>
             <li>MiniMax M2.7</li>
+            <li>Qwen3.8 Max</li>
             <li>Qwen3.7 Max</li>
             <li>Qwen3.7 Plus</li>
             <li>Qwen3.6 Plus</li>
