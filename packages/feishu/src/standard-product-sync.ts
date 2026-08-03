@@ -313,7 +313,10 @@ export function fingerprintStorageTotals(
   return hasher.digest("hex")
 }
 
-export function standardProductSetupStatements(): StandardProductStatement[] {
+export function standardProductSetupStatements(
+  existingStandardProductColumns: readonly string[] = [],
+): StandardProductStatement[] {
+  const columns = new Set(existingStandardProductColumns)
   return [
     {
       name: "create_sync_run",
@@ -344,10 +347,8 @@ export function standardProductSetupStatements(): StandardProductStatement[] {
         product_name VARCHAR(255) NOT NULL,
         origin LONGTEXT NULL,
         workbook_quantity DECIMAL(38,8) NOT NULL,
-        inventory_date LONGTEXT NULL,
         specification LONGTEXT NULL,
         model LONGTEXT NULL,
-        source_remark LONGTEXT NULL,
         remark LONGTEXT NULL,
         shelf_text LONGTEXT NULL,
         PRIMARY KEY (run_id, source_row),
@@ -356,14 +357,22 @@ export function standardProductSetupStatements(): StandardProductStatement[] {
           REFERENCES erp_standard_product_sync_run (run_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin`,
     },
-    {
-      name: "add_inventory_date",
-      sql: "ALTER TABLE erp_standard_product ADD COLUMN IF NOT EXISTS inventory_date LONGTEXT NULL AFTER workbook_quantity",
-    },
-    {
-      name: "add_source_remark",
-      sql: "ALTER TABLE erp_standard_product ADD COLUMN IF NOT EXISTS source_remark LONGTEXT NULL AFTER model",
-    },
+    ...(columns.has("inventory_date")
+      ? []
+      : [
+          {
+            name: "add_inventory_date",
+            sql: "ALTER TABLE erp_standard_product ADD COLUMN inventory_date LONGTEXT NULL AFTER workbook_quantity",
+          },
+        ]),
+    ...(columns.has("source_remark")
+      ? []
+      : [
+          {
+            name: "add_source_remark",
+            sql: "ALTER TABLE erp_standard_product ADD COLUMN source_remark LONGTEXT NULL AFTER model",
+          },
+        ]),
     {
       name: "create_standard_shelf",
       sql: `CREATE TABLE IF NOT EXISTS erp_standard_product_shelf (
@@ -580,7 +589,6 @@ export function standardProductApplyStatements(
   runID = "",
   expected?: {
     matchedProducts: number
-    changedProducts: number
     existingShelfRelations: number
     existingShelfEvidence: number
     replacementShelves: number
@@ -642,7 +650,7 @@ export function standardProductApplyStatements(
           product.u_Remark = standard.remark
         WHERE mapping.run_id = ? AND mapping.mapping_status = 'MATCHED'`,
       values: [runID],
-      expectedAffectedRows: expected?.changedProducts,
+      expectedAffectedRows: expected?.matchedProducts,
     },
     {
       name: "delete_shelf_evidence",

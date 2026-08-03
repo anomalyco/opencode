@@ -440,7 +440,7 @@ describe("standard product database plan", () => {
   })
 
   test("setup idempotently upgrades inventory date and source remark evidence", () => {
-    const statements = standardProductSetupStatements()
+    const statements = standardProductSetupStatements([])
     expect(statements).toHaveLength(11)
     expect(
       statements.every(
@@ -451,11 +451,14 @@ describe("standard product database plan", () => {
       ),
     ).toBeTrue()
     expect(statements.find((statement) => statement.name === "add_inventory_date")?.sql).toMatch(
-      /ALTER TABLE erp_standard_product ADD COLUMN IF NOT EXISTS inventory_date LONGTEXT NULL/i,
+      /ALTER TABLE erp_standard_product ADD COLUMN inventory_date LONGTEXT NULL/i,
     )
     expect(statements.find((statement) => statement.name === "add_source_remark")?.sql).toMatch(
-      /ALTER TABLE erp_standard_product ADD COLUMN IF NOT EXISTS source_remark LONGTEXT NULL/i,
+      /ALTER TABLE erp_standard_product ADD COLUMN source_remark LONGTEXT NULL/i,
     )
+    const repeated = standardProductSetupStatements(["inventory_date", "source_remark"])
+    expect(repeated).toHaveLength(9)
+    expect(repeated.some((statement) => statement.name.startsWith("add_"))).toBeFalse()
     const inventoryView = statements.find((statement) => statement.name === "create_inventory_view")!
     expect(inventoryView.sql).toMatch(
       /CASE\s+WHEN\s+mapping\.product_id\s+IS\s+NULL[\s\S]*workbook_quantity[\s\S]*COALESCE\(inventory\.total_inventory,\s*0\)/i,
@@ -465,7 +468,6 @@ describe("standard product database plan", () => {
   test("apply never writes Storage and updates only approved Product fields", () => {
     const statements = standardProductApplyStatements("run-1", {
       matchedProducts: 10,
-      changedProducts: 8,
       existingShelfRelations: 12,
       existingShelfEvidence: 13,
       replacementShelves: 11,
@@ -483,7 +485,7 @@ describe("standard product database plan", () => {
     )
     expect(productUpdates[0].sql).not.toMatch(/s_ID\s*=|u_Code\s*=|s_ParentID\s*=/)
     expect(statements.find((statement) => statement.name === "backup_products")?.expectedAffectedRows).toBe(10)
-    expect(statements.find((statement) => statement.name === "update_products")?.expectedAffectedRows).toBe(8)
+    expect(statements.find((statement) => statement.name === "update_products")?.expectedAffectedRows).toBe(10)
     expect(statements.find((statement) => statement.name === "delete_shelf_relations")?.expectedAffectedRows).toBe(12)
     expect(statements.find((statement) => statement.name === "delete_shelf_evidence")?.expectedAffectedRows).toBe(13)
     expect(statements.find((statement) => statement.name === "replace_shelf_relations")?.expectedAffectedRows).toBe(11)

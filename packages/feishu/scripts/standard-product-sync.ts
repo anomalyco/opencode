@@ -130,7 +130,16 @@ async function dispatch(
   )
   if (oversized) throw new Error(`Product.u_Name exceeds 60 characters at row ${oversized.row.sourceRow}`)
 
-  for (const statement of standardProductSetupStatements()) {
+  const standardProductColumns = await queryRows(
+    connection,
+    timeout,
+    `SELECT COLUMN_NAME AS column_name
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='erp_standard_product'`,
+  )
+  for (const statement of standardProductSetupStatements(
+    standardProductColumns.map((row) => requiredText(row, "column_name")),
+  )) {
     await execute(connection, timeout, statement)
   }
   const activeRuns = await queryRows(
@@ -151,7 +160,6 @@ async function dispatch(
       ...standardProductStageStatements({ runID, previousRunID, preview }),
       ...standardProductApplyStatements(runID, {
         matchedProducts: matched.length,
-        changedProducts: preview.differences.products,
         existingShelfRelations: matched.reduce(
           (total, mapping) => total + candidates.get(mapping.productID!)!.shelves.length,
           0,
