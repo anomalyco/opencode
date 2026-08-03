@@ -135,22 +135,19 @@ export async function createFeishuChannelPort(
       )
     },
     send(task, text) {
-      const options = {
-        ...(task.replyRootID ? { replyTo: task.replyRootID, replyInThread: true } : {}),
-        ...(task.replyMentionID
-          ? {
-              mentions: [
-                {
-                  key: task.replyMentionID,
-                  openId: task.replyMentionID,
-                  ...(task.replyMentionName ? { name: task.replyMentionName } : {}),
-                },
-              ],
-            }
-          : {}),
-      }
+      const options = task.replyMentionID
+        ? {
+            mentions: [
+              {
+                key: task.replyMentionID,
+                openId: task.replyMentionID,
+                ...(task.replyMentionName ? { name: task.replyMentionName } : {}),
+              },
+            ],
+          }
+        : undefined
       return channel
-        .send(task.replyTarget, { text }, Object.keys(options).length ? options : undefined)
+        .send(task.replyTarget, { text }, options)
         .then(
           (result) => ({ kind: "delivered" as const, externalReplyID: result.messageId }),
           (error) => classifySendError(error),

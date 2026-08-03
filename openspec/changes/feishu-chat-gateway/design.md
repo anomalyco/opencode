@@ -33,7 +33,7 @@ SQLite 记录回答 -> 飞书最终文本回复 -> 记录投递结果
 **Goals:**
 
 - 在当前 Windows 电脑上以一条启动命令运行飞书长连接机器人，无需公网回调地址。
-- 正确处理单聊和群聊提及，并把回复送回原单聊或原消息串。
+- 正确处理单聊和群聊提及，把单聊回复送回原单聊，并把群聊回复作为带原生 requester mention 的普通消息送到原群聊主时间线。
 - 为同一飞书会话复用稳定的 OpenCode Session，保证同会话顺序和跨会话并发。
 - 使用 DeepSeek 完成纯文本回答，并以工具列表和权限策略两层约束禁止全部工具执行。
 - 对飞书重复投递、进程重启、模型失败和回复投递不确定性采取可解释、可恢复且不轻易重复回复的处理。
@@ -127,7 +127,7 @@ SQLite 主日志写入失败时，不得把任务标为已接纳或已完成。�
 
 ### 7. 通过端口适配隔离外部 SDK 和真实模型
 
-飞书 Channel、回复客户端、OpenCode Session 客户端、时钟和 ID/哈希来源在包内以窄接口注入。领域测试使用内存适配器驱动真实路由、状态机和 SQLite，不模拟全局对象；另设少量针对官方 SDK payload 的契约测试。最终答案始终以不含 mention 的正文持久化；仅 Feishu SDK 交付适配器使用官方 Channel 客户端的 `mentions` send option 和可空的群聊投递元数据渲染原生 requester mention，绝不手工构造飞书 mention markup。
+飞书 Channel、回复客户端、OpenCode Session 客户端、时钟和 ID/哈希来源在包内以窄接口注入。领域测试使用内存适配器驱动真实路由、状态机和 SQLite，不模拟全局对象；另设少量针对官方 SDK payload 的契约测试。最终答案始终以不含 mention 的正文持久化；仅 Feishu SDK 交付适配器使用官方 Channel 客户端的 `mentions` send option 和可空的群聊投递元数据渲染原生 requester mention，绝不手工构造飞书 mention markup。群聊最终答案不传 `replyTo` 或 `replyInThread`，使固定版本 SDK 调用消息创建接口并把答案显示在群聊主时间线；单聊仍使用不带发送选项的普通文本消息。入站 `thread_id`、`root_id` 和确定性 Session 路由保持不变，这次只改变最终投递形态。
 
 OpenCode 集成测试使用真实 `sdk-next` 内嵌路由、临时 Location 和测试 provider，验证确定性 Session、prompt 重试、事件收集与工具阻断。真实飞书和 DeepSeek 只用于最终手工烟雾测试，避免把外部账号和费用引入常规测试。
 
@@ -135,7 +135,7 @@ OpenCode 集成测试使用真实 `sdk-next` 内嵌路由、临时 Location 和�
 
 - [飞书发送成功但本地未记录成功会形成不确定投递] → 把状态记为 `uncertain_delivery`，不自动重发，并保留 trace 供人工确认。
 - [本机掉电发生在飞书回调接收与 SQLite 提交之间] → 依赖飞书重复投递和确定性 message ID；只有事务提交成功才确认本地接纳。
-- [官方 Channel 高层 API 的行为或类型与设计假设不一致] → 固定 SDK 版本，并在实现第一阶段用最小契约测试确认消息、提及、回复目标和重连事件。
+- [官方 Channel 高层 API 的行为或类型与设计假设不一致] → 固定 SDK 版本，并用最小契约测试确认普通消息创建、原生提及和重连事件。
 - [同一 Session 的消息并发导致上下文交错] → keyed worker 串行同 Session，禁止绕过队列直接调用 prompt。
 - [DeepSeek 调用耗时超过飞书回调时限] → 回调只做持久接纳，模型在后台执行。
 - [双层工具限制仍出现上游回归] → 监听工具事件并中断 Session；安全测试必须证明执行端口未被调用。

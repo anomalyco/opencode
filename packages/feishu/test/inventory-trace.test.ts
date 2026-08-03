@@ -30,16 +30,16 @@ describe("inventory trace", () => {
     await trace.append(event("inventory_intent_admitted", { term: "6001ZZ" }))
     await trace.append(
       event("inventory_query_started", {
-        templateVersion: "mysql-inventory-v1",
+        templateVersion: "mysql-inventory-v2",
         term: "6001ZZ",
         limit: 20,
       }),
     )
-    await trace.append(event("inventory_query_completed", { rowCount: 3, durationMs: 10 }))
+    await trace.append(event("inventory_query_completed", { rowCount: 2, durationMs: 10 }))
     await trace.append(event("inventory_answer_mapped", { itemCount: 1 }))
     await trace.append(
       event("inventory_answer_delivered", {
-        answer: "6001ZZ（清油）（12×28×8）库存200",
+        answer: "6001ZZ（12×28×8）（货架号：A-1-1、A-1-4）虎旺库存177",
       }),
     )
 
@@ -51,7 +51,7 @@ describe("inventory trace", () => {
       "inventory_answer_delivered",
     ])
     expect(events[1]?.data).toEqual({
-      templateVersion: "mysql-inventory-v1",
+      templateVersion: "mysql-inventory-v2",
       term: "6001ZZ",
       limit: 20,
     })

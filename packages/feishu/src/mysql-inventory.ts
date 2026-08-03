@@ -1,34 +1,25 @@
 import { createPool, type RowDataPacket } from "mysql2/promise"
 import type { InventoryAnswerItem } from "./inventory-answer"
-import {
-  mapInventoryRows,
-  type InventorySourceRow,
-  type ProductRow,
-  type ShelfRow,
-} from "./inventory-mapper"
+import { mapInventoryRows, type ProductRow, type ShelfRow } from "./inventory-mapper"
 import { loadMysqlPassword, type MysqlConfig } from "./mysql-config"
-import {
-  runMysqlPreflight,
-  type MysqlPreflight,
-  type QueryExecutor,
-} from "./mysql-preflight"
+import { runMysqlPreflight, type MysqlPreflight, type QueryExecutor } from "./mysql-preflight"
 
 export type InventoryQueryEvent =
   | {
       type: "query_started"
-      templateVersion: "mysql-inventory-v1"
+      templateVersion: "mysql-inventory-v2"
       term: string
       limit: number
     }
   | {
       type: "query_completed"
-      templateVersion: "mysql-inventory-v1"
+      templateVersion: "mysql-inventory-v2"
       rowCount: number
       durationMs: number
     }
   | {
       type: "query_failed"
-      templateVersion: "mysql-inventory-v1"
+      templateVersion: "mysql-inventory-v2"
       durationMs: number
     }
 
@@ -44,71 +35,31 @@ export type MysqlInventory = {
 
 const productSQL = `
   SELECT
-    CAST(product.s_ID AS CHAR) AS product_id,
-    product.u_Name AS product_name,
-    product.ProdSpec AS product_spec,
-    product.ProdType AS product_attribute,
-    product.u_Remark AS product_remark,
-    CAST(COALESCE(SUM(storage.Prod_Number1), 0) AS CHAR) AS total_inventory
-  FROM Product AS product
-  LEFT JOIN Storage AS storage ON storage.Prod_ID = product.s_ID
-  WHERE product.u_Name LIKE ? ESCAPE '\\\\'
-     OR product.u_Code = ?
-     OR product.ProdSpec LIKE ? ESCAPE '\\\\'
-  GROUP BY
-    product.s_ID,
-    product.u_Name,
-    product.ProdSpec,
-    product.ProdType,
-    product.u_Remark
-  ORDER BY product.s_ID
+    product.standard_product_id AS product_id,
+    product.product_name,
+    product.model AS product_spec,
+    product.specification AS product_attribute,
+    product.remark AS product_remark,
+    product.origin AS supplier_name,
+    product.total_inventory
+  FROM vw_standard_inventory_product AS product
+  WHERE product.product_name LIKE ? ESCAPE '\\\\'
+     OR product.product_code = ?
+     OR product.model LIKE ? ESCAPE '\\\\'
+  ORDER BY product.source_row
   LIMIT 100
 `
 
 const shelfSQL = `
   SELECT
-    CAST(shelf.ProductID AS CHAR) AS product_id,
-    shelf.ShelfCode AS shelf_code
-  FROM vw_productshelflocation AS shelf
+    shelf.standard_product_id AS product_id,
+    shelf.shelf_code
+  FROM vw_standard_product_shelf AS shelf
   JOIN JSON_TABLE(
     ?,
-    '$[*]' COLUMNS(product_id INT PATH '$')
-  ) AS selected ON selected.product_id = shelf.ProductID
-  ORDER BY shelf.ProductID, shelf.ShelfCode, shelf.RelationID
-`
-
-const sourceSQL = `
-  SELECT
-    source.product_ref_id AS product_id,
-    source.source_ref_kind,
-    source.source_ref_id,
-    CAST(source.on_hand_qty AS CHAR) AS on_hand_qty,
-    partner.id AS supplier_id,
-    CAST(partner.legacy_id AS CHAR) AS supplier_legacy_id,
-    partner.name AS supplier_name,
-    partner.role AS supplier_role,
-    partner.enabled AS supplier_enabled,
-    partner.deleted AS supplier_deleted
-  FROM erp_inventory_source_projection AS source
-  JOIN JSON_TABLE(
-    ?,
-    '$[*]' COLUMNS(product_id INT PATH '$')
-  ) AS selected
-    ON source.product_ref_kind = 'LEGACY'
-   AND source.product_ref_id = CAST(selected.product_id AS CHAR)
-  LEFT JOIN erp_partner_overlay AS partner
-    ON (
-      (source.source_ref_kind = 'ERP' AND partner.id = source.source_ref_id)
-      OR
-      (
-        source.source_ref_kind = 'LEGACY'
-        AND CAST(partner.legacy_id AS CHAR) = source.source_ref_id
-      )
-    )
-  ORDER BY
-    selected.product_id,
-    source.source_ref_kind,
-    source.source_ref_id
+    '$[*]' COLUMNS(product_id VARCHAR(96) PATH '$')
+  ) AS selected ON selected.product_id = shelf.standard_product_id
+  ORDER BY shelf.source_row, shelf.shelf_code
 `
 
 export async function createMysqlInventory(
@@ -130,8 +81,10 @@ export async function createMysqlInventory(
     bigNumberStrings: true,
   })
   const query: QueryExecutor = async (sql, values = []) => {
-    const [rows] = await pool.execute<RowDataPacket[]>({ sql, timeout: config.queryTimeoutMs }, [...values])
-    return rows
+    const result = await pool.execute<RowDataPacket[]>({ sql, timeout: config.queryTimeoutMs }, [
+      ...values,
+    ])
+    return result[0]
   }
   const preflight = await runMysqlPreflight(query, config.database).catch(async (error) => {
     await pool.end().catch(() => undefined)
@@ -153,10 +106,7 @@ export function createInventoryReaderForTest(input: {
   maxResults: number
   observe?: (event: InventoryQueryEvent) => void | Promise<void>
 }): MysqlInventory {
-  return createInventoryReader({
-    ...input,
-    close: async () => {},
-  })
+  return createInventoryReader({ ...input, close: async () => {} })
 }
 
 function createInventoryReader(input: {
@@ -178,7 +128,7 @@ function createInventoryReader(input: {
       const startedAt = Date.now()
       const started = {
         type: "query_started",
-        templateVersion: "mysql-inventory-v1",
+        templateVersion: "mysql-inventory-v2",
         term: normalized,
         limit,
       } satisfies InventoryQueryEvent
@@ -189,7 +139,7 @@ function createInventoryReader(input: {
         .then(async (result) => {
           const completed = {
             type: "query_completed",
-            templateVersion: "mysql-inventory-v1",
+            templateVersion: "mysql-inventory-v2",
             rowCount: result.rowCount,
             durationMs: Date.now() - startedAt,
           } satisfies InventoryQueryEvent
@@ -200,7 +150,7 @@ function createInventoryReader(input: {
         .catch(async () => {
           const failed = {
             type: "query_failed",
-            templateVersion: "mysql-inventory-v1",
+            templateVersion: "mysql-inventory-v2",
             durationMs: Date.now() - startedAt,
           } satisfies InventoryQueryEvent
           await input.observe?.(failed)
@@ -217,32 +167,25 @@ async function readInventory(query: QueryExecutor, term: string, limit: number) 
   const products = productRows(await query(productSQL, [escaped, term, escaped])).slice(0, limit)
   if (products.length === 0) return { items: [], rowCount: 0 }
 
-  const productIDs = JSON.stringify(products.map((product) => Number(product.productID)))
-  const [shelves, sources] = await Promise.all([
-    query(shelfSQL, [productIDs]).then(shelfRows),
-    query(sourceSQL, [productIDs]).then(sourceRows),
-  ])
-
+  const shelves = shelfRows(
+    await query(shelfSQL, [JSON.stringify(products.map((product) => product.productID))]),
+  )
   return {
-    items: mapInventoryRows({ products, shelves, sources }),
-    rowCount: products.length + shelves.length + sources.length,
+    items: mapInventoryRows({ products, shelves }),
+    rowCount: products.length + shelves.length,
   }
 }
 
 function productRows(rows: readonly Record<string, unknown>[]): ProductRow[] {
-  return rows.map((row) => {
-    const productID = requiredString(row, "product_id")
-    if (!/^\d+$/.test(productID)) throw new Error("inventory row contract mismatch")
-
-    return {
-      productID,
-      name: nullableString(row, "product_name"),
-      spec: nullableString(row, "product_spec"),
-      attribute: nullableString(row, "product_attribute"),
-      remark: nullableString(row, "product_remark"),
-      totalInventory: requiredString(row, "total_inventory"),
-    }
-  })
+  return rows.map((row) => ({
+    productID: requiredString(row, "product_id"),
+    name: nullableString(row, "product_name"),
+    spec: nullableString(row, "product_spec"),
+    attribute: nullableString(row, "product_attribute"),
+    remark: nullableString(row, "product_remark"),
+    supplier: nullableString(row, "supplier_name"),
+    totalInventory: requiredString(row, "total_inventory"),
+  }))
 }
 
 function shelfRows(rows: readonly Record<string, unknown>[]): ShelfRow[] {
@@ -252,43 +195,19 @@ function shelfRows(rows: readonly Record<string, unknown>[]): ShelfRow[] {
   }))
 }
 
-function sourceRows(rows: readonly Record<string, unknown>[]): InventorySourceRow[] {
-  return rows.map((row) => ({
-    productID: requiredString(row, "product_id"),
-    sourceRefKind: requiredString(row, "source_ref_kind"),
-    sourceRefID: requiredString(row, "source_ref_id"),
-    onHandQty: requiredString(row, "on_hand_qty"),
-    supplierID: nullableString(row, "supplier_id"),
-    supplierLegacyID: nullableString(row, "supplier_legacy_id"),
-    supplierName: nullableString(row, "supplier_name"),
-    supplierRole: nullableString(row, "supplier_role"),
-    supplierEnabled: nullableFlag(row, "supplier_enabled"),
-    supplierDeleted: nullableFlag(row, "supplier_deleted"),
-  }))
-}
-
 function requiredString(row: Record<string, unknown>, key: string) {
   const value = nullableString(row, key)
-  if (value === null || !value.trim()) throw new Error("inventory row contract mismatch")
+  if (!value?.trim()) throw new Error("inventory row contract mismatch")
   return value
 }
 
 function nullableString(row: Record<string, unknown>, key: string) {
   const value = row[key]
-  if (value === null) return null
+  if (value === null || value === undefined) return null
   if (typeof value !== "string") throw new Error("inventory row contract mismatch")
   return value
 }
 
-function nullableFlag(row: Record<string, unknown>, key: string) {
-  const value = row[key]
-  if (value === null) return null
-  if (value === 0 || value === 1) return value
-  if (value === "0") return 0
-  if (value === "1") return 1
-  throw new Error("inventory row contract mismatch")
-}
-
-function like(term: string) {
-  return `%${term.replace(/[\\%_]/g, "\\$&")}%`
+function like(value: string) {
+  return `%${value.replace(/([%_\\])/g, "\\$1")}%`
 }

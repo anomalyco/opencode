@@ -7,6 +7,10 @@
     "start": "bun run src/index.ts",
     "test": "bun test",
     "test:mysql-contract": "bun test test/mysql-inventory.contract.test.ts",
+    "standard-product:preview": "bun run scripts/standard-product-sync.ts --mode Preview",
+    "standard-product:apply": "bun run scripts/standard-product-sync.ts --mode Apply",
+    "standard-product:validate": "bun run scripts/standard-product-sync.ts --mode Validate",
+    "standard-product:rollback": "bun run scripts/standard-product-sync.ts --mode Rollback",
     "typecheck": "tsgo --noEmit",
     "lint": "oxlint -c ../../.oxlintrc.json src test"
   },

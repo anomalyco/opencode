@@ -8,7 +8,8 @@ export type MysqlPreflight = {
   database: string
   currentUser: string
   readOnly: boolean
-  contractVersion: "mysql-inventory-v1"
+  standardRunID: string
+  contractVersion: "mysql-inventory-v2"
 }
 
 const identitySQL = `
@@ -33,35 +34,43 @@ const columnsSQL = `
    AND tables.TABLE_NAME = columns.TABLE_NAME
   WHERE columns.TABLE_SCHEMA = ?
     AND columns.TABLE_NAME IN (
-      'Product',
       'Storage',
-      'vw_productshelflocation',
-      'erp_inventory_source_projection',
-      'erp_partner_overlay'
+      'erp_standard_product_sync_run',
+      'vw_standard_inventory_product',
+      'vw_standard_product_shelf'
     )
 `
 
+const activeRunSQL = `
+  SELECT
+    run_id,
+    JSON_UNQUOTE(JSON_EXTRACT(validation_json, '$.valid')) AS validation_valid
+  FROM erp_standard_product_sync_run
+  WHERE status = 'APPLIED'
+`
+
 const requiredColumns = [
-  ["Product.s_ID", "int", "NO", "BASE TABLE", "PRI"],
-  ["Product.u_Name", "varchar", "YES", "BASE TABLE", ""],
-  ["Product.ProdSpec", "longtext", "YES", "BASE TABLE", ""],
-  ["Product.ProdType", "longtext", "YES", "BASE TABLE", ""],
-  ["Product.u_Remark", "longtext", "YES", "BASE TABLE", ""],
   ["Storage.Prod_ID", "int", "NO", "BASE TABLE", ""],
   ["Storage.Prod_Number1", "decimal", "NO", "BASE TABLE", ""],
-  ["vw_productshelflocation.ShelfCode", "varchar", "NO", "VIEW", ""],
-  ["vw_productshelflocation.ProductID", "int", "NO", "VIEW", ""],
-  ["erp_inventory_source_projection.product_ref_kind", "varchar", "NO", "BASE TABLE", ""],
-  ["erp_inventory_source_projection.product_ref_id", "varchar", "NO", "BASE TABLE", ""],
-  ["erp_inventory_source_projection.source_ref_kind", "varchar", "NO", "BASE TABLE", ""],
-  ["erp_inventory_source_projection.source_ref_id", "varchar", "NO", "BASE TABLE", ""],
-  ["erp_inventory_source_projection.on_hand_qty", "decimal", "NO", "BASE TABLE", ""],
-  ["erp_partner_overlay.id", "char", "NO", "BASE TABLE", "PRI"],
-  ["erp_partner_overlay.legacy_id", "bigint", "YES", "BASE TABLE", ""],
-  ["erp_partner_overlay.role", "varchar", "NO", "BASE TABLE", ""],
-  ["erp_partner_overlay.name", "varchar", "YES", "BASE TABLE", ""],
-  ["erp_partner_overlay.enabled", "tinyint", "NO", "BASE TABLE", ""],
-  ["erp_partner_overlay.deleted", "tinyint", "NO", "BASE TABLE", ""],
+  ["erp_standard_product_sync_run.run_id", "char", "NO", "BASE TABLE", "PRI"],
+  ["erp_standard_product_sync_run.status", "varchar", "NO", "BASE TABLE", ""],
+  ["erp_standard_product_sync_run.validation_json", "json", "YES", "BASE TABLE", ""],
+  ["vw_standard_inventory_product.standard_product_id", "varchar", "YES", "VIEW", ""],
+  ["vw_standard_inventory_product.run_id", "char", "NO", "VIEW", ""],
+  ["vw_standard_inventory_product.source_row", "int", "NO", "VIEW", ""],
+  ["vw_standard_inventory_product.product_code", "varchar", "NO", "VIEW", ""],
+  ["vw_standard_inventory_product.product_name", "varchar", "NO", "VIEW", ""],
+  ["vw_standard_inventory_product.origin", "longtext", "YES", "VIEW", ""],
+  ["vw_standard_inventory_product.specification", "longtext", "YES", "VIEW", ""],
+  ["vw_standard_inventory_product.model", "longtext", "YES", "VIEW", ""],
+  ["vw_standard_inventory_product.remark", "longtext", "YES", "VIEW", ""],
+  ["vw_standard_inventory_product.product_id", "int", "YES", "VIEW", ""],
+  ["vw_standard_inventory_product.mapping_status", "varchar", "YES", "VIEW", ""],
+  ["vw_standard_inventory_product.total_inventory", "varchar", "YES", "VIEW", ""],
+  ["vw_standard_product_shelf.standard_product_id", "varchar", "YES", "VIEW", ""],
+  ["vw_standard_product_shelf.run_id", "char", "NO", "VIEW", ""],
+  ["vw_standard_product_shelf.source_row", "int", "NO", "VIEW", ""],
+  ["vw_standard_product_shelf.shelf_code", "varchar", "NO", "VIEW", ""],
 ] as const
 
 export function runMysqlPreflight(query: QueryExecutor, expectedDatabase: string) {
@@ -74,8 +83,6 @@ async function inspectMysql(query: QueryExecutor, expectedDatabase: string): Pro
   const identityRows = await query(identitySQL)
   if (identityRows.length !== 1) throw new Error("identity mismatch")
   const identity = identityRows[0]
-  if (!identity) throw new Error("identity mismatch")
-
   const mysqlVersion = text(identity.mysql_version)
   const database = text(identity.database_name)
   const currentUser = text(identity.authenticated_account)
@@ -95,24 +102,31 @@ async function inspectMysql(query: QueryExecutor, expectedDatabase: string): Pro
       },
     ]),
   )
-  const compatible = requiredColumns.every(([key, dataType, nullable, tableType, columnKey]) => {
-    const actual = columns.get(key)
-    if (!actual) return false
-    return (
-      actual.dataType === dataType &&
-      actual.nullable === nullable &&
-      actual.tableType === tableType &&
-      (!columnKey || actual.columnKey === columnKey)
-    )
-  })
-  if (!compatible) throw new Error("schema mismatch")
+  if (
+    !requiredColumns.every(([key, dataType, nullable, tableType, columnKey]) => {
+      const actual = columns.get(key)
+      return (
+        actual?.dataType === dataType &&
+        actual.nullable === nullable &&
+        actual.tableType === tableType &&
+        (!columnKey || actual.columnKey === columnKey)
+      )
+    })
+  ) {
+    throw new Error("schema mismatch")
+  }
 
+  const activeRuns = await query(activeRunSQL)
+  if (activeRuns.length !== 1 || text(activeRuns[0].validation_valid) !== "true") {
+    throw new Error("active standard run mismatch")
+  }
   return {
     mysqlVersion,
     database,
     currentUser,
     readOnly,
-    contractVersion: "mysql-inventory-v1",
+    standardRunID: text(activeRuns[0].run_id),
+    contractVersion: "mysql-inventory-v2",
   }
 }
 

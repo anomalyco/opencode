@@ -4,14 +4,14 @@
 
 The Feishu inventory reply already omits internal product codes, formats one answer item per physical line, preserves actual remarks, and uses native group mentions. Live verification on 2026-08-03 exposed one remaining mismatch: migrated products such as `6001ZZ` have no rows in the new structured supplier-source tables, so the current implementation omits every supplier even though the migrated purchase ledger contains actual supplier names.
 
-Read-only inspection confirmed that `ListBuy.Prod_ID` associates a product with a purchase bill and `b_vw_master` exposes that bill's supplier, date, approval state, and red-letter state. It also confirmed that the literal `上海涂众轴承` is not present in the live supplier data and must remain only a formatting example.
+Read-only inspection confirmed that `ListBuy.Prod_ID` associates a product with `MasterBill`, while `MasterBill.Unit_ID` resolves the actual supplier name in `Units`. It also confirmed that the literal `上海涂众轴承` is not present in the live supplier data and must remain only a formatting example. The presentation view `b_vw_master` exposes equivalent fields but joins many unrelated display tables and exceeded 20 seconds for 20 matched products; the direct structured-table query completed in about 85 milliseconds.
 
 ## Approved behavior
 
 Supplier selection has two levels:
 
 1. An active structured inventory source in `erp_inventory_source_projection` joined to an enabled, non-deleted supplier in `erp_partner_overlay` remains authoritative. Its source-specific quantity is displayed, and no purchase fallback is added.
-2. If no active structured supplier source exists, select the same product's latest reliable migrated purchase supplier. A reliable row is approved (`BillState=3`), not red-letter (`Redflg` empty), has a positive purchase quantity, and has a non-empty supplier name. Select exactly one row by purchase date descending, bill ID descending, then line ID descending. Display that supplier beside the product's current total inventory from `Storage`.
+2. If no active structured supplier source exists, select the same product's latest reliable migrated purchase supplier. A reliable row is approved (`MasterBill.BillState=3`), not red-letter (`MasterBill.s_Syb=0`), has a positive purchase quantity, and has a non-empty `Units.u_Name`. Select exactly one row by purchase date descending, bill ID descending, then line ID descending. Display that supplier beside the product's current total inventory from `Storage`.
 
 If neither source is reliable, omit the supplier. Never substitute a fixed example or infer a supplier from names, remarks, or free text.
 

@@ -45,20 +45,24 @@ The system SHALL persist the accepted message, its sentence events, and a recove
 - **WHEN** the gateway cannot commit the accepted message and task
 - **THEN** it does not report the task as admitted, does not start model inference for that attempt, and writes a sanitized fallback diagnostic
 
-### Requirement: Gateway sends one final text reply to the originating conversation
-The system SHALL send exactly one complete final text response to the originating direct chat or group message thread after model execution completes.
+### Requirement: Gateway sends one final text message to the originating conversation
+The system SHALL send exactly one complete final text response to the originating direct chat or group chat after model execution completes.
 
 #### Scenario: Direct-chat response
 - **WHEN** a direct-chat task produces a final assistant text
 - **THEN** the gateway sends one text reply to that direct chat and records the delivery result
 
-#### Scenario: Group-thread response
+#### Scenario: Top-level group response
 - **WHEN** a mentioned group-chat task produces a final assistant text
-- **THEN** the gateway sends one text reply in the originating thread or root-message context and records the delivery result
+- **THEN** the gateway creates one ordinary text message in the originating group chat without `replyTo` or `replyInThread`, and records the delivery result
 
 #### Scenario: Group reply mentions the requester
 - **WHEN** an accepted group-chat task produces a final answer
-- **THEN** the gateway uses the official Feishu Channel client's `mentions` send option for a native Feishu mention of the original requester before the answer in the originating thread or root-message context
+- **THEN** the gateway uses the official Feishu Channel client's `mentions` send option for a native Feishu mention of the original requester before the answer in the ordinary top-level group message
+
+#### Scenario: Multiple result lines remain physical lines
+- **WHEN** a group-chat final answer contains multiple inventory results separated by newline characters
+- **THEN** the gateway passes the exact body unchanged to the ordinary group message so each result remains on its own physical line
 
 #### Scenario: Direct reply has no requester mention
 - **WHEN** an accepted direct-chat task produces a final answer

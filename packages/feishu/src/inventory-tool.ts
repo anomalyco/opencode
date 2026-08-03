@@ -17,8 +17,8 @@ export type InventoryToolResult =
       status: "ok"
       text: string
       evidence?: {
-        templateVersion: "mysql-inventory-v1"
-        schemaVersion: "mysql-inventory-v1"
+        templateVersion: "mysql-inventory-v2"
+        schemaVersion: "mysql-inventory-v2"
         database: string
         mysqlVersion: string
         rowCount: number

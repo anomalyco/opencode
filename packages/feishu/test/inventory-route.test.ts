@@ -61,8 +61,8 @@ describe("inventory pre-model route", () => {
             status: "ok",
             text: "6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx",
             evidence: {
-              templateVersion: "mysql-inventory-v1",
-              schemaVersion: "mysql-inventory-v1",
+              templateVersion: "mysql-inventory-v2",
+              schemaVersion: "mysql-inventory-v2",
               database: "inventory",
               mysqlVersion: "8.4.10",
               rowCount: 3,
@@ -99,7 +99,7 @@ describe("inventory pre-model route", () => {
       status: "ok",
       durationMs: 10,
       rowCount: 3,
-      schemaVersion: "mysql-inventory-v1",
+      schemaVersion: "mysql-inventory-v2",
       database: "inventory",
       mysqlVersion: "8.4.10",
     })

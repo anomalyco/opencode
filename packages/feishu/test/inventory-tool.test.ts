@@ -25,19 +25,20 @@ function inventory(result: InventoryAnswerItem[] = []) {
         database: "inventory",
         currentUser: "inventory_reader@%",
         readOnly: false,
-        contractVersion: "mysql-inventory-v1" as const,
+        standardRunID: "run-1",
+        contractVersion: "mysql-inventory-v2" as const,
       },
       async query(term: string, limit?: number, observe?: (event: InventoryQueryEvent) => void | Promise<void>) {
         calls.push({ term, limit })
         await observe?.({
           type: "query_started",
-          templateVersion: "mysql-inventory-v1",
+          templateVersion: "mysql-inventory-v2",
           term,
           limit: limit ?? 20,
         })
         await observe?.({
           type: "query_completed",
-          templateVersion: "mysql-inventory-v1",
+          templateVersion: "mysql-inventory-v2",
           rowCount: result.length,
           durationMs: 10,
         })
@@ -70,8 +71,8 @@ describe("inventory tool", () => {
       status: "ok",
       text: "6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx",
       evidence: {
-        templateVersion: "mysql-inventory-v1",
-        schemaVersion: "mysql-inventory-v1",
+        templateVersion: "mysql-inventory-v2",
+        schemaVersion: "mysql-inventory-v2",
         database: "inventory",
         mysqlVersion: "8.4.10",
         rowCount: 1,
@@ -96,8 +97,8 @@ describe("inventory tool", () => {
       status: "ok",
       text: "未找到相关商品。",
       evidence: {
-        templateVersion: "mysql-inventory-v1",
-        schemaVersion: "mysql-inventory-v1",
+        templateVersion: "mysql-inventory-v2",
+        schemaVersion: "mysql-inventory-v2",
         database: "inventory",
         mysqlVersion: "8.4.10",
         rowCount: 0,

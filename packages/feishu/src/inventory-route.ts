@@ -82,7 +82,7 @@ export function createInventoryRoute(input: {
         status: "lookup",
       })
       const queryStarted = trace(task, startedAt, "inventory_query_started", {
-        templateVersion: "mysql-inventory-v1",
+        templateVersion: "mysql-inventory-v2",
         term: intent.productTerm,
         limit: 20,
       })

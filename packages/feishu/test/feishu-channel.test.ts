@@ -162,7 +162,7 @@ describe("Feishu Channel adapter", () => {
     expect(delivered.lastSend).toEqual({
       to: "oc_chat_1",
       input: { text: "完整回答" },
-      options: { replyTo: "om_root_1", replyInThread: true },
+      options: undefined,
     })
 
     const retryable = new FakeChannel()
@@ -189,8 +189,10 @@ describe("Feishu Channel adapter", () => {
     })
   })
 
-  test("sends group requester mentions as native send options without changing the answer text", async () => {
-    const body = "6001ZZ，2×28×8（货架号：A-2-1）上海涂众轴承库位77，备注：2026-07-11"
+  test("sends group requester mentions in top-level messages without changing the multiline answer", async () => {
+    const body =
+      "6001ZZ（12×28×8）（货架号：A-2-1）虎旺轴承库存177，备注：2026-07-11\n" +
+      "6001ZZ（清油）（12×28×8）（货架号：B-11-13）天宇轴承库存200，备注：2024-7-20"
     const namedGroup = new FakeChannel()
     const namedGroupPort = await createFeishuChannelPort(
       { appID: "cli_test", appSecret: "secret-canary" },
@@ -202,8 +204,6 @@ describe("Feishu Channel adapter", () => {
       to: "oc_chat_1",
       input: { text: body },
       options: {
-        replyTo: "om_root_1",
-        replyInThread: true,
         mentions: [{ key: "ou_user_1", openId: "ou_user_1", name: "求精轴承" }],
       },
     })
@@ -218,8 +218,6 @@ describe("Feishu Channel adapter", () => {
       to: "oc_chat_1",
       input: { text: body },
       options: {
-        replyTo: "om_root_1",
-        replyInThread: true,
         mentions: [{ key: "ou_user_1", openId: "ou_user_1" }],
       },
     })

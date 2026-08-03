@@ -6,20 +6,18 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "6001ZZ" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "6001ZZ", "limit": 20 },
         "result": [
           {
             "name": "6001ZZ",
-            "attribute": "清油",
             "size": "12×28×8",
-            "shelves": ["B-11-13"],
-            "supplier": "上海涂众轴承",
-            "inventory": "200",
-            "remark": "xxx"
+            "shelves": ["A-1-1", "A-1-4"],
+            "supplier": "虎旺",
+            "inventory": "177"
           }
         ],
-        "answer": "6001ZZ（清油）（12×28×8）（货架号：B-11-13）上海涂众轴承库存200，备注：xxx",
+        "answer": "6001ZZ（12×28×8）（货架号：A-1-1、A-1-4）虎旺库存177",
         "policy": "allow"
       }
     },
@@ -28,7 +26,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "6001ZZ" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "6001ZZ", "limit": 20 },
         "result": [
           {
@@ -47,7 +45,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "shelf_lookup", "term": "6201" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "6201", "limit": 20 },
         "result": [
           {
@@ -65,7 +63,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "shelf_lookup", "term": "6301" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "6301", "limit": 20 },
         "result": [
           {
@@ -83,7 +81,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "6401" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "6401", "limit": 20 },
         "result": [
           {
@@ -102,7 +100,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "6501" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "6501", "limit": 20 },
         "result": [
           {
@@ -121,7 +119,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "不存在商品" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "不存在商品", "limit": 20 },
         "result": [],
         "answer": "未找到相关商品。",
@@ -133,7 +131,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "6601" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "6601", "limit": 20 },
         "result": [
           {
@@ -152,7 +150,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "6701" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "6701", "limit": 20 },
         "result": [
           {
@@ -171,7 +169,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "6801" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "6801", "limit": 20 },
         "result": [
           {
@@ -190,7 +188,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "6901" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "6901", "limit": 20 },
         "result": [
           {
@@ -208,7 +206,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "7001" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "7001", "limit": 20 },
         "result": [
           {
@@ -226,7 +224,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "ZZ" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "ZZ", "limit": 20 },
         "result": [
           {
@@ -249,7 +247,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "7101" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "7101", "limit": 20 },
         "result": [
           {
@@ -274,7 +272,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "7201" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "7201", "limit": 20 },
         "result": [
           {
@@ -299,7 +297,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "SP0000005943" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "SP0000005943", "limit": 20 },
         "result": [
           {
@@ -317,7 +315,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "shelf_lookup", "term": "7301" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "7301", "limit": 20 },
         "result": [
           {
@@ -336,7 +334,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "7401" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "7401", "limit": 20 },
         "result": [
           {
@@ -355,7 +353,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "7501" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "7501", "limit": 20 },
         "result": [
           {
@@ -374,7 +372,7 @@
       "category": "read",
       "expected": {
         "intent": { "kind": "inventory_lookup", "term": "7601" },
-        "templateVersion": "mysql-inventory-v1",
+        "templateVersion": "mysql-inventory-v2",
         "parameters": { "term": "7601", "limit": 20 },
         "result": [
           {
