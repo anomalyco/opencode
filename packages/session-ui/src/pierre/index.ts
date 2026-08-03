@@ -26,10 +26,12 @@ const unsafeCSS = `
     color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-deletion-base)),
     color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-deletion-base))
   );
+  --diffs-bg-deletion-number-override: var(--diffs-bg-deletion-override);
   --diffs-bg-addition-override: light-dark(
     color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-addition-base)),
     color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-addition-base))
   );
+  --diffs-bg-addition-number-override: var(--diffs-bg-addition-override);
   --diffs-selection-base: var(--surface-warning-strong);
   --diffs-selection-border: var(--border-warning-base);
   --diffs-selection-number-fg: #1c1917;
@@ -55,6 +57,29 @@ const unsafeCSS = `
 [data-diff] ::selection,
 [data-file] ::selection {
   background-color: var(--diffs-bg-selection-text);
+}
+
+[data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before,
+[data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
+  width: 2px;
+}
+
+[data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
+  background-image: none;
+  background-color: var(--diffs-deletion-base);
+}
+
+[data-background] [data-column-number] {
+  --mix-light: 88%;
+  --mix-dark: 80%;
+}
+
+[data-diff-type='split'] [data-additions],
+[data-diff-type='split'] [data-additions] [data-gutter],
+[data-diff-type='split'] [data-deletions],
+[data-diff-type='split'] [data-deletions] [data-content] {
+  border-left: 0;
+  border-right: 0;
 }
 
 ::highlight(opencode-find) {
@@ -133,7 +158,6 @@ const unsafeCSS = `
     height: 24px;
   }
   [data-column-number] {
-    background-color: var(--diffs-bg);
     cursor: default !important;
   }
 
@@ -182,5 +206,6 @@ export const styleVariables = {
   "--diffs-font-features": "var(--font-family-mono--font-feature-settings)",
   "--diffs-header-font-family": "var(--font-family-sans)",
   "--diffs-gap-block": 0,
-  "--diffs-min-number-column-width": "4ch",
+  "--diffs-gap-style": 0,
+  "--diffs-min-number-column-width": "3ch",
 }
