@@ -353,6 +353,8 @@ export const dict = {
   "go.faq.a5.gptRetention":
     "Für die Nutzung aller API-Funktionen werden Protokolle zur Missbrauchsüberwachung erstellt und bis zu 30 Tage lang aufbewahrt.",
   "go.faq.a5.learnMore": "Mehr erfahren",
+  "go.faq.a5.deepseekRetention":
+    "Die ZDR-Vereinbarung wird monatlich erneuert. Die aktuelle Vereinbarung gilt bis einschließlich 31. August 2026.",
   "go.faq.a5.beforeExceptions":
     "Go-Modelle werden in den USA gehostet. Anbieter verfolgen eine Zero-Retention-Politik und nutzen deine Daten nicht für das Training von Modellen, mit den",
   "go.faq.a5.exceptionsLink": "folgenden Ausnahmen",
