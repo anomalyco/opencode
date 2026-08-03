@@ -4,7 +4,7 @@ import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { randomUUID } from "node:crypto"
 import { rmSync } from "node:fs"
-import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
+import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol, shell } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
@@ -14,6 +14,7 @@ import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
 import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
+import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -204,6 +205,7 @@ export function createMainWindow(id: string = randomUUID()) {
 
   allowRendererPermissions(win)
   wireWindowRecovery(win, id)
+  wireNavigationPolicy(win)
 
   win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
@@ -228,6 +230,40 @@ export function createMainWindow(id: string = randomUUID()) {
   })
 
   return win
+}
+
+export function openExternalURL(value: string) {
+  const url = resolveExternalURL(value)
+  if (!url) {
+    writeLog("window", "blocked external target", { url: value }, "warn")
+    return
+  }
+  void shell.openExternal(url)
+}
+
+export function openLocalFileURL(value: string) {
+  const path = resolveLocalFilePath(value)
+  if (!path) {
+    writeLog("window", "blocked local file target", { url: value }, "warn")
+    return
+  }
+  void shell.openPath(path).then((error) => {
+    if (error) writeLog("window", "failed to open local file", { path, error }, "error")
+  })
+}
+
+function wireNavigationPolicy(win: BrowserWindow) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (!isRendererUrl(url)) openExternalURL(url)
+    return { action: "deny" }
+  })
+  // Renderer reloads (window.location.reload) navigate to the app's own URL
+  // and must stay in-window; everything else leaves through the OS.
+  win.webContents.on("will-navigate", (event, url) => {
+    if (isRendererUrl(url)) return
+    event.preventDefault()
+    openExternalURL(url)
+  })
 }
 
 function registerWindow(win: BrowserWindow, id: string) {
