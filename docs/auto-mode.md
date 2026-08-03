@@ -98,10 +98,28 @@ The verdict table:
 
 | Validator output       | Effect on the tool call                        | Audit row           | Agent feedback                    |
 | ---------------------- | ---------------------------------------------- | ------------------- | --------------------------------- |
-| `ALLOW`                | runs                                           | `verdict=allow`     | —                                 |
+| `ALLOW`                | runs; the exact patterns are learned (below)   | `verdict=allow`     | —                                 |
 | `DENY <reason>`        | fails with `CorrectedError(reason)`            | `verdict=deny`      | receives the reason as tool error |
 | `UNCERTAIN <reason>`   | opens the human dialog with the reason visible | `verdict=uncertain` | depends on the human reply        |
 | timeout / error / junk | normal human flow                              | `verdict=fallback`  | depends on the human reply        |
+
+### Learned approvals
+
+An `ALLOW` is remembered for the rest of the instance, like a human "always"
+reply — identical future asks short-circuit in the static ruleset evaluation
+and never reach the validator (no LLM call, no new audit row, no badge, same
+as a human "always"). Learning is deliberately stricter than the human flow:
+
+- only the **exact patterns** of the approved request are recorded — never
+  the broader `always` globs a human reply records (bash records
+  `cmd prefix *`; edit/write record `*`). `rm -rf /tmp/build` approved once
+  approves only `rm -rf /tmp/build`, never `rm -rf` anything else;
+- patterns containing `*` or `?` are **never** learned — a learned glob would
+  auto-approve commands the validator never saw;
+- a pattern the static ruleset explicitly denies is never learned.
+
+`DENY` is never learned: a refusal is context-dependent and must not become a
+standing rule.
 
 `DENY` is not silent: the calling agent receives the reason as a tool error
 and can correct course, exactly like a human reject-with-message.
@@ -343,9 +361,20 @@ change — human or LLM — appends one row to `session_title_history`.
   fallback), the dialog shows the verdict line
   `auto (<model>): <verdict> — <reason>`.
 - **Transcript badge**: tool calls the validator decided without a dialog get
-  a muted ` · auto: allow` / ` · auto: deny` suffix (`AutoDecisionSuffix`),
-  correlated through the audited `callID`. `uncertain`/`fallback` rows don't
-  get a badge — they already surfaced as the dialog.
+  a muted ` · auto: <verdict> · <model>` suffix (`AutoDecisionSuffix`), with
+  the short model name identifying which LLM decided, correlated through the
+  audited `callID`. `uncertain`/`fallback` rows don't get a badge — they
+  already surfaced as the dialog.
+- **Sidebar section**: an `Auto` section (feature plugin
+  `feature-plugins/sidebar/auto.tsx`) lists the session's decisions with a
+  verdict icon, the permission and command, and per-verdict counts in the
+  header. Clicking a row expands the verdict, full model, latency, reason,
+  and timestamp.
+- **Decisions dialog**: `session.decisions` (slash `/decisions`, keybind
+  `session_decisions`, default `none`) opens a `DialogSelect` audit list —
+  newest first, verdict gutter icon, command as title, verdict/model/latency
+  as description, reason and extra patterns as expandable details, timestamp
+  in the footer.
 
 The TUI keeps a `decision` store keyed by session, fetched with the session
 payload and refetched when validator activity lands (an escalated ask, or a
@@ -355,11 +384,14 @@ runs).
 ## Evals
 
 The golden dataset lives in `packages/opencode/test/eval/validator-cases.json`
-— 46 bash cases (15 expected `allow`, 15 `deny`, 10 `uncertain`, 6
+— 54 bash cases (18 expected `allow`, 25 `deny`, 11 `uncertain`, including 6
 prompt-injection cases expected `deny`: forged summaries inside commands,
 policy directives, "ignore previous instructions", fake instructions in
-metadata, summary manipulation, and newline-split paths), in English and
-PT-BR, most carrying a synthetic session summary. Run it from
+metadata, summary manipulation, and newline-split paths; and 8 secret-handling
+cases: printing keys/tokens/.env must DENY, listing or using credentials
+without revealing values must ALLOW), in English and
+PT-BR, most carrying a synthetic session summary. Validated against
+`anthropic/claude-haiku-4.5`: 0 false-allows, 0 false-denies. Run it from
 `packages/opencode` against any OpenAI-compatible endpoint:
 
 ```bash
@@ -415,10 +447,10 @@ rejects on its own — every degradation lands on the normal permission dialog.
   (`packages/core/src/permission.ts`) tracks the upstream V2 migration.
 - **Eval in CI**: the harness runs on demand against a real model; wiring it
   into CI needs a stable endpoint (a local model in CI is fragile).
-- **Learned `always` patterns**: persist validator-approved patterns as
-  session approvals. Deliberately deferred — recording LLM approvals as
-  standing rules is risky without more eval data.
-- **Audit UI in the TUI**: the trail is read via HTTP + SQL today.
+- **Durable learned approvals**: learned `ALLOW` patterns live in the
+  instance's in-memory `approved` ruleset, exactly like human "always"
+  replies — they do not survive a restart. Persisting them (per-project or
+  global) needs a revocation UI first.
 - **Decision-store convergence in the TUI**: the `decision` store is cleaned
   on `session.deleted` but other per-session stores (`todo`, `session_diff`)
   still rely on full-session sync; converging them is tracked separately.
