@@ -587,7 +587,7 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   })
 
   test("a tool's strict flag survives on bedrock and is still overridden on mantle", async () => {
-    const prepare = (npm: string) =>
+    const prepare = (npm: string, apiId: string, url: string) =>
       Effect.runPromise(
         LLMRequestPrep.prepare({
           user: {
@@ -596,18 +596,14 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
             role: "user",
             time: { created: Date.now() },
             agent: "test",
-            model: { providerID: "amazon-bedrock", modelID: "anthropic.claude-sonnet-4-6" },
+            model: { providerID: "amazon-bedrock", modelID: apiId },
           } as any,
           sessionID,
           model: {
-            ...createGpt5Model("anthropic.claude-sonnet-4-6"),
-            id: "amazon-bedrock/anthropic.claude-sonnet-4-6",
+            ...createGpt5Model(apiId),
+            id: `amazon-bedrock/${apiId}`,
             providerID: "amazon-bedrock",
-            api: {
-              id: "anthropic.claude-sonnet-4-6",
-              url: "https://bedrock-runtime.us-east-1.amazonaws.com",
-              npm,
-            },
+            api: { id: apiId, url, npm },
           },
           agent: {
             name: "test",
@@ -636,8 +632,19 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
         }),
       )
 
-    expect((await prepare("@ai-sdk/amazon-bedrock")).tools.lookup.strict).toBe(true)
-    expect((await prepare("@ai-sdk/amazon-bedrock/mantle")).tools.lookup.strict).toBe(false)
+    const converse = await prepare(
+      "@ai-sdk/amazon-bedrock",
+      "anthropic.claude-sonnet-4-6",
+      "https://bedrock-runtime.us-east-1.amazonaws.com",
+    )
+    const mantle = await prepare(
+      "@ai-sdk/amazon-bedrock/mantle",
+      "openai.gpt-5.5",
+      "https://bedrock-mantle.us-east-2.api.aws/openai/v1",
+    )
+
+    expect(converse.tools.lookup.strict).toBe(true)
+    expect(mantle.tools.lookup.strict).toBe(false)
   })
 
   test("gpt-5.1 should have textVerbosity set to low", () => {
