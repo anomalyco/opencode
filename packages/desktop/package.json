@@ -30,7 +30,8 @@
     "electron-log": "^5",
     "electron-store": "11.0.2",
     "electron-updater": "6.8.9",
-    "electron-window-state": "^5.0.3"
+    "electron-window-state": "^5.0.3",
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "@actions/artifact": "4.0.0",
