@@ -113,6 +113,10 @@ export function completedToolContent(toolName: string, state: CompletedToolState
     },
   ]
 
+  if (toolName.toLocaleLowerCase() === "apply_patch") {
+    content.push(...applyPatchDiffContent(state.metadata))
+  }
+
   if (toToolKind(toolName) === "edit") {
     content.push(...diffContent(state.input))
   }
@@ -307,6 +311,14 @@ export const buildDuplicateRunningToolUpdate = duplicateRunningToolUpdate
 export const buildCompletedToolUpdate = completedToolUpdate
 export const buildErrorToolUpdate = errorToolUpdate
 
+export function deleteDiffContent(path: string, oldText: string): ToolCallContent[] {
+  return [{ type: "diff", path, oldText, newText: "" }]
+}
+
+export function moveDiffContent(dest: string, oldText: string, newText: string): ToolCallContent[] {
+  return [{ type: "diff", path: dest, oldText, newText }]
+}
+
 function locationFrom(...values: unknown[]): ToolCallLocation[] {
   return Array.from(
     new Set(
@@ -320,6 +332,30 @@ function locationFrom(...values: unknown[]): ToolCallLocation[] {
     ),
     (path) => ({ path }),
   )
+}
+
+// apply_patch deletes and moves go straight to disk, so the client never gets a
+// writeTextFile for them. Build diff content from the tool metadata so those
+// changes still show up as a diff in the tool call. Metadata is untrusted, so
+// every field is checked before use.
+function applyPatchDiffContent(metadata: unknown): ToolCallContent[] {
+  if (!metadata || typeof metadata !== "object") return []
+  const files = (metadata as Record<string, unknown>).files
+  if (!Array.isArray(files)) return []
+
+  return files.flatMap((file): ToolCallContent[] => {
+    if (!file || typeof file !== "object") return []
+    const info = file as Record<string, unknown>
+    const type = stringValue(info.type)
+    const path = stringValue(info.diffPath) ?? stringValue(info.movePath) ?? stringValue(info.filePath)
+    const oldText = stringValue(info.oldText)
+    if (!path || oldText === undefined) return []
+    const newText = stringValue(info.newText) ?? ""
+
+    if (type === "delete") return deleteDiffContent(path, oldText)
+    if (type === "move") return moveDiffContent(path, oldText, newText)
+    return []
+  })
 }
 
 function diffContent(input: ToolInput): ToolCallContent[] {

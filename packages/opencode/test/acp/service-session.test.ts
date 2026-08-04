@@ -18,6 +18,8 @@ import * as ACPService from "@/acp/service"
 import * as ACPError from "@/acp/error"
 import { UsageService } from "@/acp/usage"
 import type { Provider } from "@/provider/provider"
+import { ReviewOverlay } from "@opencode-ai/core/review-overlay"
+import { forceEnableForAcp, reset as resetReviewMode, setClientWriteTextFileSupported } from "@/acp/review-mode"
 
 const providerID = ProviderV2.ID.make("test")
 const modelID = ModelV2.ID.make("test-model")
@@ -1212,6 +1214,63 @@ describe("ACP service sessions", () => {
     )
 
     expect(error.code).toBe(-32000)
+  })
+
+  it("clears the review overlay when a prompt fails mid-turn", async () => {
+    process.env.OPENCODE_CLIENT = "acp"
+    forceEnableForAcp()
+    setClientWriteTextFileSupported(true)
+    try {
+      const failing = ACPService.make({
+        sdk: {
+          config: {
+            providers: () => Promise.resolve({ data: { providers: [provider], default: { test: modelID } } }),
+            get: () => Promise.resolve({ data: {} }),
+          },
+          app: {
+            agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
+            skills: () => Promise.resolve({ data: [] }),
+          },
+          command: {
+            list: () => Promise.resolve({ data: [] }),
+          },
+          session: {
+            create: () => Promise.resolve({ data: { id: "ses_review_fail" } }),
+            list: () => Promise.resolve({ data: [] }),
+            prompt: () => Promise.reject(new Error("provider exploded")),
+          },
+          mcp: {
+            add: () => Promise.resolve({ data: {} }),
+          },
+        } as unknown as OpencodeClient,
+        connection: {
+          sessionUpdate: () => Promise.resolve(),
+          writeTextFile: () => Promise.resolve({}),
+        } as unknown as Pick<AgentSideConnection, "sessionUpdate" | "writeTextFile">,
+        usage: UsageService.Service.of({
+          buildUsage: UsageService.buildUsage,
+          latestAssistantMessage: UsageService.latestAssistantMessage,
+          totalSessionCost: UsageService.totalSessionCost,
+          contextLimit: () => Effect.succeed(128000),
+          sendUpdate: () => Effect.void,
+        }),
+      })
+
+      const session = await Effect.runPromise(failing.newSession({ cwd: "/workspace", mcpServers: [] }))
+      ReviewOverlay.setActiveSession(session.sessionId)
+      ReviewOverlay.stage("/workspace/leftover.ts", "staged but turn fails")
+      expect(ReviewOverlay.get("/workspace/leftover.ts")).toBeDefined()
+
+      const exit = await Effect.runPromiseExit(
+        failing.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] }),
+      )
+      expect(exit._tag).toBe("Failure")
+
+      expect(ReviewOverlay.get("/workspace/leftover.ts")).toBeUndefined()
+    } finally {
+      delete process.env.OPENCODE_CLIENT
+      resetReviewMode()
+    }
   })
 })
 
