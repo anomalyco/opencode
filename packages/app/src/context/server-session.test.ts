@@ -265,6 +265,34 @@ describe("server session", () => {
 
     expect(requests).toEqual([{ sessionID: "root", limit: 20, order: "desc" }])
     expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
+    expect(store.history.more("root")).toBe(false)
+  })
+
+  test("replaces stale current projections on complete refreshes", async () => {
+    const first = { id: "msg_1", type: "user", text: "first", time: { created: 1 } } as const
+    const second = { id: "msg_2", type: "user", text: "second", time: { created: 2 } } as const
+    const pages = [
+      { data: [first], cursor: { previous: null, next: null } },
+      { data: [second], cursor: { previous: null, next: null } },
+      { data: [], cursor: { previous: null, next: null } },
+    ]
+    const messageApi = {
+      list: async () => pages.shift()!,
+    } as unknown as MessageApi
+    const sessionApi = { get: async () => session("root") } as unknown as SessionApi
+    const store = createServerSession({} as OpencodeClient, sessionApi, messageApi)
+    store.remember(session("root"))
+
+    await store.sync("root")
+    expect(store.data.session_message.root.map((message) => message.id)).toEqual([first.id])
+
+    await store.sync("root", { force: true })
+    expect(store.data.session_message.root.map((message) => message.id)).toEqual([second.id])
+    expect(store.data.message.root.map((message) => message.id)).toEqual([second.id])
+
+    await store.sync("root", { force: true })
+    expect(store.data.session_message.root).toEqual([])
+    expect(store.data.message.root).toEqual([])
   })
 
   test("extends a current page to include the user for split assistant turns", async () => {

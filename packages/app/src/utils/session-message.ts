@@ -196,7 +196,7 @@ function userMessage(
 
 function userParts(sessionID: string, message: SessionMessageUser): Part[] {
   return [
-    textPart(sessionID, message.id, 0, message.text),
+    ...(message.text ? [textPart(sessionID, message.id, 0, message.text)] : []),
     ...(message.files ?? []).map(
       (file, index): FilePart => ({
         id: `${message.id}:file:${index}`,

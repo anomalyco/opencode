@@ -563,7 +563,7 @@ export function createServerSession(
         sourceMode: before ? ("older" as const) : ("latest" as const),
         projectSource: true,
         cursor: response.cursor.next ?? undefined,
-        complete: response.data.length === 0,
+        complete: !response.cursor.next,
       }
     }
     const response = await (options?.retry ?? retry)(() => {
@@ -683,7 +683,14 @@ export function createServerSession(
       ? (() => {
           const incoming = new Map(page.source.map((message) => [message.id, message]))
           const existing = data.session_message[sessionID] ?? []
-          const current = existing.filter((message) => !incoming.has(message.id))
+          const boundary = Math.min(...page.source.map((message) => message.time.created))
+          const current = existing.filter(
+            (message) =>
+              !incoming.has(message.id) &&
+              (page.sourceMode === "older" ||
+                load?.touchedSource.has(message.id) ||
+                (!page.complete && message.time.created < boundary)),
+          )
           const live = new Map(existing.map((message) => [message.id, message]))
           return (page.sourceMode === "older" ? [...page.source, ...current] : [...current, ...page.source]).map(
             (message) => (load?.touchedSource.has(message.id) ? (live.get(message.id) ?? message) : message),
