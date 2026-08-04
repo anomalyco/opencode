@@ -222,27 +222,31 @@ const layer = Layer.effect(
         EffectRuntime.gen(function* () {
           const existing = pending.get(input.requestID)
           if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-          yield* events.publish(Event.Replied, {
-            sessionID: existing.request.sessionID,
-            requestID: existing.request.id,
-            reply: input.reply,
-          })
+          pending.delete(input.requestID)
+          yield* events
+            .publish(Event.Replied, {
+              sessionID: existing.request.sessionID,
+              requestID: existing.request.id,
+              reply: input.reply,
+            })
+            .pipe(EffectRuntime.onError(() => EffectRuntime.sync(() => pending.set(input.requestID, existing))))
 
           if (input.reply === "reject") {
             yield* Deferred.fail(
               existing.deferred,
               input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
             )
-            pending.delete(input.requestID)
             for (const [id, item] of pending) {
               if (item.request.sessionID !== existing.request.sessionID) continue
-              yield* events.publish(Event.Replied, {
-                sessionID: item.request.sessionID,
-                requestID: item.request.id,
-                reply: "reject",
-              })
-              yield* Deferred.fail(item.deferred, new DeclinedError())
               pending.delete(id)
+              yield* events
+                .publish(Event.Replied, {
+                  sessionID: item.request.sessionID,
+                  requestID: item.request.id,
+                  reply: "reject",
+                })
+                .pipe(EffectRuntime.onError(() => EffectRuntime.sync(() => pending.set(id, item))))
+              yield* Deferred.fail(item.deferred, new DeclinedError())
             }
             return
           }
@@ -255,7 +259,6 @@ const layer = Layer.effect(
             })
           }
           yield* Deferred.succeed(existing.deferred, undefined)
-          pending.delete(input.requestID)
           if (input.reply !== "always" || !existing.request.save?.length) return
 
           const rememberedRules = yield* savedRules()
@@ -273,13 +276,15 @@ const layer = Layer.effect(
               )
             )
               continue
-            yield* events.publish(Event.Replied, {
-              sessionID: item.request.sessionID,
-              requestID: item.request.id,
-              reply: "always",
-            })
-            yield* Deferred.succeed(item.deferred, undefined)
             pending.delete(id)
+            yield* events
+              .publish(Event.Replied, {
+                sessionID: item.request.sessionID,
+                requestID: item.request.id,
+                reply: "always",
+              })
+              .pipe(EffectRuntime.onError(() => EffectRuntime.sync(() => pending.set(id, item))))
+            yield* Deferred.succeed(item.deferred, undefined)
           }
         }),
       ),

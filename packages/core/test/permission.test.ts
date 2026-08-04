@@ -265,6 +265,35 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("removes a pending request before publishing a reply", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const { service, fiber, request } = yield* waitForRequest()
+      const events = yield* EventV2.Service
+      const publishing = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const replied: EventV2.Payload[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.gen(function* () {
+          if (event.type !== PermissionV2.Event.Replied.type) return
+          const count = replied.push(event)
+          if (count === 1) yield* Deferred.succeed(publishing, undefined).pipe(Effect.andThen(Deferred.await(release)))
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const first = yield* service.reply({ requestID: request.id, reply: "once" }).pipe(Effect.forkScoped)
+      yield* Deferred.await(publishing)
+
+      yield* Effect.sync(() => undefined).pipe(
+        Effect.andThen(service.list()),
+        Effect.andThen((pending) => Effect.sync(() => expect(pending).toEqual([]))),
+        Effect.ensuring(Deferred.succeed(release, undefined)),
+      )
+      yield* Fiber.join(first)
+      yield* Fiber.join(fiber)
+    }),
+  )
+
   it.effect("defects when an asked permission is declined", () =>
     Effect.gen(function* () {
       yield* setup()

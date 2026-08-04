@@ -60,6 +60,35 @@ describe("QuestionV2", () => {
     }),
   )
 
+  it.effect("removes a pending request before publishing its reply", () =>
+    Effect.gen(function* () {
+      const service = yield* QuestionV2.Service
+      const events = yield* EventV2.Service
+      const publishing = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const replied: EventV2.Payload[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.gen(function* () {
+          if (event.type !== QuestionV2.Event.Replied.type) return
+          const count = replied.push(event)
+          if (count === 1) yield* Deferred.succeed(publishing, undefined).pipe(Effect.andThen(Deferred.await(release)))
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const { fiber, request } = yield* waitForAsk(service, { sessionID, questions: [question] })
+      const first = yield* service.reply({ requestID: request.id, answers: [["One"]] }).pipe(Effect.forkScoped)
+      yield* Deferred.await(publishing)
+
+      yield* Effect.sync(() => undefined).pipe(
+        Effect.andThen(service.list()),
+        Effect.andThen((pending) => Effect.sync(() => expect(pending).toEqual([]))),
+        Effect.ensuring(Deferred.succeed(release, undefined)),
+      )
+      yield* Fiber.join(first)
+      expect(yield* Fiber.join(fiber)).toEqual([["One"]])
+    }),
+  )
+
   it.effect("publishes rejection, fails the ask, and rejects unknown IDs", () =>
     Effect.gen(function* () {
       const service = yield* QuestionV2.Service
