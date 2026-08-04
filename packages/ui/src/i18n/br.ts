@@ -36,10 +36,10 @@ export const dict = {
   "ui.sessionReviewV2.empty.changes.description": "As alterações do projeto aparecerão aqui",
   "ui.fileMedia.kind.image": "imagem",
   "ui.fileMedia.kind.audio": "áudio",
-  "ui.fileMedia.state.removed": "Removido: {{kind}}",
+  "ui.fileMedia.state.removed": "Arquivo de {{kind}} removido.",
   "ui.fileMedia.state.loading": "Carregando {{kind}}...",
-  "ui.fileMedia.state.error": "Erro ao carregar {{kind}}",
-  "ui.fileMedia.state.unavailable": "{{kind}} indisponível",
+  "ui.fileMedia.state.error": "Não foi possível carregar {{kind}}.",
+  "ui.fileMedia.state.unavailable": "Pré-visualização de {{kind}} indisponível.",
   "ui.fileMedia.binary.title": "Arquivo binário",
   "ui.fileMedia.binary.description.path": "Não é possível exibir {{path}} porque é um arquivo binário.",
   "ui.fileMedia.binary.description.default": "Não é possível exibir o arquivo porque ele é binário.",
@@ -72,7 +72,7 @@ export const dict = {
 
   "dialog.usageExceeded.freeTier.title": "Limite gratuito atingido",
   "dialog.usageExceeded.freeTier.description":
-    "Assine o OpenCode Go para ter acesso confiável aos melhores modelos open-source, a partir de $5/mês.",
+    "Assine o OpenCode Go para ter acesso confiável aos melhores modelos de código aberto, a partir de $5/mês.",
   "dialog.usageExceeded.freeTier.actionLabel": "Assinar",
   "dialog.usageExceeded.accountRateLimit.title": "Limite do Go atingido",
   "dialog.usageExceeded.accountRateLimit.description":
@@ -126,8 +126,8 @@ export const dict = {
   "ui.tool.list": "Listar",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
-  "ui.tool.webfetch": "Buscar Web",
-  "ui.tool.websearch": "Pesquisa na Web",
+  "ui.tool.webfetch": "Busca na web",
+  "ui.tool.websearch": "Pesquisa na web",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Tarefas",
