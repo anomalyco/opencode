@@ -155,13 +155,14 @@ const nativeLayer = (config: Config) =>
   Layer.effect(
     Sqlite.Native,
     Effect.gen(function* () {
+      const readonly = config.readonly === true
       const native = new Database(config.filename, {
-        readonly: config.readonly,
-        readwrite: config.readwrite ?? true,
-        create: config.create ?? true,
+        readonly,
+        readwrite: config.readwrite ?? !readonly,
+        create: config.create ?? !readonly,
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
-      if (config.disableWAL !== true) native.run("PRAGMA journal_mode = WAL;")
+      if (!readonly && config.disableWAL !== true) native.run("PRAGMA journal_mode = WAL;")
       return native
     }),
   )
