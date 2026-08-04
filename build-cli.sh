@@ -23,7 +23,14 @@ BINARY=$(find packages/opencode/dist -type f -name "opencode" | head -n 1)
 if [ -f "$BINARY" ]; then
   echo "✅ Built binary successfully at: $BINARY"
   mkdir -p ~/.local/bin
-  # Symlink binaries to user local bin
+  
+  # Remove stale symlinks or existing binaries
+  rm -f ~/.local/bin/opencode ~/.local/bin/opencode-evolve
+  
+  # Clean up stale SQLite lock files that may cause TUI freeze
+  rm -f ~/.local/share/opencode/*.db-wal ~/.local/share/opencode/*.db-shm 2>/dev/null || true
+  
+  # Create fresh symlinks
   ln -sf "$(pwd)/$BINARY" ~/.local/bin/opencode
   ln -sf "$(pwd)/$BINARY" ~/.local/bin/opencode-evolve
   echo "🔗 Symlinked to ~/.local/bin/opencode & ~/.local/bin/opencode-evolve"
