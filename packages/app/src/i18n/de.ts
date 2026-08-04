@@ -1034,4 +1034,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Dauerhaftes Projekticon konnte nicht erstellt werden",
   "error.childStore.storeCreateFailed": "Speicher konnte nicht erstellt werden",
   "terminal.connectionLost.abnormalClose": "WebSocket abnormal geschlossen: {{code}}",
+  "dialog.provider.custom.label": "Benutzerdefinierter OpenAI-kompatibler Anbieter",
+  "dialog.model.unpaid.viewMoreProviders": "Über 70 weitere Anbieter anzeigen",
+  "session.header.reveal.finder": "Im Finder anzeigen",
+  "session.header.reveal.fileExplorer": "Im Datei-Explorer anzeigen",
+  "session.header.reveal.containingFolder": "Enthaltenden Ordner öffnen",
 } satisfies Partial<Record<Keys, string>>

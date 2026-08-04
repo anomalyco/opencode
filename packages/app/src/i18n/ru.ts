@@ -1100,4 +1100,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Не удалось создать постоянный значок проекта",
   "error.childStore.storeCreateFailed": "Не удалось создать хранилище",
   "terminal.connectionLost.abnormalClose": "WebSocket закрыт аварийно: {{code}}",
+  "dialog.provider.custom.label": "Пользовательский провайдер, совместимый с OpenAI",
+  "dialog.model.unpaid.viewMoreProviders": "Посмотреть ещё более 70 провайдеров",
+  "session.header.reveal.finder": "Показать в Finder",
+  "session.header.reveal.fileExplorer": "Показать в Проводнике",
+  "session.header.reveal.containingFolder": "Открыть содержащую папку",
 }

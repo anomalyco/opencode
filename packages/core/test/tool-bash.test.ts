@@ -6,6 +6,7 @@ import { Effect, Layer } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@opencode-ai/core/config"
+import { ConfigSandbox } from "@opencode-ai/core/config/sandbox"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
@@ -15,6 +16,7 @@ import { AppProcess } from "@opencode-ai/core/process"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { BashTool } from "@opencode-ai/core/tool/bash"
+import { DockerSandbox } from "@opencode-ai/core/tool/docker-sandbox"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { location } from "./fixture/location"
@@ -26,7 +28,9 @@ const sessionID = SessionV2.ID.make("ses_bash_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
 const runs: Array<{
   readonly command: string
+  readonly args: readonly string[]
   readonly cwd?: string
+  readonly env?: NodeJS.ProcessEnv
   readonly shell?: string | boolean
   readonly options?: AppProcess.RunOptions
 }> = []
@@ -43,6 +47,7 @@ let result: AppProcess.RunResult = {
 }
 let runFailure: AppProcess.AppProcessError | undefined
 let afterPermission = (_input: PermissionV2.AssertInput): Effect.Effect<void> => Effect.void
+let sandbox: ConfigSandbox.Info | undefined
 
 const permission = Layer.succeed(
   PermissionV2.Service,
@@ -67,7 +72,14 @@ const appProcess = Layer.succeed(
     run: (command: ChildProcess.Command, options?: AppProcess.RunOptions) =>
       Effect.suspend(() => {
         if (command._tag !== "StandardCommand") throw new Error("expected standard command")
-        runs.push({ command: command.command, cwd: command.options.cwd, shell: command.options.shell, options })
+        runs.push({
+          command: command.command,
+          args: command.args,
+          cwd: command.options.cwd,
+          env: command.options.env,
+          shell: command.options.shell,
+          options,
+        })
         return runFailure ? Effect.fail(runFailure) : Effect.succeed(result)
       }),
   } as unknown as AppProcess.Interface),
@@ -75,7 +87,8 @@ const appProcess = Layer.succeed(
 const config = Layer.succeed(
   Config.Service,
   Config.Service.of({
-    entries: () => Effect.succeed([]),
+    entries: () =>
+      Effect.succeed(sandbox ? [new Config.Document({ type: "document", info: new Config.Info({ sandbox }) })] : []),
   }),
 )
 
@@ -85,6 +98,7 @@ const reset = () => {
   denyAction = undefined
   runFailure = undefined
   afterPermission = () => Effect.void
+  sandbox = undefined
   result = {
     command: "mock",
     exitCode: 0,
@@ -133,6 +147,88 @@ const call = (input: typeof BashTool.Input.Type, id = "call-bash") => ({
 const it = testEffect(Layer.empty)
 
 describe("BashTool", () => {
+  it.effect("builds a least-privilege Docker command for secure development", () =>
+    Effect.sync(() => {
+      expect(
+        DockerSandbox.command({
+          command: "bun test",
+          cwd: "/workspace/project",
+          image: "oven/bun:1.3.13",
+        }),
+      ).toEqual([
+        "docker",
+        [
+          "run",
+          "--rm",
+          "--init",
+          "--network",
+          "none",
+          "--read-only",
+          "--cap-drop",
+          "ALL",
+          "--security-opt",
+          "no-new-privileges",
+          "--pids-limit",
+          "256",
+          "--memory",
+          "2g",
+          "--cpus",
+          "2",
+          "--tmpfs",
+          "/tmp:rw,noexec,nosuid,size=256m",
+          "--user",
+          `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`,
+          "--env",
+          "HOME=/tmp/home",
+          "--volume",
+          "/workspace/project:/workspace:rw",
+          "--workdir",
+          "/workspace",
+          "oven/bun:1.3.13",
+          "/bin/sh",
+          "-lc",
+          "bun test",
+        ],
+      ])
+    }),
+  )
+
+  it.live("uses the configured Docker sandbox without passing host environment variables", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        sandbox = { type: "docker", image: "oven/bun:1.3.13" }
+        return withTool(tmp.path, (registry) => executeTool(registry, call({ command: "bun test" }))).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(runs).toMatchObject([
+                {
+                  command: "docker",
+                  args: expect.arrayContaining([
+                    "--network",
+                    "none",
+                    "--read-only",
+                    "--cap-drop",
+                    "ALL",
+                    "--security-opt",
+                    "no-new-privileges",
+                    "oven/bun:1.3.13",
+                    "bun test",
+                  ]),
+                  cwd: realpathSync(tmp.path),
+                  shell: false,
+                },
+              ])
+              expect(runs[0]?.env).toEqual(DockerSandbox.environment())
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("registers and returns structured successful output from the active Location", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

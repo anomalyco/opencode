@@ -1108,4 +1108,9 @@ export const dict = {
   "settings.general.row.pinchZoom.description": "Tillat knipebevegelser på styreflaten og Ctrl-rulling for å zoome",
   "settings.updates.action.downloading": "Laster ned...",
   "settings.updates.action.installing": "Installerer...",
+  "dialog.provider.custom.label": "Tilpasset OpenAI-kompatibel leverandør",
+  "dialog.model.unpaid.viewMoreProviders": "Se over 70 flere leverandører",
+  "session.header.reveal.finder": "Vis i Finder",
+  "session.header.reveal.fileExplorer": "Vis i Filutforsker",
+  "session.header.reveal.containingFolder": "Åpne inneholdende mappe",
 } satisfies Partial<Record<Keys, string>>

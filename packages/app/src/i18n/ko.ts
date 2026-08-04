@@ -1012,4 +1012,9 @@ export const dict = {
   "settings.general.row.pinchZoom.description": "트랙패드 핀치 및 Ctrl-스크롤 제스처로 확대/축소 허용",
   "settings.updates.action.downloading": "다운로드 중...",
   "settings.updates.action.installing": "설치 중...",
+  "dialog.provider.custom.label": "사용자 지정 OpenAI 호환 공급자",
+  "dialog.model.unpaid.viewMoreProviders": "70개 이상의 공급자 더 보기",
+  "session.header.reveal.finder": "Finder에서 보기",
+  "session.header.reveal.fileExplorer": "파일 탐색기에서 보기",
+  "session.header.reveal.containingFolder": "포함된 폴더 열기",
 }

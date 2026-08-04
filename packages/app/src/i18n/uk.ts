@@ -1102,4 +1102,9 @@ export const dict = {
   "workspace.reset.archived.one": "1 сесію буде заархівовано.",
   "workspace.reset.archived.many": "{{count}} сесій буде заархівовано.",
   "workspace.reset.note": "Це скине робочу область, щоб вона відповідала гілці за замовчуванням.",
+  "dialog.provider.custom.label": "Користувацький провайдер, сумісний з OpenAI",
+  "dialog.model.unpaid.viewMoreProviders": "Переглянути ще понад 70 провайдерів",
+  "session.header.reveal.finder": "Показати у Finder",
+  "session.header.reveal.fileExplorer": "Показати у Провіднику файлів",
+  "session.header.reveal.containingFolder": "Відкрити папку, що містить",
 }

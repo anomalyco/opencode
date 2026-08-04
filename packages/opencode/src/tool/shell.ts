@@ -21,6 +21,8 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
+import { DockerSandbox } from "@opencode-ai/core/tool/docker-sandbox"
+import { ShellSafety } from "./shell/safety"
 
 export { Parameters } from "./shell/prompt"
 
@@ -74,6 +76,7 @@ type Scan = {
   dirs: Set<string>
   patterns: Set<string>
   always: Set<string>
+  protected: Set<string>
 }
 
 type Chunk = {
@@ -279,6 +282,18 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
     })
   }
 
+  if (scan.protected.size > 0) {
+    yield* ctx.ask({
+      permission: "destructive_bash",
+      patterns: Array.from(scan.protected),
+      always: [],
+      metadata: {
+        command: input.command,
+        reason: "Destructive shell commands require a one-time confirmation",
+      },
+    })
+  }
+
   if (scan.patterns.size === 0) return
   yield* ctx.ask({
     permission: ShellID.ToolID,
@@ -290,7 +305,28 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
   })
 })
 
-function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
+function cmd(input: {
+  shell: string
+  command: string
+  cwd: string
+  env: NodeJS.ProcessEnv
+  sandbox?: { type: "docker"; image: string }
+}) {
+  if (input.sandbox) {
+    const [executable, args] = DockerSandbox.command({
+      command: input.command,
+      cwd: input.cwd,
+      image: input.sandbox.image,
+    })
+    return ChildProcess.make(executable, args, {
+      cwd: input.cwd,
+      env: DockerSandbox.environment(),
+      stdin: "ignore",
+      detached: process.platform !== "win32",
+    })
+  }
+
+  const { shell, command, cwd, env } = input
   if (process.platform === "win32" && Shell.ps(shell)) {
     return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
       cwd,
@@ -386,6 +422,7 @@ export const ShellTool = Tool.define(
         dirs: new Set<string>(),
         patterns: new Set<string>(),
         always: new Set<string>(),
+        protected: new Set<string>(),
       }
       const shellKind = ShellID.toKind(Shell.name(shell))
 
@@ -402,6 +439,11 @@ export const ShellTool = Tool.define(
             const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
             scan.dirs.add(dir)
           }
+        }
+
+        if (tokens.length && (!cmd || !CWD.has(cmd)) && ShellSafety.requiresConfirmation(tokens)) {
+          scan.protected.add(source(node))
+          continue
         }
 
         if (tokens.length && (!cmd || !CWD.has(cmd))) {
@@ -432,6 +474,7 @@ export const ShellTool = Tool.define(
         cwd: string
         env: NodeJS.ProcessEnv
         timeout: number
+        sandbox?: { type: "docker"; image: string }
       },
       ctx: Tool.Context,
     ) {
@@ -481,7 +524,7 @@ export const ShellTool = Tool.define(
       const code: number | null = yield* Effect.scoped(
         Effect.gen(function* () {
           yield* Effect.addFinalizer(closeSink)
-          const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
+          const handle = yield* spawner.spawn(cmd(input))
 
           yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
@@ -633,8 +676,9 @@ export const ShellTool = Tool.define(
                   shell,
                   command: params.command,
                   cwd,
-                  env: yield* shellEnv(ctx, cwd),
+                  env: cfg.sandbox ? {} : yield* shellEnv(ctx, cwd),
                   timeout,
+                  sandbox: cfg.sandbox,
                 },
                 ctx,
               )

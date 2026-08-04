@@ -1013,4 +1013,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "永続プロジェクトアイコンの作成に失敗しました",
   "error.childStore.storeCreateFailed": "ストアの作成に失敗しました",
   "terminal.connectionLost.abnormalClose": "WebSocket が異常終了しました: {{code}}",
+  "dialog.provider.custom.label": "カスタム OpenAI 互換プロバイダー",
+  "dialog.model.unpaid.viewMoreProviders": "さらに 70 以上のプロバイダーを見る",
+  "session.header.reveal.finder": "Finder で表示",
+  "session.header.reveal.fileExplorer": "ファイル エクスプローラーで表示",
+  "session.header.reveal.containingFolder": "含まれるフォルダーを開く",
 }
