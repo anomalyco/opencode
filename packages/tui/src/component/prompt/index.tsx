@@ -1327,12 +1327,16 @@ export function Prompt(props: PromptProps) {
     return Locale.takeWidth(value, Math.max(1, width)).trimEnd()
   })
   const locationLabel = createMemo(() => {
-    // No session yet: show where the next session will be created.
-    const location = !props.sessionID
-      ? (currentLocation.ref ?? data.location.default())
-      : data.session.get(props.sessionID)?.location
-    if (status() !== "idle") return undefined
-    if (!location) return undefined
+    if (!props.sessionID) {
+      // No session yet: show where the next session will be created.
+      const location = currentLocation.ref ?? data.location.default()
+      const directory = abbreviateHome(location.directory, paths.home)
+      const branch = data.location.vcs.info(location)?.branch.current
+      return branch ? `${directory}:${branch}` : directory
+    }
+    if (status() !== "idle") return
+    const location = data.session.get(props.sessionID)?.location
+    if (!location) return
     const directory = abbreviateHome(location.directory, paths.home)
     const branch = data.location.vcs.info(location)?.branch.current
     return branch ? `${directory}:${branch}` : directory
