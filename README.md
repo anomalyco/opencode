@@ -45,7 +45,7 @@
 
 ### Installation
 
-To install our custom version of `opencode-evolve` directly onto your system (`~/.local/bin/opencode`), run:
+To install our custom version of `opencode-evolve` directly onto your system (`~/.local/bin/opencode` and `~/.local/bin/opencode-evolve`), run:
 
 ```bash
 # Build & install custom opencode CLI onto the system
@@ -54,7 +54,7 @@ bun run install:custom
 ```
 
 > [!TIP]
-> Ensure `~/.local/bin` is in your system's `PATH`. You can run `./build-cli.sh` directly as well.
+> Ensure `~/.local/bin` is in your system's `PATH`. You can run either `opencode` or `opencode-evolve` from anywhere in your terminal.
 
 ### Desktop App (BETA)
 

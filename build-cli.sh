@@ -16,8 +16,9 @@ if [ -f "$BINARY" ]; then
   echo "✅ Built binary successfully at: $BINARY"
   mkdir -p ~/.local/bin
   ln -sf "$(pwd)/$BINARY" ~/.local/bin/opencode
-  echo "🔗 Symlinked to ~/.local/bin/opencode"
-  echo "🎉 Done! You can now run 'opencode' from anywhere in your terminal."
+  ln -sf "$(pwd)/$BINARY" ~/.local/bin/opencode-evolve
+  echo "🔗 Symlinked to ~/.local/bin/opencode & ~/.local/bin/opencode-evolve"
+  echo "🎉 Done! You can now run 'opencode' or 'opencode-evolve' from anywhere in your terminal."
 else
   echo "❌ Error: Could not locate built binary."
   exit 1
