@@ -19,6 +19,16 @@ declare global {
   }
 }
 
+declare module "*.png" {
+  const src: string
+  export default src
+}
+
+declare module "*.mp4" {
+  const src: string
+  export default src
+}
+
 export declare module "solid-js" {
   namespace JSX {
     interface Directives {

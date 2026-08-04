@@ -43,7 +43,11 @@ export function SessionFileListV2(props: {
   active?: string
   highlighted?: string
   kinds?: ReadonlyMap<string, Kind>
+  id?: string
+  role?: "listbox"
+  optionID?: (path: string) => string
   onFileClick: (path: string) => void
+  onFileDoubleClick?: (path: string) => void
 }) {
   const active = () => normalizePath(props.active ?? "")
   const highlighted = () => normalizePath(props.highlighted ?? "")
@@ -88,6 +92,8 @@ export function SessionFileListV2(props: {
   return (
     <div
       ref={setRoot}
+      id={props.id}
+      role={props.role}
       data-component="file-tree-v2"
       data-total-rows={props.files.length}
       style={{ position: "relative", height: `${virtualizer.getTotalSize()}px` }}
@@ -116,6 +122,9 @@ export function SessionFileListV2(props: {
                 >
                   <button
                     type="button"
+                    id={props.optionID?.(path)}
+                    role={props.role ? "option" : undefined}
+                    aria-selected={props.role ? selected() : undefined}
                     data-slot="file-tree-v2-row"
                     data-path={path}
                     data-selected={selected() ? "" : undefined}
@@ -124,6 +133,7 @@ export function SessionFileListV2(props: {
                     onFocus={() => setFocused(path)}
                     onBlur={() => setFocused(undefined)}
                     onClick={() => props.onFileClick(path)}
+                    onDblClick={() => props.onFileDoubleClick?.(path)}
                   >
                     <span class="filetree-iconpair size-4">
                       <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--color" />
