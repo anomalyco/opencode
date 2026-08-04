@@ -60,25 +60,10 @@ const layer = Layer.effect(
         },
 
         "experimental.text.complete": async (input, output) => {
-          const rawInput = input as Record<string, unknown>
-          const sessionID = typeof rawInput.sessionID === "string" ? rawInput.sessionID : undefined
-          if (!sessionID) return
-
-          const taskID = `task_${sessionID}`
-          try {
-            const taskRow = Effect.runSync(
-              db
-                .select()
-                .from(harness_task)
-                .where(eq(harness_task.task_id, taskID))
-                .pipe(Effect.orElseSucceed(() => [])),
-            )
-
-            if (taskRow.length && !output.text.includes("Harness User Feedback")) {
-              const auditBanner = `\n\n---\n### 📊 Harness Quality & Evolution Feedback\n**Are you satisfied with the result? (Yes/No)**\n*Reply ` + "`Yes`" + ` to confirm or ` + "`No: <your explanation of how you expected it>`" + ` so the Harness can learn and extract rules for future runs.*`
-              output.text += auditBanner
-            }
-          } catch {}
+          if (output.text && !output.text.includes("Harness Quality & Evolution Feedback")) {
+            const auditBanner = `\n\n---\n### 📊 Harness Quality & Evolution Feedback\n**Are you satisfied with this subtask result? (Yes/No)**\n*Reply ` + "`Yes`" + ` to confirm or ` + "`No: <your explanation of how you expected it>`" + ` so the Harness can learn and extract rules for future runs.*`
+            output.text += auditBanner
+          }
         },
 
         "tool.definition": async (input, output) => {
