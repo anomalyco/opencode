@@ -1,5 +1,6 @@
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { isRTL } from "@kobalte/core/i18n"
 import { createSignal, Show } from "solid-js"
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer"
 import { usePlatform } from "@/context/platform"
@@ -19,18 +20,19 @@ export function TabsInfoPopup() {
   const language = useLanguage()
   const [drawerOpen, setDrawerOpen] = createSignal(false)
   const windows = () => platform.platform === "desktop" && platform.os === "windows"
+  const rtl = () => isRTL(language.intl())
 
   return (
-    <Drawer open={drawerOpen()} onOpenChange={setDrawerOpen} side="right">
+    <Drawer open={drawerOpen()} onOpenChange={setDrawerOpen} side={rtl() ? "left" : "right"}>
       <Show when={settings.general.shouldDisplayTabsToast()}>
         <div
-          class="fixed bottom-5 right-5 z-50 h-[240px] w-[192px] rounded-[8px] bg-v2-background-bg-base p-1 shadow-[var(--v2-elevation-floating)]"
+          class="fixed bottom-5 end-5 z-50 h-[240px] w-[192px] rounded-[8px] bg-v2-background-bg-base p-1 shadow-[var(--v2-elevation-floating)]"
           aria-label={language.t("help.tabs.toast.ariaLabel")}
         >
           <button
             type="button"
             aria-label={language.t("help.tabs.toast.dismiss")}
-            class="absolute top-3 right-3 z-10 size-5 flex items-center justify-center rounded-[4px] bg-[rgba(0,0,0,0.4)]"
+            class="absolute top-3 end-3 z-10 size-5 flex items-center justify-center rounded-[4px] bg-[rgba(0,0,0,0.4)]"
             onClick={settings.general.dismissTabsToast}
           >
             <svg
@@ -46,7 +48,7 @@ export function TabsInfoPopup() {
           </button>
           <button
             type="button"
-            class="relative block h-[232px] w-[184px] cursor-pointer overflow-hidden rounded-[4px] text-left"
+            class="relative block h-[232px] w-[184px] cursor-pointer overflow-hidden rounded-[4px] text-start"
             onClick={() => {
               settings.general.dismissTabsToast()
               setDrawerOpen(true)
@@ -77,7 +79,10 @@ export function TabsInfoPopup() {
         style={
           windows()
             ? {
-                inset: "0 0 0 auto",
+                top: "0",
+                bottom: "0",
+                "inset-inline-end": "0",
+                "inset-inline-start": "auto",
                 "max-height": "100vh",
                 "max-width": "100vw",
                 "border-radius": "0",
@@ -93,7 +98,7 @@ export function TabsInfoPopup() {
             variant="neutral"
             aria-label={language.t("common.close")}
             icon={<IconV2 name="xmark-small" />}
-            class="absolute top-[10px] left-[-36px]"
+            class="absolute top-[10px] start-[-36px]"
           />
         </Show>
         <div

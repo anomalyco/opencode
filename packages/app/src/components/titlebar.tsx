@@ -515,7 +515,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   <div
                     class="flex items-center shrink-0"
                     classList={{
-                      "-translate-x-[36px]": layout.sidebar.opened() && !!params.dir,
+                      "ltr:-translate-x-[36px] rtl:translate-x-[36px]": layout.sidebar.opened() && !!params.dir,
                       "duration-180 ease-out": !layout.sidebar.opened(),
                       "duration-180 ease-in": layout.sidebar.opened(),
                     }}
