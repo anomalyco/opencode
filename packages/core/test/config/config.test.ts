@@ -526,6 +526,22 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("ignores legacy provider aliases when their canonical provider is configured", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        provider: {
+          azure: { models: { canonical: {} } },
+          "azure-cognitive-services": { models: { legacy: {} } },
+          "google-vertex": { models: { gemini: {} } },
+          "google-vertex-anthropic": { models: { claude: {} } },
+        },
+      })
+
+      expect(migrated.providers?.azure?.models).toEqual({ canonical: expect.anything() })
+      expect(migrated.providers?.["google-vertex"]?.models).toEqual({ gemini: expect.anything() })
+    }),
+  )
+
   it.effect("migrates v1 interleaved fields to compatibility", () =>
     Effect.sync(() => {
       const migrated = ConfigMigrateV1.migrate({

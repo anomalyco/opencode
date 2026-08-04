@@ -235,7 +235,11 @@ function migrateMcp(info: ConfigMCPV1.Info) {
 function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
   if (!info) return undefined
   return Object.fromEntries(
-    Object.entries(info).map(([name, provider]) => [providerID(name), migrateProvider(name, provider)]),
+    Object.entries(info).flatMap(([name, provider]) => {
+      const id = providerID(name)
+      if (id !== name && info[id]) return []
+      return [[id, migrateProvider(name, provider)]]
+    }),
   )
 }
 
