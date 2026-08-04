@@ -44,7 +44,8 @@ import {
   type PromptHistoryBadge,
 } from "../../prompt/footer"
 import { createStashArm, type StashGesture } from "../../prompt/stash-arm"
-import { computePromptTraits } from "../../prompt/traits"
+import { computePromptTraits, type PromptMode } from "../../prompt/traits"
+import { executeLocalCommand, formatLocalCommandResult, isLocalServerURL } from "../../prompt/local-command"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
@@ -295,7 +296,7 @@ export function Prompt(props: PromptProps) {
 
   const [store, setStore] = createStore<{
     prompt: PromptInfo
-    mode: "normal" | "shell"
+    mode: PromptMode
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
@@ -441,6 +442,10 @@ export function Prompt(props: PromptProps) {
           // TODO: this should be its own command
           if (store.mode === "shell") {
             setStore("mode", "normal")
+            return
+          }
+          if (store.mode === "local") {
+            exitLocalMode()
             return
           }
           // With text typed, escape stashes the draft into the prompt history
@@ -681,7 +686,7 @@ export function Prompt(props: PromptProps) {
   })
 
   onCleanup(() => {
-    if (store.prompt.input) {
+    if (store.mode !== "local" && store.prompt.input) {
       stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
     }
     setInputTarget(undefined)
@@ -795,8 +800,9 @@ export function Prompt(props: PromptProps) {
         title: "Stash prompt",
         name: "prompt.stash",
         category: "Prompt",
-        enabled: !!store.prompt.input,
+        enabled: store.mode !== "local" && !!store.prompt.input,
         run: () => {
+          if (store.mode === "local") return
           if (!store.prompt.input) return
           stash.push({
             input: store.prompt.input,
@@ -813,8 +819,9 @@ export function Prompt(props: PromptProps) {
         title: "Stash pop",
         name: "prompt.stash.pop",
         category: "Prompt",
-        enabled: stash.list().length > 0,
+        enabled: store.mode !== "local" && stash.list().length > 0,
         run: () => {
+          if (store.mode === "local") return
           const entry = stash.pop()
           if (entry) {
             input.setText(entry.input)
@@ -829,8 +836,9 @@ export function Prompt(props: PromptProps) {
         title: "Stash list",
         name: "prompt.stash.list",
         category: "Prompt",
-        enabled: stash.list().length > 0,
+        enabled: store.mode !== "local" && stash.list().length > 0,
         run: () => {
+          if (store.mode === "local") return
           dialog.replace(() => (
             <DialogStash
               onSelect={(entry) => {
@@ -912,6 +920,69 @@ export function Prompt(props: PromptProps) {
         return inputTarget() !== undefined && store.mode === "shell" && input?.visualCursor.offset === 0
       })(),
       bindings: [{ key: "backspace", desc: "Exit shell mode", group: "Prompt", cmd: () => setStore("mode", "normal") }],
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: (() => {
+        cursorVersion()
+        return (
+          inputTarget() !== undefined &&
+          !props.disabled &&
+          store.mode === "shell" &&
+          !auto()?.visible &&
+          input?.plainText === ""
+        )
+      })(),
+      bindings: [
+        {
+          key: "!",
+          desc: "Local mode",
+          group: "Prompt",
+          cmd: () => {
+            if (!props.sessionID) {
+              toast.show({ message: "Open a session before running a local command.", variant: "error" })
+              return
+            }
+            if (!isLocalServerURL(sdk.url)) {
+              toast.show({
+                message: "Local commands are unavailable while attached to a remote server.",
+                variant: "error",
+              })
+              return
+            }
+            stashed = undefined
+            setStore("placeholder", randomIndex(shell().length))
+            setStore("mode", "local")
+          },
+        },
+      ],
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: inputTarget() !== undefined && store.mode === "local",
+      bindings: [{ key: "escape", desc: "Exit local mode", group: "Prompt", cmd: exitLocalMode }],
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: (() => {
+        cursorVersion()
+        return (
+          inputTarget() !== undefined &&
+          store.mode === "local" &&
+          input?.plainText === "" &&
+          input.visualCursor.offset === 0
+        )
+      })(),
+      bindings: [{ key: "backspace", desc: "Exit local mode", group: "Prompt", cmd: exitLocalMode }],
     }
   })
 
@@ -1016,6 +1087,18 @@ export function Prompt(props: PromptProps) {
     if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
     if (!store.prompt.input) return false
+    if (store.mode === "local") {
+      const inputText = expandTrackedPastedText(
+        store.prompt.input,
+        input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
+          const partIndex = store.extmarkToPartIndex.get(extmark.id)
+          const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
+          if (part?.type !== "text") return []
+          return [{ start: extmark.start, end: extmark.end, text: part.text }]
+        }),
+      )
+      return submitLocalCommand(inputText)
+    }
     const agent = local.agent.current()
     if (!agent) return false
     const trimmed = store.prompt.input.trim()
@@ -1208,6 +1291,54 @@ export function Prompt(props: PromptProps) {
     return true
   }
 
+  async function submitLocalCommand(command: string) {
+    if (!props.sessionID) {
+      toast.show({ message: "Open a session before running a local command.", variant: "error" })
+      return false
+    }
+    if (!sdk.directory) {
+      toast.show({ message: "The active session has no local directory.", variant: "error" })
+      return false
+    }
+    if (!isLocalServerURL(sdk.url)) {
+      toast.show({ message: "Local commands are unavailable while attached to a remote server.", variant: "error" })
+      return false
+    }
+
+    setStore("historyBadge", null)
+    input.extmarks.clear()
+    setStore("prompt", {
+      input: "",
+      parts: [],
+    })
+    setStore("extmarkToPartIndex", new Map())
+    input.clear()
+    setStore("mode", "normal")
+
+    try {
+      const result = await executeLocalCommand({
+        command,
+        directory: sdk.directory,
+      })
+      void DialogAlert.show(dialog, "Local command", formatLocalCommandResult(result))
+    } catch (error) {
+      void DialogAlert.show(dialog, "Local command failed", errorMessage(error))
+    }
+    return true
+  }
+
+  function exitLocalMode() {
+    setStore("historyBadge", null)
+    input.clear()
+    input.extmarks.clear()
+    setStore("prompt", {
+      input: "",
+      parts: [],
+    })
+    setStore("extmarkToPartIndex", new Map())
+    setStore("mode", "shell")
+  }
+
   function pasteText(text: string, virtualText: string) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
@@ -1332,7 +1463,7 @@ export function Prompt(props: PromptProps) {
   }
 
   function clearPrompt() {
-    if (shouldRetainClearedPrompt(store.prompt)) {
+    if (store.mode !== "local" && shouldRetainClearedPrompt(store.prompt)) {
       history.append(
         createPromptHistoryEntry(store.prompt, {
           mode: store.mode,
@@ -1352,13 +1483,14 @@ export function Prompt(props: PromptProps) {
 
   function stashAndClear() {
     if (store.prompt.input === "" && store.prompt.parts.length === 0) return
-    history.append(
-      createPromptHistoryEntry(store.prompt, {
-        mode: store.mode,
-        sessionID: props.sessionID,
-        origin: "stash",
-      }),
-    )
+    if (store.mode !== "local")
+      history.append(
+        createPromptHistoryEntry(store.prompt, {
+          mode: store.mode,
+          sessionID: props.sessionID,
+          origin: "stash",
+        }),
+      )
     setStore("historyBadge", null)
     input.clear()
     input.extmarks.clear()
@@ -1404,7 +1536,7 @@ export function Prompt(props: PromptProps) {
 
   const highlight = createMemo(() => {
     if (leader()) return theme.border
-    if (store.mode === "shell") return theme.primary
+    if (store.mode !== "normal") return theme.primary
     const agent = local.agent.current()
     if (!agent) return theme.border
     return local.agent.color(agent.name)
@@ -1427,7 +1559,7 @@ export function Prompt(props: PromptProps) {
     return !!current
   })
 
-  const agentMetaAlpha = createFadeIn(() => !!local.agent.current(), animationsEnabled)
+  const agentMetaAlpha = createFadeIn(() => store.mode === "local" || !!local.agent.current(), animationsEnabled)
   const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
   const variantMetaAlpha = createFadeIn(
     () => !!local.agent.current() && store.mode === "normal" && showVariant(),
@@ -1437,7 +1569,7 @@ export function Prompt(props: PromptProps) {
 
   const placeholderText = createMemo(() => {
     if (props.showPlaceholder === false) return undefined
-    if (store.mode === "shell") {
+    if (store.mode !== "normal") {
       if (!shell().length) return undefined
       const example = shell()[store.placeholder % shell().length]
       return `Run a command... "${example}"`
@@ -1504,7 +1636,7 @@ export function Prompt(props: PromptProps) {
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "input", value)
-                auto()?.onInput(value)
+                if (store.mode !== "local") auto()?.onInput(value)
                 syncExtmarksWithPromptParts()
                 setCursorVersion((value) => value + 1)
                 if (store.stashArm) stashArm.clear()
@@ -1570,32 +1702,42 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
-                <Show when={local.agent.current()} fallback={<box height={1} />}>
-                  <>
-                    <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                      {store.mode === "shell" ? "Shell" : agentLabel()}
-                    </text>
-                    <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
-                      <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
-                    </Show>
-                    <Show when={store.mode === "normal"}>
-                      <box flexDirection="row" gap={1}>
-                        <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
-                        <text flexShrink={0} fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}>
-                          {local.model.parsed().model}
+                <Show
+                  when={store.mode === "local"}
+                  fallback={
+                    <Show when={local.agent.current()} fallback={<box height={1} />}>
+                      <>
+                        <text fg={fadeColor(highlight(), agentMetaAlpha())}>
+                          {store.mode === "shell" ? "Shell" : agentLabel()}
                         </text>
-                        <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
-                        <Show when={showVariant()}>
-                          <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
-                          <text>
-                            <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
-                              {local.model.variant.current()}
-                            </span>
-                          </text>
+                        <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
+                          <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
                         </Show>
-                      </box>
+                        <Show when={store.mode === "normal"}>
+                          <box flexDirection="row" gap={1}>
+                            <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                            <text
+                              flexShrink={0}
+                              fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
+                            >
+                              {local.model.parsed().model}
+                            </text>
+                            <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
+                            <Show when={showVariant()}>
+                              <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
+                              <text>
+                                <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
+                                  {local.model.variant.current()}
+                                </span>
+                              </text>
+                            </Show>
+                          </box>
+                        </Show>
+                      </>
                     </Show>
-                  </>
+                  }
+                >
+                  <text fg={theme.primary}>Local</text>
                 </Show>
               </box>
               <Show when={hasRightContent()}>
@@ -1821,6 +1963,11 @@ export function Prompt(props: PromptProps) {
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
                     esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                  </text>
+                </Match>
+                <Match when={store.mode === "local"}>
+                  <text fg={theme.text}>
+                    esc <span style={{ fg: theme.textMuted }}>shell mode</span>
                   </text>
                 </Match>
               </Switch>

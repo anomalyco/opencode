@@ -161,6 +161,33 @@ not consume entries. It is intentionally separate from the explicit
 commands use the dedicated `prompt-stash.jsonl` stack, where pop/list provide
 explicit stash management instead of normal `up`/`down` history navigation.
 
+## 8. Local shell bypass
+
+The existing `!` shortcut remains **Shell** mode: it asks the OpenCode server
+to execute the command and the resulting tool call remains auditable in the
+session. Press `!` a second time while the shell input is empty to enter
+**Local** mode, then type a command such as `pwd` or `code .`.
+
+`!!` is a strict client-side bypass. The TUI starts the command directly in
+the current session directory and displays stdout/stderr in an ephemeral
+dialog. It does not create a session message, tool result, prompt-history
+entry, or model request; the provider therefore receives neither the command
+nor its output. ANSI and control sequences are removed before display. After
+execution the prompt returns to normal mode.
+
+- Local mode is available only for an active session attached to a loopback
+  OpenCode server. A remote server could report a directory that has no safe
+  meaning on the local machine, so it is rejected. A loopback tunnel to a
+  remote host is not supported: it does not prove that the reported directory
+  belongs to this machine.
+- `esc` discards a local input and returns to auditable Shell mode. `backspace`
+  on an empty local input does the same; a second `esc` returns to the normal
+  prompt.
+- Commands have a 30-second limit. On timeout OpenCode terminates the local
+  process tree and reports the result without persisting it. Each output stream
+  is capped at 64 KiB. Interactive or long-running work belongs in a real
+  terminal.
+
 ## Commit map
 
 | Feature                        | Commits (main)                                                                             |
