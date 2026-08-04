@@ -267,9 +267,9 @@ export function fromPromise(plugin: Plugin) {
           },
           session: {
             hook: (...registration: SessionHookRegistration) => {
-              if (registration[0] === "context")
+              if (registration[0] !== "http")
                 return register(
-                  host.session.hook("context", (event) =>
+                  host.session.hook(registration[0], (event) =>
                     Effect.promise(() => Promise.resolve(registration[1](event))),
                   ),
                 )

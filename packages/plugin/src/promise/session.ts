@@ -32,11 +32,16 @@ export interface SessionHooks {
 }
 
 export type SessionHookRegistration =
-  | [name: "context", callback: (event: SessionContext) => Promise<void> | void]
+  | {
+      [Name in keyof SessionHooks]: [name: Name, callback: (event: SessionHooks[Name]) => Promise<void> | void]
+    }[keyof SessionHooks]
   | [name: "http", middleware: SessionHttpMiddleware]
 
 export interface SessionHook {
-  (name: "context", callback: (event: SessionContext) => Promise<void> | void): Promise<Registration>
+  <Name extends keyof SessionHooks>(
+    name: Name,
+    callback: (event: SessionHooks[Name]) => Promise<void> | void,
+  ): Promise<Registration>
   (name: "http", middleware: SessionHttpMiddleware): Promise<Registration>
 }
 

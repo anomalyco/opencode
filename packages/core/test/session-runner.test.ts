@@ -478,7 +478,7 @@ const setup = Effect.gen(function* () {
     session: {
       hook: (...registration: SessionHookRegistration) => {
         if (registration[0] === "http") return Effect.die("unused session HTTP hook")
-        return hooks.register("session", "context", registration[1])
+        return hooks.register("session", ...registration)
       },
     },
   })

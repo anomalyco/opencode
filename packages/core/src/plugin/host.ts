@@ -339,7 +339,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
     },
     session: {
       hook: (...registration: SessionHookRegistration) => {
-        if (registration[0] === "context") return hooks.register("session", "context", registration[1])
+        if (registration[0] !== "http") return hooks.register("session", ...registration)
         const middleware = registration[1]
         return hooks.register("session", "http", (event) =>
           Effect.sync(() => {

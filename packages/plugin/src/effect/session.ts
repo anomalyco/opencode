@@ -32,15 +32,16 @@ export interface SessionHooks {
 }
 
 export type SessionHookRegistration =
-  | [name: "context", callback: (event: SessionContext) => Effect.Effect<void>]
+  | {
+      [Name in keyof SessionHooks]: [name: Name, callback: (event: SessionHooks[Name]) => Effect.Effect<void>]
+    }[keyof SessionHooks]
   | [name: "http", middleware: SessionHttpMiddleware]
 
 export interface SessionHook {
-  (name: "context", callback: (event: SessionContext) => Effect.Effect<void>): Effect.Effect<
-    Registration,
-    never,
-    Scope.Scope
-  >
+  <Name extends keyof SessionHooks>(
+    name: Name,
+    callback: (event: SessionHooks[Name]) => Effect.Effect<void>,
+  ): Effect.Effect<Registration, never, Scope.Scope>
   (name: "http", middleware: SessionHttpMiddleware): Effect.Effect<Registration, never, Scope.Scope>
 }
 
