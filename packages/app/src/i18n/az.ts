@@ -402,6 +402,7 @@ export const dict = {
   "dialog.fork.empty": "Yeni sessiyaya ayırmaq üçün mesaj yoxdur",
   "dialog.directory.search.placeholder": "Qovluqları axtar",
   "dialog.directory.empty": "Qovluq tapılmadı",
+  "dialog.directory.navigationHint": "Tab: Alt qovluğa daxil ol · Enter: Qovluğu seç",
   "dialog.directory.action.selectFile": "Fayl seçin",
   "dialog.directory.action.selectFolder": "Qovluğu seçin",
   "dialog.directory.root": "Kök",

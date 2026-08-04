@@ -449,6 +449,7 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "搜索文件夹",
   "dialog.directory.empty": "未找到文件夹",
+  "dialog.directory.navigationHint": "Tab：进入子目录　·　Enter：选择目录",
   "dialog.directory.action.selectFile": "选择文件",
   "dialog.directory.action.selectFolder": "选择文件夹",
   "dialog.directory.root": "根目录",

@@ -406,6 +406,7 @@ export const dict = {
   "dialog.fork.empty": "फ़ोर्क करने के लिए कोई संदेश नहीं",
   "dialog.directory.search.placeholder": "फ़ोल्डर खोजें",
   "dialog.directory.empty": "कोई फ़ोल्डर नहीं मिला",
+  "dialog.directory.navigationHint": "Tab: सबफ़ोल्डर खोलें · Enter: फ़ोल्डर चुनें",
   "dialog.directory.action.selectFile": "फ़ाइल का चयन करें",
   "dialog.directory.action.selectFolder": "फ़ोल्डर चुनें",
   "dialog.directory.root": "रूट",

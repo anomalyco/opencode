@@ -429,6 +429,7 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "ค้นหาโฟลเดอร์",
   "dialog.directory.empty": "ไม่พบโฟลเดอร์",
+  "dialog.directory.navigationHint": "Tab: เปิดโฟลเดอร์ย่อย · Enter: เลือกโฟลเดอร์",
   "dialog.directory.action.selectFile": "เลือกไฟล์",
   "dialog.directory.action.selectFolder": "เลือกโฟลเดอร์",
   "dialog.directory.root": "โฟลเดอร์ราก",

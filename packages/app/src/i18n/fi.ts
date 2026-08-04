@@ -306,6 +306,7 @@ export const dict = {
   "dialog.fork.empty": "Ei viestejä, joista voisi haarauttaa",
   "dialog.directory.search.placeholder": "Hae kansioita",
   "dialog.directory.empty": "Kansioita ei löytynyt",
+  "dialog.directory.navigationHint": "Tab: Avaa alikansio · Enter: Valitse kansio",
   "dialog.directory.action.selectFile": "Valitse tiedosto",
   "dialog.directory.action.selectFolder": "Valitse kansio",
   "dialog.directory.root": "Juuri",

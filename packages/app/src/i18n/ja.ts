@@ -403,6 +403,7 @@ export const dict = {
   "dialog.fork.empty": "フォーク元のメッセージがありません",
   "dialog.directory.search.placeholder": "フォルダを検索",
   "dialog.directory.empty": "フォルダが見つかりません",
+  "dialog.directory.navigationHint": "Tab：サブフォルダを開く　·　Enter：フォルダを選択",
   "dialog.directory.action.selectFile": "ファイルを選択",
   "dialog.directory.action.selectFolder": "フォルダを選択",
   "dialog.directory.root": "ルート",

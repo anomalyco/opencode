@@ -432,6 +432,7 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Pretraži fascikle",
   "dialog.directory.empty": "Nema pronađenih fascikli",
+  "dialog.directory.navigationHint": "Tab: Otvori podfasciklu · Enter: Odaberi fasciklu",
   "dialog.directory.action.selectFile": "Odaberi datoteku",
   "dialog.directory.action.selectFolder": "Odaberi fasciklu",
   "dialog.directory.root": "Korijen",

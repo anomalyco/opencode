@@ -406,6 +406,7 @@ export const dict = {
   "dialog.fork.empty": "Không có tin nhắn nào để phân nhánh",
   "dialog.directory.search.placeholder": "Tìm kiếm thư mục",
   "dialog.directory.empty": "Không tìm thấy thư mục nào",
+  "dialog.directory.navigationHint": "Tab: Mở thư mục con · Enter: Chọn thư mục",
   "dialog.directory.action.selectFile": "Chọn tệp",
   "dialog.directory.action.selectFolder": "Chọn thư mục",
   "dialog.directory.root": "Gốc",

@@ -335,6 +335,7 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Search folders",
   "dialog.directory.empty": "No folders found",
+  "dialog.directory.navigationHint": "Tab: Enter subfolder · Enter: Select folder",
   "dialog.directory.action.selectFile": "Select file",
   "dialog.directory.action.selectFolder": "Select folder",
   "dialog.directory.root": "Root",

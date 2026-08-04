@@ -430,6 +430,7 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Поиск папок",
   "dialog.directory.empty": "Папки не найдены",
+  "dialog.directory.navigationHint": "Tab: Открыть подпапку · Enter: Выбрать папку",
   "dialog.directory.action.selectFile": "Выбрать файл",
   "dialog.directory.action.selectFolder": "Выбрать папку",
   "dialog.directory.root": "Корень",

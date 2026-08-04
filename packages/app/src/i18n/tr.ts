@@ -436,6 +436,7 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Klasör ara",
   "dialog.directory.empty": "Klasör bulunamadı",
+  "dialog.directory.navigationHint": "Tab: Alt klasörü aç · Enter: Klasörü seç",
   "dialog.directory.action.selectFile": "Dosya seç",
   "dialog.directory.action.selectFolder": "Klasör seç",
   "dialog.directory.root": "Kök",

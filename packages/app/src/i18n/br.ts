@@ -406,6 +406,7 @@ export const dict = {
   "dialog.fork.empty": "Nenhuma mensagem para bifurcar",
   "dialog.directory.search.placeholder": "Buscar pastas",
   "dialog.directory.empty": "Nenhuma pasta encontrada",
+  "dialog.directory.navigationHint": "Tab: Entrar na subpasta · Enter: Selecionar pasta",
   "dialog.directory.action.selectFile": "Selecionar arquivo",
   "dialog.directory.action.selectFolder": "Selecionar pasta",
   "dialog.directory.root": "Raiz",

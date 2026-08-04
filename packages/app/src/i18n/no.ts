@@ -422,6 +422,7 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Søk etter mapper",
   "dialog.directory.empty": "Ingen mapper funnet",
+  "dialog.directory.navigationHint": "Tab: Åpne undermappe · Enter: Velg mappe",
   "dialog.directory.action.selectFile": "Velg fil",
   "dialog.directory.action.selectFolder": "Velg mappe",
   "dialog.directory.root": "Rot",

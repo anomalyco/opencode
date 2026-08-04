@@ -406,6 +406,7 @@ export const dict = {
   "dialog.fork.empty": "Brak wiadomości do rozwidlenia",
   "dialog.directory.search.placeholder": "Szukaj folderów",
   "dialog.directory.empty": "Nie znaleziono folderów",
+  "dialog.directory.navigationHint": "Tab: Otwórz podfolder · Enter: Wybierz folder",
   "dialog.directory.action.selectFile": "Wybierz plik",
   "dialog.directory.action.selectFolder": "Wybierz folder",
   "dialog.directory.root": "Katalog główny",

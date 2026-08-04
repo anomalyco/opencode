@@ -308,6 +308,7 @@ export const dict = {
   "dialog.fork.empty": "Nessun messaggio da cui effettuare il fork",
   "dialog.directory.search.placeholder": "Cerca cartelle",
   "dialog.directory.empty": "Nessuna cartella trovata",
+  "dialog.directory.navigationHint": "Tab: Apri sottocartella · Enter: Seleziona cartella",
   "dialog.directory.action.selectFile": "Seleziona file",
   "dialog.directory.action.selectFolder": "Seleziona la cartella",
   "dialog.directory.root": "Radice",

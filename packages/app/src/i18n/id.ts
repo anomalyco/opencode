@@ -432,6 +432,7 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Cari folder",
   "dialog.directory.empty": "Folder tidak ditemukan",
+  "dialog.directory.navigationHint": "Tab: Buka subfolder · Enter: Pilih folder",
   "dialog.directory.action.selectFile": "Pilih berkas",
   "dialog.directory.action.selectFolder": "Pilih folder",
   "dialog.directory.root": "Akar",

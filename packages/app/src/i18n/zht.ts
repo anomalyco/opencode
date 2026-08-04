@@ -429,6 +429,7 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "搜尋資料夾",
   "dialog.directory.empty": "找不到資料夾",
+  "dialog.directory.navigationHint": "Tab：進入子目錄　·　Enter：選擇目錄",
   "dialog.directory.action.selectFile": "選擇檔案",
   "dialog.directory.action.selectFolder": "選擇資料夾",
   "dialog.directory.root": "根目錄",

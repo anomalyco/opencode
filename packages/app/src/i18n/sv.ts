@@ -400,6 +400,7 @@ export const dict = {
   "dialog.fork.empty": "Inga meddelanden att förgrena från",
   "dialog.directory.search.placeholder": "Sök i mappar",
   "dialog.directory.empty": "Inga mappar hittades",
+  "dialog.directory.navigationHint": "Tab: Öppna undermapp · Enter: Välj mapp",
   "dialog.directory.action.selectFile": "Välj fil",
   "dialog.directory.action.selectFolder": "Välj mapp",
   "dialog.directory.root": "Rotmapp",

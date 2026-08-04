@@ -404,6 +404,7 @@ export const dict = {
   "dialog.fork.empty": "لا توجد رسائل للتفرع منها",
   "dialog.directory.search.placeholder": "البحث في المجلدات",
   "dialog.directory.empty": "لم يتم العثور على مجلدات",
+  "dialog.directory.navigationHint": "Tab: فتح مجلد فرعي · Enter: اختيار مجلد",
   "dialog.directory.action.selectFile": "اختيار ملف",
   "dialog.directory.action.selectFolder": "اختيار مجلد",
   "dialog.directory.root": "الجذر",

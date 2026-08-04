@@ -168,6 +168,14 @@ describe("i18n plural parity", () => {
   })
 })
 
+test("directory navigation hint is available in every app locale", async () => {
+  const key = "dialog.directory.navigationHint"
+  for (const locale of ["en", ...appLocales]) {
+    const target = await dictionary(`./${locale}.ts`)
+    expect({ locale, value: target[key] }).toEqual({ locale, value: expect.any(String) })
+  }
+})
+
 async function dictionary(file: string) {
   const module: unknown = await import(file)
   if (typeof module !== "object" || module === null || !("dict" in module) || !isDictionary(module.dict)) {

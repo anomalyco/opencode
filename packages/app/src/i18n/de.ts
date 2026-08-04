@@ -311,6 +311,7 @@ export const dict = {
   "dialog.fork.empty": "Keine Nachrichten zum Abzweigen vorhanden",
   "dialog.directory.search.placeholder": "Ordner durchsuchen",
   "dialog.directory.empty": "Keine Ordner gefunden",
+  "dialog.directory.navigationHint": "Tab: Unterordner öffnen · Enter: Ordner auswählen",
   "dialog.directory.action.selectFile": "Datei auswählen",
   "dialog.directory.action.selectFolder": "Ordner auswählen",
   "dialog.directory.root": "Stammverzeichnis",

@@ -292,6 +292,7 @@ export const dict = {
   "dialog.fork.empty": "분기할 메시지 없음",
   "dialog.directory.search.placeholder": "폴더 검색",
   "dialog.directory.empty": "폴더 없음",
+  "dialog.directory.navigationHint": "Tab: 하위 폴더 열기 · Enter: 폴더 선택",
   "dialog.directory.action.selectFile": "파일 선택",
   "dialog.directory.action.selectFolder": "폴더 선택",
   "dialog.directory.root": "루트",

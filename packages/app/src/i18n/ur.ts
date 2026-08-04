@@ -408,6 +408,7 @@ export const dict = {
   "dialog.fork.empty": "کوئی پیغامات نہیں ہیں جن سے فورک کیا جائے۔",
   "dialog.directory.search.placeholder": "فولڈرز تلاش کریں۔",
   "dialog.directory.empty": "کوئی فولڈر نہیں ملا",
+  "dialog.directory.navigationHint": "Tab: ذیلی فولڈر کھولیں · Enter: فولڈر منتخب کریں",
   "dialog.directory.action.selectFile": "فائل منتخب کریں۔",
   "dialog.directory.action.selectFolder": "فولڈر منتخب کریں۔",
   "dialog.directory.root": "بنیادی فولڈر",

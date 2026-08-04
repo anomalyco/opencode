@@ -410,6 +410,7 @@ export const dict = {
   "dialog.fork.empty": "Aucun message à partir duquel bifurquer",
   "dialog.directory.search.placeholder": "Rechercher des dossiers",
   "dialog.directory.empty": "Aucun dossier trouvé",
+  "dialog.directory.navigationHint": "Tab : Ouvrir le sous-dossier · Enter : Sélectionner le dossier",
   "dialog.directory.action.selectFile": "Sélectionner le fichier",
   "dialog.directory.action.selectFolder": "Sélectionner le dossier",
   "dialog.directory.root": "Racine",

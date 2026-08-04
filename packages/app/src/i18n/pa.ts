@@ -406,6 +406,7 @@ export const dict = {
   "dialog.fork.empty": "فورک کرن لئی کوئی پیغام نئیں",
   "dialog.directory.search.placeholder": "فولڈراں نوں لبھو",
   "dialog.directory.empty": "کوئی فولڈر نئیں لبیا",
+  "dialog.directory.navigationHint": "Tab: ذیلی فولڈر کھولو · Enter: فولڈر چنو",
   "dialog.directory.action.selectFile": "فائل چنو",
   "dialog.directory.action.selectFolder": "فولڈر چنو",
   "dialog.directory.root": "Root",

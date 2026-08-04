@@ -433,6 +433,7 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Buscar carpetas",
   "dialog.directory.empty": "No se encontraron carpetas",
+  "dialog.directory.navigationHint": "Tab: Abrir subcarpeta · Enter: Seleccionar carpeta",
   "dialog.directory.action.selectFile": "Seleccionar archivo",
   "dialog.directory.action.selectFolder": "Seleccionar carpeta",
   "dialog.directory.root": "Raíz",

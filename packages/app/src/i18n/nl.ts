@@ -400,6 +400,7 @@ export const dict = {
   "dialog.fork.empty": "Geen berichten om van af te splitsen",
   "dialog.directory.search.placeholder": "Zoek in mappen",
   "dialog.directory.empty": "Geen mappen gevonden",
+  "dialog.directory.navigationHint": "Tab: Submap openen · Enter: Map selecteren",
   "dialog.directory.action.selectFile": "Selecteer bestand",
   "dialog.directory.action.selectFolder": "Selecteer map",
   "dialog.directory.root": "Hoofdmap",

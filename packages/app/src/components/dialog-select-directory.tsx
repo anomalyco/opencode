@@ -195,6 +195,9 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           )
         }}
       </List>
+      <div data-slot="directory-navigation-hint" class="px-3 pb-3 text-12-regular text-text-weak">
+        {language.t("dialog.directory.navigationHint")}
+      </div>
     </Dialog>
   )
 }
