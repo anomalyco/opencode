@@ -123,7 +123,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       if (!a.strategy && !b.strategy) return a.directory.length - b.directory.length
       return 0
     })
-    if (roots.length === 0) return [{ title: "No project directories found", value: undefined }]
+    if (roots.length === 0) return [{ title: "未找到项目目录", value: undefined }]
 
     const subdirectories = sync.data.session
       .filter((session) => session.projectID === props.projectID && session.path && ![".", "/"].includes(session.path))
@@ -254,7 +254,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         if (forced.error) {
           toast.show({
             variant: "error",
-            title: "Failed to delete project copy",
+            title: "删除项目副本失败",
             message: errorMessage(forced.error),
           })
           reopen()
@@ -268,7 +268,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       }
       toast.show({
         variant: "error",
-        title: "Failed to delete project copy",
+        title: "删除项目副本失败",
         message: errorMessage(result.error),
       })
       return
@@ -286,11 +286,11 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   return (
     <box minHeight={showError() ? 5 : fullHeight()}>
       <DialogSelect
-        title="Move session"
+        title="移动会话"
         titleView={
           <box flexDirection="row" gap={1}>
             <text fg={theme.text} attributes={TextAttributes.BOLD}>
-              Move session
+              移动会话
             </text>
             <Show when={working() || directories.loading || loadedProject.loading}>
               <Spinner />
@@ -303,7 +303,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
           showError() ? (
             <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.error} attributes={TextAttributes.BOLD}>
-                Could not load project directories
+                无法加载项目目录
               </text>
               <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
             </box>
@@ -321,12 +321,12 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
             : [
                 {
                   command: "dialog.move_session.new",
-                  title: "new",
+                  title: "新建",
                   onTrigger: () => props.onSelect({ type: "new" }),
                 },
                 {
                   command: "dialog.move_session.delete",
-                  title: "delete",
+                  title: "删除",
                   disabled: (option) => {
                     const value = option?.value
                     if (!value || value.type !== "directory" || value.subdirectory) return true
@@ -336,7 +336,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
                 },
                 {
                   command: "dialog.move_session.refresh",
-                  title: "refresh",
+                  title: "刷新",
                   onTrigger: () => void refetch(),
                 },
               ]

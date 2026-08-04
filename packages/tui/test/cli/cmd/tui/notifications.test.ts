@@ -85,14 +85,14 @@ function permission(id: string, sessionID = "session"): PermissionRequest {
 
 const questionNotification: TuiAttentionNotifyInput = {
   title: "Demo session",
-  message: "Question needs input",
+  message: "问题需要输入",
   notification: { when: "blurred" },
   sound: { name: "question", when: "always" },
 }
 
 const permissionNotification: TuiAttentionNotifyInput = {
   title: "Demo session",
-  message: "Permission needs input",
+  message: "权限需要输入",
   notification: { when: "blurred" },
   sound: { name: "permission", when: "always" },
 }
@@ -158,7 +158,7 @@ describe("internal notifications TUI plugin", () => {
     expect(harness.notifications).toEqual([
       {
         title: "Demo session",
-        message: "Session done",
+        message: "会话完成",
         notification: { when: "blurred" },
         sound: { name: "done", when: "always" },
       },
@@ -183,13 +183,13 @@ describe("internal notifications TUI plugin", () => {
     expect(harness.notifications).toEqual([
       {
         title: "Subagent session",
-        message: "Question needs input",
+        message: "问题需要输入",
         notification: false,
         sound: { name: "question", when: "always" },
       },
       {
         title: "Subagent session",
-        message: "Session done",
+        message: "会话完成",
         notification: false,
         sound: { name: "subagent_done", when: "always" },
       },
@@ -218,7 +218,7 @@ describe("internal notifications TUI plugin", () => {
     expect(harness.notifications).toEqual([
       {
         title: "Demo session",
-        message: "Session error",
+        message: "会话错误",
         notification: { when: "blurred" },
         sound: { name: "error", when: "always" },
       },
@@ -252,13 +252,13 @@ describe("internal notifications TUI plugin", () => {
     expect(harness.notifications).toEqual([
       {
         title: "Abort session",
-        message: "Session aborted",
+        message: "会话已中止",
         notification: { when: "blurred" },
         sound: { name: "error", when: "always" },
       },
       {
         title: "Timeout session",
-        message: "Model stopped responding",
+        message: "模型停止响应",
         notification: { when: "blurred" },
         sound: { name: "error", when: "always" },
       },

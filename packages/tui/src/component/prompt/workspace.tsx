@@ -32,15 +32,15 @@ export function usePromptWorkspace(sessionID?: string) {
     } catch (err) {
       setSelection(undefined)
       setCreating(false)
-      toast.show({ title: "Creating workspace failed", message: errorMessage(err), variant: "error" })
+      toast.show({ title: "创建工作区失败", message: errorMessage(err), variant: "error" })
       return
     }
     if (result.error || !result.data) {
       setSelection(undefined)
       setCreating(false)
       toast.show({
-        title: "Creating workspace failed",
-        message: errorMessage(result.error ?? "no response"),
+        title: "创建工作区失败",
+        message: errorMessage(result.error ?? "无响应"),
         variant: "error",
       })
       return

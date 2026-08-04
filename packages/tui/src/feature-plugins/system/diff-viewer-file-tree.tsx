@@ -63,7 +63,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
             <text />
           </Match>
           <Match when={props.files.length === 0}>
-            <text fg={props.theme.text}>No files</text>
+            <text fg={props.theme.text}>没有文件</text>
           </Match>
           <Match when={props.files.length > 0}>
             <For each={rows()}>

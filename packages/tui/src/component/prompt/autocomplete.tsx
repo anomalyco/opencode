@@ -584,8 +584,8 @@ export function Autocomplete(props: {
     commands: [
       {
         name: "prompt.autocomplete.prev",
-        title: "Previous autocomplete item",
-        category: "Autocomplete",
+        title: "上一个自动补全项目",
+        category: "自动补全",
         run() {
           setStore("input", "keyboard")
           move(-1)
@@ -593,8 +593,8 @@ export function Autocomplete(props: {
       },
       {
         name: "prompt.autocomplete.next",
-        title: "Next autocomplete item",
-        category: "Autocomplete",
+        title: "下一个自动补全项目",
+        category: "自动补全",
         run() {
           setStore("input", "keyboard")
           move(1)
@@ -602,24 +602,24 @@ export function Autocomplete(props: {
       },
       {
         name: "prompt.autocomplete.hide",
-        title: "Hide autocomplete",
-        category: "Autocomplete",
+        title: "隐藏自动补全",
+        category: "自动补全",
         run() {
           hide()
         },
       },
       {
         name: "prompt.autocomplete.select",
-        title: "Select autocomplete item",
-        category: "Autocomplete",
+        title: "选择自动补全项目",
+        category: "自动补全",
         run() {
           select()
         },
       },
       {
         name: "prompt.autocomplete.complete",
-        title: "Complete autocomplete item",
-        category: "Autocomplete",
+        title: "完成自动补全项目",
+        category: "自动补全",
         run() {
           const selected = options()[store.selected]
           if (selected?.isDirectory) {

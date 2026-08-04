@@ -21,8 +21,8 @@ describe("sortModelOptions", () => {
         { title: "GLM 5", releaseDate: "2025-07-28" },
         { title: "GLM 5.1", releaseDate: "2025-12-09" },
         { title: "GLM 5.2", releaseDate: "2026-02-16" },
-        { title: "Free old", releaseDate: "2024-01-01", footer: "Free" },
-        { title: "Free new", releaseDate: "2025-01-01", footer: "Free" },
+        { title: "Free old", releaseDate: "2024-01-01", footer: "免费" },
+        { title: "Free new", releaseDate: "2025-01-01", footer: "免费" },
       ],
       false,
     )

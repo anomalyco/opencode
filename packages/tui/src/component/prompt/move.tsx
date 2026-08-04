@@ -31,7 +31,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     const projectID = input.projectID()
     if (!projectID) return
     setCreating(true)
-    setProgress("Creating copy")
+    setProgress("正在创建副本")
     try {
       const generated = await sdk.client.experimental.projectCopy.generateName(
         { projectID, context },
@@ -48,19 +48,19 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
         { throwOnError: true },
       )
       const directory = result.data?.directory
-      if (!directory) throw new Error("No project copy directory returned")
+      if (!directory) throw new Error("未返回项目副本目录")
 
       // Call a location-based route to make sure it's bootstrapped
       // before moving on
       await sdk.client.path.get({ directory }, { throwOnError: true })
 
-      setProgress("Creating session")
+      setProgress("正在创建会话")
       return directory
     } catch (err) {
       homeDestination?.clear()
       setProgress(undefined)
       setCreating(false)
-      toast.show({ title: "Creating workspace failed", message: errorMessage(err), variant: "error" })
+      toast.show({ title: "创建工作区失败", message: errorMessage(err), variant: "error" })
       return
     }
   }
@@ -126,7 +126,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       dialog.clear()
       return
     }
-    setProgress("Moving session")
+    setProgress("正在移动会话")
     try {
       await sdk.client.experimental.controlPlane.moveSession(
         {
@@ -173,7 +173,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   }
 
   function startSubmit() {
-    if (progress()) setProgress("Submitting prompt")
+    if (progress()) setProgress("正在提交提示")
   }
 
   function finishSubmit() {

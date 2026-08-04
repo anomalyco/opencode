@@ -40,8 +40,8 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
         success: "#7fd88f",
       }
 
-  const message = props.error.message || "An unknown error occurred."
-  const stack = props.error.stack || "No stack trace available."
+  const message = props.error.message || "发生了未知错误。"
+  const stack = props.error.stack || "没有可用的堆栈信息。"
   const issueURL = buildIssueURL(message, stack)
 
   const copyReport = () => {
@@ -49,9 +49,9 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   }
 
   const actions = [
-    { key: "c", label: () => (copied() ? "✓ Copied" : "Copy report"), copy: true, onUse: copyReport },
-    { key: "r", label: () => "Restart", onUse: props.reset },
-    { key: "q", label: () => "Quit", onUse: () => exit() },
+    { key: "c", label: () => (copied() ? "✓ 已复制" : "复制报告"), copy: true, onUse: copyReport },
+    { key: "r", label: () => "重启", onUse: props.reset },
+    { key: "q", label: () => "退出", onUse: () => exit() },
   ]
   const [selected, setSelected] = createSignal(0)
   const move = (delta: number) => setSelected((prev) => (prev + delta + actions.length) % actions.length)
@@ -108,10 +108,10 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
         {/* Headline */}
         <box flexDirection="column" alignItems="center" flexShrink={0}>
           <text attributes={TextAttributes.BOLD} fg={colors.text}>
-            opencode crashed
+            opencode 崩溃了
           </text>
           <Show when={showSubtext()}>
-            <text fg={colors.muted}>An unexpected error stopped the session.</text>
+            <text fg={colors.muted}>一个意外错误停止了会话。</text>
           </Show>
         </box>
 
@@ -121,7 +121,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
           border
           borderStyle="rounded"
           borderColor={colors.error}
-          title=" Error "
+          title=" 错误 "
           titleColor={colors.error}
           paddingLeft={2}
           paddingRight={2}
@@ -168,9 +168,9 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
           border
           borderStyle="rounded"
           borderColor={colors.borderSubtle}
-          title=" Stack trace "
+          title=" 堆栈跟踪 "
           titleColor={colors.muted}
-          bottomTitle=" ↑↓ scroll "
+          bottomTitle=" ↑↓ 滚动 "
           bottomTitleAlignment="right"
           paddingLeft={1}
           paddingRight={1}
@@ -189,8 +189,8 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
           <box flexDirection="column" alignItems="center" flexShrink={0}>
             <text fg={colors.muted}>
               {copied()
-                ? "Report copied — paste it into a new GitHub issue."
-                : "Copy the report and open a GitHub issue to help us fix this."}
+                ? "报告已复制 — 粘贴到新的 GitHub issue 中。"
+                : "复制报告并打开 GitHub issue 以帮助我们修复此问题。"}
             </text>
             <text fg={colors.muted}>opencode {InstallationVersion}</text>
           </box>

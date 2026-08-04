@@ -38,7 +38,7 @@ function View(props: { api: TuiPluginApi }) {
             <Show when={!open()}>
               <span style={{ fg: theme().textMuted }}>
                 {" "}
-                ({on()} active{bad() > 0 ? `, ${bad()} error${bad() > 1 ? "s" : ""}` : ""})
+                ({on()} 个已连接{bad() > 0 ? `，${bad()} 个错误` : ""})
               </span>
             </Show>
           </text>
@@ -59,13 +59,13 @@ function View(props: { api: TuiPluginApi }) {
                   {item.name}{" "}
                   <span style={{ fg: theme().textMuted }}>
                     <Switch fallback={item.status}>
-                      <Match when={item.status === "connected"}>Connected</Match>
+                      <Match when={item.status === "connected"}>已连接</Match>
                       <Match when={item.status === "failed"}>
                         <i>{item.error}</i>
                       </Match>
-                      <Match when={item.status === "disabled"}>Disabled</Match>
-                      <Match when={item.status === "needs_auth"}>Needs auth</Match>
-                      <Match when={item.status === "needs_client_registration"}>Needs client ID</Match>
+                      <Match when={item.status === "disabled"}>已禁用</Match>
+                      <Match when={item.status === "needs_auth"}>需要认证</Match>
+                      <Match when={item.status === "needs_client_registration"}>需要客户端 ID</Match>
                     </Switch>
                   </span>
                 </text>

@@ -51,7 +51,7 @@ export function DialogConsoleOrg() {
     if (listed === undefined) {
       return [
         {
-          title: "Loading orgs...",
+          title: "正在加载组织...",
           value: "loading",
           onSelect: () => {},
         },
@@ -61,7 +61,7 @@ export function DialogConsoleOrg() {
     if (listed.length === 0) {
       return [
         {
-          title: "No orgs found",
+          title: "未找到组织",
           value: "empty",
           onSelect: () => {},
         },
@@ -105,7 +105,7 @@ export function DialogConsoleOrg() {
 
           await sdk.client.instance.dispose()
           toast.show({
-            message: `Switched to ${item.orgName}`,
+            message: `已切换到 ${item.orgName}`,
             variant: "info",
           })
           dialog.clear()
@@ -115,7 +115,7 @@ export function DialogConsoleOrg() {
 
   return (
     <DialogSelect<string | OrgOption>
-      title="Switch org"
+      title="切换组织"
       options={options()}
       current={current()}
       renderFilter={!showError()}
@@ -124,7 +124,7 @@ export function DialogConsoleOrg() {
         showError() ? (
           <box paddingLeft={4} paddingRight={4}>
             <text fg={theme.error} attributes={TextAttributes.BOLD}>
-              Could not load orgs
+              无法加载组织
             </text>
             <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
           </box>

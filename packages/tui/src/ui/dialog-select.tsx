@@ -373,8 +373,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       commands: [
         {
           name: "dialog.select.prev",
-          title: "Previous item",
-          category: "Dialog",
+          title: "上一个项目",
+          category: "对话框",
           run() {
             setStore("input", "keyboard")
             move(-1)
@@ -382,8 +382,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.next",
-          title: "Next item",
-          category: "Dialog",
+          title: "下一个项目",
+          category: "对话框",
           run() {
             setStore("input", "keyboard")
             move(1)
@@ -391,8 +391,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.page_up",
-          title: "Page up",
-          category: "Dialog",
+          title: "向上翻页",
+          category: "对话框",
           run() {
             setStore("input", "keyboard")
             move(-10)
@@ -400,8 +400,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.page_down",
-          title: "Page down",
-          category: "Dialog",
+          title: "向下翻页",
+          category: "对话框",
           run() {
             setStore("input", "keyboard")
             move(10)
@@ -409,8 +409,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.home",
-          title: "First item",
-          category: "Dialog",
+          title: "第一个项目",
+          category: "对话框",
           run() {
             if (props.locked) return
             setStore("input", "keyboard")
@@ -419,8 +419,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.end",
-          title: "Last item",
-          category: "Dialog",
+          title: "最后一个项目",
+          category: "对话框",
           run() {
             if (props.locked) return
             setStore("input", "keyboard")
@@ -429,14 +429,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.submit",
-          title: "Select item",
-          category: "Dialog",
+          title: "选择项目",
+          category: "对话框",
           run: submit,
         },
         ...visible.map((item) => ({
           name: item.command,
           title: item.title,
-          category: "Dialog",
+          category: "对话框",
           run() {
             if (props.locked) return
             if (isActionDisabled(item)) return
@@ -462,14 +462,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           ? [
               {
                 key: "tab",
-                desc: "Next dialog action",
-                group: "Dialog",
+                desc: "下一个对话框操作",
+                group: "对话框",
                 cmd: () => moveAction(1),
               },
               {
                 key: "shift+tab",
-                desc: "Previous dialog action",
-                group: "Dialog",
+                desc: "上一个对话框操作",
+                group: "对话框",
                 cmd: () => moveAction(-1),
               },
             ]
@@ -589,7 +589,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                   input.focus()
                 }, 1)
               }}
-              placeholder={props.placeholder ?? "Search"}
+              placeholder={props.placeholder ?? "搜索"}
               placeholderColor={theme.textMuted}
             />
           </box>
@@ -601,7 +601,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           fallback={
             props.emptyView ?? (
               <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-                <text fg={theme.textMuted}>No results found</text>
+                <text fg={theme.textMuted}>无匹配结果</text>
               </box>
             )
           }

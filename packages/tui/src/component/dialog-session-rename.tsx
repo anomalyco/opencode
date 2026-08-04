@@ -16,7 +16,7 @@ export function DialogSessionRename(props: DialogSessionRenameProps) {
 
   return (
     <DialogPrompt
-      title="Rename Session"
+      title="重命名会话"
       value={session()?.title}
       onConfirm={(value) => {
         void sdk.client.session.update({
