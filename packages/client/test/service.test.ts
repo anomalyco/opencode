@@ -141,6 +141,24 @@ test("waits for a slow winner while bounding lock probes", async () => {
   }
 }, 15_000)
 
+test("waits for a live contender when another contender fails", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const endpoint = await run(
+    Service.ensure({
+      file: registration,
+      version: "test",
+      command: [process.execPath, fixture, registration, "coordinated-failed-loser"],
+    }),
+  )
+  const info = await Bun.file(registration).json()
+  try {
+    expect(endpoint.url).toBe(info.url)
+  } finally {
+    process.kill(info.pid, "SIGTERM")
+  }
+}, 15_000)
+
 test("reports a contender that fails to start", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
