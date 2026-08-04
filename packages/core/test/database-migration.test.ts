@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 import path from "path"
+import { readFile, readdir } from "node:fs/promises"
+import { Database as BunDatabase } from "bun:sqlite"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { Effect, Layer } from "effect"
@@ -38,6 +40,28 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
+  test("opens inspection databases without changing the file or creating sidecars", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "readonly.sqlite")
+    const native = new BunDatabase(filename, { create: true })
+    native.run("CREATE TABLE sample (value TEXT NOT NULL)")
+    native.run("INSERT INTO sample VALUES ('preserved')")
+    native.close()
+    const before = await readFile(filename)
+
+    const value = await Effect.runPromise(
+      Effect.scoped(
+        Database.Service.use(({ db }) => db.get<{ value: string }>(sql`SELECT value FROM sample`)).pipe(
+          Effect.provide(Database.readOnlyLayerFromPath(filename)),
+        ),
+      ),
+    )
+
+    expect(value).toEqual({ value: "preserved" })
+    expect(await readFile(filename)).toEqual(before)
+    expect((await readdir(tmp.path)).sort()).toEqual(["readonly.sqlite"])
+  })
+
   test("serializes concurrent embedded initialization for one database path", async () => {
     await using tmp = await tmpdir()
     const filename = path.join(tmp.path, "embedded.sqlite")

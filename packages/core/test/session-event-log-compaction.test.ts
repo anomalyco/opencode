@@ -56,8 +56,17 @@ describe("SessionEventLogCompaction", () => {
       const projection = yield* db.select().from(MessageTable).where(eq(MessageTable.id, messageID)).get()
       expect(yield* SessionEventLogCompaction.status(db)).toMatchObject({ events: 2, compactableEvents: 2 })
       const dryRun = yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID })
+      const allDryRun = yield* SessionEventLogCompaction.compact(db, { all: true, limit: 1 })
 
       expect(dryRun).toMatchObject({ candidates: 1, rewritten: 0, payloadBytesReclaimed: expect.any(Number) })
+      expect(allDryRun).toMatchObject({
+        aggregateID: sessionID,
+        inspected: 1,
+        candidates: 1,
+        rewritten: 0,
+        hasMore: false,
+      })
+      expect(allDryRun.continuation).toBe(`opencode db compact-events --all --cursor ${sessionID} --apply --limit 1`)
       expect(projection?.data).toMatchObject({ agent: "after" })
 
       const applied = yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID, apply: true })
@@ -103,7 +112,9 @@ describe("SessionEventLogCompaction", () => {
       })
       const idempotent = yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID, apply: true })
       expect(firstPartBatch).toMatchObject({ candidates: 1, rewritten: 1, hasMore: true })
-      expect(firstPartBatch.continuation).toBe(`opencode db compact-events --session ${sessionID} --apply --limit 1`)
+      expect(firstPartBatch.continuation).toBe(
+        `opencode db compact-events --session ${sessionID} --apply --limit 1 --after-seq 2`,
+      )
       expect(secondPartBatch).toMatchObject({ candidates: 1, rewritten: 1 })
       expect(idempotent).toMatchObject({ candidates: 0, rewritten: 0 })
 
@@ -147,6 +158,7 @@ describe("SessionEventLogCompaction", () => {
         { aggregateID: sessionID, all: true },
         { aggregateID: sessionID, limit: 0 },
         { aggregateID: sessionID, limit: 10_001 },
+        { all: true, afterSeq: 1 },
       ]) {
         const exit = yield* SessionEventLogCompaction.compact(db, options).pipe(Effect.exit)
         expect(String(exit)).toContain("Error")
