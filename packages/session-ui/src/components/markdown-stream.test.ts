@@ -158,6 +158,12 @@ describe("markdown stream", () => {
     expect(final.blocks[2]).toEqual({ raw: "- final item", src: "- final item", mode: "full" })
   })
 
+  test("splits completed markdown into bounded top-level blocks", () => {
+    const result = project(undefined, "# Plan\n\nFirst paragraph.\n\nSecond paragraph.", false)
+
+    expect(result.blocks.map((block) => block.raw)).toEqual(["# Plan", "First paragraph.", "Second paragraph."])
+  })
+
   test("catches up paced text before finalizing", () => {
     const live = project(undefined, "# Plan\n\nFinished paragraph.\n\n- final", true)
     const final = project(live, `${live.text} item`, false)

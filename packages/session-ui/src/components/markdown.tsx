@@ -490,6 +490,8 @@ export function Markdown(
   )
 
   let copyCleanup: (() => void) | undefined
+  let renderFrame: number | undefined
+  let renderGeneration = 0
 
   createEffect(() => {
     const container = root()
@@ -498,6 +500,9 @@ export function Markdown(
     const content = local.text ? pendingBlocks(result, projected, local.cacheKey, owner) : []
     if (!container) return
     if (isServer) return
+    const generation = ++renderGeneration
+    if (renderFrame !== undefined) cancelAnimationFrame(renderFrame)
+    renderFrame = undefined
     if (content.length === 0) {
       disposeCopyButtons(container)
       container.innerHTML = ""
@@ -514,24 +519,40 @@ export function Markdown(
     })
     activeCodeKeys.clear()
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
-    content.forEach((block, index) => updateBlock(container, index, block, labels))
-    while (container.children.length > content.length) {
-      const child = container.lastElementChild
-      if (!child) break
-      disposeCopyButtons(child)
-      child.remove()
+    let index = 0
+    const update = () => {
+      renderFrame = undefined
+      if (generation !== renderGeneration) return
+      const deadline = performance.now() + 8
+      while (index < content.length && performance.now() < deadline) {
+        updateBlock(container, index, content[index]!, labels)
+        index += 1
+      }
+      if (index < content.length) {
+        renderFrame = requestAnimationFrame(update)
+        return
+      }
+      while (container.children.length > content.length) {
+        const child = container.lastElementChild
+        if (!child) break
+        disposeCopyButtons(child)
+        child.remove()
+      }
+      container
+        .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
+        .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+      if (!copyCleanup)
+        copyCleanup = setupCodeCopy(container, () => ({
+          copy: i18n.t("ui.message.copy"),
+          copied: i18n.t("ui.message.copied"),
+        }))
     }
-    container
-      .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
-      .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
-    if (!copyCleanup)
-      copyCleanup = setupCodeCopy(container, () => ({
-        copy: i18n.t("ui.message.copy"),
-        copied: i18n.t("ui.message.copied"),
-      }))
+    update()
   })
 
   onCleanup(() => {
+    renderGeneration += 1
+    if (renderFrame !== undefined) cancelAnimationFrame(renderFrame)
     if (copyCleanup) copyCleanup()
     disposeMarkdownProjection(owner)
     activeCodeKeys.forEach(disposeCode)

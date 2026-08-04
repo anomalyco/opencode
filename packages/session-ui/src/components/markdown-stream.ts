@@ -51,7 +51,7 @@ function heal(text: string) {
 }
 
 export function stream(text: string, live: boolean): Block[] {
-  if (!live) return completedProjection(text).blocks
+  if (!live) return completedBlocks(text)
   if (refs(text)) return [{ raw: text, src: heal(text), mode: "live" }] satisfies Block[]
   const tokens = marked.lexer(text)
   const tail = tokens.findLastIndex((token) => token.type !== "space")
@@ -85,6 +85,17 @@ export function stream(text: string, live: boolean): Block[] {
   return [...result, { raw, src: openCode(code.raw), mode: "code", language: language(code.lang) }]
 }
 
+function completedBlocks(text: string) {
+  if (refs(text)) return completedProjection(text).blocks
+  const tokens = marked.lexer(text)
+  return tokens.flatMap((token): Block[] => {
+    if (token.type === "space") return []
+    if (token.type !== "code") return [{ raw: token.raw, src: token.raw, mode: "full" }]
+    const code = token as Tokens.Code
+    return [{ raw: code.raw, src: code.text, mode: "code", language: language(code.lang), complete: true }]
+  })
+}
+
 export function project(previous: Projection | undefined, text: string, live: boolean): Projection {
   if (!live) {
     const current =
@@ -93,7 +104,7 @@ export function project(previous: Projection | undefined, text: string, live: bo
         : previous && text.startsWith(previous.text)
           ? project(previous, text, true)
           : undefined
-    if (!current) return completedProjection(text)
+    if (!current) return { text, blocks: completedBlocks(text) }
     return {
       text,
       blocks: current.blocks.map((block) => {
