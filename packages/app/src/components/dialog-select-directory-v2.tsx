@@ -70,10 +70,20 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const [fallbackPath] = createResource(
     () => (missingBase() ? true : undefined),
     async (): Promise<Path | undefined> => {
-      if ((await sdk.protocol) !== "v1") return
-      return sdk.client.path
+      if ((await sdk.protocol) === "v1")
+        return sdk.client.path
+          .get()
+          .then((result) => result.data)
+          .catch(() => undefined)
+      return sdk.currentApi.location
         .get()
-        .then((result) => result.data)
+        .then((location) => ({
+          state: "",
+          config: "",
+          worktree: location.project.directory,
+          directory: location.directory,
+          home: "",
+        }))
         .catch(() => undefined)
     },
     { initialValue: undefined },
@@ -97,7 +107,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     if (!policy.includeFiles) return { query: value, items: directories.slice(0, 5) }
     const base = pickerRoot(cleaned) || root() || start()
     if (!base) return { query: value, items: directories.slice(0, 5) }
-    const files = await sdk.api.file
+    const files = await sdk.currentApi.file
       .find({
         location: { directory: base },
         query: pickerFileSearchQuery(base, value, home()),
@@ -127,7 +137,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
       existing ??
       loads.schedule(`${generation}:${key}`, eager ? "background" : "user", () => {
         if (!activeTreeNavigation(generation, navigation)) return Promise.resolve(undefined)
-        return sdk.api.file
+        return sdk.currentApi.file
           .list({ location: { directory: absolute } })
           .then((result) =>
             result.data.map((entry) => ({

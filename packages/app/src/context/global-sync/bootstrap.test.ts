@@ -76,9 +76,30 @@ function directoryState() {
 }
 
 describe("bootstrapDirectory", () => {
-  test("uses legacy MCP endpoints while refreshing a v1 directory", async () => {
+  test("uses current MCP endpoints while retaining unsupported v1 directory reads", async () => {
     const mcpReads: string[] = []
     const [store, setStore] = directoryState()
+    const currentApi = {
+      ...api,
+      command: {
+        list: async () => {
+          mcpReads.push("command")
+          return { location: {}, data: [] }
+        },
+      },
+      mcp: {
+        list: async () => {
+          mcpReads.push("status")
+          return { location: {}, data: [] }
+        },
+        resource: {
+          catalog: async () => {
+            mcpReads.push("resource")
+            return { location: {}, data: { resources: [], templates: [] } }
+          },
+        },
+      },
+    } as unknown as ServerApi
 
     await bootstrapDirectory({
       directory: "/project",
@@ -120,7 +141,7 @@ describe("bootstrapDirectory", () => {
         },
         provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
       } as unknown as OpencodeClient,
-      api,
+      api: currentApi,
       store,
       setStore,
       vcsCache: { setStore() {} } as unknown as VcsCache,
@@ -141,12 +162,21 @@ describe("bootstrapDirectory", () => {
 
 describe("query keys", () => {
   test("partitions identical directories by server scope", () => {
-    const client = {} as Parameters<typeof loadPathQuery>[2]
+    const location = {} as Parameters<typeof loadPathQuery>[2]
+    const client = {} as Parameters<typeof loadPathQuery>[3]
     const api = {} as CatalogApi
     const remote = "https://debian.example" as typeof ServerScope.local
 
-    expect([...loadPathQuery(ServerScope.local, "/repo", client).queryKey]).toEqual(["local", "/repo", "path"])
-    expect([...loadPathQuery(remote, "/repo", client).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
+    expect([...loadPathQuery(ServerScope.local, "/repo", location, client).queryKey]).toEqual([
+      "local",
+      "/repo",
+      "path",
+    ])
+    expect([...loadPathQuery(remote, "/repo", location, client).queryKey]).toEqual([
+      "https://debian.example",
+      "/repo",
+      "path",
+    ])
     expect([...loadProvidersQuery(remote, null, api).queryKey]).toEqual(["https://debian.example", null, "providers"])
   })
 

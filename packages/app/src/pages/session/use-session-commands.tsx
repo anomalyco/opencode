@@ -306,7 +306,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
     const owner = sessionOwnership.capture()
-    const session = sdk().api.session
+    const session = sdk().currentApi.session
     const directory = sdk().directory
     const promptSession = prompt.capture()
     const revert = info()?.revert?.messageID
@@ -334,7 +334,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
     const owner = sessionOwnership.capture()
-    const session = sdk().api.session
+    const session = sdk().currentApi.session
     const messages = userMessages()
     const promptSession = prompt.capture()
 
@@ -366,19 +366,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    const model = local.model.current()
-    if (!model) {
-      showToast({
-        title: language.t("toast.model.none.title"),
-        description: language.t("toast.model.none.description"),
-      })
-      return
-    }
-
-    await sdk().api.session.compact({
-      sessionID,
-      model: { providerID: model.provider.id, modelID: model.id },
-    })
+    await sdk().currentApi.session.compact({ sessionID })
   }
 
   const fork = () => {

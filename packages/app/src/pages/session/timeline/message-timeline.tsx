@@ -680,7 +680,7 @@ export function MessageTimeline(props: {
 
   const titleMutation = useMutation(() => ({
     mutationFn: (input: { id: string; title: string }) =>
-      sdk().api.session.rename({ sessionID: input.id, title: input.title }),
+      sdk().currentApi.session.rename({ sessionID: input.id, title: input.title }),
     onSuccess: (_, input) => {
       sync().set(
         produce((draft) => {
@@ -854,7 +854,7 @@ export function MessageTimeline(props: {
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
 
     const result = await sdk()
-      .api.session.remove({ sessionID })
+      .currentApi.session.remove({ sessionID })
       .then(() => true)
       .catch((err) => {
         showToast({

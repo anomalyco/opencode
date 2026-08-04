@@ -102,8 +102,8 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
 
   const readFile = async (path: string) =>
     sdk()
-      .client.file.read({ path })
-      .then((x) => x.data)
+      .currentApi.file.read({ path, location: { directory: sdk().directory } })
+      .then((content) => ({ type: "text" as const, content: new TextDecoder().decode(content) }))
       .catch((error) => {
         console.debug("[session-review-v2] failed to read file", { path, error })
         return undefined

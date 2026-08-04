@@ -1,8 +1,8 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { type Accessor, createMemo } from "solid-js"
-import { type ServerSDK, useServerSDK } from "./server-sdk"
+import { type DirectorySDK, useServerSDK } from "./server-sdk"
 
-export type DirectorySDK = ReturnType<ServerSDK["ensureDirSdkContext"]>
+export type { DirectorySDK }
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",

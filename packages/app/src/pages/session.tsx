@@ -1724,7 +1724,7 @@ export default function Page() {
       setFollowup("failed", input.sessionID, undefined)
 
       const ok = await sendFollowupDraft({
-        api: sdk().api.session,
+        api: sdk().currentApi.session,
         sync: sync(),
         serverSync: serverSync(),
         draft: item,
@@ -1820,13 +1820,13 @@ export default function Page() {
   const halt = (sessionID: string) =>
     busy(sessionID)
       ? sdk()
-          .api.session.interrupt({ sessionID })
+          .currentApi.session.interrupt({ sessionID })
           .catch(() => {})
       : Promise.resolve()
 
   const revertMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; messageID: string }) => {
-      const session = sdk().api.session
+      const session = sdk().currentApi.session
       const target = sync()
       const last = target.session.get(input.sessionID)?.revert
       const value = draft(input.messageID)
@@ -1849,7 +1849,7 @@ export default function Page() {
       const sessionID = params.id
       if (!sessionID) return
 
-      const session = sdk().api.session
+      const session = sdk().currentApi.session
       const target = sync()
       const next = userMessages().find((item) => item.id > id)
       const last = target.session.get(sessionID)?.revert

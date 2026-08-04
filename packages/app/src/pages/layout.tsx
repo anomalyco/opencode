@@ -25,7 +25,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import type { Session } from "@/types"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
@@ -1189,10 +1189,13 @@ export default function LegacyLayout(props: ParentProps) {
     const refreshDirs = async (target?: string) => {
       if (!target || target === root || canOpen(target)) return canOpen(target)
       const listed = await Promise.resolve(
-        project?.id ?? serverSDK().api.project.current({ location: { directory: root } }),
+        project?.id ?? serverSDK().currentApi.project.current({ location: { directory: root } }),
       )
         .then((value) => (typeof value === "string" ? value : value.id))
-        .then((projectID) => serverSDK().api.project.directories({ projectID, location: { directory: root } }))
+        .then(async (projectID) => {
+          await serverSDK().currentApi.projectCopy.refresh({ projectID, location: { directory: root } })
+          return serverSDK().currentApi.project.directories({ projectID, location: { directory: root } })
+        })
         .then((items) => items.map((item) => item.directory).filter((item) => pathKey(item) !== pathKey(root)))
         .catch(() => [] as string[])
       dirs = effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root])
@@ -1237,7 +1240,7 @@ export default function LegacyLayout(props: ParentProps) {
       await Promise.all(
         dirs.map(async (item) => ({
           path: { directory: item },
-          session: await listAllSessions(serverSDK().api.session, {
+          session: await listAllSessions(serverSDK().currentApi.session, {
             directory: item,
             parentID: null,
             order: "desc",
@@ -1403,16 +1406,19 @@ export default function LegacyLayout(props: ParentProps) {
 
     setBusy(directory, true)
 
-    const result = await serverSDK()
-      .client.worktree.remove({ directory: root, worktreeRemoveInput: { directory } })
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: language.t("workspace.delete.failed.title"),
-          description: errorMessage(err, language.t("common.requestFailed")),
-        })
-        return false
-      })
+    const projectID = serverSync().data.project.find((project) => project.worktree === root)?.id
+    const result = projectID
+      ? await serverSDK()
+          .currentApi.projectCopy.remove({ projectID, directory, force: false, location: { directory: root } })
+          .then(() => true)
+          .catch((err) => {
+            showToast({
+              title: language.t("workspace.delete.failed.title"),
+              description: errorMessage(err, language.t("common.requestFailed")),
+            })
+            return false
+          })
+      : false
 
     setBusy(directory, false)
 
@@ -1461,7 +1467,9 @@ export default function LegacyLayout(props: ParentProps) {
     })
     const dismiss = () => toaster.dismiss(progress)
 
-    const sessions = await listAllSessions(serverSDK().api.session, { directory, order: "desc" }).catch(() => [])
+    const sessions = await listAllSessions(serverSDK().currentApi.session, { directory, order: "desc" }).catch(
+      () => [],
+    )
 
     clearWorkspaceTerminals(
       directory,
@@ -1595,7 +1603,7 @@ export default function LegacyLayout(props: ParentProps) {
     })
 
     const refresh = async () => {
-      const sessions = await listAllSessions(serverSDK().api.session, {
+      const sessions = await listAllSessions(serverSDK().currentApi.session, {
         directory: props.directory,
         order: "desc",
       }).catch(() => [])
@@ -1835,20 +1843,26 @@ export default function LegacyLayout(props: ParentProps) {
 
   const createWorkspace = async (project: LocalProject) => {
     clearSidebarHoverState()
-    const created = await serverSDK()
-      .client.worktree.create({ directory: project.worktree })
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: language.t("workspace.create.failed.title"),
-          description: errorMessage(err, language.t("common.requestFailed")),
-        })
-        return undefined
-      })
+    const created = project.id
+      ? await serverSDK()
+          .currentApi.projectCopy.create({
+            projectID: project.id,
+            strategy: "git_worktree",
+            directory: getDirectory(project.worktree),
+            location: { directory: project.worktree },
+          })
+          .catch((err) => {
+            showToast({
+              title: language.t("workspace.create.failed.title"),
+              description: errorMessage(err, language.t("common.requestFailed")),
+            })
+            return undefined
+          })
+      : undefined
 
     if (!created?.directory) return
 
-    setWorkspaceName(created.directory, created.branch ?? getFilename(created.directory), project.id, created.branch)
+    setWorkspaceName(created.directory, getFilename(created.directory), project.id)
 
     const local = project.worktree
     const key = pathKey(created.directory)

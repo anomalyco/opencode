@@ -125,10 +125,17 @@ export const SettingsProvidersV2: Component<{
       await disableProvider(providerID, name)
       return
     }
+    const location = props.directory() ? { directory: props.directory() } : undefined
     await serverSdk()
-      .client.auth.remove({ providerID })
-      .then(async () => {
-        await serverSdk().client.global.dispose()
+      .currentApi.integration.get({ integrationID: providerID, location })
+      .then(async (integration) => {
+        const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
+        if (credentials.length === 0) throw new Error(`No removable credentials found for ${name}`)
+        await Promise.all(
+          credentials.map((credential) =>
+            serverSdk().currentApi.credential.remove({ credentialID: credential.id, location }),
+          ),
+        )
         showToast({
           variant: "success",
           icon: "circle-check",
