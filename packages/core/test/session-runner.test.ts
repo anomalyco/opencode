@@ -443,10 +443,17 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
         completeEvents: [
           ...partialEvents,
           LLMEvent.reasoningEnd({ id }),
+          LLMEvent.textStart({ id: `${id}-text` }),
+          LLMEvent.textDelta({ id: `${id}-text`, text: "Answered." }),
+          LLMEvent.textEnd({ id: `${id}-text` }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
-        expectedAssistant: { type: "assistant", finish: "stop", content: [expectedContent] },
+        expectedAssistant: {
+          type: "assistant",
+          finish: "stop",
+          content: [expectedContent, { type: "text", id: `${id}-text`, text: "Answered." }],
+        },
         expectedContent,
       }
     }
@@ -1480,6 +1487,9 @@ describe("SessionRunnerLLM", () => {
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -1529,6 +1539,9 @@ describe("SessionRunnerLLM", () => {
           id: "reasoning-openai",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         }),
+        LLMEvent.textStart({ id: "text-answer" }),
+        LLMEvent.textDelta({ id: "text-answer", text: "Answered." }),
+        LLMEvent.textEnd({ id: "text-answer" }),
         LLMEvent.stepFinish({ index: 0, reason: "stop" }),
         LLMEvent.finish({ reason: "stop" }),
       ]
@@ -1546,6 +1559,7 @@ describe("SessionRunnerLLM", () => {
               text: "Encrypted thought",
               providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
             },
+            { type: "text", id: "text-answer", text: "Answered." },
           ],
         },
       ])
@@ -1561,6 +1575,7 @@ describe("SessionRunnerLLM", () => {
           text: "Encrypted thought",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
+        { type: "text", text: "Answered." },
       ])
     }),
   )
@@ -1818,11 +1833,17 @@ describe("SessionRunnerLLM", () => {
       responses = [
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -1867,11 +1888,17 @@ describe("SessionRunnerLLM", () => {
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -1910,6 +1937,9 @@ describe("SessionRunnerLLM", () => {
         [],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -1953,6 +1983,9 @@ describe("SessionRunnerLLM", () => {
         [],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -1994,16 +2027,25 @@ describe("SessionRunnerLLM", () => {
       responses = [
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -2043,11 +2085,17 @@ describe("SessionRunnerLLM", () => {
       responses = [
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -2071,21 +2119,33 @@ describe("SessionRunnerLLM", () => {
       responses = [
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -2136,11 +2196,17 @@ describe("SessionRunnerLLM", () => {
       responses = [
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -2389,6 +2455,9 @@ describe("SessionRunnerLLM", () => {
       requests.length = 0
       response = [
         LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-recovered" }),
+        LLMEvent.textDelta({ id: "text-recovered", text: "Recovered" }),
+        LLMEvent.textEnd({ id: "text-recovered" }),
         LLMEvent.stepFinish({ index: 0, reason: "stop" }),
         LLMEvent.finish({ reason: "stop" }),
       ]
@@ -2637,6 +2706,9 @@ describe("SessionRunnerLLM", () => {
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -2730,6 +2802,9 @@ describe("SessionRunnerLLM", () => {
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -3028,6 +3103,9 @@ describe("SessionRunnerLLM", () => {
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
           LLMEvent.stepFinish({ index: 0, reason: "stop" }),
           LLMEvent.finish({ reason: "stop" }),
         ],
@@ -3360,6 +3438,132 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe(
         "Tool input delta before start: call-1",
       )
+    }),
+  )
+
+  it.effect("retries reasoning-only or whitespace provider turns before a terminal step failure", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Think out loud" }), resume: false })
+
+      authorizations.length = 0
+      executions.length = 0
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.reasoningStart({ id: "reasoning-empty" }),
+          LLMEvent.reasoningDelta({ id: "reasoning-empty", text: "Working through it" }),
+          LLMEvent.reasoningEnd({ id: "reasoning-empty" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-space" }),
+          LLMEvent.textDelta({ id: "text-space", text: "  " }),
+          LLMEvent.textEnd({ id: "text-space" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(3)
+      const assistants = (yield* session.context(sessionID)).filter((message) => message.type === "assistant")
+      expect(assistants.at(-1)).toMatchObject({
+        type: "assistant",
+        finish: "error",
+        error: {
+          type: "unknown",
+          message: "Provider returned an empty response with no visible text and no tool calls",
+        },
+      })
+    }),
+  )
+
+  it.effect("recovers when a retried provider turn returns usable output", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Start working" }), resume: false })
+
+      authorizations.length = 0
+      executions.length = 0
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      const assistants = (yield* session.context(sessionID)).filter((message) => message.type === "assistant")
+      expect(assistants.at(-1)).toMatchObject({
+        type: "assistant",
+        finish: "stop",
+        content: [{ type: "text", id: "text-final", text: "Done" }],
+      })
+    }),
+  )
+
+  it.effect("does not retry a provider turn that returns a tool call", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Use a tool" }), resume: false })
+
+      authorizations.length = 0
+      executions.length = 0
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-echo", name: "echo", input: { text: "hello" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-final" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(executions).toEqual(["hello"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Use a tool" },
+        {
+          type: "assistant",
+          content: [{ type: "tool", id: "call-echo", state: { status: "completed", structured: { text: "hello" } } }],
+        },
+        { type: "assistant", finish: "stop", content: [{ type: "text", id: "text-final", text: "Done" }] },
+      ])
     }),
   )
 })

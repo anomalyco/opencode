@@ -154,6 +154,11 @@ const layer = Layer.effect(
       | { readonly _tag: "ContinueAfterCompaction"; readonly step: number }
       // Overflow compaction completed; rebuild once through the path without overflow recovery.
       | { readonly _tag: "ContinueAfterOverflowCompaction"; readonly step: number }
+      // Provider returned a successful stream with no visible text and no tool call; retry bounded.
+      | { readonly _tag: "ContinueAfterEmptyOutput"; readonly step: number }
+
+    // Request a bounded number of provider retries before recording a terminal step failure.
+    const MAX_EMPTY_OUTPUT_RETRIES = 2
 
     class TurnTransitionError extends Error {
       constructor(readonly transition: TurnTransition) {
@@ -175,6 +180,7 @@ const layer = Layer.effect(
       promotion: SessionInput.Delivery | undefined,
       step: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
+      emptyOutputRetries = 0,
     ) {
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
@@ -314,6 +320,21 @@ const layer = Layer.effect(
             yield* withPublication(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
           }
           const stepSettlement = publisher.stepSettlement()
+          if (
+            stream._tag === "Success" &&
+            stepSettlement &&
+            !publisher.hasProviderError() &&
+            !publisher.hasUsableOutput()
+          ) {
+            if (emptyOutputRetries < MAX_EMPTY_OUTPUT_RETRIES)
+              return yield* Effect.die(
+                new TurnTransitionError({ _tag: "ContinueAfterEmptyOutput", step: currentStep }),
+              )
+            yield* withPublication(
+              publisher.failAssistant("Provider returned an empty response with no visible text and no tool calls"),
+            )
+            return { needsContinuation: false, step: currentStep }
+          }
           if (stepSettlement && !publisher.hasProviderError()) {
             const endSnapshot = yield* snapshots.capture()
             const files =
@@ -350,31 +371,52 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
+      emptyOutputRetries?: number,
     ) => Effect.Effect<{ readonly needsContinuation: boolean; readonly step: number }, RunError>
 
-    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step).pipe(
+    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (
+      sessionID,
+      promotion,
+      step,
+      emptyOutputRetries = 0,
+    ) {
+      return yield* runTurnAttempt(sessionID, promotion, step, undefined, emptyOutputRetries).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
             yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
+            if (defect.transition._tag === "ContinueAfterEmptyOutput")
+              return yield* runAfterOverflowCompaction(
+                sessionID,
+                undefined,
+                defect.transition.step,
+                emptyOutputRetries + 1,
+              )
+            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step, emptyOutputRetries)
           }),
         ),
       )
     })
 
-    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step, compaction.compactAfterOverflow).pipe(
+    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, emptyOutputRetries = 0) {
+      return yield* runTurnAttempt(
+        sessionID,
+        promotion,
+        step,
+        compaction.compactAfterOverflow,
+        emptyOutputRetries,
+      ).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
-            return yield* runTurn(sessionID, undefined, defect.transition.step)
+            if (defect.transition._tag === "ContinueAfterEmptyOutput")
+              return yield* runTurn(sessionID, undefined, defect.transition.step, emptyOutputRetries + 1)
+            return yield* runTurn(sessionID, undefined, defect.transition.step, emptyOutputRetries)
           }),
         ),
       )
