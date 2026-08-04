@@ -31,7 +31,7 @@ export type PromptInputV2Attachment = {
   filename: string
   sourcePath?: string
   mime: string
-  dataUrl: string
+  blob: { id: string; url: string }
 }
 
 export type PromptInputV2Prompt = (
