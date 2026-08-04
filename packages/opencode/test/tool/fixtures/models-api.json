@@ -95294,25 +95294,9 @@
           "output": 128000
         },
         "cost": {
-          "input": 0.3,
-          "output": 1.2,
-          "cache_read": 0.06,
-          "tiers": [
-            {
-              "input": 0.6,
-              "output": 2.4,
-              "cache_read": 0.12,
-              "tier": {
-                "type": "context",
-                "size": 512000
-              }
-            }
-          ],
-          "context_over_200k": {
-            "input": 0.6,
-            "output": 2.4,
-            "cache_read": 0.12
-          }
+          "input": 0.6,
+          "output": 2.4,
+          "cache_read": 0.12
         }
       },
       "MiniMax-M2.7": {
@@ -169948,25 +169932,9 @@
           "output": 128000
         },
         "cost": {
-          "input": 0.3,
-          "output": 1.2,
-          "cache_read": 0.06,
-          "tiers": [
-            {
-              "input": 0.6,
-              "output": 2.4,
-              "cache_read": 0.12,
-              "tier": {
-                "type": "context",
-                "size": 512000
-              }
-            }
-          ],
-          "context_over_200k": {
-            "input": 0.6,
-            "output": 2.4,
-            "cache_read": 0.12
-          }
+          "input": 0.6,
+          "output": 2.4,
+          "cache_read": 0.12
         }
       },
       "MiniMax-M2.7": {
