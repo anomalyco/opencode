@@ -61,6 +61,16 @@ mise use -g opencode               # Any OS
 nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
 ```
 
+### Custom Installation
+
+To install our custom version of `opencode-evolve` directly onto your system (`~/.local/bin/opencode`), run:
+
+```bash
+# Run custom build & installation script
+npm run install:custom
+# or: bun run install:custom
+```
+
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 
