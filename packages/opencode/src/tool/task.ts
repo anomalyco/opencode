@@ -10,11 +10,12 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
-import { compressTaskResult } from "../session/result-compressor"
+import { ResultCompressor } from "../session/result-compressor"
+import { Provider } from "@/provider/provider"
 
 type TaskMetadata = {
   parentSessionId: SessionID
@@ -102,16 +103,34 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const compressorOpt = yield* Effect.serviceOption(ResultCompressor.Service)
+    const provider = yield* Provider.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context,
     ) {
       const cfg = yield* config.get()
-      const contextLimit = 131_072 // safe default; model limit resolved dynamically at LLM dispatch
 
       // ── Fan-Out/Join: collect results from previously launched background tasks ──
       if (params.wait_for && params.wait_for.length > 0) {
+        // Resolve the parent model for compression — needed before msg is available
+        const parentSession = yield* sessions.get(ctx.sessionID)
+        const joinMsg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
+          Effect.provideService(Database.Service, database),
+          Effect.orDie,
+        )
+        if (joinMsg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+        const joinModelRef = { providerID: joinMsg.info.providerID, id: joinMsg.info.modelID }
+        const joinProviderModel = yield* provider
+          .getModel(joinModelRef.providerID, joinModelRef.id)
+          .pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+        const joinContextLimit = joinProviderModel?.limit?.context ?? 131_072
+        const joinOutputLimit = joinProviderModel?.limit?.output ?? Math.floor(joinContextLimit * 0.03)
+        const joinAgent = (yield* agent.get(parentSession.agent ?? "default").pipe(
+          Effect.catchCause(() => Effect.succeed(undefined))
+        )) ?? (yield* agent.get("default"))
+
         const joinedParts: string[] = []
         for (const joinID of params.wait_for) {
           const waited = yield* background
@@ -124,9 +143,23 @@ export const TaskTool = Tool.define(
               : waited.info?.status === "error"
               ? `Error: ${waited.info.error ?? "unknown"}`
               : ""
-          const compressed = compressTaskResult(rawText, contextLimit)
+          const compressed = Option.isSome(compressorOpt) && joinProviderModel
+            ? yield* compressorOpt.value.compress({
+                text: rawText,
+                model: joinProviderModel,
+                agentInfo: joinAgent,
+                user: joinMsg.info as unknown as import("@opencode-ai/core/v1/session").SessionV1.User,
+                contextLimit: joinContextLimit,
+                outputLimit: joinOutputLimit,
+                sessionID: ctx.sessionID,
+              })
+            : rawText
           joinedParts.push(
-            renderOutput({ sessionID: SessionID.make(joinID), state: waited.info?.status === "completed" ? "completed" : "error", text: compressed }),
+            renderOutput({
+              sessionID: SessionID.make(joinID),
+              state: waited.info?.status === "completed" ? "completed" : "error",
+              text: compressed,
+            }),
           )
         }
         return {
@@ -134,7 +167,7 @@ export const TaskTool = Tool.define(
           metadata: {
             parentSessionId: ctx.sessionID,
             sessionId: ctx.sessionID,
-            model: { modelID: "", providerID: "" },
+            model: { modelID: joinModelRef.id, providerID: joinModelRef.providerID },
             joined: (params.wait_for ?? []) as string[],
           },
           output: joinedParts.join("\n\n"),
@@ -375,7 +408,23 @@ export const TaskTool = Tool.define(
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
             const rawOutput = result?.output ?? ""
-            const compressedOutput = compressTaskResult(rawOutput, contextLimit)
+            // Resolve provider model for compression to get real context/output limits
+            const providerModel = yield* provider
+              .getModel(model.providerID, model.modelID)
+              .pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+            const resolvedContextLimit = providerModel?.limit?.context ?? 131_072
+            const resolvedOutputLimit = providerModel?.limit?.output ?? Math.floor(resolvedContextLimit * 0.03)
+            const compressedOutput = Option.isSome(compressorOpt) && providerModel
+              ? yield* compressorOpt.value.compress({
+                  text: rawOutput,
+                  model: providerModel,
+                  agentInfo: next,
+                  user: msg.info as unknown as import("@opencode-ai/core/v1/session").SessionV1.User,
+                  contextLimit: resolvedContextLimit,
+                  outputLimit: resolvedOutputLimit,
+                  sessionID: ctx.sessionID,
+                })
+              : rawOutput
             return {
               title: params.description,
               metadata,

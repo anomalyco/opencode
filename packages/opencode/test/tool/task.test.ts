@@ -16,6 +16,7 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 
+import { Provider } from "@/provider/provider"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
@@ -51,6 +52,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       Database.node,
       RuntimeFlags.node,
       Ripgrep.node,
+      Provider.node,
     ]),
     [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
   )
