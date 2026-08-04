@@ -475,7 +475,7 @@ describe("Config", () => {
     }),
   )
 
-  it.effect("canonicalizes legacy provider aliases while migrating v1 configuration", () =>
+  it.effect("renames old provider IDs while migrating v1 configuration", () =>
     Effect.sync(() => {
       const migrated = ConfigMigrateV1.migrate({
         model: "azure-cognitive-services/deployment",
@@ -526,18 +526,18 @@ describe("Config", () => {
     }),
   )
 
-  it.effect("ignores legacy provider aliases when their canonical provider is configured", () =>
+  it.effect("ignores old provider IDs when the current provider ID is configured", () =>
     Effect.sync(() => {
       const migrated = ConfigMigrateV1.migrate({
         provider: {
-          azure: { models: { canonical: {} } },
+          azure: { models: { current: {} } },
           "azure-cognitive-services": { models: { legacy: {} } },
           "google-vertex": { models: { gemini: {} } },
           "google-vertex-anthropic": { models: { claude: {} } },
         },
       })
 
-      expect(migrated.providers?.azure?.models).toEqual({ canonical: expect.anything() })
+      expect(migrated.providers?.azure?.models).toEqual({ current: expect.anything() })
       expect(migrated.providers?.["google-vertex"]?.models).toEqual({ gemini: expect.anything() })
     }),
   )

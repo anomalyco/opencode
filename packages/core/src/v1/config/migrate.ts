@@ -237,7 +237,7 @@ function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
   return Object.fromEntries(
     Object.entries(info).flatMap(([name, provider]) => {
       const id = providerID(name)
-      // A canonical block is authoritative when the same V1 file also contains its retired alias.
+      // If both names are present, keep the settings under the current name and ignore the old one.
       if (id !== name && info[id]) return []
       return [[id, migrateProvider(name, provider)]]
     }),
@@ -255,7 +255,7 @@ function migrateProvider(sourceID: string, info: ConfigProviderV1.Info) {
   return {
     name: info.name,
     env: info.env,
-    // Canonical Google Vertex includes Gemini and Claude. Keep the Anthropic SDK on Claude models
+    // The current Google Vertex provider includes Gemini and Claude. Keep the Anthropic SDK on Claude models
     // instead of changing the package inherited by every model on the provider.
     package: vertexAnthropic ? undefined : packageName,
     settings: info.api ? { ...options.settings, baseURL: info.api } : options.settings,
@@ -275,7 +275,7 @@ function migrateProvider(sourceID: string, info: ConfigProviderV1.Info) {
   }
 }
 
-// Retired built-in IDs are accepted only while translating positively identified V1 config.
+// Rename these only in files detected as V1 by a field that exists only in the old config format.
 function providerID(input: string) {
   if (input === "azure-cognitive-services") return "azure"
   if (input === "google-vertex-anthropic") return "google-vertex"
