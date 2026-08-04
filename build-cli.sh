@@ -35,6 +35,16 @@ if [ -f "$BINARY" ]; then
   ln -sf "$(pwd)/$BINARY" ~/.local/bin/opencode-evolve
   echo "🔗 Symlinked to ~/.local/bin/opencode & ~/.local/bin/opencode-evolve"
 
+  # Copy to /usr/local/bin or fallback gracefully if no permission
+  if [ -w /usr/local/bin ]; then
+    cp -f "$(pwd)/$BINARY" /usr/local/bin/opencode-evolve
+    cp -f "$(pwd)/$BINARY" /usr/local/bin/opencode
+    echo "📌 Copied binary to /usr/local/bin/opencode-evolve & /usr/local/bin/opencode"
+  elif command -v sudo &> /dev/null && [ -t 0 ]; then
+    sudo cp -f "$(pwd)/$BINARY" /usr/local/bin/opencode-evolve 2>/dev/null || true
+    sudo cp -f "$(pwd)/$BINARY" /usr/local/bin/opencode 2>/dev/null || true
+  fi
+
   # Ensure ~/.local/bin is added to user shell PATH if missing
   if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
     echo "⚠️  ~/.local/bin is not currently in your PATH!"
