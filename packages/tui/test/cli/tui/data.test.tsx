@@ -106,6 +106,49 @@ test("does not preload session summaries into the data context", async () => {
   }
 })
 
+test("syncs VCS info and applies branch updates", async () => {
+  const events = createEventStream()
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/vcs") return undefined
+    return json({
+      location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
+      data: { branch: { current: "main", default: "main" } },
+    })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => data.location.vcs.info()?.branch.current === "main")
+    emitEvent(events, {
+      id: "evt_vcs_branch",
+      created: Date.now(),
+      type: "vcs.branch.updated",
+      data: { branch: "feature" },
+    })
+    await wait(() => data.location.vcs.info()?.branch.current === "feature")
+    expect(data.location.vcs.info()?.branch).toEqual({ current: "feature", default: "main" })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("proactively syncs project metadata newest first", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {
