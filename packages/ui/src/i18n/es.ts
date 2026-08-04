@@ -49,6 +49,7 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Comentando en ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Añadir comentario",
+  "ui.lineComment.contextPlaceholder": "Añadir contexto para este cambio",
   "ui.lineComment.submit": "Comentar",
   "ui.lineComment.cancel": "Cancelar",
 
@@ -118,6 +119,25 @@ export const dict = {
 
   "ui.messageNav.newMessage": "Nuevo mensaje",
 
+  "ui.promptInput.noMatchingItems": "No hay elementos coincidentes",
+  "ui.promptInput.commands": "Comandos",
+  "ui.promptInput.dropFiles": "Suelta los archivos para adjuntarlos",
+  "ui.promptInput.removeAttachment": "Eliminar adjunto",
+  "ui.promptInput.label": "Prompt",
+  "ui.promptInput.placeholder.shell": "Introduce un comando de shell...",
+  "ui.promptInput.placeholder.normal": "Pregunta lo que quieras, {{slash}} para comandos, {{at}} para contexto...",
+  "ui.promptInput.add": "Añadir imágenes y archivos",
+  "ui.promptInput.attachments": "Imágenes y archivos",
+  "ui.promptInput.context": "Contexto",
+  "ui.promptInput.shell": "Comando de shell",
+  "ui.promptInput.chooseAgent": "Elegir agente",
+  "ui.promptInput.chooseModel": "Elegir modelo",
+  "ui.promptInput.chooseVariant": "Elegir variante del modelo",
+  "ui.promptInput.send": "Enviar",
+  "ui.promptInput.stop": "Detener",
+
+  "ui.tabs.close": "Cerrar pestaña",
+
   "ui.textField.copyToClipboard": "Copiar al portapapeles",
   "ui.textField.copyLink": "Copiar enlace",
   "ui.textField.copied": "Copiado",
@@ -132,11 +152,13 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
   "ui.tool.websearch": "Búsqueda web",
+  "ui.tool.websearch.provider": "{{provider}} Búsqueda web",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Parche",
   "ui.tool.todos": "Tareas",
   "ui.tool.todos.read": "Leer tareas",
   "ui.tool.questions": "Preguntas",
+  "ui.tool.questions.numbered": "Preguntas {{number}}",
   "ui.tool.agent": "Agente {{type}}",
   "ui.tool.agent.default": "Agente",
 
@@ -146,6 +168,8 @@ export const dict = {
   "ui.common.question.other": "preguntas",
 
   "ui.common.add": "Añadir",
+  "ui.common.clear": "Borrar",
+  "ui.common.file": "Archivo",
   "ui.common.back": "Atrás",
   "ui.common.cancel": "Cancelar",
   "ui.common.confirm": "Confirmar",

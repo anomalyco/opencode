@@ -1,40 +1,20 @@
 import * as i18n from "@solid-primitives/i18n"
 import { createEffect, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createSimpleContext, pluralCategory, type UiI18nPluralKey } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode-ai/ui/context"
+import { pluralCategory, type UiI18nPluralKey } from "@opencode-ai/ui/context/i18n"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
+import {
+  createDesktopNativeBundle,
+  DESKTOP_NATIVE_ENGLISH,
+  DESKTOP_NATIVE_LOCALES,
+  type DesktopNativeBundle,
+  type DesktopNativeLocale,
+} from "@/i18n/desktop-native"
 
-export type Locale =
-  | "en"
-  | "zh"
-  | "zht"
-  | "ko"
-  | "de"
-  | "es"
-  | "fr"
-  | "da"
-  | "ja"
-  | "pl"
-  | "ru"
-  | "uk"
-  | "ar"
-  | "no"
-  | "br"
-  | "th"
-  | "bs"
-  | "tr"
-  | "hi"
-  | "nl"
-  | "id"
-  | "vi"
-  | "it"
-  | "ur"
-  | "pa"
-  | "az"
-  | "fi"
-  | "sv"
+export type Locale = DesktopNativeLocale
 
 const RTL_LOCALES: ReadonlySet<Locale> = new Set(["ar", "ur", "pa"])
 
@@ -51,36 +31,7 @@ function cookie(locale: Locale) {
   return `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
 }
 
-const LOCALES: readonly Locale[] = [
-  "en",
-  "zh",
-  "zht",
-  "ko",
-  "de",
-  "es",
-  "fr",
-  "da",
-  "ja",
-  "pl",
-  "ru",
-  "uk",
-  "bs",
-  "ar",
-  "no",
-  "br",
-  "th",
-  "tr",
-  "hi",
-  "nl",
-  "id",
-  "vi",
-  "it",
-  "ur",
-  "pa",
-  "az",
-  "fi",
-  "sv",
-]
+const LOCALES: readonly Locale[] = DESKTOP_NATIVE_LOCALES
 
 const INTL: Record<Locale, string> = {
   en: "en",
@@ -280,7 +231,7 @@ if (warm !== "en") void loadDict(warm)
 export const { use: useLanguage, provider: LanguageProvider } = createSimpleContext({
   name: "Language",
   gate: false,
-  init: (props: { locale?: Locale }) => {
+  init: (props: { locale?: Locale; onNativeTranslations?: (bundle: DesktopNativeBundle) => void }) => {
     const initial = props.locale ?? readStoredLocale() ?? detectLocale()
     const [store, setStore, _, ready] = persisted(
       Persist.global("language", ["language.v1"]),
@@ -321,6 +272,15 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       document.documentElement.lang = value
       document.documentElement.dir = RTL_LOCALES.has(value) ? "rtl" : "ltr"
       document.cookie = cookie(value)
+    })
+
+    createEffect(() => {
+      if (!props.onNativeTranslations || dict.loading) return
+      const current = dict()
+      if (!current) return
+      props.onNativeTranslations(
+        createDesktopNativeBundle(locale(), (key) => current[key] ?? DESKTOP_NATIVE_ENGLISH[key]),
+      )
     })
 
     return {

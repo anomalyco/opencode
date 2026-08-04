@@ -50,6 +50,7 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Commentaire concernant ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Ajouter un commentaire",
+  "ui.lineComment.contextPlaceholder": "Ajouter du contexte à cette modification",
   "ui.lineComment.submit": "Commenter",
   "ui.lineComment.cancel": "Annuler",
 
@@ -119,6 +120,25 @@ export const dict = {
 
   "ui.messageNav.newMessage": "Nouveau message",
 
+  "ui.promptInput.noMatchingItems": "Aucun élément correspondant",
+  "ui.promptInput.commands": "Commandes",
+  "ui.promptInput.dropFiles": "Déposez des fichiers pour les joindre",
+  "ui.promptInput.removeAttachment": "Supprimer la pièce jointe",
+  "ui.promptInput.label": "Invite",
+  "ui.promptInput.placeholder.shell": "Entrez une commande shell...",
+  "ui.promptInput.placeholder.normal": "Demandez n'importe quoi, {{slash}} pour les commandes, {{at}} pour le contexte...",
+  "ui.promptInput.add": "Ajouter des images et des fichiers",
+  "ui.promptInput.attachments": "Images et fichiers",
+  "ui.promptInput.context": "Contexte",
+  "ui.promptInput.shell": "Commande shell",
+  "ui.promptInput.chooseAgent": "Choisir l'agent",
+  "ui.promptInput.chooseModel": "Choisir le modèle",
+  "ui.promptInput.chooseVariant": "Choisir la variante du modèle",
+  "ui.promptInput.send": "Envoyer",
+  "ui.promptInput.stop": "Arrêter",
+
+  "ui.tabs.close": "Fermer l'onglet",
+
   "ui.textField.copyToClipboard": "Copier dans le presse-papiers",
   "ui.textField.copyLink": "Copier le lien",
   "ui.textField.copied": "Copié",
@@ -133,11 +153,13 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
   "ui.tool.websearch": "Recherche Web",
+  "ui.tool.websearch.provider": "{{provider}} Recherche Web",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Tâches",
   "ui.tool.todos.read": "Lire les tâches",
   "ui.tool.questions": "Questions",
+  "ui.tool.questions.numbered": "Questions {{number}}",
   "ui.tool.agent": "Agent {{type}}",
   "ui.tool.agent.default": "Agent",
 
@@ -147,6 +169,8 @@ export const dict = {
   "ui.common.question.other": "questions",
 
   "ui.common.add": "Ajouter",
+  "ui.common.clear": "Effacer",
+  "ui.common.file": "Fichier",
   "ui.common.back": "Retour",
   "ui.common.cancel": "Annuler",
   "ui.common.confirm": "Confirmer",

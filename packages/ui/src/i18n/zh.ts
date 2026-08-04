@@ -53,6 +53,7 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "正在评论",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "添加评论",
+  "ui.lineComment.contextPlaceholder": "添加此更改的上下文",
   "ui.lineComment.submit": "发布评论",
   "ui.lineComment.cancel": "取消",
 
@@ -116,6 +117,25 @@ export const dict = {
 
   "ui.messageNav.newMessage": "新消息",
 
+  "ui.promptInput.noMatchingItems": "没有匹配项",
+  "ui.promptInput.commands": "命令",
+  "ui.promptInput.dropFiles": "拖放文件以添加附件",
+  "ui.promptInput.removeAttachment": "移除附件",
+  "ui.promptInput.label": "提示词",
+  "ui.promptInput.placeholder.shell": "输入 shell 命令...",
+  "ui.promptInput.placeholder.normal": "随便问点什么， {{slash}} 可查看命令， {{at}} 可添加上下文...",
+  "ui.promptInput.add": "添加图片和文件",
+  "ui.promptInput.attachments": "图片和文件",
+  "ui.promptInput.context": "上下文",
+  "ui.promptInput.shell": "Shell 命令",
+  "ui.promptInput.chooseAgent": "选择智能体",
+  "ui.promptInput.chooseModel": "选择模型",
+  "ui.promptInput.chooseVariant": "选择模型变体",
+  "ui.promptInput.send": "发送",
+  "ui.promptInput.stop": "停止",
+
+  "ui.tabs.close": "关闭标签页",
+
   "ui.textField.copyToClipboard": "复制到剪贴板",
   "ui.textField.copyLink": "复制链接",
   "ui.textField.copied": "已复制",
@@ -130,11 +150,13 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
   "ui.tool.websearch": "网页搜索",
+  "ui.tool.websearch.provider": "{{provider}} 网页搜索",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "补丁",
   "ui.tool.todos": "待办",
   "ui.tool.todos.read": "读取待办",
   "ui.tool.questions": "问题",
+  "ui.tool.questions.numbered": "问题 {{number}}",
   "ui.tool.agent": "{{type}} 智能体",
   "ui.tool.agent.default": "智能体",
 
@@ -144,6 +166,8 @@ export const dict = {
   "ui.common.question.other": "个问题",
 
   "ui.common.add": "添加",
+  "ui.common.clear": "清除",
+  "ui.common.file": "文件",
   "ui.common.back": "返回",
   "ui.common.cancel": "取消",
   "ui.common.confirm": "确认",

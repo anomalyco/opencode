@@ -89,7 +89,7 @@ export type Locale =
   | "th"
 
 type RawDictionary = typeof appEn & typeof desktopEn
-type Dictionary = i18n.Flatten<RawDictionary>
+type Dictionary = Record<keyof i18n.Flatten<RawDictionary>, string>
 
 const LOCALES: readonly Locale[] = [
   "en",

@@ -49,6 +49,7 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "กำลังแสดงความคิดเห็นที่ ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "เพิ่มความคิดเห็น",
+  "ui.lineComment.contextPlaceholder": "เพิ่มบริบทสำหรับการเปลี่ยนแปลงนี้",
   "ui.lineComment.submit": "แสดงความคิดเห็น",
   "ui.lineComment.cancel": "ยกเลิก",
 
@@ -114,6 +115,25 @@ export const dict = {
 
   "ui.messageNav.newMessage": "ข้อความใหม่",
 
+  "ui.promptInput.noMatchingItems": "ไม่พบรายการที่ตรงกัน",
+  "ui.promptInput.commands": "คำสั่ง",
+  "ui.promptInput.dropFiles": "วางไฟล์เพื่อแนบ",
+  "ui.promptInput.removeAttachment": "เอาไฟล์แนบออก",
+  "ui.promptInput.label": "พรอมต์",
+  "ui.promptInput.placeholder.shell": "ป้อนคำสั่งเชลล์...",
+  "ui.promptInput.placeholder.normal": "ถามอะไรก็ได้ {{slash}} สำหรับคำสั่ง {{at}} สำหรับบริบท...",
+  "ui.promptInput.add": "เพิ่มรูปภาพและไฟล์",
+  "ui.promptInput.attachments": "รูปภาพและไฟล์",
+  "ui.promptInput.context": "บริบท",
+  "ui.promptInput.shell": "คำสั่งเชลล์",
+  "ui.promptInput.chooseAgent": "เลือกเอเจนต์",
+  "ui.promptInput.chooseModel": "เลือกโมเดล",
+  "ui.promptInput.chooseVariant": "เลือกรูปแบบโมเดล",
+  "ui.promptInput.send": "ส่ง",
+  "ui.promptInput.stop": "หยุด",
+
+  "ui.tabs.close": "ปิดแท็บ",
+
   "ui.textField.copyToClipboard": "คัดลอกไปยังคลิปบอร์ด",
   "ui.textField.copyLink": "คัดลอกลิงก์",
   "ui.textField.copied": "คัดลอกแล้ว",
@@ -128,11 +148,13 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "ดึงจากเว็บ",
   "ui.tool.websearch": "ค้นหาเว็บ",
+  "ui.tool.websearch.provider": "{{provider}} ค้นหาเว็บ",
   "ui.tool.shell": "เชลล์",
   "ui.tool.patch": "แพตช์",
   "ui.tool.todos": "รายการงาน",
   "ui.tool.todos.read": "อ่านรายการงาน",
   "ui.tool.questions": "คำถาม",
+  "ui.tool.questions.numbered": "คำถาม {{number}}",
   "ui.tool.agent": "เอเจนต์ {{type}}",
   "ui.tool.agent.default": "เอเจนต์",
 
@@ -142,6 +164,8 @@ export const dict = {
   "ui.common.question.other": "คำถาม",
 
   "ui.common.add": "เพิ่ม",
+  "ui.common.clear": "ล้าง",
+  "ui.common.file": "ไฟล์",
   "ui.common.back": "ย้อนกลับ",
   "ui.common.cancel": "ยกเลิก",
   "ui.common.confirm": "ยืนยัน",

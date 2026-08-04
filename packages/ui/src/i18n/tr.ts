@@ -55,6 +55,7 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Yorum yapılıyor: ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Yorum ekle",
+  "ui.lineComment.contextPlaceholder": "Bu değişiklik için bağlam ekle",
   "ui.lineComment.submit": "Yorum yap",
   "ui.lineComment.cancel": "İptal",
 
@@ -120,6 +121,25 @@ export const dict = {
 
   "ui.messageNav.newMessage": "Yeni mesaj",
 
+  "ui.promptInput.noMatchingItems": "Eşleşen öğe yok",
+  "ui.promptInput.commands": "Komutlar",
+  "ui.promptInput.dropFiles": "Eklemek için dosyaları bırakın",
+  "ui.promptInput.removeAttachment": "Eki kaldır",
+  "ui.promptInput.label": "İstem",
+  "ui.promptInput.placeholder.shell": "Kabuk komutu girin...",
+  "ui.promptInput.placeholder.normal": "Bir şey sorun, {{slash}} komutlar için, {{at}} bağlam için...",
+  "ui.promptInput.add": "Görsel ve dosya ekle",
+  "ui.promptInput.attachments": "Görseller ve dosyalar",
+  "ui.promptInput.context": "Bağlam",
+  "ui.promptInput.shell": "Kabuk komutu",
+  "ui.promptInput.chooseAgent": "Ajan seç",
+  "ui.promptInput.chooseModel": "Model seç",
+  "ui.promptInput.chooseVariant": "Model varyantı seç",
+  "ui.promptInput.send": "Gönder",
+  "ui.promptInput.stop": "Durdur",
+
+  "ui.tabs.close": "Sekmeyi kapat",
+
   "ui.textField.copyToClipboard": "Panoya kopyala",
   "ui.textField.copyLink": "Bağlantıyı kopyala",
   "ui.textField.copied": "Kopyalandı",
@@ -134,11 +154,13 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Web içeriğini getir",
   "ui.tool.websearch": "Web araması",
+  "ui.tool.websearch.provider": "{{provider}} Web araması",
   "ui.tool.shell": "Kabuk",
   "ui.tool.patch": "Yama",
   "ui.tool.todos": "Görevler",
   "ui.tool.todos.read": "Görevleri oku",
   "ui.tool.questions": "Sorular",
+  "ui.tool.questions.numbered": "Sorular {{number}}",
   "ui.tool.agent": "{{type}} ajanı",
   "ui.tool.agent.default": "Ajan",
 
@@ -148,6 +170,8 @@ export const dict = {
   "ui.common.question.other": "soru",
 
   "ui.common.add": "Ekle",
+  "ui.common.clear": "Temizle",
+  "ui.common.file": "Dosya",
   "ui.common.back": "Geri",
   "ui.common.cancel": "İptal",
   "ui.common.confirm": "Onayla",

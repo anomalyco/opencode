@@ -132,6 +132,7 @@ const api: ElectronAPI = {
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
   setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
+  setNativeTranslations: (bundle) => ipcRenderer.invoke("set-native-translations", bundle),
 }
 
 contextBridge.exposeInMainWorld("api", api)

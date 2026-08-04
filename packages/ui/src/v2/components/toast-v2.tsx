@@ -2,12 +2,14 @@ import { Toaster, toast, type ToasterProps } from "solid-sonner"
 import type { ComponentProps, JSX } from "solid-js"
 import { createContext, onCleanup, onMount, splitProps, useContext } from "solid-js"
 import { Portal } from "solid-js/web"
+import { useI18n } from "../../context/i18n"
 import "./button-v2.css"
 import "./toast-v2.css"
 
 export interface ToastV2RegionProps extends ToasterProps {}
 
 function ToastV2Region(props: ToastV2RegionProps) {
+  const i18n = useI18n()
   const [local, rest] = splitProps(props, ["class", "className", "style", "toastOptions", "swipeDirections"])
   onMount(() => {
     const sync = () => {
@@ -56,7 +58,7 @@ function ToastV2Region(props: ToastV2RegionProps) {
           ...local.toastOptions,
           unstyled: true,
           closeButton: true,
-          closeButtonAriaLabel: local.toastOptions?.closeButtonAriaLabel ?? "Dismiss",
+          closeButtonAriaLabel: local.toastOptions?.closeButtonAriaLabel ?? i18n.t("ui.common.dismiss"),
         }}
         {...rest}
       />
@@ -96,13 +98,14 @@ function ToastV2Actions(props: ComponentProps<"div">) {
 }
 
 function ToastV2CloseButton(props: ComponentProps<"button">) {
+  const i18n = useI18n()
   const toastId = useContext(ToastV2Context)
   const [local, rest] = splitProps(props, ["children", "onClick"])
   return (
     <button
       type="button"
       data-slot="toast-v2-close-button"
-      aria-label="Dismiss"
+      aria-label={i18n.t("ui.common.dismiss")}
       {...rest}
       onClick={(event) => {
         if (typeof local.onClick === "function") local.onClick(event)

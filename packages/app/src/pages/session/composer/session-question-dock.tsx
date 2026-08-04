@@ -472,7 +472,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                         data-answered={answered(i())}
                         disabled={sending()}
                         onClick={() => jump(i())}
-                        aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
+                        aria-label={language.t("ui.tool.questions.numbered", { number: i() + 1 })}
                       />
                     )}
                   </For>

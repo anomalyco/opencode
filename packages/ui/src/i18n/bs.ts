@@ -53,6 +53,7 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Komentarišeš ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Dodaj komentar",
+  "ui.lineComment.contextPlaceholder": "Dodaj kontekst za ovu izmjenu",
   "ui.lineComment.submit": "Komentariši",
   "ui.lineComment.cancel": "Otkaži",
 
@@ -122,6 +123,25 @@ export const dict = {
 
   "ui.messageNav.newMessage": "Nova poruka",
 
+  "ui.promptInput.noMatchingItems": "Nema odgovarajućih stavki",
+  "ui.promptInput.commands": "Komande",
+  "ui.promptInput.dropFiles": "Ispusti datoteke da ih priložiš",
+  "ui.promptInput.removeAttachment": "Ukloni prilog",
+  "ui.promptInput.label": "Upit",
+  "ui.promptInput.placeholder.shell": "Unesi shell komandu...",
+  "ui.promptInput.placeholder.normal": "Pitaj bilo šta, {{slash}} za komande, {{at}} za kontekst...",
+  "ui.promptInput.add": "Dodaj slike i datoteke",
+  "ui.promptInput.attachments": "Slike i datoteke",
+  "ui.promptInput.context": "Kontekst",
+  "ui.promptInput.shell": "Shell komanda",
+  "ui.promptInput.chooseAgent": "Odaberi agenta",
+  "ui.promptInput.chooseModel": "Odaberi model",
+  "ui.promptInput.chooseVariant": "Odaberi varijantu modela",
+  "ui.promptInput.send": "Pošalji",
+  "ui.promptInput.stop": "Zaustavi",
+
+  "ui.tabs.close": "Zatvori karticu",
+
   "ui.textField.copyToClipboard": "Kopiraj u međuspremnik",
   "ui.textField.copyLink": "Kopiraj link",
   "ui.textField.copied": "Kopirano",
@@ -136,11 +156,13 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Web preuzimanje",
   "ui.tool.websearch": "Pretraga weba",
+  "ui.tool.websearch.provider": "{{provider}} Pretraga weba",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Lista zadataka",
   "ui.tool.todos.read": "Čitanje liste zadataka",
   "ui.tool.questions": "Pitanja",
+  "ui.tool.questions.numbered": "Pitanja {{number}}",
   "ui.tool.agent": "{{type}} agent",
   "ui.tool.agent.default": "agent",
 
@@ -150,6 +172,8 @@ export const dict = {
   "ui.common.question.other": "pitanja",
 
   "ui.common.add": "Dodaj",
+  "ui.common.clear": "Očisti",
+  "ui.common.file": "Datoteka",
   "ui.common.back": "Nazad",
   "ui.common.cancel": "Otkaži",
   "ui.common.confirm": "Potvrdi",
