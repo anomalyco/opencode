@@ -1,7 +1,7 @@
 import * as i18n from "@solid-primitives/i18n"
 import { createEffect, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext, pluralCategory, type UiI18nPluralKey } from "@opencode-ai/ui/context"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
@@ -38,6 +38,11 @@ export type Locale =
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
+type PluralKey =
+  | UiI18nPluralKey
+  | "session.question.pending"
+  | "session.followupDock.summary"
+  | "session.revertDock.summary"
 type Source = { dict: Record<string, string> }
 
 function cookie(locale: Locale) {
@@ -294,6 +299,14 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       params?: Record<string, string | number | boolean>,
     ) => string
 
+    const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) => {
+      const category = pluralCategory(intl(), count)
+      const current = (dict.loading ? base : (dict() ?? base)) as Record<string, string>
+      const candidate = `${key}.${category}`
+      const fallback = `${key}.other`
+      return i18n.resolveTemplate(current[candidate] ?? current[fallback] ?? fallback, { ...params, count })
+    }
+
     const label = (value: Locale) => {
       const key = LABEL_KEY[value]
       if (key) return t(key)
@@ -313,6 +326,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       locales: LOCALES,
       label,
       t,
+      plural,
       setLocale(next: Locale) {
         setStore("locale", normalizeLocale(next))
       },

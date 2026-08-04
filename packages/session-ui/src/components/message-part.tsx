@@ -1097,22 +1097,16 @@ export function ContextToolGroup(props: {
               <AnimatedCountList
                 items={[
                   {
-                    key: "read",
+                    key: "ui.messagePart.context.read",
                     count: summary().read,
-                    one: i18n.t("ui.messagePart.context.read.one"),
-                    other: i18n.t("ui.messagePart.context.read.other"),
                   },
                   {
-                    key: "search",
+                    key: "ui.messagePart.context.search",
                     count: summary().search,
-                    one: i18n.t("ui.messagePart.context.search.one"),
-                    other: i18n.t("ui.messagePart.context.search.other"),
                   },
                   {
-                    key: "list",
+                    key: "ui.messagePart.context.list",
                     count: summary().list,
-                    one: i18n.t("ui.messagePart.context.list.one"),
-                    other: i18n.t("ui.messagePart.context.list.other"),
                   },
                 ]}
                 fallback=""
