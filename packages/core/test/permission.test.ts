@@ -118,6 +118,26 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("omits undefined metadata values from pending requests", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* PermissionV2.Service
+      yield* service.ask(
+        assertion({
+          metadata: {
+            root: ".",
+            path: undefined,
+            nested: { include: undefined, limit: 10 },
+          },
+        }),
+      )
+
+      const request = yield* service.get(PermissionV2.ID.create("per_test"))
+      expect(request?.metadata).toEqual({ root: ".", nested: { limit: 10 } })
+      expect(Object.hasOwn(request?.metadata ?? {}, "path")).toBe(false)
+    }),
+  )
+
   it.effect("evaluates against an explicit provider-turn agent", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])

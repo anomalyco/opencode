@@ -106,6 +106,33 @@ interface Pending {
   readonly deferred: Deferred.Deferred<void, DeclinedError | CorrectedError>
 }
 
+function sanitizeMetadataValue(value: unknown): unknown {
+  if (value === undefined) return undefined
+  if (Array.isArray(value)) return value.flatMap((item) => {
+    const sanitized = sanitizeMetadataValue(item)
+    return sanitized === undefined ? [] : [sanitized]
+  })
+  if (typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value).flatMap(([key, item]) => {
+        const sanitized = sanitizeMetadataValue(item)
+        return sanitized === undefined ? [] : [[key, sanitized]]
+      }),
+    )
+  }
+  return value
+}
+
+function sanitizeMetadata(metadata: Record<string, unknown> | undefined) {
+  if (metadata === undefined) return undefined
+  return Object.fromEntries(
+    Object.entries(metadata).flatMap(([key, value]) => {
+      const sanitized = sanitizeMetadataValue(value)
+      return sanitized === undefined ? [] : [[key, sanitized]]
+    }),
+  )
+}
+
 const layer = Layer.effect(
   Service,
   EffectRuntime.gen(function* () {
@@ -168,7 +195,7 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         save: input.save,
-        metadata: input.metadata,
+        metadata: sanitizeMetadata(input.metadata),
         source: input.source,
       }
     }
