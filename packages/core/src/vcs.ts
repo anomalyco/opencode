@@ -45,14 +45,17 @@ const layer = Layer.effect(
     const location = yield* Location.Service
     const bus = yield* Bus.Service
     const impl = adapter(proc, fs, location)
-    const git = location.vcs?.type === "git" ? location.vcs : undefined
-    const cache = git && impl ? yield* Ref.make(yield* impl.info()) : undefined
+    const vcs = location.vcs
+    const cache = vcs && impl ? yield* Ref.make(yield* impl.info()) : undefined
 
-    if (cache && git && impl) {
-      const store = yield* fs.realPath(git.store).pipe(Effect.catch(() => Effect.succeed(git.store)))
+    if (cache && vcs && impl) {
+      const store = yield* fs.realPath(vcs.store).pipe(Effect.catch(() => Effect.succeed(vcs.store)))
       yield* bus.subscribe(FileSystem.Event.Changed).pipe(
         Stream.filter(
-          (event) => path.basename(event.data.file) === "HEAD" && FSUtil.contains(store, event.data.file),
+          (event) =>
+            vcs.type === "git"
+              ? path.basename(event.data.file) === "HEAD" && FSUtil.contains(store, event.data.file)
+              : path.resolve(event.data.file) === path.join(store, "branch"),
         ),
         Stream.runForEach((event) =>
           Effect.gen(function* () {
@@ -71,8 +74,8 @@ const layer = Layer.effect(
       if (!impl) return { branch: {} }
       if (!cache) return yield* impl.info()
       const current = yield* Ref.get(cache)
-      if (current.branch.default !== undefined) return current
-      // An unborn repository can gain its first default branch without changing HEAD.
+      if (current.branch.current !== undefined && current.branch.default !== undefined) return current
+      // An unborn repository can gain its first branch without changing existing metadata.
       const next = yield* impl.info()
       yield* Ref.set(cache, next)
       return next

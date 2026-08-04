@@ -2,11 +2,14 @@ import { $ } from "bun"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Vcs } from "@opencode-ai/core/vcs"
+import { FileSystem } from "@opencode-ai/schema/filesystem"
+import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
@@ -15,7 +18,7 @@ const describeHg = Bun.which("hg") ? describe : describe.skip
 
 const provide = (directory: string) =>
   Effect.provide(
-    LayerNode.compile(Vcs.node, [
+    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node]), [
       [
         Location.node,
         Layer.succeed(
@@ -96,6 +99,39 @@ describeHg("Vcs mercurial", () => {
         expect(diff[1].deletions).toBe(1)
         expect(diff[2].patch).toContain("+hello")
         expect(diff[2].additions).toBe(1)
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("caches branch info and publishes branch metadata changes", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await hg(directory, "init")
+          await fs.writeFile(path.join(directory, "file.txt"), "one\n")
+          await commitAll(directory, "initial")
+        })
+        const vcs = yield* Vcs.Service
+        const bus = yield* Bus.Service
+        expect(yield* vcs.info()).toEqual({ branch: { current: "default", default: "default" } })
+
+        const updated = yield* bus.subscribe(VcsEvent.BranchUpdated).pipe(
+          Stream.take(1),
+          Stream.runHead,
+          Effect.forkScoped({ startImmediately: true }),
+        )
+        yield* Effect.promise(() => hg(directory, "branch", "-q", "feature"))
+        expect(yield* vcs.info()).toEqual({ branch: { current: "default", default: "default" } })
+
+        yield* bus.publish(FileSystem.Event.Changed, {
+          file: path.join(directory, ".hg", "branch"),
+          event: "change",
+        })
+        expect(yield* Fiber.join(updated)).toMatchObject({
+          _tag: "Some",
+          value: { location: { directory }, data: { branch: "feature" } },
+        })
+        expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "default" } })
       }).pipe(provide(directory)),
     ),
   )
