@@ -80,7 +80,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       )
     }
     if (path === "/global/health")
-      return config.protocol === "v2" ? json(route, {}, undefined, 404) : json(route, { healthy: true })
+      return config.protocol === "v2" ? json(route, {}) : json(route, { healthy: true })
     if (path === "/api/health" && config.protocol === "v2")
       return json(route, { healthy: true, version: "2.0.0", pid: 1 })
     if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: true })

@@ -33,6 +33,7 @@ test.describe("smoke: session timeline", () => {
   test("keeps the visible message fixed while prepending history", async ({ page }) => {
     const requests: { before?: string; phase: "start" | "end"; at: number }[] = []
     await mockOpenCodeServer(page, {
+      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -91,6 +92,7 @@ test.describe("smoke: session timeline", () => {
 
   test("preserves the timeline gap above the composer", async ({ page }) => {
     await mockOpenCodeServer(page, {
+      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -117,6 +119,7 @@ test.describe("smoke: session timeline", () => {
 
   test("paints cached session tabs at the latest message", async ({ page }) => {
     await mockOpenCodeServer(page, {
+      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -242,6 +245,7 @@ test.describe("smoke: session timeline", () => {
 
   test("paints a cold session tab at the latest message", async ({ page }) => {
     await mockOpenCodeServer(page, {
+      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -320,6 +324,7 @@ test.describe("smoke: session timeline", () => {
   test("renders seeded timeline in order while paging through history", async ({ page }) => {
     const errors = trackPageErrors(page)
     await mockOpenCodeServer(page, {
+      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
