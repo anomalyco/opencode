@@ -1,15 +1,49 @@
 import { describe, expect, test } from "bun:test"
 import {
+  createPromptHistoryEntry,
+  historyEntryScope,
   isDuplicateEntry,
   MAX_HISTORY_ENTRIES,
   orderHistoryForSession,
   parsePromptHistory,
+  shouldRetainClearedPrompt,
   type PromptInfo,
 } from "../../src/prompt/history"
 
 const entry = (input: string, parts: PromptInfo["parts"] = []): PromptInfo => ({ input, parts })
 
 describe("prompt history", () => {
+  test("retains meaningful ctrl+c clears without filling history with short input", () => {
+    expect(shouldRetainClearedPrompt(entry("short"))).toBe(false)
+    expect(shouldRetainClearedPrompt(entry("x".repeat(20)))).toBe(true)
+    expect(
+      shouldRetainClearedPrompt(
+        entry("", [{ type: "file", mime: "image/png", filename: "a.png", url: "data:image/png;base64,AAA" }]),
+      ),
+    ).toBe(true)
+  })
+
+  test("tags a Home submission with the effective newly-created session ID", () => {
+    expect(
+      createPromptHistoryEntry(entry("first prompt"), {
+        mode: "normal",
+        sessionID: "ses_created",
+        origin: "submit",
+      }),
+    ).toEqual({
+      ...entry("first prompt"),
+      mode: "normal",
+      sessionID: "ses_created",
+      origin: "submit",
+    })
+  })
+
+  test("labels legacy entries without session metadata neutrally", () => {
+    expect(historyEntryScope(entry("legacy"), "ses_1")).toBe("history")
+    expect(historyEntryScope({ ...entry("own"), sessionID: "ses_1" }, "ses_1")).toBe("current")
+    expect(historyEntryScope({ ...entry("other"), sessionID: "ses_2" }, "ses_1")).toBe("other")
+  })
+
   test("recovers valid JSONL entries around corruption", () => {
     expect(parsePromptHistory(`${JSON.stringify(entry("one"))}\nnot-json\n${JSON.stringify(entry("two"))}\n`)).toEqual([
       entry("one"),

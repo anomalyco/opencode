@@ -1,4 +1,5 @@
-import { Prompt, type PromptRef } from "../component/prompt"
+import { Prompt } from "../component/prompt"
+import type { TuiPromptRef } from "@opencode-ai/plugin/tui"
 import { createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
@@ -24,7 +25,7 @@ export function Home() {
   const sync = useSync()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
-  const [ref, setRef] = createSignal<PromptRef | undefined>()
+  const [ref, setRef] = createSignal<TuiPromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
   const editor = useEditorContext()
@@ -41,7 +42,7 @@ export function Home() {
     editor.clearSelection()
   })
 
-  const bind = (r: PromptRef | undefined) => {
+  const bind = (r: TuiPromptRef | undefined) => {
     setRef(r)
     promptRef.set(r)
     if (once || !r) return

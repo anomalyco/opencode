@@ -26,7 +26,8 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
-import { Prompt, type PromptRef } from "../../component/prompt"
+import { Prompt } from "../../component/prompt"
+import type { TuiPromptRef } from "@opencode-ai/plugin/tui"
 import type {
   AssistantMessage,
   Part,
@@ -62,7 +63,7 @@ import { errorMessage } from "../../util/error"
 import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import stripAnsi from "strip-ansi"
-import { usePromptRef } from "../../context/prompt"
+import { canStashPromptForSessions, usePromptRef } from "../../context/prompt"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
@@ -347,8 +348,8 @@ export function Session() {
 
   let seeded = false
   let scroll: ScrollBoxRenderable
-  let prompt: PromptRef | undefined
-  const bind = (r: PromptRef | undefined) => {
+  let prompt: TuiPromptRef | undefined
+  const bind = (r: TuiPromptRef | undefined) => {
     prompt = r
     promptRef.set(r)
     if (seeded || !route.prompt || !r) return
@@ -1115,11 +1116,12 @@ export function Session() {
         const prompt = promptRef.current
         if (!prompt) return false
         if (prompt.current.input === "") return true
-        return prompt.cursorAtStart
+        return canStashPromptForSessions(prompt)
       },
       run: () => {
         const prompt = promptRef.current
         if (prompt && prompt.current.input !== "") {
+          if (!canStashPromptForSessions(prompt)) return
           if (prompt.stashAndClear() === "armed") return
         }
         navigate({ type: "sessions" })

@@ -126,7 +126,7 @@ the last summarized turn. The validator consumes the latest persisted summary
 as context, with a 20s catch-up bound — a broken summarizer means validating
 without a summary, never a stuck ask.
 
-## 7. Prompt history stashing + session-aware browsing
+## 7. Prompt history recovery + session-aware browsing
 
 Two confirmed double-press gestures (3s window, same pattern as
 `esc`-to-interrupt) that stash the typed draft into the prompt history instead
@@ -140,13 +140,26 @@ of losing it:
   otherwise a no-op): first press arms, the second press stashes the draft,
   clears the input, and navigates back to the sessions list. An empty input
   still goes back immediately.
+- `ctrl+c` keeps clearing immediately on the first press. Clears with at least
+  20 non-whitespace characters, or with any attachment, are also appended to
+  prompt history so a meaningful draft is recoverable; shorter text-only
+  clears are not retained.
 
 History entries are tagged with their origin (`sessionID` +
 `origin: "submit" | "stash"`; entries from before this change simply have no
-tag). `up`/`down` browsing shows entries from the open session first, then the
-global ones, and a footer badge marks what you are looking at:
-`↑ this session` / `↑ other session`, with a `· stashed` suffix for drafts
-that were never submitted. The badge clears as soon as you edit the text.
+tag). The effective Session ID is recorded for submissions created from Home,
+not only for prompts sent inside an existing session. `up`/`down` browsing
+shows entries from the open session first, then the global ones, and a footer
+badge marks what you are looking at: `↑ this session` / `↑ other session`.
+Legacy untagged entries use the neutral `↑ history` badge. Drafts that were
+never submitted add a `· stashed` suffix. These notices stay visible while a
+session is busy or retrying, and clear as soon as you edit the text.
+
+This recovery history is stored in `prompt-history.jsonl` and browsing it does
+not consume entries. It is intentionally separate from the explicit
+`prompt.stash`, `prompt.stash.pop`, and `prompt.stash.list` commands. Those
+commands use the dedicated `prompt-stash.jsonl` stack, where pop/list provide
+explicit stash management instead of normal `up`/`down` history navigation.
 
 ## Commit map
 

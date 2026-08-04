@@ -30,7 +30,20 @@ import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { promptOffsetWidth } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
-import { usePromptHistory, type PromptInfo } from "../../prompt/history"
+import {
+  createPromptHistoryEntry,
+  historyEntryScope,
+  shouldRetainClearedPrompt,
+  usePromptHistory,
+  type PromptInfo,
+} from "../../prompt/history"
+import {
+  promptHistoryBadgeLabel,
+  resolvePromptFooterState,
+  type PromptFooterNotice,
+  type PromptHistoryBadge,
+} from "../../prompt/footer"
+import { createStashArm, type StashGesture } from "../../prompt/stash-arm"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
@@ -102,8 +115,6 @@ const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
 })
-
-const DRAFT_RETENTION_MIN_CHARS = 20
 
 function randomIndex(count: number) {
   if (count <= 0) return 0
@@ -288,8 +299,8 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
-    stashArm: "esc" | "left" | null
-    historyBadge: { input: string; sameSession: boolean; origin?: "submit" | "stash" } | null
+    stashArm: StashGesture | null
+    historyBadge: PromptHistoryBadge | null
   }>({
     placeholder: randomIndex(list().length),
     prompt: {
@@ -301,6 +312,30 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
     stashArm: null,
     historyBadge: null,
+  })
+
+  const stashArm = createStashArm({
+    current: () => store.stashArm,
+    set: (value) => setStore("stashArm", value),
+  })
+  onCleanup(() => stashArm.dispose())
+
+  const footerState = createMemo(() =>
+    resolvePromptFooterState({
+      status: status().type,
+      stashArm: store.stashArm,
+      historyBadge: store.historyBadge,
+    }),
+  )
+  const busyFooterNotice = createMemo(() => {
+    const state = footerState()
+    if (state.type !== "busy") return undefined
+    return state.notice ?? undefined
+  })
+  const idleFooterNotice = createMemo(() => {
+    const state = footerState()
+    if (state.type === "stash" || state.type === "history") return state
+    return undefined
   })
 
   createEffect(
@@ -411,8 +446,7 @@ export function Prompt(props: PromptProps) {
           // With text typed, escape stashes the draft into the prompt history
           // on a confirmed double press instead of interrupting the session.
           if (store.prompt.input !== "") {
-            if (!armStash("esc")) return
-            setStore("stashArm", null)
+            if (!stashArm.press("esc")) return
             stashAndClear()
             dialog.clear()
             return
@@ -604,8 +638,7 @@ export function Prompt(props: PromptProps) {
       return input.visualCursor.offset === 0
     },
     stashAndClear() {
-      if (!armStash("left")) return "armed"
-      setStore("stashArm", null)
+      if (!stashArm.press("left")) return "armed"
       stashAndClear()
       return "stashed"
     },
@@ -1144,12 +1177,13 @@ export function Prompt(props: PromptProps) {
         })
       if (editorParts.length > 0) editor.markSelectionSent()
     }
-    history.append({
-      ...store.prompt,
-      mode: currentMode,
-      sessionID: props.sessionID,
-      origin: "submit",
-    })
+    history.append(
+      createPromptHistoryEntry(store.prompt, {
+        mode: currentMode,
+        sessionID,
+        origin: "submit",
+      }),
+    )
     setStore("historyBadge", null)
     input.extmarks.clear()
     setStore("prompt", {
@@ -1298,13 +1332,14 @@ export function Prompt(props: PromptProps) {
   }
 
   function clearPrompt() {
-    if (store.prompt.input.trim().length >= DRAFT_RETENTION_MIN_CHARS || store.prompt.parts.length > 0) {
-      history.append({
-        ...store.prompt,
-        mode: store.mode,
-        sessionID: props.sessionID,
-        origin: "stash",
-      })
+    if (shouldRetainClearedPrompt(store.prompt)) {
+      history.append(
+        createPromptHistoryEntry(store.prompt, {
+          mode: store.mode,
+          sessionID: props.sessionID,
+          origin: "stash",
+        }),
+      )
     }
     input.clear()
     input.extmarks.clear()
@@ -1315,24 +1350,15 @@ export function Prompt(props: PromptProps) {
     setStore("extmarkToPartIndex", new Map())
   }
 
-  // Arms a double-press gesture; returns true when this press confirms it.
-  function armStash(gesture: "esc" | "left") {
-    const confirmed = store.stashArm === gesture
-    setStore("stashArm", gesture)
-    setTimeout(() => {
-      if (store.stashArm === gesture) setStore("stashArm", null)
-    }, 3000)
-    return confirmed
-  }
-
   function stashAndClear() {
     if (store.prompt.input === "" && store.prompt.parts.length === 0) return
-    history.append({
-      ...store.prompt,
-      mode: store.mode,
-      sessionID: props.sessionID,
-      origin: "stash",
-    })
+    history.append(
+      createPromptHistoryEntry(store.prompt, {
+        mode: store.mode,
+        sessionID: props.sessionID,
+        origin: "stash",
+      }),
+    )
     setStore("historyBadge", null)
     input.clear()
     input.extmarks.clear()
@@ -1347,9 +1373,33 @@ export function Prompt(props: PromptProps) {
     if (item.input === "" && item.parts.length === 0) return null
     return {
       input: item.input,
-      sameSession: item.sessionID !== undefined && item.sessionID === props.sessionID,
+      scope: historyEntryScope(item, props.sessionID),
       origin: item.origin,
     }
+  }
+
+  function renderFooterNotice(notice: PromptFooterNotice) {
+    if (notice.type === "stash") {
+      return (
+        <box paddingLeft={3}>
+          <text fg={theme.primary}>
+            {notice.gesture === "esc" ? "esc " : "← "}
+            <span style={{ fg: theme.textMuted }}>
+              {notice.gesture === "esc" ? "again to clear · saves draft" : "again for sessions · saves draft"}
+            </span>
+          </text>
+        </box>
+      )
+    }
+
+    return (
+      <box paddingLeft={3}>
+        <text fg={notice.badge.scope === "current" ? theme.accent : theme.textMuted}>
+          ↑ {promptHistoryBadgeLabel(notice.badge.scope)}
+          {notice.badge.origin === "stash" ? " · stashed" : ""}
+        </text>
+      </box>
+    )
   }
 
   const highlight = createMemo(() => {
@@ -1457,7 +1507,7 @@ export function Prompt(props: PromptProps) {
                 auto()?.onInput(value)
                 syncExtmarksWithPromptParts()
                 setCursorVersion((value) => value + 1)
-                if (store.stashArm) setStore("stashArm", null)
+                if (store.stashArm) stashArm.clear()
                 if (store.historyBadge && store.historyBadge.input !== value) setStore("historyBadge", null)
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
@@ -1584,7 +1634,7 @@ export function Prompt(props: PromptProps) {
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between">
           <Switch>
-            <Match when={status().type !== "idle"}>
+            <Match when={footerState().type === "busy"}>
               <box
                 flexDirection="row"
                 gap={1}
@@ -1657,45 +1707,30 @@ export function Prompt(props: PromptProps) {
                   </box>
                 </box>
                 <Show
-                  when={store.prompt.input === ""}
+                  when={busyFooterNotice()}
                   fallback={
-                    <text fg={store.stashArm === "esc" ? theme.primary : theme.text}>
-                      esc{" "}
-                      <span style={{ fg: store.stashArm === "esc" ? theme.primary : theme.textMuted }}>
-                        {store.stashArm === "esc" ? "again to clear · saves draft" : "clear draft"}
-                      </span>
-                    </text>
+                    <Show
+                      when={store.prompt.input === ""}
+                      fallback={
+                        <text fg={theme.text}>
+                          esc <span style={{ fg: theme.textMuted }}>clear draft</span>
+                        </text>
+                      }
+                    >
+                      <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                        esc{" "}
+                        <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                          {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                        </span>
+                      </text>
+                    </Show>
                   }
                 >
-                  <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                    esc{" "}
-                    <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                      {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                    </span>
-                  </text>
+                  {(notice) => renderFooterNotice(notice())}
                 </Show>
               </box>
             </Match>
-            <Match when={store.stashArm !== null}>
-              <box paddingLeft={3}>
-                <text fg={theme.primary}>
-                  {store.stashArm === "esc" ? "esc " : "← "}
-                  <span style={{ fg: theme.textMuted }}>
-                    {store.stashArm === "esc" ? "again to clear · saves draft" : "again for sessions · saves draft"}
-                  </span>
-                </text>
-              </box>
-            </Match>
-            <Match when={store.historyBadge}>
-              {(badge) => (
-                <box paddingLeft={3}>
-                  <text fg={badge().sameSession ? theme.accent : theme.textMuted}>
-                    ↑ {badge().sameSession ? "this session" : "other session"}
-                    {badge().origin === "stash" ? " · stashed" : ""}
-                  </text>
-                </box>
-              )}
-            </Match>
+            <Match when={idleFooterNotice()}>{(notice) => renderFooterNotice(notice())}</Match>
             <Match when={workspace.notice()}>
               {(notice) => (
                 <box paddingLeft={3}>

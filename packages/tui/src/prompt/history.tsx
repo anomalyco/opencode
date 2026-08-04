@@ -27,6 +27,11 @@ export type PromptInfo = {
 }
 
 export const MAX_HISTORY_ENTRIES = 50
+const CLEARED_DRAFT_RETENTION_MIN_CHARS = 20
+
+export function shouldRetainClearedPrompt(prompt: PromptInfo) {
+  return prompt.input.trim().length >= CLEARED_DRAFT_RETENTION_MIN_CHARS || prompt.parts.length > 0
+}
 
 export function parsePromptHistory(text: string) {
   return text
@@ -46,6 +51,23 @@ export function parsePromptHistory(text: string) {
 export function isDuplicateEntry(previous: PromptInfo | undefined, next: PromptInfo): boolean {
   if (!previous) return false
   return JSON.stringify(previous) === JSON.stringify(next)
+}
+
+export function createPromptHistoryEntry(
+  prompt: PromptInfo,
+  metadata: Pick<PromptInfo, "mode" | "sessionID" | "origin">,
+) {
+  return {
+    ...prompt,
+    ...metadata,
+  }
+}
+
+export type PromptHistoryScope = "current" | "other" | "history"
+
+export function historyEntryScope(item: PromptInfo, sessionID?: string): PromptHistoryScope {
+  if (!item.sessionID) return "history"
+  return item.sessionID === sessionID ? "current" : "other"
 }
 
 // Browsing order: entries from the given session first (newest first), then

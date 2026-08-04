@@ -203,13 +203,13 @@ export type TuiPromptInfo = {
 export type TuiPromptRef = {
   focused: boolean
   current: TuiPromptInfo
-  cursorAtStart: boolean
+  cursorAtStart?: boolean
   set(prompt: TuiPromptInfo): void
   reset(): void
   blur(): void
   focus(): void
   submit(): void
-  stashAndClear(): "armed" | "stashed"
+  stashAndClear?(): "armed" | "stashed"
 }
 
 export type TuiPromptProps = {
