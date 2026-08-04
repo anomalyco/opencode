@@ -75,6 +75,21 @@ describe("AzurePlugin", () => {
     ),
   )
 
+  it.effect("resolves resourceName from the legacy env", () =>
+    withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: "legacy-resource" }, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Catalog.Service
+        yield* catalog.transform((catalog) => {
+          catalog.provider.update(Provider.ID.azure, (item) => {
+            item.package = Provider.aisdk("@ai-sdk/azure")
+          })
+        })
+        yield* addPlugin()
+        expect(required(yield* catalog.provider.get(Provider.ID.azure)).settings?.resourceName).toBe("legacy-resource")
+      }),
+    ),
+  )
+
   it.effect("keeps explicit resourceName over env and ignores other providers", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env" }, () =>
       Effect.gen(function* () {

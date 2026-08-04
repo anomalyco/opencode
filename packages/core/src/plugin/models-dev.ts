@@ -22,7 +22,13 @@ export const ModelsDevPlugin = define({
         })
         integrations.method.update({
           integrationID,
-          method: { type: "env", names: [...provider.environment] },
+          method: {
+            type: "env",
+            names:
+              provider.info.id === Provider.ID.azure
+                ? provider.environment.filter((name) => name.endsWith("_API_KEY"))
+                : [...provider.environment],
+          },
         })
       }
     })

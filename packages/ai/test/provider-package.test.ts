@@ -209,6 +209,26 @@ describe("provider package entrypoints", () => {
     expect(chat.route.id).toBe("azure-openai-chat")
   })
 
+  test("constructs Azure deployment URLs and preserves custom gateway URLs", async () => {
+    const Azure = await import("@opencode-ai/ai/providers/azure")
+    const deployment = Azure.model("custom-deployment", {
+      apiKey: "fixture",
+      resourceName: "opencode-test",
+      apiVersion: "2025-01-01-preview",
+      useDeploymentBasedUrls: true,
+    })
+    const gateway = Azure.model("gateway-model", {
+      apiKey: "fixture",
+      baseURL: "https://gateway.example/azure",
+    })
+
+    expect(deployment.route.endpoint).toMatchObject({
+      baseURL: "https://opencode-test.openai.azure.com/openai/deployments/custom-deployment",
+      query: { "api-version": "2025-01-01-preview" },
+    })
+    expect(gateway.route.endpoint).toMatchObject({ baseURL: "https://gateway.example/azure", query: {} })
+  })
+
   test("maps Google package settings onto the Gemini model", async () => {
     const Google = await import("@opencode-ai/ai/providers/google")
     const selected = Google.model("gemini-2.5-flash", {

@@ -241,7 +241,7 @@ describe("ModelsDevPlugin", () => {
           name,
           package: Provider.aisdk(packageName),
         },
-        environment: [environment],
+        environment: id === "azure" ? ["AZURE_RESOURCE_NAME", environment] : [environment],
         models: [],
       })) satisfies readonly ModelsDev.Snapshot[]
 
@@ -265,6 +265,9 @@ describe("ModelsDevPlugin", () => {
       expect(yield* catalog.provider.get(Provider.ID.make("azure-cognitive-services"))).toBeUndefined()
       expect(yield* catalog.provider.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toBeDefined()
+      expect(yield* integrations.get(Integration.ID.make("azure"))).toMatchObject({
+        methods: [{ type: "key" }, { type: "env", names: ["AZURE_API_KEY"] }],
+      })
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
       expect(yield* integrations.get(Integration.ID.make("google-vertex-anthropic"))).toBeUndefined()
@@ -442,10 +445,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const openrouter = yield* catalog.model.get(
-        Provider.ID.make("openrouter"),
-        Model.ID.make("openrouter-toggle"),
-      )
+      const openrouter = yield* catalog.model.get(Provider.ID.make("openrouter"), Model.ID.make("openrouter-toggle"))
       expect(openrouter?.variants).toEqual([
         { id: Model.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
         { id: Model.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
@@ -467,10 +467,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const vertex = yield* catalog.model.get(
-        Provider.ID.make("google-vertex"),
-        Model.ID.make("gemini-2.5-flash-lite"),
-      )
+      const vertex = yield* catalog.model.get(Provider.ID.make("google-vertex"), Model.ID.make("gemini-2.5-flash-lite"))
       expect(vertex?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),

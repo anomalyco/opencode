@@ -490,7 +490,7 @@ describe("Config", () => {
         provider: {
           "azure-cognitive-services": {
             npm: "@ai-sdk/azure",
-            env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
+            env: ["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "AZURE_COGNITIVE_SERVICES_API_KEY"],
             models: { deployment: {} },
           },
           "google-vertex-anthropic": {
@@ -523,6 +523,27 @@ describe("Config", () => {
         },
       })
       expect(migrated.providers?.["google-vertex-anthropic"]).toBeUndefined()
+    }),
+  )
+
+  it.effect("preserves the generated base URL for v1 Azure OpenAI-compatible providers", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        provider: {
+          "azure-cognitive-services": {
+            npm: "@ai-sdk/openai-compatible",
+            env: ["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "AZURE_COGNITIVE_SERVICES_API_KEY"],
+          },
+        },
+      })
+
+      expect(migrated.providers?.azure).toMatchObject({
+        env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
+        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+        settings: {
+          baseURL: "https://${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
+        },
+      })
     }),
   )
 

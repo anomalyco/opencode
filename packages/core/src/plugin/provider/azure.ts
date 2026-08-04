@@ -19,7 +19,9 @@ export const AzurePlugin = define({
         if (Provider.packageName(item.provider.package) !== "@ai-sdk/azure") continue
         const configured = item.provider.settings?.resourceName
         const resourceName =
-          typeof configured === "string" && configured.trim() !== "" ? configured : process.env.AZURE_RESOURCE_NAME
+          typeof configured === "string" && configured.trim() !== ""
+            ? configured
+            : (process.env.AZURE_RESOURCE_NAME ?? process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME)
         if (!resourceName) continue
         evt.provider.update(item.provider.id, (provider) => {
           provider.settings = { ...provider.settings, resourceName }
@@ -36,9 +38,7 @@ export const AzurePlugin = define({
             !evt.options.baseURL &&
             (!Provider.isAISDK(evt.model.package) || typeof evt.model.settings?.baseURL !== "string")
           ) {
-            throw new Error(
-              "AZURE_RESOURCE_NAME is missing, set it using env var or reconnecting the azure provider and setting it",
-            )
+            throw new Error("Azure resource name is missing; set AZURE_RESOURCE_NAME or configure resourceName/baseURL")
           }
         }
         const mod = yield* Effect.promise(() => import("@ai-sdk/azure"))
