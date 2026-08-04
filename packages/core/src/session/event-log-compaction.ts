@@ -48,7 +48,17 @@ export type Report = {
   readonly payloadBytesReclaimed: number
   readonly hasMore: boolean
   readonly continuation: string
+  readonly next?: { readonly cursor?: string; readonly afterSeq?: number }
   readonly byType: Readonly<Record<string, { readonly events: number; readonly payloadBytesReclaimed: number }>>
+}
+
+export type ReclaimReport = {
+  readonly backup?: string
+  readonly integrity: "ok"
+  readonly backupIntegrity?: "ok"
+  readonly bytesBefore: number
+  readonly bytesAfter: number
+  readonly bytesReclaimed: number
 }
 
 export type Status = {
@@ -165,6 +175,7 @@ const malformed = Effect.fn("SessionEventLogCompaction.malformed")(function* (
   db: Database.Interface["db"],
   aggregateID: string,
   afterSeq: number,
+  throughSeq?: number,
 ) {
   const row = yield* db
     .get<{ count: number }>(
@@ -172,6 +183,7 @@ const malformed = Effect.fn("SessionEventLogCompaction.malformed")(function* (
       SELECT count(*) AS count FROM event
       WHERE type IN (${policies[0].type}, ${policies[1].type}) AND NOT json_valid(data)
         AND aggregate_id = ${aggregateID} AND seq > ${afterSeq}
+        ${throughSeq === undefined ? sql`` : sql`AND seq <= ${throughSeq}`}
     `,
     )
     .pipe(Effect.orDie)
@@ -235,8 +247,14 @@ const compactAggregate = Effect.fn("SessionEventLogCompaction.compactAggregate")
 ) {
   const run = Effect.gen(function* () {
     const selected = yield* candidates(db, aggregateID, afterSeq, limit)
-    const result = report(selected, yield* malformed(db, aggregateID, afterSeq), aggregateID, apply, limit)
     const inspected = selected.slice(0, limit)
+    const result = report(
+      selected,
+      yield* malformed(db, aggregateID, afterSeq, inspected.at(-1)?.seq),
+      aggregateID,
+      apply,
+      limit,
+    )
     if (apply) {
       const eligible = inspected.filter(
         (candidate) =>
@@ -289,6 +307,7 @@ export const compact = Effect.fn("SessionEventLogCompaction.compact")(function* 
     const nextSeq = batch.result.hasMore ? batch.lastSeq : undefined
     return {
       ...batch.result,
+      next: nextSeq === undefined ? undefined : { afterSeq: nextSeq },
       continuation:
         !apply || nextSeq !== undefined
           ? command({
@@ -337,6 +356,7 @@ export const compact = Effect.fn("SessionEventLogCompaction.compact")(function* 
       const next = aggregates[index + 1]
       return {
         ...batch.result,
+        next: { cursor: aggregate.id, afterSeq: afterSeq < 0 ? undefined : afterSeq },
         hasMore: batch.result.hasMore || Boolean(next),
         continuation: command({
           all: true,
@@ -365,17 +385,26 @@ export const compact = Effect.fn("SessionEventLogCompaction.compact")(function* 
     }
 
     if (batch.result.hasMore) {
-      return combined(true, command({ all: true, cursor: aggregate.id, afterSeq: batch.lastSeq, apply: true, limit }))
+      return {
+        ...combined(true, command({ all: true, cursor: aggregate.id, afterSeq: batch.lastSeq, apply: true, limit })),
+        next: { cursor: aggregate.id, afterSeq: batch.lastSeq },
+      }
     }
 
     const next = aggregates[index + 1]
     if (remaining === 0) {
-      return combined(Boolean(next), next ? command({ all: true, cursor: next.id, apply: true, limit }) : "")
+      return {
+        ...combined(Boolean(next), next ? command({ all: true, cursor: next.id, apply: true, limit }) : ""),
+        next: next ? { cursor: next.id } : undefined,
+      }
     }
   }
 
   const next = aggregates[AGGREGATE_SCAN_LIMIT]
-  return combined(Boolean(next), next ? command({ all: true, cursor: next.id, apply, limit }) : "")
+  return {
+    ...combined(Boolean(next), next ? command({ all: true, cursor: next.id, apply, limit }) : ""),
+    next: next ? { cursor: next.id } : undefined,
+  }
 })
 
 export const status = Effect.fn("SessionEventLogCompaction.status")(function* (db: Database.Interface["db"]) {
@@ -391,4 +420,54 @@ export const status = Effect.fn("SessionEventLogCompaction.status")(function* (d
     .pipe(Effect.orDie)
   const result = row ?? { events: 0, payloadBytes: 0, compactableEvents: 0 }
   return { ...result, recommended: result.compactableEvents > DEFAULT_LIMIT } satisfies Status
+})
+
+const size = Effect.fn("SessionEventLogCompaction.size")(function* (db: Database.Interface["db"]) {
+  const row = yield* db
+    .get<{ pageCount: number; pageSize: number }>(
+      sql`
+      SELECT (SELECT page_count FROM pragma_page_count) AS pageCount,
+             (SELECT page_size FROM pragma_page_size) AS pageSize
+    `,
+    )
+    .pipe(Effect.orDie)
+  return (row?.pageCount ?? 0) * (row?.pageSize ?? 0)
+})
+
+const quickCheck = Effect.fn("SessionEventLogCompaction.quickCheck")(function* (
+  db: Database.Interface["db"],
+  schema?: string,
+) {
+  const rows = yield* db
+    .all<Record<string, string>>(sql.raw(`PRAGMA ${schema ? `${schema}.` : ""}quick_check`))
+    .pipe(Effect.orDie)
+  if (rows.length !== 1 || Object.values(rows[0])[0] !== "ok") {
+    throw new Error(`SQLite integrity check failed: ${JSON.stringify(rows)}`)
+  }
+})
+
+export const reclaim = Effect.fn("SessionEventLogCompaction.reclaim")(function* (
+  db: Database.Interface["db"],
+  backup?: string,
+) {
+  const bytesBefore = yield* size(db)
+  yield* quickCheck(db)
+  if (backup) {
+    yield* db.run(sql`VACUUM INTO ${backup}`).pipe(Effect.orDie)
+    yield* db.run(sql`ATTACH DATABASE ${backup} AS compaction_backup`).pipe(Effect.orDie)
+    yield* quickCheck(db, "compaction_backup").pipe(
+      Effect.ensuring(db.run(sql`DETACH DATABASE compaction_backup`).pipe(Effect.orDie)),
+    )
+  }
+  yield* db.run(sql`VACUUM`).pipe(Effect.orDie)
+  yield* quickCheck(db)
+  const bytesAfter = yield* size(db)
+  return {
+    backup,
+    integrity: "ok",
+    backupIntegrity: backup ? "ok" : undefined,
+    bytesBefore,
+    bytesAfter,
+    bytesReclaimed: bytesBefore - bytesAfter,
+  } satisfies ReclaimReport
 })

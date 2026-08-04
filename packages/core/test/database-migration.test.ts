@@ -29,6 +29,7 @@ import sessionMetadataMigration from "@opencode-ai/core/database/migration/20260
 import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionEventLogCompaction } from "@opencode-ai/core/session/event-log-compaction"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { tmpdir } from "./fixture/tmpdir"
 
@@ -60,6 +61,53 @@ describe("DatabaseMigration", () => {
     expect(value).toEqual({ value: "preserved" })
     expect(await readFile(filename)).toEqual(before)
     expect((await readdir(tmp.path)).sort()).toEqual(["readonly.sqlite"])
+  })
+
+  test("verifies a compact backup before vacuuming the source", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "source.sqlite")
+    const backup = path.join(tmp.path, "backup.sqlite")
+
+    const report = await Effect.runPromise(
+      Effect.scoped(
+        Database.Service.use(({ db }) =>
+          Effect.gen(function* () {
+            yield* db.run(sql`CREATE TABLE reclaim_test (data BLOB NOT NULL)`)
+            yield* db.run(sql`
+              WITH RECURSIVE rows(value) AS (
+                SELECT 1 UNION ALL SELECT value + 1 FROM rows WHERE value < 128
+              )
+              INSERT INTO reclaim_test SELECT zeroblob(4096) FROM rows
+            `)
+            yield* db.run(sql`DELETE FROM reclaim_test`)
+            return yield* SessionEventLogCompaction.reclaim(db, backup)
+          }),
+        ).pipe(Effect.provide(Database.layerFromPath(filename))),
+      ),
+    )
+
+    expect(report).toMatchObject({ backup, integrity: "ok", backupIntegrity: "ok" })
+    expect(report.bytesReclaimed).toBeGreaterThan(0)
+    expect((await readFile(backup)).byteLength).toBeGreaterThan(0)
+  })
+
+  test("holds an exclusive maintenance lock across transactions", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "exclusive.sqlite")
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Database.Service.use(({ db }) =>
+          Effect.gen(function* () {
+            yield* db.run(sql`CREATE TABLE maintenance_test (value INTEGER NOT NULL)`)
+            yield* Database.acquireExclusive(db)
+            const other = new BunDatabase(filename, { readwrite: true })
+            expect(() => other.run("INSERT INTO maintenance_test VALUES (1)")).toThrow()
+            other.close()
+          }),
+        ).pipe(Effect.provide(Database.layerFromPath(filename))),
+      ),
+    )
   })
 
   test("serializes concurrent embedded initialization for one database path", async () => {
