@@ -69,6 +69,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   let assistantActive = false
   let assistantFailed = false
   let providerFailed = false
+  let usableOutput = false
   let stepSettlement: { readonly finish: string; readonly tokens: ReturnType<typeof tokens> } | undefined
 
   const startAssistant = Effect.fnUntraced(function* () {
@@ -254,6 +255,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "text-delta":
         yield* text.append(event.id, event.text)
+        if (event.text.trim().length > 0) usableOutput = true
         yield* events.publish(SessionEvent.Text.Delta, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
@@ -311,6 +313,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* endToolInput(event)
         return
       case "tool-call": {
+        usableOutput = true
         if (!tools.has(event.id)) yield* startToolInput(event)
         const tool = tools.get(event.id)!
         if (!tool.inputEnded) yield* endToolInput(event)
@@ -416,6 +419,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     hasActiveAssistant: () => assistantActive,
     hasAssistantStarted: () => assistantMessageID !== undefined,
     hasProviderError: () => providerFailed,
+    hasUsableOutput: () => usableOutput,
     stepSettlement: () => stepSettlement,
     startAssistant,
     assistantMessageID: assistantMessageIDForTool,
