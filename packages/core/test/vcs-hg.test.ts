@@ -160,6 +160,7 @@ describeHg("Vcs mercurial", () => {
           await commitAll(directory, "feature change")
         })
         const diff = yield* vcs.diff("branch")
+        expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "default" } })
         expect(diff.map((item) => ({ file: item.file, status: item.status }))).toEqual([
           { file: "file.txt", status: "modified" },
         ])

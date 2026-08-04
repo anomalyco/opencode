@@ -4,7 +4,7 @@ import path from "path"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
-import { FileStatus, Mode } from "@opencode-ai/schema/vcs"
+import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { AppProcess } from "@opencode-ai/util/process"
 import type { DiffOptions, Interface } from "../vcs"
@@ -73,6 +73,9 @@ export function make(
   })
 
   return {
+    info: Effect.fn("VcsHg.info")(function* () {
+      return { branch: { current: yield* hg.branch(), default: "default" } } satisfies Info
+    }),
     status: Effect.fn("VcsHg.status")(function* () {
       const [items, batch] = yield* Effect.all(
         // Zero-context patches are enough to count changed lines.

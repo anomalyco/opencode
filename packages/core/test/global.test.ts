@@ -5,8 +5,8 @@ import path from "path"
 import { Global } from "@opencode-ai/util/global"
 
 describe("global paths", () => {
-  test("tmp path is under the system temp directory", () => {
-    expect(Global.Path.tmp).toBe(path.join(os.tmpdir(), "opencode"))
+  test("tmp path is the canonical system temp directory", async () => {
+    expect(Global.Path.tmp).toBe(await fs.realpath(path.join(os.tmpdir(), "opencode")))
     expect(Global.make().tmp).toBe(Global.Path.tmp)
   })
 

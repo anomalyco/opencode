@@ -887,6 +887,27 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("executes a tool renamed by a session context hook", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          event.tools.renamed_echo = event.tools.echo!
+          delete event.tools.echo
+        }),
+      )
+      yield* admit(session, "Use the renamed tool")
+      yield* TestLLM.push(TestLLM.tool("call-renamed", "renamed_echo", { text: "renamed" }), [])
+
+      yield* session.resume(sessionID)
+
+      expect(requests[0]?.tools.map((tool) => tool.name)).toContain("renamed_echo")
+      expect(requests[0]?.tools.map((tool) => tool.name)).not.toContain("echo")
+      expect(executions).toEqual(["renamed"])
+    }),
+  )
+
   it.effect("advertises and executes a location registered tool", () =>
     Effect.gen(function* () {
       const session = yield* setup

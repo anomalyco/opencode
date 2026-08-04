@@ -851,6 +851,16 @@
                       }
                     ]
                   },
+                  "title": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "agent": {
                     "anyOf": [
                       {
@@ -11301,6 +11311,104 @@
         }
       }
     },
+    "/api/vcs": {
+      "get": {
+        "tags": [
+          "vcs"
+        ],
+        "operationId": "v2.vcs.get",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.Info"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Vcs.Info"
+                    }
+                  },
+                  "required": [
+                    "location",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Get current and default branch information for the requested location.",
+        "summary": "VCS info"
+      }
+    },
     "/api/vcs/status": {
       "get": {
         "tags": [
@@ -12032,11 +12140,15 @@
               },
               "directory": {
                 "type": "string"
+              },
+              "canonical": {
+                "type": "string"
               }
             },
             "required": [
               "id",
-              "directory"
+              "directory",
+              "canonical"
             ],
             "additionalProperties": false
           }
@@ -12498,7 +12610,6 @@
           "cost",
           "tokens",
           "time",
-          "title",
           "location"
         ],
         "additionalProperties": false
@@ -13837,6 +13948,15 @@
           },
           "message": {
             "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 100,
+                "maximum": 599
+              }
+            ]
           }
         },
         "required": [
@@ -20765,7 +20885,7 @@
           "id": {
             "type": "string"
           },
-          "worktree": {
+          "canonical": {
             "type": "string"
           },
           "vcs": {
@@ -20792,7 +20912,7 @@
         },
         "required": [
           "id",
-          "worktree",
+          "canonical",
           "time",
           "sandboxes"
         ],
@@ -20806,11 +20926,15 @@
           },
           "directory": {
             "type": "string"
+          },
+          "canonical": {
+            "type": "string"
           }
         },
         "required": [
           "id",
-          "directory"
+          "directory",
+          "canonical"
         ],
         "additionalProperties": false
       },
@@ -22445,7 +22569,6 @@
           "slug",
           "projectID",
           "directory",
-          "title",
           "version",
           "time"
         ],
@@ -29124,6 +29247,30 @@
         "required": [
           "name",
           "data"
+        ],
+        "additionalProperties": false
+      },
+      "Vcs.Branch": {
+        "type": "object",
+        "properties": {
+          "current": {
+            "type": "string"
+          },
+          "default": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Vcs.Info": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "$ref": "#/components/schemas/Vcs.Branch"
+          }
+        },
+        "required": [
+          "branch"
         ],
         "additionalProperties": false
       },

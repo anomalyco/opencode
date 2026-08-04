@@ -1,10 +1,15 @@
 export * as Agent from "./agent"
 
+import path from "path"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Array, Context, Effect, Layer, Types } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
+import { Global } from "@opencode-ai/util/global"
 import { Bus } from "./bus"
 import { State } from "./state"
+
+const SHELL_OUTPUT_GLOB = (data: string) => path.join(data, "shell", "*", "*")
+const TOOL_OUTPUT_GLOB = (data: string) => path.join(data, "tool-output", "*")
 
 export const ID = Agent.ID
 export type ID = typeof ID.Type
@@ -51,6 +56,13 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const global = yield* Global.Service
+    const permissions: Info["permissions"] = [
+      { action: "external_directory", resource: SHELL_OUTPUT_GLOB(global.data), effect: "allow" },
+      { action: "external_directory", resource: TOOL_OUTPUT_GLOB(global.data), effect: "allow" },
+      { action: "external_directory", resource: path.join(global.tmp, "*"), effect: "allow" },
+      { action: "external_directory", resource: path.join(global.config, "*"), effect: "allow" },
+    ]
     const state = State.create<Data, Draft>({
       name: "agent",
       initial: () => ({ agents: new Map() }),
@@ -61,7 +73,13 @@ const layer = Layer.effect(
           draft.default = id
         },
         update: (id, fn) => {
-          const current = draft.agents.get(id) ?? (Info.default(id) as Types.DeepMutable<Info>)
+          const defaults = Info.default(id)
+          const current =
+            draft.agents.get(id) ??
+            ({
+              ...defaults,
+              permissions: [...defaults.permissions, ...permissions],
+            } as Types.DeepMutable<Info>)
           if (!draft.agents.has(id)) draft.agents.set(id, current)
           fn(current)
           current.id = id
@@ -114,4 +132,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node, Global.node] })

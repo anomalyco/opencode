@@ -81,8 +81,7 @@ current built-in actions use these resources:
 | `<server>_<tool>` | `*` for an MCP tool; unsupported characters in both names become `_` |
 | `execute` | `*`; controls availability of the Code Mode dispatcher, while each nested tool still enforces its own permission |
 
-Built-in agent policy also reserves `plan_enter` and `plan_exit` for plan-mode
-transitions. `doom_loop` and `lsp` are not current V2 Core permission actions.
+`doom_loop` and `lsp` are not current V2 Core permission actions.
 
 ## External directories
 
@@ -132,7 +131,9 @@ matching, so authorize only trusted directory boundaries.
 
 ## Defaults
 
-The evaluator's fallback is `ask`, but shipped agents include ordered defaults:
+Every agent, including custom agents, starts with ordered defaults that allow
+tools, ask for external directories, ask for `.env` reads, and allow
+`.env.example` reads. Shipped agents then add their own policies:
 
 | Agent | Effective default policy |
 | --- | --- |
@@ -153,8 +154,12 @@ The base read rules are ordered as follows:
 ]
 ```
 
-OpenCode also permits its managed tool-output and temporary directories where
-needed. These exceptions do not grant general external-directory access.
+OpenCode also permits its managed tool-output, shell-output, temporary, and
+global configuration directories. These exceptions apply only to the
+external-directory boundary for every agent; the underlying action still uses
+its own permission rules. The environment instructions identify the temporary
+directory available for work outside the workspace. Later global and
+agent-specific rules can override these defaults.
 
 ## Agent overrides
 

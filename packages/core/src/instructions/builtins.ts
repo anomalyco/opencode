@@ -2,6 +2,7 @@ export * as InstructionBuiltIns from "./builtins"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { Global } from "@opencode-ai/util/global"
 import { Location } from "../location"
 import { SessionSchema } from "../session/schema"
 import { Instructions } from "./index"
@@ -15,6 +16,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const global = yield* Global.Service
     const location = yield* Location.Service
     return Service.of({
       load: (sessionID) =>
@@ -31,6 +33,7 @@ const layer = Layer.effect(
                   `  Workspace root folder: ${location.project.directory}`,
                   `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
                   `  Platform: ${process.platform}`,
+                  `  Use ${global.tmp} for temporary work outside the workspace; it already exists and is pre-approved for external directory access.`,
                   "</env>",
                 ].join("\n"),
               ),
@@ -58,4 +61,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Location.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Global.node, Location.node] })
