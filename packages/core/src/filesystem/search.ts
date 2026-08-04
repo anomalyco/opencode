@@ -10,6 +10,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
+import { Protected } from "./protected"
 
 export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
@@ -33,11 +34,13 @@ export const ripgrepLayer = Layer.effect(
     const scope = yield* Scope.Scope
     const files: string[] = []
     const directories = new Set<string>()
+    const home = Protected.isHome(location.directory)
     yield* ripgrep
       .find({
         cwd: location.directory,
         pattern: "*",
-        limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
+        limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
+        exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
         onEntry: (entry) =>
           Effect.sync(() => {
             files.push(entry.path)
@@ -232,15 +235,16 @@ export const fffLayer = Layer.effect(
   }),
 )
 
-export const layer = (options?: Options) => Layer.unwrap(
-  Effect.gen(function* () {
-    if (options?.fff === false || (options?.fff === undefined && process.platform === "win32") || !Fff.available())
-      return ripgrepLayer
-    const location = yield* Location.Service
-    // Non-VCS locations can contain many repositories, so avoid eagerly content-indexing the entire aggregate tree.
-    return location.vcs ? fffLayer : ripgrepLayer
-  }),
-)
+export const layer = (options?: Options) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      if (options?.fff === false || (options?.fff === undefined && process.platform === "win32") || !Fff.available())
+        return ripgrepLayer
+      const location = yield* Location.Service
+      // Non-VCS locations can contain many repositories, so avoid eagerly content-indexing the entire aggregate tree.
+      return location.vcs && !Protected.isHome(location.directory) ? fffLayer : ripgrepLayer
+    }),
+  )
 
 export function configured(options?: Options) {
   return makeLocationNode({ service: Service, layer: layer(options), deps: [FSUtil.node, Location.node, Ripgrep.node] })

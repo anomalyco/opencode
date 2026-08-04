@@ -63,6 +63,29 @@ describe("Ripgrep", () => {
     ),
   )
 
+  it.live("excludes protected directory trees from catch-all find results", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "Pictures")))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "Pictures", "private.jpg"), "private\n"))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "visible.txt"), "visible\n"))
+
+          const files = yield* (yield* Ripgrep.Service).find({
+            cwd: tmp.path,
+            pattern: "*",
+            limit: 10,
+            exclude: ["Pictures/**"],
+          })
+
+          expect(files.map((item) => item.path)).toContain(RelativePath.make("visible.txt"))
+          expect(files.map((item) => item.path)).not.toContain(RelativePath.make("Pictures/private.jpg"))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("returns a bounded preview for matches on oversized lines", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
