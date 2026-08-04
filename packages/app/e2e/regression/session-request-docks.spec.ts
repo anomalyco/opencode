@@ -173,7 +173,6 @@ async function mockServer(
   },
 ) {
   await mockOpenCodeServer(page, {
-    protocol: "v2",
     directory,
     project: {
       id: projectID,

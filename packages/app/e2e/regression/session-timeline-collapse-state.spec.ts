@@ -52,7 +52,7 @@ const editPart = {
   sessionID,
   messageID: assistantMessageID,
   type: "tool",
-  callID: "call_edit_regression",
+  callID: editPartID,
   tool: "edit",
   state: {
     status: "completed",

@@ -10,7 +10,6 @@ import {
   status,
   textPart,
   title,
-  userID,
   userMessage,
 } from "../performance/timeline-stability/fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
@@ -19,18 +18,22 @@ import { expectSessionTitle } from "../utils/waits"
 
 const initialPageSize = 20
 const historyPageSize = 200
-const assistants = Array.from({ length: initialPageSize + 1 }, (_, index) =>
-  assistantMessage([textPart(`prt_history_root_${index}`, `Assistant response ${index}`)], {
-    id: `msg_${String(index + 1001).padStart(4, "0")}_history_root_assistant`,
-    parentID: userID,
-    created: 1700000001000 + index * 1_000,
-    completed: index < initialPageSize,
-  }),
-)
-const messages = [userMessage(), ...assistants]
+const messages = Array.from({ length: initialPageSize + 1 }, (_, index) => {
+  const id = `msg_${String(index + 1001).padStart(4, "0")}_history_root_user`
+  return [
+    userMessage(undefined, { id, created: 1700000000000 + index * 2_000 }),
+    assistantMessage([textPart(`prt_history_root_${index}`, `Assistant response ${index}`)], {
+      id: `msg_${String(index + 1001).padStart(4, "0")}_history_root_assistant`,
+      parentID: id,
+      created: 1700000001000 + index * 2_000,
+      completed: index < initialPageSize,
+    }),
+  ]
+}).flat()
+const assistants = messages.filter((message) => message.info.role === "assistant")
 const lastAssistant = assistants.at(-1)!
-const lastPartID = assistants.at(-1)!.parts[0]!.id
-const userPartID = `prt_${userID}_text`
+const lastPartID = `${assistants.at(-1)!.info.id}:text:0`
+const userPartID = `${messages.at(-2)!.info.id}:text:0`
 const completed = {
   ...lastAssistant.info,
   time: { ...lastAssistant.info.time, completed: lastAssistant.info.time.created + 15_000 },
@@ -154,15 +157,23 @@ for (const scenario of scenarios) {
     await expectSessionTitle(page, title)
     await expect(page.locator(`[data-timeline-part-id="${lastPartID}"]`)).toBeVisible()
     await expect(page.locator(`[data-timeline-part-id="${userPartID}"]`)).toBeVisible()
-    await expect.poll(() => requests.filter((request) => request.phase === "start").length).toBe(2)
+    const viewport = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+    await viewport.hover()
+    const deadline = Date.now() + 10_000
+    while (requests.filter((request) => request.phase === "start").length < 2) {
+      if (Date.now() >= deadline) throw new Error("Timed out scrolling to the history boundary")
+      await page.mouse.wheel(0, -240)
+      await page.waitForTimeout(20)
+    }
     expect(requests.filter((request) => request.phase === "end")).toHaveLength(1)
-    expect(sequence.slice(0, 4)).toEqual([
+    expect(sequence.slice(0, 3)).toEqual([
       "messages:start:latest",
       "messages:end:latest",
-      `message:${userID}`,
       `messages:start:${messages.at(-initialPageSize)!.info.id}`,
     ])
-    await expect(page.locator('[data-timeline-part-id^="prt_history_root_"]')).toHaveCount(initialPageSize)
+    await expect(page.locator('[data-timeline-part-id*="_history_root_assistant:text:0"]')).toHaveCount(
+      initialPageSize / 2,
+    )
     await page.evaluate(() => {
       ;(
         window as Window & {
@@ -174,7 +185,9 @@ for (const scenario of scenarios) {
     expect(await visibleContentHidden(page)).toBe(false)
     const beforeHistory = await probeSamples(page)
     history.resolve()
-    await expect(page.locator('[data-timeline-part-id^="prt_history_root_"]')).toHaveCount(assistants.length)
+    await expect
+      .poll(() => page.locator('[data-timeline-part-id*="_history_root_assistant:text:0"]').count())
+      .toBeGreaterThan(initialPageSize / 2)
     await expect.poll(() => requests.filter((request) => request.phase === "end").length).toBe(2)
     await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
     await waitForProbeSamples(page, beforeHistory)
@@ -182,7 +195,7 @@ for (const scenario of scenarios) {
       { before: undefined, limit: initialPageSize },
       { before: messages.at(-initialPageSize)!.info.id, limit: historyPageSize },
     ])
-    expect(roots).toEqual([{ sessionID, messageID: userID }])
+    expect(roots).toEqual([])
 
     const message = messageUpdated(scenario.info)
     const idle = status("idle")

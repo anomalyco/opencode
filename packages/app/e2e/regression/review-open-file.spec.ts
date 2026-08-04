@@ -127,7 +127,7 @@ test("opens and searches project files inline", async ({ page }) => {
   await expect(panel.getByRole("tab", { name: "nested.ts" })).toHaveAttribute("data-selected", "")
   await expect(sidebarToggle).toBeEnabled()
   await expect(panel.getByText("contents:src/nested.ts", { exact: true })).toBeVisible()
-  expect(searches).toContainEqual({ query: "nested", dirs: "false", limit: 200 })
+  expect(searches).toContainEqual({ query: "nested", dirs: "file", limit: 200 })
 
   await panel.getByRole("button", { name: "Open file" }).click()
   await expect(panel.getByRole("tab", { name: "nested.ts" })).toHaveCount(1)
