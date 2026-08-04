@@ -319,9 +319,17 @@ const layer = Layer.effect(
             yield* ensureToolCall(value)
             return
 
-          case "tool-input-delta":
-            yield* ensureToolCall(value)
+          case "tool-input-delta": {
+            const pending = yield* ensureToolCall(value)
+            yield* session.updatePartDelta({
+              sessionID: pending.part.sessionID,
+              messageID: pending.part.messageID,
+              partID: pending.part.id,
+              field: "raw",
+              delta: value.text,
+            })
             return
+          }
 
           case "tool-input-end": {
             yield* ensureToolCall(value)

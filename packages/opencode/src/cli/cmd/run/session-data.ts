@@ -25,6 +25,7 @@
 //   event arrives, the queue entry is removed and the footer falls back
 //   to the next pending request or to the prompt view.
 import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import { parseJSON } from "partial-json"
 import * as Locale from "@/util/locale"
 import { toolView } from "./tool"
 import type { FooterOutput, FooterPatch, FooterView, StreamCommit } from "./types"
@@ -54,6 +55,8 @@ type SessionCommit = StreamCommit
 //
 // - ids:    parts and error keys we've already committed (dedup guard)
 // - tools:  tool parts we've emitted a "start" for but not yet completed
+// - toolParts/toolRaw/toolPreview: pending mutation input streamed to scrollback
+// - toolDiff: edit previews already emitted for running tools
 // - call:   tool call inputs, keyed by msg:call, for enriching permission views
 // - role:   message ID → "assistant" | "user", learned from message.updated
 // - msg:    part ID → message ID
@@ -74,6 +77,10 @@ export type SessionData = {
   announced: boolean
   ids: Set<string>
   tools: Set<string>
+  toolParts: Map<string, ToolPart>
+  toolRaw: Map<string, string>
+  toolPreview: Map<string, string>
+  toolDiff: Set<string>
   call: Map<string, Dict>
   shell: Map<string, ShellCall>
   permissions: PermissionRequest[]
@@ -112,6 +119,10 @@ export function createSessionData(
     announced: false,
     ids: new Set(),
     tools: new Set(),
+    toolParts: new Map(),
+    toolRaw: new Map(),
+    toolPreview: new Map(),
+    toolDiff: new Set(),
     call: new Map(),
     shell: new Map(),
     permissions: [],
@@ -634,6 +645,45 @@ function toolCommit(
   }
 }
 
+function partialTool(part: ToolPart, raw: string): ToolPart {
+  if (part.state.status !== "pending") return part
+
+  try {
+    const input = parseJSON(raw)
+    if (!input || typeof input !== "object" || Array.isArray(input)) return part
+    return {
+      ...part,
+      state: {
+        ...part.state,
+        input: { ...input },
+        raw,
+      },
+    }
+  } catch {
+    return part
+  }
+}
+
+function toolPreview(part: ToolPart): string {
+  if (part.state.status !== "pending") return ""
+  if (part.tool === "write") {
+    const content = part.state.input.content
+    return typeof content === "string" ? content : ""
+  }
+  if (part.tool === "apply_patch") {
+    const patch = part.state.input.patchText
+    return typeof patch === "string" ? patch : ""
+  }
+  return ""
+}
+
+function clearToolPreview(data: SessionData, partID: string) {
+  data.toolParts.delete(partID)
+  data.toolRaw.delete(partID)
+  data.toolPreview.delete(partID)
+  data.toolDiff.delete(partID)
+}
+
 function shellPartID(callID: string): string {
   return `shell:${callID}`
 }
@@ -882,6 +932,29 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       return out(data, commits)
     }
 
+    if (event.properties.field === "raw") {
+      const part = data.toolParts.get(event.properties.partID)
+      if (!part || part.state.status !== "pending") return out(data, commits)
+
+      const raw = (data.toolRaw.get(part.id) ?? "") + event.properties.delta
+      data.toolRaw.set(part.id, raw)
+      const next = partialTool(part, raw)
+      data.toolParts.set(part.id, next)
+      const preview = toolPreview(next)
+      const sent = data.toolPreview.get(part.id) ?? ""
+      if (!preview.startsWith(sent) || preview.length === sent.length) return out(data, commits)
+
+      data.toolPreview.set(part.id, preview)
+      commits.push(
+        toolCommit(next, {
+          text: preview.slice(sent.length),
+          phase: "progress",
+          toolState: "running",
+        }),
+      )
+      return out(data, commits)
+    }
+
     if (event.properties.field !== "text") {
       return out(data, commits)
     }
@@ -929,7 +1002,14 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
         }
       }
 
+      if (part.state.status === "pending") {
+        data.toolParts.set(part.id, part)
+        return out(data, commits, view)
+      }
+
       if (part.state.status === "running") {
+        data.toolParts.delete(part.id)
+        data.toolRaw.delete(part.id)
         if (data.ids.has(part.id)) {
           return out(data, commits, view)
         }
@@ -939,10 +1019,24 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
           commits.push(startTool(part))
         }
 
+        const diff =
+          part.tool === "edit" && typeof part.state.metadata?.diff === "string" ? part.state.metadata.diff : ""
+        if (diff && !data.toolDiff.has(part.id)) {
+          data.toolDiff.add(part.id)
+          commits.push(
+            toolCommit(part, {
+              text: diff,
+              phase: "progress",
+              toolState: "running",
+            }),
+          )
+        }
+
         return out(data, commits, view ?? patch({ status: toolStatus(part) }))
       }
 
       if (part.state.status === "completed") {
+        clearToolPreview(data, part.id)
         const seen = data.tools.has(part.id)
         const mode = toolView(part.tool)
         data.tools.delete(part.id)
@@ -980,6 +1074,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       }
 
       if (part.state.status === "error") {
+        clearToolPreview(data, part.id)
         const seen = data.tools.has(part.id)
         data.tools.delete(part.id)
         if (data.ids.has(part.id)) {

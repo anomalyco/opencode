@@ -1433,6 +1433,23 @@ export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody |
   const ctx = toolFrame(commit, raw)
   const view = toolView(ctx.name)
 
+  if (commit.phase === "progress" && ctx.name === "write") {
+    const file = text(ctx.input.filePath) || text(ctx.input.path)
+    return {
+      type: "code",
+      content: raw,
+      filetype: toolFiletype(file),
+    }
+  }
+
+  if (commit.phase === "progress" && (ctx.name === "edit" || ctx.name === "apply_patch")) {
+    return {
+      type: "code",
+      content: raw,
+      filetype: "diff",
+    }
+  }
+
   if (ctx.name === "task") {
     if (commit.phase === "start") {
       return undefined

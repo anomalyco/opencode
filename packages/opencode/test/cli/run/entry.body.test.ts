@@ -50,6 +50,40 @@ function structured(next: StreamCommit) {
 }
 
 describe("run entry body", () => {
+  test("renders live file mutations as streaming code", () => {
+    expect(
+      entryBody(
+        toolCommit({
+          tool: "write",
+          phase: "progress",
+          toolState: "running",
+          text: "const answer = ",
+          state: {
+            status: "pending",
+            input: { filePath: "src/a.ts", content: "const answer = " },
+            raw: "",
+          },
+        }),
+      ),
+    ).toEqual({ type: "code", content: "const answer = ", filetype: "typescript" })
+
+    expect(
+      entryBody(
+        toolCommit({
+          tool: "apply_patch",
+          phase: "progress",
+          toolState: "running",
+          text: "@@ -1 +1 @@\n-old\n+new",
+          state: {
+            status: "pending",
+            input: { patchText: "@@ -1 +1 @@\n-old\n+new" },
+            raw: "",
+          },
+        }),
+      ),
+    ).toEqual({ type: "code", content: "@@ -1 +1 @@\n-old\n+new", filetype: "diff" })
+  })
+
   test("renders assistant, reasoning, and user entries in their display formats", () => {
     expect(
       entryBody(

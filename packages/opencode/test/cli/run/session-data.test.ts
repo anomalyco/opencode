@@ -93,6 +93,19 @@ function delta(messageID: string, partID: string, value: string) {
   }
 }
 
+function rawDelta(messageID: string, partID: string, value: string) {
+  return {
+    type: "message.part.delta",
+    properties: {
+      sessionID: "session-1",
+      messageID,
+      partID,
+      field: "raw",
+      delta: value,
+    },
+  }
+}
+
 function tool(input: { id: string; messageID: string; tool: string; state: Record<string, unknown>; callID?: string }) {
   return {
     type: "message.part.updated",
@@ -111,6 +124,57 @@ function tool(input: { id: string; messageID: string; tool: string; state: Recor
 }
 
 describe("run session data", () => {
+  test("streams write content from partial tool input", () => {
+    let data = createSessionData()
+    data = reduce(
+      data,
+      tool({
+        id: "write-1",
+        messageID: "msg-1",
+        tool: "write",
+        state: { status: "pending", input: {}, raw: "" },
+      }),
+    ).data
+
+    let out = reduce(data, rawDelta("msg-1", "write-1", '{"filePath":"src/a.ts","content":"hel'))
+    expect(out.commits).toEqual([
+      expect.objectContaining({
+        kind: "tool",
+        text: "hel",
+        phase: "progress",
+        toolState: "running",
+        part: expect.objectContaining({
+          state: expect.objectContaining({ input: { filePath: "src/a.ts", content: "hel" } }),
+        }),
+      }),
+    ])
+
+    out = reduce(out.data, rawDelta("msg-1", "write-1", 'lo\\nworld"}'))
+    expect(out.commits).toEqual([expect.objectContaining({ text: "lo\nworld" })])
+  })
+
+  test("streams a prepared edit diff while the tool is running", () => {
+    const out = reduce(
+      createSessionData(),
+      tool({
+        id: "edit-1",
+        messageID: "msg-1",
+        tool: "edit",
+        state: {
+          status: "running",
+          input: { filePath: "src/a.ts" },
+          metadata: { diff: "@@ -1 +1 @@\n-old\n+new" },
+          time: { start: 1 },
+        },
+      }),
+    )
+
+    expect(out.commits).toEqual([
+      expect.objectContaining({ phase: "start", toolState: "running" }),
+      expect.objectContaining({ text: "@@ -1 +1 @@\n-old\n+new", phase: "progress", toolState: "running" }),
+    ])
+  })
+
   test("buffers delayed assistant text until the role is known", () => {
     let data = createSessionData()
     data = reduce(data, delta("msg-1", "txt-1", "hello")).data
