@@ -172,7 +172,9 @@ test("directory navigation hint is available in every app locale", async () => {
   const key = "dialog.directory.navigationHint"
   for (const locale of ["en", ...appLocales]) {
     const target = await dictionary(`./${locale}.ts`)
-    expect({ locale, value: target[key] }).toEqual({ locale, value: expect.any(String) })
+    const value = target[key]
+    expect({ locale, value }).toEqual({ locale, value: expect.any(String) })
+    expect({ locale, value: value.trim() }).toEqual({ locale, value: expect.stringMatching(/\S/) })
   }
 })
 
