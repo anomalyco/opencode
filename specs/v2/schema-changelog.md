@@ -1,5 +1,12 @@
 # V2 Schema Changelog
 
+## 2026-08-04: Add Question Option Previews
+
+- Add optional `preview` to `QuestionV2.Option` and the V1 `QuestionOption`, carrying plain monospace text for an option.
+- Normalize previews at the question tool boundary: strip markdown fences, ANSI escapes, and control characters, then truncate past 2000 characters rather than failing the call.
+- Drop previews for `multiple` questions at the source, so no surface has to decide whether a preview applies.
+- Add no migration and no event version; the field is additive and optional, and clients that ignore it render exactly as before.
+
 ## 2026-06-26: Add Finite Session History
 
 - Add `GET /api/session/:sessionID/history` and generated Promise, Effect, and legacy JavaScript client methods.

@@ -1,7 +1,8 @@
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
+import { previewLayout, previewLines } from "@opencode-ai/core/question"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
@@ -10,6 +11,25 @@ import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
 
 const QUESTION_MODE = "question"
+
+function PreviewPane(props: { text?: string; fallback?: string; width: number; rows: number }) {
+  const { theme } = useTheme()
+  const body = createMemo(() => props.text ?? props.fallback ?? "")
+  const lines = createMemo(() => (body() ? previewLines(body(), props.width, props.rows) : []))
+
+  return (
+    <box
+      width={props.width + 2}
+      height={props.rows}
+      flexShrink={0}
+      border={["left"]}
+      borderColor={theme.border}
+      paddingLeft={1}
+    >
+      <For each={lines()}>{(line) => <text fg={props.text ? theme.text : theme.textMuted}>{line}</text>}</For>
+    </box>
+  )
+}
 
 export function QuestionPrompt(props: { request: QuestionRequest; directory?: string }) {
   const sdk = useSDK()
@@ -44,6 +64,16 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     if (!value) return false
     return store.answers[store.tab]?.includes(value) ?? false
   })
+
+  // Previews are honored only for single-select questions: with several options
+  // active at once there is no focused option for the pane to track.
+  const previewed = createMemo(() => !multi() && options().some((opt) => Boolean(opt.preview)))
+  const focused = createMemo(() => (other() ? undefined : options()[store.selected]))
+  const dimensions = useTerminalDimensions()
+  // Chrome: outer border (1) + panel padding (1 left, 3 right) + content padding (1).
+  const layout = createMemo(() =>
+    previewLayout({ width: dimensions().width, height: dimensions().height, previewed: previewed() }),
+  )
 
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
@@ -360,97 +390,107 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                 {multi() ? " (select all that apply)" : ""}
               </text>
             </box>
-            <box>
-              <For each={options()}>
-                {(opt, i) => {
-                  const active = () => i() === store.selected
-                  const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
-                  return (
-                    <box
-                      onMouseOver={() => moveTo(i())}
-                      onMouseDown={() => moveTo(i())}
-                      onMouseUp={() => {
-                        if (renderer.getSelection()?.getSelectedText()) return
-                        selectOption()
-                      }}
-                    >
-                      <box flexDirection="row">
-                        <box backgroundColor={active() ? theme.backgroundElement : undefined} paddingRight={1}>
-                          <text fg={active() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
-                            {`${i() + 1}.`}
-                          </text>
+            <box flexDirection={layout().twoPane ? "row" : "column"} gap={layout().twoPane ? 2 : 1}>
+              <box width={layout().twoPane ? layout().listWidth : undefined} flexShrink={0}>
+                <For each={options()}>
+                  {(opt, i) => {
+                    const active = () => i() === store.selected
+                    const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+                    return (
+                      <box
+                        onMouseOver={() => moveTo(i())}
+                        onMouseDown={() => moveTo(i())}
+                        onMouseUp={() => {
+                          if (renderer.getSelection()?.getSelectedText()) return
+                          selectOption()
+                        }}
+                      >
+                        <box flexDirection="row">
+                          <box backgroundColor={active() ? theme.backgroundElement : undefined} paddingRight={1}>
+                            <text fg={active() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
+                              {`${i() + 1}.`}
+                            </text>
+                          </box>
+                          <box backgroundColor={active() ? theme.backgroundElement : undefined}>
+                            <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
+                              {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
+                            </text>
+                          </box>
+                          <Show when={!multi()}>
+                            <text fg={theme.success}>{picked() ? " ✓" : ""}</text>
+                          </Show>
                         </box>
-                        <box backgroundColor={active() ? theme.backgroundElement : undefined}>
-                          <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
-                          </text>
-                        </box>
-                        <Show when={!multi()}>
-                          <text fg={theme.success}>{picked() ? " ✓" : ""}</text>
-                        </Show>
-                      </box>
 
-                      <box paddingLeft={3}>
-                        <text fg={theme.textMuted}>{opt.description}</text>
+                        <box paddingLeft={3}>
+                          <text fg={theme.textMuted}>{opt.description}</text>
+                        </box>
                       </box>
-                    </box>
-                  )
-                }}
-              </For>
-              <Show when={custom()}>
-                <box
-                  onMouseOver={() => moveTo(options().length)}
-                  onMouseDown={() => moveTo(options().length)}
-                  onMouseUp={() => {
-                    if (renderer.getSelection()?.getSelectedText()) return
-                    selectOption()
+                    )
                   }}
-                >
-                  <box flexDirection="row">
-                    <box backgroundColor={other() ? theme.backgroundElement : undefined} paddingRight={1}>
-                      <text fg={other() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
-                        {`${options().length + 1}.`}
-                      </text>
-                    </box>
-                    <box backgroundColor={other() ? theme.backgroundElement : undefined}>
-                      <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
-                      </text>
-                    </box>
+                </For>
+                <Show when={custom()}>
+                  <box
+                    onMouseOver={() => moveTo(options().length)}
+                    onMouseDown={() => moveTo(options().length)}
+                    onMouseUp={() => {
+                      if (renderer.getSelection()?.getSelectedText()) return
+                      selectOption()
+                    }}
+                  >
+                    <box flexDirection="row">
+                      <box backgroundColor={other() ? theme.backgroundElement : undefined} paddingRight={1}>
+                        <text fg={other() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
+                          {`${options().length + 1}.`}
+                        </text>
+                      </box>
+                      <box backgroundColor={other() ? theme.backgroundElement : undefined}>
+                        <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
+                          {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
+                        </text>
+                      </box>
 
-                    <Show when={!multi()}>
-                      <text fg={theme.success}>{customPicked() ? " ✓" : ""}</text>
+                      <Show when={!multi()}>
+                        <text fg={theme.success}>{customPicked() ? " ✓" : ""}</text>
+                      </Show>
+                    </box>
+                    <Show when={store.editing}>
+                      <box paddingLeft={3}>
+                        <textarea
+                          ref={(val: TextareaRenderable) => {
+                            textarea = val
+                            val.traits = { status: "ANSWER" }
+                            queueMicrotask(() => {
+                              val.focus()
+                              val.gotoLineEnd()
+                            })
+                          }}
+                          initialValue={input()}
+                          placeholder="Type your own answer"
+                          placeholderColor={theme.textMuted}
+                          minHeight={1}
+                          maxHeight={6}
+                          textColor={theme.text}
+                          focusedTextColor={theme.text}
+                          cursorColor={theme.primary}
+                          cursorStyle={tuiConfig.cursor}
+                        />
+                      </box>
+                    </Show>
+                    <Show when={!store.editing && input()}>
+                      <box paddingLeft={3}>
+                        <text fg={theme.textMuted}>{input()}</text>
+                      </box>
                     </Show>
                   </box>
-                  <Show when={store.editing}>
-                    <box paddingLeft={3}>
-                      <textarea
-                        ref={(val: TextareaRenderable) => {
-                          textarea = val
-                          val.traits = { status: "ANSWER" }
-                          queueMicrotask(() => {
-                            val.focus()
-                            val.gotoLineEnd()
-                          })
-                        }}
-                        initialValue={input()}
-                        placeholder="Type your own answer"
-                        placeholderColor={theme.textMuted}
-                        minHeight={1}
-                        maxHeight={6}
-                        textColor={theme.text}
-                        focusedTextColor={theme.text}
-                        cursorColor={theme.primary}
-                        cursorStyle={tuiConfig.cursor}
-                      />
-                    </box>
-                  </Show>
-                  <Show when={!store.editing && input()}>
-                    <box paddingLeft={3}>
-                      <text fg={theme.textMuted}>{input()}</text>
-                    </box>
-                  </Show>
-                </box>
+                </Show>
+              </box>
+              <Show when={previewed()}>
+                <PreviewPane
+                  text={focused()?.preview}
+                  fallback={focused()?.description}
+                  width={layout().previewWidth}
+                  rows={layout().rows}
+                />
               </Show>
             </box>
           </box>

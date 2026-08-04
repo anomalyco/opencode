@@ -17346,6 +17346,9 @@
           "description": {
             "type": "string",
             "description": "Explanation of choice"
+          },
+          "preview": {
+            "type": "string"
           }
         },
         "required": ["label", "description"],
@@ -24785,6 +24788,9 @@
           "description": {
             "type": "string",
             "description": "Explanation of choice"
+          },
+          "preview": {
+            "type": "string"
           }
         },
         "required": ["label", "description"],

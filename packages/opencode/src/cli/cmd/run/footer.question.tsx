@@ -17,6 +17,7 @@ import type { TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
+import { Question as QuestionSchema } from "@opencode-ai/schema/question"
 import {
   createQuestionBodyState,
   questionConfirm,
@@ -44,6 +45,24 @@ import { footerWidthPolicy } from "./footer.width"
 import type { RunFooterTheme } from "./theme"
 import type { QuestionReject, QuestionReply } from "./types"
 
+function PreviewPane(props: { text?: string; fallback?: string; width: number; rows: number; theme: RunFooterTheme }) {
+  const body = createMemo(() => props.text ?? props.fallback ?? "")
+  const lines = createMemo(() => (body() ? QuestionSchema.previewLines(body(), props.width, props.rows) : []))
+
+  return (
+    <box
+      width={props.width + 2}
+      height={props.rows}
+      flexShrink={0}
+      border={["left"]}
+      borderColor={props.theme.line}
+      paddingLeft={1}
+    >
+      <For each={lines()}>{(line) => <text fg={props.text ? props.theme.text : props.theme.muted}>{line}</text>}</For>
+    </box>
+  )
+}
+
 export function RunQuestionBody(props: {
   request: QuestionRequest
   theme: RunFooterTheme
@@ -60,6 +79,17 @@ export function RunQuestionBody(props: {
   const picked = createMemo(() => questionPicked(state()))
   const disabled = createMemo(() => state().submitting)
   const narrow = createMemo(() => footerWidthPolicy(dims().width).dialog.narrow)
+  // Previews are honored only for single-select questions: with several options
+  // active at once there is no focused option for the pane to track.
+  const previewed = createMemo(() => {
+    const current = info()
+    if (!current || current.multiple === true) return false
+    return current.options.some((opt) => Boolean(opt.preview))
+  })
+  const focused = createMemo(() => (other() ? undefined : info()?.options[state().selected]))
+  const layout = createMemo(() =>
+    QuestionSchema.previewLayout({ width: dims().width, height: dims().height, previewed: previewed() }),
+  )
   const verb = createMemo(() => {
     if (confirm()) {
       return "submit"
@@ -361,151 +391,174 @@ export function RunQuestionBody(props: {
               </text>
             </box>
 
-            <box flexGrow={1} flexShrink={1}>
-              <scrollbox
-                width="100%"
+            <box
+              flexGrow={1}
+              flexShrink={1}
+              flexDirection={layout().twoPane ? "row" : "column"}
+              gap={layout().twoPane ? 2 : 0}
+            >
+              <box
+                width={layout().twoPane ? layout().listWidth : undefined}
+                flexGrow={layout().twoPane ? 0 : 1}
+                flexShrink={1}
                 height="100%"
-                verticalScrollbarOptions={{
-                  trackOptions: {
-                    backgroundColor: props.theme.surface,
-                    foregroundColor: props.theme.line,
-                  },
-                }}
               >
-                <box width="100%" flexDirection="column">
-                  <For each={info()?.options ?? []}>
-                    {(item, index) => {
-                      const active = () => state().selected === index()
-                      const hit = () => state().answers[state().tab]?.includes(item.label) ?? false
-                      return (
-                        <box
-                          flexDirection="column"
-                          gap={0}
-                          onMouseOver={() => {
-                            if (!disabled()) {
-                              mark(index())
-                            }
-                          }}
-                          onMouseDown={() => {
-                            if (!disabled()) {
-                              mark(index())
-                            }
-                          }}
-                          onMouseUp={() => {
-                            if (!disabled()) {
-                              choose(index())
-                            }
-                          }}
-                        >
-                          <box flexDirection="row">
-                            <box backgroundColor={active() ? props.theme.line : undefined} paddingRight={1}>
-                              <text fg={active() ? props.theme.highlight : props.theme.muted}>{`${index() + 1}.`}</text>
-                            </box>
-                            <box backgroundColor={active() ? props.theme.line : undefined}>
-                              <text
-                                fg={active() ? props.theme.highlight : hit() ? props.theme.success : props.theme.text}
-                              >
-                                {info()?.multiple ? `[${hit() ? "✓" : " "}] ${item.label}` : item.label}
-                              </text>
-                            </box>
-                            <Show when={!info()?.multiple}>
-                              <text fg={props.theme.success}>{hit() ? " ✓" : ""}</text>
-                            </Show>
-                          </box>
-                          <box paddingLeft={3}>
-                            <text fg={props.theme.muted} wrapMode="word">
-                              {item.description}
-                            </text>
-                          </box>
-                        </box>
-                      )
-                    }}
-                  </For>
-
-                  <Show when={questionCustom(props.request, state())}>
-                    <box
-                      flexDirection="column"
-                      gap={0}
-                      onMouseOver={() => {
-                        if (!disabled()) {
-                          mark(info()?.options.length ?? 0)
-                        }
-                      }}
-                      onMouseDown={() => {
-                        if (!disabled()) {
-                          mark(info()?.options.length ?? 0)
-                        }
-                      }}
-                      onMouseUp={() => {
-                        if (!disabled()) {
-                          choose(info()?.options.length ?? 0)
-                        }
-                      }}
-                    >
-                      <box flexDirection="row">
-                        <box backgroundColor={other() ? props.theme.line : undefined} paddingRight={1}>
-                          <text
-                            fg={other() ? props.theme.highlight : props.theme.muted}
-                          >{`${(info()?.options.length ?? 0) + 1}.`}</text>
-                        </box>
-                        <box backgroundColor={other() ? props.theme.line : undefined}>
-                          <text
-                            fg={other() ? props.theme.highlight : picked() ? props.theme.success : props.theme.text}
+                <scrollbox
+                  width="100%"
+                  height="100%"
+                  verticalScrollbarOptions={{
+                    trackOptions: {
+                      backgroundColor: props.theme.surface,
+                      foregroundColor: props.theme.line,
+                    },
+                  }}
+                >
+                  <box width="100%" flexDirection="column">
+                    <For each={info()?.options ?? []}>
+                      {(item, index) => {
+                        const active = () => state().selected === index()
+                        const hit = () => state().answers[state().tab]?.includes(item.label) ?? false
+                        return (
+                          <box
+                            flexDirection="column"
+                            gap={0}
+                            onMouseOver={() => {
+                              if (!disabled()) {
+                                mark(index())
+                              }
+                            }}
+                            onMouseDown={() => {
+                              if (!disabled()) {
+                                mark(index())
+                              }
+                            }}
+                            onMouseUp={() => {
+                              if (!disabled()) {
+                                choose(index())
+                              }
+                            }}
                           >
-                            {info()?.multiple
-                              ? `[${picked() ? "✓" : " "}] Type your own answer`
-                              : "Type your own answer"}
-                          </text>
-                        </box>
-                        <Show when={!info()?.multiple}>
-                          <text fg={props.theme.success}>{picked() ? " ✓" : ""}</text>
-                        </Show>
-                      </box>
-                      <Show
-                        when={state().editing}
-                        fallback={
-                          <Show when={input()}>
+                            <box flexDirection="row">
+                              <box backgroundColor={active() ? props.theme.line : undefined} paddingRight={1}>
+                                <text
+                                  fg={active() ? props.theme.highlight : props.theme.muted}
+                                >{`${index() + 1}.`}</text>
+                              </box>
+                              <box backgroundColor={active() ? props.theme.line : undefined}>
+                                <text
+                                  fg={active() ? props.theme.highlight : hit() ? props.theme.success : props.theme.text}
+                                >
+                                  {info()?.multiple ? `[${hit() ? "✓" : " "}] ${item.label}` : item.label}
+                                </text>
+                              </box>
+                              <Show when={!info()?.multiple}>
+                                <text fg={props.theme.success}>{hit() ? " ✓" : ""}</text>
+                              </Show>
+                            </box>
                             <box paddingLeft={3}>
                               <text fg={props.theme.muted} wrapMode="word">
-                                {input()}
+                                {item.description}
                               </text>
                             </box>
-                          </Show>
-                        }
-                      >
-                        <box paddingLeft={3}>
-                          <textarea
-                            width="100%"
-                            minHeight={1}
-                            maxHeight={4}
-                            wrapMode="word"
-                            placeholder="Type your own answer"
-                            placeholderColor={props.theme.muted}
-                            textColor={props.theme.text}
-                            focusedTextColor={props.theme.text}
-                            backgroundColor={props.theme.surface}
-                            focusedBackgroundColor={props.theme.surface}
-                            cursorColor={props.theme.text}
-                            focused={!disabled()}
-                            onSubmit={saveCustom}
-                            onContentChange={() => {
-                              if (!area || area.isDestroyed || disabled()) {
-                                return
-                              }
+                          </box>
+                        )
+                      }}
+                    </For>
 
-                              const text = area.plainText
-                              setState((prev) => questionStoreCustom(prev, prev.tab, text))
-                            }}
-                            ref={(item) => {
-                              area = item
-                            }}
-                          />
+                    <Show when={questionCustom(props.request, state())}>
+                      <box
+                        flexDirection="column"
+                        gap={0}
+                        onMouseOver={() => {
+                          if (!disabled()) {
+                            mark(info()?.options.length ?? 0)
+                          }
+                        }}
+                        onMouseDown={() => {
+                          if (!disabled()) {
+                            mark(info()?.options.length ?? 0)
+                          }
+                        }}
+                        onMouseUp={() => {
+                          if (!disabled()) {
+                            choose(info()?.options.length ?? 0)
+                          }
+                        }}
+                      >
+                        <box flexDirection="row">
+                          <box backgroundColor={other() ? props.theme.line : undefined} paddingRight={1}>
+                            <text
+                              fg={other() ? props.theme.highlight : props.theme.muted}
+                            >{`${(info()?.options.length ?? 0) + 1}.`}</text>
+                          </box>
+                          <box backgroundColor={other() ? props.theme.line : undefined}>
+                            <text
+                              fg={other() ? props.theme.highlight : picked() ? props.theme.success : props.theme.text}
+                            >
+                              {info()?.multiple
+                                ? `[${picked() ? "✓" : " "}] Type your own answer`
+                                : "Type your own answer"}
+                            </text>
+                          </box>
+                          <Show when={!info()?.multiple}>
+                            <text fg={props.theme.success}>{picked() ? " ✓" : ""}</text>
+                          </Show>
                         </box>
-                      </Show>
-                    </box>
-                  </Show>
-                </box>
-              </scrollbox>
+                        <Show
+                          when={state().editing}
+                          fallback={
+                            <Show when={input()}>
+                              <box paddingLeft={3}>
+                                <text fg={props.theme.muted} wrapMode="word">
+                                  {input()}
+                                </text>
+                              </box>
+                            </Show>
+                          }
+                        >
+                          <box paddingLeft={3}>
+                            <textarea
+                              width="100%"
+                              minHeight={1}
+                              maxHeight={4}
+                              wrapMode="word"
+                              placeholder="Type your own answer"
+                              placeholderColor={props.theme.muted}
+                              textColor={props.theme.text}
+                              focusedTextColor={props.theme.text}
+                              backgroundColor={props.theme.surface}
+                              focusedBackgroundColor={props.theme.surface}
+                              cursorColor={props.theme.text}
+                              focused={!disabled()}
+                              onSubmit={saveCustom}
+                              onContentChange={() => {
+                                if (!area || area.isDestroyed || disabled()) {
+                                  return
+                                }
+
+                                const text = area.plainText
+                                setState((prev) => questionStoreCustom(prev, prev.tab, text))
+                              }}
+                              ref={(item) => {
+                                area = item
+                              }}
+                            />
+                          </box>
+                        </Show>
+                      </box>
+                    </Show>
+                  </box>
+                </scrollbox>
+              </box>
+              <Show when={previewed()}>
+                <PreviewPane
+                  text={focused()?.preview}
+                  fallback={focused()?.description}
+                  width={layout().previewWidth}
+                  rows={layout().rows}
+                  theme={props.theme}
+                />
+              </Show>
             </box>
           </box>
         </Show>

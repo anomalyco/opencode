@@ -20,7 +20,20 @@ export const description = `Use this tool when you need to ask the user question
 Usage notes:
 - When \`custom\` is enabled (default), a "Type your own answer" option is added automatically; don't include "Other" or catch-all options
 - Answers are returned as arrays of labels; set \`multiple: true\` to allow selecting more than one
-- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label`
+- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label
+
+Previews:
+Each option accepts an optional \`preview\`: a block of plain monospace text shown beside the option list as the user moves the selection. Use it when the choice is between concrete comparable artifacts that a one-line description cannot convey:
+- competing layouts or UI mockups drawn as ASCII
+- two implementations of the same function
+- config, schema or API shape variants
+- directory structures
+Rules:
+- Do NOT use \`preview\` for simple preference questions where \`label\` and \`description\` already say everything — an unnecessary preview pane is noise
+- Previews are ignored when \`multiple\` is true, since no single option is focused
+- Content is rendered verbatim in a fixed-width pane: no markdown, no HTML, no ANSI colors. Don't wrap it in a code fence
+- Keep previews under 2000 characters and lines short; longer content is truncated
+- Previews replace dumping the variants into your message text before asking — when you use one, don't repeat the same content in prose`
 
 export const Input = Schema.Struct({
   questions: Schema.Array(QuestionV2.Prompt).annotate({ description: "Questions to ask" }),
@@ -30,6 +43,16 @@ export const Output = Schema.Struct({
   answers: Schema.Array(QuestionV2.Answer),
 })
 export type Output = typeof Output.Type
+
+/**
+ * Cleans model-supplied option previews once, at the boundary, so every surface
+ * downstream receives display-ready text and none of them has to defend itself.
+ */
+export const sanitize = (questions: ReadonlyArray<QuestionV2.Prompt>): ReadonlyArray<QuestionV2.Prompt> =>
+  questions.map((question) => {
+    const options = QuestionV2.normalizeOptions(question.options, question.multiple)
+    return options === question.options ? question : { ...question, options }
+  })
 
 export const toModelOutput = (
   questions: ReadonlyArray<QuestionV2.Prompt>,
@@ -74,7 +97,7 @@ const layer = Layer.effectDiscard(
                   question
                     .ask({
                       sessionID: context.sessionID,
-                      questions: input.questions,
+                      questions: sanitize(input.questions),
                       tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
                     })
                     .pipe(Effect.orDie),
