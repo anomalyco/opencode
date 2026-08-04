@@ -5,14 +5,14 @@ import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import type { MessageV2 } from "./message-v2"
 
-const COMPACTION_BUFFER = 50_000
+const COMPACTION_BUFFER = 65_000
 
 export function usable(input: { cfg: ConfigV1.Info; model: Provider.Model; outputTokenMax?: number }) {
   const context = input.model.limit.context
   if (context === 0) return 0
 
   const outputMax = ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax)
-  const reserved = input.cfg.compaction?.reserved ?? Math.max(COMPACTION_BUFFER, outputMax + 18_000)
+  const reserved = input.cfg.compaction?.reserved ?? Math.max(COMPACTION_BUFFER, outputMax + 25_000)
   return input.model.limit.input
     ? Math.max(0, input.model.limit.input - reserved)
     : Math.max(0, context - reserved)
