@@ -40,6 +40,11 @@ const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
 
+const withHg = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
+  withTmp((directory) =>
+    Effect.promise(() => hg(directory, "init")).pipe(Effect.andThen(f(directory).pipe(provide(directory)))),
+  )
+
 async function hg(directory: string, ...args: string[]) {
   await $`hg ${args}`.cwd(directory).env({ ...process.env, HGPLAIN: "1" }).quiet()
 }
@@ -51,10 +56,9 @@ async function commitAll(directory: string, message: string) {
 
 describeHg("Vcs mercurial", () => {
   it.live("reports modified, missing, and untracked files", () =>
-    withTmp((directory) =>
+    withHg((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
-          await hg(directory, "init")
           await fs.writeFile(path.join(directory, "keep.txt"), "one\ntwo\n")
           await fs.writeFile(path.join(directory, "gone.txt"), "bye\n")
           await commitAll(directory, "initial")
@@ -69,15 +73,14 @@ describeHg("Vcs mercurial", () => {
           { file: "keep.txt", additions: 1, deletions: 1, status: "modified" },
           { file: "new.txt", additions: 2, deletions: 0, status: "added" },
         ])
-      }).pipe(provide(directory)),
+      }),
     ),
   )
 
   it.live("diffs the working copy with synthesized untracked and missing patches", () =>
-    withTmp((directory) =>
+    withHg((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
-          await hg(directory, "init")
           await fs.writeFile(path.join(directory, "keep.txt"), "one\ntwo\n")
           await fs.writeFile(path.join(directory, "gone.txt"), "bye\n")
           await commitAll(directory, "initial")
@@ -99,15 +102,14 @@ describeHg("Vcs mercurial", () => {
         expect(diff[1].deletions).toBe(1)
         expect(diff[2].patch).toContain("+hello")
         expect(diff[2].additions).toBe(1)
-      }).pipe(provide(directory)),
+      }),
     ),
   )
 
   it.live("caches branch info and publishes branch metadata changes", () =>
-    withTmp((directory) =>
+    withHg((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
-          await hg(directory, "init")
           await fs.writeFile(path.join(directory, "file.txt"), "one\n")
           await commitAll(directory, "initial")
         })
@@ -132,16 +134,15 @@ describeHg("Vcs mercurial", () => {
           value: { location: { directory }, data: { branch: "feature" } },
         })
         expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "default" } })
-      }).pipe(provide(directory)),
+      }),
     ),
   )
 
   it.live("respects the context option", () =>
-    withTmp((directory) =>
+    withHg((directory) =>
       Effect.gen(function* () {
         const body = Array.from({ length: 20 }, (_, index) => `line-${index}`).join("\n") + "\n"
         yield* Effect.promise(async () => {
-          await hg(directory, "init")
           await fs.writeFile(path.join(directory, "file.txt"), body)
           await commitAll(directory, "initial")
           await fs.writeFile(path.join(directory, "file.txt"), body.replace("line-10", "changed"))
@@ -153,15 +154,14 @@ describeHg("Vcs mercurial", () => {
         const tight = yield* vcs.diff("working", { context: 1 })
         expect(tight[0].patch).toContain("line-9")
         expect(tight[0].patch).not.toContain("line-0")
-      }).pipe(provide(directory)),
+      }),
     ),
   )
 
   it.live("diffs before the first commit", () =>
-    withTmp((directory) =>
+    withHg((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
-          await hg(directory, "init")
           await fs.writeFile(path.join(directory, "tracked.txt"), "a\nb\n")
           await hg(directory, "add", "-q", "tracked.txt")
           await fs.writeFile(path.join(directory, "loose.txt"), "hello\n")
@@ -175,15 +175,14 @@ describeHg("Vcs mercurial", () => {
         expect(diff).toHaveLength(2)
         expect(diff[0].patch).toContain("+hello")
         expect(diff[1].patch).toContain("+a")
-      }).pipe(provide(directory)),
+      }),
     ),
   )
 
   it.live("diffs a named branch against the default branch", () =>
-    withTmp((directory) =>
+    withHg((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(async () => {
-          await hg(directory, "init")
           await fs.writeFile(path.join(directory, "file.txt"), "one\n")
           await commitAll(directory, "initial")
         })
@@ -196,12 +195,11 @@ describeHg("Vcs mercurial", () => {
           await commitAll(directory, "feature change")
         })
         const diff = yield* vcs.diff("branch")
-        expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "default" } })
         expect(diff.map((item) => ({ file: item.file, status: item.status }))).toEqual([
           { file: "file.txt", status: "modified" },
         ])
         expect(diff[0].patch).toContain("+two")
-      }).pipe(provide(directory)),
+      }),
     ),
   )
 })

@@ -1,7 +1,7 @@
 export * as Vcs from "./vcs"
 
 import path from "path"
-import { Context, Effect, Layer, Ref, Stream } from "effect"
+import { Context, Effect, Layer, Stream } from "effect"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
@@ -46,23 +46,22 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const impl = adapter(proc, fs, location)
     const vcs = location.vcs
-    const cache = vcs && impl ? yield* Ref.make(yield* impl.info()) : undefined
+    const state = { info: impl ? yield* impl.info() : { branch: {} } satisfies Info }
 
-    if (cache && vcs && impl) {
+    if (vcs && impl) {
       const store = yield* fs.realPath(vcs.store).pipe(Effect.catch(() => Effect.succeed(vcs.store)))
+      const isBranchMetadata =
+        vcs.type === "git"
+          ? (file: string) => path.basename(file) === "HEAD" && FSUtil.contains(store, file)
+          : (file: string) => path.resolve(file) === path.join(store, "branch")
       yield* bus.subscribe(FileSystem.Event.Changed).pipe(
-        Stream.filter(
-          (event) =>
-            vcs.type === "git"
-              ? path.basename(event.data.file) === "HEAD" && FSUtil.contains(store, event.data.file)
-              : path.resolve(event.data.file) === path.join(store, "branch"),
-        ),
+        Stream.filter((event) => isBranchMetadata(event.data.file)),
         Stream.runForEach((event) =>
           Effect.gen(function* () {
-            const previous = yield* Ref.get(cache)
             const next = yield* impl.info()
-            yield* Ref.set(cache, next)
-            if (previous.branch.current === next.branch.current) return
+            const changed = state.info.branch.current !== next.branch.current
+            state.info = next
+            if (!changed) return
             yield* bus.publish(VcsEvent.BranchUpdated, { branch: next.branch.current })
           }).pipe(Effect.withSpan("Vcs.refreshBranch", { attributes: { file: event.data.file } })),
         ),
@@ -70,20 +69,9 @@ const layer = Layer.effect(
       )
     }
 
-    const info = Effect.fnUntraced(function* () {
-      if (!impl) return { branch: {} }
-      if (!cache) return yield* impl.info()
-      const current = yield* Ref.get(cache)
-      if (current.branch.current !== undefined && current.branch.default !== undefined) return current
-      // An unborn repository can gain its first branch without changing existing metadata.
-      const next = yield* impl.info()
-      yield* Ref.set(cache, next)
-      return next
-    })
-
     return Service.of({
       info: Effect.fn("Vcs.info")(function* () {
-        return yield* info()
+        return state.info
       }),
       status: Effect.fn("Vcs.status")(function* () {
         if (!impl) return []
