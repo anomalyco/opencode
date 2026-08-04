@@ -43,7 +43,7 @@ export function WindowsAppMenu(props: {
       runAction(entry.action)
       return
     }
-    if (entry.href) props.platform.openLink(entry.href)
+    if (entry.href) props.platform.openExternal(entry.href)
   }
 
   return (

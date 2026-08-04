@@ -338,40 +338,6 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   keybind: "mod+shift+t",
                   onSelect: () => tabsStoreActions.reopenClosedTab(),
                 },
-                {
-                  id: `tab.prev`,
-                  category: "tab",
-                  title: "",
-                  keybind: `mod+option+ArrowLeft,ctrl+shift+tab`,
-                  hidden: true,
-                  onSelect: () => {
-                    let index = tabsStore.findIndex((tab) => tab === currentTab())
-                    if (index === -1) return
-
-                    index -= 1
-                    if (index === -1) index = tabsStore.length - 1
-
-                    const next = tabsStore[index]
-                    if (next) tabs.select(next)
-                  },
-                },
-                {
-                  id: `tab.next`,
-                  category: "tab",
-                  title: "",
-                  keybind: `mod+option+ArrowRight,ctrl+tab`,
-                  hidden: true,
-                  onSelect: () => {
-                    let index = tabsStore.findIndex((tab) => tab === currentTab())
-                    if (index === -1) return
-
-                    index += 1
-                    if (index === tabsStore.length) index = 0
-
-                    const next = tabsStore[index]
-                    if (next) tabs.select(next)
-                  },
-                },
               ].filter((v) => v !== undefined)
             })
 
@@ -429,27 +395,25 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   }}
                   onReorder={(keys) => tabsStoreActions.reorder(keys)}
                 />
-                <Show when={!creating()}>
-                  <TooltipV2
-                    placement="bottom"
-                    value={
-                      <>
-                        {language.t("command.session.new")}
-                        <KeybindV2 keys={newTabTooltipKeybind(command)} variant="neutral" />
-                      </>
-                    }
-                  >
-                    <IconButtonV2
-                      type="button"
-                      variant="ghost-muted"
-                      size="large"
-                      class="shrink-0"
-                      icon={<IconV2 name="plus" />}
-                      onClick={openNewTab}
-                      aria-label={language.t("command.session.new")}
-                    />
-                  </TooltipV2>
-                </Show>
+                <TooltipV2
+                  placement="bottom"
+                  value={
+                    <>
+                      {language.t("command.session.new")}
+                      <KeybindV2 keys={newTabTooltipKeybind(command)} variant="neutral" />
+                    </>
+                  }
+                >
+                  <IconButtonV2
+                    type="button"
+                    variant="ghost-muted"
+                    size="large"
+                    class="shrink-0"
+                    icon={<IconV2 name="plus" />}
+                    onClick={openNewTab}
+                    aria-label={language.t("command.session.new")}
+                  />
+                </TooltipV2>
                 <div class="flex-1" />
                 <TitlebarV2Right state={v2RightState()} />
               </div>

@@ -167,4 +167,41 @@ describe("current session timeline rows", () => {
       "thinking:msg_2",
     ])
   })
+
+  test("removes a failed assistant error when the turn continues streaming", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "recover", time: { created: 1 } },
+      {
+        id: "msg_failed",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [],
+        error: { type: "ProviderError", message: "temporary failure" },
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "msg_recovery",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "streaming again" }],
+        time: { created: 4 },
+      },
+    ] satisfies SessionMessageInfo[]
+    const normalized = normalizeSessionMessages("ses_1", source)
+    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
+
+    const result = Timeline.constructSessionMessageRows(
+      source,
+      (messageID) => messages.get(messageID),
+      (messageID) => normalized.parts.get(messageID) ?? [],
+      true,
+      "busy",
+      true,
+      normalized.messages.filter((message) => message.role === "user"),
+    )
+
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
+  })
 })

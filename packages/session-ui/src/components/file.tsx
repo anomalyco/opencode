@@ -255,8 +255,16 @@ function useFileViewer(config: ViewerConfig) {
     if (!dragMoved) {
       pendingSelectionEnd = false
       const selected = config.buildClickSelection()
-      if (selected) config.setSelectedLines(selected)
-      config.onLineSelectionEnd(lastSelection)
+      const next =
+        selected &&
+        lastSelection?.start === selected.start &&
+        lastSelection.end === selected.end &&
+        lastSelection.side === selected.side &&
+        (lastSelection.endSide ?? lastSelection.side) === (selected.endSide ?? selected.side)
+          ? null
+          : selected
+      if (next !== undefined) config.setSelectedLines(next)
+      config.onLineSelectionEnd(next === undefined ? lastSelection : next)
       dragStart = undefined
       dragEnd = undefined
       dragMoved = false
@@ -291,10 +299,29 @@ function useFileViewer(config: ViewerConfig) {
   createEffect(() => {
     rendered()
     const ranges = config.commentedLines()
-    requestAnimationFrame(() => {
-      const root = getRoot()
-      if (!root) return
+    const root = getRoot()
+    if (!root) return
+    if (ranges.length === 0) {
       config.markCommented(root, ranges)
+      return
+    }
+
+    let frame: number | undefined
+    const mark = () => {
+      if (frame !== undefined) cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        frame = undefined
+        config.markCommented(root, ranges)
+      })
+    }
+    const observer = new MutationObserver(mark)
+
+    observer.observe(root, { childList: true, subtree: true })
+    mark()
+
+    onCleanup(() => {
+      observer.disconnect()
+      if (frame !== undefined) cancelAnimationFrame(frame)
     })
   })
 
