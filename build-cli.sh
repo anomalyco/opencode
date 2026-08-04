@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -e
 
+# Ensure bun is installed
+if ! command -v bun &> /dev/null; then
+  echo "📦 Bun not found. Installing Bun..."
+  curl -fsSL https://bun.sh/install | bash
+  export BUN_INSTALL="$HOME/.bun"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+fi
+
 echo "🚀 Installing CLI dependencies..."
 bun install --filter opencode --filter @opencode-ai/tui
 
