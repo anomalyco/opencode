@@ -8,6 +8,7 @@ import type {
 import type { Agent, PermissionRequest, Project, Provider, ProviderListResponse } from "@opencode-ai/sdk/v2/client"
 import type { Project as CurrentProject } from "@opencode-ai/client/promise"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
+import type { ProjectMeta } from "./types"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/utils/path-key"
 
 export const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
@@ -167,5 +168,38 @@ export function normalizeProjectInfo(project: Project | CurrentProject): Project
   return {
     ...project,
     vcs: project.vcs === "git" ? "git" : undefined,
+  }
+}
+
+type ProjectMetaShape = {
+  name?: string
+  icon?: { color?: string; override?: string }
+  commands?: { start?: string }
+}
+
+// Merge local per-workspace overrides (name, commands, icon) from the localStorage
+// cache (childStore.projectMeta) over the base project, then apply the legacy
+// childStore.icon override. For projects with a server registration the server is the
+// source of truth, so their local projectMeta is ignored to avoid a stale local name
+// overriding the persisted one. Without this, projects without a server registration
+// would ignore their renamed name, startup command, and icon.
+export function enrichProject<T extends ProjectMetaShape>(
+  base: T,
+  local: ProjectMeta | undefined,
+  icon: string | undefined,
+  hasServerId: boolean,
+): T {
+  const merged = hasServerId ? base : mergeProjectMeta(base, local)
+  if (icon) return { ...merged, icon: { ...merged.icon, override: icon } }
+  return merged
+}
+
+export function mergeProjectMeta<T extends ProjectMetaShape>(base: T, local: ProjectMeta | undefined): T {
+  if (!local) return base
+  return {
+    ...base,
+    ...(local.name !== undefined ? { name: local.name } : {}),
+    ...(local.icon ? { icon: { ...base.icon, ...local.icon } } : {}),
+    ...(local.commands ? { commands: { ...base.commands, ...local.commands } } : {}),
   }
 }
