@@ -1173,15 +1173,16 @@ const layer = Layer.effect(
             msgs.length >= IDLE_COMPACT_MIN_MESSAGES &&
             step === 1
           ) {
-            const idleMinutes =
+            const idleMinutesThreshold =
               (yield* config.get()).compaction?.idle_minutes ?? DEFAULT_IDLE_COMPACT_MINUTES
-            if (idleMinutes > 0) {
+            if (idleMinutesThreshold > 0) {
               const lastActive = lastFinished.time.completed ?? lastFinished.time.created
               const idle = Math.floor((Date.now() - lastActive) / 60_000)
-              if (idle >= idleMinutes) {
+              if (idle >= idleMinutesThreshold) {
                 yield* Effect.logInfo("idle auto-compact", {
                   "session.id": sessionID,
                   idleMinutes: idle,
+                  idleMinutesThreshold,
                   messages: msgs.length,
                 })
                 yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
