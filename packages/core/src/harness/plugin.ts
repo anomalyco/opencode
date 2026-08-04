@@ -60,7 +60,6 @@ const layer = Layer.effect(
         },
 
         "experimental.text.complete": async (input, output) => {
-          if (!activeVersion) return
           const rawInput = input as Record<string, unknown>
           const sessionID = typeof rawInput.sessionID === "string" ? rawInput.sessionID : undefined
           if (!sessionID) return
@@ -75,22 +74,9 @@ const layer = Layer.effect(
                 .pipe(Effect.orElseSucceed(() => [])),
             )
 
-            if (taskRow.length && taskRow[0]?.task_error) {
-              const feedbackRows = Effect.runSync(
-                db
-                  .select()
-                  .from(harness_subtask_feedback)
-                  .where(eq(harness_subtask_feedback.task_id, taskID))
-                  .pipe(Effect.orElseSucceed(() => [])),
-              )
-
-              const subFiveFeedback = feedbackRows.find((f) => f.user_feedback || f.changes_requested)
-              if (subFiveFeedback && subFiveFeedback.user_feedback) {
-                const auditBanner = `\n\n---\n### 📊 Harness Quality Audit & User Feedback Request\n- **Evaluation**: ${taskRow[0].task_error}\n- **Feedback**: ${subFiveFeedback.user_feedback}\n- **Refinement Recommendation**: ${subFiveFeedback.changes_requested || "N/A"}`
-                if (!output.text.includes("Harness Quality Audit")) {
-                  output.text += auditBanner
-                }
-              }
+            if (taskRow.length && !output.text.includes("Harness User Feedback")) {
+              const auditBanner = `\n\n---\n### 📊 Harness Quality & Evolution Feedback\n**Are you satisfied with the result? (Yes/No)**\n*Reply ` + "`Yes`" + ` to confirm or ` + "`No: <your explanation of how you expected it>`" + ` so the Harness can learn and extract rules for future runs.*`
+              output.text += auditBanner
             }
           } catch {}
         },
