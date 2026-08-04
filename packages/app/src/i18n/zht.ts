@@ -1071,4 +1071,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "建立持續性專案圖示失敗",
   "error.childStore.storeCreateFailed": "建立儲存區失敗",
   "terminal.connectionLost.abnormalClose": "WebSocket 異常關閉：{{code}}",
+  "dialog.provider.custom.label": "自訂 OpenAI 相容提供者",
+  "dialog.model.unpaid.viewMoreProviders": "查看另外 70 多個提供者",
+  "session.header.reveal.finder": "在 Finder 中顯示",
+  "session.header.reveal.fileExplorer": "在檔案總管中顯示",
+  "session.header.reveal.containingFolder": "開啟所在資料夾",
 } satisfies Partial<Record<Keys, string>>

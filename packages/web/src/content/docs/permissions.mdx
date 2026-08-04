@@ -190,6 +190,7 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 - `glob` — file globbing (matches the glob pattern)
 - `grep` — content search (matches the regex pattern)
 - `bash` — running shell commands (matches parsed commands like `git status --porcelain`)
+- `destructive_bash` — one-time confirmation for destructive shell commands in the secure-development profile
 - `task` — launching subagents (matches the subagent type)
 - `skill` — loading a skill (matches the skill name)
 - `lsp` — running LSP queries (currently non-granular)
@@ -233,6 +234,46 @@ When OpenCode prompts for approval, the UI offers three outcomes:
 - `reject` — deny the request
 
 The set of patterns that `always` would approve is provided by the tool (for example, bash approvals typically whitelist a safe command prefix like `git status*`).
+
+---
+
+## Secure development sandbox
+
+For autonomous development without granting the agent authority over the host, configure the `bash` tool to run in Docker. The container has no network, no host credentials, no Linux capabilities, a read-only root filesystem, and only the active working directory mounted read-write.
+
+Build the supplied image once. Its build context contains only the Dockerfile, so project files and credentials are not sent to Docker during the build.
+
+```bash
+docker build --tag opencode-secure-dev:1.3.13 packages/opencode/src/sandbox
+```
+
+Then use the secure-development profile:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "*": "ask",
+    "read": "allow",
+    "edit": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "bash": "allow",
+    "destructive_bash": "ask",
+    "external_directory": "ask",
+    "webfetch": "ask",
+    "websearch": "ask"
+  },
+  "sandbox": {
+    "type": "docker",
+    "image": "opencode-secure-dev:1.3.13"
+  }
+}
+```
+
+Normal project work such as edits, tests, builds, and Git inspection stays autonomous. Destructive shell operations (`rm`, destructive Git operations, in-place rewrites, disk tools, and publishing) use `destructive_bash`, which is one-time only and cannot create an `always` rule. Network access remains disabled in the container; use an explicitly reviewed integration when an operation must reach an external service.
+
+The sandbox is not a replacement for project permissions: `external_directory` remains `ask`, and a mounted workspace is intentionally writable so the agent can develop in it. Never set global `bash: "allow"` without a sandbox.
 
 ---
 

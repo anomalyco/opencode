@@ -1097,4 +1097,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Nije uspjelo kreiranje trajne ikone projekta",
   "error.childStore.storeCreateFailed": "Nije uspjelo kreiranje skladišta",
   "terminal.connectionLost.abnormalClose": "WebSocket zatvoren nenormalno: {{code}}",
+  "dialog.provider.custom.label": "Prilagođeni pružatelj kompatibilan s OpenAI",
+  "dialog.model.unpaid.viewMoreProviders": "Prikaži više od 70 pružatelja",
+  "session.header.reveal.finder": "Prikaži u Finderu",
+  "session.header.reveal.fileExplorer": "Prikaži u File Exploreru",
+  "session.header.reveal.containingFolder": "Otvori mapu koja sadrži",
 }

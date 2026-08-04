@@ -22,4 +22,11 @@ describe("computePromptTraits", () => {
     expect(traits.suspend).toBeUndefined()
     expect(traits.status).toBe("SHELL")
   })
+
+  test("local mode disables capture and labels the prompt as local", () => {
+    const traits = computePromptTraits({ mode: "local", autocompleteVisible: false })
+    expect(traits.capture).toBeUndefined()
+    expect(traits.suspend).toBeUndefined()
+    expect(traits.status).toBe("LOCAL")
+  })
 })

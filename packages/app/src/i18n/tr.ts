@@ -1103,4 +1103,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Kalıcı proje simgesi oluşturulamadı",
   "error.childStore.storeCreateFailed": "Depo oluşturulamadı",
   "terminal.connectionLost.abnormalClose": "WebSocket anormal şekilde kapandı: {{code}}",
+  "dialog.provider.custom.label": "Özel OpenAI uyumlu sağlayıcı",
+  "dialog.model.unpaid.viewMoreProviders": "70'ten fazla sağlayıcıyı gör",
+  "session.header.reveal.finder": "Finder'da göster",
+  "session.header.reveal.fileExplorer": "Dosya Gezgini'nde göster",
+  "session.header.reveal.containingFolder": "İçeren klasörü aç",
 } satisfies Partial<Record<Keys, string>>

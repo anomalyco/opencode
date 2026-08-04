@@ -134,6 +134,7 @@ As permissões do opencode são indexadas pelo nome da ferramenta, além de algu
 - `glob` — globbing de arquivos (corresponde ao padrão glob)
 - `grep` — busca de conteúdo (corresponde ao padrão regex)
 - `bash` — execução de comandos de shell (corresponde a comandos analisados como `git status --porcelain`)
+- `destructive_bash` — confirmação única para comandos de shell destrutivos no perfil `secure-development`
 - `task` — lançamento de subagentes (corresponde ao tipo de subagente)
 - `skill` — carregamento de uma habilidade (corresponde ao nome da habilidade)
 - `lsp` — execução de consultas LSP (atualmente não granular)
@@ -176,6 +177,46 @@ Quando o opencode solicita aprovação, a interface oferece três resultados:
 - `reject` — negar a solicitação
 
 O conjunto de padrões que `always` aprovaria é fornecido pela ferramenta (por exemplo, aprovações de bash normalmente incluem um prefixo de comando seguro como `git status*`).
+
+---
+
+## Sandbox de desenvolvimento seguro
+
+Para desenvolver com autonomia sem entregar ao agente a autoridade do host, configure o `bash` para executar em Docker. O container não tem rede, credenciais do host, capacidades Linux, nem sistema de arquivos raiz gravável; somente o diretório de trabalho ativo é montado com escrita.
+
+Construa uma vez a imagem fornecida. O contexto do build contém somente o Dockerfile, portanto arquivos do projeto e credenciais não são enviados ao Docker durante o build.
+
+```bash
+docker build --tag opencode-secure-dev:1.3.13 packages/opencode/src/sandbox
+```
+
+Depois, use o perfil `secure-development`:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "*": "ask",
+    "read": "allow",
+    "edit": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "bash": "allow",
+    "destructive_bash": "ask",
+    "external_directory": "ask",
+    "webfetch": "ask",
+    "websearch": "ask"
+  },
+  "sandbox": {
+    "type": "docker",
+    "image": "opencode-secure-dev:1.3.13"
+  }
+}
+```
+
+Edições, testes, builds e inspeção de Git no projeto seguem automáticos. Operações destrutivas de shell (`rm`, operações destrutivas de Git, reescritas in-place, ferramentas de disco e publicação) usam `destructive_bash`, sempre com aprovação única e sem criar regra `always`. A rede permanece desabilitada no container; use uma integração revisada explicitamente quando a operação precisar alcançar um serviço externo.
+
+O sandbox não substitui permissões do projeto: `external_directory` continua em `ask`, e o workspace montado é gravável de propósito para que o agente desenvolva nele. Nunca defina `bash: "allow"` global sem sandbox.
 
 ---
 

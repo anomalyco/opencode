@@ -14,6 +14,7 @@ import { PositiveInt } from "../schema"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
+import { DockerSandbox } from "./docker-sandbox"
 
 export const name = "bash"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -106,7 +107,7 @@ const layer = Layer.effectDiscard(
     yield* tools
       .register({
         [name]: Tool.make({
-          description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows.`,
+          description: `Execute one shell command string. When a Docker sandbox is configured, commands run with no network, no host credentials, no Linux capabilities, and only the active working directory mounted read-write. Without a sandbox, commands have the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}).`,
           input: Input,
           output: Output,
           structured: StructuredOutput,
@@ -135,10 +136,14 @@ const layer = Layer.effectDiscard(
                   agent: context.agent,
                   source,
                 })
-              const warnings = (yield* externalCommandDirectories(fs, input.command, target.canonical)).map(
-                (directory) =>
-                  `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Bash runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
-              )
+              const entries = yield* config.entries()
+              const sandbox = Config.latest(entries, "sandbox")
+              const warnings = sandbox
+                ? []
+                : (yield* externalCommandDirectories(fs, input.command, target.canonical)).map(
+                    (directory) =>
+                      `Command argument references external directory ${path.join(directory, "*").replaceAll("\\", "/")}. Bash runs with host-user filesystem, process, and network authority; this scan is advisory only.`,
+                  )
               yield* permission.assert({
                 action: name,
                 resources: [input.command],
@@ -151,13 +156,16 @@ const layer = Layer.effectDiscard(
               if ((yield* fs.stat(target.canonical)).type !== "Directory")
                 return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
 
-              const entries = yield* config.entries()
               const shell =
                 Object.assign({}, ...entries.flatMap((entry) => (entry.type === "document" ? [entry.info] : [])))
                   .shell ?? defaultShell()
-              const command = ChildProcess.make(input.command, [], {
+              const [executable, args] = sandbox
+                ? DockerSandbox.command({ command: input.command, cwd: target.canonical, image: sandbox.image })
+                : ([input.command, []] as const)
+              const command = ChildProcess.make(executable, args, {
                 cwd: target.canonical,
-                shell,
+                env: sandbox ? DockerSandbox.environment() : undefined,
+                shell: sandbox ? false : shell,
                 stdin: "ignore",
                 detached: process.platform !== "win32",
                 forceKillAfter: Duration.seconds(3),

@@ -1021,4 +1021,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Nie udało się utworzyć trwałej ikony projektu",
   "error.childStore.storeCreateFailed": "Nie udało się utworzyć magazynu",
   "terminal.connectionLost.abnormalClose": "WebSocket zamknięty nieprawidłowo: {{code}}",
+  "dialog.provider.custom.label": "Niestandardowy dostawca zgodny z OpenAI",
+  "dialog.model.unpaid.viewMoreProviders": "Zobacz ponad 70 dodatkowych dostawców",
+  "session.header.reveal.finder": "Pokaż w Finderze",
+  "session.header.reveal.fileExplorer": "Pokaż w Eksploratorze plików",
+  "session.header.reveal.containingFolder": "Otwórz folder zawierający",
 }

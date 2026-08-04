@@ -21,6 +21,7 @@ import { ConfigMCP } from "./config/mcp"
 import { ConfigPlugin } from "./config/plugin"
 import { ConfigProvider } from "./config/provider"
 import { ConfigReference } from "./config/reference"
+import { ConfigSandbox } from "./config/sandbox"
 import { ConfigToolOutput } from "./config/tool-output"
 import { ConfigWatcher } from "./config/watcher"
 import { ConfigV1 } from "./v1/config/config"
@@ -32,6 +33,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   shell: Schema.String.pipe(Schema.optional).annotate({
     description: "Default shell to use for terminal and shell tool execution",
+  }),
+  sandbox: ConfigSandbox.Info.pipe(Schema.optional).annotate({
+    description: "Run shell commands inside an isolated Docker container with no network or host credentials",
   }),
   model: Schema.String.pipe(Schema.optional).annotate({
     description: "Default model to use when no session or agent model is selected",

@@ -1089,4 +1089,9 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Kunne ikke oprette vedvarende projektikon",
   "error.childStore.storeCreateFailed": "Kunne ikke oprette lager",
   "terminal.connectionLost.abnormalClose": "WebSocket lukkede unormalt: {{code}}",
+  "dialog.provider.custom.label": "Brugerdefineret OpenAI-kompatibel udbyder",
+  "dialog.model.unpaid.viewMoreProviders": "Se mere end 70 udbydere",
+  "session.header.reveal.finder": "Vis i Finder",
+  "session.header.reveal.fileExplorer": "Vis i Stifinder",
+  "session.header.reveal.containingFolder": "Åbn den indeholdende mappe",
 }

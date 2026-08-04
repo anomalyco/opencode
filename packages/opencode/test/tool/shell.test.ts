@@ -220,6 +220,26 @@ describe("tool.shell", () => {
 })
 
 describe("tool.shell permissions", () => {
+  each("requires a one-time destructive_bash approval without creating an always rule", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          yield* run({ command: "rm -rf build" }, capture(requests))
+          expect(requests).toEqual([
+            expect.objectContaining({
+              permission: "destructive_bash",
+              patterns: ["rm -rf build"],
+              always: [],
+            }),
+          ])
+        }),
+      )
+    }),
+  )
+
   each("asks for bash permission with correct pattern", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
