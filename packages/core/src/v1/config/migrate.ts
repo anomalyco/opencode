@@ -247,11 +247,8 @@ function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
 function migrateProvider(sourceID: string, info: ConfigProviderV1.Info) {
   const options = ConfigProviderOptionsV1.provider(info.options ?? {})
   const vertexAnthropic = sourceID === "google-vertex-anthropic"
-  const packageName = info.npm
-    ? Provider.aisdk(info.npm)
-    : vertexAnthropic
-      ? Provider.aisdk("@ai-sdk/google-vertex/anthropic")
-      : undefined
+  const packageName = info.npm ? Provider.aisdk(info.npm) : undefined
+  const modelPackage = vertexAnthropic ? (packageName ?? Provider.aisdk("@ai-sdk/google-vertex/anthropic")) : undefined
   return {
     name: info.name,
     env: info.env,
@@ -266,10 +263,7 @@ function migrateProvider(sourceID: string, info: ConfigProviderV1.Info) {
       Object.fromEntries(
         Object.entries(info.models).map(([name, model]) => {
           const migrated = migrateModel(model)
-          return [
-            name,
-            vertexAnthropic && packageName && !migrated.package ? { ...migrated, package: packageName } : migrated,
-          ]
+          return [name, modelPackage && !migrated.package ? { ...migrated, package: modelPackage } : migrated]
         }),
       ),
   }
