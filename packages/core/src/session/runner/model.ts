@@ -24,9 +24,9 @@ export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavaila
 ) {
   override get message() {
     if (this.providerID === "azure-cognitive-services")
-      return `Model unavailable: ${this.providerID}/${this.modelID}. Use azure/${this.modelID} instead.`
+      return `Model unavailable: ${this.providerID}/${this.modelID}. This provider has been deprecated; use azure/${this.modelID} instead.`
     if (this.providerID === "google-vertex-anthropic")
-      return `Model unavailable: ${this.providerID}/${this.modelID}. Use google-vertex/${this.modelID} instead.`
+      return `Model unavailable: ${this.providerID}/${this.modelID}. This provider has been deprecated; use google-vertex/${this.modelID} instead.`
     return `Model unavailable: ${this.providerID}/${this.modelID}`
   }
 }

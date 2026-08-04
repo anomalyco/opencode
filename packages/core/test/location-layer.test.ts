@@ -701,7 +701,9 @@ describe("LocationServiceMap", () => {
               providerID,
               modelID: "chat",
             })
-            expect(failure.message).toBe(`Model unavailable: ${providerID}/chat. Use ${replacement}/chat instead.`)
+            expect(failure.message).toBe(
+              `Model unavailable: ${providerID}/chat. This provider has been deprecated; use ${replacement}/chat instead.`,
+            )
           }
         }),
       ),
