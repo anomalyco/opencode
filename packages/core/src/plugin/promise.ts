@@ -2,6 +2,7 @@ export * as PluginPromise from "./promise"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import type { Context, Plugin } from "@opencode-ai/plugin/promise/plugin"
+import type { SessionContext, SessionHttp } from "@opencode-ai/plugin/promise/session"
 import type { Info } from "@opencode-ai/plugin/promise/tool"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Integration } from "@opencode-ai/schema/integration"
@@ -56,6 +57,28 @@ export function fromPromise(plugin: Plugin) {
                 callback(draft)
               }),
             )
+
+        const sessionHttp = (callback: (event: SessionHttp) => Promise<void> | void) =>
+          register(
+            host.session.hook("http", (event) => {
+              const request = event.request
+              const output: SessionHttp = {
+                ...event,
+                request: (input) => Effect.runPromiseWith(context)(request(input), { signal: input.signal }),
+              }
+              return Effect.promise(() => Promise.resolve(callback(output))).pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => {
+                    event.request = (input) =>
+                      Effect.tryPromise({
+                        try: (signal) => output.request(new Request(input, { signal })),
+                        catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+                      })
+                  }),
+                ),
+              )
+            }),
+          )
 
         const context2: Context = {
           app: host.app,
@@ -266,32 +289,10 @@ export function fromPromise(plugin: Plugin) {
           },
           session: {
             hook: (name, callback) => {
-              if (name !== "http")
-                return register(
-                  host.session.hook(name, (event) =>
-                    Effect.promise(() => Promise.resolve(Reflect.apply(callback, undefined, [event]))),
-                  ),
-                )
+              if (name === "http") return sessionHttp(callback as (event: SessionHttp) => Promise<void> | void)
+              const sessionContext = callback as (event: SessionContext) => Promise<void> | void
               return register(
-                host.session.hook("http", (event) => {
-                  const request = event.request
-                  const output = {
-                    ...event,
-                    request: (input: Request) =>
-                      Effect.runPromiseWith(context)(request(input), { signal: input.signal }),
-                  }
-                  return Effect.promise(() => Promise.resolve(Reflect.apply(callback, undefined, [output]))).pipe(
-                    Effect.tap(() =>
-                      Effect.sync(() => {
-                        event.request = (input) =>
-                          Effect.tryPromise({
-                            try: (signal) => output.request(new Request(input, { signal })),
-                            catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-                          })
-                      }),
-                    ),
-                  )
-                }),
+                host.session.hook("context", (event) => Effect.promise(() => Promise.resolve(sessionContext(event)))),
               )
             },
             create: (input) =>
