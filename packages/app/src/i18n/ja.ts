@@ -276,6 +276,7 @@ export const dict = {
   "prompt.action.send": "送信",
   "prompt.action.stop": "停止",
   "prompt.toast.pasteUnsupported.title": "サポートされていない添付ファイル",
+  "prompt.toast.attachmentDuplicate.title": "このファイルはすでにアップロードされています",
   "prompt.toast.pasteUnsupported.description": "画像、PDF、またはテキストファイルのみ添付できます。",
   "prompt.toast.modelAgentRequired.title": "エージェントとモデルを選択",
   "prompt.toast.modelAgentRequired.description": "プロンプトを送信する前にエージェントとモデルを選択してください。",

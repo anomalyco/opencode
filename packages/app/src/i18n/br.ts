@@ -277,6 +277,7 @@ export const dict = {
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Parar",
   "prompt.toast.pasteUnsupported.title": "Anexo não suportado",
+  "prompt.toast.attachmentDuplicate.title": "Este arquivo já foi enviado",
   "prompt.toast.pasteUnsupported.description": "Apenas imagens, PDFs ou arquivos de texto podem ser anexados aqui.",
   "prompt.toast.modelAgentRequired.title": "Selecione um agente e modelo",
   "prompt.toast.modelAgentRequired.description": "Escolha um agente e modelo antes de enviar um prompt.",

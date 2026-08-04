@@ -288,6 +288,7 @@ export const dict = {
   "prompt.action.stop": "Stopp",
 
   "prompt.toast.pasteUnsupported.title": "Ikke støttet vedlegg",
+  "prompt.toast.attachmentDuplicate.title": "Denne filen er allerede lastet opp",
   "prompt.toast.pasteUnsupported.description": "Kun bilder, PDF-er eller tekstfiler kan legges ved her.",
   "prompt.toast.modelAgentRequired.title": "Velg en agent og modell",
   "prompt.toast.modelAgentRequired.description": "Velg en agent og modell før du sender en forespørsel.",

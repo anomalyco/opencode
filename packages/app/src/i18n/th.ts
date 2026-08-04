@@ -297,6 +297,7 @@ export const dict = {
   "prompt.action.stop": "หยุด",
 
   "prompt.toast.pasteUnsupported.title": "ไฟล์แนบที่ไม่รองรับ",
+  "prompt.toast.attachmentDuplicate.title": "ไฟล์นี้ถูกอัปโหลดแล้ว",
   "prompt.toast.pasteUnsupported.description": "แนบได้เฉพาะรูปภาพ, PDF หรือไฟล์ข้อความเท่านั้น",
   "prompt.toast.modelAgentRequired.title": "เลือกเอเจนต์และโมเดล",
   "prompt.toast.modelAgentRequired.description": "เลือกเอเจนต์และโมเดลก่อนส่งพร้อมท์",

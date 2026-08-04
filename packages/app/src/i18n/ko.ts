@@ -264,6 +264,7 @@ export const dict = {
   "prompt.action.send": "전송",
   "prompt.action.stop": "중지",
   "prompt.toast.pasteUnsupported.title": "지원되지 않는 첨부 파일",
+  "prompt.toast.attachmentDuplicate.title": "이 파일은 이미 업로드되었습니다",
   "prompt.toast.pasteUnsupported.description": "이미지, PDF 또는 텍스트 파일만 첨부할 수 있습니다.",
   "prompt.toast.modelAgentRequired.title": "에이전트 및 모델 선택",
   "prompt.toast.modelAgentRequired.description": "프롬프트를 보내기 전에 에이전트와 모델을 선택하세요.",

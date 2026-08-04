@@ -278,6 +278,7 @@ export const dict = {
   "prompt.action.send": "Wyślij",
   "prompt.action.stop": "Zatrzymaj",
   "prompt.toast.pasteUnsupported.title": "Nieobsługiwany załącznik",
+  "prompt.toast.attachmentDuplicate.title": "Ten plik został już przesłany",
   "prompt.toast.pasteUnsupported.description": "Można tutaj załączać tylko obrazy, pliki PDF lub pliki tekstowe.",
   "prompt.toast.modelAgentRequired.title": "Wybierz agenta i model",
   "prompt.toast.modelAgentRequired.description": "Wybierz agenta i model przed wysłaniem zapytania.",

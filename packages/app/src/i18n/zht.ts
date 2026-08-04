@@ -297,6 +297,7 @@ export const dict = {
   "prompt.action.stop": "停止",
 
   "prompt.toast.pasteUnsupported.title": "不支援的附件",
+  "prompt.toast.attachmentDuplicate.title": "此檔案已上傳",
   "prompt.toast.pasteUnsupported.description": "此處僅能附加圖片、PDF 或文字檔案。",
   "prompt.toast.modelAgentRequired.title": "請選擇代理程式和模型",
   "prompt.toast.modelAgentRequired.description": "傳送提示前請先選擇代理程式和模型。",

@@ -1505,6 +1505,30 @@ To use Kimi K2 from Moonshot AI:
 
 ---
 
+### Modal
+
+1. Create a [shared Endpoint](https://modal.com/endpoints) for the model you want to use.
+
+2. Create a [proxy token](https://modal.com/docs/guide/endpoints#proxy-tokens), then join its ID and secret with a period:
+
+   ```txt
+   wk-<id>.ws-<secret>
+   ```
+
+3. Run the `/connect` command, search for **Modal**, and enter the combined proxy token.
+
+   ```txt
+   /connect
+   ```
+
+4. Run the `/models` command to select one of the endpoints in your Modal workspace.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### NVIDIA
 
 NVIDIA provides access to Nemotron models and many other open models through [build.nvidia.com](https://build.nvidia.com) for free.

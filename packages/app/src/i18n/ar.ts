@@ -277,6 +277,7 @@ export const dict = {
   "prompt.action.send": "إرسال",
   "prompt.action.stop": "توقف",
   "prompt.toast.pasteUnsupported.title": "مرفق غير مدعوم",
+  "prompt.toast.attachmentDuplicate.title": "تم تحميل هذا الملف بالفعل",
   "prompt.toast.pasteUnsupported.description": "يمكن إرفاق الصور أو ملفات PDF أو الملفات النصية فقط هنا.",
   "prompt.toast.modelAgentRequired.title": "حدد وكيلاً ونموذجاً",
   "prompt.toast.modelAgentRequired.description": "اختر وكيلاً ونموذجاً قبل إرسال الموجه.",
