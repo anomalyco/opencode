@@ -19,7 +19,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { showToast } from "@/utils/toast"
 import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./titlebar-tab-order"
-import type { Session } from "@opencode-ai/sdk/v2"
+import type { Session } from "@/types"
 
 function SessionTabSlot(props: {
   tab: SessionTab

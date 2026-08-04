@@ -5,7 +5,7 @@ import type {
   PermissionRequest,
   ProviderListOutput,
 } from "@opencode-ai/client/promise"
-import type { Agent, Event, Project, Provider, ProviderListResponse } from "@opencode-ai/sdk/v2/client"
+import type { Agent, Event, Project, Provider, ProviderListResponse } from "@/types"
 import type { Project as CurrentProject } from "@opencode-ai/client/promise"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/utils/path-key"

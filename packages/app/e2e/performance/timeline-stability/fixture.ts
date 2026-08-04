@@ -9,7 +9,7 @@ import type {
   ToolPart,
   ToolState,
   UserMessage,
-} from "@opencode-ai/sdk/v2/client"
+} from "../../../src/types"
 import type { SessionV1Info, SessionStatus } from "@opencode-ai/client/promise"
 import { expect, type Page } from "@playwright/test"
 import { Schema } from "effect"

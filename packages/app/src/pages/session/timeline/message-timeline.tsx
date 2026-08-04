@@ -51,7 +51,7 @@ import type {
   Part as PartType,
   ToolPart,
   UserMessage,
-} from "@opencode-ai/sdk/v2"
+} from "@/types"
 import { showToast } from "@/utils/toast"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"

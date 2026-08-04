@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2/client"
+import type { PermissionRequest } from "@/types"
 import { Persist, persisted } from "@/utils/persist"
 import type { ServerSDK } from "@/context/server-sdk"
 import type { ServerSync } from "./server-sync"

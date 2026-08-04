@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { buildFileTreeV2Model, flattenFileTreeV2, flattenLiveFileTreeV2 } from "./file-tree-v2-model"
-import type { FileNode } from "@opencode-ai/sdk/v2"
+import type { FileNode } from "@/types"
 
 describe("buildFileTreeV2Model", () => {
   test("builds a sorted tree and flattens expanded directories", () => {

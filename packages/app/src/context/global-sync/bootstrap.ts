@@ -1,6 +1,5 @@
 import type {
   Config,
-  OpencodeClient,
   Path,
   PermissionRequest,
   Project,
@@ -8,7 +7,8 @@ import type {
   QuestionRequest,
   ReferenceInfo,
   Session,
-} from "@opencode-ai/sdk/v2/client"
+} from "@/types"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type {
   AgentListInput,
   AgentListOutput,

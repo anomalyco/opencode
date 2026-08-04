@@ -8,7 +8,7 @@ import { createEffect, createMemo, createResource, createSignal, For, onCleanup,
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
-import type { Path } from "@opencode-ai/sdk/v2/client"
+import type { Path } from "@/types"
 import {
   absoluteTreePath,
   activeTreeNavigation,

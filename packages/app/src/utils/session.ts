@@ -1,5 +1,5 @@
 import type { SessionApi, SessionInfo, SessionListInput } from "@opencode-ai/client/promise"
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "@/types"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 
 export function normalizeSessionInfo(input: SessionInfo | Session): Session {

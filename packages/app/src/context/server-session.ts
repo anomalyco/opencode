@@ -3,14 +3,14 @@ import { retry } from "@opencode-ai/core/util/retry"
 import type { OpenCodeEvent, SessionApi, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type {
   Message,
-  OpencodeClient,
   Part,
   PermissionRequest,
   QuestionRequest,
   Session,
   SessionStatus,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@/types"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"

@@ -12,7 +12,7 @@ import type {
   SessionStatus,
   Todo,
   VcsInfo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@/types"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import type { CommandInfo, McpResource, McpServer, SessionMessageInfo } from "@opencode-ai/client/promise"

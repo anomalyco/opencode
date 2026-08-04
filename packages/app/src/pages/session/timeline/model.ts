@@ -1,4 +1,4 @@
-import type { Message, UserMessage } from "@opencode-ai/sdk/v2"
+import type { Message, UserMessage } from "@/types"
 import { createMemo, createResource, onCleanup, untrack, type Accessor } from "solid-js"
 import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"

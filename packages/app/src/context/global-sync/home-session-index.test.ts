@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionV2Info } from "@opencode-ai/sdk/v2/client"
+import type { SessionV2Info } from "@/types"
 import {
   applyHomeSessionEvent,
   appendHomeSessionEvent,

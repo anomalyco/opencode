@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { retry } from "@opencode-ai/core/util/retry"
 import type { OpenCodeEvent, SessionApi } from "@opencode-ai/client/promise"
-import type { Message, OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, Session } from "@/types"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { createServerSession } from "./server-session"
 import type { ServerApi } from "@/utils/server"
 

@@ -1,11 +1,11 @@
 import type {
   Config,
-  OpencodeClient,
   Path,
   Project,
   ProviderAuthResponse,
   SessionStatus,
-} from "@opencode-ai/sdk/v2/client"
+} from "@/types"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { type Accessor, batch, createMemo, getOwner, onCleanup, onMount, untrack } from "solid-js"

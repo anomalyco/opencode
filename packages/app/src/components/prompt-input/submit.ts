@@ -1,4 +1,4 @@
-import type { Message, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Session } from "@/types"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"

@@ -1,5 +1,5 @@
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import type { Event } from "@opencode-ai/sdk/v2/client"
+import type { Event, PermissionRequest } from "@/types"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -18,7 +18,7 @@ const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
 
 const isStreamClosed = (error: unknown, signal?: AbortSignal) => isAbortError(error) || signal?.aborted === true
-export type ServerEvent = Event & { current?: OpenCodeEvent }
+export type ServerEvent = Event & { id?: string; current?: OpenCodeEvent }
 type QueuedServerEvent = { directory: string; payload: ServerEvent }
 type CurrentDelta = Extract<
   OpenCodeEvent,
@@ -41,9 +41,9 @@ export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
           event.data.source?.type === "tool"
             ? { messageID: event.data.source.messageID, callID: event.data.source.id }
             : undefined,
-      },
+      } satisfies PermissionRequest,
       current: event,
-    } as ServerEvent
+    }
   }
   return { id: event.id, type: event.type, properties: event.data, current: event } as ServerEvent
 }
