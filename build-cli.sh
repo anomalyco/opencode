@@ -23,6 +23,7 @@ BINARY=$(find packages/opencode/dist -type f -name "opencode" | head -n 1)
 if [ -f "$BINARY" ]; then
   echo "✅ Built binary successfully at: $BINARY"
   mkdir -p ~/.local/bin
+  # Symlink binaries to user local bin
   ln -sf "$(pwd)/$BINARY" ~/.local/bin/opencode
   ln -sf "$(pwd)/$BINARY" ~/.local/bin/opencode-evolve
   echo "🔗 Symlinked to ~/.local/bin/opencode & ~/.local/bin/opencode-evolve"
