@@ -13,6 +13,11 @@ type Model = {
   }
 }
 
+type ModelKey = {
+  providerID: string
+  modelID: string
+}
+
 type Context = {
   message: AssistantMessage
   provider?: Provider
@@ -36,14 +41,17 @@ const lastAssistantWithTokens = (messages: Message[]) => {
     if (tokenTotal(msg) <= 0) continue
     return msg
   }
+  return undefined
 }
 
-const build = (messages: Message[] = [], providers: Provider[] = []): Context | undefined => {
+const build = (messages: Message[] = [], providers: Provider[] = [], selected?: ModelKey): Context | undefined => {
   const message = lastAssistantWithTokens(messages)
   if (!message) return undefined
 
-  const provider = providers.find((item) => item.id === message.providerID)
-  const model = provider?.models[message.modelID]
+  const selectedProvider = selected ? providers.find((item) => item.id === selected.providerID) : undefined
+  const selectedModel = selectedProvider?.models[selected?.modelID ?? ""]
+  const provider = selectedModel ? selectedProvider : providers.find((item) => item.id === message.providerID)
+  const model = selectedModel ?? provider?.models[message.modelID]
   const limit = model?.limit.context
   const total = tokenTotal(message)
 
@@ -51,8 +59,8 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Context | 
     message,
     provider,
     model,
-    providerLabel: provider?.name ?? message.providerID,
-    modelLabel: model?.name ?? message.modelID,
+    providerLabel: provider?.name ?? selected?.providerID ?? message.providerID,
+    modelLabel: model?.name ?? selected?.modelID ?? message.modelID,
     limit,
     input: message.tokens.input,
     total,
@@ -60,6 +68,6 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Context | 
   }
 }
 
-export function getSessionContext(messages: Message[] = [], providers: Provider[] = []) {
-  return build(messages, providers)
+export function getSessionContext(messages: Message[] = [], providers: Provider[] = [], selected?: ModelKey) {
+  return build(messages, providers, selected)
 }

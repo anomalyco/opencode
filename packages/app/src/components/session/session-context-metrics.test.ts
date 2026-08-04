@@ -67,6 +67,27 @@ describe("getSessionContext", () => {
     expect(ctx?.modelLabel).toBe("GPT-4.1")
   })
 
+  test("uses the selected model limit when it differs from the last assistant model", () => {
+    const messages = [assistant("a1", { input: 300, output: 100, reasoning: 50, read: 25, write: 25 }, 1.25)]
+    const providers = [
+      {
+        id: "openai",
+        name: "OpenAI",
+        models: {
+          large: { name: "Large", limit: { context: 1000 } },
+          small: { name: "Small", limit: { context: 250 } },
+        },
+      },
+    ]
+
+    const ctx = getSessionContext(messages, providers, { providerID: "openai", modelID: "small" })
+
+    expect(ctx?.message.id).toBe("a1")
+    expect(ctx?.limit).toBe(250)
+    expect(ctx?.usage).toBe(200)
+    expect(ctx?.modelLabel).toBe("Small")
+  })
+
   test("preserves fallback labels and null usage when model metadata is missing", () => {
     const messages = [assistant("a1", { input: 40, output: 10, reasoning: 0, read: 0, write: 0 }, 0.1, "p-1", "m-1")]
     const providers = [{ id: "p-1", models: {} }]

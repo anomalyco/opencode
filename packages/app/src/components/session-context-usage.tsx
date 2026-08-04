@@ -16,6 +16,7 @@ import { getSessionContext } from "@/components/session/session-context-metrics"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { useSettings } from "@/context/settings"
+import { useLocal } from "@/context/local"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
@@ -50,6 +51,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const language = useLanguage()
   const sdk = useSDK()
   const settings = useSettings()
+  const local = useLocal()
   const providers = useProviders(() => sdk().directory)
   const { params, tabs, view } = useSessionLayout()
   const isDesktop = createMediaQuery("(min-width: 768px)")
@@ -73,7 +75,14 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       }),
   )
 
-  const context = createMemo(() => getSessionContext(messages(), [...providers.all().values()]))
+  const context = createMemo(() => {
+    const current = local.model.current()
+    return getSessionContext(
+      messages(),
+      [...providers.all().values()],
+      current ? { providerID: current.provider.id, modelID: current.id } : undefined,
+    )
+  })
   const cost = createMemo(() => {
     return usd().format(info()?.cost ?? 0)
   })
