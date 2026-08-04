@@ -22,6 +22,7 @@ const locales = [
   "tr",
   "zh",
   "zht",
+  "fa",
 ] as const
 type Locale = (typeof locales)[number]
 
@@ -43,6 +44,7 @@ const languages = {
   tr: "Turkish",
   zh: "Simplified Chinese",
   zht: "Traditional Chinese",
+  fa: "Farsi",
 } as const satisfies Record<Locale, string>
 
 type Dictionary = Record<string, string>

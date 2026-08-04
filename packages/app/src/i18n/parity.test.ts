@@ -18,6 +18,7 @@ const appLocales = [
   "tr",
   "zh",
   "zht",
+  "fa",
 ] as const
 const desktopLocales = appLocales.filter((locale) => locale !== "th" && locale !== "tr")
 
