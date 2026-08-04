@@ -14,12 +14,6 @@ export type LocalCommandResult = {
   timedOut: boolean
 }
 
-export function isLocalServerURL(value: string) {
-  if (!URL.canParse(value)) return false
-  const hostname = new URL(value).hostname.replace(/^\[|\]$/g, "")
-  return ["127.0.0.1", "::1", "0.0.0.0", "localhost"].includes(hostname)
-}
-
 export async function executeLocalCommand(input: { command: string; directory: string; timeout?: number }) {
   const shell = Shell.preferred()
   if (!shell) throw new Error("No local shell is available")

@@ -2,24 +2,11 @@ import { describe, expect, test } from "bun:test"
 import {
   executeLocalCommand,
   formatLocalCommandResult,
-  isLocalServerURL,
   LOCAL_COMMAND_OUTPUT_LIMIT,
 } from "../../src/prompt/local-command"
 
 describe("local command", () => {
-  test("accepts loopback server URLs", () => {
-    expect(isLocalServerURL("http://127.0.0.1:4096")).toBe(true)
-    expect(isLocalServerURL("http://localhost:4096")).toBe(true)
-    expect(isLocalServerURL("http://[::1]:4096")).toBe(true)
-    expect(isLocalServerURL("http://0.0.0.0:4096")).toBe(true)
-  })
-
-  test("rejects remote server URLs", () => {
-    expect(isLocalServerURL("https://opencode.example.com")).toBe(false)
-    expect(isLocalServerURL("not a URL")).toBe(false)
-  })
-
-  test("runs the command in the supplied directory and captures its output", async () => {
+  test("runs the command in the supplied local directory and captures its output", async () => {
     const result = await executeLocalCommand({
       command: process.platform === "win32" ? "cd" : "pwd",
       directory: process.cwd(),

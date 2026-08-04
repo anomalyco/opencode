@@ -45,7 +45,7 @@ import {
 } from "../../prompt/footer"
 import { createStashArm, type StashGesture } from "../../prompt/stash-arm"
 import { computePromptTraits, type PromptMode } from "../../prompt/traits"
-import { executeLocalCommand, formatLocalCommandResult, isLocalServerURL } from "../../prompt/local-command"
+import { executeLocalCommand, formatLocalCommandResult } from "../../prompt/local-command"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
@@ -946,13 +946,6 @@ export function Prompt(props: PromptProps) {
               toast.show({ message: "Open a session before running a local command.", variant: "error" })
               return
             }
-            if (!isLocalServerURL(sdk.url)) {
-              toast.show({
-                message: "Local commands are unavailable while attached to a remote server.",
-                variant: "error",
-              })
-              return
-            }
             stashed = undefined
             setStore("placeholder", randomIndex(shell().length))
             setStore("mode", "local")
@@ -967,22 +960,6 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: inputTarget() !== undefined && store.mode === "local",
       bindings: [{ key: "escape", desc: "Exit local mode", group: "Prompt", cmd: exitLocalMode }],
-    }
-  })
-
-  useBindings(() => {
-    return {
-      target: inputTarget,
-      enabled: (() => {
-        cursorVersion()
-        return (
-          inputTarget() !== undefined &&
-          store.mode === "local" &&
-          input?.plainText === "" &&
-          input.visualCursor.offset === 0
-        )
-      })(),
-      bindings: [{ key: "backspace", desc: "Exit local mode", group: "Prompt", cmd: exitLocalMode }],
     }
   })
 
@@ -1300,11 +1277,6 @@ export function Prompt(props: PromptProps) {
       toast.show({ message: "The active session has no local directory.", variant: "error" })
       return false
     }
-    if (!isLocalServerURL(sdk.url)) {
-      toast.show({ message: "Local commands are unavailable while attached to a remote server.", variant: "error" })
-      return false
-    }
-
     setStore("historyBadge", null)
     input.extmarks.clear()
     setStore("prompt", {
@@ -1313,8 +1285,6 @@ export function Prompt(props: PromptProps) {
     })
     setStore("extmarkToPartIndex", new Map())
     input.clear()
-    setStore("mode", "normal")
-
     try {
       const result = await executeLocalCommand({
         command,
@@ -1536,7 +1506,8 @@ export function Prompt(props: PromptProps) {
 
   const highlight = createMemo(() => {
     if (leader()) return theme.border
-    if (store.mode !== "normal") return theme.primary
+    if (store.mode === "local") return theme.warning
+    if (store.mode === "shell") return theme.primary
     const agent = local.agent.current()
     if (!agent) return theme.border
     return local.agent.color(agent.name)
@@ -1737,7 +1708,7 @@ export function Prompt(props: PromptProps) {
                     </Show>
                   }
                 >
-                  <text fg={theme.primary}>Local</text>
+                  <text fg={theme.warning}>Local shell</text>
                 </Show>
               </box>
               <Show when={hasRightContent()}>
@@ -1966,8 +1937,8 @@ export function Prompt(props: PromptProps) {
                   </text>
                 </Match>
                 <Match when={store.mode === "local"}>
-                  <text fg={theme.text}>
-                    esc <span style={{ fg: theme.textMuted }}>shell mode</span>
+                  <text fg={theme.warning}>
+                    esc <span style={{ fg: theme.textMuted }}>exit local mode</span>
                   </text>
                 </Match>
               </Switch>
