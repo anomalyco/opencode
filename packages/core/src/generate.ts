@@ -47,10 +47,6 @@ export const layer = Layer.effect(
             input.model
               ? new ModelSelectionError({ message: error.message })
               : new UnavailableError({ message: error.message, service: error.providerID }),
-          "SessionRunnerModel.ProviderRemovedError": (error) =>
-            input.model
-              ? new ModelSelectionError({ message: error.message })
-              : new UnavailableError({ message: error.message, service: error.providerID }),
         }),
       )
       if (!resolved)

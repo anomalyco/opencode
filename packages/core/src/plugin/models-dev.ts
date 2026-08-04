@@ -51,5 +51,7 @@ export const ModelsDevPlugin = define({
 })
 
 function snapshots(data: readonly ModelsDev.Snapshot[]) {
-  return structuredClone(data).filter((provider) => !Provider.isRemoved(provider.info.id))
+  return structuredClone(data).filter(
+    (provider) => provider.info.id !== "azure-cognitive-services" && provider.info.id !== "google-vertex-anthropic",
+  )
 }

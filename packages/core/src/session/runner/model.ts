@@ -3,6 +3,7 @@ export * as SessionRunnerModel from "./model"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { LanguageModel } from "@opencode-ai/ai"
 import { Context, Effect, Layer, Schema } from "effect"
+import { Catalog } from "../../catalog"
 import { ModelResolver } from "../../model-resolver"
 import { Capabilities, ID, Info, Ref, VariantID } from "../../model"
 import { Provider } from "../../provider"
@@ -22,6 +23,10 @@ export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavaila
   { providerID: Provider.ID, modelID: ID },
 ) {
   override get message() {
+    if (this.providerID === "azure-cognitive-services")
+      return `Model unavailable: ${this.providerID}/${this.modelID}. Use azure/${this.modelID} instead.`
+    if (this.providerID === "google-vertex-anthropic")
+      return `Model unavailable: ${this.providerID}/${this.modelID}. Use google-vertex/${this.modelID} instead.`
     return `Model unavailable: ${this.providerID}/${this.modelID}`
   }
 }
@@ -29,8 +34,6 @@ export const VariantUnavailableError = ModelResolver.VariantUnavailableError
 export type VariantUnavailableError = ModelResolver.VariantUnavailableError
 export const UnsupportedPackageError = ModelResolver.UnsupportedPackageError
 export type UnsupportedPackageError = ModelResolver.UnsupportedPackageError
-export const ProviderRemovedError = ModelResolver.ProviderRemovedError
-export type ProviderRemovedError = ModelResolver.ProviderRemovedError
 
 export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved
@@ -63,19 +66,35 @@ export const resolved = (
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const catalog = yield* Catalog.Service
     const resolver = yield* ModelResolver.Service
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
+        const configured = session.model ? undefined : yield* catalog.model.configured()
+        if (
+          configured?.providerID === "azure-cognitive-services" ||
+          configured?.providerID === "google-vertex-anthropic"
+        )
+          return yield* new ModelUnavailableError({
+            providerID: configured.providerID,
+            modelID: configured.modelID,
+          })
         const resolved = yield* resolver.resolve(session.model)
         if (resolved) return resolved
-        if (!session.model) return yield* new ModelNotSelectedError({ sessionID: session.id })
-        return yield* new ModelUnavailableError({
-          providerID: session.model.providerID,
-          modelID: session.model.id,
-        })
+        if (session.model)
+          return yield* new ModelUnavailableError({
+            providerID: session.model.providerID,
+            modelID: session.model.id,
+          })
+        if (configured)
+          return yield* new ModelUnavailableError({
+            providerID: configured.providerID,
+            modelID: configured.modelID,
+          })
+        return yield* new ModelNotSelectedError({ sessionID: session.id })
       }),
     })
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [ModelResolver.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Catalog.node, ModelResolver.node] })

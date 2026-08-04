@@ -666,7 +666,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  it.live("explains replacements for removed providers", () =>
+  it.live("explains replacements for unavailable legacy provider models", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -697,14 +697,11 @@ describe("LocationServiceMap", () => {
             ).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
 
             expect(failure).toMatchObject({
-              _tag: "SessionRunnerModel.ProviderRemovedError",
+              _tag: "SessionRunnerModel.ModelUnavailableError",
               providerID,
-              replacement,
               modelID: "chat",
             })
-            expect(failure.message).toBe(
-              `Provider "${providerID}" no longer exists. Change "${providerID}/chat" to "${replacement}/chat".`,
-            )
+            expect(failure.message).toBe(`Model unavailable: ${providerID}/chat. Use ${replacement}/chat instead.`)
           }
         }),
       ),
@@ -743,7 +740,7 @@ describe("LocationServiceMap", () => {
           ).pipe(Effect.provide(context), Effect.flip)
 
           expect(failure.message).toBe(
-            'Provider "azure-cognitive-services" no longer exists. Change "azure-cognitive-services/deployment" to "azure/deployment".',
+            "Model unavailable: azure-cognitive-services/deployment. Use azure/deployment instead.",
           )
         }),
       ),
