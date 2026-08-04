@@ -297,9 +297,7 @@ export const layer = Layer.effect(
     return Service.of({
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
         const selected = requested
-          ? (yield* catalog.model.available()).find(
-              (model) => model.providerID === requested.providerID && model.id === requested.id,
-            )
+          ? yield* catalog.model.get(requested.providerID, requested.id)
           : yield* catalog.model
               .default()
               .pipe(

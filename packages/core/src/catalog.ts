@@ -51,7 +51,6 @@ export interface Interface extends State.Transformable<Draft> {
     readonly get: (providerID: Provider.ID, modelID: Model.ID) => Effect.Effect<Model.Info | undefined>
     readonly all: () => Effect.Effect<Model.Info[]>
     readonly available: () => Effect.Effect<Model.Info[]>
-    readonly configured: () => Effect.Effect<DefaultModel | undefined>
     readonly default: () => Effect.Effect<Model.Info | undefined>
     readonly small: (providerID: Provider.ID) => Effect.Effect<Model.Info | undefined>
   }
@@ -193,10 +192,6 @@ const layer = Layer.effect(
             models,
             Array.sortWith((item) => item.time.released, Order.flip(Order.Number)),
           )
-        }),
-
-        configured: Effect.fn("Catalog.model.configured")(function* () {
-          return state.get().defaultModel
         }),
 
         default: Effect.fn("Catalog.model.default")(function* () {

@@ -70,28 +70,20 @@ const layer = Layer.effect(
     const resolver = yield* ModelResolver.Service
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
-        const configured = session.model ? undefined : yield* catalog.model.configured()
-        if (
-          configured?.providerID === "azure-cognitive-services" ||
-          configured?.providerID === "google-vertex-anthropic"
+        if (!session.model) {
+          const resolved = yield* resolver.resolve()
+          if (resolved) return resolved
+          return yield* new ModelNotSelectedError({ sessionID: session.id })
+        }
+        const selected = (yield* catalog.model.available()).find(
+          (model) => model.providerID === session.model?.providerID && model.id === session.model.id,
         )
-          return yield* new ModelUnavailableError({
-            providerID: configured.providerID,
-            modelID: configured.modelID,
-          })
-        const resolved = yield* resolver.resolve(session.model)
-        if (resolved) return resolved
-        if (session.model)
+        if (!selected)
           return yield* new ModelUnavailableError({
             providerID: session.model.providerID,
             modelID: session.model.id,
           })
-        if (configured)
-          return yield* new ModelUnavailableError({
-            providerID: configured.providerID,
-            modelID: configured.modelID,
-          })
-        return yield* new ModelNotSelectedError({ sessionID: session.id })
+        return yield* resolver.resolveModel(selected, session.model.variant)
       }),
     })
   }),

@@ -28,8 +28,7 @@ const catalog = Layer.mock(Catalog.Service, {
   model: {
     get: () => Effect.succeed(selected),
     all: () => Effect.die("unused"),
-    available: () => Effect.succeed([selected]),
-    configured: () => Effect.succeed(undefined),
+    available: () => Effect.die("unused"),
     default: () => Effect.die("unused"),
     small: () => Effect.die("unused"),
   },

@@ -361,7 +361,6 @@ const promptCatalog = Layer.mock(Catalog.Service, {
     get: () => Effect.succeed(undefined),
     all: () => Effect.succeed([]),
     available: () => Effect.succeed([]),
-    configured: () => Effect.succeed(undefined),
     default: () => Effect.succeed(undefined),
     small: () => Effect.succeed(undefined),
   },

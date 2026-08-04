@@ -708,45 +708,6 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  it.live("rejects a removed provider configured as the default model", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            fs.writeFile(
-              path.join(dir.path, "opencode.json"),
-              JSON.stringify({ model: "azure-cognitive-services/deployment" }),
-            ),
-          )
-          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-          const locations = yield* LocationServiceMap.Service
-          const context = yield* locations.contextEffect(location)
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(context))
-          const failure = yield* SessionRunnerModel.Service.use((models) =>
-            models.resolve(
-              Session.Info.make({
-                id: Session.ID.make("ses_removed_default"),
-                projectID: Project.ID.global,
-                title: "test",
-                cost: Money.USD.zero,
-                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-                time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
-                location,
-              }),
-            ),
-          ).pipe(Effect.provide(context), Effect.flip)
-
-          expect(failure.message).toBe(
-            "Model unavailable: azure-cognitive-services/deployment. Use azure/deployment instead.",
-          )
-        }),
-      ),
-    ),
-  )
-
   it.live("preserves the selected catalog identity when the package model id differs", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
