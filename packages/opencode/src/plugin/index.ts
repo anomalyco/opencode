@@ -31,6 +31,7 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { HarnessPlugin } from "@opencode-ai/core/harness/plugin"
 
 type State = {
   hooks: Hooks[]
@@ -126,10 +127,15 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
     const flags = yield* RuntimeFlags.Service
+    const harnessPluginSvc = yield* HarnessPlugin.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
         const hooks: Hooks[] = []
+        const harnessHooks = yield* harnessPluginSvc.createHooks("general").pipe(Effect.orElseSucceed(() => ({})))
+        if (harnessHooks && Object.keys(harnessHooks).length > 0) {
+          hooks.push(harnessHooks)
+        }
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
@@ -308,7 +314,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node],
+  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node, HarnessPlugin.node],
 })
 
 export * as Plugin from "."

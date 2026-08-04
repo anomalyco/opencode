@@ -39,5 +39,10 @@ export const isContextOverflow = (message: string) =>
 
 export const isContextOverflowFailure = (failure: unknown) =>
   failure instanceof LLMError
-    ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
-    : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
+    ? (failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow") ||
+      isContextOverflow(failure.reason.message)
+    : Schema.is(ProviderErrorEvent)(failure)
+    ? failure.classification === "context-overflow" || isContextOverflow(failure.message)
+    : failure instanceof Error
+    ? isContextOverflow(failure.message)
+    : false

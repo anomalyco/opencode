@@ -20,6 +20,7 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { isContextOverflow } from "@opencode-ai/llm"
 import { NotFoundError } from "@/storage/storage"
 import { and } from "drizzle-orm"
 import { desc } from "drizzle-orm"
@@ -699,8 +700,42 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case e instanceof Error:
-      return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
+    case e instanceof Error: {
+      const msg = errorMessage(e)
+      if (isContextOverflow(msg)) {
+        return new ContextOverflowError(
+          {
+            message: msg,
+          },
+          { cause: e },
+        ).toObject()
+      }
+      try {
+        const parsed = ProviderError.parseStreamError(e)
+        if (parsed) {
+          if (parsed.type === "context_overflow") {
+            return new ContextOverflowError(
+              {
+                message: parsed.message,
+                responseBody: parsed.responseBody,
+              },
+              { cause: e },
+            ).toObject()
+          }
+          return new APIError(
+            {
+              message: parsed.message,
+              isRetryable: parsed.isRetryable,
+              responseBody: parsed.responseBody,
+            },
+            {
+              cause: e,
+            },
+          ).toObject()
+        }
+      } catch {}
+      return new NamedError.Unknown({ message: msg }, { cause: e }).toObject()
+    }
     default:
       try {
         const parsed = ProviderError.parseStreamError(e)

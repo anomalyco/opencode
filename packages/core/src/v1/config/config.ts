@@ -29,6 +29,13 @@ const LogLevelRef = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate
   description: "Log level",
 })
 
+export const ConfigEmbeddingV1 = Schema.Struct({
+  provider: Schema.optional(Schema.String),
+  baseURL: Schema.optional(Schema.String),
+  model: Schema.optional(Schema.String),
+  apiKey: Schema.optional(Schema.String),
+}).annotate({ description: "Embedding provider configuration" })
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String).annotate({
     description: "JSON schema reference for configuration validation",
@@ -76,6 +83,9 @@ export const Info = Schema.Struct({
   }),
   small_model: Schema.optional(Schema.String).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
+  }),
+  embedding: Schema.optional(ConfigEmbeddingV1).annotate({
+    description: "Embedding provider configuration for harness vector embeddings",
   }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:

@@ -277,12 +277,15 @@ const layer = Layer.effect(
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const stream = yield* restore(providerStream).pipe(Effect.exit)
+          const squashedError = stream._tag === "Failure" ? Cause.squash(stream.cause) : undefined
           const failure =
-            stream._tag === "Failure" ? Option.getOrUndefined(Cause.findErrorOption(stream.cause)) : undefined
+            stream._tag === "Failure"
+              ? Option.getOrUndefined(Cause.findErrorOption(stream.cause)) ?? squashedError
+              : undefined
           if (
             recoverOverflow &&
             !publisher.hasAssistantStarted() &&
-            isContextOverflowFailure(overflowFailure ?? failure) &&
+            isContextOverflowFailure(overflowFailure ?? failure ?? squashedError) &&
             (yield* restore(recoverOverflow({ sessionID: session.id, entries, model, request })))
           )
             return yield* Effect.die(continueAfterOverflowCompaction(currentStep))

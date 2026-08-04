@@ -47,9 +47,12 @@ function message(providerID: ProviderV2.ID, e: APICallError) {
 
     try {
       const body = JSON.parse(e.responseBody)
-      // try to extract common error message fields
-      const errMsg = body.message || body.error || body.error?.message
-      if (errMsg && typeof errMsg === "string") {
+      // try to extract common error message fields (including FastAPI/vLLM/TPU gateway detail field)
+      const errMsg =
+        (typeof body.detail === "string" ? body.detail : undefined) ||
+        (typeof body.message === "string" ? body.message : undefined) ||
+        (typeof body.error === "string" ? body.error : typeof body.error?.message === "string" ? body.error.message : undefined)
+      if (errMsg) {
         return `${msg}: ${errMsg}`
       }
     } catch {}
@@ -105,6 +108,18 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
   if (!body) return
 
   const responseBody = JSON.stringify(body)
+  if (
+    isContextOverflow(responseBody) ||
+    isContextOverflow(typeof body.detail === "string" ? body.detail : "") ||
+    isContextOverflow(typeof body.message === "string" ? body.message : "")
+  ) {
+    return {
+      type: "context_overflow",
+      message: typeof body.detail === "string" ? body.detail : typeof body.message === "string" ? body.message : responseBody,
+      responseBody,
+    }
+  }
+
   if (body.type !== "error") return
 
   switch (body?.error?.code) {
@@ -165,7 +180,12 @@ export type ParsedAPICallError =
 export function parseAPICallError(input: { providerID: ProviderV2.ID; error: APICallError }): ParsedAPICallError {
   const m = message(input.providerID, input.error)
   const body = json(input.error.responseBody)
-  if (isContextOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
+  if (
+    isContextOverflow(m) ||
+    isContextOverflow(input.error.responseBody ?? "") ||
+    input.error.statusCode === 413 ||
+    body?.error?.code === "context_length_exceeded"
+  ) {
     return {
       type: "context_overflow",
       message: m,

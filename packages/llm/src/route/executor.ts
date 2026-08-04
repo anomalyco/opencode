@@ -259,7 +259,7 @@ const statusReason = (input: {
   ) {
     return new InvalidRequestReason({
       message: input.message,
-      classification: isContextOverflow(body) ? "context-overflow" : undefined,
+      classification: isContextOverflow(body) || isContextOverflow(input.message) ? "context-overflow" : undefined,
       http: input.http,
     })
   }

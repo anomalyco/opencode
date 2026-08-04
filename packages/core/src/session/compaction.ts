@@ -9,7 +9,7 @@ import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
 
-const DEFAULT_BUFFER = 20_000
+const DEFAULT_BUFFER = 50_000
 const DEFAULT_KEEP_TOKENS = 8_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
