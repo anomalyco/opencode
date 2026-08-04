@@ -24,8 +24,14 @@ if [ -f "$BINARY" ]; then
   echo "✅ Built binary successfully at: $BINARY"
   mkdir -p ~/.local/bin
   
+  # Uninstall any global opencode npm package or binary if present to avoid path conflicts
+  echo "🧹 Cleaning up any previous global opencode installations..."
+  npm uninstall -g opencode-ai opencode 2>/dev/null || true
+  bun remove -g opencode-ai opencode 2>/dev/null || true
+  
   # Remove stale symlinks or existing binaries
   rm -f ~/.local/bin/opencode ~/.local/bin/opencode-evolve
+  rm -f /usr/local/bin/opencode /usr/local/bin/opencode-evolve 2>/dev/null || true
   
   # Clean up stale SQLite lock files that may cause TUI freeze
   rm -f ~/.local/share/opencode/*.db-wal ~/.local/share/opencode/*.db-shm 2>/dev/null || true
