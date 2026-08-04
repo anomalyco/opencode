@@ -8,10 +8,15 @@ import type {
   SessionStructuredError,
 } from "@opencode-ai/client/promise"
 
+const emptyList = new Set(["/skill", "/command", "/lsp", "/formatter", "/vcs/status", "/vcs/diff"])
+const emptyObject = new Set(["/global/config", "/config", "/provider/auth", "/mcp", "/experimental/resource"])
+
 export interface MockServerConfig {
+  protocol?: "v1" | "v2"
   provider: unknown | (() => unknown)
   integrationMethods?: Record<string, unknown[]>
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
+  onInstanceDispose?: () => void
   directory: string
   project: unknown
   sessions: ({ id: string } & Record<string, unknown>)[]
@@ -36,6 +41,20 @@ export interface MockServerConfig {
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   const cursors = new Map<string, string>()
   let nextCursor = 0
+  const staticRoutes: Record<string, unknown> = {
+    "/path": {
+      state: config.directory,
+      config: config.directory,
+      worktree: config.directory,
+      directory: config.directory,
+      home: "C:/OpenCode",
+    },
+    "/project": [config.project],
+    "/project/current": config.project,
+    "/agent": [{ name: "build", mode: "primary" }],
+    "/vcs": { branch: "main", default_branch: "main" },
+    "/session": config.sessions,
+  }
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     const targetPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
@@ -45,15 +64,60 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (url.port !== targetPort && url.port !== appPort) return route.fallback()
 
     const path = url.pathname
-    if (path === "/api/event") {
+    if (path === "/global/event" || path === "/event" || path === "/api/event") {
       const events = config.events?.()
       return sse(
         route,
-        [{ id: "evt_mock_connected", type: "server.connected", data: {} }, ...(events?.map(currentEvent) ?? [])],
+        path === "/api/event"
+          ? [{ id: "evt_mock_connected", type: "server.connected", data: {} }, ...(events?.map(currentEvent) ?? [])]
+          : [
+              ...(path === "/global/event"
+                ? [{ payload: { id: "evt_mock_connected", type: "server.connected", properties: {} } }]
+                : []),
+              ...(events ?? []),
+            ],
         config.eventRetry,
       )
     }
-    if (path === "/api/health") return json(route, { healthy: true, version: "2.0.0", pid: 1 })
+    if (path === "/global/health")
+      return config.protocol === "v2" ? json(route, {}, undefined, 404) : json(route, { healthy: true })
+    if (path === "/api/health" && config.protocol === "v2")
+      return json(route, { healthy: true, version: "2.0.0", pid: 1 })
+    if (path === "/experimental/capabilities") return json(route, { backgroundSubagents: true })
+    if (path === "/provider") return json(route, providerConfig(config))
+    if (path === "/provider/auth") return json(route, config.integrationMethods ?? {})
+    const legacyAuth = path.match(/^\/auth\/([^/]+)$/)?.[1]
+    if (legacyAuth && route.request().method() === "PUT") {
+      config.onConnectKey?.({ integrationID: legacyAuth, body: route.request().postDataJSON() })
+      return json(route, true)
+    }
+    if (path === "/instance/dispose" && route.request().method() === "POST") {
+      config.onInstanceDispose?.()
+      return json(route, true)
+    }
+    if (path === "/permission")
+      return json(route, typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
+    if (path === "/question")
+      return json(route, typeof config.questions === "function" ? config.questions() : (config.questions ?? []))
+    if (path === "/session/status")
+      return json(
+        route,
+        typeof config.sessionStatus === "function" ? config.sessionStatus() : (config.sessionStatus ?? {}),
+      )
+    if (path === "/vcs/diff" && config.vcsDiff) return json(route, config.vcsDiff)
+    if (path === "/file" && config.fileList)
+      return json(route, await config.fileList(url.searchParams.get("path") ?? ""))
+    if (path === "/file/content" && config.fileContent)
+      return json(route, await config.fileContent(url.searchParams.get("path") ?? ""))
+    if (path === "/find/file" && config.findFiles)
+      return json(
+        route,
+        await config.findFiles({
+          query: url.searchParams.get("query") ?? "",
+          dirs: url.searchParams.get("dirs") ?? undefined,
+          limit: url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : undefined,
+        }),
+      )
     if (path === "/api/reference")
       return json(route, {
         location: {
@@ -218,6 +282,9 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
+    if (/^\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST") return json(route, true)
+    if (/^\/session\/[^/]+\/permissions\/[^/]+$/.test(path) && route.request().method() === "POST")
+      return json(route, true)
     if (
       /^\/api\/session\/[^/]+\/(archive|rename|interrupt|revert\/clear|revert\/commit)$/.test(path) &&
       route.request().method() === "POST"
@@ -227,6 +294,9 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (/^\/api\/session\/[^/]+$/.test(path) && route.request().method() === "DELETE") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
+    if (emptyObject.has(path)) return json(route, {})
+    if (emptyList.has(path)) return json(route, [])
+    if (path in staticRoutes) return json(route, staticRoutes[path])
 
     const currentSessionMatch = path.match(/^\/api\/session\/([^/]+)$/)
     if (currentSessionMatch) {
@@ -246,6 +316,25 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, { data: currentMessage(message) })
     }
 
+    const sessionMatch = path.match(/^\/session\/([^/]+)$/)
+    if (sessionMatch) return json(route, config.sessions.find((session) => session.id === sessionMatch[1]) ?? {})
+
+    const projectMatch = path.match(/^\/project\/([^/]+)$/)
+    if (projectMatch) return json(route, config.project)
+
+    const messageMatch = path.match(/^\/session\/([^/]+)\/message\/([^/]+)$/)
+    if (messageMatch) {
+      config.onMessage?.({ sessionID: messageMatch[1]!, messageID: messageMatch[2]! })
+      if (config.messageDelay !== undefined) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
+      const message = config.message?.(messageMatch[1]!, messageMatch[2]!)
+      if (message === undefined) return json(route, { error: "Message not found" }, undefined, 404)
+      return json(route, message)
+    }
+
+    const todoMatch = path.match(/^\/session\/([^/]+)\/todo$/)
+    if (todoMatch) return json(route, config.todos?.(todoMatch[1]!) ?? [])
+    if (/^\/session\/[^/]+\/(children|diff)$/.test(path)) return json(route, [])
+
     const currentMessagesMatch = path.match(/^\/api\/session\/([^/]+)\/message$/)
     if (currentMessagesMatch) {
       const token = url.searchParams.get("cursor") ?? undefined
@@ -262,6 +351,22 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         data: pageData.items.map(currentMessage).reverse(),
         cursor: { next: cursor },
       })
+    }
+
+    const messagesMatch = path.match(/^\/session\/([^/]+)\/message$/)
+    if (messagesMatch) {
+      const token = url.searchParams.get("before") ?? undefined
+      const before = token ? cursors.get(token) : undefined
+      if (token && !before) return json(route, { error: "Invalid cursor" }, undefined, 400)
+      config.onMessages?.({ sessionID: messagesMatch[1], before, phase: "start" })
+      await config.beforeMessagesResponse?.({ sessionID: messagesMatch[1]!, before })
+      if (config.messageDelay !== undefined) await new Promise((resolve) => setTimeout(resolve, config.messageDelay))
+      const pageData = config.pageMessages(messagesMatch[1], Number(url.searchParams.get("limit") ?? 80), before)
+      config.onMessages?.({ sessionID: messagesMatch[1], before, phase: "end" })
+      if (!pageData.cursor) return json(route, pageData.items)
+      const cursor = `cursor_${++nextCursor}`
+      cursors.set(cursor, pageData.cursor)
+      return json(route, pageData.items, { "x-next-cursor": cursor })
     }
 
     if (url.port === targetPort && targetPort !== appPort) return json(route, {})
