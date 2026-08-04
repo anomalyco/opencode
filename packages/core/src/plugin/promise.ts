@@ -2,7 +2,6 @@ export * as PluginPromise from "./promise"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import type { Context, Plugin } from "@opencode-ai/plugin/promise/plugin"
-import type { SessionHttpMiddleware } from "@opencode-ai/plugin/promise/session"
 import type { Info } from "@opencode-ai/plugin/promise/tool"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Integration } from "@opencode-ai/schema/integration"
@@ -57,21 +56,6 @@ export function fromPromise(plugin: Plugin) {
                 callback(draft)
               }),
             )
-
-        const sessionHttp = (middleware: SessionHttpMiddleware) =>
-          register(
-            host.session.http((event, input, next) =>
-              Effect.tryPromise({
-                try: (signal) =>
-                  Promise.resolve(
-                    middleware(event, new Request(input, { signal }), (request) =>
-                      Effect.runPromiseWith(context)(next(new Request(request, { signal })), { signal }),
-                    ),
-                  ),
-                catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-              }),
-            ),
-          )
 
         const context2: Context = {
           app: host.app,
@@ -283,7 +267,20 @@ export function fromPromise(plugin: Plugin) {
           session: {
             hook: (name, callback) =>
               register(host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
-            http: sessionHttp,
+            http: (middleware) =>
+              register(
+                host.session.http((event, input, next) =>
+                  Effect.tryPromise({
+                    try: (signal) =>
+                      Promise.resolve(
+                        middleware(event, new Request(input, { signal }), (request) =>
+                          Effect.runPromiseWith(context)(next(new Request(request, { signal })), { signal }),
+                        ),
+                      ),
+                    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+                  }),
+                ),
+              ),
             create: (input) =>
               run(
                 host.session.create(
