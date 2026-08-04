@@ -445,6 +445,14 @@ Slot notes:
 - `app_bottom` is rendered in normal layout flow below the active route, while `app` is rendered afterward for global app-level UI.
 - Plugins can define custom slot names in `api.slots.register(...)` and render them from plugin UI with `ui.Slot`.
 
+Prompt replacement refs:
+
+- `home_prompt` and `session_prompt` replacements can publish a `TuiPromptRef` through the optional `ref` callback.
+- The original ref surface (`focused`, `current`, `set`, `reset`, `blur`, `focus`, and `submit`) remains required.
+- `cursorAtStart` and `stashAndClear` are optional capabilities. A replacement that implements both opts into the confirmed `←` gesture that saves a typed draft before navigating to the sessions list.
+- The host feature-detects both capabilities. If either is absent, an empty prompt can still navigate back immediately, while a non-empty prompt keeps normal plugin-owned behavior and is never cleared or navigated by the host.
+- Plugins consuming a prompt ref must also feature-detect optional capabilities before calling them. Existing replacements that publish only the original ref surface remain compatible.
+
 ### Plugin control and lifecycle
 
 - `api.plugins.list()` returns `{ id, source, spec, target, enabled, active }[]`.
