@@ -225,27 +225,14 @@ export const OpenAIPlugin = define({
         })
       }
     })
-    yield* ctx.session.hook("http", (evt) =>
-      Effect.sync(() => {
-        if (!chatgpt || evt.model.providerID !== Provider.ID.openai) return
-        const request = evt.request
-        evt.request = (input) => {
-          const url = new URL(input.url)
-          const headers = new Headers(input.headers)
-          headers.set("originator", "opencode")
-          headers.set("session-id", evt.sessionID)
-          if (url.origin !== "https://api.openai.com") return request(new Request(input, { headers }))
-          return request(
-            new Request(`${codexBaseURL}${url.pathname.replace(/^\/v1/, "")}${url.search}`, {
-              method: input.method,
-              headers,
-              body: input.body,
-              signal: input.signal,
-            }),
-          )
-        }
-      }),
-    )
+    yield* ctx.session.http((evt, request, next) => {
+      if (!chatgpt || evt.model.providerID !== Provider.ID.openai) return next(request)
+      const url = new URL(request.url)
+      request.headers.set("originator", "opencode")
+      request.headers.set("session-id", evt.sessionID)
+      if (url.origin !== "https://api.openai.com") return next(request)
+      return next(new Request(`${codexBaseURL}${url.pathname.replace(/^\/v1/, "")}${url.search}`, request))
+    })
 
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
     yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(

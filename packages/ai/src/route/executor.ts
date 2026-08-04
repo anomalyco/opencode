@@ -270,7 +270,7 @@ const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: u
     return transportError({ message: error.message, kind: "Timeout" })
   }
   if (!HttpClientError.isHttpClientError(error)) {
-    return transportError({ message: "HTTP transport failed" })
+    return transportError({ message: error instanceof Error ? error.message : "HTTP transport failed" })
   }
   const request = "request" in error ? error.request : undefined
   if (error.reason._tag === "TransportError") {

@@ -232,17 +232,19 @@ describe("fromPromise", () => {
         define({
           id: "promise-session-http",
           setup: async (ctx) => {
-            await ctx.session.hook("http", (event) => {
-              const request = event.request
-              event.request = async (input) => {
-                const response = await request(new Request(input, { headers: { "x-hook": "promise" } }))
-                return new Response(`${await response.text()}-response`)
-              }
+            await ctx.session.http(async (_event, request, next) => {
+              request.headers.set("x-hook", "promise")
+              const response = await next(request)
+              return new Response(`${await response.text()}-response`)
+            })
+            await ctx.session.http(async (_event, request, next) => {
+              const response = await next(request)
+              return new Response(`${await response.text()}-outer`)
             })
           },
         }),
       ).effect(host)
-      const event: SessionHooks["http"] = {
+      const event: PluginHooks.Domains["session"]["http"] = {
         sessionID: Session.ID.make("ses_promise_session_http"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("model") }),
@@ -252,7 +254,7 @@ describe("fromPromise", () => {
       yield* hooks.trigger("session", "http", event)
       const response = yield* event.request(new Request("https://provider.test"))
 
-      expect(yield* Effect.promise(() => response.text())).toBe("promise-response")
+      expect(yield* Effect.promise(() => response.text())).toBe("promise-response-outer")
     }),
   )
 
@@ -265,16 +267,13 @@ describe("fromPromise", () => {
         define({
           id: "promise-session-http-interrupt",
           setup: async (ctx) => {
-            await ctx.session.hook("http", (event) => {
-              const request = event.request
-              event.request = (input) => request(input)
-            })
+            await ctx.session.http((_event, request, next) => next(request))
           },
         }),
       ).effect(host)
       const started = yield* Deferred.make<void>()
       const interrupted = yield* Deferred.make<void>()
-      const event: SessionHooks["http"] = {
+      const event: PluginHooks.Domains["session"]["http"] = {
         sessionID: Session.ID.make("ses_promise_session_http_interrupt"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("model") }),

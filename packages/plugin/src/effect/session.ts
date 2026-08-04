@@ -3,8 +3,8 @@ import type { Message, SystemPart } from "@opencode-ai/ai"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { Session } from "@opencode-ai/schema/session"
-import type { Effect, JsonSchema } from "effect"
-import type { Hooks } from "./registration.js"
+import type { Effect, JsonSchema, Scope } from "effect"
+import type { Hooks, Registration } from "./registration.js"
 
 export interface SessionContext {
   readonly sessionID: Session.ID
@@ -15,16 +15,20 @@ export interface SessionContext {
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
 }
 
-export interface SessionHttp {
+export interface SessionHttpContext {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
-  request: (input: Request) => Effect.Effect<Response, Error>
 }
+
+export type SessionHttpMiddleware = (
+  context: SessionHttpContext,
+  request: Request,
+  next: (request: Request) => Effect.Effect<Response, Error>,
+) => Effect.Effect<Response, Error>
 
 export interface SessionHooks {
   readonly context: SessionContext
-  readonly http: SessionHttp
 }
 
 export type SessionDomain = Pick<
@@ -32,4 +36,5 @@ export type SessionDomain = Pick<
   "create" | "get" | "prompt" | "generate" | "command" | "synthetic" | "interrupt" | "rename" | "wait"
 > & {
   readonly hook: Hooks<SessionHooks>
+  readonly http: (middleware: SessionHttpMiddleware) => Effect.Effect<Registration, never, Scope.Scope>
 }

@@ -338,6 +338,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
     },
     session: {
       hook: (name, callback) => hooks.register("session", name, callback),
+      http: (middleware) =>
+        hooks.register("session", "http", (event) =>
+          Effect.sync(() => {
+            const next = event.request
+            event.request = (request) => middleware(event, request, next)
+          }),
+        ),
       create: (input) =>
         runtime.session.create({
           id: input?.id,
