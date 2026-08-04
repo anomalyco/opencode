@@ -8,17 +8,21 @@ import type { Database } from "../database/database"
 
 const DEFAULT_LIMIT = 1000
 const MAX_LIMIT = 10_000
+const AGGREGATE_SCAN_LIMIT = 25
 const checkpointType = Event.versionedType(Event.Compacted.type, Event.Compacted.durable!.version)
 
 type Policy = (typeof policies)[number]
 type Candidate = {
   id: string
   aggregateID: string
+  seq: number
+  entityID: string
   type: string
   bytes: number
   supersededBy: string
   latestData: string
   projectionData: string
+  projectionParentID: string | null
   workspaceID: string | null
   ownerID: string | null
 }
@@ -28,10 +32,14 @@ export type Options = {
   readonly all?: boolean
   readonly apply?: boolean
   readonly limit?: number
+  readonly cursor?: string
+  readonly afterSeq?: number
 }
 
 export type Report = {
   readonly dryRun: boolean
+  readonly aggregateID?: string
+  readonly inspected: number
   readonly candidates: number
   readonly rewritten: number
   readonly projectionMismatches: number
@@ -63,12 +71,14 @@ function validate(options: Options) {
   if (!Number.isSafeInteger(limit) || limit <= 0 || limit > MAX_LIMIT) {
     throw new Error(`limit must be a positive integer no greater than ${MAX_LIMIT}`)
   }
+  if (options.cursor && !options.all) throw new Error("cursor requires all scope")
+  if (options.afterSeq !== undefined && (!Number.isSafeInteger(options.afterSeq) || options.afterSeq < 0)) {
+    throw new Error("afterSeq must be a non-negative integer")
+  }
+  if (options.all && options.afterSeq !== undefined && !options.cursor) {
+    throw new Error("afterSeq requires a cursor for all scope")
+  }
   return limit
-}
-
-function continuation(options: Options, limit: number) {
-  const scope = options.all ? "--all" : `--session ${options.aggregateID}`
-  return `opencode db compact-events ${scope} --apply --limit ${limit}`
 }
 
 function checkpoint(candidate: Candidate) {
@@ -90,6 +100,14 @@ function projectedData(candidate: Candidate, policy: Policy) {
 
 function safe(candidate: Candidate, policy: Policy) {
   try {
+    const latest = JSON.parse(candidate.latestData) as {
+      info?: { id?: string; sessionID?: string }
+      part?: { id?: string; sessionID?: string; messageID?: string }
+    }
+    const value = policy.type === "message.updated.1" ? latest.info : latest.part
+    if (value?.id !== candidate.entityID || value.sessionID !== candidate.aggregateID) return false
+    if (policy.type === "message.part.updated.1" && latest.part?.messageID !== candidate.projectionParentID)
+      return false
     return isDeepStrictEqual(projectedData(candidate, policy), JSON.parse(candidate.projectionData))
   } catch {
     return false
@@ -98,12 +116,13 @@ function safe(candidate: Candidate, policy: Policy) {
 
 const candidates = Effect.fn("SessionEventLogCompaction.candidates")(function* (
   db: Database.Interface["db"],
-  options: Options,
+  aggregateID: string,
+  afterSeq: number,
   limit: number,
 ) {
   const rows = new Array<Candidate & { policy: Policy }>()
   for (const policy of policies) {
-    if (rows.length >= limit + 1) break
+    const projectionParent = policy.type === "message.part.updated.1" ? sql`projection.message_id` : sql`NULL`
     const selected = yield* db
       .all<Candidate>(
         sql`
@@ -112,12 +131,14 @@ const candidates = Effect.fn("SessionEventLogCompaction.candidates")(function* (
           FROM event
           WHERE type = ${policy.type}
             AND json_valid(data)
-            ${options.all ? sql`` : sql`AND aggregate_id = ${options.aggregateID!}`}
+            AND aggregate_id = ${aggregateID}
           GROUP BY aggregate_id, json_extract(data, ${policy.path})
         )
-        SELECT event.id, event.aggregate_id AS aggregateID, event.type, length(event.data) AS bytes,
+        SELECT event.id, event.aggregate_id AS aggregateID, event.seq,
+               latest.entity_id AS entityID, event.type, length(event.data) AS bytes,
                replacement.id AS supersededBy, replacement.data AS latestData,
-               projection.data AS projectionData, session.workspace_id AS workspaceID,
+               projection.data AS projectionData, ${projectionParent} AS projectionParentID,
+               session.workspace_id AS workspaceID,
                event_sequence.owner_id AS ownerID
         FROM event
         JOIN latest ON latest.aggregate_id = event.aggregate_id
@@ -128,27 +149,29 @@ const candidates = Effect.fn("SessionEventLogCompaction.candidates")(function* (
           AND projection.session_id = latest.aggregate_id
         JOIN session ON session.id = event.aggregate_id
         JOIN event_sequence ON event_sequence.aggregate_id = event.aggregate_id
-        WHERE event.type = ${policy.type} AND json_valid(event.data) AND event.seq < latest.seq
-        ORDER BY event.aggregate_id, event.seq
-        LIMIT ${limit + 1 - rows.length}
+        WHERE event.type = ${policy.type} AND json_valid(event.data)
+          AND event.seq > ${afterSeq} AND event.seq < latest.seq
+        ORDER BY event.seq
+        LIMIT ${limit + 1}
       `,
       )
       .pipe(Effect.orDie)
     rows.push(...selected.map((candidate) => ({ ...candidate, policy })))
   }
-  return rows
+  return rows.sort((a, b) => a.seq - b.seq).slice(0, limit + 1)
 })
 
 const malformed = Effect.fn("SessionEventLogCompaction.malformed")(function* (
   db: Database.Interface["db"],
-  options: Options,
+  aggregateID: string,
+  afterSeq: number,
 ) {
   const row = yield* db
     .get<{ count: number }>(
       sql`
       SELECT count(*) AS count FROM event
       WHERE type IN (${policies[0].type}, ${policies[1].type}) AND NOT json_valid(data)
-      ${options.all ? sql`` : sql`AND aggregate_id = ${options.aggregateID!}`}
+        AND aggregate_id = ${aggregateID} AND seq > ${afterSeq}
     `,
     )
     .pipe(Effect.orDie)
@@ -158,7 +181,8 @@ const malformed = Effect.fn("SessionEventLogCompaction.malformed")(function* (
 function report(
   rows: ReadonlyArray<Candidate & { policy: Policy }>,
   malformedCount: number,
-  options: Options,
+  aggregateID: string,
+  apply: boolean,
   limit: number,
 ) {
   const inspected = rows.slice(0, limit)
@@ -172,18 +196,80 @@ function report(
     byType[candidate.type] = summary
   }
   return {
-    dryRun: !options.apply,
+    dryRun: !apply,
+    aggregateID,
+    inspected: inspected.length,
     candidates: eligible.length,
-    rewritten: options.apply ? eligible.length : 0,
+    rewritten: apply ? eligible.length : 0,
     projectionMismatches: inspected.filter((candidate) => !safe(candidate, candidate.policy)).length,
     compatibilityRejected: safeRows.length - eligible.length,
     malformed: malformedCount,
     payloadBytesReclaimed: eligible.reduce((total, candidate) => total + reclaimedBytes(candidate), 0),
     hasMore: rows.length > limit,
-    continuation: continuation(options, limit),
+    continuation: "",
     byType,
   } satisfies Report
 }
+
+function command(options: {
+  aggregateID?: string
+  all?: boolean
+  cursor?: string
+  afterSeq?: number
+  apply?: boolean
+  limit: number
+}) {
+  const scope = options.all
+    ? `--all${options.cursor ? ` --cursor ${options.cursor}` : ""}`
+    : `--session ${options.aggregateID}`
+  const after = options.afterSeq === undefined ? "" : ` --after-seq ${options.afterSeq}`
+  return `opencode db compact-events ${scope}${options.apply ? " --apply" : ""} --limit ${options.limit}${after}`
+}
+
+const compactAggregate = Effect.fn("SessionEventLogCompaction.compactAggregate")(function* (
+  db: Database.Interface["db"],
+  aggregateID: string,
+  afterSeq: number,
+  apply: boolean,
+  limit: number,
+) {
+  const run = Effect.gen(function* () {
+    const selected = yield* candidates(db, aggregateID, afterSeq, limit)
+    const result = report(selected, yield* malformed(db, aggregateID, afterSeq), aggregateID, apply, limit)
+    const inspected = selected.slice(0, limit)
+    if (apply) {
+      const eligible = inspected.filter(
+        (candidate) =>
+          safe(candidate, candidate.policy) && candidate.workspaceID === null && candidate.ownerID === null,
+      )
+      yield* Effect.forEach(eligible, (candidate) =>
+        db.run(sql`
+          UPDATE event SET type = ${checkpointType}, data = ${JSON.stringify(checkpoint(candidate))}
+          WHERE id = ${candidate.id} AND type = ${candidate.type}
+        `),
+      )
+    }
+    return { result, lastSeq: inspected.at(-1)?.seq }
+  })
+  if (!apply) return yield* run
+  return yield* db.transaction(() => run, { behavior: "immediate" }).pipe(Effect.orDie)
+})
+
+const aggregateIDs = Effect.fn("SessionEventLogCompaction.aggregateIDs")(function* (
+  db: Database.Interface["db"],
+  cursor?: string,
+) {
+  return yield* db
+    .all<{ id: string }>(
+      sql`
+      SELECT id FROM session
+      ${cursor ? sql`WHERE id >= ${cursor}` : sql``}
+      ORDER BY id
+      LIMIT ${AGGREGATE_SCAN_LIMIT + 1}
+    `,
+    )
+    .pipe(Effect.orDie)
+})
 
 /**
  * Replaces only locally-owned, projection-verified snapshots. Sync has no
@@ -195,31 +281,101 @@ export const compact = Effect.fn("SessionEventLogCompaction.compact")(function* 
   options: Options,
 ) {
   const limit = validate(options)
-  if (!options.apply)
-    return report(yield* candidates(db, options, limit), yield* malformed(db, options), options, limit)
-  return yield* db
-    .transaction(
-      () =>
-        Effect.gen(function* () {
-          const selected = yield* candidates(db, options, limit)
-          const result = report(selected, yield* malformed(db, options), options, limit)
-          const eligible = selected
-            .slice(0, limit)
-            .filter(
-              (candidate) =>
-                safe(candidate, candidate.policy) && candidate.workspaceID === null && candidate.ownerID === null,
-            )
-          yield* Effect.forEach(eligible, (candidate) =>
-            db.run(sql`
-              UPDATE event SET type = ${checkpointType}, data = ${JSON.stringify(checkpoint(candidate))}
-              WHERE id = ${candidate.id} AND type = ${candidate.type}
-            `),
-          )
-          return result
+  const apply = options.apply === true
+  const startSeq = options.afterSeq ?? -1
+
+  if (options.aggregateID) {
+    const batch = yield* compactAggregate(db, options.aggregateID, startSeq, apply, limit)
+    const nextSeq = batch.result.hasMore ? batch.lastSeq : undefined
+    return {
+      ...batch.result,
+      continuation:
+        !apply || nextSeq !== undefined
+          ? command({
+              aggregateID: options.aggregateID,
+              apply: true,
+              limit,
+              afterSeq: apply ? nextSeq : options.afterSeq,
+            })
+          : "",
+    } satisfies Report
+  }
+
+  const aggregates = yield* aggregateIDs(db, options.cursor)
+  let remaining = limit
+  let aggregateID: string | undefined
+  let inspected = 0
+  let candidatesCount = 0
+  let rewritten = 0
+  let projectionMismatches = 0
+  let compatibilityRejected = 0
+  let malformedCount = 0
+  let payloadBytesReclaimed = 0
+  const byType: Record<string, { events: number; payloadBytesReclaimed: number }> = {}
+
+  const combined = (hasMore: boolean, continuation: string): Report => ({
+    dryRun: !apply,
+    aggregateID,
+    inspected,
+    candidates: candidatesCount,
+    rewritten,
+    projectionMismatches,
+    compatibilityRejected,
+    malformed: malformedCount,
+    payloadBytesReclaimed,
+    hasMore,
+    continuation,
+    byType,
+  })
+
+  for (const [index, aggregate] of aggregates.slice(0, AGGREGATE_SCAN_LIMIT).entries()) {
+    const afterSeq = index === 0 && aggregate.id === options.cursor ? startSeq : -1
+    const batch = yield* compactAggregate(db, aggregate.id, afterSeq, apply, apply ? remaining : limit)
+    if (batch.result.inspected === 0 && batch.result.malformed === 0) continue
+
+    if (!apply) {
+      const next = aggregates[index + 1]
+      return {
+        ...batch.result,
+        hasMore: batch.result.hasMore || Boolean(next),
+        continuation: command({
+          all: true,
+          cursor: aggregate.id,
+          afterSeq: afterSeq < 0 ? undefined : afterSeq,
+          apply: true,
+          limit,
         }),
-      { behavior: "immediate" },
-    )
-    .pipe(Effect.orDie)
+      } satisfies Report
+    }
+
+    aggregateID = aggregate.id
+    inspected += batch.result.inspected
+    candidatesCount += batch.result.candidates
+    rewritten += batch.result.rewritten
+    projectionMismatches += batch.result.projectionMismatches
+    compatibilityRejected += batch.result.compatibilityRejected
+    malformedCount += batch.result.malformed
+    payloadBytesReclaimed += batch.result.payloadBytesReclaimed
+    remaining -= batch.result.inspected
+    for (const [type, summary] of Object.entries(batch.result.byType)) {
+      const current = byType[type] ?? { events: 0, payloadBytesReclaimed: 0 }
+      current.events += summary.events
+      current.payloadBytesReclaimed += summary.payloadBytesReclaimed
+      byType[type] = current
+    }
+
+    if (batch.result.hasMore) {
+      return combined(true, command({ all: true, cursor: aggregate.id, afterSeq: batch.lastSeq, apply: true, limit }))
+    }
+
+    const next = aggregates[index + 1]
+    if (remaining === 0) {
+      return combined(Boolean(next), next ? command({ all: true, cursor: next.id, apply: true, limit }) : "")
+    }
+  }
+
+  const next = aggregates[AGGREGATE_SCAN_LIMIT]
+  return combined(Boolean(next), next ? command({ all: true, cursor: next.id, apply, limit }) : "")
 })
 
 export const status = Effect.fn("SessionEventLogCompaction.status")(function* (db: Database.Interface["db"]) {

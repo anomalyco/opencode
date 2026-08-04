@@ -5,6 +5,7 @@ import { SessionEventLogCompaction } from "@opencode-ai/core/session/event-log-c
 import { Effect } from "effect"
 import { sql } from "drizzle-orm"
 import { effectCmd, fail } from "../effect-cmd"
+import { cmd } from "./cmd"
 
 const QueryCommand = effectCmd({
   command: "$0 [query]",
@@ -52,41 +53,61 @@ const PathCommand = effectCmd({
   }),
 })
 
-const CompactEventsCommand = effectCmd({
+const CompactEventsCommand = cmd<
+  {},
+  {
+    apply: boolean
+    session?: string
+    all: boolean
+    limit?: number
+    cursor?: string
+    afterSeq?: number
+  }
+>({
   command: "compact-events",
   describe: "replace superseded message and part snapshots with replay-safe checkpoints",
-  instance: false,
   builder: (yargs: Argv) =>
     yargs
       .option("apply", { type: "boolean", default: false, describe: "write checkpoints; default is dry-run" })
       .option("session", { type: "string", describe: "compact one session aggregate" })
       .option("all", { type: "boolean", default: false, describe: "inspect all session aggregates" })
-      .option("limit", { type: "number", describe: "maximum snapshots per bounded batch" }),
-  handler: Effect.fn("Cli.db.compactEvents")(function* (args: {
-    apply: boolean
-    session?: string
-    all: boolean
-    limit?: number
-  }) {
-    const { db } = yield* Database.Service
-    const report = yield* SessionEventLogCompaction.compact(db, {
-      aggregateID: args.session,
-      all: args.all,
-      apply: args.apply,
-      limit: args.limit,
-    }).pipe(Effect.catchDefect((error) => fail(error instanceof Error ? error.message : String(error))))
-    console.log(JSON.stringify(report, null, 2))
-  }),
+      .option("limit", { type: "number", describe: "maximum snapshots per bounded batch" })
+      .option("cursor", { type: "string", describe: "session cursor returned by an all-scope batch" })
+      .option("after-seq", { type: "number", describe: "event cursor returned by a bounded batch" }),
+  async handler(args) {
+    const effect = Database.Service.use(({ db }) =>
+      SessionEventLogCompaction.compact(db, {
+        aggregateID: args.session,
+        all: args.all,
+        apply: args.apply,
+        limit: args.limit,
+        cursor: args.cursor,
+        afterSeq: args.afterSeq,
+      }).pipe(
+        Effect.catchDefect((error) => fail(error instanceof Error ? error.message : String(error))),
+        Effect.tap((report) => Effect.sync(() => console.log(JSON.stringify(report, null, 2)))),
+      ),
+    )
+    if (args.apply) {
+      const { AppRuntime } = await import("@/effect/app-runtime")
+      await AppRuntime.runPromise(effect)
+      return
+    }
+    await Effect.runPromise(Effect.scoped(effect.pipe(Effect.provide(Database.readOnlyLayerFromPath(Database.path())))))
+  },
 })
 
-const EventLogStatusCommand = effectCmd({
+const EventLogStatusCommand = cmd({
   command: "event-log-status",
   describe: "report event-log growth and compaction recommendation",
-  instance: false,
-  handler: Effect.fn("Cli.db.eventLogStatus")(function* () {
-    const { db } = yield* Database.Service
-    console.log(JSON.stringify(yield* SessionEventLogCompaction.status(db), null, 2))
-  }),
+  async handler() {
+    const effect = Database.Service.use(({ db }) =>
+      SessionEventLogCompaction.status(db).pipe(
+        Effect.tap((report) => Effect.sync(() => console.log(JSON.stringify(report, null, 2)))),
+      ),
+    )
+    await Effect.runPromise(Effect.scoped(effect.pipe(Effect.provide(Database.readOnlyLayerFromPath(Database.path())))))
+  },
 })
 
 export const DbCommand = effectCmd({
