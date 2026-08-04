@@ -542,6 +542,23 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("preserves the built-in package for v1 Vertex Anthropic custom models", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        provider: {
+          "google-vertex-anthropic": {
+            models: { claude: {} },
+          },
+        },
+      })
+
+      expect(migrated.providers?.["google-vertex"]?.package).toBeUndefined()
+      expect(migrated.providers?.["google-vertex"]?.models?.claude?.package).toBe(
+        Provider.aisdk("@ai-sdk/google-vertex/anthropic"),
+      )
+    }),
+  )
+
   it.effect("migrates v1 interleaved fields to compatibility", () =>
     Effect.sync(() => {
       const migrated = ConfigMigrateV1.migrate({

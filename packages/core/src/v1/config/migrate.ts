@@ -237,19 +237,27 @@ function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
   return Object.fromEntries(
     Object.entries(info).flatMap(([name, provider]) => {
       const id = providerID(name)
+      // A canonical block is authoritative when the same V1 file also contains its retired alias.
       if (id !== name && info[id]) return []
       return [[id, migrateProvider(name, provider)]]
     }),
   )
 }
 
-function migrateProvider(providerID: string, info: ConfigProviderV1.Info) {
+function migrateProvider(sourceID: string, info: ConfigProviderV1.Info) {
   const options = ConfigProviderOptionsV1.provider(info.options ?? {})
-  const packageName = info.npm ? Provider.aisdk(info.npm) : undefined
+  const vertexAnthropic = sourceID === "google-vertex-anthropic"
+  const packageName = info.npm
+    ? Provider.aisdk(info.npm)
+    : vertexAnthropic
+      ? Provider.aisdk("@ai-sdk/google-vertex/anthropic")
+      : undefined
   return {
     name: info.name,
     env: info.env,
-    package: providerID === "google-vertex-anthropic" ? undefined : packageName,
+    // Canonical Google Vertex includes Gemini and Claude. Keep the Anthropic SDK on Claude models
+    // instead of changing the package inherited by every model on the provider.
+    package: vertexAnthropic ? undefined : packageName,
     settings: info.api ? { ...options.settings, baseURL: info.api } : options.settings,
     headers: info.options && options.headers,
     body: info.options && options.body,
@@ -260,15 +268,14 @@ function migrateProvider(providerID: string, info: ConfigProviderV1.Info) {
           const migrated = migrateModel(model)
           return [
             name,
-            providerID === "google-vertex-anthropic" && packageName && !migrated.package
-              ? { ...migrated, package: packageName }
-              : migrated,
+            vertexAnthropic && packageName && !migrated.package ? { ...migrated, package: packageName } : migrated,
           ]
         }),
       ),
   }
 }
 
+// Retired built-in IDs are accepted only while translating positively identified V1 config.
 function providerID(input: string) {
   if (input === "azure-cognitive-services") return "azure"
   if (input === "google-vertex-anthropic") return "google-vertex"
