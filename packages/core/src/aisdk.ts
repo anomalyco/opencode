@@ -413,7 +413,7 @@ function mapBodyToProviderOptions(model: Info, packageName: string) {
 function callOptions(request: LLMRequest): LanguageModelV3CallOptions {
   return {
     prompt: prompt(request),
-    maxOutputTokens: request.generation?.maxTokens ?? request.model.route.defaults.limits?.output,
+    maxOutputTokens: request.generation?.maxTokens,
     temperature: request.generation?.temperature,
     stopSequences: request.generation?.stop === undefined ? undefined : [...request.generation.stop],
     topP: request.generation?.topP,
