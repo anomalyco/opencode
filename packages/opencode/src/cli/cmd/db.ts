@@ -112,15 +112,20 @@ const CompactEventsCommand = cmd<
           let payloadBytesReclaimed = 0
           const byType: Record<string, { events: number; payloadBytesReclaimed: number }> = {}
 
+          if (args.untilDone) yield* SessionEventLogCompaction.prepareIndex(db)
+
           while (true) {
-            const report = yield* SessionEventLogCompaction.compact(db, {
-              aggregateID: args.session,
-              all: args.all,
-              apply: args.apply,
-              limit: args.limit,
-              cursor,
-              afterSeq,
-            })
+            const indexed = args.untilDone ? yield* SessionEventLogCompaction.compactIndexed(db, args.limit) : undefined
+            const report = indexed
+              ? indexed.report
+              : yield* SessionEventLogCompaction.compact(db, {
+                  aggregateID: args.session,
+                  all: args.all,
+                  apply: args.apply,
+                  limit: args.limit,
+                  cursor,
+                  afterSeq,
+                })
             if (!args.untilDone) {
               console.log(JSON.stringify(report, null, 2))
               return
@@ -132,7 +137,7 @@ const CompactEventsCommand = cmd<
             rewritten += report.rewritten
             projectionMismatches += report.projectionMismatches
             compatibilityRejected += report.compatibilityRejected
-            malformed += report.malformed
+            if (batches === 1) malformed = report.malformed
             payloadBytesReclaimed += report.payloadBytesReclaimed
             for (const [type, summary] of Object.entries(report.byType)) {
               const current = byType[type] ?? { events: 0, payloadBytesReclaimed: 0 }
@@ -141,11 +146,15 @@ const CompactEventsCommand = cmd<
               byType[type] = current
             }
             if (batches % 10 === 0) console.error(`compaction: ${rewritten} events rewritten in ${batches} batches`)
-            if (!report.next) break
-            cursor = report.next.cursor
-            afterSeq = report.next.afterSeq
+            if (indexed && indexed.cursor === undefined) break
+            const next = "next" in report ? report.next : undefined
+            if (indexed) continue
+            if (!next) break
+            cursor = next.cursor
+            afterSeq = next.afterSeq
           }
 
+          if (args.untilDone) yield* SessionEventLogCompaction.dropIndex(db)
           const reclaim = args.vacuum ? yield* SessionEventLogCompaction.reclaim(db, args.backup) : undefined
           console.log(
             JSON.stringify(

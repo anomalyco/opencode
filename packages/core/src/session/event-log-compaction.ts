@@ -13,6 +13,7 @@ const checkpointType = Event.versionedType(Event.Compacted.type, Event.Compacted
 
 type Policy = (typeof policies)[number]
 type Candidate = {
+  scanID?: number
   id: string
   aggregateID: string
   seq: number
@@ -61,6 +62,11 @@ export type ReclaimReport = {
   readonly bytesReclaimed: number
 }
 
+export type IndexedBatch = {
+  readonly report: Report
+  readonly cursor?: number
+}
+
 export type Status = {
   readonly events: number
   readonly payloadBytes: number
@@ -94,6 +100,24 @@ function validate(options: Options) {
 function checkpoint(candidate: Candidate) {
   return { aggregateID: candidate.aggregateID, supersededType: candidate.type, supersededBy: candidate.supersededBy }
 }
+
+const rewrite = Effect.fn("SessionEventLogCompaction.rewrite")(function* (
+  db: Database.Interface["db"],
+  candidates: ReadonlyArray<Candidate>,
+) {
+  if (candidates.length === 0) return
+  const values = sql.join(
+    candidates.map((candidate) => sql`(${candidate.id}, ${candidate.type}, ${JSON.stringify(checkpoint(candidate))})`),
+    sql`, `,
+  )
+  yield* db.run(sql`
+    WITH rewrite(id, old_type, data) AS (VALUES ${values})
+    UPDATE event
+    SET type = ${checkpointType}, data = rewrite.data
+    FROM rewrite
+    WHERE event.id = rewrite.id AND event.type = rewrite.old_type
+  `)
+})
 
 function reclaimedBytes(candidate: Candidate) {
   return Math.max(0, candidate.bytes - Buffer.byteLength(JSON.stringify(checkpoint(candidate))))
@@ -260,12 +284,7 @@ const compactAggregate = Effect.fn("SessionEventLogCompaction.compactAggregate")
         (candidate) =>
           safe(candidate, candidate.policy) && candidate.workspaceID === null && candidate.ownerID === null,
       )
-      yield* Effect.forEach(eligible, (candidate) =>
-        db.run(sql`
-          UPDATE event SET type = ${checkpointType}, data = ${JSON.stringify(checkpoint(candidate))}
-          WHERE id = ${candidate.id} AND type = ${candidate.type}
-        `),
-      )
+      yield* rewrite(db, eligible)
     }
     return { result, lastSeq: inspected.at(-1)?.seq }
   })
@@ -420,6 +439,215 @@ export const status = Effect.fn("SessionEventLogCompaction.status")(function* (d
     .pipe(Effect.orDie)
   const result = row ?? { events: 0, payloadBytes: 0, compactableEvents: 0 }
   return { ...result, recommended: result.compactableEvents > DEFAULT_LIMIT } satisfies Status
+})
+
+const INDEX_SCAN_LIMIT = 100_000
+
+export const prepareIndex = Effect.fn("SessionEventLogCompaction.prepareIndex")(function* (
+  db: Database.Interface["db"],
+) {
+  // The maintenance lock makes this a stable snapshot. Rebuild after an
+  // interrupted run so deleted events and reusable SQLite rowids cannot leave
+  // stale index entries behind.
+  yield* db.run(sql`DROP TABLE IF EXISTS event_compaction_snapshot`)
+  yield* db.run(sql`DROP TABLE IF EXISTS event_compaction_state`)
+  yield* db.run(sql`
+    CREATE TABLE IF NOT EXISTS event_compaction_snapshot (
+      scan_id INTEGER PRIMARY KEY,
+      event_id TEXT NOT NULL UNIQUE,
+      aggregate_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      entity_id TEXT NOT NULL
+    )
+  `)
+  yield* db.run(sql`
+    CREATE INDEX IF NOT EXISTS event_compaction_snapshot_entity_idx
+    ON event_compaction_snapshot (aggregate_id, type, entity_id, seq DESC, event_id)
+  `)
+  yield* db.run(sql`
+    CREATE TABLE IF NOT EXISTS event_compaction_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      upper_event_rowid INTEGER NOT NULL,
+      indexed_event_rowid INTEGER NOT NULL,
+      compacted_scan_id INTEGER NOT NULL,
+      malformed INTEGER NOT NULL
+    )
+  `)
+  const maximum =
+    (yield* db.get<{ value: number }>(sql`SELECT coalesce(max(rowid), 0) AS value FROM event`).pipe(Effect.orDie))
+      ?.value ?? 0
+  yield* db.run(sql`
+    INSERT OR IGNORE INTO event_compaction_state
+      (id, upper_event_rowid, indexed_event_rowid, compacted_scan_id, malformed)
+    VALUES (1, ${maximum}, 0, 0, 0)
+  `)
+  const state = yield* db
+    .get<{ upper: number; indexed: number }>(
+      sql`
+      SELECT upper_event_rowid AS upper, indexed_event_rowid AS indexed
+      FROM event_compaction_state WHERE id = 1
+    `,
+    )
+    .pipe(Effect.orDie)
+  if (!state) throw new Error("Missing event compaction state")
+  if (maximum > state.upper) {
+    yield* db.run(sql`
+      UPDATE event_compaction_state
+      SET upper_event_rowid = ${maximum}, compacted_scan_id = 0
+      WHERE id = 1
+    `)
+  }
+
+  let indexed = state.indexed
+  while (indexed < maximum) {
+    const through = Math.min(maximum, indexed + INDEX_SCAN_LIMIT)
+    yield* db
+      .transaction(
+        () =>
+          Effect.gen(function* () {
+            yield* db.run(sql`
+              INSERT OR IGNORE INTO event_compaction_snapshot
+                (scan_id, event_id, aggregate_id, seq, type, entity_id)
+              SELECT rowid, id, aggregate_id, seq, type,
+                     CASE type
+                       WHEN ${policies[0].type} THEN json_extract(data, ${policies[0].path})
+                       ELSE json_extract(data, ${policies[1].path})
+                     END
+              FROM event
+              WHERE rowid > ${indexed} AND rowid <= ${through}
+                AND type IN (${policies[0].type}, ${policies[1].type})
+                AND CASE
+                  WHEN NOT json_valid(data) THEN 0
+                  WHEN type = ${policies[0].type} THEN json_type(data, ${policies[0].path}) = 'text'
+                  ELSE json_type(data, ${policies[1].path}) = 'text'
+                END
+            `)
+            const malformedCount =
+              (yield* db.get<{ value: number }>(sql`
+                  SELECT count(*) AS value FROM event
+                  WHERE rowid > ${indexed} AND rowid <= ${through}
+                    AND type IN (${policies[0].type}, ${policies[1].type})
+                    AND CASE
+                      WHEN NOT json_valid(data) THEN 1
+                      WHEN type = ${policies[0].type}
+                        THEN coalesce(json_type(data, ${policies[0].path}), '') <> 'text'
+                      ELSE coalesce(json_type(data, ${policies[1].path}), '') <> 'text'
+                    END
+                `))?.value ?? 0
+            yield* db.run(sql`
+              UPDATE event_compaction_state
+              SET indexed_event_rowid = ${through}, malformed = malformed + ${malformedCount}
+              WHERE id = 1
+            `)
+          }),
+        { behavior: "immediate" },
+      )
+      .pipe(Effect.orDie)
+    indexed = through
+  }
+  return yield* db
+    .get<{ snapshots: number; malformed: number }>(
+      sql`
+      SELECT (SELECT count(*) FROM event_compaction_snapshot) AS snapshots, malformed
+      FROM event_compaction_state WHERE id = 1
+    `,
+    )
+    .pipe(Effect.orDie)
+})
+
+export const compactIndexed = Effect.fn("SessionEventLogCompaction.compactIndexed")(function* (
+  db: Database.Interface["db"],
+  limit = DEFAULT_LIMIT,
+) {
+  if (!Number.isSafeInteger(limit) || limit <= 0 || limit > MAX_LIMIT) {
+    throw new Error(`limit must be a positive integer no greater than ${MAX_LIMIT}`)
+  }
+  return yield* db
+    .transaction(
+      () =>
+        Effect.gen(function* () {
+          const state = yield* db
+            .get<{ cursor: number; malformed: number }>(
+              sql`
+              SELECT compacted_scan_id AS cursor, malformed
+              FROM event_compaction_state WHERE id = 1
+            `,
+            )
+            .pipe(Effect.orDie)
+          if (!state) throw new Error("Prepare the event compaction index first")
+          const selected = yield* db
+            .all<Candidate>(
+              sql`
+              SELECT snapshot.scan_id AS scanID, event.id, event.aggregate_id AS aggregateID, event.seq,
+                     snapshot.entity_id AS entityID, event.type, length(event.data) AS bytes,
+                     replacement.id AS supersededBy, replacement.data AS latestData,
+                     coalesce(message.data, part.data) AS projectionData,
+                     part.message_id AS projectionParentID, session.workspace_id AS workspaceID,
+                     event_sequence.owner_id AS ownerID
+              FROM event_compaction_snapshot AS snapshot
+              JOIN event ON event.id = snapshot.event_id AND event.type = snapshot.type
+              JOIN event_compaction_snapshot AS head ON head.event_id = (
+                SELECT candidate.event_id
+                FROM event_compaction_snapshot AS candidate
+                WHERE candidate.aggregate_id = snapshot.aggregate_id
+                  AND candidate.type = snapshot.type
+                  AND candidate.entity_id = snapshot.entity_id
+                ORDER BY candidate.seq DESC
+                LIMIT 1
+              )
+              JOIN event AS replacement ON replacement.id = head.event_id
+              LEFT JOIN message ON snapshot.type = ${policies[0].type}
+                AND message.id = snapshot.entity_id AND message.session_id = snapshot.aggregate_id
+              LEFT JOIN part ON snapshot.type = ${policies[1].type}
+                AND part.id = snapshot.entity_id AND part.session_id = snapshot.aggregate_id
+              JOIN session ON session.id = snapshot.aggregate_id
+              JOIN event_sequence ON event_sequence.aggregate_id = snapshot.aggregate_id
+              WHERE snapshot.scan_id > ${state.cursor} AND snapshot.seq < head.seq
+                AND coalesce(message.data, part.data) IS NOT NULL
+              ORDER BY snapshot.scan_id
+              LIMIT ${limit + 1}
+            `,
+            )
+            .pipe(Effect.orDie)
+          const rows = selected
+            .map((candidate) => ({
+              ...candidate,
+              policy: policies.find((policy) => policy.type === candidate.type),
+            }))
+            .filter((candidate): candidate is Candidate & { policy: Policy } => candidate.policy !== undefined)
+          const result = report(rows, state.malformed, "indexed", true, limit)
+          const inspected = rows.slice(0, limit)
+          const eligible = inspected.filter(
+            (candidate) =>
+              safe(candidate, candidate.policy) && candidate.workspaceID === null && candidate.ownerID === null,
+          )
+          yield* rewrite(db, eligible)
+          const cursor = inspected.at(-1)?.scanID
+          if (cursor !== undefined) {
+            yield* db.run(sql`
+              UPDATE event_compaction_state SET compacted_scan_id = ${cursor} WHERE id = 1
+            `)
+          } else {
+            yield* db.run(sql`
+              UPDATE event_compaction_state
+              SET compacted_scan_id = coalesce((SELECT max(scan_id) FROM event_compaction_snapshot), compacted_scan_id)
+              WHERE id = 1
+            `)
+          }
+          return {
+            report: { ...result, hasMore: rows.length > limit, continuation: "" },
+            cursor: rows.length > limit ? cursor : undefined,
+          } satisfies IndexedBatch
+        }),
+      { behavior: "immediate" },
+    )
+    .pipe(Effect.orDie)
+})
+
+export const dropIndex = Effect.fn("SessionEventLogCompaction.dropIndex")(function* (db: Database.Interface["db"]) {
+  yield* db.run(sql`DROP TABLE IF EXISTS event_compaction_snapshot`).pipe(Effect.orDie)
+  yield* db.run(sql`DROP TABLE IF EXISTS event_compaction_state`).pipe(Effect.orDie)
 })
 
 const size = Effect.fn("SessionEventLogCompaction.size")(function* (db: Database.Interface["db"]) {
