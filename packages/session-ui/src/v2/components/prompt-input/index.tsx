@@ -195,9 +195,10 @@ export function PromptInputV2(props: PromptInputV2Props) {
           </Show>
         </div>
 
-        <div class="flex h-11 items-center px-2">
+        <div data-slot="prompt-input-footer" class="flex h-11 min-w-0 items-center ps-0 pe-2">
           <div
-            class="flex min-w-0 flex-1 items-center gap-1"
+            data-slot="prompt-input-controls"
+            class="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-x-auto no-scrollbar px-2 py-2"
             aria-hidden={state.mode === "shell"}
             inert={state.mode === "shell" ? true : undefined}
             style={buttons()}
@@ -248,6 +249,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
                   <PromptInputV2ConfiguredSelect
                     title={i18n.t("ui.promptInput.chooseVariant")}
                     keybind={["Shift", "Mod", "D"]}
+                    dataAction="prompt-variant"
                     control={control}
                   />
                 </Show>
@@ -483,6 +485,7 @@ export function PromptInputV2AddMenu(props: {
 }) {
   return (
     <TooltipV2
+      class="shrink-0"
       placement="top"
       value={
         <>
@@ -527,6 +530,7 @@ export function PromptInputV2AddMenu(props: {
 function PromptInputV2ConfiguredSelect(props: {
   title: string
   keybind?: string[]
+  dataAction?: string
   control: PromptInputV2SelectControl
   model?: boolean
 }) {
@@ -536,6 +540,7 @@ function PromptInputV2ConfiguredSelect(props: {
     <PromptInputV2Select
       title={props.title}
       keybind={props.control.keybind?.() ?? props.keybind}
+      dataAction={props.dataAction}
       options={props.control.options()}
       current={current()}
       currentIcon={
@@ -551,6 +556,7 @@ function PromptInputV2ConfiguredSelect(props: {
 export function PromptInputV2Select(props: {
   title: string
   keybind?: string[]
+  dataAction?: string
   options: PromptInputV2Option[]
   current: string
   currentIcon?: JSX.Element
@@ -560,6 +566,7 @@ export function PromptInputV2Select(props: {
 }) {
   return (
     <TooltipV2
+      class="shrink-0"
       placement="top"
       value={
         <>
@@ -571,13 +578,14 @@ export function PromptInputV2Select(props: {
       <MenuV2 gutter={6} modal={false} placement="top-start" onOpenChange={props.onOpenChange}>
         <MenuV2.Trigger
           as={ButtonV2}
+          data-action={props.dataAction}
           variant="ghost-muted"
           size="normal"
-          class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+          class={`min-w-0 max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
           aria-label={props.title}
         >
           {props.currentIcon}
-          <span class="truncate capitalize leading-5">
+          <span class="min-w-0 truncate capitalize leading-5">
             {props.options.find((option) => option.id === props.current)?.label ?? props.current}
           </span>
           <span class="-ms-0.5 -me-1 flex shrink-0">
@@ -680,6 +688,7 @@ export function PromptInputV2SubmitButton(props: {
 }) {
   return (
     <TooltipV2
+      class="shrink-0"
       placement="top"
       inactive={!props.stopping && props.disabled}
       value={props.stopping ? props.stopLabel : props.sendLabel}
@@ -691,7 +700,7 @@ export function PromptInputV2SubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
         variant="primary"
-        class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
+        class="size-7 shrink-0 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
         style={{
           "background-image":
             "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
