@@ -343,7 +343,7 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const existing = cache.get(key)
     if (existing) return existing
     const request = args.sdk.api.file
-      .list({ location: { directory: key } })
+      .list({ location: { directory: key }, path: "" })
       .then((result) => result.data)
       .catch(() => [])
       .then((nodes) =>
@@ -355,6 +355,14 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
           }),
       )
     cache.set(key, request)
+    request.then(
+      () => {
+        if (cache.get(key) === request) cache.delete(key)
+      },
+      () => {
+        if (cache.get(key) === request) cache.delete(key)
+      },
+    )
     return request
   }
 
@@ -374,12 +382,20 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)
     if (!pathInput) {
+      if (!query) {
+        const matches = await match(input.directory, "", 50)
+        if (!active()) return []
+        return matches
+      }
       const results = await args.sdk.api.file
         .find({ location: { directory: input.directory }, query, type: "directory", limit: 50 })
         .then((result) => result.data.map((entry) => entry.path))
         .catch(() => [])
       if (!active()) return []
-      return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)
+      if (results.length > 0) return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)
+      const matches = await match(input.directory, query, 50)
+      if (!active()) return []
+      return matches
     }
     const segments = query.replace(/^\/+/, "").split("/")
     const head = segments.slice(0, -1).filter((part) => part && part !== ".")

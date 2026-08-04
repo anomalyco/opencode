@@ -128,7 +128,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
       loads.schedule(`${generation}:${key}`, eager ? "background" : "user", () => {
         if (!activeTreeNavigation(generation, navigation)) return Promise.resolve(undefined)
         return sdk.api.file
-          .list({ location: { directory: absolute } })
+          .list({ location: { directory: absolute }, path: "" })
           .then((result) =>
             result.data.map((entry) => ({
               name: getFilename(entry.path.replace(/[\\/]+$/, "")),
