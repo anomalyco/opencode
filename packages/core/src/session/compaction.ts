@@ -9,7 +9,6 @@ import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
 
-const DEFAULT_BUFFER = 65_000
 const DEFAULT_KEEP_TOKENS = 8_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
@@ -121,7 +120,7 @@ const settings = (documents: readonly Config.Entry[]) => {
       buffer: current.buffer ?? result.buffer,
       tokens: current.keep?.tokens ?? result.tokens,
     }),
-    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS },
+    { auto: true, buffer: 0, tokens: DEFAULT_KEEP_TOKENS },
   )
 }
 
@@ -227,12 +226,13 @@ export const make = (dependencies: Dependencies) => {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+    const dynamicBuffer = Math.max(output * 2, Math.floor(context * 0.45), config.buffer)
     const estimatedTokens = estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools })
-    const hardMaxInput = Math.max(0, context - output - 5_000)
+    const hardMaxInput = Math.max(0, context - output - Math.min(output, Math.floor(context * 0.05)))
     if (estimatedTokens > hardMaxInput) {
       return yield* compactAfterOverflow(input)
     }
-    if (estimatedTokens <= context - Math.max(output, config.buffer))
+    if (estimatedTokens <= context - dynamicBuffer)
       return false
     return yield* compactAfterOverflow(input)
   })
