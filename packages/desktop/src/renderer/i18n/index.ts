@@ -28,6 +28,7 @@ import { dict as desktopAz } from "./az"
 import { dict as desktopFi } from "./fi"
 import { dict as desktopSv } from "./sv"
 import { dict as desktopTh } from "./th"
+import { dict as desktopFa } from "./fa"
 
 import { dict as appEn } from "../../../../app/src/i18n/en"
 import { dict as appZh } from "../../../../app/src/i18n/zh"
@@ -57,6 +58,7 @@ import { dict as appAz } from "../../../../app/src/i18n/az"
 import { dict as appFi } from "../../../../app/src/i18n/fi"
 import { dict as appSv } from "../../../../app/src/i18n/sv"
 import { dict as appTh } from "../../../../app/src/i18n/th"
+import { dict as appFa } from "../../../../app/src/i18n/fa"
 
 export type Locale =
   | "en"
@@ -86,6 +88,7 @@ export type Locale =
   | "az"
   | "fi"
   | "sv"
+  | "fa"
   | "th"
 
 type RawDictionary = typeof appEn & typeof desktopEn
@@ -119,6 +122,7 @@ const LOCALES: readonly Locale[] = [
   "az",
   "fi",
   "sv",
+  "fa",
   "th",
 ]
 
@@ -177,6 +181,7 @@ function detectLocale(): Locale {
       return "az"
     if (language.toLowerCase().startsWith("fi")) return "fi"
     if (language.toLowerCase().startsWith("sv")) return "sv"
+    if (language.toLowerCase().startsWith("fa")) return "fa"
     if (language.toLowerCase().startsWith("th")) return "th"
   }
 
@@ -244,6 +249,7 @@ function build(locale: Locale): Dictionary {
   if (locale === "az") return { ...base, ...i18n.flatten(appAz), ...i18n.flatten(desktopAz) }
   if (locale === "fi") return { ...base, ...i18n.flatten(appFi), ...i18n.flatten(desktopFi) }
   if (locale === "sv") return { ...base, ...i18n.flatten(appSv), ...i18n.flatten(desktopSv) }
+  if (locale === "fa") return { ...base, ...i18n.flatten(appFa), ...i18n.flatten(desktopFa) }
   if (locale === "th") return { ...base, ...i18n.flatten(appTh), ...i18n.flatten(desktopTh) }
   return { ...base, ...i18n.flatten(appKo), ...i18n.flatten(desktopKo) }
 }
