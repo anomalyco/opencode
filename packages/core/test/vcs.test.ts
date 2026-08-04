@@ -102,7 +102,7 @@ describe("Vcs", () => {
         })
         const vcs = yield* Vcs.Service
         const bus = yield* Bus.Service
-        expect(yield* vcs.info()).toEqual({ branch: { current: "main", default: "main" } })
+        expect(yield* vcs.info()).toEqual({ branch: { current: "main", default: undefined } })
 
         const updated = yield* bus.subscribe(VcsEvent.BranchUpdated).pipe(
           Stream.take(1),
@@ -112,7 +112,7 @@ describe("Vcs", () => {
         yield* Effect.promise(() => $`git checkout -q -b feature`.cwd(directory).quiet())
 
         yield* bus.publish(FileSystem.Event.Changed, { file: path.join(directory, "HEAD"), event: "change" })
-        expect(yield* vcs.info()).toEqual({ branch: { current: "main", default: "main" } })
+        expect(yield* vcs.info()).toEqual({ branch: { current: "main", default: undefined } })
 
         yield* bus.publish(FileSystem.Event.Changed, { file: path.join(directory, ".git", "HEAD"), event: "change" })
         expect(yield* Fiber.join(updated)).toMatchObject({

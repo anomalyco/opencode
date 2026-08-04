@@ -24,7 +24,7 @@ export function make(proc: AppProcess.Interface, input: { directory: string; wor
       const [current, root] = yield* Effect.all([ctx.git.branch(ctx.directory), ctx.git.defaultBranch(ctx.directory)], {
         concurrency: 2,
       })
-      return { branch: { current, default: root?.name ?? current } } satisfies Info
+      return { branch: { current, default: root?.name } } satisfies Info
     }),
     status: Effect.fn("VcsGit.status")(function* () {
       const git = ctx.git
