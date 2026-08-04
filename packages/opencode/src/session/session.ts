@@ -168,8 +168,22 @@ function getForkedTitle(title: string): string {
   return `${title} (fork #1)`
 }
 
-function sessionPath(worktree: string, cwd: string) {
-  return path.relative(path.resolve(worktree), cwd).replaceAll("\\", "/")
+/**
+ * Compute the session path relative to the project worktree.
+ *
+ * Returns `undefined` when the directory is not inside the worktree. This
+ * happens for non-git projects, which use worktree "/" (see
+ * `Project.fromDirectory`): `path.resolve("/")` resolves to the drive root
+ * of the current process, so on Windows the "relative" result is actually a
+ * machine-dependent absolute path (e.g. "D:/repo" or "C:/repo") that the
+ * session list query can never match. Storing no path lets `listByProject`
+ * fall back to directory-based scoping, which is unambiguous.
+ *
+ * @param p Path module override for tests (e.g. `path.win32`).
+ */
+export function sessionPath(worktree: string, cwd: string, p: typeof path = path) {
+  const rel = p.relative(p.resolve(worktree), cwd).replaceAll("\\", "/")
+  return p.isAbsolute(rel) ? undefined : rel
 }
 
 const Summary = Schema.Struct({
