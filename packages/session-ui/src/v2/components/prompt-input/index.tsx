@@ -53,9 +53,11 @@ export function PromptInputV2(props: PromptInputV2Props) {
   const view = props.controller.view
   let editor: HTMLDivElement | undefined
   let localInput = false
-  const updateCursor = () => {
+  const updateCursor = (event: KeyboardEvent | PointerEvent) => {
     if (!editor || !window.getSelection()?.isCollapsed) return
-    props.controller.onCursor(promptInputV2Cursor(editor))
+    if (event instanceof KeyboardEvent && !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key))
+      return
+    props.controller.onCursor(parsePromptInputV2Editor(editor).cursor)
   }
   const mode = createMemo(() => state.mode)
   const buttons = createMemo(() => ({
@@ -169,8 +171,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
               "text-align": "start",
             }}
             onInput={(event) => {
-              const cursor = promptInputV2Cursor(event.currentTarget)
-              const prompt = parsePromptInputV2Editor(event.currentTarget)
+              const { prompt, cursor } = parsePromptInputV2Editor(event.currentTarget)
               const images = props.controller.parts().filter((part) => part.type === "image")
               localInput = true
               props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
@@ -307,8 +308,13 @@ function renderPromptInputV2Editor(editor: HTMLDivElement, prompt: PromptInputV2
 
 function parsePromptInputV2Editor(editor: HTMLDivElement) {
   const parts: Exclude<PromptInputV2Prompt[number], PromptInputV2Attachment>[] = []
+  const selection = window.getSelection()
+  const anchorNode = selection && editor.contains(selection.anchorNode) ? selection.anchorNode : undefined
+  const anchorOffset = anchorNode ? selection!.anchorOffset : 0
   let buffer = ""
   let position = 0
+  let cursor: number | undefined
+  const offset = () => position + buffer.length
 
   const flush = () => {
     if (!buffer) return
@@ -343,43 +349,42 @@ function parsePromptInputV2Editor(editor: HTMLDivElement) {
   }
   const visit = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
+      if (node === anchorNode) cursor = offset() + Math.min(anchorOffset, node.textContent?.length ?? 0)
       buffer += node.textContent ?? ""
       return
     }
     if (!(node instanceof HTMLElement)) return
     if (node.dataset.mention) {
+      if (node === anchorNode) cursor = offset() + (anchorOffset > 0 ? (node.textContent?.length ?? 0) : 0)
       mention(node)
       return
     }
     if (node.tagName === "BR") {
+      if (node === anchorNode) cursor = offset() + (anchorOffset > 0 ? 1 : 0)
       buffer += "\n"
       return
     }
-    Array.from(node.childNodes).forEach(visit)
+    Array.from(node.childNodes).forEach((child, index) => {
+      if (node === anchorNode && anchorOffset === index) cursor = offset()
+      visit(child)
+    })
+    if (node === anchorNode && anchorOffset >= node.childNodes.length) cursor = offset()
   }
 
   Array.from(editor.childNodes).forEach((node, index, nodes) => {
+    if (editor === anchorNode && anchorOffset === index) cursor = offset()
     visit(node)
     if (node instanceof HTMLElement && ["DIV", "P"].includes(node.tagName) && index < nodes.length - 1) buffer += "\n"
   })
+  if (editor === anchorNode && anchorOffset >= editor.childNodes.length) cursor = offset()
   flush()
-  if (
-    parts.every((part) => part.type === "text") &&
-    parts.every((part) => part.content.replace(/[\n\u200B]/g, "") === "")
-  ) {
-    return [{ type: "text" as const, content: "", start: 0, end: 0 }]
-  }
-  if (parts.length > 0) return parts
-  return [{ type: "text" as const, content: "", start: 0, end: 0 }]
-}
-
-function promptInputV2Cursor(editor: HTMLDivElement) {
-  const selection = window.getSelection()
-  if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return editor.textContent?.length ?? 0
-  const range = selection.getRangeAt(0).cloneRange()
-  range.selectNodeContents(editor)
-  range.setEnd(selection.anchorNode!, selection.anchorOffset)
-  return range.toString().length
+  const result =
+    parts.length === 0 ||
+    (parts.every((part) => part.type === "text") &&
+      parts.every((part) => part.content.replace(/[\n\u200B]/g, "") === ""))
+      ? [{ type: "text" as const, content: "", start: 0, end: 0 }]
+      : parts
+  return { prompt: result, cursor: cursor ?? offset() }
 }
 
 export function PromptInputV2Attachments(props: {
