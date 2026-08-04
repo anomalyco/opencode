@@ -34,6 +34,17 @@ if [ -f "$BINARY" ]; then
   ln -sf "$(pwd)/$BINARY" ~/.local/bin/opencode
   ln -sf "$(pwd)/$BINARY" ~/.local/bin/opencode-evolve
   echo "🔗 Symlinked to ~/.local/bin/opencode & ~/.local/bin/opencode-evolve"
+
+  # Ensure ~/.local/bin is added to user shell PATH if missing
+  if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    echo "⚠️  ~/.local/bin is not currently in your PATH!"
+    echo "💡 Adding ~/.local/bin to your current session PATH and ~/.bashrc..."
+    export PATH="$HOME/.local/bin:$PATH"
+    if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' ~/.bashrc 2>/dev/null; then
+      echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+    fi
+  fi
+
   echo "🎉 Done! You can now run 'opencode' or 'opencode-evolve' from anywhere in your terminal."
 else
   echo "❌ Error: Could not locate built binary."
