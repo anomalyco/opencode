@@ -12,14 +12,14 @@ interface SessionHttpEvent extends SessionHttpContext {
   request: (input: Request) => Effect.Effect<Response, Error>
 }
 
-interface SessionEvents {
+interface SessionHooks {
   readonly context: SessionContext
   readonly http: SessionHttpEvent
 }
 
 export interface Domains {
   readonly aisdk: AISDKHooks
-  readonly session: SessionEvents
+  readonly session: SessionHooks
   readonly shell: ShellHooks
   readonly tool: ToolHooks
 }
