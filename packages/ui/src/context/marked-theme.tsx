@@ -207,7 +207,7 @@ export const OpenCodeTheme = {
         "string.regexp.character-class",
         "string.regexp constant.character.escape",
         "string.regexp source.ruby.embedded",
-        "string.regexp string.regexp.arbitrary-repitition",
+        "string.regexp string.regexp.arbitrary-repetition",
         "string.regexp constant.character.escape",
       ],
       settings: {
