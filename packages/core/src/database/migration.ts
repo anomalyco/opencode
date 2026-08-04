@@ -66,6 +66,9 @@ export function applyOnly(db: Database, input: Migration[]) {
       }
     }
 
+    // Ensure custom harness tables exist on both fresh and existing database schemas
+    yield* db.transaction((tx) => schema.up(tx))
+
     for (const migration of input) {
       if (completed.has(migration.id)) continue
       yield* db.transaction((tx) =>
