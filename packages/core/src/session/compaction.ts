@@ -9,9 +9,7 @@ import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
 
-const DEFAULT_KEEP_TOKENS = 8_000
-const TOOL_OUTPUT_MAX_CHARS = 2_000
-const SUMMARY_OUTPUT_TOKENS = 4_096
+// No static token constants — all limits are derived dynamically from model context/output limits at call time.
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Objective
@@ -72,8 +70,8 @@ type Input = {
 
 const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
 
-const truncate = (value: string) =>
-  value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
+const truncate = (value: string, maxChars: number) =>
+  value.length <= maxChars ? value : `${value.slice(0, maxChars)}\n[truncated]`
 
 export const serializeToolContent = (content: SessionMessage.ToolStateCompleted["content"]) =>
   content
@@ -82,7 +80,7 @@ export const serializeToolContent = (content: SessionMessage.ToolStateCompleted[
     )
     .join("\n")
 
-const serialize = (message: SessionMessage.Message) => {
+const serialize = (message: SessionMessage.Message, toolOutputMaxChars: number) => {
   if (message.type === "user") {
     const files = message.files?.map((file) => `[Attached ${file.mime}: ${file.name ?? file.uri}]`) ?? []
     return [`[User]: ${message.text}`, ...files].join("\n")
@@ -96,7 +94,7 @@ const serialize = (message: SessionMessage.Message) => {
         if (part.state.status === "completed")
           return [
             `[Assistant tool call]: ${part.name}(${input})`,
-            `[Tool result]: ${truncate(serializeToolContent(part.state.content))}`,
+            `[Tool result]: ${truncate(serializeToolContent(part.state.content), toolOutputMaxChars)}`,
           ]
         if (part.state.status === "error")
           return [`[Assistant tool call]: ${part.name}(${input})`, `[Tool error]: ${part.state.error.message}`]
@@ -106,7 +104,7 @@ const serialize = (message: SessionMessage.Message) => {
   }
   if (message.type === "system") return `[System update]: ${message.text}`
   if (message.type === "synthetic") return `[Synthetic context]: ${message.text}`
-  if (message.type === "shell") return `[Shell]: ${message.command}\n${truncate(message.output)}`
+  if (message.type === "shell") return `[Shell]: ${message.command}\n${truncate(message.output, toolOutputMaxChars)}`
   return ""
 }
 
@@ -120,17 +118,18 @@ const settings = (documents: readonly Config.Entry[]) => {
       buffer: current.buffer ?? result.buffer,
       tokens: current.keep?.tokens ?? result.tokens,
     }),
-    { auto: true, buffer: 0, tokens: DEFAULT_KEEP_TOKENS },
+    { auto: true, buffer: 0, tokens: 0 },
   )
 }
 
 const select = (
   entries: readonly Entry[],
   tokens: number,
+  toolOutputMaxChars: number,
 ): { readonly head: string; readonly recent: string } | undefined => {
   const conversation = entries
     .filter((entry) => entry.message.type !== "compaction")
-    .map((entry) => serialize(entry.message))
+    .map((entry) => serialize(entry.message, toolOutputMaxChars))
     .filter(Boolean)
   if (conversation.length === 0) return
   let total = 0
@@ -171,15 +170,21 @@ export const make = (dependencies: Dependencies) => {
   const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
-    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    const selected = select(input.entries, config.tokens)
+    const output = input.model.route.defaults.limits?.output ?? 0
+    const requestOutput = input.request.generation?.maxTokens ?? output
+    // Keep enough recent tokens so the model can orient itself after compaction
+    const keepTokens = config.tokens > 0 ? config.tokens : Math.max(Math.floor(context * 0.06), 1_000)
+    // Tool output chars proportional to context: ~1.5 chars per token, targeting ~1.5% of context for any single tool result
+    const toolOutputMaxChars = Math.max(Math.floor(context * 0.015 * 1.5), 500)
+    // Summary output capped at the smaller of actual output limit and 3% of context
+    const summaryOutput = Math.min(requestOutput || Math.floor(context * 0.03), Math.floor(context * 0.03))
+    const selected = select(input.entries, keepTokens, toolOutputMaxChars)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
     if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
     const summaryPrompt = buildPrompt({
       previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
       context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
     })
-    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
     if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
     const messageID = SessionMessage.ID.create()
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {

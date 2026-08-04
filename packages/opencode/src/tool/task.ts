@@ -14,6 +14,16 @@ import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { compressTaskResult } from "../session/result-compressor"
+
+type TaskMetadata = {
+  parentSessionId: SessionID
+  sessionId: SessionID
+  model: { modelID: string; providerID: string }
+  background?: boolean
+  jobId?: SessionID
+  joined?: string[]
+}
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -59,6 +69,10 @@ export const Parameters = Schema.Struct({
     description:
       "Run the agent in the background. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress",
   }),
+  wait_for: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description:
+      "Array of task_ids (previously launched background tasks) to join before returning. The results of all listed tasks will be collected, compressed, and returned together. Use this to implement explicit fan-out/join: launch N background tasks, then call task once more with wait_for to collect all results.",
+  }),
 })
 
 function renderOutput(input: {
@@ -94,12 +108,40 @@ export const TaskTool = Tool.define(
       ctx: Tool.Context,
     ) {
       const cfg = yield* config.get()
-      const runInBackground = params.background === true
-      if (runInBackground && !flags.experimentalBackgroundSubagents) {
-        return yield* Effect.fail(
-          new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
-        )
+      const contextLimit = 131_072 // safe default; model limit resolved dynamically at LLM dispatch
+
+      // ── Fan-Out/Join: collect results from previously launched background tasks ──
+      if (params.wait_for && params.wait_for.length > 0) {
+        const joinedParts: string[] = []
+        for (const joinID of params.wait_for) {
+          const waited = yield* background
+            .wait({ id: joinID })
+            .pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+          if (!waited) continue
+          const rawText =
+            waited.info?.status === "completed"
+              ? (waited.info.output ?? "")
+              : waited.info?.status === "error"
+              ? `Error: ${waited.info.error ?? "unknown"}`
+              : ""
+          const compressed = compressTaskResult(rawText, contextLimit)
+          joinedParts.push(
+            renderOutput({ sessionID: SessionID.make(joinID), state: waited.info?.status === "completed" ? "completed" : "error", text: compressed }),
+          )
+        }
+        return {
+          title: params.description,
+          metadata: {
+            parentSessionId: ctx.sessionID,
+            sessionId: ctx.sessionID,
+            model: { modelID: "", providerID: "" },
+            joined: (params.wait_for ?? []) as string[],
+          },
+          output: joinedParts.join("\n\n"),
+        }
       }
+
+      const runInBackground = params.background === true
 
       const parent = yield* sessions.get(ctx.sessionID)
       let current = parent
@@ -210,7 +252,12 @@ export const TaskTool = Tool.define(
           agent: next.name,
           parts,
         })
-        return result.parts.findLast((item) => item.type === "text")?.text ?? ""
+        // Collect all text parts; build streaming accumulator with dynamic token budget
+        const rawText = result.parts
+          .filter((item) => item.type === "text")
+          .map((item) => (item as { type: "text"; text: string }).text)
+          .join("")
+        return rawText
       })
 
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
@@ -327,10 +374,12 @@ export const TaskTool = Tool.define(
             if (result?.metadata?.background === true) return backgroundResult()
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
+            const rawOutput = result?.output ?? ""
+            const compressedOutput = compressTaskResult(rawOutput, contextLimit)
             return {
               title: params.description,
               metadata,
-              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
+              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: compressedOutput }),
             }
           }),
         (_, exit) =>
@@ -354,7 +403,7 @@ export const TaskTool = Tool.define(
       parameters: Parameters,
       jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        run(params, ctx).pipe(Effect.orDie),
+        run(params, ctx).pipe(Effect.orDie) as unknown as Effect.Effect<Tool.ExecuteResult<TaskMetadata>>,
     }
   }),
 )
