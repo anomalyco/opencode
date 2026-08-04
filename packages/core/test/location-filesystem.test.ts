@@ -66,4 +66,34 @@ describe("FileSystem", () => {
       }).pipe(provide(directory)),
     ),
   )
+
+  it.live("finds files created after startup once the index is refreshed", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        // Seed an initial file so the async index scan has a fence to wait on.
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "seed.txt"), "seed"))
+        const service = yield* FileSystem.Service
+        const waitFor = (name: string, maxAttempts = 50): Effect.Effect<void> =>
+          Effect.gen(function* () {
+            if (maxAttempts <= 0) throw new Error(`Timed out waiting for ${name}`)
+            const found = yield* service.find({ query: name, type: "file" })
+            if (found.some((entry) => entry.path.endsWith(name))) return
+            yield* Effect.sleep("50 millis")
+            yield* waitFor(name, maxAttempts - 1)
+          })
+        yield* waitFor("seed.txt")
+
+        // A new file added after startup is not in the static snapshot yet.
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "fresh.ts"), "// fresh"))
+        const before = yield* service.find({ query: "fresh.ts", type: "file" })
+        expect(before.some((entry) => entry.path.endsWith("fresh.ts"))).toBe(false)
+
+        // Refreshing rebuilds the snapshot and makes the new file discoverable.
+        yield* service.refresh()
+        yield* waitFor("fresh.ts")
+        const after = yield* service.find({ query: "fresh.ts", type: "file" })
+        expect(after.some((entry) => entry.path.endsWith("fresh.ts"))).toBe(true)
+      }).pipe(provide(directory)),
+    ),
+  )
 })

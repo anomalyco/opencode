@@ -62,6 +62,7 @@ export interface Picker {
   destroy(): void
   isScanning(): boolean
   waitForScan(timeoutMs?: number): Promise<Result<boolean>>
+  scanFiles(): Result<void>
   refreshGitStatus(): Result<number>
   fileSearch(
     query: string,
@@ -125,6 +126,7 @@ export function create(opts: Init): Result<Picker> {
       destroy: () => pick.destroy(),
       isScanning: () => pick.isScanning(),
       waitForScan: (timeoutMs) => pick.waitForScan(timeoutMs),
+      scanFiles: () => pick.scanFiles(),
       refreshGitStatus: () => pick.refreshGitStatus(),
       fileSearch: (query, next) => pick.fileSearch(query, next),
       glob: (pattern, next) => pick.glob(pattern, next),

@@ -16,6 +16,7 @@ export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
   readonly glob: (input: FileSystem.GlobInput) => Effect.Effect<readonly FileSystem.Entry[]>
   readonly grep: (input: FileSystem.GrepInput) => Effect.Effect<readonly FileSystem.Match[]>
+  readonly refresh: () => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem/Search") {}
@@ -31,22 +32,34 @@ export const ripgrepLayer = Layer.effect(
       files: [] as string[],
       directories: [] as string[],
     }
-    const directories = new Set<string>()
-    yield* ripgrep
-      .find({
-        cwd: location.directory,
-        pattern: "*",
-        limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
-        onEntry: (entry) =>
-          Effect.sync(() => {
-            state.files.push(entry.path)
-            const parts = entry.path.split("/")
-            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
-            state.directories = Array.from(directories)
-          }),
-      })
-      .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
+    let generation = 0
+    const scan = () => {
+      const current = ++generation
+      const directories = new Set<string>()
+      state.files = []
+      state.directories = []
+      return ripgrep
+        .find({
+          cwd: location.directory,
+          pattern: "*",
+          limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
+          onEntry: (entry) =>
+            Effect.sync(() => {
+              if (current !== generation) return
+              state.files.push(entry.path)
+              const parts = entry.path.split("/")
+              parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
+              state.directories = Array.from(directories)
+            }),
+        })
+        .pipe(
+          Effect.catch((error) => Effect.logWarning("ripgrep index scan failed", { error }).pipe(Effect.asVoid)),
+          Effect.asVoid,
+        )
+    }
+    yield* scan().pipe(Effect.forkIn(scope))
     return Service.of({
+      refresh: () => scan(),
       glob: (input) =>
         Effect.gen(function* () {
           const target = path.resolve(location.directory, input.path ?? ".")
@@ -141,10 +154,24 @@ export const fffLayer = Layer.effect(
         find: () => Effect.succeed([]),
         glob: () => Effect.succeed([]),
         grep: () => Effect.succeed([]),
+        refresh: () => Effect.void,
       })
     }
     yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
     return Service.of({
+      refresh: () =>
+        Effect.tryPromise(async () => {
+          const res = result.value.scanFiles()
+          if (!res.ok) throw new Error(res.error)
+          const deadline = Date.now() + 30_000
+          while (!result.value.isScanning() && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 25))
+          }
+          await result.value.waitForScan(Math.max(1_000, deadline - Date.now()))
+        }).pipe(
+          Effect.catch((error) => Effect.logWarning("failed to refresh fff index", { error })),
+          Effect.asVoid,
+        ),
       glob: (input) =>
         Effect.sync(() => {
           const prefix = input.path?.replaceAll("\\", "/").replace(/\/$/, "")

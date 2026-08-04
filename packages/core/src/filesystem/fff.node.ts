@@ -78,6 +78,7 @@ export interface Picker {
   destroy(): void
   isScanning(): boolean
   waitForScan(timeoutMs?: number): Promise<Result<boolean>>
+  scanFiles(): Result<void>
   refreshGitStatus(): Result<number>
   fileSearch(
     query: string,

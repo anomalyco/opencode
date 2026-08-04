@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { showToast } from "@/utils/toast"
@@ -70,6 +70,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     )
 
     const inflight = new Map<string, Promise<void>>()
+    const [indexing, setIndexing] = createSignal(0)
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
     }>({
@@ -204,18 +205,18 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     const search = (query: string, dirs: "true" | "false", options?: { limit?: number; signal?: AbortSignal }) =>
-      serverSDK()
-        .api.file.find(
+      sdk()
+        .client.v2.fs.find(
           {
             location: { directory: sdk().directory },
             query,
-            type: dirs === "true" ? "directory" : "file",
-            limit: options?.limit,
+            ...(dirs === "false" ? { type: "file" } : {}),
+            ...(options?.limit ? { limit: String(options.limit) } : {}),
           },
           { signal: options?.signal },
         )
         .then(
-          (x) => x.data.map((entry) => path.normalize(entry.path)),
+          (x) => x.data.data.map((entry) => path.normalize(entry.path)),
           (error) => {
             if (options?.signal?.aborted) throw error
             return []
@@ -298,6 +299,21 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       searchFiles: (query: string, options?: { limit?: number; signal?: AbortSignal }) =>
         search(query, "false", options),
       searchFilesAndDirectories: (query: string) => search(query, "true"),
+      indexing: () => indexing() > 0,
+      refreshIndex: async () => {
+        setIndexing((value) => value + 1)
+        try {
+          await sdk()
+            .client.v2.fs.refresh({
+              location: {
+                directory: sdk().directory,
+              },
+            })
+            .then(() => tree.reset())
+        } finally {
+          setIndexing((value) => Math.max(0, value - 1))
+        }
+      },
     }
   },
 })
