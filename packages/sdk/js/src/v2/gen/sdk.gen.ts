@@ -279,6 +279,8 @@ import type {
   V2FsListResponses,
   V2FsReadErrors,
   V2FsReadResponses,
+  V2FsRefreshErrors,
+  V2FsRefreshResponses,
   V2HealthGetErrors,
   V2HealthGetResponses,
   V2IntegrationAttemptCancelErrors,
@@ -6492,6 +6494,28 @@ export class Fs extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<V2FsFindResponses, V2FsFindErrors, ThrowOnError>({
       url: "/api/fs/find",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Refresh file index
+   *
+   * Rescan the requested location and rebuild the file search index.
+   */
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).post<V2FsRefreshResponses, V2FsRefreshErrors, ThrowOnError>({
+      url: "/api/fs/find/refresh",
       ...options,
       ...params,
     })

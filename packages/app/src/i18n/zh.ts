@@ -59,6 +59,8 @@ export const dict = {
   "command.file.open": "打开文件",
 
   "command.tab.close": "关闭标签页",
+  "command.file.refresh": "刷新文件索引",
+  "index.progress.refreshing": "正在刷新文件索引…",
   "command.tab.reopenClosed": "重新打开已关闭的标签页",
 
   "command.context.addSelection": "将所选内容添加到上下文",

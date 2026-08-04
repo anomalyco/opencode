@@ -12891,6 +12891,40 @@ export type V2FsFindResponses = {
 
 export type V2FsFindResponse = V2FsFindResponses[keyof V2FsFindResponses]
 
+export type V2FsRefreshData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/fs/find/refresh"
+}
+
+export type V2FsRefreshErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2FsRefreshError = V2FsRefreshErrors[keyof V2FsRefreshErrors]
+
+export type V2FsRefreshResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2FsRefreshResponse = V2FsRefreshResponses[keyof V2FsRefreshResponses]
+
 export type V2CommandListData = {
   body?: never
   path?: never

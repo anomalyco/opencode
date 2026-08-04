@@ -4,7 +4,6 @@ import { PositiveInt, RelativePath } from "@opencode-ai/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location"
-
 const ListQuery = Schema.Struct({
   ...LocationQuery.fields,
   path: RelativePath.pipe(Schema.optional),
@@ -57,6 +56,20 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
           identifier: "v2.fs.find",
           summary: "Find files",
           description: "Find recursively ranked filesystem entries relative to the requested location.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("fs.refresh", "/api/fs/find/refresh", {
+      query: LocationQuery,
+      success: HttpApiSchema.NoContent,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.fs.refresh",
+          summary: "Refresh file index",
+          description: "Rescan the requested location and rebuild the file search index.",
         }),
       ),
   )

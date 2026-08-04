@@ -36,7 +36,7 @@ import { SDKProvider, useSDK } from "./context/sdk"
 import { StartupLoading } from "./component/startup-loading"
 import { SyncProvider, useSync } from "./context/sync"
 import { DataProvider } from "./context/data"
-import { LocationProvider } from "./context/location"
+import { LocationProvider, useLocation } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
@@ -137,6 +137,7 @@ const appBindingCommands = [
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
   "app.toggle.session_directory_filter",
+  "fs.refresh",
 ] as const
 
 export type TuiInput = {
@@ -379,6 +380,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const { theme, mode, setMode, locked, lock, unlock } = themeState
   const sync = useSync()
   const project = useProject()
+  const location = useLocation()
   const exit = useExit()
   const promptRef = usePromptRef()
   const pluginRuntime = usePluginRuntime()
@@ -951,6 +953,23 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: () => {
           local.permission.toggle()
           dialog.clear()
+        },
+      },
+      {
+        name: "fs.refresh",
+        title: "Refresh file index",
+        category: "System",
+        run: () => {
+          dialog.clear()
+          sdk.client.v2.fs
+            .refresh({
+              location: {
+                directory: location()?.directory,
+                workspace: location()?.workspaceID ?? project.workspace.current(),
+              },
+            })
+            .then(() => toast.show({ message: "File index refreshed", variant: "success" }))
+            .catch(() => toast.show({ message: "Failed to refresh file index", variant: "error" }))
         },
       },
     ].map((command) => ({

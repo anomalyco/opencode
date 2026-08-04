@@ -131,6 +131,7 @@ export const Definitions = {
   agent_cycle_reverse: keybind("shift+tab", "Previous agent"),
   variant_cycle: keybind("ctrl+t", "Cycle model variants"),
   variant_list: keybind("none", "List model variants"),
+  fs_refresh: keybind("f5", "Refresh file index"),
 
   messages_page_up: keybind("pageup,ctrl+alt+b", "Scroll messages up by one page"),
   messages_page_down: keybind("pagedown,ctrl+alt+f", "Scroll messages down by one page"),

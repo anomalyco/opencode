@@ -471,6 +471,22 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         slash: "open",
         onSelect: openFile,
       }),
+      fileCommand({
+        id: "file.refresh",
+        title: language.t("command.file.refresh"),
+        onSelect: () => {
+          void file
+            .refreshIndex()
+            .then(() => showToast({ variant: "success", title: language.t("command.file.refresh") }))
+            .catch(() =>
+              showToast({
+                variant: "error",
+                title: language.t("command.file.refresh"),
+                description: language.t("toast.file.listFailed.title"),
+              }),
+            )
+        },
+      }),
       tab &&
         fileCommand({
           id: "tab.close",

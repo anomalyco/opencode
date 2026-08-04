@@ -2,7 +2,7 @@ import { FileSystem } from "@opencode-ai/core/filesystem"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { Effect } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { response } from "../location"
 
@@ -33,6 +33,11 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
             const fs = yield* FileSystem.Service
             return yield* fs.find(ctx.query)
           }),
+        ),
+      )
+      .handle("fs.refresh", (ctx) =>
+        FileSystem.Service.use((fs) =>
+          fs.refresh().pipe(Effect.as(HttpApiSchema.NoContent.make())),
         ),
       )
   }),

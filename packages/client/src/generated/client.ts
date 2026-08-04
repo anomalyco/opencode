@@ -81,6 +81,8 @@ import type {
   FilesListOutput,
   FilesFindInput,
   FilesFindOutput,
+  FilesRefreshInput,
+  FilesRefreshOutput,
   CommandsListInput,
   CommandsListOutput,
   SkillsListInput,
@@ -776,6 +778,18 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
+          },
+          requestOptions,
+        ),
+      refresh: (input?: FilesRefreshInput, requestOptions?: RequestOptions) =>
+        request<FilesRefreshOutput>(
+          {
+            method: "POST",
+            path: `/api/fs/find/refresh`,
+            query: { location: input?.["location"] },
+            successStatus: 204,
+            declaredStatuses: [401, 400],
+            empty: true,
           },
           requestOptions,
         ),
