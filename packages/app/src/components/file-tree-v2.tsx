@@ -215,6 +215,7 @@ export default function FileTreeV2(props: {
     <div
       ref={setRoot}
       data-component="file-tree-v2"
+      dir="ltr"
       data-total-rows={live() ? rows().length : model()!.total}
       class="group/file-tree-v2"
       style={{ position: "relative", height: `${virtualizer.getTotalSize()}px` }}
