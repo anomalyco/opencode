@@ -94,13 +94,13 @@ function experimental(info: typeof ConfigV1.Info.Type) {
           { action: "provider.use" as const, resource: "*", effect: "deny" as const },
           ...info.enabled_providers.map((resource) => ({
             action: "provider.use" as const,
-            resource,
+            resource: providerID(resource),
             effect: "allow" as const,
           })),
         ]),
     ...(info.disabled_providers ?? []).map((resource) => ({
       action: "provider.use" as const,
-      resource,
+      resource: providerID(resource),
       effect: "deny" as const,
     })),
   ]
@@ -188,7 +188,7 @@ function modelSelection(input?: string, variant?: string) {
   if (input === undefined || !/^[^/#]+\/[^#]+$/.test(input)) return undefined
   const separator = input.indexOf("/")
   return {
-    providerID: input.slice(0, separator),
+    providerID: providerID(input.slice(0, separator)),
     model: input.slice(separator + 1),
     ...(variant === undefined || variant.length === 0 || variant.includes("#") ? {} : { variant }),
   }
@@ -234,22 +234,41 @@ function migrateMcp(info: ConfigMCPV1.Info) {
 
 function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
   if (!info) return undefined
-  return Object.fromEntries(Object.entries(info).map(([name, provider]) => [name, migrateProvider(provider)]))
+  return Object.fromEntries(
+    Object.entries(info).map(([name, provider]) => [providerID(name), migrateProvider(name, provider)]),
+  )
 }
 
-function migrateProvider(info: ConfigProviderV1.Info) {
+function migrateProvider(providerID: string, info: ConfigProviderV1.Info) {
   const options = ConfigProviderOptionsV1.provider(info.options ?? {})
+  const packageName = info.npm ? Provider.aisdk(info.npm) : undefined
   return {
     name: info.name,
     env: info.env,
-    package: info.npm ? Provider.aisdk(info.npm) : undefined,
+    package: providerID === "google-vertex-anthropic" ? undefined : packageName,
     settings: info.api ? { ...options.settings, baseURL: info.api } : options.settings,
     headers: info.options && options.headers,
     body: info.options && options.body,
     models:
       info.models &&
-      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model)])),
+      Object.fromEntries(
+        Object.entries(info.models).map(([name, model]) => {
+          const migrated = migrateModel(model)
+          return [
+            name,
+            providerID === "google-vertex-anthropic" && packageName && !migrated.package
+              ? { ...migrated, package: packageName }
+              : migrated,
+          ]
+        }),
+      ),
   }
+}
+
+function providerID(input: string) {
+  if (input === "azure-cognitive-services") return "azure"
+  if (input === "google-vertex-anthropic") return "google-vertex"
+  return input
 }
 
 function migrateModel(info: typeof ConfigProviderV1.Model.Type) {

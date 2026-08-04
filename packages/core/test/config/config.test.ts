@@ -475,6 +475,57 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("canonicalizes legacy provider aliases while migrating v1 configuration", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        model: "azure-cognitive-services/deployment",
+        enabled_providers: ["google-vertex-anthropic"],
+        disabled_providers: ["azure-cognitive-services"],
+        agent: {
+          reviewer: { model: "google-vertex-anthropic/claude-sonnet" },
+        },
+        command: {
+          review: { template: "Review", model: "azure-cognitive-services/deployment" },
+        },
+        provider: {
+          "azure-cognitive-services": {
+            npm: "@ai-sdk/azure",
+            env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
+            models: { deployment: {} },
+          },
+          "google-vertex-anthropic": {
+            npm: "@ai-sdk/google-vertex/anthropic",
+            options: { project: "test-project", location: "us-central1" },
+            models: { "claude-sonnet": {} },
+          },
+        },
+      })
+
+      expect(migrated.model).toEqual({ providerID: "azure", model: "deployment" })
+      expect(migrated.agents?.reviewer?.model).toEqual({ providerID: "google-vertex", model: "claude-sonnet" })
+      expect(migrated.commands?.review?.model).toEqual({ providerID: "azure", model: "deployment" })
+      expect(migrated.experimental?.policies).toEqual([
+        { action: "provider.use", resource: "*", effect: "deny" },
+        { action: "provider.use", resource: "google-vertex", effect: "allow" },
+        { action: "provider.use", resource: "azure", effect: "deny" },
+      ])
+      expect(migrated.providers?.azure).toMatchObject({
+        env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
+        package: Provider.aisdk("@ai-sdk/azure"),
+        models: { deployment: {} },
+      })
+      expect(migrated.providers?.["azure-cognitive-services"]).toBeUndefined()
+      expect(migrated.providers?.["google-vertex"]).toMatchObject({
+        package: undefined,
+        settings: { project: "test-project", location: "us-central1" },
+        models: {
+          "claude-sonnet": { package: Provider.aisdk("@ai-sdk/google-vertex/anthropic") },
+        },
+      })
+      expect(migrated.providers?.["google-vertex-anthropic"]).toBeUndefined()
+    }),
+  )
+
   it.effect("migrates v1 interleaved fields to compatibility", () =>
     Effect.sync(() => {
       const migrated = ConfigMigrateV1.migrate({
