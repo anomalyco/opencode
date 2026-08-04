@@ -130,9 +130,39 @@ function bind(hostname: string, port: number) {
     const parentScope = yield* Scope.Scope
     const serverScope = yield* Scope.fork(parentScope)
     const server = createServer()
+    const sockets = new Set<import("node:net").Socket>()
+    const onConnection = (socket: import("node:net").Socket) => {
+      sockets.add(socket)
+      socket.once("close", () => sockets.delete(socket))
+    }
+    const onUpgrade = (_request: unknown, socket: import("node:net").Socket) => sockets.add(socket)
+    server.on("connection", onConnection)
+    server.on("upgrade", onUpgrade)
     return yield* Effect.gen(function* () {
       const http = yield* NodeHttpServer.make(() => server, { port, host: hostname })
       yield* Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()))
+      // Node's closeAllConnections deliberately excludes upgraded sockets.
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          server.off("connection", onConnection)
+          server.off("upgrade", onUpgrade)
+          server.closeAllConnections()
+        }).pipe(
+          Effect.andThen(
+            Effect.suspend(() => {
+              if (sockets.size === 0) return Effect.void
+              return Effect.sleep("1 second").pipe(
+                Effect.andThen(
+                  Effect.sync(() => {
+                    for (const socket of sockets) socket.destroy()
+                    sockets.clear()
+                  }),
+                ),
+              )
+            }),
+          ),
+        ),
+      )
       return { http, server, scope: serverScope }
     }).pipe(
       Effect.provideService(Scope.Scope, serverScope),
@@ -241,7 +271,8 @@ function unavailable(status: Status.State) {
 /**
  * The managed server owns restart continuity: it resumes Sessions the previous server suspended and
  * suspends its own active Sessions on graceful shutdown. Suspension runs while the drains are still
- * alive: connections close first, this finalizer runs next, and Session execution teardown follows.
+ * alive: request admission stops first, application-owned transports receive their shutdown signal,
+ * listener connections close, and this finalizer runs during application teardown.
  */
 const installRestartContinuity = Effect.fnUntraced(function* (restart: SessionRestart.Interface) {
   yield* Effect.forkScoped(restart.resumeSuspendedSessions)

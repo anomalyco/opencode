@@ -14,6 +14,7 @@ import { SkillGroup } from "./groups/skill.js"
 import { EventGroup, makeEventGroup } from "./groups/event.js"
 import type { Definition } from "@opencode-ai/schema/event"
 import { AgentGroup } from "./groups/agent.js"
+import { BrowserGroup } from "./groups/browser.js"
 import { PluginGroup } from "./groups/plugin.js"
 import { HealthGroup } from "./groups/health.js"
 import { ServerGroup } from "./groups/server.js"
@@ -85,6 +86,7 @@ type ApiGroups<
   | typeof HealthGroup
   | typeof ServerGroup
   | typeof DebugGroup
+  | typeof BrowserGroup
   | LocationGroups<LocationId>
   | FormGroups<LocationId, LocationService, FormLocationId, FormLocationService>
   | SessionGroups<SessionLocationId, SessionLocationService>
@@ -146,6 +148,7 @@ const makeApiFromGroup = <
   HttpApi.make("server")
     .add(HealthGroup)
     .add(ServerGroup)
+    .add(BrowserGroup)
     .add(LocationGroup.middleware(locationMiddleware))
     .add(AgentGroup.middleware(locationMiddleware))
     .add(PluginGroup.middleware(locationMiddleware))

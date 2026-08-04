@@ -22,11 +22,17 @@ export class RegistrationError extends Schema.TaggedErrorClass<RegistrationError
   message: Schema.String,
 }) {}
 
+export interface Draft {
+  readonly add: (tool: Tool.Info) => void
+}
+
+export type SessionTransform = (sessionID: SessionSchema.ID, draft: Draft) => Effect.Effect<void>
+
 export interface Interface {
-  readonly transform: (
-    callback: (draft: { readonly add: (tool: Tool.Info) => void }) => void,
-  ) => Effect.Effect<void, RegistrationError, Scope.Scope>
-  readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
+  readonly transform: (callback: (draft: Draft) => void) => Effect.Effect<void, RegistrationError, Scope.Scope>
+  /** Installs a privileged transform materialized only for a requested Session snapshot. */
+  readonly transformSession: (callback: SessionTransform) => Effect.Effect<void, never, Scope.Scope>
+  readonly snapshot: (permissions?: Permission.Ruleset, sessionID?: SessionSchema.ID) => Effect.Effect<Snapshot>
 }
 
 export interface Snapshot {
@@ -80,7 +86,37 @@ const layer = Layer.effect(
     })
 
     const local = new Map<string, Array<{ readonly token: object; readonly tool: Tool.Info }>>()
+    const sessionTransforms: Array<{ readonly token: object; readonly transform: SessionTransform }> = []
     const lock = Semaphore.makeUnsafe(1)
+
+    const plan = Effect.fnUntraced(function* (tools: ReadonlyArray<Tool.Info>) {
+      yield* Effect.forEach(
+        tools.flatMap((tool) => (tool.options?.namespace === undefined ? [] : [tool.options.namespace])),
+        validateNamespace,
+        { discard: true },
+      )
+      const entries = normalizedEntries(tools)
+      yield* Effect.forEach(entries, (entry) => validateName(normalizedName(entry.tool)), { discard: true })
+      const collision = entries.find(
+        (entry, index) => entries.findIndex((candidate) => candidate.key === entry.key) !== index,
+      )
+      if (collision)
+        return yield* Effect.fail(
+          new RegistrationError({
+            name: collision.key,
+            message: `Duplicate normalized tool name: ${collision.key}`,
+          }),
+        )
+      const reserved = entries.find((entry) => entry.tool.options?.codemode === false && entry.key === "execute")
+      if (reserved)
+        return yield* Effect.fail(
+          new RegistrationError({
+            name: reserved.key,
+            message: 'Tool name "execute" is reserved for CodeMode',
+          }),
+        )
+      return entries
+    })
 
     const executeTool = Effect.fn("Tool.execute")(function* (
       tool: Tool.Info,
@@ -140,31 +176,7 @@ const layer = Layer.effect(
     const transform: Interface["transform"] = Effect.fn("Tool.transform")(function* (callback) {
       const tools: Array<Tool.Info> = []
       yield* Effect.sync(() => callback({ add: (tool) => tools.push(tool) }))
-      yield* Effect.forEach(
-        tools.flatMap((tool) => (tool.options?.namespace === undefined ? [] : [tool.options.namespace])),
-        validateNamespace,
-        { discard: true },
-      )
-      const entries = normalizedEntries(tools)
-      yield* Effect.forEach(entries, (entry) => validateName(normalizedName(entry.tool)), { discard: true })
-      const collision = entries.find(
-        (entry, index) => entries.findIndex((candidate) => candidate.key === entry.key) !== index,
-      )
-      if (collision)
-        return yield* Effect.fail(
-          new RegistrationError({
-            name: collision.key,
-            message: `Duplicate normalized tool name: ${collision.key}`,
-          }),
-        )
-      const reserved = entries.find((entry) => entry.tool.options?.codemode === false && entry.key === "execute")
-      if (reserved)
-        return yield* Effect.fail(
-          new RegistrationError({
-            name: reserved.key,
-            message: 'Tool name "execute" is reserved for CodeMode',
-          }),
-        )
+      const entries = yield* plan(tools)
       if (entries.length === 0) return
       yield* Effect.uninterruptible(
         lock.withPermit(
@@ -188,59 +200,101 @@ const layer = Layer.effect(
       )
     })
 
-    return Service.of({
-      transform,
-      snapshot: Effect.fn("Tool.snapshot")((permissions) =>
+    const transformSession: Interface["transformSession"] = Effect.fn("Tool.transformSession")((transform) =>
+      Effect.uninterruptible(
         lock.withPermit(
           Effect.gen(function* () {
-            const active = new Map<string, Tool.Info>()
-            const rules = permissions ?? []
-            for (const [name, entries] of local) {
-              const tool = entries.at(-1)?.tool
-              if (!tool) continue
-              if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
-              active.set(name, tool)
-            }
-            const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
-            const codemode = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
-            const executeRule = rules.findLast((rule) => Wildcard.match("execute", rule.action))
-            const codemodeEnabled = executeRule?.resource !== "*" || executeRule.effect !== "deny"
-            const codemodeTool = codemodeEnabled
-              ? CodeModeTool.create(codemode, (name, tool, input, context) => executeTool(tool, name, input, context))
-              : undefined
-            const codeModeCatalog = codemodeEnabled ? CodeModeTool.catalog(codemode) : undefined
-            return {
-              ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
-              definitions: [
-                ...Array.from(direct)
-                  .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-                  .map(([, tool]) => definition(tool)),
-                ...(codemodeTool ? [definition(codemodeTool)] : []),
-              ],
-              execute: (input: {
-                readonly sessionID: SessionSchema.ID
-                readonly agent: Agent.ID
-                readonly messageID: SessionMessage.ID
-                readonly call: ToolCall
-                readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
-              }) => {
-                const context: Tool.Context = {
-                  sessionID: input.sessionID,
-                  agent: input.agent,
-                  messageID: input.messageID,
-                  callID: Tool.CallID.make(input.call.id),
-                  progress: input.progress ?? (() => Effect.void),
-                }
-                if (input.call.name === "execute" && codemodeTool)
-                  return executeTool(codemodeTool, input.call.name, input.call.input, context)
-                const tool = direct.get(input.call.name)
-                if (tool) return executeTool(tool, input.call.name, input.call.input, context)
-                return new Tool.Error({ message: `Unknown tool: ${input.call.name}` })
-              },
-            }
+            const token = {}
+            sessionTransforms.push({ token, transform })
+            yield* Effect.addFinalizer(() =>
+              lock.withPermit(
+                Effect.sync(() => {
+                  const index = sessionTransforms.findIndex((item) => item.token === token)
+                  if (index !== -1) sessionTransforms.splice(index, 1)
+                }),
+              ),
+            )
           }),
         ),
       ),
+    )
+
+    return Service.of({
+      transform,
+      transformSession,
+      snapshot: Effect.fn("Tool.snapshot")(function* (permissions, sessionID) {
+        const captured = yield* lock.withPermit(
+          Effect.sync(() => {
+            const active = new Map<string, Tool.Info>()
+            for (const [name, entries] of local) {
+              const tool = entries.at(-1)?.tool
+              if (tool) active.set(name, tool)
+            }
+            return { active, sessionTransforms: [...sessionTransforms] }
+          }),
+        )
+        if (sessionID !== undefined) {
+          for (const item of captured.sessionTransforms) {
+            const tools: Array<Tool.Info> = []
+            yield* item.transform(sessionID, { add: (tool) => tools.push(tool) })
+            const planned = yield* plan(tools).pipe(
+              Effect.map((entries) => ({ entries })),
+              Effect.catchTag("Tool.RegistrationError", (error) =>
+                Effect.logWarning("invalid Session tool materialization ignored", {
+                  name: error.name,
+                  error: error.message,
+                }).pipe(Effect.as(undefined)),
+              ),
+            )
+            if (!planned) continue
+            for (const entry of planned.entries) captured.active.set(entry.key, entry.tool)
+          }
+        }
+
+        const rules = permissions ?? []
+        for (const [name, tool] of captured.active) {
+          if (whollyDisabled(tool.options?.permission ?? name, rules)) captured.active.delete(name)
+        }
+        const direct = new Map(Array.from(captured.active).filter(([, tool]) => tool.options?.codemode === false))
+        const codemode = new Map(Array.from(captured.active).filter(([, tool]) => tool.options?.codemode !== false))
+        const executeRule = rules.findLast((rule) => Wildcard.match("execute", rule.action))
+        const codemodeEnabled = executeRule?.resource !== "*" || executeRule.effect !== "deny"
+        const codemodeTool = codemodeEnabled
+          ? CodeModeTool.create(codemode, (name, tool, input, context) => executeTool(tool, name, input, context))
+          : undefined
+        const codeModeCatalog = codemodeEnabled ? CodeModeTool.catalog(codemode) : undefined
+        return {
+          ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
+          definitions: [
+            ...Array.from(direct)
+              .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+              .map(([, tool]) => definition(tool)),
+            ...(codemodeTool ? [definition(codemodeTool)] : []),
+          ],
+          execute: (input: {
+            readonly sessionID: SessionSchema.ID
+            readonly agent: Agent.ID
+            readonly messageID: SessionMessage.ID
+            readonly call: ToolCall
+            readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
+          }) => {
+            if (sessionID !== undefined && input.sessionID !== sessionID)
+              return new Tool.Error({ message: "Tool snapshot belongs to another Session" })
+            const context: Tool.Context = {
+              sessionID: input.sessionID,
+              agent: input.agent,
+              messageID: input.messageID,
+              callID: Tool.CallID.make(input.call.id),
+              progress: input.progress ?? (() => Effect.void),
+            }
+            if (input.call.name === "execute" && codemodeTool)
+              return executeTool(codemodeTool, input.call.name, input.call.input, context)
+            const tool = direct.get(input.call.name)
+            if (tool) return executeTool(tool, input.call.name, input.call.input, context)
+            return new Tool.Error({ message: `Unknown tool: ${input.call.name}` })
+          },
+        }
+      }),
     })
   }),
 )
