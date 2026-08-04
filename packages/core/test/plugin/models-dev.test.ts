@@ -220,6 +220,56 @@ describe("ModelsDevPlugin", () => {
     }).pipe(Effect.provide(models(path.join(import.meta.dir, "fixtures", "models-dev.json")))),
   )
 
+  it.effect("omits legacy provider aliases", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const catalog = yield* Catalog.Service
+      const snapshots = [
+        ["azure", "Azure", "AZURE_API_KEY", "@ai-sdk/azure"],
+        ["azure-cognitive-services", "Azure Cognitive Services", "AZURE_COGNITIVE_SERVICES_API_KEY", "@ai-sdk/azure"],
+        ["google-vertex", "Google Vertex", "GOOGLE_APPLICATION_CREDENTIALS", "@ai-sdk/google-vertex"],
+        [
+          "google-vertex-anthropic",
+          "Google Vertex Anthropic",
+          "GOOGLE_APPLICATION_CREDENTIALS",
+          "@ai-sdk/google-vertex/anthropic",
+        ],
+      ].map(([id, name, environment, packageName]) => ({
+        info: {
+          id: Provider.ID.make(id),
+          name,
+          package: Provider.aisdk(packageName),
+        },
+        environment: [environment],
+        models: [],
+      })) satisfies readonly ModelsDev.Snapshot[]
+
+      yield* ModelsDevPlugin.effect(
+        host({
+          catalog: catalogHost(catalog),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({
+            get: () => Effect.succeed(snapshots),
+            refresh: () => Effect.void,
+          }),
+        ),
+      )
+
+      expect(yield* catalog.provider.get(Provider.ID.azure)).toBeDefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("google-vertex"))).toBeDefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("azure-cognitive-services"))).toBeUndefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
+      expect(yield* integrations.get(Integration.ID.make("azure"))).toBeDefined()
+      expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toBeDefined()
+      expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
+      expect(yield* integrations.get(Integration.ID.make("google-vertex-anthropic"))).toBeUndefined()
+    }),
+  )
+
   it.effect("converts reasoning options into settings variants", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

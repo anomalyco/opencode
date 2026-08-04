@@ -4,6 +4,8 @@ import { Effect, Stream } from "effect"
 import { Bus } from "../bus"
 import { ModelsDev } from "../models-dev"
 
+const legacyProviders = new Set(["azure-cognitive-services", "google-vertex-anthropic"])
+
 export const ModelsDevPlugin = define({
   id: "opencode.models-dev",
   effect: Effect.fn(function* (ctx) {
@@ -12,6 +14,7 @@ export const ModelsDevPlugin = define({
     const loaded = { data: structuredClone(yield* modelsDev.get()) }
     yield* ctx.integration.transform((integrations) => {
       for (const provider of loaded.data) {
+        if (legacyProviders.has(provider.info.id)) continue
         if (provider.environment.length === 0) continue
         const integrationID = provider.info.id
         integrations.update(integrationID, (integration) => (integration.name = provider.info.name))
@@ -27,6 +30,7 @@ export const ModelsDevPlugin = define({
     })
     yield* ctx.catalog.transform((catalog) => {
       for (const provider of loaded.data) {
+        if (legacyProviders.has(provider.info.id)) continue
         catalog.provider.update(provider.info.id, (draft) => {
           Object.assign(draft, provider.info)
           draft.integrationID = Integration.ID.make(provider.info.id)
