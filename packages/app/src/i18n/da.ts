@@ -296,6 +296,7 @@ export const dict = {
   "prompt.action.stop": "Stop",
 
   "prompt.toast.pasteUnsupported.title": "Ikke understøttet vedhæftning",
+  "prompt.toast.attachmentDuplicate.title": "Denne fil er allerede uploadet",
   "prompt.toast.pasteUnsupported.description": "Kun billeder, PDF'er eller tekstfiler kan vedhæftes her.",
   "prompt.toast.modelAgentRequired.title": "Vælg en agent og model",
   "prompt.toast.modelAgentRequired.description": "Vælg en agent og model før du sender en forespørgsel.",
@@ -670,6 +671,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Lokal",
   "session.new.workspace.local": "Lokalt repository",
   "session.new.workspace.existing": "Arbejdsområde…",
+  "session.new.git.none": "Ingen Git",
   "session.new.lastModified": "Sidst ændret",
 
   "session.header.search.placeholder": "Søg {{project}}",

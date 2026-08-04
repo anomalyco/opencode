@@ -15,6 +15,7 @@ type PersistedWithReady<T> = [
 ]
 
 type PersistTarget = {
+  draft?: boolean
   storage?: string
   scope?: "window"
   legacyStorageNames?: string[]
@@ -295,6 +296,14 @@ async function removeAsync(storage: AsyncStorage, key: string) {
   } catch {}
 }
 
+function toAsyncStorage(storage: SyncStorage | AsyncStorage): AsyncStorage {
+  return {
+    getItem: async (key) => storage.getItem(key),
+    setItem: async (key, value) => storage.setItem(key, value),
+    removeItem: async (key) => storage.removeItem(key),
+  }
+}
+
 async function migrateLegacyAsync(input: {
   current: AsyncStorage
   legacyStore?: AsyncStorage
@@ -513,6 +522,9 @@ export const Persist = {
     if (session) return Persist.serverSession(scope, dir, session, key, legacy)
     return Persist.serverWorkspace(scope, dir, key, legacy)
   },
+  prompt(target: PersistTarget): PersistTarget {
+    return { ...target, draft: true }
+  },
 }
 
 function resolveTarget(target: PersistTarget, platform: Platform): PersistTarget {
@@ -526,9 +538,12 @@ function resolveTarget(target: PersistTarget, platform: Platform): PersistTarget
 }
 
 export function removePersisted(
-  target: { storage?: string; legacyStorageNames?: string[]; key: string },
+  target: { draft?: boolean; storage?: string; legacyStorageNames?: string[]; key: string },
   platform?: Platform,
 ) {
+  if (target.draft && platform?.draftStore) {
+    void platform.draftStore.removeItem(`${target.storage ?? "default"}:${target.key}`)
+  }
   const isDesktop = platform?.platform === "desktop" && !!platform.storage
 
   if (isDesktop) {
@@ -561,8 +576,17 @@ export function persisted<T>(
   const legacy = config.legacy ?? []
 
   const isDesktop = platform.platform === "desktop" && !!platform.storage
+  const draft = config.draft ? platform.draftStore : undefined
 
   const currentStorage = (() => {
+    if (draft) {
+      const prefix = `${config.storage ?? "default"}:`
+      return {
+        getItem: (key: string) => draft.getItem(prefix + key),
+        setItem: (key: string, value: string) => draft.setItem(prefix + key, value),
+        removeItem: (key: string) => draft.removeItem(prefix + key),
+      } satisfies AsyncStorage
+    }
     if (isDesktop) return platform.storage?.(config.storage)
     if (!config.storage) return localStorageDirect()
     return localStorageWithPrefix(config.storage)
@@ -577,7 +601,7 @@ export function persisted<T>(
   const legacyStorageNames = config.legacyStorageNames ?? []
 
   const storage = (() => {
-    if (!isDesktop) {
+    if (!isDesktop && !draft) {
       const current = currentStorage as SyncStorage
       const legacyStore = legacyStorage as SyncStorage
       const legacyStores = legacyStorageNames.map(localStorageWithPrefix)
@@ -609,15 +633,26 @@ export function persisted<T>(
 
     const current = currentStorage as AsyncStorage
     const legacyStore = legacyStorage as AsyncStorage | undefined
-    const legacyStores = legacyStorageNames
-      .map((name) => platform.storage?.(name) as AsyncStorage | undefined)
+    const oldCurrent = draft
+      ? isDesktop
+        ? platform.storage?.(config.storage)
+        : config.storage
+          ? localStorageWithPrefix(config.storage)
+          : localStorageDirect()
+      : undefined
+    const legacyStores = [
+      oldCurrent,
+      ...legacyStorageNames.map((name) => (isDesktop ? platform.storage?.(name) : localStorageWithPrefix(name))),
+    ]
       .filter((x) => !!x)
+      .map(toAsyncStorage)
+    let draftLatest: string | undefined
 
     const api: AsyncStorage = {
       getItem: async (key) => {
         const value = await readCurrentAsync({ storage: current, key, defaults, migrate: config.migrate })
         if (value !== undefined) return value
-        return migrateLegacyAsync({
+        const migrated = await migrateLegacyAsync({
           current,
           legacyStore,
           stores: legacyStores,
@@ -626,8 +661,15 @@ export function persisted<T>(
           defaults,
           migrate: config.migrate,
         })
+        if (draftLatest === undefined) {
+          if (draft && migrated !== null) return (await current.getItem(key)) ?? migrated
+          return migrated
+        }
+        await current.setItem(key, draftLatest)
+        return draftLatest
       },
       setItem: async (key, value) => {
+        if (draft) draftLatest = value
         await current.setItem(key, value)
       },
       removeItem: async (key) => {

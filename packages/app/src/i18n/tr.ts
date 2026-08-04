@@ -302,6 +302,7 @@ export const dict = {
   "prompt.action.stop": "Durdur",
 
   "prompt.toast.pasteUnsupported.title": "Desteklenmeyen ek",
+  "prompt.toast.attachmentDuplicate.title": "Bu dosya zaten yüklendi",
   "prompt.toast.pasteUnsupported.description": "Buraya yalnızca resimler, PDF'ler veya metin dosyaları eklenebilir.",
   "prompt.toast.modelAgentRequired.title": "Bir ajan ve model seçin",
   "prompt.toast.modelAgentRequired.description": "Komut göndermeden önce bir ajan ve model seçin.",
@@ -679,6 +680,7 @@ export const dict = {
   "session.new.workspace.triggerLocal": "Yerel",
   "session.new.workspace.local": "Yerel depo",
   "session.new.workspace.existing": "Çalışma alanı…",
+  "session.new.git.none": "Git yok",
   "session.new.lastModified": "Son değişiklik",
 
   "session.header.search.placeholder": "{{project}} ara",
