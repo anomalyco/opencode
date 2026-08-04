@@ -5,6 +5,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"
 import { mergeDeep } from "remeda"
+import { isDeepStrictEqual } from "util"
 import { Global } from "@opencode-ai/core/global"
 import fsNode from "fs/promises"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -20,7 +21,6 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { RemoteAuthError } from "@opencode-ai/core/v1/config/error"
@@ -35,6 +35,9 @@ import { ConfigPlugin } from "./plugin"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
+import type { MarketplaceHostConfig } from "@opencode-ai/core/marketplace"
+import { composeMarketplaceConfig, decomposeMarketplaceConfig } from "@/marketplace/overlay"
+import * as MarketplaceRegistry from "@/marketplace/registry"
 
 // Custom merge function that concatenates array fields instead of replacing them
 // Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.
@@ -108,11 +111,12 @@ async function resolveLoadedPlugins<T extends { plugin?: ConfigPluginV1.Spec[] }
   return config
 }
 
-type Info = ConfigV1.Info & {
-  // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
-  // with the file and scope it came from so later runtime code can make location-sensitive decisions.
-  plugin_origins?: ConfigPlugin.Origin[]
-}
+type Info = ConfigV1.Info &
+  Pick<MarketplaceHostConfig, "marketplace"> & {
+    // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
+    // with the file and scope it came from so later runtime code can make location-sensitive decisions.
+    plugin_origins?: ConfigPlugin.Origin[]
+  }
 
 type State = {
   config: Info
@@ -124,6 +128,7 @@ type State = {
 export interface Interface {
   readonly get: () => Effect.Effect<Info>
   readonly getGlobal: () => Effect.Effect<Info>
+  readonly getGlobalBase: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
   readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
@@ -147,21 +152,49 @@ function globalConfigFile() {
 }
 
 function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
-  if (!isRecord(patch)) {
-    const edits = modify(input, path, patch, {
-      formattingOptions: {
-        insertSpaces: true,
-        tabSize: 2,
-      },
-    })
-    return applyEdits(input, edits)
-  }
+  if (!isRecord(patch)) return replaceJsonc(input, path, patch)
 
   return Object.entries(patch).reduce((result, [key, value]) => patchJsonc(result, value, [...path, key]), input)
 }
 
+function replaceJsonc(input: string, path: string[], value: unknown) {
+  return applyEdits(
+    input,
+    modify(input, path, value, {
+      formattingOptions: {
+        insertSpaces: true,
+        tabSize: 2,
+      },
+    }),
+  )
+}
+
+const MARKETPLACE_MANAGED_CONFIG_KEYS = ["plugin", "skills", "agent", "command", "mcp", "instructions"] as const
+
+function mergeGlobalConfig(existing: Info, patch: Info, replaceManaged = false) {
+  const merged = mergeDeep(existing, patch) as Info
+  if (!replaceManaged) return merged
+  const result = merged as Record<string, unknown>
+  for (const key of MARKETPLACE_MANAGED_CONFIG_KEYS) {
+    if (key in patch) result[key] = patch[key]
+    else delete result[key]
+  }
+  return merged
+}
+
+function patchGlobalJsonc(input: string, patch: Info, replaceManaged = false) {
+  if (!replaceManaged) return patchJsonc(input, patch)
+  const rest = Object.fromEntries(
+    Object.entries(patch).filter(([key]) => !(MARKETPLACE_MANAGED_CONFIG_KEYS as readonly string[]).includes(key)),
+  )
+  return MARKETPLACE_MANAGED_CONFIG_KEYS.reduce(
+    (result, key) => replaceJsonc(result, [key], patch[key]),
+    patchJsonc(input, rest),
+  )
+}
+
 function writable(info: Info) {
-  const { plugin_origins: _plugin_origins, ...next } = info
+  const { plugin_origins: _pluginOrigins, marketplace: _marketplace, ...next } = info
   return next
 }
 
@@ -181,6 +214,7 @@ const layer = Layer.effect(
     const env = yield* Env.Service
     const npmSvc = yield* Npm.Service
     const http = yield* HttpClient.HttpClient
+    const marketplace = yield* MarketplaceRegistry.Service
 
     const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
 
@@ -243,7 +277,7 @@ const layer = Layer.effect(
       return yield* loadConfig(text, { path: filepath }, env)
     })
 
-    const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
+    const loadGlobalRaw = Effect.fnUntraced(function* (env?: Record<string, string>) {
       let result: Info = {}
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
       // explicitly routes config through env-provided paths or content.
@@ -275,7 +309,14 @@ const layer = Layer.effect(
         )
       }
 
+      delete result.marketplace
       return result
+    })
+
+    const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
+      const raw = yield* loadGlobalRaw(env)
+      const state = yield* marketplace.read()
+      return composeMarketplaceConfig(raw as MarketplaceHostConfig, state) as Info
     })
 
     const [cachedGlobal, invalidateGlobal] = yield* Effect.cachedInvalidateWithTTL(
@@ -290,6 +331,10 @@ const layer = Layer.effect(
 
     const getGlobal = Effect.fn("Config.getGlobal")(function* () {
       return yield* cachedGlobal
+    })
+
+    const getGlobalBase = Effect.fn("Config.getGlobalBase")(function* () {
+      return yield* loadGlobalRaw()
     })
 
     const ensureGitignore = Effect.fn("Config.ensureGitignore")(function* (dir: string) {
@@ -637,31 +682,38 @@ const layer = Layer.effect(
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
       const file = globalConfigFile()
       const before = (yield* readConfigFile(file)) ?? "{}"
-      const patch = writableGlobal(config)
+      const raw = yield* loadGlobalRaw()
+      const state = yield* marketplace.read()
+      const effective = composeMarketplaceConfig(raw as MarketplaceHostConfig, state) as Info
+      const incoming = mergeGlobalConfig(effective, config, false)
+      const desired = decomposeMarketplaceConfig(
+        incoming as MarketplaceHostConfig,
+        raw as MarketplaceHostConfig,
+        state,
+      ) as Info
+      const patch = writableGlobal(desired)
+      const changed = !isDeepStrictEqual(writableGlobal(raw), patch)
 
-      let next: Info
-      let changed: boolean
-      if (!file.endsWith(".jsonc")) {
-        const existing = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(before, file), file)
-        const merged = mergeDeep(writable(existing), patch)
-        const serialized = JSON.stringify(merged, null, 2)
-        changed = serialized !== before
-        if (changed) yield* fs.writeFileString(file, serialized).pipe(Effect.orDie)
-        next = merged
-      } else {
-        const updated = patchJsonc(before, patch)
-        next = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(updated, file), file)
-        changed = updated !== before
-        if (changed) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+      if (changed) {
+        if (!file.endsWith(".jsonc")) {
+          yield* fs.writeFileString(file, JSON.stringify(patch, null, 2)).pipe(Effect.orDie)
+        } else {
+          const updated = patchGlobalJsonc(before, patch, true)
+          if (updated !== before) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+        }
+        yield* invalidate()
       }
 
-      if (changed) yield* invalidate()
-      return { info: next, changed }
+      return {
+        info: composeMarketplaceConfig(patch as MarketplaceHostConfig, state) as Info,
+        changed,
+      }
     })
 
     return Service.of({
       get,
       getGlobal,
+      getGlobalBase,
       getConsoleState,
       update,
       updateGlobal,
@@ -675,7 +727,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient],
+  deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, MarketplaceRegistry.node, httpClient],
 })
 
 export * as Config from "./config"

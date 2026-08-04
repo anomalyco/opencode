@@ -17,6 +17,7 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import { Discovery } from "./discovery"
 import { isRecord } from "@/util/record"
 import { escapeHtml } from "@/util/html"
+import { marketplaceDisabledSkillNames, type MarketplaceHostConfig } from "@opencode-ai/core/marketplace"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
@@ -102,7 +103,12 @@ export interface Interface {
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
 }
 
-const add = Effect.fnUntraced(function* (state: State, match: string, events: EventV2Bridge.Service["Service"]) {
+const add = Effect.fnUntraced(function* (
+  state: State,
+  match: string,
+  events: EventV2Bridge.Service["Service"],
+  disabled: Set<string>,
+) {
   const md = yield* Effect.tryPromise({
     try: () => ConfigMarkdown.parse(match),
     catch: (err) => err,
@@ -121,6 +127,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
   if (!md) return
 
   if (!isSkillFrontmatter(md.data)) return
+  if (disabled.has(md.data.name)) return
 
   if (state.skills[md.data.name]) {
     yield* Effect.logWarning("duplicate skill name", {
@@ -236,8 +243,9 @@ const loadSkills = Effect.fnUntraced(function* (
   state: State,
   discovered: DiscoveryState,
   events: EventV2Bridge.Service["Service"],
+  disabled: Set<string>,
 ) {
-  yield* Effect.forEach(discovered.matches, (match) => add(state, match, events), {
+  yield* Effect.forEach(discovered.matches, (match) => add(state, match, events, disabled), {
     concurrency: "unbounded",
     discard: true,
   })
@@ -281,7 +289,13 @@ const layer = Layer.effect(
           location: "<built-in>",
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
         }
-        yield* loadSkills(s, yield* InstanceState.get(discovered), events)
+        const cfg = yield* config.get()
+        yield* loadSkills(
+          s,
+          yield* InstanceState.get(discovered),
+          events,
+          new Set(marketplaceDisabledSkillNames(cfg as MarketplaceHostConfig)),
+        )
         return s
       }),
     )
