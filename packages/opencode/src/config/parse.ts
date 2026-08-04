@@ -6,8 +6,10 @@ import type { DeepMutable } from "@opencode-ai/core/schema"
 import { InvalidError, JsonError } from "@opencode-ai/core/v1/config/error"
 
 export function jsonc(text: string, filepath: string): unknown {
+  // Strip BOM (\uFEFF) and normalize hidden Unicode characters
+  const cleanText = text.replace(/^\uFEFF/, "")
   const errors: JsoncParseError[] = []
-  const data = parseJsoncImpl(text, errors, { allowTrailingComma: true })
+  const data = parseJsoncImpl(cleanText, errors, { allowTrailingComma: true })
   if (errors.length) {
     const lines = text.split("\n")
     const issues = errors
