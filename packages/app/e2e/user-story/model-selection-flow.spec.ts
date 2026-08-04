@@ -6,7 +6,7 @@ const directory = "C:/OpenCode/NewProject"
 
 test("creates a session in a new project and selects its model", async ({ page }) => {
   await mockOpenCodeServer(page, {
-    protocol: "v1",
+    protocol: "v2",
     directory,
     project: {
       id: "proj_model_selection_flow",
