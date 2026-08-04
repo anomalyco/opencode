@@ -1,12 +1,16 @@
 export * as Vcs from "./vcs"
 
-import { Context, Effect, Layer } from "effect"
+import path from "path"
+import { Context, Effect, Layer, Ref, Stream } from "effect"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
+import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
+import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "./location"
 import { AppProcess } from "@opencode-ai/util/process"
+import { Bus } from "./bus"
 import { VcsGit } from "./vcs/git"
 import { VcsHg } from "./vcs/hg"
 
@@ -39,11 +43,44 @@ const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
+    const bus = yield* Bus.Service
     const impl = adapter(proc, fs, location)
+    const git = location.vcs?.type === "git" ? location.vcs : undefined
+    const cache = git && impl ? yield* Ref.make(yield* impl.info()) : undefined
+
+    if (cache && git && impl) {
+      const store = yield* fs.realPath(git.store).pipe(Effect.catch(() => Effect.succeed(git.store)))
+      yield* bus.subscribe(FileSystem.Event.Changed).pipe(
+        Stream.filter(
+          (event) => path.basename(event.data.file) === "HEAD" && FSUtil.contains(store, event.data.file),
+        ),
+        Stream.runForEach((event) =>
+          Effect.gen(function* () {
+            const previous = yield* Ref.get(cache)
+            const next = yield* impl.info()
+            yield* Ref.set(cache, next)
+            if (previous.branch.current === next.branch.current) return
+            yield* bus.publish(VcsEvent.BranchUpdated, { branch: next.branch.current })
+          }).pipe(Effect.withSpan("Vcs.refreshBranch", { attributes: { file: event.data.file } })),
+        ),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+    }
+
+    const info = Effect.fnUntraced(function* () {
+      if (!impl) return { branch: {} }
+      if (!cache) return yield* impl.info()
+      const current = yield* Ref.get(cache)
+      if (current.branch.default !== undefined) return current
+      // An unborn repository can gain its first default branch without changing HEAD.
+      const next = yield* impl.info()
+      yield* Ref.set(cache, next)
+      return next
+    })
+
     return Service.of({
       info: Effect.fn("Vcs.info")(function* () {
-        if (!impl) return { branch: {} }
-        return yield* impl.info()
+        return yield* info()
       }),
       status: Effect.fn("Vcs.status")(function* () {
         if (!impl) return []
@@ -60,5 +97,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer: layer,
-  deps: [AppProcess.node, FSUtil.node, Location.node],
+  deps: [AppProcess.node, FSUtil.node, Location.node, Bus.node],
 })
