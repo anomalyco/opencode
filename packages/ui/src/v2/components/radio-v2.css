@@ -45,6 +45,7 @@
 }
 
 [data-slot="radio-v2-item"] {
+  position: relative;
   display: flex;
   flex-direction: row;
   align-items: flex-start;
@@ -131,10 +132,6 @@
       linear-gradient(180deg, var(--v2-alpha-light-20) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-accent);
   }
 
-  &:where([data-checked][data-disabled]) [data-slot="radio-v2-item-control"] {
-    opacity: 0.5;
-  }
-
   &:where([data-invalid]):where(:not([data-checked])) [data-slot="radio-v2-item-control"] {
     background: var(--v2-state-bg-danger);
     box-shadow: inset 0 0 0 0.5px var(--v2-state-border-danger);
@@ -195,8 +192,11 @@
     user-select: none;
   }
 
-  &:where([data-disabled]) [data-slot="radio-v2-item-label"],
+  &:where([data-disabled]) [data-slot="radio-v2-item-label-text"] {
+    color: var(--v2-text-text-muted);
+  }
+
   &:where([data-disabled]) [data-slot="radio-v2-item-description"] {
-    opacity: 0.5;
+    color: var(--v2-text-text-faint);
   }
 }

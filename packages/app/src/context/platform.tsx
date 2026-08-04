@@ -5,6 +5,7 @@ import type { DesktopMenuAction } from "../desktop-menu"
 import { ServerConnection } from "./server"
 import type { WslServersPlatform } from "../wsl/types"
 import type { UpdaterPlatform } from "../updater"
+import type { DraftStore } from "@/utils/draft-store"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -31,23 +32,23 @@ type PlatformBase = {
   /** App version */
   version?: string
 
-  /** Open a URL in the default browser */
-  openLink(url: string): void
+  /** Open a web or mail URL in the default system application */
+  openExternal(url: string): void
 
   /** Open a local path in a local app (desktop only) */
   openPath?(path: string, app?: string): Promise<void>
 
+  /** Open a local file URL in its default app (desktop only) */
+  openLocalFile?(url: string): void
+
+  /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
+  revealPath?(path: string): Promise<boolean>
+
   /** Restart the app  */
   restart(): Promise<void>
 
-  /** Navigate back in history */
-  back(): void
-
-  /** Navigate forward in history */
-  forward(): void
-
-  /** Send a system notification (optional deep link) */
-  notify(title: string, description?: string, href?: string): Promise<void>
+  /** Send a system notification */
+  notify(title: string, description?: string, onClick?: () => void): Promise<void>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?(
@@ -63,6 +64,12 @@ type PlatformBase = {
 
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
+
+  /** Prompt drafts, history, and their blobs. */
+  draftStore?: DraftStore
+
+  /** Stable platform window identity for window-scoped persistence */
+  windowID?: string
 
   /** Application-global desktop updater */
   updater?: UpdaterPlatform
@@ -85,11 +92,11 @@ type PlatformBase = {
   /** Set the preferred display backend (desktop only) */
   setDisplayBackend?(backend: DisplayBackend): Promise<void>
 
-  /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
-  parseMarkdown?(markdown: string): Promise<string>
-
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
+
+  /** Whether the native desktop window is fullscreen */
+  windowFullscreen?: Accessor<boolean>
 
   /** Get whether native pinch/Ctrl-scroll zoom gestures are enabled (desktop only) */
   getPinchZoomEnabled?(): Promise<boolean> | boolean
@@ -108,6 +115,9 @@ type PlatformBase = {
 
   /** Export collected diagnostic logs (desktop only) */
   exportDebugLogs?(): Promise<string>
+
+  /** Force focus styles on interactive elements through desktop devtools (desktop only) */
+  setForceFocus?(enabled: boolean): Promise<void>
 
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>

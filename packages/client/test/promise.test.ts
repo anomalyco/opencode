@@ -1,6 +1,43 @@
 import { expect, test } from "bun:test"
 import { isSessionNotFoundError, isUnauthorizedError, OpenCode } from "../src"
 
+test("exposes every standard HTTP API group", () => {
+  const client = OpenCode.make({ baseUrl: "http://localhost:3000" })
+
+  expect(Object.keys(client)).toEqual([
+    "health",
+    "location",
+    "agents",
+    "sessions",
+    "messages",
+    "models",
+    "providers",
+    "integrations",
+    "credentials",
+    "permissions",
+    "files",
+    "commands",
+    "skills",
+    "events",
+    "ptys",
+    "questions",
+    "references",
+    "projectCopies",
+  ])
+  expect(Object.keys(client.messages)).toEqual(["list"])
+  expect(Object.keys(client.integrations)).toEqual([
+    "list",
+    "get",
+    "connectKey",
+    "connectOauth",
+    "attemptStatus",
+    "attemptComplete",
+    "attemptCancel",
+  ])
+  expect(Object.keys(client.files)).toEqual(["list", "find"])
+  expect(Object.keys(client.ptys)).toEqual(["list", "create", "get", "update", "remove"])
+})
+
 test("sessions.get returns the wire projection", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",

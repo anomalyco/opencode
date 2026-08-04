@@ -1,6 +1,6 @@
 export * as CommandV2 from "./command"
 
-import { makeLocationNode } from "./effect/node"
+import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Types } from "effect"
 import { Command } from "@opencode-ai/schema/command"
 import { State } from "./state"
@@ -26,7 +26,7 @@ export interface Interface extends State.Transformable<Draft> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Command") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.sync(() => {
     const state = State.create<Data, Draft>({

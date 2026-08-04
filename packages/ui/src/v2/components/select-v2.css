@@ -65,6 +65,7 @@
   box-shadow: var(--v2-elevation-button-neutral);
   flex: none;
   align-self: stretch;
+  user-select: none;
   transition:
     background 85ms ease-out,
     outline-color 85ms ease-out,

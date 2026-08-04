@@ -1,6 +1,7 @@
 export * as MoveSession from "./move-session"
 
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { makeGlobalNode } from "../effect/app-node"
 import { EventV2 } from "../event"
 import { Git } from "../git"
 import { Location } from "../location"
@@ -65,7 +66,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ControlPlaneMoveSession") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const git = yield* Git.Service
@@ -140,9 +141,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(Git.defaultLayer),
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(ProjectV2.defaultLayer),
-  Layer.provide(SessionStore.defaultLayer),
-)
+export const node = makeGlobalNode({
+  service: Service,
+  layer,
+  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node],
+})

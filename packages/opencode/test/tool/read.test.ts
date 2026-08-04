@@ -1,5 +1,6 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
@@ -44,14 +45,16 @@ const ctx = {
 }
 
 const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  Layer.mergeAll(
-    Agent.defaultLayer,
-    FSUtil.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
-    Instruction.defaultLayer,
-    LSP.defaultLayer,
-    Ripgrep.defaultLayer,
-    Truncate.defaultLayer,
+  LayerNode.compile(
+    LayerNode.group([
+      Agent.node,
+      FSUtil.node,
+      CrossSpawnSpawner.node,
+      Instruction.node,
+      LSP.node,
+      Ripgrep.node,
+      Truncate.node,
+    ]),
   )
 
 const it = testEffect(Layer.mergeAll(readLayer(), testInstanceStoreLayer))

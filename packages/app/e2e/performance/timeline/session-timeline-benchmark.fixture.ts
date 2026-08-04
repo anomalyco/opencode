@@ -93,36 +93,53 @@ const assistantMessage = {
   parts: [editPart],
 }
 
-export async function setupTimelineBenchmark(page: Page, options: { historyTurns: number; eventBatch: number }) {
+export async function setupTimelineBenchmark(
+  page: Page,
+  options: {
+    historyTurns: number
+    eventBatch: number
+    newLayoutDesigns?: boolean
+    vcsDiff?: unknown[]
+    turnDiffs?: unknown[]
+  },
+) {
   const events: EventPayload[] = []
   let eventBatch = options.eventBatch
+  const currentUserMessage = options.turnDiffs
+    ? { ...userMessage, info: { ...userMessage.info, summary: { diffs: options.turnDiffs } } }
+    : userMessage
   await mockOpenCodeServer(page, {
     directory,
     project: project(),
     provider: provider(),
     sessions: [session()],
+    vcsDiff: options.vcsDiff,
     pageMessages: () => ({
       items: [
         ...Array.from({ length: options.historyTurns }, (_, index) => performanceTurn(index)).flat(),
-        userMessage,
+        currentUserMessage,
         assistantMessage,
       ],
     }),
     events: () => events.splice(0, eventBatch),
     eventRetry: 16,
   })
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      "settings.v3",
-      JSON.stringify({
-        general: {
-          editToolPartsExpanded: true,
-          shellToolPartsExpanded: true,
-          showReasoningSummaries: true,
-        },
-      }),
-    )
-  })
+  await page.addInitScript(
+    (input) => {
+      localStorage.setItem(
+        "settings.v3",
+        JSON.stringify({
+          general: {
+            newLayoutDesigns: input.newLayoutDesigns,
+            editToolPartsExpanded: true,
+            shellToolPartsExpanded: true,
+            showReasoningSummaries: true,
+          },
+        }),
+      )
+    },
+    { newLayoutDesigns: options.newLayoutDesigns ?? false },
+  )
   await page.setViewportSize({ width: 1366, height: 768 })
   const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
   const text = page.locator(`[data-timeline-part-id="${textPartID}"]`).first()

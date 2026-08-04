@@ -49,6 +49,9 @@ export function Dialog(
     >
       <box
         onMouseUp={(e: { stopPropagation(): void }) => {
+          // A selection release must bubble up to the copy-on-select handler in
+          // DialogProvider; the backdrop's dismiss flag keeps it from closing the dialog.
+          if (renderer.getSelection()?.getSelectedText()) return
           dismiss = false
           e.stopPropagation()
         }}

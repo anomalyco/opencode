@@ -135,7 +135,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LSP") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -494,12 +494,6 @@ export const layer = Layer.effect(
       outgoingCalls,
     })
   }),
-)
-
-export const defaultLayer = layer.pipe(
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(RuntimeFlags.defaultLayer),
-  Layer.provide(EventV2Bridge.defaultLayer),
 )
 
 export * as Diagnostic from "./diagnostic"

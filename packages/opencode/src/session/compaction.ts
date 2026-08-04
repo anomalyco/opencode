@@ -153,7 +153,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 export const use = serviceUse(Service)
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -542,19 +542,6 @@ export const layer = Layer.effect(
       create,
     })
   }),
-)
-
-export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
-    Layer.provide(Provider.defaultLayer),
-    Layer.provide(Session.defaultLayer),
-    Layer.provide(SessionProcessor.defaultLayer),
-    Layer.provide(Agent.defaultLayer),
-    Layer.provide(Plugin.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(RuntimeFlags.defaultLayer),
-    Layer.provide(EventV2Bridge.defaultLayer),
-  ),
 )
 
 export const node = LayerNode.make({

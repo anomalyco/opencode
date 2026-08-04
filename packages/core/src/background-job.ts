@@ -2,7 +2,7 @@ export * as BackgroundJob from "./background-job"
 
 import { Cause, Clock, Context, Deferred, Effect, Exit, Layer, Scope, SynchronizedRef } from "effect"
 import { Identifier } from "./id/id"
-import { makeGlobalNode } from "./effect/node"
+import { makeGlobalNode } from "./effect/app-node"
 
 export type Status = "running" | "completed" | "error" | "cancelled"
 
@@ -360,8 +360,6 @@ export const make = Effect.gen(function* () {
   return Service.of({ list, get, start, extend, wait, waitForPromotion, promote, cancel })
 })
 
-export const layer = Layer.effect(Service, make)
-
-export const defaultLayer = layer
+const layer = Layer.effect(Service, make)
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })

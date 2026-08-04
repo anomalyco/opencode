@@ -4,7 +4,7 @@ import { asc, eq } from "drizzle-orm"
 import { Context, Effect, Layer } from "effect"
 import { SessionTodo } from "@opencode-ai/schema/session-todo"
 import { Database } from "../database/database"
-import { makeLocationNode } from "../effect/node"
+import { makeLocationNode } from "../effect/app-node"
 import { EventV2 } from "../event"
 import { SessionSchema } from "./schema"
 import { TodoTable } from "./sql"
@@ -23,7 +23,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionTodo") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
@@ -74,7 +74,5 @@ export const layer = Layer.effect(
     return Service.of({ update, get })
   }),
 )
-
-export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(Database.defaultLayer))
 
 export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Database.node] })

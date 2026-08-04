@@ -11,7 +11,7 @@ import { Context, Effect, Layer } from "effect"
 
 export class Service extends Context.Service<Service, EventV2.Interface>()("@opencode/EventV2Bridge") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
@@ -65,8 +65,6 @@ export const layer = Layer.effect(
     return Service.of({ ...events, publish })
   }),
 )
-
-export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer))
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2.node] })
 

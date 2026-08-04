@@ -8,6 +8,7 @@ import {
   LLMEvent,
   Usage,
   type FinishReason,
+  type JsonSchema,
   type LLMRequest,
   type ProviderMetadata,
   type ReasoningPart,
@@ -21,6 +22,7 @@ import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./share
 import { isContextOverflow } from "../provider-error"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
+import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-responses"
@@ -254,11 +256,11 @@ const invalid = ProviderShared.invalidRequest
 // =============================================================================
 // Request Lowering
 // =============================================================================
-const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
+const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema): OpenAIResponsesTool => ({
   type: "function",
   name: tool.name,
   description: tool.description,
-  parameters: ProviderShared.openAiToolInputSchema(tool.inputSchema),
+  parameters: ToolSchemaProjection.openAI(inputSchema),
   // TODO: Read this from OpenAI-specific tool options so direct LLM callers can opt into strict schemas.
   strict: false,
 })
@@ -476,10 +478,16 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
   const generation = request.generation
   const options = yield* lowerOptions(request)
+  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
     model: request.model.id,
     input: yield* lowerMessages(request),
-    tools: request.tools.length === 0 ? undefined : request.tools.map(lowerTool),
+    tools:
+      request.tools.length === 0
+        ? undefined
+        : request.tools.map((tool) =>
+            lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
+          ),
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     max_output_tokens: generation?.maxTokens,

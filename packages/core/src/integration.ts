@@ -1,6 +1,6 @@
 export * as Integration from "./integration"
 
-import { makeLocationNode } from "./effect/node"
+import { makeLocationNode } from "./effect/app-node"
 import {
   Cause,
   Clock,

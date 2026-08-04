@@ -1,6 +1,6 @@
 export * as SessionRunnerModel from "./model"
 
-import { makeLocationNode } from "../../effect/node"
+import { makeLocationNode } from "../../effect/app-node"
 import { type Model } from "@opencode-ai/llm"
 import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-messages"
 import * as OpenAICompatibleChat from "@opencode-ai/llm/protocols/openai-compatible-chat"

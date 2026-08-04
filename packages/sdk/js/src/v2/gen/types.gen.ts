@@ -1768,9 +1768,13 @@ export type ProviderConfig = {
       temperature?: boolean
       tool_call?: boolean
       interleaved?:
-        | true
+        | boolean
+        | "reasoning"
+        | "reasoning_content"
+        | "reasoning_text"
+        | string
         | {
-            field: "reasoning" | "reasoning_content" | "reasoning_details"
+            field: "reasoning" | "reasoning_content" | "reasoning_text" | string
           }
       cost?: {
         input: number
@@ -1928,6 +1932,7 @@ export type Config = {
   model?: string
   small_model?: string
   default_agent?: string
+  subagent_depth?: number
   username?: string
   mode?: {
     build?: AgentConfig
@@ -2056,7 +2061,7 @@ export type Model = {
     interleaved:
       | boolean
       | {
-          field: "reasoning" | "reasoning_content" | "reasoning_details"
+          field: "reasoning" | "reasoning_content" | "reasoning_text" | string
         }
   }
   cost: {
@@ -2766,7 +2771,7 @@ export type SessionHistory = {
   hasMore: boolean
 }
 
-export type SessionDurableEvent1 = string
+export type SessionDurableEventStream = string
 
 export type SessionMessagesResponse = {
   data: Array<SessionMessage>
@@ -2847,7 +2852,7 @@ export type QuestionRejected2 = {
   }
 }
 
-export type V2Event1 =
+export type V2Event =
   | ModelsDevRefreshed
   | IntegrationUpdated
   | IntegrationConnectionUpdated
@@ -2937,7 +2942,7 @@ export type V2Event1 =
   | ServerConnected
   | GlobalDisposed
 
-export type V2Event = string
+export type V2EventStream = string
 
 export type ForbiddenError = {
   _tag: "ForbiddenError"
@@ -11901,7 +11906,7 @@ export type V2SessionEventsResponses = {
   200: {
     id: string
     event: string
-    data: SessionDurableEvent1
+    data: SessionDurableEventStream
   }
 }
 

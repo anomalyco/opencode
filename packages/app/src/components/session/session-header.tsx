@@ -24,6 +24,7 @@ import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
+import { fileManagerApp } from "@/utils/file-manager"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover, StatusPopoverV2 } from "../status-popover"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
@@ -31,6 +32,7 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { reviewTooltipKeybind } from "../command-tooltip-keybind"
+import { useTitlebarRightMount } from "../titlebar"
 
 const OPEN_APPS = [
   "vscode",
@@ -174,11 +176,7 @@ export function SessionHeader() {
     return LINUX_APPS
   })
 
-  const fileManager = createMemo(() => {
-    if (os() === "macos") return { label: "session.header.open.finder", icon: "finder" as const }
-    if (os() === "windows") return { label: "session.header.open.fileExplorer", icon: "file-explorer" as const }
-    return { label: "session.header.open.fileManager", icon: "finder" as const }
-  })
+  const fileManager = createMemo(() => fileManagerApp(os()))
 
   createEffect(() => {
     if (platform.platform !== "desktop") return
@@ -284,17 +282,16 @@ export function SessionHeader() {
   }
 
   const [centerMount, setCenterMount] = createSignal<HTMLElement | null>(null)
-  const [rightMount, setRightMount] = createSignal<HTMLElement | null>(null)
+  const rightMount = useTitlebarRightMount()
   onMount(() => {
     setCenterMount(document.getElementById("opencode-titlebar-center"))
-    setRightMount(document.getElementById("opencode-titlebar-right"))
   })
 
   return (
     <>
-      <Show when={search() && centerMount()}>
+      <Show when={search() && centerMount()} keyed>
         {(mount) => (
-          <Portal mount={mount()}>
+          <Portal mount={mount}>
             <Button
               type="button"
               variant="ghost"
@@ -311,10 +308,10 @@ export function SessionHeader() {
                 </span>
               </div>
 
-              <Show when={hotkey()}>
+              <Show when={hotkey()} keyed>
                 {(keybind) => (
                   <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0 text-text-weaker">
-                    {keybind()}
+                    {keybind}
                   </Keybind>
                 )}
               </Show>
@@ -322,9 +319,9 @@ export function SessionHeader() {
           </Portal>
         )}
       </Show>
-      <Show when={rightMount()}>
+      <Show when={rightMount()} keyed>
         {(mount) => (
-          <Portal mount={mount()}>
+          <Portal mount={mount}>
             <Show
               when={isV2}
               fallback={
@@ -541,6 +538,7 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
       </Show>
       <Show when={props.state.reviewVisible}>
         <TooltipV2
+          class="shrink-0"
           placement="bottom"
           value={
             <>

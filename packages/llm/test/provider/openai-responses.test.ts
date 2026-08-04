@@ -778,6 +778,11 @@ describe("OpenAI Responses route", () => {
         { type: "step-finish", index: 0, reason: "stop" },
         { type: "finish", reason: "stop" },
       ])
+      expect(response.events.filter((event) => event.type === "finish")).toHaveLength(1)
+      expect(response.message.content).toEqual([
+        { type: "reasoning", text: "thinking" },
+        { type: "text", text: "Hello" },
+      ])
     }),
   )
 

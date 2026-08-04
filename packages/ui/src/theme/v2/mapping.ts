@@ -3,6 +3,34 @@ import { V2_AVATAR_DARK, V2_AVATAR_LIGHT } from "./avatar"
 
 const ref = (name: string): V2ColorValue => `var(--${name})`
 
+const lightAgentTokens: Record<string, V2ColorValue> = {
+  "v2-agent-plan-solid": ref("v2-pink-800"),
+  "v2-agent-plan-border": "rgba(200, 61, 139, 0.20)",
+  "v2-agent-plan-background": "rgba(253, 236, 243, 0.10)",
+  "v2-agent-build-solid": ref("v2-blue-800"),
+  "v2-agent-build-border": "rgba(44, 71, 200, 0.20)",
+  "v2-agent-build-background": "rgba(236, 241, 254, 0.10)",
+  "v2-agent-explore-solid": ref("v2-yellow-900"),
+  "v2-agent-explore-border": "rgba(203, 159, 52, 0.20)",
+  "v2-agent-explore-background": "rgba(254, 250, 236, 0.1)",
+  "v2-agent-review-solid": ref("v2-green-800"),
+  "v2-agent-writer-solid": ref("v2-purple-700"),
+}
+
+const darkAgentTokens: Record<string, V2ColorValue> = {
+  "v2-agent-plan-solid": ref("v2-pink-400"),
+  "v2-agent-plan-border": "rgba(247, 153, 198, 0.20)",
+  "v2-agent-plan-background": "rgba(170, 53, 118, 0.05)",
+  "v2-agent-build-solid": ref("v2-blue-300"),
+  "v2-agent-build-border": "rgba(162, 188, 255, 0.20)",
+  "v2-agent-build-background": "rgba(38, 63, 169, 0.05)",
+  "v2-agent-explore-solid": ref("v2-yellow-300"),
+  "v2-agent-explore-border": "rgba(243, 218, 155, 0.20)",
+  "v2-agent-explore-background": "rgba(172, 136, 51, 0.05)",
+  "v2-agent-review-solid": ref("v2-green-300"),
+  "v2-agent-writer-solid": ref("v2-purple-400"),
+}
+
 const light: Record<string, V2ColorValue> = {
   "v2-background-bg-base": ref("v2-grey-100"),
   "v2-background-bg-deep": ref("v2-grey-200"),
@@ -46,6 +74,7 @@ const light: Record<string, V2ColorValue> = {
   "v2-state-bg-info": ref("v2-blue-100"),
   "v2-state-fg-info": ref("v2-blue-800"),
   "v2-state-border-info": ref("v2-blue-300"),
+  ...lightAgentTokens,
   ...V2_AVATAR_LIGHT,
   "v2-elevation-raised":
     "0px 2px 4px 0px var(--v2-alpha-dark-4), 0px 1px 2px -1px var(--v2-alpha-dark-8), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
@@ -110,6 +139,7 @@ const dark: Record<string, V2ColorValue> = {
   "v2-state-bg-info": ref("v2-blue-1200"),
   "v2-state-fg-info": ref("v2-blue-500"),
   "v2-state-border-info": ref("v2-blue-900"),
+  ...darkAgentTokens,
   ...V2_AVATAR_DARK,
   "v2-elevation-raised":
     "0px 2px 4px 0px var(--v2-alpha-dark-30), 0px 1px 2px 0px var(--v2-alpha-dark-30), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
