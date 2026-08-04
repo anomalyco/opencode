@@ -1,5 +1,4 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
-import type { SessionHookRegistration } from "@opencode-ai/plugin/effect/session"
 import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
 import { Auth, LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -193,12 +192,7 @@ describe("SessionRunnerLLM recorded", () => {
       const pluginHost = host({
         agent: agentHost(agents),
         catalog: catalogHost(catalog),
-        session: {
-          hook: (...registration: SessionHookRegistration) => {
-            if (registration[0] === "http") return Effect.die("unused session HTTP hook")
-            return hooks.register("session", ...registration)
-          },
-        },
+        session: { hook: (name, callback) => hooks.register("session", name, callback) },
       })
       yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
       const { db } = yield* Database.Service
@@ -300,24 +294,15 @@ describe("SessionModelRequest HTTP bridge", () => {
       const pluginHost = host({
         agent: agentHost(agents),
         catalog: catalogHost(catalog),
-        session: {
-          hook: (...registration: SessionHookRegistration) => {
-            if (registration[0] !== "http") return hooks.register("session", ...registration)
-            const middleware = registration[1]
-            return hooks.register("session", "http", (event) =>
-              Effect.sync(() => {
-                const next = event.request
-                event.request = (request) => middleware(event, request, next)
-              }),
-            )
-          },
-        },
+        session: { hook: (name, callback) => hooks.register("session", name, callback) },
       })
-      yield* pluginHost.session.hook("http", (_context, request, next) =>
-        Effect.gen(function* () {
-          yield* next(request).pipe(Effect.flatMap((response) => Effect.promise(() => response.text())))
-          return yield* next(request)
-        }),
+      yield* pluginHost.session.hook("http", (event) =>
+        event.use((request, next) =>
+          Effect.gen(function* () {
+            yield* next(request).pipe(Effect.flatMap((response) => Effect.promise(() => response.text())))
+            return yield* next(request)
+          }),
+        ),
       )
       yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
       const { db } = yield* Database.Service

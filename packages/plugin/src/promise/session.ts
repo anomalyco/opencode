@@ -4,7 +4,7 @@ import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { Session } from "@opencode-ai/schema/session"
 import type { JsonSchema } from "effect"
-import type { Registration } from "./registration.js"
+import type { Hooks } from "./registration.js"
 
 export interface SessionContext {
   readonly sessionID: Session.ID
@@ -15,39 +15,28 @@ export interface SessionContext {
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
 }
 
-export interface SessionHttpContext {
+export interface SessionHttp {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
+  readonly use: (middleware: SessionHttpMiddleware) => void
 }
 
+export type SessionHttpHandler = (request: Request) => Promise<Response>
+
 export type SessionHttpMiddleware = (
-  context: SessionHttpContext,
   request: Request,
-  next: (request: Request) => Promise<Response>,
+  next: SessionHttpHandler,
 ) => Promise<Response> | Response
 
 export interface SessionHooks {
   readonly context: SessionContext
-}
-
-export type SessionHookRegistration =
-  | {
-      [Name in keyof SessionHooks]: [name: Name, callback: (event: SessionHooks[Name]) => Promise<void> | void]
-    }[keyof SessionHooks]
-  | [name: "http", middleware: SessionHttpMiddleware]
-
-export interface SessionHook {
-  <Name extends keyof SessionHooks>(
-    name: Name,
-    callback: (event: SessionHooks[Name]) => Promise<void> | void,
-  ): Promise<Registration>
-  (name: "http", middleware: SessionHttpMiddleware): Promise<Registration>
+  readonly http: SessionHttp
 }
 
 export type SessionDomain = Pick<
   SessionApi,
   "create" | "get" | "prompt" | "generate" | "command" | "synthetic" | "interrupt"
 > & {
-  readonly hook: SessionHook
+  readonly hook: Hooks<SessionHooks>
 }

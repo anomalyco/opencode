@@ -14,7 +14,6 @@ import {
 } from "@opencode-ai/ai"
 import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode-ai/ai/testing"
-import type { SessionHookRegistration } from "@opencode-ai/plugin/effect/session"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -475,12 +474,7 @@ const setup = Effect.gen(function* () {
   const pluginHost = host({
     agent: agentHost(agents),
     catalog: catalogHost(catalog),
-    session: {
-      hook: (...registration: SessionHookRegistration) => {
-        if (registration[0] === "http") return Effect.die("unused session HTTP hook")
-        return hooks.register("session", ...registration)
-      },
-    },
+    session: { hook: (name, callback) => hooks.register("session", name, callback) },
   })
   yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
     discard: true,

@@ -1,21 +1,12 @@
 export * as PluginHooks from "./hooks"
 
 import type { AISDKHooks } from "@opencode-ai/plugin/effect/aisdk"
-import type { SessionContext, SessionHttpContext } from "@opencode-ai/plugin/effect/session"
+import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import type { ShellHooks } from "@opencode-ai/plugin/effect/shell"
 import type { ToolHooks } from "@opencode-ai/plugin/effect/tool"
 import { Context, Effect, Layer, Scope } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { State } from "../state"
-
-interface SessionHttpEvent extends SessionHttpContext {
-  request: (input: Request) => Effect.Effect<Response, Error>
-}
-
-interface SessionHooks {
-  readonly context: SessionContext
-  readonly http: SessionHttpEvent
-}
 
 export interface Domains {
   readonly aisdk: AISDKHooks

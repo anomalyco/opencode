@@ -12,6 +12,7 @@ import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { OpenAIPlugin } from "@opencode-ai/core/plugin/provider/openai"
 import { Provider } from "@opencode-ai/core/provider"
+import type { SessionHttpHandler } from "@opencode-ai/plugin/effect/session"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -30,17 +31,25 @@ function required<T>(value: T | undefined): T {
 }
 
 const http = Effect.fn(function* (providerID: Provider.ID, url: string) {
-  const event = yield* (yield* PluginHooks.Service).trigger("session", "http", {
+  const middlewares: Parameters<PluginHooks.Domains["session"]["http"]["use"]>[0][] = []
+  yield* (yield* PluginHooks.Service).trigger("session", "http", {
     sessionID: Session.ID.make("ses_test"),
     agent: Agent.ID.make("build"),
     model: Model.Ref.make({ providerID, id: Model.ID.make("gpt-5.5") }),
-    request: (input) => {
+    use: (item) =>
+      Effect.sync(() => {
+        middlewares.push(item)
+      }),
+  })
+  const request = middlewares.reduce<SessionHttpHandler>(
+    (next, item) => (input: Request) => item(input, next),
+    (input: Request) => {
       const headers = new Headers(input.headers)
       headers.set("x-seen-url", input.url)
       return Effect.succeed(new Response(null, { headers }))
     },
-  })
-  const response = yield* event.request(new Request(url, { method: "POST", body: "{}" }))
+  )
+  const response = yield* request(new Request(url, { method: "POST", body: "{}" }))
   return { url: response.headers.get("x-seen-url"), headers: Object.fromEntries(response.headers.entries()) }
 })
 

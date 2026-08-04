@@ -15,7 +15,7 @@ import { SessionPending } from "@opencode-ai/core/session/pending"
 import { Tool } from "@opencode-ai/core/tool"
 import { Provider } from "@opencode-ai/core/provider"
 import { define } from "@opencode-ai/plugin/promise/plugin"
-import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
+import type { SessionHooks, SessionHttpHandler } from "@opencode-ai/plugin/effect/session"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import { host as testHost } from "./host"
@@ -228,32 +228,51 @@ describe("fromPromise", () => {
       const plugin = yield* Plugin.Service
       const hooks = yield* PluginHooks.Service
       const host = yield* PluginHost.make(plugin)
+      const bodies: string[] = []
       yield* PluginPromise.fromPromise(
         define({
           id: "promise-session-http",
           setup: async (ctx) => {
-            await ctx.session.hook("http", async (_event, request, next) => {
-              request.headers.set("x-hook", "promise")
-              const response = await next(request)
-              return new Response(`${await response.text()}-response`)
+            await ctx.session.hook("http", (event) => {
+              event.use(async (request, next) => {
+                request.headers.set("x-hook", "promise")
+                await next(request)
+                const response = await next(request)
+                return new Response(`${await response.text()}-response`)
+              })
             })
-            await ctx.session.hook("http", async (_event, request, next) => {
-              const response = await next(request)
-              return new Response(`${await response.text()}-outer`)
+            await ctx.session.hook("http", (event) => {
+              event.use(async (request, next) => {
+                const response = await next(request)
+                return new Response(`${await response.text()}-outer`)
+              })
             })
           },
         }),
       ).effect(host)
+      const middlewares: Parameters<PluginHooks.Domains["session"]["http"]["use"]>[0][] = []
       const event: PluginHooks.Domains["session"]["http"] = {
         sessionID: Session.ID.make("ses_promise_session_http"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("model") }),
-        request: (input) => Effect.succeed(new Response(input.headers.get("x-hook") ?? "missing")),
+        use: (item) =>
+          Effect.sync(() => {
+            middlewares.push(item)
+          }),
       }
 
       yield* hooks.trigger("session", "http", event)
-      const response = yield* event.request(new Request("https://provider.test"))
+      const request = middlewares.reduce<SessionHttpHandler>(
+        (next, item) => (input: Request) => item(input, next),
+        (input: Request) =>
+          Effect.promise(() => input.text()).pipe(
+            Effect.tap((body) => Effect.sync(() => bodies.push(body))),
+            Effect.as(new Response(input.headers.get("x-hook") ?? "missing")),
+          ),
+      )
+      const response = yield* request(new Request("https://provider.test", { method: "POST", body: "payload" }))
 
+      expect(bodies).toEqual(["payload", "payload"])
       expect(yield* Effect.promise(() => response.text())).toBe("promise-response-outer")
     }),
   )
@@ -267,25 +286,35 @@ describe("fromPromise", () => {
         define({
           id: "promise-session-http-interrupt",
           setup: async (ctx) => {
-            await ctx.session.hook("http", (_event, request, next) => next(request))
+            await ctx.session.hook("http", (event) => {
+              event.use((request, next) => next(request))
+            })
           },
         }),
       ).effect(host)
       const started = yield* Deferred.make<void>()
       const interrupted = yield* Deferred.make<void>()
+      const middlewares: Parameters<PluginHooks.Domains["session"]["http"]["use"]>[0][] = []
       const event: PluginHooks.Domains["session"]["http"] = {
         sessionID: Session.ID.make("ses_promise_session_http_interrupt"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("model") }),
-        request: () =>
+        use: (item) =>
+          Effect.sync(() => {
+            middlewares.push(item)
+          }),
+      }
+
+      yield* hooks.trigger("session", "http", event)
+      const request = middlewares.reduce<SessionHttpHandler>(
+        (next, item) => (input: Request) => item(input, next),
+        () =>
           Deferred.succeed(started, undefined).pipe(
             Effect.andThen(Effect.never),
             Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
           ),
-      }
-
-      yield* hooks.trigger("session", "http", event)
-      const fiber = yield* event.request(new Request("https://provider.test")).pipe(Effect.forkChild)
+      )
+      const fiber = yield* request(new Request("https://provider.test")).pipe(Effect.forkChild)
       yield* Deferred.await(started)
       yield* Fiber.interrupt(fiber)
 
