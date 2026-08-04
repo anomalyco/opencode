@@ -36,8 +36,22 @@ const layer = Layer.effect(
   }).pipe(Effect.orDie),
 )
 
+const readOnlyLayer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const db = yield* makeDatabase
+    return { db }
+  }),
+)
+
 export function layerFromPath(filename: string) {
   return layer.pipe(Layer.provide(sqliteLayer({ filename })))
+}
+
+export function readOnlyLayerFromPath(filename: string) {
+  return readOnlyLayer.pipe(
+    Layer.provide(sqliteLayer({ filename, readonly: true, readwrite: false, create: false, disableWAL: true })),
+  )
 }
 
 export function path() {
