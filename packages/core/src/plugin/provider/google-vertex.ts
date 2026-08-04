@@ -96,15 +96,15 @@ export const GoogleVertexPlugin = define({
           const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex/anthropic"))
           const project = resolveProject(evt.options)
           const location = String(resolveLocation(evt.options))
+          const regionalBaseURL =
+            (location === "eu" || location === "us") && project && !evt.options.baseURL
+              ? `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`
+              : undefined
           evt.sdk = mod.createVertexAnthropic({
             ...evt.options,
             project,
             location,
-            ...((location === "eu" || location === "us") && project && !evt.options.baseURL
-              ? {
-                  baseURL: `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`,
-                }
-              : {}),
+            ...(regionalBaseURL ? { baseURL: regionalBaseURL } : {}),
           })
           return
         }

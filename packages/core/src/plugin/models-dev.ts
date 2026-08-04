@@ -10,10 +10,9 @@ export const ModelsDevPlugin = define({
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
     const bus = yield* Bus.Service
-    const loaded = { data: structuredClone(yield* modelsDev.get()) }
+    const loaded = { data: snapshots(yield* modelsDev.get()) }
     yield* ctx.integration.transform((integrations) => {
       for (const provider of loaded.data) {
-        if (Provider.replacement(provider.info.id)) continue
         if (provider.environment.length === 0) continue
         const integrationID = provider.info.id
         integrations.update(integrationID, (integration) => (integration.name = provider.info.name))
@@ -29,7 +28,6 @@ export const ModelsDevPlugin = define({
     })
     yield* ctx.catalog.transform((catalog) => {
       for (const provider of loaded.data) {
-        if (Provider.replacement(provider.info.id)) continue
         catalog.provider.update(provider.info.id, (draft) => {
           Object.assign(draft, provider.info)
           draft.integrationID = Integration.ID.make(provider.info.id)
@@ -42,7 +40,7 @@ export const ModelsDevPlugin = define({
     yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
       Stream.runForEach(() =>
         modelsDev.get().pipe(
-          Effect.tap((data) => Effect.sync(() => (loaded.data = structuredClone(data)))),
+          Effect.tap((data) => Effect.sync(() => (loaded.data = snapshots(data)))),
           Effect.andThen(ctx.integration.reload()),
           Effect.andThen(ctx.catalog.reload()),
         ),
@@ -51,3 +49,7 @@ export const ModelsDevPlugin = define({
     )
   }),
 })
+
+function snapshots(data: readonly ModelsDev.Snapshot[]) {
+  return structuredClone(data).filter((provider) => !Provider.isRemoved(provider.info.id))
+}

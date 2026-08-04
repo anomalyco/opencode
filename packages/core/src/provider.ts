@@ -10,11 +10,13 @@ import { importModule, resolveModule } from "@opencode-ai/util/runtime-import"
 export const ID = Provider.ID
 export type ID = typeof ID.Type
 
-export function replacement(providerID: ID) {
+export function replacement(providerID: string) {
   if (providerID === ID.make("azure-cognitive-services")) return ID.azure
   if (providerID === ID.make("google-vertex-anthropic")) return ID.googleVertex
   return undefined
 }
+
+export const isRemoved = (providerID: string) => replacement(providerID) !== undefined
 
 export const AISDK_PREFIX = "aisdk:"
 export const isAISDK = (value: string | undefined): value is string => value?.startsWith(AISDK_PREFIX) ?? false

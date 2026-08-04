@@ -319,7 +319,9 @@ export const layer = Layer.effect(
         const replacement = providerID && Provider.replacement(providerID)
         if (replacement && modelID) return yield* new ProviderRemovedError({ providerID, replacement, modelID })
         const selected = requested
-          ? yield* catalog.model.get(requested.providerID, requested.id)
+          ? (yield* catalog.model.available()).find(
+              (model) => model.providerID === requested.providerID && model.id === requested.id,
+            )
           : yield* catalog.model
               .default()
               .pipe(
