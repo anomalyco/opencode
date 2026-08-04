@@ -70,6 +70,7 @@ const layer = Layer.effect(
     const resolver = yield* ModelResolver.Service
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
+        // Location plugins populate and filter the catalog asynchronously during layer startup.
         if (!session.model) {
           const resolved = yield* resolver.resolve()
           if (resolved) return resolved
