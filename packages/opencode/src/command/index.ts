@@ -138,6 +138,9 @@ const layer = Layer.effect(
           name: item.name,
           description: item.description,
           source: "skill",
+          // Skill bodies are free-form markdown docs, not command templates.
+          // Placeholder substitution ($ARGUMENTS / $N) is applied by a fixed
+          // wrapper in SessionPrompt.command so docs cannot swallow user args.
           get template() {
             if (!dir) return item.content
             return [
@@ -147,7 +150,7 @@ const layer = Layer.effect(
               "Relative paths in this skill (e.g., scripts/, references/) are relative to this base directory.",
             ].join("\n")
           },
-          hints: [],
+          hints: ["$ARGUMENTS"],
         }
       }
 
