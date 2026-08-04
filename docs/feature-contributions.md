@@ -169,24 +169,27 @@ session. Press `!` a second time while the shell input is empty to enter
 **Local** mode, then type a command such as `pwd` or `code .`.
 
 `!!` is a strict client-side bypass. The TUI starts the command directly in
-the current session directory and displays stdout/stderr in an ephemeral
-dialog. It does not create a session message, tool result, prompt-history
-entry, or model request; the provider therefore receives neither the command
-nor its output. ANSI and control sequences are removed before display. The
-orange **Local shell** label remains active after each command.
+the current session directory and displays stdout/stderr inline above the
+prompt. It does not create a session message, tool result, persistent
+prompt-history entry, or model request; the provider therefore receives
+neither the command nor its output. ANSI and control sequences are removed
+before display. The orange **Local shell** label remains active after each
+command.
 
 - Local mode is available for an active session, including when the TUI is
   attached to a remote OpenCode server. The command always runs on the client
   in the reported session directory; a remote server never executes it. If the
   reported directory is unavailable locally, the command fails locally and its
-  error is shown only in the ephemeral dialog.
+  error is shown inline in Local shell.
 - `esc` is the only shortcut that leaves Local shell. It discards the current
   local input and returns to auditable Shell mode; a second `esc` returns to
   the normal prompt.
 - Commands have a 30-second limit. On timeout OpenCode terminates the local
-  process tree and reports the result without persisting it. Each output stream
-  is capped at 64 KiB. Interactive or long-running work belongs in a real
-  terminal.
+  process tree and reports the result without persisting it. `up` and `down`
+  navigate a dedicated in-memory Local shell command history. The history is
+  cleared by `esc` or a session change; it holds at most 20 commands and shows
+  the five most recent outputs inline, with each output preview capped at 8 KiB
+  and 12 lines. Interactive or long-running work belongs in a real terminal.
 
 ## Commit map
 

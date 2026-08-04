@@ -52,14 +52,19 @@ export async function executeLocalCommand(input: { command: string; directory: s
 
 export function formatLocalCommandResult(result: LocalCommandResult) {
   if (result.timedOut) return "Command stopped after reaching the local time limit."
-  const output = [result.stdout, result.stderr].map(sanitizeLocalCommandOutput).filter(Boolean).join("\n")
+  const output = [result.stdout, result.stderr].map(sanitizeLocalCommandText).filter(Boolean).join("\n")
   const limit = result.outputTruncated ? `Output truncated after ${LOCAL_COMMAND_OUTPUT_LIMIT / 1024} KiB.` : undefined
   if (result.exitCode !== 0)
     return [`Command exited with code ${result.exitCode}.`, output, limit].filter(Boolean).join("\n\n")
   return [output || "Command completed with no output.", limit].filter(Boolean).join("\n\n")
 }
 
-function sanitizeLocalCommandOutput(value: string) {
+export function formatLocalCommandError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return ["Local command failed.", sanitizeLocalCommandText(message)].filter(Boolean).join("\n\n")
+}
+
+export function sanitizeLocalCommandText(value: string) {
   return stripAnsi(value).replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g, "")
 }
 

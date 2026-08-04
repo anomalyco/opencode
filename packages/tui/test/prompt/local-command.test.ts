@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   executeLocalCommand,
+  formatLocalCommandError,
   formatLocalCommandResult,
   LOCAL_COMMAND_OUTPUT_LIMIT,
 } from "../../src/prompt/local-command"
@@ -56,7 +57,7 @@ describe("local command", () => {
     expect(result.stdout).toHaveLength(LOCAL_COMMAND_OUTPUT_LIMIT)
   })
 
-  test("formats failure and timeout results for ephemeral display", () => {
+  test("formats failure and timeout results for inline display", () => {
     expect(
       formatLocalCommandResult({
         exitCode: 7,
@@ -84,5 +85,8 @@ describe("local command", () => {
         timedOut: false,
       }),
     ).toBe("partial output\n\nOutput truncated after 64 KiB.")
+    expect(formatLocalCommandError(new Error("\u001B[31mfailed\u001B[0m\u0007"))).toBe(
+      "Local command failed.\n\nfailed",
+    )
   })
 })

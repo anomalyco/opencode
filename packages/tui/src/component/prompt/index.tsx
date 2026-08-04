@@ -9,7 +9,7 @@ import {
   type Renderable,
 } from "@opentui/core"
 import type { CommandContext } from "@opentui/keymap"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, For, Show, Switch, Match } from "solid-js"
 import { registerOpencodeSpinner } from "../register-spinner"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -45,7 +45,17 @@ import {
 } from "../../prompt/footer"
 import { createStashArm, type StashGesture } from "../../prompt/stash-arm"
 import { computePromptTraits, type PromptMode } from "../../prompt/traits"
-import { executeLocalCommand, formatLocalCommandResult } from "../../prompt/local-command"
+import {
+  executeLocalCommand,
+  formatLocalCommandError,
+  formatLocalCommandResult,
+  sanitizeLocalCommandText,
+} from "../../prompt/local-command"
+import {
+  appendLocalCommandHistory,
+  moveLocalCommandHistory,
+  type LocalCommandHistoryEntry,
+} from "../../prompt/local-history"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
@@ -302,6 +312,8 @@ export function Prompt(props: PromptProps) {
     placeholder: number
     stashArm: StashGesture | null
     historyBadge: PromptHistoryBadge | null
+    localHistory: LocalCommandHistoryEntry[]
+    localHistoryIndex: number
   }>({
     placeholder: randomIndex(list().length),
     prompt: {
@@ -313,6 +325,8 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
     stashArm: null,
     historyBadge: null,
+    localHistory: [],
+    localHistoryIndex: 0,
   })
 
   const stashArm = createStashArm({
@@ -344,6 +358,8 @@ export function Prompt(props: PromptProps) {
       () => props.sessionID,
       () => {
         setStore("placeholder", randomIndex(list().length))
+        setStore("localHistory", [])
+        setStore("localHistoryIndex", 0)
       },
       { defer: true },
     ),
@@ -948,6 +964,8 @@ export function Prompt(props: PromptProps) {
             }
             stashed = undefined
             setStore("placeholder", randomIndex(shell().length))
+            setStore("localHistory", [])
+            setStore("localHistoryIndex", 0)
             setStore("mode", "local")
           },
         },
@@ -976,6 +994,17 @@ export function Prompt(props: PromptProps) {
           title: "Previous prompt history",
           category: "Prompt",
           run() {
+            if (store.mode === "local") {
+              const item = moveLocalCommandHistory(store.localHistory, store.localHistoryIndex, -1)
+              if (!item) return false
+              input.extmarks.clear()
+              input.setText(item.command)
+              setStore("prompt", { input: item.command, parts: [] })
+              setStore("extmarkToPartIndex", new Map())
+              setStore("localHistoryIndex", item.index)
+              input.cursorOffset = 0
+              return true
+            }
             if (input.cursorOffset !== 0) {
               if (input.scrollY + input.visualCursor.visualRow === 0) input.cursorOffset = 0
               return false
@@ -989,6 +1018,7 @@ export function Prompt(props: PromptProps) {
             restoreExtmarksFromParts(item.parts)
             input.cursorOffset = 0
             setStore("historyBadge", historyBadgeFor(item))
+            return true
           },
         },
       ],
@@ -1009,6 +1039,17 @@ export function Prompt(props: PromptProps) {
           title: "Next prompt history",
           category: "Prompt",
           run() {
+            if (store.mode === "local") {
+              const item = moveLocalCommandHistory(store.localHistory, store.localHistoryIndex, 1)
+              if (!item) return false
+              input.extmarks.clear()
+              input.setText(item.command)
+              setStore("prompt", { input: item.command, parts: [] })
+              setStore("extmarkToPartIndex", new Map())
+              setStore("localHistoryIndex", item.index)
+              input.cursorOffset = input.plainText.length
+              return true
+            }
             if (input.cursorOffset !== input.plainText.length) {
               if (
                 input.scrollY + input.visualCursor.visualRow ===
@@ -1026,6 +1067,7 @@ export function Prompt(props: PromptProps) {
             restoreExtmarksFromParts(item.parts)
             input.cursorOffset = input.plainText.length
             setStore("historyBadge", historyBadgeFor(item))
+            return true
           },
         },
       ],
@@ -1285,14 +1327,27 @@ export function Prompt(props: PromptProps) {
     })
     setStore("extmarkToPartIndex", new Map())
     input.clear()
+    setStore("localHistoryIndex", 0)
     try {
       const result = await executeLocalCommand({
         command,
         directory: sdk.directory,
       })
-      void DialogAlert.show(dialog, "Local command", formatLocalCommandResult(result))
+      setStore("localHistory", (entries) =>
+        appendLocalCommandHistory(entries, {
+          command,
+          output: formatLocalCommandResult(result),
+          failed: result.exitCode !== 0 || result.timedOut,
+        }),
+      )
     } catch (error) {
-      void DialogAlert.show(dialog, "Local command failed", errorMessage(error))
+      setStore("localHistory", (entries) =>
+        appendLocalCommandHistory(entries, {
+          command,
+          output: formatLocalCommandError(error),
+          failed: true,
+        }),
+      )
     }
     return true
   }
@@ -1306,6 +1361,8 @@ export function Prompt(props: PromptProps) {
       parts: [],
     })
     setStore("extmarkToPartIndex", new Map())
+    setStore("localHistory", [])
+    setStore("localHistoryIndex", 0)
     setStore("mode", "shell")
   }
 
@@ -1578,6 +1635,20 @@ export function Prompt(props: PromptProps) {
   return (
     <>
       <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
+        <Show when={store.mode === "local" && store.localHistory.length > 0}>
+          <box paddingLeft={3} paddingRight={2} paddingBottom={1} flexDirection="column" gap={1}>
+            <For each={store.localHistory.slice(-5)}>
+              {(entry) => (
+                <box flexDirection="column">
+                  <text fg={theme.warning}>$ {sanitizeLocalCommandText(entry.command)}</text>
+                  <For each={entry.output.split("\n")}>
+                    {(line) => <text fg={entry.failed ? theme.error : theme.textMuted}>{line || " "}</text>}
+                  </For>
+                </box>
+              )}
+            </For>
+          </box>
+        </Show>
         <box
           width="100%"
           border={["left"]}
