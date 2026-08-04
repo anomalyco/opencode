@@ -271,6 +271,33 @@ describe("MessageV2.page", () => {
     ),
   )
 
+  it.instance("keeps storage order chronological across the 48-bit id rollover", () =>
+    withSession(({ session }) =>
+      Effect.gen(function* () {
+        const created = yield* session.create({})
+        const boundary = 2 ** 36
+        const ids = [MessageID.make("msg_fffffffff001AAAAAAAAAAAAAA"), MessageID.make("msg_000000000001BBBBBBBBBBBBBB")]
+        for (const [index, id] of ids.entries()) {
+          yield* session.updateMessage({
+            id,
+            sessionID: created.id,
+            role: "user",
+            time: { created: boundary - 1 + index },
+            agent: "test",
+            model: { providerID: "test", modelID: "test" },
+            tools: {},
+            mode: "",
+          } as unknown as SessionV1.Info)
+        }
+
+        const result = yield* MessageV2.page({ sessionID: created.id, limit: 10 })
+        expect(ids[1]! < ids[0]!).toBe(true)
+        expect(result.items.map((item) => item.info.id)).toEqual(ids)
+        yield* session.remove(created.id)
+      }),
+    ),
+  )
+
   it.instance("does not return messages from other sessions", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service

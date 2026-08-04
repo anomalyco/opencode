@@ -61,12 +61,12 @@ const model: Provider.Model = {
   release_date: "2026-01-01",
 }
 
-function userInfo(id: string): SessionV1.User {
+function userInfo(id: string, created = 0): SessionV1.User {
   return {
     id,
     sessionID,
     role: "user",
-    time: { created: 0 },
+    time: { created },
     agent: "user",
     model: { providerID, modelID: ModelV2.ID.make("test") },
     tools: {},
@@ -79,13 +79,14 @@ function assistantInfo(
   parentID: string,
   error?: SessionV1.Assistant["error"],
   meta?: { providerID: string; modelID: string },
+  created = 0,
 ): SessionV1.Assistant {
   const infoModel = meta ?? { providerID: model.providerID, modelID: model.api.id }
   return {
     id,
     sessionID,
     role: "assistant",
-    time: { created: 0 },
+    time: { created },
     error,
     parentID,
     modelID: infoModel.modelID,
@@ -1631,6 +1632,28 @@ describe("session.message-v2.latest", () => {
     expect(state.finished?.summary).toBe(true)
     expect(state.user?.id).toBe(CONTINUE_USER)
     expect(state.tasks).toEqual([])
+  })
+
+  test("uses creation time across the 48-bit ascending-id rollover", () => {
+    const boundary = 2 ** 36
+    const beforeID = "msg_fffffffff001AAAAAAAAAAAAAA"
+    const afterID = "msg_000000000001BBBBBBBBBBBBBB"
+    expect(afterID < beforeID).toBe(true)
+
+    const before: SessionV1.WithParts = {
+      info: userInfo(beforeID, boundary - 1),
+      parts: [],
+    }
+    const after: SessionV1.WithParts = {
+      info: { ...assistantInfo(afterID, beforeID, undefined, undefined, boundary), finish: "stop" },
+      parts: [],
+    }
+
+    const state = MessageV2.latest([after, before])
+    expect(String(state.user?.id)).toBe(beforeID)
+    expect(String(state.assistant?.id)).toBe(afterID)
+    expect(String(state.finished?.id)).toBe(afterID)
+    expect(MessageV2.compareChronological(before.info, after.info)).toBeLessThan(0)
   })
 
   test("a fresh compaction-user newer than the latest summary surfaces in tasks", () => {

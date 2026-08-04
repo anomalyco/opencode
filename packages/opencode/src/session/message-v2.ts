@@ -575,25 +575,33 @@ export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: Ses
   return filterCompacted(yield* stream(sessionID))
 })
 
+// Message IDs contain a truncated 48-bit timestamp prefix, so lexical order
+// wraps every 2^36 milliseconds. Storage already orders by (time.created, id);
+// use the same migration-safe ordering here, with id only breaking ties inside
+// one millisecond.
+export function compareChronological(a: Info, b: Info) {
+  return a.time.created - b.time.created || a.id.localeCompare(b.id)
+}
+
 // filterCompacted reorders messages for model consumption
 // ([compaction-user, summary, ...retained tail..., continue-user]), so array
-// position is not chronological. Derive each binding by max id (MessageID
-// is monotonic via MessageID.ascending) so a pre-compaction overflowing tail
-// assistant doesn't get mistaken for the most recent turn. tasks are
-// compaction/subtask parts attached to user messages newer than the latest
-// finished assistant — i.e. unprocessed work.
+// position is not chronological. Derive each binding by persisted creation
+// time rather than lexical id order. tasks are compaction/subtask parts
+// attached to user messages newer than the latest finished assistant — i.e.
+// unprocessed work.
 export function latest(msgs: WithParts[]) {
   let user: User | undefined
   let assistant: Assistant | undefined
   let finished: Assistant | undefined
   for (const msg of msgs) {
     const info = msg.info
-    if (info.role === "user" && (!user || info.id > user.id)) user = info
-    if (info.role === "assistant" && (!assistant || info.id > assistant.id)) assistant = info
-    if (info.role === "assistant" && info.finish && (!finished || info.id > finished.id)) finished = info
+    if (info.role === "user" && (!user || compareChronological(info, user) > 0)) user = info
+    if (info.role === "assistant" && (!assistant || compareChronological(info, assistant) > 0)) assistant = info
+    if (info.role === "assistant" && info.finish && (!finished || compareChronological(info, finished) > 0))
+      finished = info
   }
   const tasks = msgs.flatMap((m) =>
-    finished && m.info.id <= finished.id
+    finished && compareChronological(m.info, finished) <= 0
       ? []
       : m.parts.filter((p): p is CompactionPart | SubtaskPart => p.type === "compaction" || p.type === "subtask"),
   )
