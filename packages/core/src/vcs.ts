@@ -2,7 +2,7 @@ export * as Vcs from "./vcs"
 
 import { Context, Effect, Layer } from "effect"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
-import { FileStatus, Mode } from "@opencode-ai/schema/vcs"
+import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "./location"
@@ -10,13 +10,14 @@ import { AppProcess } from "@opencode-ai/util/process"
 import { VcsGit } from "./vcs/git"
 import { VcsHg } from "./vcs/hg"
 
-export { FileStatus, Mode }
+export { FileStatus, Info, Mode }
 
 export interface DiffOptions {
   readonly context?: number
 }
 
 export interface Interface {
+  readonly info: () => Effect.Effect<Info>
   readonly status: () => Effect.Effect<FileStatus[]>
   readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[]>
 }
@@ -40,6 +41,10 @@ const layer = Layer.effect(
     const location = yield* Location.Service
     const impl = adapter(proc, fs, location)
     return Service.of({
+      info: Effect.fn("Vcs.info")(function* () {
+        if (!impl) return { branch: {} }
+        return yield* impl.info()
+      }),
       status: Effect.fn("Vcs.status")(function* () {
         if (!impl) return []
         return yield* impl.status()

@@ -53,6 +53,7 @@ describe("Vcs", () => {
     withTmp((directory) =>
       Effect.gen(function* () {
         const vcs = yield* Vcs.Service
+        expect(yield* vcs.info()).toEqual({ branch: {} })
         expect(yield* vcs.status()).toEqual([])
         expect(yield* vcs.diff("working")).toEqual([])
         expect(yield* vcs.diff("branch")).toEqual([])
@@ -163,6 +164,7 @@ describe("Vcs", () => {
           await commitAll(directory, "feature change")
         })
         const diff = yield* vcs.diff("branch")
+        expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "main" } })
         expect(diff.map((item) => ({ file: item.file, status: item.status }))).toEqual([
           { file: "file.txt", status: "modified" },
         ])

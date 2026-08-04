@@ -530,6 +530,8 @@ export type ReferenceGitSource = {
 
 export type ProjectCopyCopy = { directory: string }
 
+export type VcsBranch = { current?: string; default?: string }
+
 export type VcsFileStatus = {
   file: string
   additions: number
@@ -1744,6 +1746,8 @@ export type SessionStatus2 = {
 }
 
 export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
+
+export type VcsInfo = { branch: VcsBranch }
 
 export type PermissionRuleset = Array<PermissionRule>
 
@@ -4901,6 +4905,17 @@ export type ProjectCopyRefreshInput = {
 }
 
 export type ProjectCopyRefreshOutput = void
+
+export type VcsGetInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type VcsGetOutput = {
+  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
+  data: VcsInfo
+}
 
 export type VcsStatusInput = {
   readonly location?: {

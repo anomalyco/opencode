@@ -16,6 +16,7 @@ import { FileDiff } from "../src/file-diff.js"
 import { Money } from "../src/money.js"
 import { Skill } from "../src/skill.js"
 import { Shell } from "../src/shell.js"
+import { Vcs } from "../src/vcs.js"
 import { PersistedRevert } from "../src/session-revert.js"
 import { AbsolutePath, optional } from "../src/schema.js"
 
@@ -134,6 +135,10 @@ describe("contract hygiene", () => {
     expect(Pty.ID.create()).toStartWith("pty_")
   })
 
+  test("VCS info omits unavailable branch names", () => {
+    expect(Schema.encodeSync(Vcs.Info)({ branch: { current: undefined, default: undefined } })).toEqual({ branch: {} })
+  })
+
   test("reusable public identifiers are stable and unique", () => {
     const identifiers = [
       Agent.Color,
@@ -166,6 +171,8 @@ describe("contract hygiene", () => {
       SessionPending.SyntheticData,
       SessionPending.User,
       SessionPending.Synthetic,
+      Vcs.Branch,
+      Vcs.Info,
     ].map((schema) => schema.ast.annotations?.identifier)
 
     expect(identifiers.every((identifier) => typeof identifier === "string")).toBe(true)
