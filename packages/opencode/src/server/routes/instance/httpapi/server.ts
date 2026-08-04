@@ -273,7 +273,7 @@ const app = LayerNode.group([
 export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
-  const locationServiceMapV2 = buildLocationServiceMap([[SessionExecution.node, SessionExecutionLocal.node]])
+  const locationServiceMapV2 = buildLocationServiceMap()
 
   return Layer.mergeAll(
     rootApiRoutes,
