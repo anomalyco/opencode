@@ -20,20 +20,30 @@ export async function replyPermission(input: {
   readonly connection: Connection
   readonly event: PermissionEvent
   readonly sessionID: string
+  readonly clientSessionID?: string
   readonly cwd: string
   readonly tool?: Tool
+  readonly toolCallPrefix?: string
+  readonly titlePrefix?: string
 }) {
   const toolName = input.tool?.name ?? input.event.data.action
   const toolInput = { ...input.event.data.metadata, ...input.tool?.input }
   const previews = await permissionPreviews(toolName, toolInput, input.cwd)
   const result = await input.connection
     .requestPermission({
-      sessionId: input.sessionID,
+      sessionId: input.clientSessionID ?? input.sessionID,
       toolCall: {
         ...pendingToolCall({
-          toolCallId: input.event.data.source?.callID ?? input.event.data.id,
+          toolCallId: [input.toolCallPrefix, input.event.data.source?.callID ?? input.event.data.id]
+            .filter((value) => value !== undefined)
+            .join(":"),
           toolName,
-          state: { input: toolInput, title: permissionTitle(toolName, toolInput, previews) },
+          state: {
+            input: toolInput,
+            title: [input.titlePrefix, permissionTitle(toolName, toolInput, previews)]
+              .filter((value) => value !== undefined)
+              .join(": "),
+          },
           cwd: input.cwd,
         }),
         locations: permissionLocations(toolName, toolInput, input.event.data.resources, input.cwd, previews),

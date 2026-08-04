@@ -43,13 +43,21 @@ import { OPENCODE_VERSION } from "../version"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { buildConfigOptions, parseModelSelection, type ConfigOptionProvider } from "./config-option"
 import { promptContentToParts } from "./content"
-import { replayMessages, streamTurn, type TurnControl, type TurnStart } from "./event"
+import {
+  ChildSessionUpdateMethod,
+  ChildSessionUpdatesCapability,
+  replayMessages,
+  streamTurn,
+  type ChildSessionUpdate,
+  type TurnControl,
+  type TurnStart,
+} from "./event"
 import { ACPError } from "./error"
 
 export const AuthMethodID = "opencode-login"
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
-  Partial<Pick<AgentSideConnection, "writeTextFile">>
+  Partial<Pick<AgentSideConnection, "writeTextFile" | "extNotification" | "signal">>
 
 type Catalog = {
   readonly providers: ConfigOptionProvider[]
@@ -64,6 +72,7 @@ type Catalog = {
 type Attached = {
   readonly id: string
   readonly cwd: string
+  readonly abort: AbortController
   catalog: Catalog
   model: ModelRef
   modeID: string
@@ -100,7 +109,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
   const catalogs = new Map<string, Promise<Catalog>>()
   const registeredMcp = new Map<string, Set<string>>()
   const active = new Map<string, TurnControl>()
-  const capabilities = { writeTextFile: false }
+  const capabilities = { writeTextFile: false, childSessionUpdates: false }
 
   const catalog = (cwd: string) => {
     const cached = catalogs.get(cwd)
@@ -121,9 +130,11 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
 
   const attach = async (session: SessionInfo, cwd: string, mcpServers: readonly McpServer[]) => {
     const currentCatalog = await catalog(cwd)
+    sessions.get(session.id)?.abort.abort()
     const state: Attached = {
       id: session.id,
       cwd,
+      abort: new AbortController(),
       catalog: currentCatalog,
       model: session.model ?? currentCatalog.defaultModel,
       modeID: session.agent ?? currentCatalog.defaultModeID,
@@ -161,6 +172,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
   return {
     initialize: async (params) => {
       capabilities.writeTextFile = params.clientCapabilities?.fs?.writeTextFile === true
+      capabilities.childSessionUpdates = params.clientCapabilities?._meta?.[ChildSessionUpdatesCapability] === true
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
         name: "Login with opencode",
@@ -178,6 +190,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
           mcpCapabilities: { http: true, sse: false },
           promptCapabilities: { embeddedContext: true, image: true },
           sessionCapabilities: { close: {}, delete: {}, fork: {}, list: {}, resume: {} },
+          _meta: { [ChildSessionUpdatesCapability]: true },
         },
         authMethods: [authMethod],
         agentInfo: { name: "OpenCode", version: OPENCODE_VERSION },
@@ -224,6 +237,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       await input.client.session.remove({ sessionID: params.sessionId }).catch((error) => {
         if (!isSessionNotFoundError(error)) throw error
       })
+      sessions.get(params.sessionId)?.abort.abort()
       sessions.delete(params.sessionId)
       registeredMcp.delete(params.sessionId)
       return {}
@@ -234,6 +248,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       return { configOptions: configOptions(state) }
     },
     closeSession: async (params) => {
+      sessions.get(params.sessionId)?.abort.abort()
       sessions.delete(params.sessionId)
       registeredMcp.delete(params.sessionId)
       const turn = active.get(params.sessionId)
@@ -296,6 +311,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       const messageID = SessionMessage.ID.create()
       const prepared = preparePrompt(state.catalog, params.prompt, messageID)
       const control: TurnControl = { cancelled: false, admission: new AbortController() }
+      const extNotification = input.connection.extNotification
       active.set(state.id, control)
       const response = await streamTurn({
         client: input.client,
@@ -305,7 +321,15 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         start: prepared.start,
         writeTextFile: capabilities.writeTextFile,
         control,
+        connectionSignal: input.connection.signal,
+        sessionSignal: state.abort.signal,
         submit: (signal) => submitPrompt(input.client, state, prepared, signal),
+        ...(capabilities.childSessionUpdates && extNotification
+          ? {
+              childSessionUpdate: (update: ChildSessionUpdate) =>
+                extNotification(ChildSessionUpdateMethod, update).then(() => {}),
+            }
+          : {}),
       }).finally(() => {
         if (active.get(state.id) === control) active.delete(state.id)
       })

@@ -1,4 +1,4 @@
-import type { AgentSideConnection, PromptResponse } from "@agentclientprotocol/sdk"
+import type { AgentSideConnection, PromptResponse, SessionUpdate } from "@agentclientprotocol/sdk"
 import type {
   EventSubscribeOutput,
   OpenCodeClient,
@@ -37,6 +37,34 @@ export type TurnStart =
   | { readonly type: "skill"; readonly id: string }
   | { readonly type: "compaction"; readonly id: string }
 
+export const ChildSessionUpdatesCapability = "opencode/child-session-updates"
+export const ChildSessionUpdateMethod = "opencode/session/child_update"
+
+type ChildSessionUpdateBase = {
+  readonly rootSessionId: string
+  readonly childSessionId: string
+  readonly parentSessionId: string
+  readonly depth: number
+  readonly title?: string
+}
+
+export type ChildSessionUpdate = ChildSessionUpdateBase &
+  (
+    | { readonly type: "update"; readonly update: SessionUpdate }
+    | {
+        readonly type: "status"
+        readonly status: "created" | "running" | "completed" | "failed" | "interrupted"
+        readonly error?: { readonly type: string; readonly message: string }
+      }
+  )
+
+type ChildSession = {
+  readonly id: string
+  readonly parentID: string
+  readonly depth: number
+  readonly title?: string
+}
+
 function emptyToolState(): ToolState {
   return { name: "tool", input: {}, metadata: {}, content: [] }
 }
@@ -50,8 +78,13 @@ export async function streamTurn(input: {
   readonly writeTextFile: boolean
   readonly submit: (signal: AbortSignal) => Promise<unknown>
   readonly control: TurnControl
+  readonly childSessionUpdate?: (update: ChildSessionUpdate) => Promise<void>
+  readonly connectionSignal?: AbortSignal
+  readonly sessionSignal?: AbortSignal
 }): Promise<PromptResponse> {
   const streamController = new AbortController()
+  const connectionAbort = () => streamController.abort()
+  input.connectionSignal?.addEventListener("abort", connectionAbort, { once: true })
   const stream = input.client.event.subscribe({ signal: streamController.signal })[Symbol.asyncIterator]()
   const connected = await stream.next()
   if (connected.done) throw new Error("event stream disconnected before prompt admission")
@@ -62,47 +95,113 @@ export async function streamTurn(input: {
   let finish: SessionMessageAssistant["finish"]
   let executionError: { readonly type: string; readonly message: string } | undefined
   const tools = new Map<string, ToolState>()
+  const children = new Map<string, ChildSession>()
+  const openChildren = new Set<string>()
+  let standard = true
+  let handedOff = false
 
-  const update = (value: Parameters<Connection["sessionUpdate"]>[0]["update"]) =>
-    input.connection.sessionUpdate({ sessionId: input.sessionID, update: value })
+  const notifyChild = async (
+    child: ChildSession,
+    value:
+      | { readonly type: "update"; readonly update: SessionUpdate }
+      | {
+          readonly type: "status"
+          readonly status: "created" | "running" | "completed" | "failed" | "interrupted"
+          readonly error?: { readonly type: string; readonly message: string }
+        },
+  ) => {
+    if (!input.childSessionUpdate) return
+    await input
+      .childSessionUpdate({
+        rootSessionId: input.sessionID,
+        childSessionId: child.id,
+        parentSessionId: child.parentID,
+        depth: child.depth,
+        ...(child.title ? { title: child.title } : {}),
+        ...value,
+      })
+      .catch(() => {})
+  }
 
-  const consume = async () => {
+  const updateSession = async (value: SessionUpdate, child?: ChildSession) => {
+    const projected = child ? projectChildUpdate(value, child) : value
+    if (standard && (!child || !input.childSessionUpdate)) {
+      await input.connection.sessionUpdate({ sessionId: input.sessionID, update: projected })
+    }
+    if (child) await notifyChild(child, { type: "update", update: projected })
+  }
+
+  const consume = async (mode: "turn" | "background") => {
     while (!streamController.signal.aborted) {
       const next = await stream.next()
       if (next.done) throw new Error("event stream disconnected during prompt execution")
       const event = next.value
-      if (event.type === "permission.asked" && event.data.sessionID === input.sessionID) {
-        const tool = event.data.source?.callID ? tools.get(event.data.source.callID) : undefined
+      if (event.type === "session.created") {
+        const parentID = event.data.info.parentID
+        if (!parentID) continue
+        const parent = parentID === input.sessionID ? undefined : children.get(parentID)
+        if ((mode === "turn" && parentID === input.sessionID) || parent) {
+          const child = {
+            id: event.data.sessionID,
+            parentID,
+            depth: parent ? parent.depth + 1 : 1,
+            title: event.data.info.title,
+          }
+          children.set(child.id, child)
+          openChildren.add(child.id)
+          await notifyChild(child, { type: "status", status: "created" })
+        }
+        continue
+      }
+
+      const eventSessionID = sessionID(event)
+      const child = eventSessionID ? children.get(eventSessionID) : undefined
+      const send = (update: SessionUpdate) => updateSession(update, child)
+      if (mode === "background" && !child) continue
+
+      if (event.type === "permission.asked" && (event.data.sessionID === input.sessionID || child)) {
+        const tool = event.data.source?.callID
+          ? tools.get(toolKey(event.data.sessionID, event.data.source.callID))
+          : undefined
         await replyPermission({
           client: input.client,
           connection: input.connection,
           event,
-          sessionID: input.sessionID,
+          sessionID: event.data.sessionID,
+          clientSessionID: input.sessionID,
           cwd: input.cwd,
           tool,
+          ...(child ? { toolCallPrefix: child.id, titlePrefix: child.title } : {}),
         })
         continue
       }
-      if (event.type === "form.created" && event.data.form.sessionID === input.sessionID) {
+      if (event.type === "form.created" && (event.data.form.sessionID === input.sessionID || child)) {
         await input.client.form
-          .cancel({ sessionID: input.sessionID, formID: event.data.form.id })
-          .catch(() => input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {}))
+          .cancel({ sessionID: event.data.form.sessionID, formID: event.data.form.id })
+          .catch(() => input.client.session.interrupt({ sessionID: event.data.form.sessionID }).catch(() => {}))
         continue
       }
-      if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
+      if (!eventSessionID || (eventSessionID !== input.sessionID && !child)) continue
       if (matchesStart(event, input.start)) {
         started = true
         continue
       }
       if (!started) continue
 
+      if (event.type === "session.execution.started") {
+        if (child) {
+          await notifyChild(child, { type: "status", status: "running" })
+        }
+        continue
+      }
+
       if (event.type === "session.step.started") {
-        assistantMessageID = event.data.assistantMessageID
+        if (!child) assistantMessageID = event.data.assistantMessageID
         continue
       }
       if (event.type === "session.text.delta") {
-        assistantMessageID = event.data.assistantMessageID
-        await update({
+        if (!child) assistantMessageID = event.data.assistantMessageID
+        await send({
           sessionUpdate: "agent_message_chunk",
           messageId: event.data.assistantMessageID,
           content: { type: "text", text: event.data.delta },
@@ -110,8 +209,8 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.reasoning.delta") {
-        assistantMessageID = event.data.assistantMessageID
-        await update({
+        if (!child) assistantMessageID = event.data.assistantMessageID
+        await send({
           sessionUpdate: "agent_thought_chunk",
           messageId: event.data.assistantMessageID,
           content: { type: "text", text: event.data.delta },
@@ -119,9 +218,14 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.input.started") {
-        assistantMessageID = event.data.assistantMessageID
-        tools.set(event.data.callID, { name: event.data.name, input: {}, metadata: {}, content: [] })
-        await update({
+        if (!child) assistantMessageID = event.data.assistantMessageID
+        tools.set(toolKey(event.data.sessionID, event.data.callID), {
+          name: event.data.name,
+          input: {},
+          metadata: {},
+          content: [],
+        })
+        await send({
           sessionUpdate: "tool_call",
           ...pendingToolCall({
             toolCallId: event.data.callID,
@@ -133,11 +237,12 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.called") {
-        assistantMessageID = event.data.assistantMessageID
-        const current = tools.get(event.data.callID) ?? emptyToolState()
+        if (!child) assistantMessageID = event.data.assistantMessageID
+        const key = toolKey(event.data.sessionID, event.data.callID)
+        const current = tools.get(key) ?? emptyToolState()
         current.input = event.data.input
-        tools.set(event.data.callID, current)
-        await update({
+        tools.set(key, current)
+        await send({
           sessionUpdate: "tool_call_update",
           ...runningToolUpdate({
             toolCallId: event.data.callID,
@@ -149,10 +254,10 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.progress") {
-        const current = tools.get(event.data.callID)
+        const current = tools.get(toolKey(event.data.sessionID, event.data.callID))
         if (!current) continue
         current.metadata = event.data.metadata
-        await update({
+        await send({
           sessionUpdate: "tool_call_update",
           ...runningToolUpdate({
             toolCallId: event.data.callID,
@@ -164,8 +269,9 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.success") {
-        const current = tools.get(event.data.callID) ?? emptyToolState()
-        tools.delete(event.data.callID)
+        const key = toolKey(event.data.sessionID, event.data.callID)
+        const current = tools.get(key) ?? emptyToolState()
+        tools.delete(key)
         await syncEditedFiles({
           connection: input.connection,
           writeTextFile: input.writeTextFile,
@@ -175,7 +281,7 @@ export async function streamTurn(input: {
           toolInput: current.input,
           metadata: event.data.metadata ?? {},
         }).catch(() => {})
-        await update({
+        await send({
           sessionUpdate: "tool_call_update",
           ...completedToolUpdate({
             toolCallId: event.data.callID,
@@ -188,9 +294,10 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.failed") {
-        const current = tools.get(event.data.callID) ?? emptyToolState()
-        tools.delete(event.data.callID)
-        await update({
+        const key = toolKey(event.data.sessionID, event.data.callID)
+        const current = tools.get(key) ?? emptyToolState()
+        tools.delete(key)
+        await send({
           sessionUpdate: "tool_call_update",
           ...errorToolUpdate({
             toolCallId: event.data.callID,
@@ -205,13 +312,33 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.step.ended") {
-        assistantMessageID = event.data.assistantMessageID
-        finish = event.data.finish
+        if (!child) {
+          assistantMessageID = event.data.assistantMessageID
+          finish = event.data.finish
+        }
         continue
       }
-      if (event.type === "session.execution.succeeded") return "succeeded" as const
-      if (event.type === "session.execution.interrupted") return "interrupted" as const
+      if (event.type === "session.execution.succeeded") {
+        if (!child) return "succeeded" as const
+        openChildren.delete(child.id)
+        await notifyChild(child, { type: "status", status: "completed" })
+        if (mode === "background" && openChildren.size === 0) return "succeeded" as const
+        continue
+      }
+      if (event.type === "session.execution.interrupted") {
+        if (!child) return "interrupted" as const
+        openChildren.delete(child.id)
+        await notifyChild(child, { type: "status", status: "interrupted" })
+        if (mode === "background" && openChildren.size === 0) return "interrupted" as const
+        continue
+      }
       if (event.type === "session.execution.failed") {
+        if (child) {
+          openChildren.delete(child.id)
+          await notifyChild(child, { type: "status", status: "failed", error: event.data.error })
+          if (mode === "background" && openChildren.size === 0) return "failed" as const
+          continue
+        }
         executionError = event.data.error
         return "failed" as const
       }
@@ -219,7 +346,13 @@ export async function streamTurn(input: {
     return "interrupted" as const
   }
 
-  const completed = consume()
+  const completed = consume("turn")
+  const closeStream = async () => {
+    streamController.abort()
+    input.connectionSignal?.removeEventListener("abort", connectionAbort)
+    input.sessionSignal?.removeEventListener("abort", connectionAbort)
+    await stream.return?.(undefined).catch(() => {})
+  }
   try {
     await input.submit(control.admission.signal).catch((error) => {
       if (!control.cancelled) throw error
@@ -233,6 +366,14 @@ export async function streamTurn(input: {
       }
     }
     const terminal = await completed
+    if (input.childSessionUpdate && openChildren.size > 0 && !input.sessionSignal?.aborted) {
+      standard = false
+      handedOff = true
+      input.sessionSignal?.addEventListener("abort", connectionAbort, { once: true })
+      void consume("background")
+        .catch(() => {})
+        .finally(closeStream)
+    }
     const assistant = assistantMessageID
       ? await input.client.session
           .message({ sessionID: input.sessionID, messageID: assistantMessageID })
@@ -250,9 +391,35 @@ export async function streamTurn(input: {
     await completed.catch(() => {})
     throw error
   } finally {
-    streamController.abort()
-    await stream.return?.(undefined).catch(() => {})
+    if (!handedOff) await closeStream()
   }
+}
+
+function sessionID(event: EventSubscribeOutput) {
+  if ("sessionID" in event.data && typeof event.data.sessionID === "string") return event.data.sessionID
+  if (event.type === "form.created") return event.data.form.sessionID
+  return undefined
+}
+
+function toolKey(sessionID: string, callID: string) {
+  return `${sessionID}:${callID}`
+}
+
+function projectChildUpdate(update: SessionUpdate, child: ChildSession) {
+  update._meta = {
+    ...update._meta,
+    "opencode/child-session": {
+      id: child.id,
+      parentID: child.parentID,
+      depth: child.depth,
+      ...(child.title ? { title: child.title } : {}),
+    },
+  }
+  if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
+    update.toolCallId = `${child.id}:${update.toolCallId}`
+    if (update.title && child.title) update.title = `${child.title}: ${update.title}`
+  }
+  return update
 }
 
 export async function replayMessages(

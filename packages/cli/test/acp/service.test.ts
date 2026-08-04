@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import { OpenCode } from "@opencode-ai/client/promise"
 import { ACPService } from "../../src/acp/service"
+import { ChildSessionUpdatesCapability } from "../../src/acp/event"
 
 describe("acp service", () => {
   test("creates a v2 session, registers mcp, and publishes commands", async () => {
@@ -39,11 +40,17 @@ describe("acp service", () => {
     })
 
     try {
+      const initialized = await service.initialize({
+        protocolVersion: 1,
+        clientCapabilities: { _meta: { [ChildSessionUpdatesCapability]: true } },
+        clientInfo: { name: "test", version: "1" },
+      })
       const result = await service.newSession({
         cwd: "/workspace",
         mcpServers: [{ name: "docs", command: "bun", args: ["docs.ts"], env: [{ name: "TOKEN", value: "x" }] }],
       })
       expect(result.sessionId).toBe("ses_acp")
+      expect(initialized.agentCapabilities?._meta).toEqual({ [ChildSessionUpdatesCapability]: true })
       expect(result.configOptions?.map((option) => option.id)).toEqual(["model", "effort", "mode"])
       expect(requests).toContainEqual({
         method: "PUT",
