@@ -231,7 +231,7 @@ export const layer = Layer.effect(
                   if (input.body)
                     sent = HttpClientRequest.bodyUint8Array(
                       sent,
-                      new Uint8Array(yield* Effect.promise(() => input.arrayBuffer())),
+                      new Uint8Array(yield* Effect.promise(() => input.clone().arrayBuffer())),
                       input.headers.get("content-type") ?? undefined,
                     )
                   const response = yield* handler(sent)

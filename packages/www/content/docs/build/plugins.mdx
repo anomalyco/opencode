@@ -177,7 +177,7 @@ and plugin options.
 | `ctx.integration`      | `list`, `get`, `connect`, `attempt`, `transform`, `reload`, and connection lookup/resolution |
 | `ctx.plugin`           | `list` currently active plugin IDs                                                           |
 | `ctx.reference`        | `list`, `transform`, `reload`                                                                |
-| `ctx.session`          | `create`, `get`, `prompt`, `command`, `rename`, `synthetic`, `interrupt`, `wait`, `hook`, and `http` |
+| `ctx.session`          | `create`, `get`, `prompt`, `command`, `rename`, `synthetic`, `interrupt`, `wait`, and `hook`  |
 | `ctx.skill`            | `list`, `transform`, `reload`                                                                |
 | `ctx.tool`             | `transform` and `hook`                                                                       |
 | `ctx.aisdk`            | `hook`                                                                                       |
@@ -251,7 +251,8 @@ Runtime hooks intercept live operations:
 | `ctx.tool.hook("execute.after", callback)`  | Terminal `result` on success or `error` on failure                             |
 
 HTTP middleware can modify requests, inspect responses, retry, or return a
-response without calling the provider:
+response without calling the provider. It applies to native models; AI SDK
+models do not currently pass through this hook.
 
 ```ts
 await ctx.session.hook("http", async (event, request, next) => {
