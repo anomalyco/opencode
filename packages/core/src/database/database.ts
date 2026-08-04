@@ -54,6 +54,11 @@ export function readOnlyLayerFromPath(filename: string) {
   )
 }
 
+export const acquireExclusive = Effect.fn("Database.acquireExclusive")(function* (db: Interface["db"]) {
+  yield* db.run("PRAGMA locking_mode = EXCLUSIVE").pipe(Effect.orDie)
+  yield* db.transaction(() => Effect.void, { behavior: "exclusive" }).pipe(Effect.orDie)
+})
+
 export function path() {
   if (Flag.OPENCODE_DB) {
     if (Flag.OPENCODE_DB === ":memory:" || isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
