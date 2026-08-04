@@ -30,6 +30,8 @@ export const VariantUnavailableError = ModelResolver.VariantUnavailableError
 export type VariantUnavailableError = ModelResolver.VariantUnavailableError
 export const UnsupportedPackageError = ModelResolver.UnsupportedPackageError
 export type UnsupportedPackageError = ModelResolver.UnsupportedPackageError
+export const ProviderRemovedError = ModelResolver.ProviderRemovedError
+export type ProviderRemovedError = ModelResolver.ProviderRemovedError
 
 export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved
@@ -72,6 +74,13 @@ const layer = Layer.effect(
           if (resolved) return resolved
           return yield* new ModelNotSelectedError({ sessionID: session.id })
         }
+        const replacement = Provider.replacement(session.model.providerID)
+        if (replacement)
+          return yield* new ProviderRemovedError({
+            providerID: session.model.providerID,
+            replacement,
+            modelID: session.model.id,
+          })
         const selected = (yield* catalog.model.available()).find(
           (model) => model.providerID === session.model?.providerID && model.id === session.model.id,
         )

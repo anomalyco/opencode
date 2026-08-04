@@ -309,6 +309,27 @@ describe("GoogleVertexPlugin", () => {
     ),
   )
 
+  it.effect("creates Anthropic SDKs for canonical Google Vertex models", () =>
+    Effect.gen(function* () {
+      const plugin = yield* Plugin.Service
+      const aisdk = yield* AISDK.Service
+      yield* addPlugin()
+      const result = yield* aisdk.runSDK({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.googleVertex, Model.ID.make("claude-sonnet-4-6@default")),
+          modelID: Model.ID.make("claude-sonnet-4-6@default"),
+          package: "aisdk:@ai-sdk/google-vertex/anthropic",
+        }),
+        package: "@ai-sdk/google-vertex/anthropic",
+        options: { name: "google-vertex", project: "project", location: "eu" },
+      })
+
+      expect(result.sdk.languageModel("claude-sonnet-4-6@default").config.baseURL).toBe(
+        "https://aiplatform.eu.rep.googleapis.com/v1/projects/project/locations/eu/publishers/anthropic/models",
+      )
+    }),
+  )
+
   it.effect("keeps Google auth fetch for OpenAI-compatible Vertex endpoints", () =>
     Effect.gen(function* () {
       googleAuthOptions.length = 0

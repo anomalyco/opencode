@@ -11,6 +11,7 @@ import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { ModelsDevPlugin } from "@opencode-ai/core/plugin/models-dev"
+import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
@@ -267,6 +268,8 @@ describe("ModelsDevPlugin", () => {
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
       expect(yield* integrations.get(Integration.ID.make("google-vertex-anthropic"))).toBeUndefined()
+      expect(ProviderPlugins.map((plugin) => plugin.id)).not.toContain("opencode.provider.azure-cognitive-services")
+      expect(ProviderPlugins.map((plugin) => plugin.id)).not.toContain("opencode.provider.google-vertex-anthropic")
     }),
   )
 

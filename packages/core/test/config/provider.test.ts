@@ -49,6 +49,37 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
+  it.effect("does not recreate removed providers from config", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const integrations = yield* Integration.Service
+      yield* addPlugin([
+        new Config.Document({
+          type: "document",
+          info: decode({
+            providers: {
+              "azure-cognitive-services": {
+                env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
+                package: "aisdk:@ai-sdk/azure",
+                models: { deployment: {} },
+              },
+              "google-vertex-anthropic": {
+                env: ["GOOGLE_APPLICATION_CREDENTIALS"],
+                package: "aisdk:@ai-sdk/google-vertex/anthropic",
+                models: { claude: {} },
+              },
+            },
+          }),
+        }),
+      ])
+
+      expect(yield* catalog.provider.get(Provider.ID.make("azure-cognitive-services"))).toBeUndefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
+      expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
+      expect(yield* integrations.get(Integration.ID.make("google-vertex-anthropic"))).toBeUndefined()
+    }),
+  )
+
   it.effect("defaults custom models to agent capabilities", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

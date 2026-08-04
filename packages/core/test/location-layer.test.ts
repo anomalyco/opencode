@@ -666,6 +666,90 @@ describe("LocationServiceMap", () => {
     ),
   )
 
+  it.live("explains replacements for removed providers", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          for (const [providerID, replacement] of [
+            ["azure-cognitive-services", "azure"],
+            ["google-vertex-anthropic", "google-vertex"],
+          ] as const) {
+            const failure = yield* SessionRunnerModel.Service.use((models) =>
+              models.resolve(
+                Session.Info.make({
+                  id: Session.ID.make(`ses_removed_${providerID}`),
+                  projectID: Project.ID.global,
+                  title: "test",
+                  model: {
+                    id: Model.ID.make("chat"),
+                    providerID: Provider.ID.make(providerID),
+                  },
+                  cost: Money.USD.zero,
+                  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                  time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                  location,
+                }),
+              ),
+            ).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
+
+            expect(failure).toMatchObject({
+              _tag: "SessionRunnerModel.ProviderRemovedError",
+              providerID,
+              replacement,
+              modelID: "chat",
+            })
+            expect(failure.message).toBe(
+              `Provider "${providerID}" no longer exists. Change "${providerID}/chat" to "${replacement}/chat".`,
+            )
+          }
+        }),
+      ),
+    ),
+  )
+
+  it.live("rejects a removed provider configured as the default model", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ model: "azure-cognitive-services/deployment" }),
+            ),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const locations = yield* LocationServiceMap.Service
+          const context = yield* locations.contextEffect(location)
+          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(context))
+          const failure = yield* SessionRunnerModel.Service.use((models) =>
+            models.resolve(
+              Session.Info.make({
+                id: Session.ID.make("ses_removed_default"),
+                projectID: Project.ID.global,
+                title: "test",
+                cost: Money.USD.zero,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                location,
+              }),
+            ),
+          ).pipe(Effect.provide(context), Effect.flip)
+
+          expect(failure.message).toBe(
+            'Provider "azure-cognitive-services" no longer exists. Change "azure-cognitive-services/deployment" to "azure/deployment".',
+          )
+        }),
+      ),
+    ),
+  )
+
   it.live("preserves the selected catalog identity when the package model id differs", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

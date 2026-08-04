@@ -51,6 +51,7 @@ export interface Interface extends State.Transformable<Draft> {
     readonly get: (providerID: Provider.ID, modelID: Model.ID) => Effect.Effect<Model.Info | undefined>
     readonly all: () => Effect.Effect<Model.Info[]>
     readonly available: () => Effect.Effect<Model.Info[]>
+    readonly configured: () => Effect.Effect<DefaultModel | undefined>
     readonly default: () => Effect.Effect<Model.Info | undefined>
     readonly small: (providerID: Provider.ID) => Effect.Effect<Model.Info | undefined>
   }
@@ -194,6 +195,10 @@ const layer = Layer.effect(
           )
         }),
 
+        configured: Effect.fn("Catalog.model.configured")(function* () {
+          return state.get().defaultModel
+        }),
+
         default: Effect.fn("Catalog.model.default")(function* () {
           const defaultModel = state.get().defaultModel
           if (defaultModel) {
@@ -213,7 +218,7 @@ const layer = Layer.effect(
           const provider = record.provider
 
           // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
-          if (providerID === Provider.ID.azure || providerID === Provider.ID.make("azure-cognitive-services")) {
+          if (providerID === Provider.ID.azure) {
             return
           }
 

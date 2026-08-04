@@ -51,6 +51,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
   if (
     cause instanceof SessionRunnerModel.ModelNotSelectedError ||
     cause instanceof SessionRunnerModel.ModelUnavailableError ||
+    cause instanceof SessionRunnerModel.ProviderRemovedError ||
     cause instanceof SessionRunnerModel.VariantUnavailableError ||
     cause instanceof SessionRunnerModel.UnsupportedPackageError
   )

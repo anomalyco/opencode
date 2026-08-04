@@ -58,35 +58,3 @@ export const AzurePlugin = define({
     )
   }),
 })
-
-export const AzureCognitiveServicesPlugin = define({
-  id: "opencode.provider.azure-cognitive-services",
-  effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform((evt) => {
-      const resourceName = process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME
-      if (!resourceName) return
-      for (const item of evt.provider.list()) {
-        if (!Provider.isAISDK(item.provider.package)) continue
-        if (Provider.packageName(item.provider.package) !== "@ai-sdk/openai-compatible") continue
-        if (!item.provider.id.includes("azure-cognitive-services")) continue
-        evt.provider.update(item.provider.id, (provider) => {
-          provider.settings = {
-            ...provider.settings,
-            baseURL: `https://${resourceName}.cognitiveservices.azure.com/openai`,
-          }
-        })
-      }
-    })
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.make("azure-cognitive-services")) return
-        evt.language = selectLanguage(
-          evt.sdk,
-          evt.model.modelID ?? evt.model.id,
-          Boolean(evt.options.useCompletionUrls),
-        )
-      }),
-    )
-  }),
-})

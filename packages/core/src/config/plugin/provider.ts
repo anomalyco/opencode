@@ -16,12 +16,13 @@ export const Plugin = define({
       const configuredIntegrations = new Set(
         files.flatMap((file) =>
           Object.entries(file.info.providers ?? {}).flatMap(([id, provider]) =>
-            provider.env === undefined ? [] : [id],
+            provider.env === undefined || Provider.replacement(Provider.ID.make(id)) ? [] : [id],
           ),
         ),
       )
       for (const file of files) {
         for (const [id, item] of Object.entries(file.info.providers ?? {})) {
+          if (Provider.replacement(Provider.ID.make(id))) continue
           const integrationID = id
           if (!configuredIntegrations.has(id) && !integrations.get(integrationID)) continue
           integrations.update(integrationID, (integration) => {
@@ -44,6 +45,7 @@ export const Plugin = define({
         catalog.model.default.set(configuredDefault.providerID, configuredDefault.model)
       for (const file of files) {
         for (const [id, item] of Object.entries(file.info.providers ?? {})) {
+          if (Provider.replacement(Provider.ID.make(id))) continue
           const providerID = id
           catalog.provider.update(providerID, (provider) => {
             if (item.name !== undefined) provider.name = item.name

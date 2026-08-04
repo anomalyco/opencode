@@ -46,7 +46,24 @@ export class UnsupportedPackageError extends Schema.TaggedErrorClass<Unsupported
   }
 }
 
-export type Error = VariantUnavailableError | UnsupportedPackageError | Integration.AuthorizationError
+export class ProviderRemovedError extends Schema.TaggedErrorClass<ProviderRemovedError>()(
+  "SessionRunnerModel.ProviderRemovedError",
+  {
+    providerID: Provider.ID,
+    replacement: Provider.ID,
+    modelID: ID,
+  },
+) {
+  override get message() {
+    return `Provider "${this.providerID}" no longer exists. Change "${this.providerID}/${this.modelID}" to "${this.replacement}/${this.modelID}".`
+  }
+}
+
+export type Error =
+  | VariantUnavailableError
+  | UnsupportedPackageError
+  | ProviderRemovedError
+  | Integration.AuthorizationError
 
 export interface Resolved {
   /** Route-level model for provider requests; its id is the provider API model id, which may differ from the catalog id. */
@@ -296,6 +313,11 @@ export const layer = Layer.effect(
     })
     return Service.of({
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
+        const configured = requested ? undefined : yield* catalog.model.configured()
+        const providerID = requested?.providerID ?? configured?.providerID
+        const modelID = requested?.id ?? configured?.modelID
+        const replacement = providerID && Provider.replacement(providerID)
+        if (replacement && modelID) return yield* new ProviderRemovedError({ providerID, replacement, modelID })
         const selected = requested
           ? yield* catalog.model.get(requested.providerID, requested.id)
           : yield* catalog.model
