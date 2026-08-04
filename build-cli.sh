@@ -14,8 +14,8 @@ bun install --filter opencode --filter @opencode-ai/tui
 
 echo "🚀 Building standalone opencode terminal CLI..."
 
-# Build only the single platform binary, skipping Web UI compilation
-bun run --cwd packages/opencode script/build.ts --single --skip-embed-web-ui
+# Build only the single platform binary, skipping Web UI compilation & redundant package reinstall
+bun run --cwd packages/opencode script/build.ts --single --skip-embed-web-ui --skip-install
 
 # Locate the compiled binary
 BINARY=$(find packages/opencode/dist -type f -name "opencode" | head -n 1)
