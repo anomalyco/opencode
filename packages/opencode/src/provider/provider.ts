@@ -996,6 +996,7 @@ const ProviderCapabilities = Schema.Struct({
   input: ProviderModalities,
   output: ProviderModalities,
   interleaved: ProviderInterleaved,
+  systemMessage: Schema.optional(Schema.Union([Schema.Literal("single"), Schema.Literal("multiple")])),
 })
 
 const ProviderCacheCost = Schema.Struct({
@@ -1465,7 +1466,10 @@ const layer = Layer.effect(
                 input: {
                   text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
                   audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
-                  image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
+                  image:
+                    model.modalities?.input?.includes("image") ??
+                    existingModel?.capabilities.input.image ??
+                    (provider.npm === "@ai-sdk/openai-compatible" ? true : false),
                   video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
                   pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
                 },

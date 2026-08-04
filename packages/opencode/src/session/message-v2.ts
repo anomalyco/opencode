@@ -699,6 +699,15 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    case e instanceof Error && e.message === "SSE read timed out":
+      return new APIError(
+        {
+          message: "Stream read timed out — no data received within the chunk timeout window",
+          isRetryable: true,
+          metadata: { code: "SSE_TIMEOUT", message: e.message },
+        },
+        { cause: e },
+      ).toObject()
     case e instanceof Error:
       return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
     default:
