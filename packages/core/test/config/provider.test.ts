@@ -49,7 +49,7 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
-  it.effect("does not recreate removed providers from config", () =>
+  it.effect("allows custom providers that use retired catalog IDs", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const integrations = yield* Integration.Service
@@ -73,10 +73,10 @@ describe("ConfigProviderPlugin.Plugin", () => {
         }),
       ])
 
-      expect(yield* catalog.provider.get(Provider.ID.make("azure-cognitive-services"))).toBeUndefined()
-      expect(yield* catalog.provider.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
-      expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
-      expect(yield* integrations.get(Integration.ID.make("google-vertex-anthropic"))).toBeUndefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("azure-cognitive-services"))).toBeDefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("google-vertex-anthropic"))).toBeDefined()
+      expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeDefined()
+      expect(yield* integrations.get(Integration.ID.make("google-vertex-anthropic"))).toBeDefined()
     }),
   )
 

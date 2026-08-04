@@ -111,5 +111,4 @@ function configuredProviders(entries: readonly Config.Entry[]) {
   return entries
     .filter((entry): entry is Config.Document => entry.type === "document")
     .flatMap((file) => Object.entries(file.info.providers ?? {}))
-    .filter(([id]) => id !== "azure-cognitive-services" && id !== "google-vertex-anthropic")
 }
