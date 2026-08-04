@@ -145,6 +145,39 @@ describe("SessionEventLogCompaction", () => {
         agent: "latest",
       })
 
+      const indexedID = SessionV1.MessageID.ascending("msg_event_log_indexed")
+      const indexed = (agent: string) => ({ ...message(agent), id: indexedID })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: indexed("before") })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: indexed("after") })
+      const structuralID = SessionV1.MessageID.ascending("msg_event_log_structural_malformed")
+      const structural = (agent: string) => ({ ...message(agent), id: structuralID })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: structural("before") })
+      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: structural("after") })
+      yield* db.run(sql`
+        UPDATE event SET data = '{}'
+        WHERE id = (
+          SELECT id FROM event
+          WHERE aggregate_id = ${sessionID} AND type = 'message.updated.1'
+            AND json_extract(CASE WHEN json_valid(data) THEN data END, '$.info.id') = ${structuralID}
+          ORDER BY seq LIMIT 1
+        )
+      `)
+
+      const prepared = yield* SessionEventLogCompaction.prepareIndex(db)
+      expect(prepared?.snapshots).toBeGreaterThan(0)
+      expect(prepared?.malformed).toBe(2)
+      let indexedRewritten = 0
+      while (true) {
+        const batch = yield* SessionEventLogCompaction.compactIndexed(db, 2)
+        indexedRewritten += batch.report.rewritten
+        if (batch.cursor === undefined) break
+      }
+      expect(indexedRewritten).toBeGreaterThan(0)
+      yield* SessionEventLogCompaction.dropIndex(db)
+      expect(
+        yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'event_compaction_state'`),
+      ).toBeUndefined()
+
       const ownedID = SessionV1.MessageID.ascending("msg_event_log_owned")
       const owned = (agent: string) => ({ ...message(agent), id: ownedID })
       yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: owned("before") })
