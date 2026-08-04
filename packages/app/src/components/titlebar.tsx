@@ -1,4 +1,15 @@
-import { createEffect, createMemo, createResource, createSignal, Match, onMount, Show, Switch, untrack } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  Match,
+  on,
+  onMount,
+  Show,
+  Switch,
+  untrack,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -42,8 +53,11 @@ export type TitlebarUpdate = {
 }
 
 export function useTitlebarRightMount() {
+  const language = useLanguage()
   const [mount, setMount] = createSignal<HTMLElement | null>(null)
-  onMount(() => setMount(document.getElementById("opencode-titlebar-right")))
+  const sync = () => setMount(document.getElementById("opencode-titlebar-right"))
+  onMount(sync)
+  createEffect(on(language.direction, sync, { defer: true }))
   return mount
 }
 
@@ -169,7 +183,8 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
         "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
         width: windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
-        "align-self": windows() ? "flex-start" : undefined,
+        // Native Windows caption controls remain on the physical right in both writing directions.
+        "margin-right": windows() ? "auto" : undefined,
       }}
       data-tauri-drag-region
     >
