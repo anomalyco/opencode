@@ -1885,6 +1885,70 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### Poolside
+
+[Poolside](https://poolside.ai) provides access to its models through an OpenAI-compatible API.
+
+1. Head over to [platform.poolside.ai](https://platform.poolside.ai), sign in, open the **API Keys** tab, and click **New key** to generate an API key.
+
+2. Run the `/connect` command and search for **Poolside**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Poolside API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+#### Poolside deployment
+
+If your organization runs a Poolside deployment, configure it as a custom OpenAI-compatible provider. Store the API key or token from your Poolside administrator in `~/.secrets/poolside-key`. Use a unique provider ID and add the model IDs available from your deployment.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "poolside-deployment": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Poolside deployment",
+      "options": {
+        "baseURL": "https://poolside.example.com/openai/v1",
+        "apiKey": "{file:~/.secrets/poolside-key}"
+      },
+      "models": {
+        "<served-model-id>": {
+          "name": "Poolside deployment model",
+          "reasoning": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Replace `poolside.example.com` with your deployment's host and `<served-model-id>` with a model ID returned by its `/openai/v1/models` endpoint. Model availability and thinking behavior depend on the deployment's configuration.
+
+:::tip
+You can also install [Poolside Agent CLI](https://github.com/poolsideai/pool) to use Poolside agents directly from your terminal.
+:::
+
+---
+
 ### SAP AI Core
 
 SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
