@@ -4,7 +4,7 @@ import type { Agent } from "@opencode-ai/schema/agent"
 import type { Model } from "@opencode-ai/schema/model"
 import type { Session } from "@opencode-ai/schema/session"
 import type { JsonSchema } from "effect"
-import type { Hooks, Registration } from "./registration.js"
+import type { Registration } from "./registration.js"
 
 export interface SessionContext {
   readonly sessionID: Session.ID
@@ -31,10 +31,18 @@ export interface SessionHooks {
   readonly context: SessionContext
 }
 
+export type SessionHookRegistration =
+  | [name: "context", callback: (event: SessionContext) => Promise<void> | void]
+  | [name: "http", middleware: SessionHttpMiddleware]
+
+export interface SessionHook {
+  (name: "context", callback: (event: SessionContext) => Promise<void> | void): Promise<Registration>
+  (name: "http", middleware: SessionHttpMiddleware): Promise<Registration>
+}
+
 export type SessionDomain = Pick<
   SessionApi,
   "create" | "get" | "prompt" | "generate" | "command" | "synthetic" | "interrupt"
 > & {
-  readonly hook: Hooks<SessionHooks>
-  readonly http: (middleware: SessionHttpMiddleware) => Promise<Registration>
+  readonly hook: SessionHook
 }

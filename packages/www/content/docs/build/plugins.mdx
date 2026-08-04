@@ -246,7 +246,7 @@ Runtime hooks intercept live operations:
 | `ctx.aisdk.hook("sdk", callback)`           | `sdk`, after inspecting `model`, `package`, and `options`                      |
 | `ctx.aisdk.hook("language", callback)`      | `language`, after inspecting `model`, `sdk`, and `options`                     |
 | `ctx.session.hook("context", callback)`     | `system`, `messages`, and the `tools` record immediately before model dispatch |
-| `ctx.session.http(middleware)`              | The model's HTTP request and response                                          |
+| `ctx.session.hook("http", middleware)`     | The model's HTTP request and response                                          |
 | `ctx.tool.hook("execute.before", callback)` | `input`, before the selected tool executes                                     |
 | `ctx.tool.hook("execute.after", callback)`  | Terminal `result` on success or `error` on failure                             |
 
@@ -254,7 +254,7 @@ HTTP middleware can modify requests, inspect responses, retry, or return a
 response without calling the provider:
 
 ```ts
-await ctx.session.http(async (event, request, next) => {
+await ctx.session.hook("http", async (event, request, next) => {
   request.headers.set("x-session-id", event.sessionID)
   const response = await next(request)
   return response

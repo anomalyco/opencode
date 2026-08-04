@@ -2,6 +2,7 @@ export * as PluginHost from "./host"
 
 import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import type { SessionHookRegistration } from "@opencode-ai/plugin/effect/session"
 import type { CredentialOAuth } from "@opencode-ai/sdk/v2/types"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import { App } from "../app"
@@ -337,14 +338,16 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
         }),
     },
     session: {
-      hook: (name, callback) => hooks.register("session", name, callback),
-      http: (middleware) =>
-        hooks.register("session", "http", (event) =>
+      hook: (...registration: SessionHookRegistration) => {
+        if (registration[0] === "context") return hooks.register("session", "context", registration[1])
+        const middleware = registration[1]
+        return hooks.register("session", "http", (event) =>
           Effect.sync(() => {
             const next = event.request
             event.request = (request) => middleware(event, request, next)
           }),
-        ),
+        )
+      },
       create: (input) =>
         runtime.session.create({
           id: input?.id,

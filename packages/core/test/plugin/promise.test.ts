@@ -232,12 +232,12 @@ describe("fromPromise", () => {
         define({
           id: "promise-session-http",
           setup: async (ctx) => {
-            await ctx.session.http(async (_event, request, next) => {
+            await ctx.session.hook("http", async (_event, request, next) => {
               request.headers.set("x-hook", "promise")
               const response = await next(request)
               return new Response(`${await response.text()}-response`)
             })
-            await ctx.session.http(async (_event, request, next) => {
+            await ctx.session.hook("http", async (_event, request, next) => {
               const response = await next(request)
               return new Response(`${await response.text()}-outer`)
             })
@@ -267,7 +267,7 @@ describe("fromPromise", () => {
         define({
           id: "promise-session-http-interrupt",
           setup: async (ctx) => {
-            await ctx.session.http((_event, request, next) => next(request))
+            await ctx.session.hook("http", (_event, request, next) => next(request))
           },
         }),
       ).effect(host)

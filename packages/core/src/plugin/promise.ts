@@ -2,6 +2,7 @@ export * as PluginPromise from "./promise"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import type { Context, Plugin } from "@opencode-ai/plugin/promise/plugin"
+import type { SessionHookRegistration } from "@opencode-ai/plugin/promise/session"
 import type { Info } from "@opencode-ai/plugin/promise/tool"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Integration } from "@opencode-ai/schema/integration"
@@ -265,11 +266,16 @@ export function fromPromise(plugin: Plugin) {
               ),
           },
           session: {
-            hook: (name, callback) =>
-              register(host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
-            http: (middleware) =>
-              register(
-                host.session.http((event, input, next) =>
+            hook: (...registration: SessionHookRegistration) => {
+              if (registration[0] === "context")
+                return register(
+                  host.session.hook("context", (event) =>
+                    Effect.promise(() => Promise.resolve(registration[1](event))),
+                  ),
+                )
+              const middleware = registration[1]
+              return register(
+                host.session.hook("http", (event, input, next) =>
                   Effect.tryPromise({
                     try: (signal) =>
                       Promise.resolve(
@@ -280,7 +286,8 @@ export function fromPromise(plugin: Plugin) {
                     catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
                   }),
                 ),
-              ),
+              )
+            },
             create: (input) =>
               run(
                 host.session.create(

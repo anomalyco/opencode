@@ -1,4 +1,5 @@
 import { HttpRecorder } from "@opencode-ai/http-recorder"
+import type { SessionHookRegistration } from "@opencode-ai/plugin/effect/session"
 import * as OpenAIChat from "@opencode-ai/ai/protocols/openai-chat"
 import { Auth, LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -189,7 +190,12 @@ describe("SessionRunnerLLM recorded", () => {
       const pluginHost = host({
         agent: agentHost(agents),
         catalog: catalogHost(catalog),
-        session: { hook: (name, callback) => hooks.register("session", name, callback) },
+        session: {
+          hook: (...registration: SessionHookRegistration) => {
+            if (registration[0] === "http") return Effect.die("unused session HTTP hook")
+            return hooks.register("session", "context", registration[1])
+          },
+        },
       })
       yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
       const { db } = yield* Database.Service

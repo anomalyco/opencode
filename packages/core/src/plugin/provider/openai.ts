@@ -225,7 +225,7 @@ export const OpenAIPlugin = define({
         })
       }
     })
-    yield* ctx.session.http((evt, request, next) => {
+    yield* ctx.session.hook("http", (evt, request, next) => {
       if (!chatgpt || evt.model.providerID !== Provider.ID.openai) return next(request)
       const url = new URL(request.url)
       request.headers.set("originator", "opencode")
