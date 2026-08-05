@@ -58,18 +58,14 @@ export function DirectoryDataProvider(
   })
 
   return (
-    <Show when={directory()} keyed>
-      {(directory) => (
-        <DataProvider
-          data={sync().data}
-          directory={directory}
-          onNavigateToSession={(sessionID: string) => navigate(href(sessionID))}
-          onSessionHref={href}
-        >
-          <LocalProvider>{props.children}</LocalProvider>
-        </DataProvider>
-      )}
-    </Show>
+    <DataProvider
+      data={sync().data}
+      directory={directory}
+      onNavigateToSession={(sessionID: string) => navigate(href(sessionID))}
+      onSessionHref={href}
+    >
+      <LocalProvider>{props.children}</LocalProvider>
+    </DataProvider>
   )
 }
 

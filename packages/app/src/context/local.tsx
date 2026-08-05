@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useParams } from "@solidjs/router"
-import { batch, createEffect, createMemo, startTransition } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, onCleanup, startTransition } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
 import { useSettings } from "@/context/settings"
@@ -24,6 +24,13 @@ type State = {
 
 type Saved = {
   session: Record<string, State | undefined>
+}
+
+type SavedEntry = {
+  saved: Saved
+  setSaved: ReturnType<typeof createStore<Saved>>[1]
+  ready: ReturnType<typeof persisted<Saved>>[3]
+  dispose: VoidFunction
 }
 
 const WORKSPACE_KEY = "__workspace__"
@@ -71,15 +78,29 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const agentsVisible = createMemo(() => settings.visibility.customAgents() || hasCustomAgent(list()))
     const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
 
-    const [saved, setSaved, , savedReady] = persisted(
-      {
-        ...Persist.serverWorkspace(serverSDK().scope, sdk().directory, "model-selection", ["model-selection.v1"]),
-        migrate,
-      },
-      createStore<Saved>({
-        session: {},
-      }),
-    )
+    const savedCache = new Map<string, SavedEntry>()
+    const loadSaved = (serverScope: ServerScope, directory: string) => {
+      const key = ScopedKey.from(serverScope, directory, "model-selection")
+      const existing = savedCache.get(key)
+      if (existing) return existing
+      const entry = createRoot((dispose) => {
+        const [saved, setSaved, , ready] = persisted(
+          {
+            ...Persist.serverWorkspace(serverScope, directory, "model-selection", ["model-selection.v1"]),
+            migrate,
+          },
+          createStore<Saved>({ session: {} }),
+        )
+        return { saved, setSaved, ready, dispose }
+      })
+      savedCache.set(key, entry)
+      return entry
+    }
+    const saved = createMemo(() => loadSaved(serverSDK().scope, sdk().directory))
+    onCleanup(() => {
+      for (const entry of savedCache.values()) entry.dispose()
+      savedCache.clear()
+    })
 
     const [store, setStore] = createStore<{
       current?: string
@@ -127,7 +148,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const scope = createMemo<State | undefined>(() => {
       const session = id()
       if (!session) return store.draft ?? store.promoting
-      return saved.session[session] ?? handoff.get(handoffKey(serverSDK().scope, sdk().directory, session))
+      return saved().saved.session[session] ?? handoff.get(handoffKey(serverSDK().scope, sdk().directory, session))
     })
 
     createEffect(() => {
@@ -137,13 +158,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const key = handoffKey(serverSDK().scope, sdk().directory, session)
       const next = handoff.get(key)
       if (!next) return
-      if (saved.session[session] !== undefined) {
+      if (saved().saved.session[session] !== undefined) {
         handoff.delete(key)
         setStore("promoting", undefined)
         return
       }
 
-      setSaved("session", session, clone(next))
+      saved().setSaved("session", session, clone(next))
       handoff.delete(key)
       setStore("promoting", undefined)
     })
@@ -209,7 +230,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           } satisfies State
           const session = id()
           if (session) {
-            setSaved("session", session, next)
+            saved().setSaved("session", session, next)
             return
           }
           setStore("draft", next)
@@ -270,7 +291,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const session = id()
       if (session) {
-        setSaved("session", session, state)
+        saved().setSaved("session", session, state)
         return
       }
       setStore("draft", state)
@@ -378,7 +399,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       session: {
-        ready: savedReady,
+        ready: () => saved().ready(),
         reset() {
           setStore({ draft: undefined, promoting: undefined })
         },
@@ -389,7 +410,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           handoff.set(key, next)
 
           if (dir === sdk().directory) {
-            setSaved("session", session, next)
+            saved().setSaved("session", session, next)
           }
 
           setStore("promoting", next)
@@ -399,10 +420,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const session = id()
           if (!session) return
           if (msg.sessionID !== session) return
-          if (saved.session[session] !== undefined) return
+          if (saved().saved.session[session] !== undefined) return
           if (handoff.has(handoffKey(serverSDK().scope, sdk().directory, session))) return
 
-          setSaved("session", session, {
+          saved().setSaved("session", session, {
             agent: msg.agent,
             model: msg.model,
             variant: msg.model?.variant ?? null,

@@ -2,6 +2,7 @@ import type { Message, Session, Part, SnapshotFileDiff, SessionStatus, Provider 
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
+import type { Accessor } from "solid-js"
 
 export type NormalizedProviderListResponse = {
   all: Map<string, Provider>
@@ -46,7 +47,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: {
     data: Data
-    directory: string
+    directory: string | Accessor<string>
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
   }) => {
@@ -55,7 +56,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         return props.data
       },
       get directory() {
-        return props.directory
+        return typeof props.directory === "function" ? props.directory() : props.directory
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,

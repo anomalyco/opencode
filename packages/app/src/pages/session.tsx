@@ -252,7 +252,7 @@ function ResolvedTargetSessionRoute() {
     () => params.id,
     () => sync().session.lineage,
   )
-  const directory = createMemo(() => current()?.session.directory)
+  const directory = createMemo<string | undefined>((previous) => current()?.session.directory ?? previous)
   const targetDirectory = () => directory()!
 
   createEffect(() => {
@@ -265,29 +265,13 @@ function ResolvedTargetSessionRoute() {
   })
 
   return (
-    // Non-keyed: closes only while the target's directory is unknown (uncached
-    // lineage mid-resolution), which tears down the workspace subtree including
-    // the terminal. Same-workspace tab switches keep it open because warm
-    // targets resolve synchronously from the sync cache.
+    // Keep the previous workspace mounted while an uncached target resolves.
     <Show when={directory()}>
       <SDKProvider directory={targetDirectory}>
         <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
-          <TargetSessionPage />
+          <SessionPage />
         </DirectoryDataProvider>
       </SDKProvider>
-    </Show>
-  )
-}
-
-// Owns the workspace-identity remount. Must not include the session ID in the
-// key: SessionPage handles session changes reactively, and remounting here
-// destroys workspace-scoped state (terminal PTYs, file/prompt providers).
-function TargetSessionPage() {
-  const sdk = useSDK()
-  const serverSDK = useServerSDK()
-  return (
-    <Show when={`${serverSDK().scope}\0${sdk().directory}`} keyed>
-      <SessionPage />
     </Show>
   )
 }
