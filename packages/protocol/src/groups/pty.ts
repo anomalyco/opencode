@@ -130,7 +130,7 @@ export const PtyGroup = HttpApiGroup.make("server.pty")
           "x-websocket": true,
           parameters: [
             ...(operation.parameters ?? []),
-            ...["location[directory]", "location[workspace]", "cursor", PTY_CONNECT_TICKET_QUERY].map((name) => ({
+            ...["location[directory]", "cursor", PTY_CONNECT_TICKET_QUERY].map((name) => ({
               in: "query",
               name,
               schema: { type: "string" },

@@ -81,7 +81,7 @@ export function DialogMcp() {
     if (!server || server.status.status === "pending") return
     setLoading(name)
     const current = data.location.default()
-    const input = { server: name, location: { directory: current.directory, workspace: current.workspaceID } }
+    const input = { server: name, location: { directory: current.directory } }
     const call = server.status.status === "connected" ? client.api.mcp.disconnect(input) : client.api.mcp.connect(input)
     void call.catch(toast.error).finally(() => setLoading(null))
   }

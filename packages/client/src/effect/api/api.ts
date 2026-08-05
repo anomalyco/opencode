@@ -3,13 +3,13 @@ import type { Effect, Stream } from "effect"
 import type { Location } from "@opencode-ai/schema/location"
 import type { Agent } from "@opencode-ai/schema/agent"
 import type { Plugin } from "@opencode-ai/schema/plugin"
-import type { Workspace } from "@opencode-ai/schema/workspace"
 import type { Session } from "@opencode-ai/schema/session"
 import type { AbsolutePath } from "@opencode-ai/schema/schema"
 import type { Project } from "@opencode-ai/schema/project"
 import type { RelativePath } from "@opencode-ai/schema/schema"
 import type { Brand } from "effect"
 import type { Model } from "@opencode-ai/schema/model"
+import type { Workspace } from "@opencode-ai/schema/workspace"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { PromptInput } from "@opencode-ai/schema/prompt-input"
 import type { AgentAttachment } from "@opencode-ai/schema/prompt"
@@ -58,9 +58,7 @@ export interface ServerApi<E = never> {
   readonly get: ServerGetOperation<E>
 }
 
-export type Endpoint2_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint2_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint2_0Output = Location.Info
 export type LocationGetOperation<E = never> = (input?: Endpoint2_0Input) => Effect.Effect<Endpoint2_0Output, E>
 
@@ -68,15 +66,13 @@ export interface LocationApi<E = never> {
   readonly get: LocationGetOperation<E>
 }
 
-export type Endpoint3_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint3_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint3_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Agent.Info> }
 export type AgentListOperation<E = never> = (input?: Endpoint3_0Input) => Effect.Effect<Endpoint3_0Output, E>
 
 export type Endpoint3_1Input = {
   readonly agentID: Agent.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint3_1Output = { readonly location: Location.Info; readonly data: Agent.Info }
 export type AgentGetOperation<E = never> = (input: Endpoint3_1Input) => Effect.Effect<Endpoint3_1Output, E>
@@ -86,9 +82,7 @@ export interface AgentApi<E = never> {
   readonly get: AgentGetOperation<E>
 }
 
-export type Endpoint4_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint4_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint4_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Plugin.Info> }
 export type PluginListOperation<E = never> = (input?: Endpoint4_0Input) => Effect.Effect<Endpoint4_0Output, E>
 
@@ -97,7 +91,6 @@ export interface PluginApi<E = never> {
 }
 
 export type Endpoint5_0Input = {
-  readonly workspace?: Workspace.ID | undefined
   readonly limit?: number | undefined
   readonly order?: "asc" | "desc" | undefined
   readonly search?: string | undefined
@@ -898,15 +891,11 @@ export interface MessageApi<E = never> {
   readonly list: MessageListOperation<E>
 }
 
-export type Endpoint7_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint7_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint7_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Model.Info> }
 export type ModelListOperation<E = never> = (input?: Endpoint7_0Input) => Effect.Effect<Endpoint7_0Output, E>
 
-export type Endpoint7_1Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint7_1Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint7_1Output = { readonly location: Location.Info; readonly data: Model.Info | undefined }
 export type ModelDefaultOperation<E = never> = (input?: Endpoint7_1Input) => Effect.Effect<Endpoint7_1Output, E>
 
@@ -916,7 +905,7 @@ export interface ModelApi<E = never> {
 }
 
 export type Endpoint8_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly prompt: string
   readonly model?: Model.Ref | undefined
 }
@@ -927,15 +916,13 @@ export interface GenerateApi<E = never> {
   readonly text: GenerateTextOperation<E>
 }
 
-export type Endpoint9_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint9_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint9_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Provider.Info> }
 export type ProviderListOperation<E = never> = (input?: Endpoint9_0Input) => Effect.Effect<Endpoint9_0Output, E>
 
 export type Endpoint9_1Input = {
   readonly providerID: Provider.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint9_1Output = { readonly location: Location.Info; readonly data: Provider.Info }
 export type ProviderGetOperation<E = never> = (input: Endpoint9_1Input) => Effect.Effect<Endpoint9_1Output, E>
@@ -945,21 +932,19 @@ export interface ProviderApi<E = never> {
   readonly get: ProviderGetOperation<E>
 }
 
-export type Endpoint10_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint10_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint10_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Integration.Info> }
 export type IntegrationListOperation<E = never> = (input?: Endpoint10_0Input) => Effect.Effect<Endpoint10_0Output, E>
 
 export type Endpoint10_1Input = {
   readonly integrationID: Integration.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint10_1Output = { readonly location: Location.Info; readonly data: Integration.Info | undefined }
 export type IntegrationGetOperation<E = never> = (input: Endpoint10_1Input) => Effect.Effect<Endpoint10_1Output, E>
 
 export type Endpoint10_2Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly url: string
 }
 export type Endpoint10_2Output = void
@@ -969,7 +954,7 @@ export type IntegrationWellknownAddOperation<E = never> = (
 
 export type Endpoint10_3Input = {
   readonly integrationID: Integration.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly key: string
   readonly label?: string | undefined
 }
@@ -980,7 +965,7 @@ export type IntegrationConnectKeyOperation<E = never> = (
 
 export type Endpoint10_4Input = {
   readonly integrationID: Integration.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly methodID: Integration.MethodID
   readonly inputs: { readonly [x: string]: string }
   readonly label?: string | undefined
@@ -993,7 +978,7 @@ export type IntegrationOauthConnectOperation<E = never> = (
 export type Endpoint10_5Input = {
   readonly integrationID: Integration.ID
   readonly attemptID: Integration.AttemptID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint10_5Output = { readonly location: Location.Info; readonly data: Integration.AttemptStatus }
 export type IntegrationOauthStatusOperation<E = never> = (
@@ -1003,7 +988,7 @@ export type IntegrationOauthStatusOperation<E = never> = (
 export type Endpoint10_6Input = {
   readonly integrationID: Integration.ID
   readonly attemptID: Integration.AttemptID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly code?: string | undefined
 }
 export type Endpoint10_6Output = void
@@ -1014,7 +999,7 @@ export type IntegrationOauthCompleteOperation<E = never> = (
 export type Endpoint10_7Input = {
   readonly integrationID: Integration.ID
   readonly attemptID: Integration.AttemptID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint10_7Output = void
 export type IntegrationOauthCancelOperation<E = never> = (
@@ -1023,7 +1008,7 @@ export type IntegrationOauthCancelOperation<E = never> = (
 
 export type Endpoint10_8Input = {
   readonly integrationID: Integration.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly methodID: Integration.MethodID
   readonly label?: string | undefined
 }
@@ -1035,7 +1020,7 @@ export type IntegrationCommandConnectOperation<E = never> = (
 export type Endpoint10_9Input = {
   readonly integrationID: Integration.ID
   readonly attemptID: Integration.AttemptID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint10_9Output = { readonly location: Location.Info; readonly data: Integration.CommandAttemptStatus }
 export type IntegrationCommandStatusOperation<E = never> = (
@@ -1045,7 +1030,7 @@ export type IntegrationCommandStatusOperation<E = never> = (
 export type Endpoint10_10Input = {
   readonly integrationID: Integration.ID
   readonly attemptID: Integration.AttemptID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint10_10Output = void
 export type IntegrationCommandCancelOperation<E = never> = (
@@ -1070,15 +1055,13 @@ export interface IntegrationApi<E = never> {
   }
 }
 
-export type Endpoint11_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint11_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint11_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Mcp.Server> }
 export type McpListOperation<E = never> = (input?: Endpoint11_0Input) => Effect.Effect<Endpoint11_0Output, E>
 
 export type Endpoint11_1Input = {
   readonly server: string
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly config: Mcp.LocalConfig | Mcp.RemoteConfig
 }
 export type Endpoint11_1Output = void
@@ -1086,28 +1069,26 @@ export type McpAddOperation<E = never> = (input: Endpoint11_1Input) => Effect.Ef
 
 export type Endpoint11_2Input = {
   readonly server: string
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint11_2Output = void
 export type McpRemoveOperation<E = never> = (input: Endpoint11_2Input) => Effect.Effect<Endpoint11_2Output, E>
 
 export type Endpoint11_3Input = {
   readonly server: string
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint11_3Output = void
 export type McpConnectOperation<E = never> = (input: Endpoint11_3Input) => Effect.Effect<Endpoint11_3Output, E>
 
 export type Endpoint11_4Input = {
   readonly server: string
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint11_4Output = void
 export type McpDisconnectOperation<E = never> = (input: Endpoint11_4Input) => Effect.Effect<Endpoint11_4Output, E>
 
-export type Endpoint11_5Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint11_5Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint11_5Output = { readonly location: Location.Info; readonly data: Mcp.ResourceCatalog }
 export type McpResourceCatalogOperation<E = never> = (input?: Endpoint11_5Input) => Effect.Effect<Endpoint11_5Output, E>
 
@@ -1122,7 +1103,7 @@ export interface McpApi<E = never> {
 
 export type Endpoint12_0Input = {
   readonly credentialID: Credential.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly label: string
 }
 export type Endpoint12_0Output = void
@@ -1130,7 +1111,7 @@ export type CredentialUpdateOperation<E = never> = (input: Endpoint12_0Input) =>
 
 export type Endpoint12_1Input = {
   readonly credentialID: Credential.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint12_1Output = void
 export type CredentialRemoveOperation<E = never> = (input: Endpoint12_1Input) => Effect.Effect<Endpoint12_1Output, E>
@@ -1143,15 +1124,13 @@ export interface CredentialApi<E = never> {
 export type Endpoint13_0Output = ReadonlyArray<Project.Info>
 export type ProjectListOperation<E = never> = () => Effect.Effect<Endpoint13_0Output, E>
 
-export type Endpoint13_1Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint13_1Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint13_1Output = Project.Current
 export type ProjectCurrentOperation<E = never> = (input?: Endpoint13_1Input) => Effect.Effect<Endpoint13_1Output, E>
 
 export type Endpoint13_2Input = {
   readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint13_2Output = Project.Directories
 export type ProjectDirectoriesOperation<E = never> = (input: Endpoint13_2Input) => Effect.Effect<Endpoint13_2Output, E>
@@ -1162,9 +1141,7 @@ export interface ProjectApi<E = never> {
   readonly directories: ProjectDirectoriesOperation<E>
 }
 
-export type Endpoint14_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint14_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint14_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Form.Info> }
 export type FormRequestListOperation<E = never> = (input?: Endpoint14_0Input) => Effect.Effect<Endpoint14_0Output, E>
 
@@ -1208,9 +1185,7 @@ export interface FormApi<E = never> {
   readonly cancel: FormCancelOperation<E>
 }
 
-export type Endpoint15_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint15_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint15_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Permission.Request> }
 export type PermissionRequestListOperation<E = never> = (
   input?: Endpoint15_0Input,
@@ -1268,14 +1243,14 @@ export interface PermissionApi<E = never> {
 }
 
 export type Endpoint16_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly path?: RelativePath | undefined
 }
 export type Endpoint16_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<FileSystem.Entry> }
 export type FileListOperation<E = never> = (input?: Endpoint16_0Input) => Effect.Effect<Endpoint16_0Output, E>
 
 export type Endpoint16_1Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly query: string
   readonly type?: "file" | "directory" | undefined
   readonly limit?: number | undefined
@@ -1288,9 +1263,7 @@ export interface FileApi<E = never> {
   readonly find: FileFindOperation<E>
 }
 
-export type Endpoint17_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint17_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint17_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Command.Info> }
 export type CommandListOperation<E = never> = (input?: Endpoint17_0Input) => Effect.Effect<Endpoint17_0Output, E>
 
@@ -1298,9 +1271,7 @@ export interface CommandApi<E = never> {
   readonly list: CommandListOperation<E>
 }
 
-export type Endpoint18_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint18_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint18_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Skill.Info> }
 export type SkillListOperation<E = never> = (input?: Endpoint18_0Input) => Effect.Effect<Endpoint18_0Output, E>
 
@@ -1315,14 +1286,12 @@ export interface EventApi<E = never> {
   readonly subscribe: EventSubscribeOperation<E>
 }
 
-export type Endpoint20_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint20_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint20_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Pty.Info> }
 export type PtyListOperation<E = never> = (input?: Endpoint20_0Input) => Effect.Effect<Endpoint20_0Output, E>
 
 export type Endpoint20_1Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly command?: string | undefined
   readonly args?: ReadonlyArray<string> | undefined
   readonly cwd?: string | undefined
@@ -1334,14 +1303,14 @@ export type PtyCreateOperation<E = never> = (input?: Endpoint20_1Input) => Effec
 
 export type Endpoint20_2Input = {
   readonly ptyID: Pty.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint20_2Output = { readonly location: Location.Info; readonly data: Pty.Info }
 export type PtyGetOperation<E = never> = (input: Endpoint20_2Input) => Effect.Effect<Endpoint20_2Output, E>
 
 export type Endpoint20_3Input = {
   readonly ptyID: Pty.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly title?: string | undefined
   readonly size?: { readonly rows: number; readonly cols: number } | undefined
 }
@@ -1350,7 +1319,7 @@ export type PtyUpdateOperation<E = never> = (input: Endpoint20_3Input) => Effect
 
 export type Endpoint20_4Input = {
   readonly ptyID: Pty.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint20_4Output = void
 export type PtyRemoveOperation<E = never> = (input: Endpoint20_4Input) => Effect.Effect<Endpoint20_4Output, E>
@@ -1363,14 +1332,12 @@ export interface PtyApi<E = never> {
   readonly remove: PtyRemoveOperation<E>
 }
 
-export type Endpoint21_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint21_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint21_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Shell.Info> }
 export type ShellListOperation<E = never> = (input?: Endpoint21_0Input) => Effect.Effect<Endpoint21_0Output, E>
 
 export type Endpoint21_1Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly command: string
   readonly cwd?: string | undefined
   readonly timeout: number
@@ -1381,14 +1348,14 @@ export type ShellCreateOperation<E = never> = (input: Endpoint21_1Input) => Effe
 
 export type Endpoint21_2Input = {
   readonly id: Shell.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint21_2Output = { readonly location: Location.Info; readonly data: Shell.Info }
 export type ShellGetOperation<E = never> = (input: Endpoint21_2Input) => Effect.Effect<Endpoint21_2Output, E>
 
 export type Endpoint21_3Input = {
   readonly id: Shell.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly timeout: number
 }
 export type Endpoint21_3Output = { readonly location: Location.Info; readonly data: Shell.Info }
@@ -1396,7 +1363,7 @@ export type ShellTimeoutOperation<E = never> = (input: Endpoint21_3Input) => Eff
 
 export type Endpoint21_4Input = {
   readonly id: Shell.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly cursor?: number | undefined
   readonly limit?: number | undefined
 }
@@ -1413,7 +1380,7 @@ export type ShellOutputOperation<E = never> = (input: Endpoint21_4Input) => Effe
 
 export type Endpoint21_5Input = {
   readonly id: Shell.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint21_5Output = void
 export type ShellRemoveOperation<E = never> = (input: Endpoint21_5Input) => Effect.Effect<Endpoint21_5Output, E>
@@ -1427,9 +1394,7 @@ export interface ShellApi<E = never> {
   readonly remove: ShellRemoveOperation<E>
 }
 
-export type Endpoint22_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint22_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint22_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Question.Request> }
 export type QuestionRequestListOperation<E = never> = (
   input?: Endpoint22_0Input,
@@ -1458,9 +1423,7 @@ export interface QuestionApi<E = never> {
   readonly reject: QuestionRejectOperation<E>
 }
 
-export type Endpoint23_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint23_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint23_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Reference.Info> }
 export type ReferenceListOperation<E = never> = (input?: Endpoint23_0Input) => Effect.Effect<Endpoint23_0Output, E>
 
@@ -1470,7 +1433,7 @@ export interface ReferenceApi<E = never> {
 
 export type Endpoint24_0Input = {
   readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly strategy: ProjectCopy.StrategyID
   readonly directory: AbsolutePath
   readonly name?: string | undefined
@@ -1480,7 +1443,7 @@ export type ProjectCopyCreateOperation<E = never> = (input: Endpoint24_0Input) =
 
 export type Endpoint24_1Input = {
   readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly directory: AbsolutePath
   readonly force: boolean
 }
@@ -1489,7 +1452,7 @@ export type ProjectCopyRemoveOperation<E = never> = (input: Endpoint24_1Input) =
 
 export type Endpoint24_2Input = {
   readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
 }
 export type Endpoint24_2Output = void
 export type ProjectCopyRefreshOperation<E = never> = (input: Endpoint24_2Input) => Effect.Effect<Endpoint24_2Output, E>
@@ -1500,20 +1463,16 @@ export interface ProjectCopyApi<E = never> {
   readonly refresh: ProjectCopyRefreshOperation<E>
 }
 
-export type Endpoint25_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint25_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint25_0Output = { readonly location: Location.Info; readonly data: Vcs.Info }
 export type VcsGetOperation<E = never> = (input?: Endpoint25_0Input) => Effect.Effect<Endpoint25_0Output, E>
 
-export type Endpoint25_1Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint25_1Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint25_1Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Vcs.FileStatus> }
 export type VcsStatusOperation<E = never> = (input?: Endpoint25_1Input) => Effect.Effect<Endpoint25_1Output, E>
 
 export type Endpoint25_2Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly mode: Vcs.Mode
   readonly context?: number | undefined
 }
@@ -1529,9 +1488,7 @@ export interface VcsApi<E = never> {
 export type Endpoint26_0Output = ReadonlyArray<Location.Ref>
 export type DebugLocationListOperation<E = never> = () => Effect.Effect<Endpoint26_0Output, E>
 
-export type Endpoint26_1Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint26_1Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint26_1Output = void
 export type DebugLocationEvictOperation<E = never> = (input?: Endpoint26_1Input) => Effect.Effect<Endpoint26_1Output, E>
 
@@ -1539,14 +1496,12 @@ export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
 }
 
-export type Endpoint27_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
+export type Endpoint27_0Input = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type Endpoint27_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<WebSearch.Provider> }
 export type WebsearchProvidersOperation<E = never> = (input?: Endpoint27_0Input) => Effect.Effect<Endpoint27_0Output, E>
 
 export type Endpoint27_1Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly location?: { readonly directory?: string | undefined } | undefined
   readonly query: string
   readonly providerID?: WebSearch.ID | undefined
 }

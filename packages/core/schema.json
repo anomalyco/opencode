@@ -1,15 +1,11 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "e43ed7e2-b9fc-4178-beae-3646e4a976e1",
+  "id": "6307bc18-2612-47e2-acfc-2a6a68ff28c5",
   "prevIds": [
-    "db37a97f-9b5e-4c87-be8b-4feace35136c"
+    "e43ed7e2-b9fc-4178-beae-3646e4a976e1"
   ],
   "ddl": [
-    {
-      "name": "workspace",
-      "entityType": "tables"
-    },
     {
       "name": "data_migration",
       "entityType": "tables"
@@ -89,86 +85,6 @@
     {
       "name": "session_share",
       "entityType": "tables"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "type",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "''",
-      "generated": null,
-      "name": "name",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "branch",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "directory",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "extra",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "project_id",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_used",
-      "entityType": "columns",
-      "table": "workspace"
     },
     {
       "type": "text",
@@ -1592,21 +1508,6 @@
     },
     {
       "columns": [
-        "project_id"
-      ],
-      "tableTo": "project",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "nameExplicit": false,
-      "name": "fk_workspace_project_id_project_id_fk",
-      "entityType": "fks",
-      "table": "workspace"
-    },
-    {
-      "columns": [
         "active_account_id"
       ],
       "tableTo": "account",
@@ -1814,15 +1715,6 @@
       "name": "instruction_entry_pk",
       "entityType": "pks",
       "table": "instruction_entry"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "workspace_pk",
-      "table": "workspace",
-      "entityType": "pks"
     },
     {
       "columns": [

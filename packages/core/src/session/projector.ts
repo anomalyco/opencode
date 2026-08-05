@@ -8,11 +8,9 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Model } from "../model"
 import { SessionEvent } from "./event"
 import { SessionV1 } from "../v1/session"
-import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionPending } from "./pending"
-import { Workspace } from "../workspace"
 import { InstructionState } from "./instruction-state"
 import { MessageTable, PartTable, SessionPendingTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
@@ -59,7 +57,7 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
   return {
     id: info.id,
     project_id: info.projectID,
-    workspace_id: info.workspaceID ?? null,
+    workspace_id: null,
     parent_id: info.parentID,
     slug: info.slug,
     directory: info.directory,
@@ -429,14 +427,6 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (!stored) return yield* Effect.die(new SessionAlreadyProjected())
-        if (event.data.info.workspaceID) {
-          yield* db
-            .update(WorkspaceTable)
-            .set({ time_used: Date.now() })
-            .where(eq(WorkspaceTable.id, event.data.info.workspaceID))
-            .run()
-            .pipe(Effect.orDie)
-        }
       }),
     )
     yield* bus.project(SessionV1.Event.Updated, (event) =>
@@ -455,7 +445,7 @@ const layer = Layer.effectDiscard(
             directory: event.data.location.directory,
             path: event.data.subpath,
             ...(event.data.projectID ? { project_id: event.data.projectID } : {}),
-            workspace_id: event.data.location.workspaceID ? Workspace.ID.make(event.data.location.workspaceID) : null,
+            workspace_id: null,
             time_updated: DateTime.toEpochMillis(event.created),
           })
           .where(eq(SessionTable.id, event.data.sessionID))

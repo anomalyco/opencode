@@ -2540,7 +2540,7 @@ function Shell(props: ToolProps) {
           id,
           cursor,
           limit: SHELL_DISPLAY_LIMIT,
-          location: location ? { directory: location.directory, workspace: location.workspaceID } : undefined,
+          location: location ? { directory: location.directory } : undefined,
         })
         .catch(() => undefined)
       if (!response) break

@@ -3,7 +3,6 @@ import { Effect, Layer } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { PtyID } from "@opencode-ai/core/pty/schema"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
-import { Workspace } from "@opencode-ai/core/workspace"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(PtyTicket.node))
@@ -46,17 +45,14 @@ describe("PTY websocket tickets", () => {
     }),
   )
 
-  it.live("rejects tickets scoped to a different workspace", () =>
+  it.live("rejects tickets scoped to a different pty", () =>
     Effect.gen(function* () {
       const tickets = yield* PtyTicket.Service
       const ptyID = PtyID.ascending()
-      const workspaceID = Workspace.ID.ascending()
-      const issued = yield* tickets.issue({ ptyID, workspaceID })
+      const issued = yield* tickets.issue({ ptyID })
 
-      expect(yield* tickets.consume({ ptyID, workspaceID: Workspace.ID.ascending(), ticket: issued.ticket })).toBe(
-        false,
-      )
-      expect(yield* tickets.consume({ ptyID, workspaceID, ticket: issued.ticket })).toBe(true)
+      expect(yield* tickets.consume({ ptyID: PtyID.ascending(), ticket: issued.ticket })).toBe(false)
+      expect(yield* tickets.consume({ ptyID, ticket: issued.ticket })).toBe(true)
     }),
   )
 })

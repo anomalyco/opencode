@@ -9,7 +9,6 @@ import {
   Project,
   Reference,
   Session,
-  Workspace,
 } from "../src/index.js"
 import { EventManifest } from "../src/event-manifest.js"
 import { FileSystemV1 } from "../src/filesystem-v1.js"
@@ -20,7 +19,6 @@ import { SessionEvent } from "../src/session-event.js"
 import { SessionID } from "../src/session-id.js"
 import { SessionMessage } from "../src/session-message.js"
 import { SessionV1 } from "../src/session-v1.js"
-import { WorkspaceEvent } from "../src/workspace-event.js"
 
 describe("public event manifest", () => {
   test("owns the complete public event surface", () => {
@@ -60,8 +58,6 @@ describe("public event manifest", () => {
   test("uses canonical definitions for current public events", () => {
     expect(Session.Event).toBe(SessionEvent)
     expect(Session.Event.Definitions).toBe(SessionEvent.Definitions)
-    expect(Workspace.Event).toBe(WorkspaceEvent)
-    expect(Workspace.Event.Definitions).toBe(WorkspaceEvent.Definitions)
     expect(EventManifest.Latest.get("session.step.ended")).toBe(SessionEvent.Step.Ended)
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
     expect(EventManifest.Latest.get("project.updated")).toBe(Project.Event.Updated)

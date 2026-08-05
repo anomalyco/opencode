@@ -5,19 +5,6 @@ export default {
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`
-        CREATE TABLE \`workspace\` (
-          \`id\` text PRIMARY KEY,
-          \`type\` text NOT NULL,
-          \`name\` text DEFAULT '' NOT NULL,
-          \`branch\` text,
-          \`directory\` text,
-          \`extra\` text,
-          \`project_id\` text NOT NULL,
-          \`time_used\` integer NOT NULL,
-          CONSTRAINT \`fk_workspace_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
         CREATE TABLE \`data_migration\` (
           \`name\` text PRIMARY KEY,
           \`time_completed\` integer NOT NULL

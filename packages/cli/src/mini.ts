@@ -86,7 +86,7 @@ export async function runMini(input: MiniCommandInput) {
       ) =>
         resolveSessionTarget({
           client,
-          location: { directory: next.location.directory, workspace: next.location.workspaceID },
+          location: { directory: next.location.directory },
           agent: next.agent,
           model: next.model
             ? { providerID: next.model.providerID, id: next.model.modelID, variant: next.variant }

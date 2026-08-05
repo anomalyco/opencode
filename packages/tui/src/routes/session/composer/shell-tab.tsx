@@ -85,7 +85,7 @@ export function ShellTab(props: { sessionID: string }) {
           if (!entry) return
           void client.api.shell.remove({
             id: entry.id,
-            location: { directory: entry.location.directory, workspace: entry.location.workspaceID },
+            location: { directory: entry.location.directory },
           })
         },
       },

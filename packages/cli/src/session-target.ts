@@ -136,7 +136,6 @@ async function latestSession(
   const page = await client.session.list(
     {
       directory: location.directory,
-      workspace: location.workspaceID,
       parentID: null,
       limit: SESSION_PAGE_LIMIT,
       order: "desc",

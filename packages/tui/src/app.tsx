@@ -600,7 +600,6 @@ function App(props: { pair?: DialogPairCredentials }) {
         order: "desc",
         parentID: null,
         directory: location.directory,
-        workspace: location.workspaceID,
       })
       .then((response) => {
         const match = response.data[0]?.id

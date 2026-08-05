@@ -2219,7 +2219,7 @@ describe("V2 mini transport", () => {
       { signal: undefined },
     )
     expect(defaultModel).toHaveBeenCalledWith(
-      { location: { directory: "/project", workspace: "wrk_1" } },
+      { location: { directory: "/project" } },
       { signal: undefined },
     )
     await transport.close()

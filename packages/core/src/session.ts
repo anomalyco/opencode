@@ -5,7 +5,6 @@ import { Effect, Layer, Schema, Context, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, ne, or, type SQL } from "drizzle-orm"
 import { Project } from "./project"
-import { Workspace } from "./workspace"
 import { Model } from "./model"
 import { Location } from "./location"
 import { SessionMessage } from "./session/message"
@@ -59,12 +58,9 @@ import { fileURLToPath } from "url"
 
 // - by project
 //   - by subpath
-// - by workspace (home is special)
-
 export { ListAnchor }
 
 const ListInputBase = {
-  workspaceID: Workspace.ID.pipe(Schema.optional),
   search: Schema.String.pipe(Schema.optional),
   limit: PositiveInt.pipe(Schema.optional),
   order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
@@ -206,7 +202,6 @@ export interface Interface {
   readonly move: (input: {
     sessionID: SessionSchema.ID
     directory: AbsolutePath
-    workspaceID?: Location.Ref["workspaceID"]
   }) => Effect.Effect<void, NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError>
   readonly prompt: (input: {
     id?: SessionMessage.ID
@@ -346,7 +341,6 @@ const layer = Layer.effect(
           parentID: input.parentID,
           directory: location.directory,
           path: path.relative(project.directory, location.directory).replaceAll("\\", "/"),
-          workspaceID: location.workspaceID ? Workspace.ID.make(location.workspaceID) : undefined,
           title: input.title,
           agent: input.agent,
           model: input.model
@@ -434,7 +428,6 @@ const layer = Layer.effect(
         const sortColumn = SessionTable.time_updated
         const conditions: SQL[] = []
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
-        if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
@@ -712,11 +705,7 @@ const layer = Layer.effect(
         const info = yield* fs.stat(directory).pipe(Effect.catch(() => Effect.succeed(undefined)))
         if (!info) return yield* new DestinationNotFoundError({ directory })
         if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
-        if (
-          current.location.directory === directory &&
-          current.location.workspaceID === input.workspaceID
-        )
-          return
+        if (current.location.directory === directory) return
         const project = yield* projects.resolve(directory)
         yield* persistProject(project)
         if ((yield* execution.active).has(input.sessionID)) {
@@ -725,7 +714,7 @@ const layer = Layer.effect(
         }
         yield* bus.publish(SessionEvent.Moved, {
           sessionID: input.sessionID,
-          location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
+          location: Location.Ref.make({ directory }),
           projectID: project.id,
           subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
         })

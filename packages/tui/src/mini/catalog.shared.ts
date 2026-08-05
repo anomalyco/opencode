@@ -19,7 +19,6 @@ function location(ref: LocationRef) {
   return {
     location: {
       directory: ref.directory,
-      workspace: ref.workspaceID,
     },
   }
 }

@@ -684,7 +684,7 @@ async function disconnected(
 
 function location(data: ReturnType<typeof useData>) {
   const current = data.location.default()
-  return { directory: current.directory, workspace: current.workspaceID }
+  return { directory: current.directory }
 }
 
 function message(cause: unknown) {

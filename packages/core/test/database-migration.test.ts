@@ -968,9 +968,6 @@ describe("DatabaseMigration", () => {
           sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('global', '/project', 1, 1, '[]')`,
         )
         yield* db.run(
-          sql`INSERT INTO workspace (id, type, project_id, time_used) VALUES ('workspace', 'local', 'global', 1)`,
-        )
-        yield* db.run(
           sql`INSERT INTO session (id, project_id, workspace_id, slug, directory, title, version, time_created, time_updated) VALUES ('session', 'global', 'workspace', 'session', '/project', 'Before', 'test', 1, 1)`,
         )
         yield* db.run(
@@ -994,6 +991,7 @@ describe("DatabaseMigration", () => {
         // must drop before the historical rename dance and recreate after.
         yield* db.run(sql`DROP INDEX session_pending_session_compaction_idx`)
         yield* db.run(sql`ALTER TABLE session_pending RENAME TO session_input`)
+        yield* db.run(sql`CREATE TABLE workspace (id text PRIMARY KEY)`)
         yield* db.run(sql`DELETE FROM migration WHERE id = ${simplifySessionPendingMigration.id}`)
         yield* DatabaseMigration.applyOnly(db, [simplifySessionPendingMigration])
         yield* db.run(sql`DROP TABLE session_context_epoch`)
@@ -1029,7 +1027,6 @@ describe("DatabaseMigration", () => {
               (SELECT workspace_id FROM session WHERE id = 'session') AS workspaceID,
               (SELECT COUNT(*) FROM message WHERE id = 'message') AS messages,
               (SELECT COUNT(*) FROM part WHERE id = 'part') AS parts,
-              (SELECT COUNT(*) FROM workspace) AS workspaces,
               (SELECT COUNT(*) FROM session_pending) AS sessionInputs,
               (SELECT COUNT(*) FROM session_message) AS sessionMessages,
               (SELECT COUNT(*) FROM instruction_state) AS instructionStates,
@@ -1041,7 +1038,6 @@ describe("DatabaseMigration", () => {
           workspaceID: null,
           messages: 1,
           parts: 1,
-          workspaces: 0,
           sessionInputs: 0,
           sessionMessages: 0,
           instructionStates: 0,

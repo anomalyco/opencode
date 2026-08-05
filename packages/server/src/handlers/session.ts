@@ -37,7 +37,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               : ctx.query
           const page = yield* session.list({
             ...query,
-            workspaceID: query.workspace,
             limit: ctx.query.limit ?? DefaultSessionsLimit,
           })
           const sessions = page.data
@@ -213,7 +212,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             .move({
               sessionID: ctx.params.sessionID,
               directory: ctx.payload.directory,
-              workspaceID: ctx.payload.workspaceID,
             })
             .pipe(
               Effect.catchTag("Session.NotFoundError", (error) =>

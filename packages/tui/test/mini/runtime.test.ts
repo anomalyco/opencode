@@ -240,7 +240,6 @@ describe("run interactive runtime", () => {
       {
         headers: {
           "x-opencode-directory": "%2Fremote%20work",
-          "x-opencode-workspace": "wrk_1",
         },
       },
     )
@@ -575,7 +574,7 @@ describe("run interactive runtime", () => {
     painted.resolve()
     await task
 
-    const query = { location: { directory: "/session", workspace: "work-1" } }
+    const query = { location: { directory: "/session" } }
     expect(getDirectory?.()).toBe("/session")
     expect(transportLocation).toMatchObject({ directory: "/session", workspaceID: "work-1" })
     expect(catalogs.provider).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })

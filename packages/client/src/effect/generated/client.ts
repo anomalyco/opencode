@@ -285,7 +285,6 @@ const Endpoint5_0 = (raw: RawClient["server.session"]) => (input?: Endpoint5_0In
   preserveEffect<Endpoint5_0Output>()(
     raw["session.list"]({
       query: {
-        workspace: input?.["workspace"],
         limit: input?.["limit"],
         order: input?.["order"],
         search: input?.["search"],
