@@ -3,7 +3,15 @@ import fs from "fs"
 import os from "os"
 import path from "path"
 import { parseTasksMd, allChecked, uncheckedTasks } from "@/loop/spec-queue/tasks-md"
-import { resolveQueue, cursor, quarantine, compareOrder, DefaultPriority, type QueueChange } from "@/loop/spec-queue/queue"
+import {
+  resolveQueue,
+  cursor,
+  quarantine,
+  compareOrder,
+  nearbyOpenspecRepos,
+  DefaultPriority,
+  type QueueChange,
+} from "@/loop/spec-queue/queue"
 import { buildBrief } from "@/loop/spec-queue/brief"
 import {
   evaluateImplement,
@@ -371,5 +379,39 @@ describe("standing instruction (Auto's optional prompt)", () => {
     fs.writeFileSync(path.join(root, "openspec", "changes", "aaa-first", ".openspec.yaml"), "created: 2026-01-01\n")
     fs.writeFileSync(path.join(root, "openspec", "changes", "zzz-second", ".openspec.yaml"), "created: 2026-02-01\n")
     expect(cursor(resolveQueue(root))?.slug).toBe("aaa-first")
+  })
+})
+
+describe("starting somewhere without a backlog", () => {
+  test("an empty queue distinguishes 'not an openspec repo' from 'nothing left to do'", () => {
+    const notARepo = fs.mkdtempSync(path.join(os.tmpdir(), "no-openspec-"))
+    expect(resolveQueue(notARepo).hasOpenspec).toBe(false)
+
+    // A real openspec repo whose changes are all finished is a DRAINED queue,
+    // which is a completely different thing to report.
+    const drained = fixtureTree({ done: { tasks: DONE } })
+    const resolved = resolveQueue(drained)
+    expect(resolved.hasOpenspec).toBe(true)
+    expect(resolved.eligible).toHaveLength(0)
+    expect(resolved.complete).toEqual(["done"])
+  })
+
+  test("a workspace of repos can point at the repos inside it", () => {
+    // The ~/dev case: many repos side by side, each with its own openspec.
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-"))
+    for (const repo of ["zeta-repo", "alpha-repo"]) {
+      fs.mkdirSync(path.join(workspace, repo, "openspec", "changes"), { recursive: true })
+    }
+    fs.mkdirSync(path.join(workspace, "not-a-repo"), { recursive: true })
+    fs.mkdirSync(path.join(workspace, ".hidden", "openspec", "changes"), { recursive: true })
+
+    const found = nearbyOpenspecRepos(workspace)
+    expect(found).toEqual(["alpha-repo", "zeta-repo"])
+    expect(found).not.toContain("not-a-repo")
+    expect(found).not.toContain(".hidden")
+  })
+
+  test("a directory that cannot be read is not an error", () => {
+    expect(nearbyOpenspecRepos(path.join(os.tmpdir(), "definitely-missing-dir-xyz"))).toEqual([])
   })
 })

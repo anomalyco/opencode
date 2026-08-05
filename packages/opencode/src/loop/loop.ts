@@ -33,7 +33,14 @@ import {
   type Exec,
   type GateOptions,
 } from "./spec-queue/gates"
-import { cursor, quarantine, resolveQueue, unquarantine, type QueueChange } from "./spec-queue/queue"
+import {
+  cursor,
+  nearbyOpenspecRepos,
+  quarantine,
+  resolveQueue,
+  unquarantine,
+  type QueueChange,
+} from "./spec-queue/queue"
 import { QueueDenyRules, withoutCredentials } from "./spec-queue/authority"
 
 import { contractPart, DEFAULT_COMPLETION_TOKEN, matchesCompletion, promptDisablesCompletion } from "./completion"
@@ -711,6 +718,23 @@ export const layer = Layer.effect(
         // decided to work, and in what order, up front.
         if (initial) {
           const first = resolveQueue(initial.info.directory, initial.queue?.only)
+          // "Nothing eligible" and "this is not an openspec repo" are the same
+          // empty queue but completely different situations. Reporting the
+          // second as a drained backlog tells someone their work is done when
+          // in fact nothing was ever found — most likely because the run was
+          // started in a workspace directory rather than in a repo.
+          if (!first.hasOpenspec) {
+            const nearby = nearbyOpenspecRepos(initial.info.directory)
+            yield* finishQueue(
+              id,
+              "error",
+              `no openspec/changes directory in ${initial.info.directory} — nothing was attempted.` +
+                (nearby.length > 0
+                  ? ` These subdirectories are openspec repos, start the run inside one of them: ${nearby.join(", ")}`
+                  : " Start the run from a repository that has an openspec/changes directory."),
+            )
+            return
+          }
           yield* Effect.logInfo("queue resolved", {
             "queue.order": first.eligible.map((c) => c.slug).join(", ") || "(nothing eligible)",
             "queue.quarantined": first.quarantined.join(", ") || "(none)",

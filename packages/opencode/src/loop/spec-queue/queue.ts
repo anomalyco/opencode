@@ -48,6 +48,13 @@ export interface ResolvedQueue {
   quarantined: string[]
   /** changes whose checkboxes are all checked (complete, nothing to do) */
   complete: string[]
+  /**
+   * False when there is no `openspec/changes` here at all. "Nothing eligible"
+   * and "this is not an openspec repo" both produce an empty queue but mean
+   * completely different things, and reporting the second as a drained backlog
+   * is a lie — the caller needs to tell them apart.
+   */
+  hasOpenspec: boolean
 }
 
 function hasBlocker(changeDir: string): boolean {
@@ -105,8 +112,9 @@ function readTasks(changeDir: string): TaskItem[] | undefined {
  */
 export function resolveQueue(root: string, only?: readonly string[]): ResolvedQueue {
   const changesDir = path.join(root, "openspec", "changes")
-  const result: ResolvedQueue = { eligible: [], quarantined: [], complete: [] }
+  const result: ResolvedQueue = { eligible: [], quarantined: [], complete: [], hasOpenspec: false }
   if (!fs.existsSync(changesDir)) return result
+  result.hasOpenspec = true
 
   const listed = fs
     .readdirSync(changesDir, { withFileTypes: true })
@@ -182,6 +190,28 @@ export function unquarantine(change: QueueChange): void {
   if (fs.existsSync(file)) fs.rmSync(file, { force: true })
   // Leave .skein itself if anything else lives there.
   if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
+}
+
+/**
+ * Directories one level below `root` that ARE openspec repos. A workspace like
+ * ~/dev holds many repos, each with its own openspec — starting a run there is
+ * an easy mistake, and "no backlog here" is far more useful when it can say
+ * where the backlogs actually are.
+ */
+export function nearbyOpenspecRepos(root: string, limit = 12): string[] {
+  const found: string[] = []
+  let entries: fs.Dirent[]
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true })
+  } catch {
+    return found
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue
+    if (fs.existsSync(path.join(root, entry.name, "openspec", "changes"))) found.push(entry.name)
+    if (found.length >= limit) break
+  }
+  return found.sort()
 }
 
 export * as SpecQueue from "./queue"
