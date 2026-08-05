@@ -443,16 +443,11 @@ const layer = Layer.effect(
             })
           }
 
-          if (
-            llmFailure &&
-            llmError &&
-            llmFailure.reason._tag === "InvalidProviderOutput" &&
-            llmFailure.reason.classification === "incomplete-stream" &&
-            record.outputStarted &&
-            tools.declines.length === 0 &&
-            !tools.interrupted &&
-            tools.failure === undefined
-          )
+          const incompleteStream =
+            llmFailure?.reason._tag === "InvalidProviderOutput" &&
+            llmFailure.reason.classification === "incomplete-stream"
+          const toolsAllowContinuation = tools.declines.length === 0 && !tools.interrupted
+          if (llmError && incompleteStream && record.outputStarted && toolsAllowContinuation)
             return CallOutcome.Continue({
               cause: llmFailure,
               error: llmError,

@@ -4137,6 +4137,44 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("continues an incomplete stream after settling a local tool defect", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Continue after tool defect")
+      yield* TestLLM.push(
+        TestLLM.failAfter(
+          incompleteStream(),
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-defect-before-close", name: "defect", input: {} }),
+        ),
+      )
+      yield* TestLLM.push(TestLLM.text("Recovered", "tool-defect-recovery"))
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      while (!(yield* recordedEventTypes(sessionID)).includes("session.retry.scheduled.1")) yield* Effect.yieldNow
+      yield* TestClock.adjust("2 seconds")
+      yield* Fiber.join(run)
+
+      expect(messageRoles(requests[1])).toEqual(["user", "assistant", "tool", "user"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-defect-before-close",
+              state: { status: "error", error: { type: "unknown", message: "unexpected tool defect" } },
+            },
+          ],
+        },
+        { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
   it.effect("stops incomplete stream continuations after five total attempts", () =>
     Effect.gen(function* () {
       const session = yield* setup
