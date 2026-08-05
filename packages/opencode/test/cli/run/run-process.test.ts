@@ -188,6 +188,28 @@ describe("opencode run (non-interactive subprocess)", () => {
     60_000,
   )
 
+  // Every other test passes --model, so they can't tell the model being read off
+  // the message from one read off the argv. Without --model the server resolves
+  // the configured default and the argv holds nothing, so this run only reports
+  // a model if it really comes from the assistant message.
+  cliIt.concurrent(
+    "--format json attributes events to the resolved default model without --model",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.text("default model run")
+        const result = yield* opencode.spawn(["run", "--format", "json", "say hi"])
+        opencode.expectExit(result, 0)
+
+        const events = opencode.parseJsonEvents(result.stdout)
+        expect(events.length).toBeGreaterThan(0)
+        for (const event of events) {
+          expect(event.providerID).toBe("test")
+          expect(event.modelID).toBe("test-model")
+        }
+      }),
+    60_000,
+  )
+
   cliIt.concurrent(
     "--format json emits a pure error record for a rejected prompt request",
     ({ opencode }) =>
