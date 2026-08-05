@@ -264,7 +264,6 @@ export interface ParserState {
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<string>
   readonly hasFunctionCall: boolean
-  readonly hasFunctionCallError: boolean
   readonly lifecycle: Lifecycle.State
   readonly messageItems: ReadonlySet<string>
   readonly messagePhase: (value: unknown) => MessagePhase | null | undefined
@@ -609,16 +608,15 @@ const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerMetadata
   })
 }
 
-const mapFinishReason = (event: Event, hasFunctionCall: boolean, hasFunctionCallError: boolean): FinishReason => {
+const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason => {
   const reason = event.response?.incomplete_details?.reason
-  if (reason === "max_output_tokens") return "length"
-  if (reason === "content_filter") return "content-filter"
-  if (hasFunctionCallError) return "error"
   if (reason === undefined || reason === null) {
     if (hasFunctionCall) return "tool-calls"
     if (event.type === "response.incomplete") return "unknown"
     return "stop"
   }
+  if (reason === "max_output_tokens") return "length"
+  if (reason === "content_filter") return "content-filter"
   return hasFunctionCall ? "tool-calls" : "unknown"
 }
 
@@ -898,8 +896,9 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
       {
         ...state,
         lifecycle,
-        hasFunctionCall: resultEvents.some(LLMEvent.is.toolCall) || state.hasFunctionCall,
-        hasFunctionCallError: resultEvents.some(LLMEvent.is.toolInputError) || state.hasFunctionCallError,
+        hasFunctionCall:
+          resultEvents.some((event) => LLMEvent.is.toolCall(event) || LLMEvent.is.toolInputError(event)) ||
+          state.hasFunctionCall,
         tools: result.tools,
       },
       events,
@@ -939,7 +938,7 @@ const onResponseFinish = (state: ParserState, event: Event): StepResult => {
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.finish(state.lifecycle, events, {
     reason: {
-      normalized: mapFinishReason(event, state.hasFunctionCall, state.hasFunctionCallError),
+      normalized: mapFinishReason(event, state.hasFunctionCall),
       raw: event.response?.incomplete_details?.reason,
     },
     usage: mapUsage(event.response?.usage, state.providerMetadataKey),
@@ -1032,7 +1031,6 @@ export const initial = (request: LLMRequest, extension: Extension = BASE): Parse
   name: extension.name,
   providerMetadataKey: request.model.route.providerMetadataKey ?? "openresponses",
   hasFunctionCall: false,
-  hasFunctionCallError: false,
   tools: ToolStream.empty<string>(),
   lifecycle: Lifecycle.initial(),
   messageItems: new Set<string>(),
