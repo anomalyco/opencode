@@ -1721,6 +1721,7 @@ export default function Page() {
         api: sdk().api.session,
         sync: sync(),
         serverSync: serverSync(),
+        session: () => sync().session.get(input.sessionID),
         draft: item,
         optimisticBusy: item.sessionDirectory === sdk().directory,
       }).catch((err) => {

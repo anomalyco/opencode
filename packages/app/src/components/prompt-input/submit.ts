@@ -45,6 +45,7 @@ type FollowupSendInput = {
   api: DirectorySDK["api"]["session"]
   serverSync: ServerSync
   sync: DirectorySync
+  session: Accessor<{ agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined>
   draft: FollowupDraft
   messageID?: string
   optimisticBusy?: boolean
@@ -157,6 +158,25 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       return false
     }
 
+    const session = input.session()
+    if (session?.agent !== input.draft.agent) {
+      await input.api.switchAgent({ sessionID: input.draft.sessionID, agent: input.draft.agent })
+    }
+    if (
+      session?.model?.providerID !== input.draft.model.providerID ||
+      session.model.id !== input.draft.model.modelID ||
+      (session.model.variant ?? "default") !== (input.draft.variant ?? "default")
+    ) {
+      await input.api.switchModel({
+        sessionID: input.draft.sessionID,
+        model: {
+          id: input.draft.model.modelID,
+          providerID: input.draft.model.providerID,
+          variant: input.draft.variant,
+        },
+      })
+    }
+
     await input.api.prompt({
       sessionID: input.draft.sessionID,
       id: messageID,
@@ -197,7 +217,9 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
 type PromptSubmitInput = {
   prompt: ReturnType<typeof usePrompt>
-  info: Accessor<{ id: string } | undefined>
+  info: Accessor<
+    { id: string; agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined
+  >
   imageAttachments: Accessor<ImageAttachmentPart[]>
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
@@ -595,6 +617,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       api: sdk().api.session,
       sync: sync(),
       serverSync: serverSync(),
+      session: () => input.info() ?? session,
       draft,
       messageID,
       optimisticBusy: sessionDirectory === projectDirectory,

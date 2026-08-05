@@ -31,6 +31,12 @@ const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string
 const sentPrompts: string[] = []
 const promptInputs: unknown[] = []
 const sentCommands: unknown[] = []
+const switchedAgents: Array<{ sessionID: string; agent: string }> = []
+const switchedModels: Array<{
+  sessionID: string
+  model: { id: string; providerID: string; variant?: string }
+}> = []
+const sessionRequestOrder: string[] = []
 const commands: Array<{ name: string }> = []
 let serverSessionSyncs = 0
 
@@ -93,9 +99,21 @@ const clientFor = (directory: string) => {
           }
         },
         prompt: async (input: unknown) => {
+          sessionRequestOrder.push("prompt")
           sentPrompts.push(directory)
           promptInputs.push(input)
           return { data: undefined }
+        },
+        switchAgent: async (input: { sessionID: string; agent: string }) => {
+          sessionRequestOrder.push("agent")
+          switchedAgents.push(input)
+        },
+        switchModel: async (input: {
+          sessionID: string
+          model: { id: string; providerID: string; variant?: string }
+        }) => {
+          sessionRequestOrder.push("model")
+          switchedModels.push(input)
         },
         command: async (input: unknown) => {
           sentCommands.push(input)
@@ -279,6 +297,9 @@ beforeEach(() => {
   sentPrompts.length = 0
   promptInputs.length = 0
   sentCommands.length = 0
+  switchedAgents.length = 0
+  switchedModels.length = 0
+  sessionRequestOrder.length = 0
   commands.length = 0
   promptValue = [{ type: "text", content: "ls", start: 0, end: 2 }]
   params = {}
@@ -436,13 +457,17 @@ describe("prompt submit worktree selection", () => {
     expect(promotedDrafts).toEqual([{ draftID: "draft-1", server: "project-server", sessionId: "session-1" }])
   })
 
-  test("includes the selected variant on optimistic prompts", async () => {
+  test("switches the selected agent and model before prompting", async () => {
     params = { id: "session-1" }
     variant = "high"
 
     const submit = createPromptSubmit({
       prompt,
-      info: () => ({ id: "session-1" }),
+      info: () => ({
+        id: "session-1",
+        agent: "old-agent",
+        model: { id: "old-model", providerID: "old-provider" },
+      }),
       imageAttachments: () => [],
       commentCount: () => 0,
       autoAccept: () => false,
@@ -471,6 +496,14 @@ describe("prompt submit worktree selection", () => {
       },
     })
     expect(sentPrompts).toEqual(["/repo/main"])
+    expect(switchedAgents).toEqual([{ sessionID: "session-1", agent: "agent" }])
+    expect(switchedModels).toEqual([
+      {
+        sessionID: "session-1",
+        model: { id: "model", providerID: "provider", variant: "high" },
+      },
+    ])
+    expect(sessionRequestOrder).toEqual(["agent", "model", "prompt"])
     expect(promptInputs[0]).toMatchObject({
       sessionID: "session-1",
       text: "ls",
