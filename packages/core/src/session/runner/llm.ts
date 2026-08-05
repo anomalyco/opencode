@@ -36,7 +36,8 @@ import { SessionUsage } from "../usage"
 /** How one model call ended: settled, awaiting a scheduled retry, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean; readonly step: number }
-  Retry: { readonly step: number; readonly mode: SessionRunnerRetry.RetryableFailure["mode"] }
+  Retry: { readonly step: number }
+  Continue: { readonly cause: AIError; readonly error: SessionRunnerRetry.RetryableFailure["error"]; readonly step: number }
   Restart: { readonly step: number; readonly recoveredOverflow: boolean }
 }>
 const CallOutcome = Data.taggedEnum<CallOutcome>()
@@ -165,17 +166,15 @@ const layer = Layer.effect(
        */
       const waitForRetry = (failure: SessionRunnerRetry.RetryableFailure) =>
         retry(failure).pipe(
-          Effect.as(CallOutcome.Retry({ step: failure.step, mode: failure.mode })),
+          Effect.as(CallOutcome.Retry({ step: failure.step })),
           Pull.catchDone(() =>
-            failure.mode === "continue"
-              ? Effect.fail(failure.cause)
-              : bus
-                  .publish(SessionEvent.Step.Failed, {
-                    sessionID,
-                    assistantMessageID,
-                    error: failure.error,
-                  })
-                  .pipe(Effect.andThen(Effect.fail(failure.cause))),
+            bus
+              .publish(SessionEvent.Step.Failed, {
+                sessionID,
+                assistantMessageID,
+                error: failure.error,
+              })
+              .pipe(Effect.andThen(Effect.fail(failure.cause))),
           ),
         )
       let currentPromotable: SessionPending.Promotable | undefined = promotable
@@ -191,7 +190,14 @@ const layer = Layer.effect(
           assistantMessageID,
         ).pipe(Effect.catchTag("SessionRunner.RetryableFailure", waitForRetry))
         if (outcome._tag === "Completed") return { needsContinuation: outcome.needsContinuation, step: outcome.step }
-        if (outcome._tag === "Retry" && outcome.mode === "continue") {
+        if (outcome._tag === "Continue") {
+          yield* retry(
+            new SessionRunnerRetry.RetryableFailure({
+              cause: outcome.cause,
+              error: outcome.error,
+              step: outcome.step,
+            }),
+          ).pipe(Pull.catchDone(() => Effect.fail(outcome.cause)))
           yield* bus.publish(SessionEvent.Synthetic, {
             sessionID,
             text: CONTINUE_AFTER_INCOMPLETE_STREAM,
@@ -393,7 +399,6 @@ const layer = Layer.effect(
               cause: llmFailure,
               error: llmError,
               step: currentStep,
-              mode: "retry",
             })
           }
           if (llmError) yield* publisher.failAssistant(llmError)
@@ -441,17 +446,17 @@ const layer = Layer.effect(
           if (
             llmFailure &&
             llmError &&
-            SessionRunnerRetry.isIncompleteStream(llmFailure) &&
+            llmFailure.reason._tag === "InvalidProviderOutput" &&
+            llmFailure.reason.classification === "incomplete-stream" &&
             record.outputStarted &&
             tools.declines.length === 0 &&
             !tools.interrupted &&
             tools.failure === undefined
           )
-            return yield* new SessionRunnerRetry.RetryableFailure({
+            return CallOutcome.Continue({
               cause: llmFailure,
               error: llmError,
               step: currentStep,
-              mode: "continue",
             })
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
