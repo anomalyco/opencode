@@ -121,6 +121,10 @@
       var(--v2-grey-300);
   }
 
+  &:dir(rtl)[data-checked] [data-slot="switch-thumb"] {
+    transform: translateX(-8px);
+  }
+
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
     background:
       linear-gradient(
@@ -133,6 +137,10 @@
 
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
     transform: translateX(7px);
+  }
+
+  &:dir(rtl)[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
+    transform: translateX(-7px);
   }
 
   &[data-disabled] {
