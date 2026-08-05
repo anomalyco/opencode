@@ -48,7 +48,7 @@ export function normalizePermissionRequest(input: PermissionRequest | LegacyPerm
     always: input.save ?? [],
     metadata: input.metadata ?? {},
     tool:
-      input.source?.type === "tool" ? { messageID: input.source.messageID, callID: input.source.callID } : undefined,
+      input.source?.type === "tool" ? { messageID: input.source.messageID, callID: input.source.id } : undefined,
   }
 }
 
