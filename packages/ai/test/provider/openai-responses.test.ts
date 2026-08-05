@@ -1599,7 +1599,7 @@ describe("OpenAI Responses route", () => {
         name: "lookup",
         raw: '{"query":"partial',
       })
-      expect(response.finishReason.normalized).toBe("tool-calls")
+      expect(response.finishReason.normalized).toBe("error")
       expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()
     }),
   )
@@ -1626,7 +1626,7 @@ describe("OpenAI Responses route", () => {
         name: "lookup",
         raw: '{"query":"partial',
       })
-      expect(response.finishReason.normalized).toBe("tool-calls")
+      expect(response.finishReason.normalized).toBe("error")
     }),
   )
 
