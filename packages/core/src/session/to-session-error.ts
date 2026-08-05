@@ -41,10 +41,11 @@ export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof Question.RejectedError) return { type: "aborted", message: cause.message }
   if (cause instanceof ToolFailure || cause instanceof Tool.Error) {
     if (cause.error === undefined) return { type: "tool.execution", message: cause.message }
+    if (cause.error instanceof PlatformError)
+      return { type: "tool.execution", message: `${cause.message}: ${platformErrorMessage(cause.error)}` }
     const unwrapped = toSessionError(cause.error)
-    return cause.error instanceof PlatformError
-      ? { ...unwrapped, message: `${cause.message}: ${platformErrorMessage(cause.error)}` }
-      : unwrapped
+    if (unwrapped.message === "") return { ...unwrapped, type: "tool.execution", message: cause.message }
+    return unwrapped
   }
   if (cause instanceof StepFailedError) return cause.error
   if (cause instanceof AgentNotFoundError) return { type: "unknown", message: cause.message }
@@ -57,6 +58,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
   )
     return { type: "provider.no-route", message: cause.message }
   if (cause instanceof Integration.AuthorizationError) return { type: "provider.auth", message: cause.message }
+  if (cause instanceof PlatformError) return { type: "unknown", message: platformErrorMessage(cause) }
   return { type: "unknown", message: cause instanceof Error ? cause.message : String(cause) }
 }
 
@@ -69,7 +71,7 @@ function providerError(type: string, reason: AIError["reason"]): SessionError.Er
 function platformErrorMessage(error: PlatformError) {
   const reason = error.reason
   if (reason._tag === "BadArgument")
-    return `${reason.module}.${reason.method} rejected an invalid argument${reason.description ? `: ${reason.description}` : ""}`
+    return `invalid argument${reason.description ? `: ${reason.description}` : ""}`
 
   const label = (() => {
     switch (reason._tag) {
@@ -99,5 +101,5 @@ function platformErrorMessage(error: PlatformError) {
   })()
   const target = reason.pathOrDescriptor === undefined ? "" : `: ${reason.pathOrDescriptor}`
   const description = reason.description === undefined ? "" : ` (${reason.description})`
-  return `${reason.module}.${reason.method} failed: ${label}${target}${description}`
+  return `${label}${target}${description}`
 }

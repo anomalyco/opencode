@@ -257,7 +257,7 @@ describe("ShellTool", () => {
     ),
   )
 
-  it.live("formats filesystem details when the workdir does not exist", () =>
+  it.live("reports a missing workdir", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -270,8 +270,8 @@ describe("ShellTool", () => {
               expect(settled).toEqual({
                 status: "error",
                 error: {
-                  type: "unknown",
-                  message: `Unable to execute command: ${cwdCommand}: FileSystem.stat failed: not found: ${path.join(tmp.path, "missing")}`,
+                  type: "tool.execution",
+                  message: `Working directory does not exist: ${path.join(tmp.path, "missing")}`,
                 },
               }),
             ),

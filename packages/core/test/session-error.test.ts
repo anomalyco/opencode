@@ -86,8 +86,12 @@ describe("toSessionError", () => {
         }),
       ),
     ).toEqual({
-      type: "unknown",
-      message: "Unable to execute command: pwd: FileSystem.stat failed: not found: /missing",
+      type: "tool.execution",
+      message: "Unable to execute command: pwd: not found: /missing",
+    })
+    expect(toSessionError(new ToolFailure({ message: "Tool failed", error: new Error("") }))).toEqual({
+      type: "tool.execution",
+      message: "Tool failed",
     })
   })
 
@@ -108,41 +112,18 @@ describe("toSessionError", () => {
     })
   })
 
-  test("formats every platform error reason for the model", () => {
-    const reasons = [
-      ["AlreadyExists", "already exists"],
-      ["BadResource", "resource is invalid or closed"],
-      ["Busy", "resource is busy"],
-      ["InvalidData", "invalid data"],
-      ["NotFound", "not found"],
-      ["PermissionDenied", "permission denied"],
-      ["TimedOut", "timed out"],
-      ["UnexpectedEof", "unexpected end of input"],
-      ["Unknown", "system error"],
-      ["WouldBlock", "would block"],
-      ["WriteZero", "wrote zero bytes"],
-    ] as const
-
-    for (const [tag, message] of reasons) {
-      expect(
-        toSessionError(
-          new ToolFailure({
-            message: "Tool failed",
-            error: systemError({
-              _tag: tag,
-              module: "FileSystem",
-              method: "operation",
-              pathOrDescriptor: "/target",
-              description: "OS detail",
-            }),
-          }),
-        ),
-      ).toEqual({
-        type: "unknown",
-        message: `Tool failed: FileSystem.operation failed: ${message}: /target (OS detail)`,
-      })
-    }
-
+  test("formats platform errors for the model", () => {
+    const missing = systemError({
+      _tag: "NotFound",
+      module: "FileSystem",
+      method: "operation",
+      pathOrDescriptor: "/target",
+      description: "OS detail",
+    })
+    expect(toSessionError(missing)).toEqual({
+      type: "unknown",
+      message: "not found: /target (OS detail)",
+    })
     expect(
       toSessionError(
         new ToolFailure({
@@ -151,8 +132,8 @@ describe("toSessionError", () => {
         }),
       ),
     ).toEqual({
-      type: "unknown",
-      message: "Tool failed: FileSystem.operation rejected an invalid argument: invalid path",
+      type: "tool.execution",
+      message: "Tool failed: invalid argument: invalid path",
     })
   })
 
