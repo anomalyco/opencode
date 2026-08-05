@@ -133,6 +133,8 @@ describe("opencode run (non-interactive subprocess)", () => {
           {
             type: "text",
             part: expect.objectContaining({ type: "text", text: "structured output" }),
+            providerID: provider,
+            modelID: model,
           },
           {
             type: "step_finish",
@@ -152,24 +154,31 @@ describe("opencode run (non-interactive subprocess)", () => {
     60_000,
   )
 
-  // The model only exists on the assistant message, so a step event has to pick
-  // it up from there. Running a non-default model proves the attribution follows
-  // the model that produced the step instead of a fixed value.
+  // The model only exists on the assistant message, so the events have to pick it
+  // up from there. Running a non-default model proves the attribution follows the
+  // model that produced the part instead of a fixed value, and a tool call makes
+  // the run span several part types.
   cliIt.concurrent(
-    "--format json attributes step events to the model that produced them",
+    "--format json attributes every part-bearing event to the model that produced it",
     ({ llm, opencode }) =>
       Effect.gen(function* () {
-        yield* llm.text("from the alt model")
+        yield* llm.push(
+          reply().text("before tool").tool("bash", {
+            command: "printf tool-output",
+            description: "Print deterministic output",
+          }),
+        )
+        yield* llm.text("after tool")
         const result = yield* opencode.run("say hi", { format: "json", model: "test/test-model-alt" })
         opencode.expectExit(result, 0)
 
-        const steps = opencode
-          .parseJsonEvents(result.stdout)
-          .filter((event) => event.type === "step_start" || event.type === "step_finish")
-        expect(steps.length).toBeGreaterThan(0)
-        for (const step of steps) {
-          expect(step.providerID).toBe("test")
-          expect(step.modelID).toBe("test-model-alt")
+        const events = opencode.parseJsonEvents(result.stdout)
+        expect(new Set(events.map((event) => event.type))).toEqual(
+          new Set(["step_start", "text", "tool_use", "step_finish"]),
+        )
+        for (const event of events) {
+          expect(event.providerID).toBe("test")
+          expect(event.modelID).toBe("test-model-alt")
         }
       }),
     60_000,

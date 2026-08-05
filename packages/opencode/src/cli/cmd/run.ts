@@ -731,8 +731,10 @@ export const RunCommand = effectCmd({
               const part = event.properties.part
               if (part.sessionID !== sessionID) continue
 
+              const model = models.get(part.messageID)
+
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
-                if (emit("tool_use", { part })) continue
+                if (emit("tool_use", { part, ...model })) continue
                 if (part.state.status === "completed") {
                   await tool(part)
                   continue
@@ -753,15 +755,15 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "step-start") {
-                if (emit("step_start", { part, ...models.get(part.messageID) })) continue
+                if (emit("step_start", { part, ...model })) continue
               }
 
               if (part.type === "step-finish") {
-                if (emit("step_finish", { part, ...models.get(part.messageID) })) continue
+                if (emit("step_finish", { part, ...model })) continue
               }
 
               if (part.type === "text" && part.time?.end) {
-                if (emit("text", { part })) continue
+                if (emit("text", { part, ...model })) continue
                 const text = part.text.trim()
                 if (!text) continue
                 if (!process.stdout.isTTY) {
@@ -774,7 +776,7 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "reasoning" && part.time?.end && thinking) {
-                if (emit("reasoning", { part })) continue
+                if (emit("reasoning", { part, ...model })) continue
                 const text = part.text.trim()
                 if (!text) continue
                 const line = `Thinking: ${text}`
