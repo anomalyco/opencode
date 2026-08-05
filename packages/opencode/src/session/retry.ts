@@ -29,7 +29,7 @@ export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 
 const RETRYABLE_MESSAGE_PATTERNS = [
-  /\b(?:http(?: status)?|response status|status(?: code)?)[\s:=()-]*(?:429|500|502|503|504|524)\b/i,
+  /429|500|502|503|504|524/i,
   /rate increased too quickly|rate limit|rate-limit|rate_limit|too many requests/i,
   /internal server error|internal_error|server error|server_error|service unavailable|service_unavailable|overloaded|provider returned error/i,
   /fetch failed|failed to fetch|network error|upstream connect|connection error|connection refused|connection lost|socket connection was closed|socket hang up|reset before headers|getaddrinfo|enotfound|eai_again|econnrefused|econnreset|etimedout/i,

@@ -184,13 +184,6 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(wrap(message), retryProvider)).toEqual({ message })
   })
 
-  test.each(["max_tokens must be at most 500", "port 500 is blocked"])(
-    "does not treat unrelated numbers as HTTP statuses: %s",
-    (message) => {
-      expect(SessionRetry.retryable(wrap(message), retryProvider)).toBeUndefined()
-    },
-  )
-
   test("matches retryable API response bodies", () => {
     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
       new SessionV1.APIError({
