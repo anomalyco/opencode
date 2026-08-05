@@ -632,6 +632,18 @@ const layer = Layer.effect(
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
+        // Auto-continue provider-error families: a 400 "reasoning_content ...
+        // must be passed back to the API" (DeepSeek thinking mode) and
+        // "AI_JSONParseError: JSON parsing failed: ..." are NOT terminal — a
+        // minimal "continue" user message resumes the session and it completes
+        // normally (confirmed live in the agent-teams relay). A plain retry
+        // re-sends the identical frozen request and fails identically, so when
+        // the retry policy fires for one of these errors we append a synthetic
+        // "continue" user message to the retried request — mirroring the relay.
+        // Bounded to one append per process call; the retry policy caps total
+        // attempts so a genuinely stuck session still halts.
+        let autoContinueAdded = false
+
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
@@ -662,6 +674,16 @@ const layer = Layer.effect(
                 provider: input.model.providerID,
                 parse,
                 set: (info) => {
+                  if (
+                    !autoContinueAdded &&
+                    SessionRetry.isAutoContinueError(info.message)
+                  ) {
+                    autoContinueAdded = true
+                    // Append the same minimal "continue" prompt the relay uses
+                    // to recover these transient provider errors. This is what
+                    // makes the retried request differ from the rejected one.
+                    streamInput.messages.push({ role: "user", content: "continue" })
+                  }
                   return status.set(ctx.sessionID, {
                     type: "retry",
                     attempt: info.attempt,

@@ -28,6 +28,8 @@ export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 
+// Retryable message patterns (upstream #40707): retry 5xx/429/network/timeout
+// class errors even when the provider SDK doesn't mark them retryable.
 const RETRYABLE_MESSAGE_PATTERNS = [
   /429|500|502|503|504|524/i,
   /rate increased too quickly|rate limit|rate-limit|rate_limit|too many requests/i,
@@ -36,6 +38,40 @@ const RETRYABLE_MESSAGE_PATTERNS = [
   /^timeout$|\b(?:request|response|connection|network|stream|read) (?:timeout|timed out|time out)\b/i,
   /try your request again|retry your request|resource exhausted|resource_exhausted/i,
 ]
+
+// Auto-continue provider-error families. These transient families recover by
+// re-sending a minimal "continue" prompt — the session is NOT actually failed
+// (confirmed live in the agent-teams relay):
+//   1. DeepSeek thinking mode: when a request carries tools, the previous
+//      turn's `reasoning_content` must be passed back on every subsequent
+//      request, otherwise the provider rejects the step with a 400:
+//        "The `reasoning_content` in the thinking mode must be passed back to the API"
+//   2. AI JSON parse failures that surface as:
+//        "AI_JSONParseError: JSON parsing failed: Text: ..."
+//   3. Provider-overload 503 request queue full:
+//        "Streaming response failed: [503] The request queue is full."
+// A same-request retry is deterministic and fails identically (for the 400-class
+// families), so the processor reforms the request (appends a "continue" user
+// message) before the retried stream runs. Retries for these families are
+// capped so a genuinely stuck session still surfaces its error.
+export const AUTO_CONTINUE_MAX = 2 // max auto-"continue" retries for transient provider errors
+
+// True for the auto-continue provider-error families. Matches the exact wording
+// seen in production without over-matching generic errors.
+export function isAutoContinueError(text: string) {
+  return (
+    (/reasoning_content/i.test(text) && /must be passed back/i.test(text)) ||
+    /AI_JSONParseError/i.test(text) ||
+    /JSON parsing failed/i.test(text) ||
+    /request queue is full/i.test(text)
+  )
+}
+
+function isAutoContinueAPIError(error: Err) {
+  if (!SessionV1.APIError.isInstance(error)) return false
+  return isAutoContinueError(String(error.data.message)) ||
+    isAutoContinueError(String(error.data.responseBody ?? ""))
+}
 
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
@@ -78,6 +114,18 @@ export function retryable(error: Err, provider: string) {
   // context overflow errors should not be retried
   if (SessionV1.ContextOverflowError.isInstance(error)) return undefined
   if (SessionV1.APIError.isInstance(error)) {
+    // Auto-continue families (DeepSeek reasoning_content + AI JSON parse):
+    // the provider rejects the step but a "continue" prompt resumes it.
+    // Classified as retryable so the processor can reform the request (append
+    // a minimal "continue" user message) before the retried stream runs —
+    // matching the proven relay recovery. A same-request retry would fail
+    // identically, so this is only useful together with that reform.
+    if (isAutoContinueAPIError(error)) {
+      const message = isAutoContinueError(String(error.data.message))
+        ? error.data.message
+        : error.data.responseBody ?? error.data.message
+      return { message }
+    }
     const status = error.data.statusCode
     // 5xx errors are transient server failures and should always be retried,
     // even when the provider SDK doesn't explicitly mark them as retryable.
@@ -139,6 +187,9 @@ export function retryable(error: Err, provider: string) {
 
   const message = isRecord(error.data) ? error.data.message : undefined
   if (typeof message !== "string") return undefined
+  // Auto-continue family surfaced as a non-APIError (e.g. UnknownError wrapping
+  // "AI_JSONParseError: JSON parsing failed: ..."). Same recovery as above.
+  if (isAutoContinueError(message)) return { message }
   const lower = message.toLowerCase()
   if (lower.includes("too_many_requests")) return { message: "Too Many Requests" }
   if (lower.includes("exhausted") || lower.includes("unavailable")) return { message: "Provider is overloaded" }
@@ -182,6 +233,14 @@ export function policy(opts: {
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
+      // Cap auto-continue retries: the reform (appended "continue" user
+      // message) is meant to succeed on the first retry; if the provider
+      // keeps rejecting, fail the step like any other non-retryable error.
+      // The returned retry message always carries the matched pattern, so
+      // this covers both the APIError and non-APIError (UnknownError) shapes.
+      if (isAutoContinueError(retry.message) && meta.attempt > AUTO_CONTINUE_MAX) {
+        return Cause.done(meta.attempt)
+      }
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis

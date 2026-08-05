@@ -4,7 +4,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Effect, Schedule, Schema } from "effect"
+import { Effect, Exit, Schedule, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -388,6 +388,189 @@ describe("session.retry.retryable", () => {
       "Usage limit reached. It will reset in 15 minutes. To continue using this model now, enable usage from your available balance",
     )
   })
+})
+
+describe("session.retry.auto_continue", () => {
+  const PRODUCTION_MESSAGE = "The `reasoning_content` in the thinking mode must be passed back to the API"
+  const JSON_PARSE_MESSAGE = `AI_JSONParseError: JSON parsing failed: Text: {"id":"afe4deae-4e24-4a2e-9a2e-1a2e3a4e5a6e"}`
+
+  test("classifier matches the real production reasoning_content string", () => {
+    expect(SessionRetry.isAutoContinueError(PRODUCTION_MESSAGE)).toBe(true)
+    expect(SessionRetry.isAutoContinueError(`Bad Request: ${PRODUCTION_MESSAGE}`)).toBe(true)
+  })
+
+  test("classifier matches the real production JSON parse error string", () => {
+    expect(SessionRetry.isAutoContinueError(JSON_PARSE_MESSAGE)).toBe(true)
+    expect(SessionRetry.isAutoContinueError(`UnknownError: ${JSON_PARSE_MESSAGE}`)).toBe(true)
+    expect(SessionRetry.isAutoContinueError("JSON parsing failed: Text: <!DOCTYPE html>")).toBe(true)
+  })
+
+  test("classifier does not over-match generic provider errors", () => {
+    expect(SessionRetry.isAutoContinueError("Invalid prompt")).toBe(false)
+    expect(SessionRetry.isAutoContinueError("Internal server error")).toBe(false)
+    expect(SessionRetry.isAutoContinueError("Rate limit exceeded, please try again later")).toBe(false)
+    expect(SessionRetry.isAutoContinueError("Input exceeds context window of this model")).toBe(false)
+    expect(SessionRetry.isAutoContinueError("reasoning_content must not be empty")).toBe(false)
+    expect(SessionRetry.isAutoContinueError("Agent ran out of retries")).toBe(false)
+    expect(SessionRetry.isAutoContinueError("")).toBe(false)
+  })
+
+  test("retries the production reasoning_content error even though it is a 400", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: PRODUCTION_MESSAGE,
+        isRetryable: false,
+        statusCode: 400,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: PRODUCTION_MESSAGE })
+  })
+
+  test("retries the reasoning_content error when it only appears in the response body", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "Bad Request",
+        isRetryable: false,
+        statusCode: 400,
+        responseBody: JSON.stringify({ error: { message: PRODUCTION_MESSAGE } }),
+      }).toObject(),
+    )
+
+    const retry = SessionRetry.retryable(error, retryProvider)
+    expect(retry).toBeDefined()
+    expect(retry?.message).toInclude("reasoning_content")
+    expect(retry?.message).toInclude("must be passed back")
+  })
+
+  test("retries the JSON parse error even though it is a 400 with isRetryable false", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: JSON_PARSE_MESSAGE,
+        isRetryable: false,
+        statusCode: 400,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: JSON_PARSE_MESSAGE })
+  })
+
+  test("retries the JSON parse error when surfaced as an UnknownError", () => {
+    const error = wrap(`UnknownError: ${JSON_PARSE_MESSAGE}`)
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: `UnknownError: ${JSON_PARSE_MESSAGE}` })
+  })
+
+  test("does not retry a normal 400 invalid prompt", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "Invalid prompt",
+        isRetryable: false,
+        statusCode: 400,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
+  test("does not retry the 'Agent ran out of retries' failure", () => {
+    const error = wrap("Agent ran out of retries")
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
+  test("still retries 5xx errors with isRetryable false", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "Internal server error",
+        isRetryable: false,
+        statusCode: 500,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Internal server error" })
+  })
+
+  test("still rejects context overflow errors", () => {
+    const error = new SessionV1.ContextOverflowError({
+      message: "Input exceeds context window of this model",
+      responseBody: '{"error":{"code":"context_length_exceeded"}}',
+    }).toObject()
+
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
+  it.instance("policy stops retrying reasoning_content errors after the cap", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionID.make("session-reasoning-cap-test")
+      const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+        new SessionV1.APIError({
+          message: PRODUCTION_MESSAGE,
+          isRetryable: false,
+          statusCode: 400,
+          // Zero retry delay so schedule steps complete instantly (same
+          // convention as the "policy updates retry status" test above).
+          responseHeaders: { "retry-after-ms": "0" },
+        }).toObject(),
+      )
+      const status = yield* SessionStatus.Service
+
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: "test",
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+          set: (info) =>
+            status.set(sessionID, {
+              type: "retry",
+              attempt: info.attempt,
+              message: info.message,
+              next: info.next,
+            }),
+        }),
+      )
+
+      // attempt 1 and 2 are within AUTO_CONTINUE_MAX → retryable
+      yield* step(error)
+      yield* step(error)
+
+      // attempt 3 exceeds the cap → the schedule terminates (Done)
+      const out = yield* Effect.exit(Effect.suspend(() => step(error)))
+      expect(Exit.isFailure(out)).toBe(true)
+    }),
+  )
+
+  it.instance("policy stops retrying JSON parse errors after the cap", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionID.make("session-json-parse-cap-test")
+      const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+        new SessionV1.APIError({
+          message: JSON_PARSE_MESSAGE,
+          isRetryable: false,
+          statusCode: 400,
+          responseHeaders: { "retry-after-ms": "0" },
+        }).toObject(),
+      )
+      const status = yield* SessionStatus.Service
+
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: "test",
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+          set: (info) =>
+            status.set(sessionID, {
+              type: "retry",
+              attempt: info.attempt,
+              message: info.message,
+              next: info.next,
+            }),
+        }),
+      )
+
+      yield* step(error)
+      yield* step(error)
+
+      const out = yield* Effect.exit(Effect.suspend(() => step(error)))
+      expect(Exit.isFailure(out)).toBe(true)
+    }),
+  )
 })
 
 describe("session.message-v2.fromError", () => {
