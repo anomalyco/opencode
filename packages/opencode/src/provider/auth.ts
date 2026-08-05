@@ -164,7 +164,8 @@ const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.
       input: { providerID: ProviderV2.ID } & AuthorizeInput,
     ) {
       const { hooks, pending } = yield* InstanceState.get(state)
-      const method = hooks[input.providerID].methods[input.method]
+      const method = hooks[input.providerID]?.methods[input.method]
+      if (!method) return yield* new OauthMissing({ providerID: input.providerID })
       if (method.type !== "oauth") return
 
       if (method.prompts && input.inputs) {
