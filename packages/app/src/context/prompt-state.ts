@@ -49,6 +49,13 @@ export type PromptModel = {
   providerID: string
   modelID: string
   variant?: string | null
+  /**
+   * Agent the selection was made under. A manual model choice is an override
+   * scoped to that agent; it must not outlive switching to a different agent.
+   * Undefined means the value predates this field or was inherited from another
+   * tab, in which case a configured agent model takes precedence over it.
+   */
+  agent?: string
 }
 
 export type FileContextItem = {
