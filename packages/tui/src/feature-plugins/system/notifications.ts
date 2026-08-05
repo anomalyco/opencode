@@ -1,8 +1,5 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import type { AttentionSoundName } from "@opencode-ai/plugin/tui/context"
-import type { OpenCodeEvent } from "@opencode-ai/client"
-
-type SessionError = Extract<OpenCodeEvent, { type: "session.error" }>["data"]["error"]
 
 function notify(
   context: Plugin.Context,
@@ -19,15 +16,6 @@ function notify(
     notification: isSubagent ? false : { when: "blurred" },
     sound: { name: sound, when: "always" },
   })
-}
-
-function sessionErrorMessage(error: SessionError) {
-  if (error?.name === "MessageAbortedError") return "Session aborted"
-  const data = error?.data
-  if (data && typeof data === "object" && "message" in data && data.message === "SSE read timed out") {
-    return "Model stopped responding"
-  }
-  return "Session error"
 }
 
 export default Plugin.define({
@@ -87,14 +75,6 @@ export default Plugin.define({
         errored.add(sessionID)
         notify(context, sessionID, event.data.error.message, "error")
         ended(sessionID)
-      }),
-      context.data.on("session.error", (event) => {
-        const sessionID = event.data.sessionID
-        if (!sessionID) return
-        if (context.data.session.status(sessionID) !== "running") return
-        if (errored.has(sessionID)) return
-        errored.add(sessionID)
-        notify(context, sessionID, sessionErrorMessage(event.data.error), "error")
       }),
     ]
 

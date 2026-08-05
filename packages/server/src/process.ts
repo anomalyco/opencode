@@ -31,6 +31,14 @@ type App = Effect.Effect<
   HttpServerRequest.HttpServerRequest | Scope.Scope
 >
 
+const errorResponseLogger = HttpMiddleware.make((app) =>
+  HttpMiddleware.logger(
+    Effect.tap(app, (response) =>
+      response.status < 400 ? HttpMiddleware.withLoggerDisabled(Effect.void) : Effect.void,
+    ),
+  ),
+)
+
 export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   options: ServerOptions,
   lifecycle?: Lifecycle<E, R>,
@@ -52,7 +60,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       dispatch(password, status, application, shutdown, options.app?.version ?? "unknown").pipe(
         HttpMiddleware.cors({ allowedOrigins: isAllowedCorsOrigin, maxAge: 86_400 }),
       ),
-      HttpMiddleware.logger,
+      errorResponseLogger,
     )
     .pipe(withoutParentSpan)
   if (lifecycle)

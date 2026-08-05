@@ -215,10 +215,12 @@ import type {
   Endpoint26_0Output,
   Endpoint26_1Input,
   Endpoint26_1Output,
-  Endpoint27_0Input,
   Endpoint27_0Output,
-  Endpoint27_1Input,
   Endpoint27_1Output,
+  Endpoint28_0Input,
+  Endpoint28_0Output,
+  Endpoint28_1Input,
+  Endpoint28_1Output,
 } from "../api/api.js"
 import { ClientError } from "./client-error"
 
@@ -1217,22 +1219,32 @@ const adaptGroup26 = (raw: RawClient["server.debug"]) => ({
   location: { list: Endpoint26_0(raw), evict: Endpoint26_1(raw) },
 })
 
-const Endpoint27_0 = (raw: RawClient["server.websearch"]) => (input?: Endpoint27_0Input) =>
-  preserveEffect<Endpoint27_0Output>()(
+const Endpoint27_0 = (raw: RawClient["server.migration"]) => () =>
+  preserveEffect<Endpoint27_0Output>()(raw["migration.v1.status"]({}).pipe(Effect.mapError(mapClientError)))
+
+const Endpoint27_1 = (raw: RawClient["server.migration"]) => () =>
+  preserveEffect<Endpoint27_1Output>()(raw["migration.v1.run"]({}).pipe(Effect.mapError(mapClientError)))
+
+const adaptGroup27 = (raw: RawClient["server.migration"]) => ({
+  v1: { status: Endpoint27_0(raw), run: Endpoint27_1(raw) },
+})
+
+const Endpoint28_0 = (raw: RawClient["server.websearch"]) => (input?: Endpoint28_0Input) =>
+  preserveEffect<Endpoint28_0Output>()(
     raw["websearch.providers"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint27_1 = (raw: RawClient["server.websearch"]) => (input: Endpoint27_1Input) =>
-  preserveEffect<Endpoint27_1Output>()(
+const Endpoint28_1 = (raw: RawClient["server.websearch"]) => (input: Endpoint28_1Input) =>
+  preserveEffect<Endpoint28_1Output>()(
     raw["websearch.query"]({
       query: { location: input["location"] },
       payload: { query: input["query"], providerID: input["providerID"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroup27 = (raw: RawClient["server.websearch"]) => ({
-  providers: Endpoint27_0(raw),
-  query: Endpoint27_1(raw),
+const adaptGroup28 = (raw: RawClient["server.websearch"]) => ({
+  providers: Endpoint28_0(raw),
+  query: Endpoint28_1(raw),
 })
 
 const adaptClient = (raw: RawClient) => ({
@@ -1263,7 +1275,8 @@ const adaptClient = (raw: RawClient) => ({
   projectCopy: adaptGroup24(raw["server.projectCopy"]),
   vcs: adaptGroup25(raw["server.vcs"]),
   debug: adaptGroup26(raw["server.debug"]),
-  websearch: adaptGroup27(raw["server.websearch"]),
+  migration: adaptGroup27(raw["server.migration"]),
+  websearch: adaptGroup28(raw["server.websearch"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

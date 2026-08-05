@@ -181,7 +181,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         success: Schema.Struct({ data: Session.Info }),
         error: SessionNotFoundError,
       })
-        .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.get",
@@ -276,7 +275,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, InvalidRequestError],
       })
-        .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.move",
@@ -470,7 +468,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         success: Schema.Struct({ data: Schema.Array(SessionMessage.Info) }),
         error: [SessionNotFoundError, UnknownError],
       })
-        .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.context",
@@ -485,7 +482,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         success: Schema.Struct({ data: Schema.Array(SessionPending.Info) }),
         error: SessionNotFoundError,
       })
-        .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.pending.list",
@@ -573,7 +569,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         }),
         error: SessionNotFoundError,
       })
-        .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.log",
@@ -620,7 +615,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         success: Schema.Struct({ data: SessionMessage.Info }),
         error: [SessionNotFoundError, MessageNotFoundError],
       })
-        .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.message",

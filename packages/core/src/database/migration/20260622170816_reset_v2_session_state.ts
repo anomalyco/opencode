@@ -10,8 +10,6 @@ export default {
       yield* tx.run(`DELETE FROM \`session_message\`;`)
       yield* tx.run(`DELETE FROM \`event\`;`)
       yield* tx.run(`DELETE FROM \`event_sequence\`;`)
-      yield* tx.run(`UPDATE \`session\` SET \`workspace_id\` = NULL WHERE \`workspace_id\` IS NOT NULL;`)
-      yield* tx.run(`DELETE FROM \`workspace\`;`)
     })
   },
 } satisfies DatabaseMigration.Migration

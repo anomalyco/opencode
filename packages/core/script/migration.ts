@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { $ } from "bun"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -100,9 +99,14 @@ async function drizzle(temporary: string, output: string, name?: string) {
 export default { ...config, out: ${JSON.stringify(output)} }
 `,
   )
-  await $`bun drizzle-kit generate --config ${config} ${name ? ["--name", name] : []}`.cwd(
-    path.join(root, "packages/core"),
-  )
+  const child = Bun.spawn(["bun", "drizzle-kit", "generate", "--config", config, ...(name ? ["--name", name] : [])], {
+    cwd: path.join(root, "packages/core"),
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  })
+  const exit = await child.exited
+  if (exit !== 0) throw new Error(`Drizzle generation failed with exit code ${exit}.`)
 }
 
 async function generatedMigrations(directory: string) {

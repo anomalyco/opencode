@@ -30,6 +30,7 @@ import {
   batch,
   Show,
 } from "solid-js"
+import { createStore } from "solid-js/store"
 import {
   TuiLifecycleProvider,
   TuiAppProvider,
@@ -50,6 +51,7 @@ import { ClientProvider, useClient } from "./context/client"
 import { StartupLoading } from "./component/startup-loading"
 import { DevToolsBar } from "./component/devtools-bar"
 import { Reconnecting } from "./component/reconnecting"
+import { MigrationOverlay } from "./component/migration-overlay"
 import { DataProvider, useData } from "./context/data"
 import { SessionTabsProvider, useSessionTabs } from "./context/session-tabs"
 import { LocationProvider, useLocation } from "./context/location"
@@ -95,6 +97,7 @@ import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider } from "./context/storage"
+import { Migration } from "./migration"
 
 registerOpencodeSpinner()
 
@@ -187,21 +190,6 @@ export type TuiInput = {
   log?: LogSink
 }
 
-function errorMessage(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "data" in error &&
-    typeof error.data === "object" &&
-    error.data !== null &&
-    "message" in error.data &&
-    typeof error.data.message === "string"
-  ) {
-    return error.data.message
-  }
-  return error instanceof Error ? error.message : String(error)
-}
-
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const log = input.log ?? (() => {})
   const global = yield* Global.Service
@@ -215,9 +203,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     Effect.catch(() => Effect.tryPromise(() => api.location.get())),
   )
   const directory = location.directory
-  const pluginDirectories = yield* Effect.promise(() =>
-    tuiPluginDirectories(process.cwd(), global.config),
-  )
+  const pluginDirectories = yield* Effect.promise(() => tuiPluginDirectories(process.cwd(), global.config))
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const managed = input.server.service
   const service = managed
@@ -472,6 +458,32 @@ function App(props: { pair?: DialogPairCredentials }) {
   const promptRef = usePromptRef()
   const plugins = usePlugin()
   const clipboard = useClipboard()
+  const [migration, setMigration] = createStore({ active: false, completed: 0, total: 0 })
+  const migrationAbort = new AbortController()
+
+  onMount(async () => {
+    await Bun.sleep(1_000)
+    void Migration.run(
+      client.api,
+      (status) =>
+        setMigration({
+          active: status.status !== "completed",
+          completed: status.completed,
+          total: status.total,
+        }),
+      migrationAbort.signal,
+    ).catch((error) => {
+      if (migrationAbort.signal.aborted) return
+      setMigration("active", false)
+      toast.show({
+        variant: "error",
+        title: "Data migration failed",
+        message: error instanceof Error ? error.message : String(error),
+        duration: 10_000,
+      })
+    })
+  })
+  onCleanup(() => migrationAbort.abort())
 
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
   // without having to open the status panel. Tracking the last alerted status avoids re-toasting
@@ -1170,15 +1182,11 @@ function App(props: { pair?: DialogPairCredentials }) {
     }
   })
 
-  event.on("session.error", (evt, { workspace }) => {
+  event.on("session.execution.failed", (evt, { workspace }) => {
     if (workspace !== (location.current?.workspaceID ?? data.location.default().workspaceID)) return
-    const error = evt.data.error
-    if (error && typeof error === "object" && error.name === "MessageAbortedError") return
-    const message = errorMessage(error)
-
     toast.show({
       variant: "error",
-      message,
+      message: evt.data.error.message,
       duration: 5000,
     })
   })
@@ -1265,6 +1273,9 @@ function App(props: { pair?: DialogPairCredentials }) {
       </Show>
       <Show when={showReconnecting()}>
         <Reconnecting />
+      </Show>
+      <Show when={migration.active}>
+        <MigrationOverlay completed={migration.completed} total={migration.total} />
       </Show>
       <Toast />
     </box>

@@ -96,6 +96,7 @@ import { findMessageBoundary, messageNavigationSlack } from "./message-navigatio
 import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
+import { useSessionTabs } from "../../context/session-tabs"
 
 addDefaultParsers(parsers.parsers)
 
@@ -244,6 +245,7 @@ export function Session() {
   const [navigationMessage, setNavigationMessage] = createSignal<string>()
   const [navigationSlack, setNavigationSlack] = createSignal(0)
   const [synced, setSynced] = createSignal(false)
+  const sessionTabs = useSessionTabs()
 
   const clearMessageNavigation = () => {
     setNavigationSlack(0)
@@ -262,7 +264,7 @@ export function Session() {
   createEffect(
     on([descendantSessionIDs, () => client.connection.status()], ([sessionIDs, status]) => {
       if (status !== "connected") return
-      void Promise.all(
+      void Promise.allSettled(
         sessionIDs.flatMap((sessionID) => [data.session.permission.sync(sessionID), data.session.form.sync(sessionID)]),
       )
     }),
@@ -275,8 +277,8 @@ export function Session() {
     void (async () => {
       await Promise.all([
         data.session.sync(sessionID, { children: true }),
-        data.session.permission.sync(sessionID),
-        data.session.form.sync(sessionID),
+        data.session.permission.sync(sessionID).catch(() => undefined),
+        data.session.form.sync(sessionID).catch(() => undefined),
       ])
       const info = data.session.get(sessionID)
       if (!info) {
@@ -285,7 +287,7 @@ export function Session() {
           variant: "error",
           duration: 5000,
         })
-        navigate({ type: "home" })
+        sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
         return
       }
       editor.reconnect(info.location.directory)
@@ -298,7 +300,7 @@ export function Session() {
         variant: "error",
         duration: 5000,
       })
-      navigate({ type: "home" })
+      sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
     })
   })
 

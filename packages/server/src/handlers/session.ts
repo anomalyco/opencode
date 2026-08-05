@@ -650,13 +650,21 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       )
       .handle(
         "session.log",
-        Effect.fn((ctx) =>
-          Effect.succeed(
-            session
-              .log({ sessionID: ctx.params.sessionID, after: ctx.query.after, follow: ctx.query.follow })
-              .pipe(Stream.orDie),
-          ),
-        ),
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(
+            Effect.catchTag(
+              "Session.NotFoundError",
+              (error) =>
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+            ),
+          )
+          return session
+            .log({ sessionID: ctx.params.sessionID, after: ctx.query.after, follow: ctx.query.follow })
+            .pipe(Stream.orDie)
+        }),
       )
       .handle(
         "session.interrupt",
@@ -684,6 +692,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.message",
         Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(
+            Effect.catchTag(
+              "Session.NotFoundError",
+              (error) =>
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+            ),
+          )
           const message = yield* session.message(ctx.params)
           if (message) return { data: message }
           return yield* new MessageNotFoundError({

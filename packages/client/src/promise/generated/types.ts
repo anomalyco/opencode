@@ -313,164 +313,6 @@ export type SkillInfo = {
   content: string
 }
 
-export type FileDiffLegacyInfo = {
-  file?: string
-  patch?: string
-  additions: number
-  deletions: number
-  status?: "added" | "deleted" | "modified"
-}
-
-export type PermissionV1Action = "allow" | "deny" | "ask"
-
-export type SessionV1JSONSchema = { [x: string]: any }
-
-export type ProviderAuthError = { name: "ProviderAuthError"; data: { providerID: string; message: string } }
-
-export type UnknownError2 = { name: "UnknownError"; data: { message: string; ref?: string | undefined } }
-
-export type MessageOutputLengthError = { name: "MessageOutputLengthError"; data: {} }
-
-export type MessageAbortedError = { name: "MessageAbortedError"; data: { message: string } }
-
-export type StructuredOutputError = { name: "StructuredOutputError"; data: { message: string; retries: number } }
-
-export type ContextOverflowError = {
-  name: "ContextOverflowError"
-  data: { message: string; responseBody?: string | undefined }
-}
-
-export type ContentFilterError = { name: "ContentFilterError"; data: { message: string } }
-
-export type APIError = {
-  name: "APIError"
-  data: {
-    message: string
-    statusCode?: number | undefined
-    isRetryable: boolean
-    responseHeaders?: { [x: string]: string } | undefined
-    responseBody?: string | undefined
-    metadata?: { [x: string]: string } | undefined
-  }
-}
-
-export type SessionV1TextPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "text"
-  text: string
-  synthetic?: boolean | undefined
-  ignored?: boolean | undefined
-  time?: { start: number; end?: number | undefined } | undefined
-  metadata?: { [x: string]: any } | undefined
-}
-
-export type SessionV1SubtaskPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "subtask"
-  prompt: string
-  description: string
-  agent: string
-  model?: { providerID: string; modelID: string } | undefined
-  command?: string | undefined
-}
-
-export type SessionV1ReasoningPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "reasoning"
-  text: string
-  metadata?: { [x: string]: any } | undefined
-  time: { start: number; end?: number | undefined }
-}
-
-export type SessionV1FilePartSourceText = { value: string; start: number; end: number }
-
-export type SessionV1Range = { start: { line: number; character: number }; end: { line: number; character: number } }
-
-export type SessionV1ToolStatePending = { status: "pending"; input: { [x: string]: any }; raw: string }
-
-export type SessionV1ToolStateRunning = {
-  status: "running"
-  input: { [x: string]: any }
-  title?: string | undefined
-  metadata?: { [x: string]: any } | undefined
-  time: { start: number }
-}
-
-export type SessionV1ToolStateError = {
-  status: "error"
-  input: { [x: string]: any }
-  error: string
-  metadata?: { [x: string]: any } | undefined
-  time: { start: number; end: number }
-}
-
-export type SessionV1StepStartPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "step-start"
-  snapshot?: string | undefined
-}
-
-export type SessionV1StepFinishPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "step-finish"
-  reason: string
-  snapshot?: string | undefined
-  cost: number
-  tokens: {
-    total?: number | undefined
-    input: number
-    output: number
-    reasoning: number
-    cache: { read: number; write: number }
-  }
-}
-
-export type SessionV1SnapshotPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "snapshot"
-  snapshot: string
-}
-
-export type SessionV1PatchPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "patch"
-  hash: string
-  files: Array<string>
-}
-
-export type SessionV1AgentPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "agent"
-  name: string
-  source?: { value: string; start: number; end: number } | undefined
-}
-
-export type SessionV1CompactionPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "compaction"
-  auto: boolean
-  overflow?: boolean | undefined
-  tail_start_id?: string | undefined
-}
-
 export type PermissionReply = "once" | "always" | "reject"
 
 export type Pty = {
@@ -568,6 +410,27 @@ export type ProviderRequest = {
 }
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
+
+export type SessionCreated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.created"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    projectID: string
+    location: LocationRef
+    subpath?: string
+    parentID?: string
+    slug: string
+    title?: string
+    agent?: string
+    model?: ModelRef
+    version: string
+  }
+}
 
 export type SessionAgentSelected = {
   id: string
@@ -860,26 +723,6 @@ export type AgentUpdated = {
   type: "agent.updated"
   location?: LocationRef
   data: {}
-}
-
-export type MessageRemoved = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "message.removed"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; messageID: string }
-}
-
-export type MessagePartRemoved = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "message.part.removed"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; messageID: string; partID: string }
 }
 
 export type SessionUsageUpdated = {
@@ -1537,96 +1380,6 @@ export type PermissionAsked = {
   }
 }
 
-export type PermissionV1Rule = { permission: string; pattern: string; action: PermissionV1Action }
-
-export type SessionV1OutputFormat =
-  | { type: "text" }
-  | { type: "json_schema"; schema: SessionV1JSONSchema; retryCount?: number | undefined | undefined }
-
-export type SessionV1AssistantMessage = {
-  id: string
-  sessionID: string
-  role: "assistant"
-  time: { created: number; completed?: number | undefined }
-  error?:
-    | ProviderAuthError
-    | UnknownError2
-    | MessageOutputLengthError
-    | MessageAbortedError
-    | StructuredOutputError
-    | ContextOverflowError
-    | ContentFilterError
-    | APIError
-    | undefined
-  parentID: string
-  modelID: string
-  providerID: string
-  mode: string
-  agent: string
-  path: { cwd: string; root: string }
-  summary?: boolean | undefined
-  cost: number
-  tokens: {
-    total?: number | undefined
-    input: number
-    output: number
-    reasoning: number
-    cache: { read: number; write: number }
-  }
-  structured?: any | undefined
-  variant?: string | undefined
-  finish?: string | undefined
-}
-
-export type SessionV1RetryPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "retry"
-  attempt: number
-  error: APIError
-  time: { created: number }
-}
-
-export type SessionError = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.error"
-  location?: LocationRef
-  data: {
-    sessionID?: string | undefined
-    error?:
-      | ProviderAuthError
-      | UnknownError2
-      | MessageOutputLengthError
-      | MessageAbortedError
-      | StructuredOutputError
-      | ContextOverflowError
-      | ContentFilterError
-      | APIError
-      | undefined
-  }
-}
-
-export type SessionV1FileSource = { text: SessionV1FilePartSourceText; type: "file"; path: string }
-
-export type SessionV1ResourceSource = {
-  text: SessionV1FilePartSourceText
-  type: "resource"
-  clientName: string
-  uri: string
-}
-
-export type SessionV1SymbolSource = {
-  text: SessionV1FilePartSourceText
-  type: "symbol"
-  path: string
-  range: SessionV1Range
-  name: string
-  kind: number
-}
-
 export type PermissionReplied = {
   id: string
   created: number
@@ -1904,23 +1657,6 @@ export type FormReplied = {
   data: { id: string; sessionID: string; answer: FormAnswer }
 }
 
-export type PermissionV1Ruleset = Array<PermissionV1Rule>
-
-export type SessionV1UserMessage = {
-  id: string
-  sessionID: string
-  role: "user"
-  time: { created: number }
-  format?: SessionV1OutputFormat | undefined
-  summary?: { title?: string | undefined; body?: string | undefined; diffs: Array<FileDiffLegacyInfo> } | undefined
-  agent: string
-  model: { providerID: string; modelID: string; variant?: string | undefined }
-  system?: string | undefined
-  tools?: { [x: string]: boolean } | undefined
-}
-
-export type SessionV1FilePartSource = SessionV1FileSource | SessionV1SymbolSource | SessionV1ResourceSource
-
 export type QuestionAsked = {
   id: string
   created: number
@@ -1998,41 +1734,6 @@ export type IntegrationMethod =
 
 export type FormFields = [FormField, ...Array<FormField>]
 
-export type SessionV1Info = {
-  id: string
-  slug: string
-  projectID: string
-  workspaceID?: string
-  directory: string
-  path?: string
-  parentID?: string
-  summary?: { additions: number; deletions: number; files: number; diffs?: Array<FileDiffLegacyInfo> }
-  cost?: number
-  tokens?: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
-  share?: { url: string }
-  title?: string
-  agent?: string
-  model?: { id: string; providerID: string; variant?: string }
-  version: string
-  metadata?: { [x: string]: any }
-  time: { created: number; updated: number; compacting?: number; archived?: number }
-  permission?: PermissionV1Ruleset
-  revert?: { messageID: string; partID?: string; snapshot?: string; diff?: string }
-}
-
-export type SessionV1Message = SessionV1UserMessage | SessionV1AssistantMessage
-
-export type SessionV1FilePart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "file"
-  mime: string
-  filename?: string | undefined
-  url: string
-  source?: SessionV1FilePartSource | undefined
-}
-
 export type FormFields1 = [FormField1, ...Array<FormField1>]
 
 export type SessionPendingInfo = SessionPendingUser | SessionPendingSynthetic | SessionPendingCompaction
@@ -2064,56 +1765,6 @@ export type IntegrationInfo = {
 
 export type FormInfo = { id: string; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
 
-export type SessionCreated = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.created"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; info: SessionV1Info }
-}
-
-export type SessionUpdated = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.updated"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; info: SessionV1Info }
-}
-
-export type SessionDeleted1 = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.deleted"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; info: SessionV1Info }
-}
-
-export type MessageUpdated = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "message.updated"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; info: SessionV1Message }
-}
-
-export type SessionV1ToolStateCompleted = {
-  status: "completed"
-  input: { [x: string]: any }
-  output: string
-  title: string
-  metadata: { [x: string]: any }
-  time: { start: number; end: number; compacted?: number | undefined }
-  attachments?: Array<SessionV1FilePart> | undefined
-}
-
 export type FormInfo1 = { id: string; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields1 }
 
 export type SessionInputAdmitted = {
@@ -2137,12 +1788,6 @@ export type SessionMessageInfo =
   | SessionMessageAssistant
   | SessionMessageCompaction
 
-export type SessionV1ToolState =
-  | SessionV1ToolStatePending
-  | SessionV1ToolStateRunning
-  | SessionV1ToolStateCompleted
-  | SessionV1ToolStateError
-
 export type FormCreated = {
   id: string
   created: number
@@ -2153,6 +1798,7 @@ export type FormCreated = {
 }
 
 export type SessionEventDurable =
+  | SessionCreated
   | SessionAgentSelected
   | SessionModelSelected
   | SessionMoved
@@ -2197,43 +1843,6 @@ export type SessionMessagesResponse = {
   cursor: { previous?: string | null; next?: string | null }
 }
 
-export type SessionV1ToolPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "tool"
-  callID: string
-  tool: string
-  state: SessionV1ToolState
-  metadata?: { [x: string]: any } | undefined
-}
-
-export type SessionLogItem = SessionEventDurable | EventLogSynced
-
-export type SessionV1Part =
-  | SessionV1TextPart
-  | SessionV1SubtaskPart
-  | SessionV1ReasoningPart
-  | SessionV1FilePart
-  | SessionV1ToolPart
-  | SessionV1StepStartPart
-  | SessionV1StepFinishPart
-  | SessionV1SnapshotPart
-  | SessionV1PatchPart
-  | SessionV1AgentPart
-  | SessionV1RetryPart
-  | SessionV1CompactionPart
-
-export type MessagePartUpdated = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "message.part.updated"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; part: SessionV1Part; time: number }
-}
-
 export type V2Event =
   | ModelsDevRefreshed
   | IntegrationUpdated
@@ -2241,12 +1850,6 @@ export type V2Event =
   | CatalogUpdated
   | AgentUpdated
   | SessionCreated
-  | SessionUpdated
-  | SessionDeleted1
-  | MessageUpdated
-  | MessageRemoved
-  | MessagePartUpdated
-  | MessagePartRemoved
   | SessionAgentSelected
   | SessionModelSelected
   | SessionMoved
@@ -2325,8 +1928,9 @@ export type V2Event =
   | VcsBranchUpdated
   | McpStatusChanged
   | McpResourcesChanged
-  | SessionError
   | V2EventServerConnected
+
+export type SessionLogItem = SessionEventDurable | EventLogSynced
 
 export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly message: string }
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
@@ -4960,6 +4564,10 @@ export type DebugLocationEvictInput = {
 }
 
 export type DebugLocationEvictOutput = void
+
+export type MigrationV1StatusOutput = { status: "required" | "running" | "completed"; completed: number; total: number }
+
+export type MigrationV1RunOutput = { status: "completed" }
 
 export type WebsearchProvidersInput = {
   readonly location?: {

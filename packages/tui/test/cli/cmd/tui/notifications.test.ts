@@ -293,39 +293,4 @@ describe("internal notifications TUI plugin", () => {
       },
     ])
   })
-
-  test("special-cases aborts and model response timeouts", async () => {
-    const harness = await setup()
-
-    harness.emit(executionStarted("event-1", "abort"))
-    harness.emit({
-      id: "event-2",
-      created: 0,
-      type: "session.error",
-      data: { sessionID: "abort", error: { name: "MessageAbortedError", data: { message: "Aborted" } } },
-    })
-    harness.emit(executionStarted("event-3", "timeout"))
-    harness.emit({
-      id: "event-4",
-      created: 0,
-      type: "session.error",
-      data: { sessionID: "timeout", error: { name: "UnknownError", data: { message: "SSE read timed out" } } },
-    })
-    harness.emit(executionFailed("event-5", "timeout"))
-
-    expect(harness.notifications).toEqual([
-      {
-        title: "Abort session",
-        message: "Session aborted",
-        notification: { when: "blurred" },
-        sound: { name: "error", when: "always" },
-      },
-      {
-        title: "Timeout session",
-        message: "Model stopped responding",
-        notification: { when: "blurred" },
-        sound: { name: "error", when: "always" },
-      },
-    ])
-  })
 })
