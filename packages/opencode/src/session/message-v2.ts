@@ -699,6 +699,9 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    // Preserve APIError's structured message/metadata instead of the generic fallback below.
+    case APIError.isInstance(e):
+      return e instanceof Error ? e.toObject() : e
     case e instanceof Error:
       return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
     default:

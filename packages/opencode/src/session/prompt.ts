@@ -1083,6 +1083,8 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        // Gates the processor's empty-truncation retry (see Input.priorOutput).
+        let producedOutput = false
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1215,6 +1217,7 @@ const layer = Layer.effect(
               assistantMessage: msg,
               sessionID,
               model,
+              priorOutput: producedOutput,
             })
             .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
 
@@ -1284,6 +1287,9 @@ const layer = Layer.effect(
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
             })
+
+            // A real stop reason means the turn produced output.
+            if (handle.message.finish && handle.message.finish !== "unknown") producedOutput = true
 
             if (structured !== undefined) {
               handle.message.structured = structured

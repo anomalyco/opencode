@@ -176,13 +176,28 @@ function parseJSON(value: unknown) {
 export function policy(opts: {
   provider: string
   parse: (error: unknown) => Err
-  set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
+  set: (input: {
+    attempt: number
+    message: string
+    action?: Retryable["action"]
+    next: number
+    error: Err
+  }) => Effect.Effect<void>
 }) {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
+      // Cap EmptyOther retries so a provider repeatedly closing streams without a
+      // stop_reason can't loop forever. Other retryable errors stay unbounded.
+      if (
+        SessionV1.APIError.isInstance(error) &&
+        error.data.metadata?.code === "EmptyOther" &&
+        meta.attempt >= 3
+      ) {
+        return Cause.done(meta.attempt)
+      }
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis
@@ -191,6 +206,7 @@ export function policy(opts: {
           message: retry.message,
           action: retry.action,
           next: now + wait,
+          error,
         })
         return [meta.attempt, Duration.millis(wait)] as [number, Duration.Duration]
       })
