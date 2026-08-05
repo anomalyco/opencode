@@ -16,6 +16,18 @@ import { dict as desktopAr } from "./ar"
 import { dict as desktopNo } from "./no"
 import { dict as desktopBr } from "./br"
 import { dict as desktopBs } from "./bs"
+import { dict as desktopTr } from "./tr"
+import { dict as desktopHi } from "./hi"
+import { dict as desktopNl } from "./nl"
+import { dict as desktopId } from "./id"
+import { dict as desktopVi } from "./vi"
+import { dict as desktopIt } from "./it"
+import { dict as desktopUr } from "./ur"
+import { dict as desktopPa } from "./pa"
+import { dict as desktopAz } from "./az"
+import { dict as desktopFi } from "./fi"
+import { dict as desktopSv } from "./sv"
+import { dict as desktopTh } from "./th"
 
 import { dict as appEn } from "../../../../app/src/i18n/en"
 import { dict as appZh } from "../../../../app/src/i18n/zh"
@@ -33,6 +45,18 @@ import { dict as appAr } from "../../../../app/src/i18n/ar"
 import { dict as appNo } from "../../../../app/src/i18n/no"
 import { dict as appBr } from "../../../../app/src/i18n/br"
 import { dict as appBs } from "../../../../app/src/i18n/bs"
+import { dict as appTr } from "../../../../app/src/i18n/tr"
+import { dict as appHi } from "../../../../app/src/i18n/hi"
+import { dict as appNl } from "../../../../app/src/i18n/nl"
+import { dict as appId } from "../../../../app/src/i18n/id"
+import { dict as appVi } from "../../../../app/src/i18n/vi"
+import { dict as appIt } from "../../../../app/src/i18n/it"
+import { dict as appUr } from "../../../../app/src/i18n/ur"
+import { dict as appPa } from "../../../../app/src/i18n/pa"
+import { dict as appAz } from "../../../../app/src/i18n/az"
+import { dict as appFi } from "../../../../app/src/i18n/fi"
+import { dict as appSv } from "../../../../app/src/i18n/sv"
+import { dict as appTh } from "../../../../app/src/i18n/th"
 
 export type Locale =
   | "en"
@@ -51,9 +75,21 @@ export type Locale =
   | "no"
   | "br"
   | "bs"
+  | "tr"
+  | "hi"
+  | "nl"
+  | "id"
+  | "vi"
+  | "it"
+  | "ur"
+  | "pa"
+  | "az"
+  | "fi"
+  | "sv"
+  | "th"
 
 type RawDictionary = typeof appEn & typeof desktopEn
-type Dictionary = i18n.Flatten<RawDictionary>
+type Dictionary = Record<keyof i18n.Flatten<RawDictionary>, string>
 
 const LOCALES: readonly Locale[] = [
   "en",
@@ -72,6 +108,18 @@ const LOCALES: readonly Locale[] = [
   "ar",
   "no",
   "br",
+  "tr",
+  "hi",
+  "nl",
+  "id",
+  "vi",
+  "it",
+  "ur",
+  "pa",
+  "az",
+  "fi",
+  "sv",
+  "th",
 ]
 
 function detectLocale(): Locale {
@@ -82,7 +130,13 @@ function detectLocale(): Locale {
     if (!language) continue
     if (language.toLowerCase().startsWith("en")) return "en"
     if (language.toLowerCase().startsWith("zh")) {
-      if (language.toLowerCase().includes("hant")) return "zht"
+      if (
+        language.toLowerCase().includes("hant") ||
+        language.toLowerCase().includes("-tw") ||
+        language.toLowerCase().includes("-hk") ||
+        language.toLowerCase().includes("-mo")
+      )
+        return "zht"
       return "zh"
     }
     if (language.toLowerCase().startsWith("ko")) return "ko"
@@ -103,6 +157,27 @@ function detectLocale(): Locale {
       return "no"
     if (language.toLowerCase().startsWith("pt")) return "br"
     if (language.toLowerCase().startsWith("bs")) return "bs"
+    if (language.toLowerCase().startsWith("tr")) return "tr"
+    if (language.toLowerCase().startsWith("hi")) return "hi"
+    if (language.toLowerCase().startsWith("nl")) return "nl"
+    if (language.toLowerCase().startsWith("id")) return "id"
+    if (language.toLowerCase().startsWith("vi")) return "vi"
+    if (language.toLowerCase().startsWith("it")) return "it"
+    if (language.toLowerCase().startsWith("ur")) return "ur"
+    if (
+      language.toLowerCase().startsWith("pa") &&
+      (language.toLowerCase().includes("arab") || language.toLowerCase().includes("-pk"))
+    )
+      return "pa"
+    if (
+      language.toLowerCase().startsWith("az") &&
+      !language.toLowerCase().includes("arab") &&
+      !language.toLowerCase().includes("cyrl")
+    )
+      return "az"
+    if (language.toLowerCase().startsWith("fi")) return "fi"
+    if (language.toLowerCase().startsWith("sv")) return "sv"
+    if (language.toLowerCase().startsWith("th")) return "th"
   }
 
   return "en"
@@ -158,6 +233,18 @@ function build(locale: Locale): Dictionary {
   if (locale === "no") return { ...base, ...i18n.flatten(appNo), ...i18n.flatten(desktopNo) }
   if (locale === "br") return { ...base, ...i18n.flatten(appBr), ...i18n.flatten(desktopBr) }
   if (locale === "bs") return { ...base, ...i18n.flatten(appBs), ...i18n.flatten(desktopBs) }
+  if (locale === "tr") return { ...base, ...i18n.flatten(appTr), ...i18n.flatten(desktopTr) }
+  if (locale === "hi") return { ...base, ...i18n.flatten(appHi), ...i18n.flatten(desktopHi) }
+  if (locale === "nl") return { ...base, ...i18n.flatten(appNl), ...i18n.flatten(desktopNl) }
+  if (locale === "id") return { ...base, ...i18n.flatten(appId), ...i18n.flatten(desktopId) }
+  if (locale === "vi") return { ...base, ...i18n.flatten(appVi), ...i18n.flatten(desktopVi) }
+  if (locale === "it") return { ...base, ...i18n.flatten(appIt), ...i18n.flatten(desktopIt) }
+  if (locale === "ur") return { ...base, ...i18n.flatten(appUr), ...i18n.flatten(desktopUr) }
+  if (locale === "pa") return { ...base, ...i18n.flatten(appPa), ...i18n.flatten(desktopPa) }
+  if (locale === "az") return { ...base, ...i18n.flatten(appAz), ...i18n.flatten(desktopAz) }
+  if (locale === "fi") return { ...base, ...i18n.flatten(appFi), ...i18n.flatten(desktopFi) }
+  if (locale === "sv") return { ...base, ...i18n.flatten(appSv), ...i18n.flatten(desktopSv) }
+  if (locale === "th") return { ...base, ...i18n.flatten(appTh), ...i18n.flatten(desktopTh) }
   return { ...base, ...i18n.flatten(appKo), ...i18n.flatten(desktopKo) }
 }
 

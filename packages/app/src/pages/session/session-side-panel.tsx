@@ -59,6 +59,7 @@ import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/ses
 
 type ReviewDiff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
 type RenderDiff = FileDiffInfo | (SnapshotFileDiff & { file: string }) | VcsFileDiff
+const FILE_TREE_WIDTH_MIN = 240
 
 function renderDiff(value: ReviewDiff): value is RenderDiff {
   return typeof value.file === "string"
@@ -104,13 +105,14 @@ export function SessionSidePanel(props: {
       }),
   )
   const open = createMemo(() => reviewOpen() || fileOpen())
+  const fileTreeWidth = createMemo(() => Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width()))
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
     if (reviewOpen()) return "auto"
-    return `${layout.fileTree.width()}px`
+    return `${fileTreeWidth()}px`
   })
-  const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
+  const treeWidth = createMemo(() => (fileOpen() ? `${fileTreeWidth()}px` : "0px"))
 
   const diffs = createMemo(() => props.diffs().filter(renderDiff))
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
@@ -845,8 +847,8 @@ export function SessionSidePanel(props: {
                     <ResizeHandle
                       direction="horizontal"
                       edge="start"
-                      size={layout.fileTree.width()}
-                      min={200}
+                      size={fileTreeWidth()}
+                      min={FILE_TREE_WIDTH_MIN}
                       max={480}
                       onResize={(width) => {
                         props.size.touch()
