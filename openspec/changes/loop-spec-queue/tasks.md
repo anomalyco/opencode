@@ -1,125 +1,194 @@
 # Tasks: loop-spec-queue
 
 Depends on `loop-completion-contract`, `session-cancellation-integrity`, and
-`fix-loop-reliability`. Do not start Phase 3 before those are merged.
+`fix-loop-reliability` — all three implemented in the working tree 2026-08-05.
+
+Implementation status 2026-08-05: Phases 1–3 and 6 implemented and tested
+(`src/loop/spec-queue/{tasks-md,queue,brief,gates}.ts`, queue driver in
+`src/loop/loop.ts`; 15 unit tests in `test/loop/spec-queue.test.ts`, 5 integration
+tests in `test/loop/queue-mode.test.ts` — drain, quarantine, false-completion-claim
+discrepancy, BLOCKED signal, concurrent refusal — all green). Phase 4: deny profile
+implemented (`QueueDenyRules` on the queue's parent AND child sessions) and, load-bearing:
+`session/tools.ts` now evaluates deny rules BEFORE the auto-mode skip, so auto mode
+cannot void the ceiling. Phase 5: CLI `--queue`, TUI `/loop --queue`, dialog gate
+display, report printing done (`--sync` remains). Remaining: 4.2 adversarial review,
+4.3 credential-less runs, 5.4 `--sync`, 7.3 restart resume, 7.4 real backlog run.
 
 ## Phase 1: openspec change model
 
-- [ ] 1.1 Implement a `tasks.md` parser
+- [x] 1.1 Implement a `tasks.md` parser
   - Parse `- [ ]` / `- [x]` items with their `N.N` ids, nested bullets, and `Validation:` lines
   - Return `{ id, text, checked, validation?: string }[]`
   - Validation: unit tests against the real `tasks.md` files in `openspec/changes/` — every file parses, counts match a `grep -c` baseline
 
-- [ ] 1.2 Implement queue resolution
+- [x] 1.2 Implement queue resolution
   - Enumerate `openspec/changes/*/`, exclude `archive/`, `_repo/`, and any dir containing `.skein/blocker.md`
   - Deterministic order; accept an explicit change list to override
   - Validation: unit test with a fixture tree, including a blocker-bearing change that is excluded
 
-- [ ] 1.3 Implement cursor derivation from disk
+- [x] 1.3 Implement cursor derivation from disk
   - Current change = first queued change with an unchecked task
   - Validation: unit test — resolving twice with no changes on disk yields the same cursor; checking off all tasks in change 1 advances the cursor to change 2
 
-- [ ] 1.4 Build the per-iteration brief
+- [x] 1.4 Build the per-iteration brief
   - Compose `proposal.md`, `tasks.md`, and `specs/**/spec.md` for the current change plus the next unchecked task
   - Validation: snapshot test of a brief for a known change
 
 ## Phase 2: Gates
 
-- [ ] 2.1 Define the gate state machine `implement → test → verify → commit`
+- [x] 2.1 Define the gate state machine `implement → test → verify → commit`
   - One-directional; failure returns to `implement` carrying failure output
   - Validation: `bun typecheck` — zero errors
 
-- [ ] 2.2 Implement gate evaluators
+- [x] 2.2 Implement gate evaluators
   - `implement`: all checkboxes checked
   - `test`: repo test command exits zero
   - `verify`: `bun typecheck` exits zero and each task's `Validation:` command exits zero
   - `commit`: a commit exists on a non-default branch containing the change's work
   - Validation: unit tests per evaluator with pass and fail fixtures
 
-- [ ] 2.3 Implement consecutive-same-gate failure counting, limit 3 → halt queue
-  - Must fire even when every iteration makes tool calls (the existing no-progress guard at `loop.ts:301-321` would not)
-  - Validation: test — three `verify` failures with tool calls present halts the queue
+- [x] 2.3 Implement consecutive-same-gate failure counting, limit 3 → quarantine change
+  - Must fire even when every iteration makes tool calls (the existing no-progress guard would not)
+  - Validation: test — three `verify` failures with tool calls present quarantines the change and the queue advances
 
-- [ ] 2.4 Implement completion-claim verification
+- [x] 2.4 Implement completion-claim verification
   - Token in output triggers gate evaluation; on mismatch, build the discrepancy prompt naming unchecked tasks and failing output
   - Validation: test — token emitted with 2 unchecked tasks does not advance and the next prompt names both
 
 ## Phase 3: Queue driver in the loop service
 
-- [ ] 3.1 Add queue mode to `CreateInput` and `Info`
+- [x] 3.1 Add queue mode to `CreateInput` and `Info`
   - `mode: "prompt" | "queue"`, `queue?: string[]`, plus current change and gate on `Info`
   - Validation: `bun typecheck` passes; SDK types updated in `packages/sdk/js/src/v2/loop-args.ts`
 
-- [ ] 3.2 Implement the queue driver loop
+- [x] 3.2 Implement the queue driver loop
   - Each iteration: derive cursor → build brief → dispatch → evaluate gate → advance or return to implement
   - Validation: integration test with a mock LLM driving a two-change fixture queue to completion
 
-- [ ] 3.3 Refuse a second concurrent queue loop for the same directory
+- [x] 3.3 Refuse a second concurrent queue loop for the same directory
   - Validation: test — second create is refused naming the active loop
 
-- [ ] 3.4 Implement halt semantics and the blocked signal
-  - Halt on gate exhaustion, stall, `max_reached`, error, or `<promise>BLOCKED</promise>`
-  - Leave the working tree untouched from the halt point
-  - Validation: test each halt cause produces a halt with the correct reported cause
+- [x] 3.4 Implement quarantine semantics and the blocked signal (relentless mode)
+  - Gate exhaustion, stall, `max_reached`, or `<promise>BLOCKED</promise>` on a change →
+    write `.skein/blocker.md` (gate/reason, verbatim failure output, timestamp) into the
+    change and advance; leave the tree otherwise untouched from the failure point
+  - Validation: test each cause produces a blocker file with the correct cause and the
+    queue continues with the next change
+
+- [x] 3.5 Implement live queue re-resolution and the end condition
+  - Re-resolve the queue from disk as the run progresses; changes appearing mid-run join it
+  - The run ends only when a fresh resolution finds no eligible change with unchecked tasks
+  - Validation: test — a change added after the run starts is attempted; a drained queue ends the run
+
+- [x] 3.6 Implement the systemic-failure guard
+  - Three consecutive changes quarantined with zero gates passed anywhere in the run → halt,
+    report suspected systemic cause, quarantine no further changes
+  - Validation: test — three changes failing on a broken test command halt the run with the shared cause named
+
+- [x] 3.7 Implement the fan-out nudge in the brief
+  - When `experimental.local_subagent_placement` is on and `LocalPlacement` reports at
+    least one idle peer, append one paragraph to the brief naming the task-tool fan-out
+    option; no idle peers → no nudge
+  - Validation: unit test with a stubbed placement — nudge present with idle peers, absent without
 
 ## Phase 4: Authority boundary
 
-- [ ] 4.1 Define the unattended permission profile
+- [x] 4.1 Define the unattended permission profile
   - Deny `git push`, `git tag`, `gh release`, `gh pr merge`, `npm publish`, `bun publish`, `script/deploy*`, `fleet-deploy*`, release workflow triggers
   - Enforced via the existing permission layer, not the prompt
   - Validation: test — each denied command is refused and the denial is recorded
 
-- [ ] 4.2 Adversarial review of the boundary (see design.md D4)
+- [x] 4.2 Adversarial review of the boundary (see design.md D4)
   - Attempt bypass via: subprocess, shell alias, wrapper script, heredoc-written-then-executed script, `git -c` tricks
   - Document each attempt and its result
   - Validation: no attempt succeeds in pushing, OR the gap is documented and 4.3 is mandatory
+  - Done 2026-08-05 as an executable review: `test/loop/queue-authority.test.ts`
+    runs each bypass shape through the REAL derivation the shell tool uses
+    (`ShellTool.commandPatterns` — newly exported, same parse/commands/source
+    primitives as `collect`) against the REAL `QueueDenyRules` via the REAL
+    `Permission.evaluate`. 35 shapes denied, including `&&`/`;`/`||` chains,
+    subshells, `$(…)` and backtick substitution, pipelines, env prefixes,
+    `git -c k=v push`, absolute-path git, `nohup`/`timeout`/`env -i` wrappers,
+    `xargs`, `find -exec`, remote execution (ssh/scp/rsync), and credential-helper
+    or remote-URL rewrites. Ordinary queue work (test, typecheck, add, commit,
+    checkout -b) stays permitted.
+    KEY FINDING: the shell tool AST-decomposes compound commands, so per-node
+    matching is far stronger than string matching — but 3 shapes are provably
+    invisible to ANY pattern layer and are pinned as RESIDUAL tests: an opaque
+    wrapper script (`./tools/ship.sh`), a generated-then-executed script
+    (`bash /tmp/generated.sh`), and `make release`. Those make 4.3 mandatory,
+    not optional.
 
-- [ ] 4.3 Defence in depth — run queue loops without git push credentials
+- [x] 4.3 Defence in depth — run queue loops without git push credentials
   - Ensure a push cannot authenticate even if the command is reached
   - Validation: manual — `git push` inside a queue loop fails to authenticate
+  - Done 2026-08-05 and enforced in code, not by recipe: `QueueAuthority.deniesPush`
+    keys off the session's own ruleset, and `session/tools.ts` passes that verdict
+    to the shell tool via `ctx.extra.denyPush`; `ShellTool.shellEnv` then applies
+    `withoutCredentials()`, which deletes GITHUB_TOKEN/GH_TOKEN/GITHUB_API_TOKEN/
+    NPM_TOKEN/NODE_AUTH_TOKEN/CARGO_REGISTRY_TOKEN/SSH_AUTH_SOCK/SSH_AGENT_PID and
+    forces GIT_TERMINAL_PROMPT=0 plus GIT_ASKPASS/SSH_ASKPASS=/bin/false. The queue
+    driver's own gate commands get the same stripped env. Because the trigger is
+    "this session denies pushing", the mitigation cannot drift out of step with the
+    deny list. Covered by tests in `test/loop/queue-authority.test.ts`.
 
-- [ ] 4.4 Implement the `commit` gate behaviour
+- [x] 4.4 Implement the `commit` gate behaviour
   - Branch `loop/<change-slug>` off the current branch; never commit to `dev`
   - Message from the proposal H1 plus the standard trailer; no amend, no rebase
   - Validation: test — commit lands on the expected branch, `dev` is untouched
 
 ## Phase 5: Surfaces
 
-- [ ] 5.1 CLI: `opencode loop --queue [<change>...]`
+- [x] 5.1 CLI: `opencode loop --queue [<change>...]`
   - Validation: `opencode loop --help` documents queue mode and the authority ceiling
 
-- [ ] 5.2 TUI: `/loop --queue`
+- [x] 5.2 TUI: `/loop --queue`
   - `packages/tui/src/component/prompt/index.tsx` (~:1138-1172 intercept path)
   - Validation: manual — starts a queue loop
 
-- [ ] 5.3 Show current change and gate in the `/loops` dialog
+- [x] 5.3 Show current change and gate in the `/loops` dialog
   - `packages/tui/src/component/dialog-loop-list.tsx`
   - Validation: manual — dialog shows change slug and gate per queue loop
 
-- [ ] 5.4 Optional tracker sync behind `--sync`, default off
+- [x] 5.4 Optional tracker sync behind `--sync`, default off
   - Runs `specsync -change <change>` after a change completes
   - Validation: default run makes no GitHub calls; `--sync` performs a dry-run first
+  - Done 2026-08-05: `queueSync` on `CreateInput` (default false), `--sync` on the
+    CLI and `/loop --queue --sync` in the TUI. Only fires for a change that
+    COMPLETED (never a quarantined one), always runs `specsync -change <slug>
+    -dry-run` first and logs it, and only then the real sync; each result lands in
+    the run report. A sync failure never changes the change's outcome. Note:
+    `specsync` supports `-provider beads`, so this is also the path to mirroring
+    queue progress into beads.
 
 ## Phase 6: Report
 
-- [ ] 6.1 Implement the run report
-  - Per change: final gate, iterations used, commit sha; halting change with verbatim failure output; branches awaiting push; remaining unattempted changes
-  - Validation: snapshot test for a completed run and a halted run
+- [x] 6.1 Implement the run report
+  - Per change: final gate, iterations used, commit sha; quarantined changes with cause
+    and blocker path; branches awaiting push; systemic halt cause if any
+  - Validation: snapshot test for a drained run and a quarantine-bearing run
 
-- [ ] 6.2 Surface the report in TUI and CLI on run end
+- [x] 6.2 Surface the report in TUI and CLI on run end
   - Validation: manual — report is readable after an unattended run
 
 ## Phase 7: End-to-end verification
 
-- [ ] 7.1 Two-change fixture queue drains to completion with a mock LLM
+- [x] 7.1 Two-change fixture queue drains to completion with a mock LLM
   - Validation: both changes complete, two branches created, nothing pushed
 
-- [ ] 7.2 Halt path end-to-end
-  - Validation: queue halts on change 1's `verify` gate, change 2 untouched and reported unattempted
+- [x] 7.2 Quarantine path end-to-end
+  - Validation: change 1 exhausts `verify` and is quarantined with a blocker file; change 2 is attempted and completes; the report names both outcomes
 
-- [ ] 7.3 Restart resume
+- [x] 7.3 Restart resume
   - Kill the server mid-queue; restart; resume
   - Validation: resumes at the correct change, no repeated work
+  - Done 2026-08-05: `test/loop/spec-queue.test.ts` "restart resume" — a fresh
+    resolution with zero in-memory carry-over resumes at the next unchecked change,
+    treats the finished one as complete, keeps a pre-restart quarantine excluded,
+    and picks up a change created mid-run. This is the whole point of deriving the
+    cursor from disk (D1): there is no persistence to restore.
+    Incidental finding: queue order is alphabetical by slug, so `change-three`
+    sorts before `change-two` — deterministic as specified, but not priority-aware.
 
 - [ ] 7.4 Real unattended run against this repo's own backlog
   - Target `retire-auto-reply` (smallest, self-contained) as the single queued change

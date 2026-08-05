@@ -2,21 +2,21 @@
 
 ## Phase 1: Normalised snapshot type
 
-- [ ] 1.1 Define the `CapacitySnapshot` type
+- [x] 1.1 Define the `CapacitySnapshot` type
   - Fields: `provider`, `baseURL`, `slotsTotal`, `inFlight`, `freeSlots`, `busy`, `loadedModel`, `signal: "exact" | "inferred"`, `probedAt`, `stale`, `reachable`
   - Validation: `bun typecheck` in packages/opencode — zero errors
 
-- [ ] 1.2 Build snapshots from the existing probe path
+- [x] 1.2 Build snapshots from the existing probe path
   - Reuse `/api/hardware` probing in `local/mdns.ts` and `freeSlots()` at `local/placement.ts:66`
   - `signal` is `exact` when the host serves an `inference` block, else `inferred`
   - Validation: unit test with fixtures for exact, inferred, and unreachable hosts
 
-- [ ] 1.3 Assert the z4 case explicitly — it is the regression that motivates this change
+- [x] 1.3 Assert the z4 case explicitly — it is the regression that motivates this change
   - Fixture: `gpu_util_pct: 85` with `inference: {busy: false, in_flight: 0, slots_total: 1}`
   - Assert: one free slot, `busy: false`, `signal: "exact"`
   - Validation: test fails if GPU utilisation is ever allowed to override queue depth
 
-- [ ] 1.4 Multi-slot and staleness tests
+- [x] 1.4 Multi-slot and staleness tests
   - `slots_total: 4, in_flight: 1` → three free slots
   - Probe older than the freshness bound → `stale: true`, age preserved
   - Unreachable host → `reachable: false`, not `inFlight: 0`
@@ -24,12 +24,12 @@
 
 ## Phase 2: Expose it
 
-- [ ] 2.1 Add a capacity endpoint to the instance HTTP API
+- [x] 2.1 Add a capacity endpoint to the instance HTTP API
   - Follow the existing group/handler pattern under `server/routes/instance/httpapi/`
   - Returns snapshots for all known providers
   - Validation: `bun run test:httpapi` passes; endpoint appears in the generated API surface
 
-- [ ] 2.2 Confirm no placement behaviour changed
+- [x] 2.2 Confirm no placement behaviour changed
   - The same inputs must yield the same provider choice as before this change
   - Validation: `bun test test/local/placement.test.ts --timeout 30000` — all pass unmodified
 

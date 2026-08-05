@@ -2,74 +2,106 @@
 
 ## Phase 1: Per-iteration child sessions
 
-- [ ] 1.1 Change `runIteration` to create a child session for each iteration
-  - `loop.ts`: call `session.create({ parentID: loopSessionID, title: \`loop iter ${n}: ${promptHead}\` })` instead of reusing `record.info.sessionID`
+- [x] 1.1 Change `runIteration` to create a child session for each iteration
+  - `loop.ts`: call `session.create({ parentID: loopSessionID, title: \`loop iter ${n}: ${promptHead}\` })`instead of reusing`record.info.sessionID`
   - Pass the child `sessionID` to `promptSvc.prompt()`
   - Add `iterationSessionID?: SessionID` to `Info` schema (optional, set after each iteration)
   - Validation: `bun typecheck` in packages/opencode — no errors
+  - Done 2026-08-05. Child creation failure falls back to prompting the loop
+    session directly (degraded iteration beats dead loop).
 
-- [ ] 1.2 Update `patch` call after `runIteration` to store `iterationSessionID`
+- [x] 1.2 Update `patch` call after `runIteration` to store `iterationSessionID`
   - Validation: `bun typecheck` passes; running a loop creates child sessions visible in TUI session list
+  - Done 2026-08-05.
 
-- [ ] 1.3 Add `iterationSessionID` to `Info` schema and `CreateInput` (optional read-only)
+- [x] 1.3 Add `iterationSessionID` to `Info` schema and `CreateInput` (optional read-only)
   - `loop.ts`: extend `Info` struct; keep backward-compatible (optional field)
   - Validation: `bun typecheck` passes; SDK types reflect the new field
+  - Done 2026-08-05: added to `Info` (not `CreateInput` — it is loop-owned output,
+    never caller input). SDK regeneration pending (`bun run --filter @opencode-ai/sdk generate`
+    or repo equivalent) — the server accepts/emits it already.
 
-- [ ] 1.4 Confirm `session.create({ parentID })` correctly limits inner step count
+- [x] 1.4 Confirm `session.create({ parentID })` correctly limits inner step count
   - Child sessions have `parentID` set → `defaultSteps = DefaultSubAgentSteps = 50` applies
   - Validation: check `prompt.ts` logic — `session.parentID ? DefaultSubAgentSteps : Infinity`
+  - Verified 2026-08-05 (`prompt.ts` ~1290). Note: loop iterations therefore now run
+    under the 50-step sub-agent cap — a bounded iteration is the desired behavior.
 
 ## Phase 2: Adaptive continuation prompt
 
-- [ ] 2.1 Add `PreviousOutcome` type to `loop.ts` capturing the signals needed for prompt selection
+- [x] 2.1 Add `PreviousOutcome` type capturing the signals needed for prompt selection
   - Fields: `toolCalls: number`, `outputLength: number`, `wasNearIdentical: boolean`
+  - Done 2026-08-05: lives in `src/loop/continuation.ts` (import-free, same pattern
+    as `completion.ts`/`similarity.ts`), re-exported from `loop.ts`.
 
-- [ ] 2.2 Implement `continuationPrompt(base: string, prev: PreviousOutcome | undefined): string`
+- [x] 2.2 Implement `continuationPrompt(base: string, prev: PreviousOutcome | undefined): string`
   - First iteration (`prev === undefined`): return `base`
   - Stall (zero tool calls, short output ≤ 50 chars): prepend directive about executing the plan
   - Empty output (length 0): prepend directive about empty response
   - Spinning (tool calls present, `wasNearIdentical`): prepend reassess directive
   - Otherwise: return `base`
   - Validation: unit test covering all branches
+  - Done 2026-08-05.
 
-- [ ] 2.3 Wire `continuationPrompt` into `runIteration`
+- [x] 2.3 Wire `continuationPrompt` into `runIteration`
   - Pass previous result's signals; use returned string as the prompt text
   - Validation: `bun typecheck` passes
+  - Done 2026-08-05: `Record_.lastOutcome` updated after every iteration;
+    `matchesCompletion` receives the actual prompt text used (directive included)
+    so echo detection stays correct.
 
-- [ ] 2.4 Add unit tests for `continuationPrompt`
+- [x] 2.4 Add unit tests for `continuationPrompt`
   - Test: first iteration → base prompt unchanged
   - Test: stall outcome → directive prepended
   - Test: empty output → directive prepended
   - Test: spinning → reassess directive prepended
   - Test: normal progress → base prompt unchanged
   - Validation: `bun test test/loop/ --timeout 30000` — all pass
+  - Done 2026-08-05: `test/loop/continuation.test.ts` (6 tests, includes
+    substantive-no-tool-answer-is-not-a-stall).
 
 ## Phase 3: Pause Deferred (replace busy-poll)
 
-- [ ] 3.1 Add `pauseGate: Deferred.Deferred<void> | undefined` to `Record_`
+- [x] 3.1 Add `pauseGate: Deferred.Deferred<void> | undefined` to `Record_`
   - Validation: `bun typecheck` passes
+  - Done 2026-08-05.
 
-- [ ] 3.2 `pause()`: create a new `Deferred.make<void>()`, store in `record.pauseGate`, flip status to `"paused"`
+- [x] 3.2 `pause()`: create a new `Deferred.make<void>()`, store in `record.pauseGate`, flip status to `"paused"`
   - Validation: `bun typecheck` passes
+  - Done 2026-08-05.
 
-- [ ] 3.3 `resume()`: resolve the stored `pauseGate` Deferred, clear it, flip status to `"running"`
+- [x] 3.3 `resume()`: resolve the stored `pauseGate` Deferred, clear it, flip status to `"running"`
   - Validation: `bun typecheck` passes
+  - Done 2026-08-05. Additionally: `cancel()` of a paused loop also resolves the
+    gate — otherwise the run fiber stays parked on it forever (fiber leak).
 
-- [ ] 3.4 `run` fiber: replace `Effect.sleep("500 millis") + continue` with `Deferred.await(record.pauseGate)`
+- [x] 3.4 `run` fiber: replace `Effect.sleep("500 millis") + continue` with `Deferred.await(record.pauseGate)`
   - The fiber blocks at zero cost until `resume()` resolves the Deferred
   - Validation: `bun typecheck` passes; pause/resume test still passes in loop.test.ts
+  - Done 2026-08-05 (sleep kept only as a defensive fallback for a gateless pause,
+    which `pause()` cannot produce).
 
 ## Phase 4: Tests & verification
 
-- [ ] 4.1 Update existing loop tests to account for child sessions (assertion on `info.iterationSessionID`)
-  - Validation: `bun test test/loop/loop.test.ts --timeout 30000` — all 5 pass
+- [x] 4.1 Update existing loop tests to account for child sessions (assertion on `info.iterationSessionID`)
+  - Validation: `bun test test/loop/loop.test.ts --timeout 30000` — all pass
+  - Done 2026-08-05: caller-session test now asserts the iteration ran in a child of
+    the caller's session and `iterationSessionID` tracks it. 27/27 loop tests green.
 
-- [ ] 4.2 Add test: stall → adaptive prompt fires (mock LLM returns empty output twice, verify third iteration uses directive prompt)
+- [x] 4.2 Add test: stall → adaptive prompt fires (mock LLM returns empty output twice, verify third iteration uses directive prompt)
   - Validation: new test passes
+  - Done 2026-08-05: "a stalled iteration gets a directive continuation prompt in a
+    fresh child session" — also asserts every iteration used a distinct child session
+    and the user's base prompt survives in directive iterations.
 
-- [ ] 4.3 Run full typecheck
+- [x] 4.3 Run full typecheck
   - Validation: `bun typecheck` in packages/opencode — zero errors
+  - Verified 2026-08-05 (workspace-wide).
 
-- [ ] 4.4 Rebuild binary
+- [x] 4.4 Rebuild binary
   - `bun run /path/to/packages/opencode/script/build.ts --single`
   - Validation: smoke test passes (`dist/.../opencode --version`)
+  - Verified 2026-08-05: `dist/opencode-darwin-arm64/bin/opencode` built and
+    smoke-passed (0.0.0-dev-...); per-iteration child sessions confirmed in a
+    LIVE run — three iterations of one loop each reported a distinct
+    `sessionID` (ses_030b06eb8f / ses_030b06b22f / ses_030b06797f).
