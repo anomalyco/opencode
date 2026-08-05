@@ -222,7 +222,20 @@ display, report printing done (`--sync` remains). Remaining: 4.2 adversarial rev
     misconfiguration and the verbatim output instead. `implement` and `commit` are
     excluded from that heuristic since they can legitimately never pass.
   - Run 3 (both fixes, gate cwd set to packages/opencode after a real `bun install`
-    in the worktree): gate command verified runnable first, then launched.
+    in the worktree): reached 12/12 tasks in 5 iterations, then the new
+    misconfiguration halt fired — correctly. The gate command I chose,
+    `bun test test/loop/`, runs the queue's OWN tests, and running them while a
+    real agent worked the same worktree failed 11 of them on timing; the halt
+    reported the verbatim output, which made that diagnosable in seconds instead
+    of silently blockering the change. Lesson for operators: do not point the test
+    gate at tests that exercise the queue itself.
+    IT EXPOSED ONE MORE DEFECT, now fixed: the halt still left the change
+    quarantined — a 19.7K `.skein/blocker.md` on a change whose tasks were all
+    checked. A config mistake was poisoning finished work for every future run,
+    which is precisely what the halt was introduced to prevent. The suspect-gate
+    decision now happens BEFORE any outcome is recorded, removes the blocker it
+    had written (`SpecQueue.unquarantine`), and says so in the report. Asserted by
+    the regression test.
     Across all runs the behaviour this task exists to prove holds: a real planned
     change is advanced unattended under the no-push ceiling, in an isolated
     worktree, with every outcome legible in the report and blocker file.

@@ -32,7 +32,7 @@ import {
   type Exec,
   type GateOptions,
 } from "./spec-queue/gates"
-import { cursor, quarantine, resolveQueue, type QueueChange } from "./spec-queue/queue"
+import { cursor, quarantine, resolveQueue, unquarantine, type QueueChange } from "./spec-queue/queue"
 import { QueueDenyRules, withoutCredentials } from "./spec-queue/authority"
 
 import { contractPart, DEFAULT_COMPLETION_TOKEN, matchesCompletion, promptDisablesCompletion } from "./completion"
@@ -863,6 +863,30 @@ export const layer = Layer.effect(
             }
           }
 
+          // Decide whether the gate that quarantined this change is itself
+          // suspect BEFORE recording an outcome or leaving a blocker behind: a
+          // command-backed gate that never passed once in the entire run is far
+          // more likely misconfigured than proof the change is bad (observed:
+          // `bun test` invoked from a repo root that refuses to run tests
+          // there). Halting is only honest if it also un-poisons the change —
+          // otherwise a config mistake blockers finished work forever.
+          const suspectGate =
+            ending.outcome === "quarantined" &&
+            ending.gate !== undefined &&
+            (ending.gate === "test" || ending.gate === "verify") &&
+            !queueState.gatesPassed.has(ending.gate)
+          if (suspectGate) {
+            yield* Effect.sync(() => unquarantine(change))
+            yield* finishQueue(
+              id,
+              "error",
+              `suspected misconfigured ${ending.gate} gate: it never passed once this run, so ` +
+                `"${change.slug}" was NOT quarantined (its blocker was removed). Check the command ` +
+                `and its working directory (queueOptions.cwd / --gate-cwd). Verbatim output:\n` +
+                (ending.detail ?? "").slice(-2_000),
+            )
+            return
+          }
           queueState.outcomes.push({
             slug: change.slug,
             outcome: ending.outcome === "completed" ? "completed" : "quarantined",
@@ -889,28 +913,6 @@ export const layer = Layer.effect(
             }
           }
           if (ending.outcome === "quarantined") {
-            // A gate that has never once passed in this run is far more likely
-            // misconfigured than proof that the change is bad — e.g. a test
-            // command invoked from the wrong directory (this repo's root `test`
-            // script is `exit 1`, and `bun test` from the root refuses outright).
-            // Quarantining changes one at a time against a broken gate would
-            // blocker the whole backlog for a config mistake, so halt loudly and
-            // name the gate instead.
-            // Only the purely command-backed gates: `implement` is derived from
-            // checkboxes on disk and can legitimately never pass (the model
-            // simply did not finish), and `commit` failing usually means the
-            // model did not commit rather than that git is misconfigured.
-            const commandBacked = ending.gate === "test" || ending.gate === "verify"
-            if (ending.gate && commandBacked && !queueState.gatesPassed.has(ending.gate)) {
-              yield* finishQueue(
-                id,
-                "error",
-                `suspected misconfigured ${ending.gate} gate: it never passed once this run — ` +
-                  `check the command and its working directory (queueOptions.cwd). Verbatim output:\n` +
-                  (ending.detail ?? "").slice(-2_000),
-              )
-              return
-            }
             queueState.consecutiveQuarantines += 1
             // Systemic-failure guard (design D8): quarantine is for sick
             // changes, not a sick environment. Do not consume the backlog's

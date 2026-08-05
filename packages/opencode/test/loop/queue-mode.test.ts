@@ -397,6 +397,10 @@ it.instance(
       // broken command and blockering the whole backlog.
       expect(final.status).toBe("error")
       expect(final.report).toContain("suspected misconfigured test gate")
+      // Crucially the change is left CLEAN: a config mistake must not blocker
+      // work that may well be finished. No blocker file survives the halt.
+      expect(fs.existsSync(path.join(changeDir, ".skein", "blocker.md"))).toBe(false)
+      expect(final.report).toContain("was NOT quarantined")
       // Each failure still spent a real repair turn carrying the gate's failure
       // output to the model, rather than re-passing the checkbox gate and
       // burning strikes in a tight loop with no model involvement.

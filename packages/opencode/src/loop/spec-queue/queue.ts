@@ -111,4 +111,18 @@ export function quarantine(change: QueueChange, input: { cause: string; detail: 
   return file
 }
 
+/**
+ * Removes a change's blocker, un-doing a quarantine. Used when the loop decides
+ * the gate that quarantined it was itself suspect (a misconfigured command) —
+ * a config mistake must not leave a finished change blockered for every future
+ * run. Best-effort: a missing blocker is not an error.
+ */
+export function unquarantine(change: QueueChange): void {
+  const dir = path.join(change.directory, ".skein")
+  const file = path.join(dir, "blocker.md")
+  if (fs.existsSync(file)) fs.rmSync(file, { force: true })
+  // Leave .skein itself if anything else lives there.
+  if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
+}
+
 export * as SpecQueue from "./queue"
