@@ -67,7 +67,7 @@ jobs:
         timeout-minutes: 20
         run: GITHUB_ACTIONS=false bun turbo test
         env:
-          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+          LEAKCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
       - name: Check generated client
         if: runner.os == 'Linux'

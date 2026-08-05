@@ -14,7 +14,7 @@
   node_modules ? callPackage ./node-modules.nix { },
 }:
 stdenvNoCC.mkDerivation (finalAttrs: {
-  pname = "opencode";
+  pname = "leak-code";
   inherit (node_modules) version src;
   inherit node_modules;
 
@@ -45,9 +45,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   env.MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
-  env.OPENCODE_DISABLE_MODELS_FETCH = true;
-  env.OPENCODE_VERSION = finalAttrs.version;
-  env.OPENCODE_CHANNEL = "prod";
+  env.LEAKCODE_DISABLE_MODELS_FETCH = true;
+  env.LEAKCODE_VERSION = finalAttrs.version;
+  env.LEAKCODE_CHANNEL = "prod";
 
   buildPhase = ''
     runHook preBuild
@@ -62,10 +62,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    install -Dm755 dist/opencode-*/bin/opencode $out/bin/opencode
-    install -Dm644 schema.json $out/share/opencode/schema.json
+    install -Dm755 dist/leak-code-*/bin/opencode $out/bin/leak-code
+    install -Dm644 schema.json $out/share/leak-code/schema.json
 
-    wrapProgram $out/bin/opencode \
+    wrapProgram $out/bin/leak-code \
       --prefix PATH : ${
         lib.makeBinPath (
           [
@@ -81,9 +81,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
     # trick yargs into also generating zsh completions
-    installShellCompletion --cmd opencode \
-      --bash <($out/bin/opencode completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
+    installShellCompletion --cmd leak-code \
+      --bash <($out/bin/leak-code completion) \
+      --zsh <(SHELL=/bin/zsh $out/bin/leak-code completion)
   '';
 
   nativeInstallCheckInputs = [
@@ -91,11 +91,11 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     writableTmpDirAsHomeHook
   ];
   doInstallCheck = true;
-  versionCheckKeepEnvironment = [ "HOME" "OPENCODE_DISABLE_MODELS_FETCH" ];
+  versionCheckKeepEnvironment = [ "HOME" "LEAKCODE_DISABLE_MODELS_FETCH" ];
   versionCheckProgramArg = "--version";
 
   passthru = {
-    jsonschema = "${placeholder "out"}/share/opencode/schema.json";
+    jsonschema = "${placeholder "out"}/share/leak-code/schema.json";
     env = finalAttrs.env;
   };
 
@@ -103,7 +103,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     description = "The open source coding agent";
     homepage = "https://opencode.ai";
     license = lib.licenses.mit;
-    mainProgram = "opencode";
+    mainProgram = "leak-code";
     inherit (node_modules.meta) platforms;
   };
 })

@@ -77,7 +77,7 @@ jobs:
 
             Requirements:
             1. Update all relevant locale docs under packages/web/src/content/docs/<locale>/ so they reflect these English page changes.
-            2. You MUST use the Task tool for translation work and launch subagents with subagent_type `translator` (defined in .opencode/agent/translator.md).
+            2. You MUST use the Task tool for translation work and launch subagents with subagent_type `translator` (defined in .leak-code/agent/translator.md).
             3. Do not translate directly in the primary agent. Use translator subagent output as the source for locale text updates.
             4. Run translator subagent Task calls in parallel whenever file/locale translation work is independent.
             5. Use only the minimum tools needed for this task (read/glob, file edits, and translator Task). Do not use shell, web, search, or GitHub tools for translation work.
