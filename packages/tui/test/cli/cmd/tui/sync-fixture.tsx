@@ -2,6 +2,7 @@
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { ArgsProvider } from "../../../../src/context/args"
+import { ExitProvider } from "../../../../src/context/exit"
 import { KVProvider, useKV } from "../../../../src/context/kv"
 import { ProjectProvider, useProject } from "../../../../src/context/project"
 import { SDKProvider } from "../../../../src/context/sdk"
@@ -42,17 +43,27 @@ export async function mount(override?: FetchHandler, state?: string) {
     return <box />
   }
 
+  // Recorded rather than acted on: a bootstrap that decides to exit should fail
+  // the assertion that cares, not kill the test runner.
+  const exits: unknown[] = []
+
   const app = await testRender(() => (
     <TestTuiContexts paths={state ? { state } : undefined}>
       <ArgsProvider>
         <KVProvider>
-          <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={events.source}>
-            <ProjectProvider>
-              <SyncProvider>
-                <Probe />
-              </SyncProvider>
-            </ProjectProvider>
-          </SDKProvider>
+          {/* SyncProvider calls useExit() on the bootstrap path (it exits the
+              TUI when a fatal bootstrap fails), so the harness has to supply an
+              Exit. Recording instead of exiting keeps a bootstrap failure
+              visible to a test rather than tearing the runner down. */}
+          <ExitProvider exit={(reason) => exits.push(reason)}>
+            <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={events.source}>
+              <ProjectProvider>
+                <SyncProvider>
+                  <Probe />
+                </SyncProvider>
+              </ProjectProvider>
+            </SDKProvider>
+          </ExitProvider>
         </KVProvider>
       </ArgsProvider>
     </TestTuiContexts>
@@ -60,5 +71,5 @@ export async function mount(override?: FetchHandler, state?: string) {
 
   await ready
   await wait(() => sync.status === "complete")
-  return { app, emit: events.emit, kv, project, sync, session: calls.session }
+  return { app, emit: events.emit, kv, project, sync, session: calls.session, exits }
 }
