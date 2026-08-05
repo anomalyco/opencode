@@ -92,8 +92,8 @@ export const Plugin = {
                 // directory listing the walk starts at the directory itself (so its own AGENTS.md
                 // is discovered); for a file it starts at the file's dirname. External reads are
                 // skipped, and discovery failures never fail the read.
-                yield* Effect.gen(function* () {
-                  if (target.externalDirectory !== undefined) return
+                const instructions = yield* Effect.gen(function* () {
+                  if (target.externalDirectory !== undefined) return [] as string[]
                   const resolved = yield* fs.resolve(target.canonical)
                   const root = yield* fs.resolve(location.directory)
                   // up() searches its stop directory, so the Location-root AGENTS.md (already
@@ -106,19 +106,20 @@ export const Plugin = {
                   const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(
                     (file) => dirname(file) !== root,
                   )
-                  if (candidates.length === 0) return
-                  yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
+                  return yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
                 }).pipe(
-                  Effect.catch(() => Effect.void),
-                  Effect.catchDefect(() => Effect.void),
+                  Effect.catch(() => Effect.succeed([] as string[])),
+                  Effect.catchDefect(() => Effect.succeed([] as string[])),
                 )
                 if (content.type === "file" && content.encoding === "base64" && !SUPPORTED_MEDIA_MIMES.has(content.mime))
                   return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
-                return content
+                return { output: content, instructions, absolute }
               }).pipe(
-                Effect.map((output) => ({
-                  output,
-                  content: toModelContent(input.path, input.offset, output),
+                Effect.map((result) => ({
+                  output: result.output,
+                  content: result.instructions.includes(result.absolute)
+                    ? `Read ${input.path}; its full contents are loaded as session instructions.`
+                    : toModelContent(input.path, input.offset, result.output),
                 })),
                 Effect.mapError((error) => {
                   if (error instanceof ToolFailure) return error

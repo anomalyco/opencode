@@ -20,7 +20,7 @@ export interface Interface {
   readonly load: (input: {
     readonly sessionID: SessionSchema.ID
     readonly paths: ReadonlyArray<string>
-  }) => Effect.Effect<void, MessageDecodeError | FSUtil.Error>
+  }) => Effect.Effect<ReadonlyArray<string>, MessageDecodeError | FSUtil.Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionInstructions") {}
@@ -53,10 +53,10 @@ const layer = Layer.effect(
         next.set(input.sessionID, new Set([...existing, ...newlyClaimed]))
         return [newlyClaimed, next]
       })
-      if (claimed.length === 0) return
+      if (claimed.length === 0) return []
       const alreadyInjected = yield* previouslyInjected(store, input.sessionID)
       const toInject = claimed.filter((path) => !alreadyInjected.has(path))
-      if (toInject.length === 0) return
+      if (toInject.length === 0) return []
       const files = yield* Effect.forEach(
         toInject,
         (path) =>
@@ -66,7 +66,8 @@ const layer = Layer.effect(
         { concurrency: "unbounded" },
       )
       const readable = files.filter((file): file is { path: string; content: string } => file !== undefined)
-      if (readable.length === 0) return
+      if (readable.length === 0) return []
+      const paths = readable.map((file) => file.path)
       // Publish directly rather than through Session.synthetic: a Location-scoped layer
       // cannot depend on Session (it routes through LocationServiceMap, forming a type
       // cycle with this node). The durable publish is what makes the synthetic visible on
@@ -76,8 +77,9 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         text: readable.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n"),
         description: `Loaded ${readable.map((file) => describePath(root, file.path)).join(", ")}`,
-        metadata: { instruction: { paths: readable.map((file) => file.path) } },
+        metadata: { instruction: { paths } },
       })
+      return paths
     })
 
     return Service.of({ load })

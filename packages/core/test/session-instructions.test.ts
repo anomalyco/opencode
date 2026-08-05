@@ -272,6 +272,31 @@ describe("SessionInstructions", () => {
     }),
   )
 
+  it.effect("returns a receipt when a direct AGENTS.md read injects the same content", () =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const dir = location.directory
+      const subPath = path.resolve(dir, "sub", "AGENTS.md")
+      yield* mkdir(path.dirname(subPath))
+      yield* writeAgents(subPath, "sub-instructions")
+
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
+      const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
+      const result = yield* executeTool(registry, readCall(sessionID, "call-agents", "sub/AGENTS.md"))
+
+      expect(result.status).toBe("completed")
+      if (result.status !== "completed") return
+      expect(result.output.content).toBe("sub-instructions")
+      expect(result.content).toEqual([
+        { type: "text", text: "Read sub/AGENTS.md; its full contents are loaded as session instructions." },
+      ])
+      expect((yield* synthetics(sessionID)).map((message) => message.text)).toEqual([
+        `Instructions from: ${subPath}\nsub-instructions`,
+      ])
+    }),
+  )
+
   it.effect("loads instructions directly without a read", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
