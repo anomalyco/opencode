@@ -16,6 +16,7 @@ import { nativeT } from "./native-translations"
 import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
 import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { wireNavigationPolicy } from "./navigation-policy"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -206,7 +207,7 @@ export function createMainWindow(id: string = randomUUID()) {
 
   allowRendererPermissions(win)
   wireWindowRecovery(win, id)
-  wireNavigationPolicy(win)
+  wireNavigationPolicy(win.webContents, { isRendererUrl, openExternal: openExternalURL })
 
   win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
@@ -250,20 +251,6 @@ export function openLocalFileURL(value: string) {
   }
   void shell.openPath(path).then((error) => {
     if (error) writeLog("window", "failed to open local file", { path, error }, "error")
-  })
-}
-
-function wireNavigationPolicy(win: BrowserWindow) {
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (!isRendererUrl(url)) openExternalURL(url)
-    return { action: "deny" }
-  })
-  // Renderer reloads (window.location.reload) navigate to the app's own URL
-  // and must stay in-window; everything else leaves through the OS.
-  win.webContents.on("will-navigate", (event, url) => {
-    if (isRendererUrl(url)) return
-    event.preventDefault()
-    openExternalURL(url)
   })
 }
 
