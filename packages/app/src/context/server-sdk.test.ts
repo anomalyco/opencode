@@ -15,7 +15,7 @@ describe("resumeStreamAfterPageShow", () => {
 })
 
 describe("adaptServerEvent", () => {
-  test("preserves current events while adapting permission requests for existing consumers", () => {
+  test("preserves current permission requests", () => {
     const current = {
       id: "evt_1",
       created: 1,
@@ -35,9 +35,9 @@ describe("adaptServerEvent", () => {
       properties: {
         id: "perm_1",
         sessionID: "ses_1",
-        permission: "read",
-        patterns: ["src/**"],
-        tool: { messageID: "msg_1", callID: "call_1" },
+        action: "read",
+        resources: ["src/**"],
+        source: { type: "tool", messageID: "msg_1", id: "call_1" },
       },
       current,
     })
@@ -87,11 +87,7 @@ describe("current event buffering", () => {
   test("preserves boundaries between distinct delta streams", () => {
     const events = [delta("evt_1", "a"), delta("evt_2", "b", 1), delta("evt_3", "c")]
 
-    expect(coalesceServerEvents(events).map((event) => event.payload.current?.id)).toEqual([
-      "evt_1",
-      "evt_2",
-      "evt_3",
-    ])
+    expect(coalesceServerEvents(events).map((event) => event.payload.current?.id)).toEqual(["evt_1", "evt_2", "evt_3"])
   })
 
   test("preserves current event order when enqueuing", () => {

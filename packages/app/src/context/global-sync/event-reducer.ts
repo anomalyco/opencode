@@ -3,14 +3,11 @@ import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/
 import type {
   Message,
   Part,
-  PermissionRequest,
   Project,
-  QuestionRequest,
   Session,
-  SessionStatus,
   Todo,
 } from "@/types"
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import type { FileDiffInfo, PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/client/promise"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"

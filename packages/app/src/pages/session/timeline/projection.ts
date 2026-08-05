@@ -1,5 +1,5 @@
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
-import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@/types"
+import type { SessionMessageInfo, SessionStatus } from "@opencode-ai/client/promise"
+import type { AssistantMessage, Message, Part, UserMessage } from "@/types"
 import { createMemo, type Accessor } from "solid-js"
 import { reuseTimelineRows } from "./row-reconciliation"
 import { Timeline, TimelineRow } from "./rows"

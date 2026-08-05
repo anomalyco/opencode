@@ -1,34 +1,13 @@
 import type {
   EventSubscribeOutput,
-  FileDiffInfo,
   FileDiffLegacyInfo,
   ProjectListOutput,
-  QuestionAnswer,
-  QuestionInfo,
-  QuestionRequest,
-  ReferenceInfo,
-  SessionInfo,
-  SessionNotFoundError,
-  SessionStatus,
   SessionV1Info,
-  SessionsResponse,
 } from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 
-export type {
-  QuestionAnswer,
-  QuestionRequest,
-  ReferenceInfo,
-  SessionNotFoundError,
-  SessionStatus,
-}
-
 export type Project = Omit<ProjectListOutput[number], "canonical"> & { worktree: string }
 export type Session = Omit<SessionV1Info, "title"> & { title: string }
-export type SessionV2Info = SessionInfo
-export type V2SessionListResponse = SessionsResponse
-export type SnapshotFileDiff = FileDiffLegacyInfo
-export type VcsFileDiff = FileDiffInfo
 
 type CurrentEvent = EventSubscribeOutput extends infer Item
   ? Item extends { type: infer Type extends string; data: infer Data }
@@ -36,21 +15,9 @@ type CurrentEvent = EventSubscribeOutput extends infer Item
     : never
   : never
 
-export type Event =
-  | Exclude<CurrentEvent, { type: "permission.asked" }>
-  | { type: "permission.asked"; properties: PermissionRequest }
+export type Event = CurrentEvent
 
 export type EventSessionError = Extract<Event, { type: "session.error" }>
-
-export type PermissionRequest = {
-  id: string
-  sessionID: string
-  permission: string
-  patterns: string[]
-  metadata: Record<string, unknown>
-  always: string[]
-  tool?: { messageID: string; callID: string }
-}
 
 type MessageError =
   | { name: "ProviderAuthError"; data: { providerID: string; message: string } }
@@ -78,7 +45,7 @@ export type UserMessage = {
   role: "user"
   time: { created: number }
   format?: { type: "text" } | { type: "json_schema"; schema: Record<string, unknown>; retryCount?: number }
-  summary?: { title?: string; body?: string; diffs: SnapshotFileDiff[] }
+  summary?: { title?: string; body?: string; diffs: FileDiffLegacyInfo[] }
   agent: string
   model: { providerID: string; modelID: string; variant?: string }
   system?: string
@@ -330,9 +297,3 @@ export type Config = {
   experimental?: Record<string, unknown>
   [key: string]: unknown
 }
-
-export type TextPartInput = Omit<TextPart, "id" | "sessionID" | "messageID"> & { id?: string }
-export type FilePartInput = Omit<FilePart, "id" | "sessionID" | "messageID"> & { id?: string }
-export type AgentPartInput = Omit<AgentPart, "id" | "sessionID" | "messageID"> & { id?: string }
-
-export type Question = QuestionInfo

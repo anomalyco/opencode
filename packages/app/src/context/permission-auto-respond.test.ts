@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { PermissionRequest, Session } from "@/types"
+import type { Session } from "@/types"
+import type { PermissionRequest } from "@opencode-ai/client/promise"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { autoRespondsPermission, isDirectoryAutoAccepting, sessionAutoAccept } from "./permission-auto-respond"
 

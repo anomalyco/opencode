@@ -3,7 +3,6 @@ import type {
   Path,
   Project,
   ProviderAuthResponse,
-  SessionStatus,
 } from "@/types"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
@@ -55,6 +54,7 @@ import type {
   McpResourceCatalogOutput,
   McpServer,
   SessionActiveOutput,
+  SessionStatus,
 } from "@opencode-ai/client/promise"
 import { toggleMcp } from "./global-sync/mcp"
 import { createServerSession, type ServerSession } from "./server-session"

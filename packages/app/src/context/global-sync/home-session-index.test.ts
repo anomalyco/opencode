@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionV2Info } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import {
   applyHomeSessionEvent,
   appendHomeSessionEvent,
@@ -48,9 +48,7 @@ describe("Home V2 session index", () => {
         calls.push({ input, signal: options.signal })
         if (!("cursor" in input)) {
           return {
-            data: Array.from({ length: HOME_V2_SESSION_PAGE_LIMIT }, (_, index) =>
-              session({ id: `page-1-${index}` }),
-            ),
+            data: Array.from({ length: HOME_V2_SESSION_PAGE_LIMIT }, (_, index) => session({ id: `page-1-${index}` })),
             cursor: { next: "next-page" },
           }
         }
@@ -74,7 +72,7 @@ describe("Home V2 session index", () => {
     const activeNull = {
       ...session({ id: "active-null", updated: 20 }),
       time: { created: 1, updated: 20, archived: null },
-    } as unknown as SessionV2Info
+    } as unknown as SessionInfo
     const result = parseHomeSessionIndex([
       session({ id: "root", updated: 30 }),
       activeNull,

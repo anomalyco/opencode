@@ -1,6 +1,6 @@
 import { useSDK } from "@/context/sdk"
 import { Persist, persisted } from "@/utils/persist"
-import type { SessionStatus } from "@/types"
+import type { SessionStatus } from "@opencode-ai/client/promise"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSessionLayout } from "./session-layout"

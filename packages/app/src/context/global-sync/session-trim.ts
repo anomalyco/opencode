@@ -1,4 +1,5 @@
-import type { PermissionRequest, Session } from "@/types"
+import type { Session } from "@/types"
+import type { PermissionRequest } from "@opencode-ai/client/promise"
 import { cmp } from "./utils"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "./types"
 

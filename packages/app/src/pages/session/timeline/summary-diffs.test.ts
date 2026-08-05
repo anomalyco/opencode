@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SnapshotFileDiff } from "@/types"
+import type { FileDiffLegacyInfo } from "@opencode-ai/client/promise"
 import { uniqueSummaryDiffs } from "./summary-diffs"
 
 const diff = (file: string, additions: number) =>
@@ -7,13 +7,13 @@ const diff = (file: string, additions: number) =>
     file,
     additions,
     deletions: 0,
-  }) satisfies SnapshotFileDiff
+  }) satisfies FileDiffLegacyInfo
 
 describe("uniqueSummaryDiffs", () => {
   test("drops entries without files and preserves unique input", () => {
     const alpha = diff("alpha.ts", 1)
     const beta = diff("beta.ts", 1)
-    const invalid = { additions: 1, deletions: 0 } satisfies SnapshotFileDiff
+    const invalid = { additions: 1, deletions: 0 } satisfies FileDiffLegacyInfo
 
     expect(uniqueSummaryDiffs(undefined)).toEqual([])
     expect(uniqueSummaryDiffs([])).toEqual([])
