@@ -23,7 +23,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const editToolNode = makeLocationNode({
   name: "test/edit-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(EditTool.Plugin)),
-  deps: [Tool.node, LocationMutation.node, FileMutation.node, Formatter.node, FSUtil.node, Permission.node],
+  deps: [Tool.node, LocationMutation.node, FileMutation.node, Formatter.node, FSUtil.node, Location.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_edit_tool_test")

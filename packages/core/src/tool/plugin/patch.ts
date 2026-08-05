@@ -4,7 +4,7 @@ import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { createTwoFilesPatch, diffLines } from "diff"
-import { Effect, Schema } from "effect"
+import { Effect, Result, Schema } from "effect"
 import { PlatformError } from "effect/PlatformError"
 import path from "path"
 import { Bom } from "@opencode-ai/util/bom"
@@ -87,13 +87,30 @@ export const Plugin = {
               output: Output,
               execute: (input, context) => {
                 const applied: Array<typeof Applied.Type> = []
+                const parsed = Patch.parse(input.patchText)
+                const lockTargets = Result.isSuccess(parsed)
+                  ? parsed.success.flatMap((hunk) => [
+                      {
+                        ...resolveTarget(location, hunk.path),
+                        canonical: FSUtil.resolve(path.resolve(location.directory, hunk.path)),
+                      },
+                      ...(hunk.type === "update" && hunk.movePath
+                        ? [
+                            {
+                              ...resolveTarget(location, hunk.movePath),
+                              canonical: FSUtil.resolve(path.resolve(location.directory, hunk.movePath)),
+                            },
+                          ]
+                        : []),
+                    ])
+                  : []
                 const fail = (operation: string, error: unknown) => {
                   const completed = applied.map((item) => item.resource).join(", ")
                   return new ToolFailure({
                     message: `${operation}: ${errorMessage(error)}${completed ? `. Completed before failure: ${completed}` : ""}`,
                   })
                 }
-                return mutation.withLock(Effect.gen(function* () {
+                return mutation.withLock(lockTargets)(Effect.gen(function* () {
                   const source = {
                     type: "tool" as const,
                     messageID: context.messageID,

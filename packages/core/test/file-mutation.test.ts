@@ -257,6 +257,59 @@ describe("FileMutation", () => {
     ),
   )
 
+  it.live("shares transaction locks across Location service instances", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const firstStarted = yield* Deferred.make<void>()
+        const releaseFirst = yield* Deferred.make<void>()
+        const secondStarted = yield* Deferred.make<void>()
+        const target = { canonical: path.join(directory, "shared.txt"), resource: "shared.txt" }
+        const first = yield* Effect.gen(function* () {
+          const files = yield* FileMutation.Service
+          yield* files.withLock([target])(
+            Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
+          )
+        }).pipe(provide(directory), Effect.forkChild)
+        yield* Deferred.await(firstStarted)
+        const second = yield* Effect.gen(function* () {
+          const files = yield* FileMutation.Service
+          yield* files.withLock([target])(Deferred.succeed(secondStarted, undefined))
+        }).pipe(provide(directory), Effect.forkChild)
+        yield* Effect.yieldNow
+        expect(yield* Deferred.isDone(secondStarted)).toBe(false)
+
+        yield* Deferred.succeed(releaseFirst, undefined)
+        yield* Deferred.await(secondStarted)
+        yield* Fiber.join(first)
+        yield* Fiber.join(second)
+      }),
+    ),
+  )
+
+  it.live("allows transaction locks for distinct canonical targets to proceed independently", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const firstStarted = yield* Deferred.make<void>()
+        const releaseFirst = yield* Deferred.make<void>()
+        const secondFinished = yield* Deferred.make<void>()
+        const files = yield* FileMutation.Service
+        const first = yield* files
+          .withLock([{ canonical: path.join(directory, "first.txt"), resource: "first.txt" }])(
+            Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
+          )
+          .pipe(Effect.forkChild)
+        yield* Deferred.await(firstStarted)
+        yield* files.withLock([{ canonical: path.join(directory, "second.txt"), resource: "second.txt" }])(
+          Deferred.succeed(secondFinished, undefined),
+        )
+        expect(yield* Deferred.isDone(secondFinished)).toBe(true)
+
+        yield* Deferred.succeed(releaseFirst, undefined)
+        yield* Fiber.join(first)
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("allows only one concurrent conditional write based on the same bytes", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

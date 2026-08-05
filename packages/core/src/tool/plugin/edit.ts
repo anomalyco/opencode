@@ -11,9 +11,11 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Bom } from "@opencode-ai/util/bom"
 import { Effect, Schema } from "effect"
+import path from "path"
 import { FileMutation } from "../../file-mutation"
 import { Formatter } from "../../formatter"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Location } from "../../location"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
 import { fileDiff } from "./file-diff"
@@ -112,6 +114,7 @@ export const Plugin = {
     const files = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
     const fs = yield* FSUtil.Service
+    const location = yield* Location.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
@@ -125,7 +128,9 @@ export const Plugin = {
               input: Input,
               output: Output,
               execute: (input, context) => {
-                return files.withLock(Effect.gen(function* () {
+                return files.withLock([
+                  { canonical: FSUtil.resolve(path.resolve(location.directory, input.path)), resource: input.path },
+                ])(Effect.gen(function* () {
                   const permissionSource = {
                     type: "tool" as const,
                     messageID: context.messageID,
