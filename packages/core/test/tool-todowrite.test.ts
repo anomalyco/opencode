@@ -1,6 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { Project } from "@opencode-ai/core/project"
@@ -11,6 +13,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionTodo } from "@opencode-ai/core/session/todo"
 import { TodoWriteTool } from "@opencode-ai/core/tool/todowrite"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
@@ -23,7 +26,7 @@ const permission = Layer.succeed(
   PermissionV2.Service.of({
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
-        Effect.andThen(deny ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void),
+        Effect.andThen(deny ? Effect.fail(new PermissionV2.BlockedError({ rules: [] })) : Effect.void),
       ),
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),
@@ -32,12 +35,22 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const todos = SessionTodo.layer.pipe(Layer.provide(database), Layer.provide(events))
-const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-const tool = TodoWriteTool.layer.pipe(Layer.provide(registry), Layer.provide(permission), Layer.provide(todos))
-const it = testEffect(Layer.mergeAll(database, events, todos, permission, registry, tool))
+const it = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([
+      Database.node,
+      EventV2.node,
+      SessionTodo.node,
+      ToolRegistry.node,
+      ToolRegistry.toolsNode,
+      TodoWriteTool.node,
+    ]),
+    [
+      [PermissionV2.node, permission],
+      [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+    ],
+  ),
+)
 
 const setup = Effect.gen(function* () {
   assertions.length = 0
@@ -74,7 +87,9 @@ describe("TodoWriteTool", () => {
       yield* setup
       const registry = yield* ToolRegistry.Service
       const service = yield* SessionTodo.Service
-      const todoList = [{ content: "Implement slice", status: "in_progress", priority: "high" }]
+      const todoList: ReadonlyArray<SessionTodo.Info> = [
+        { content: "Implement slice", status: "in_progress", priority: "high" },
+      ]
 
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([TodoWriteTool.name])
       expect(yield* settleTool(registry, call(todoList))).toEqual({

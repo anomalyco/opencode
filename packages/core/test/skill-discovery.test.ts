@@ -3,15 +3,17 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Global } from "@opencode-ai/core/global"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
 import { tmpdir } from "./fixture/tmpdir"
 
 const base = "https://skills.example.test/catalog/"
 
-async function pull(skills: unknown[], files: Record<string, string> = {}) {
-  const tmp = await tmpdir()
+async function pull(skills: unknown[], files: Record<string, string> = {}, cache?: Awaited<ReturnType<typeof tmpdir>>) {
+  const tmp = cache ?? (await tmpdir())
   const requests: string[] = []
   const http = Layer.succeed(
     HttpClient.HttpClient,
@@ -27,15 +29,14 @@ async function pull(skills: unknown[], files: Record<string, string> = {}) {
       ),
     ),
   )
-  const layer = SkillDiscovery.layer.pipe(
-    Layer.provide(http),
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(Global.layerWith({ cache: tmp.path })),
-  )
+  const skillDiscoveryLayer = AppNodeBuilder.build(SkillDiscovery.node, [
+    [LayerNodePlatform.httpClient, http],
+    [Global.node, Global.layerWith({ cache: tmp.path })],
+  ])
   const directories = await Effect.runPromise(
     Effect.gen(function* () {
       return yield* (yield* SkillDiscovery.Service).pull(base)
-    }).pipe(Effect.provide(layer)),
+    }).pipe(Effect.provide(skillDiscoveryLayer)),
   )
   return { tmp, requests, directories }
 }
@@ -99,6 +100,66 @@ describe("SkillDiscovery.pull", () => {
       expect(await fs.readFile(path.join(result.directories[0], "references", "guide.md"), "utf8")).toBe("# Guide")
     } finally {
       await result.tmp[Symbol.asyncDispose]()
+    }
+  })
+
+  test("refreshes cached files when the version changes", async () => {
+    const tmp = await tmpdir()
+    try {
+      const first = await pull(
+        [{ name: "deploy", version: "1", files: ["SKILL.md"] }],
+        {
+          [`${base}deploy/SKILL.md`]: "# Old",
+        },
+        tmp,
+      )
+      const second = await pull(
+        [{ name: "deploy", version: "2", files: ["SKILL.md"] }],
+        {
+          [`${base}deploy/SKILL.md`]: "# New",
+        },
+        tmp,
+      )
+
+      expect(await fs.readFile(path.join(first.directories[0], "SKILL.md"), "utf8")).toBe("# New")
+      expect(second.requests).toContain(`${base}deploy/SKILL.md`)
+      const third = await pull(
+        [{ name: "deploy", version: "2", files: ["SKILL.md"] }],
+        { [`${base}deploy/SKILL.md`]: "# Ignored" },
+        tmp,
+      )
+      expect(third.requests).toEqual([`${base}index.json`])
+    } finally {
+      await tmp[Symbol.asyncDispose]()
+    }
+  })
+
+  test("publishes complete updates and removes stale files", async () => {
+    const tmp = await tmpdir()
+    try {
+      const first = await pull(
+        [{ name: "deploy", version: "1", files: ["SKILL.md", "old.md"] }],
+        {
+          [`${base}deploy/SKILL.md`]: "# Old",
+          [`${base}deploy/old.md`]: "old reference",
+        },
+        tmp,
+      )
+      const root = first.directories[0]
+
+      await pull(
+        [{ name: "deploy", version: "2", files: ["SKILL.md", "missing.md"] }],
+        { [`${base}deploy/SKILL.md`]: "# Partial" },
+        tmp,
+      )
+      expect(await fs.readFile(path.join(root, "SKILL.md"), "utf8")).toBe("# Old")
+      expect(await fs.readFile(path.join(root, "old.md"), "utf8")).toBe("old reference")
+
+      await pull([{ name: "deploy", version: "3", files: ["SKILL.md"] }], { [`${base}deploy/SKILL.md`]: "# New" }, tmp)
+      expect(await fs.readFile(path.join(root, "SKILL.md"), "utf8")).toBe("# New")
+      expect(await Bun.file(path.join(root, "old.md")).exists()).toBe(false)
+    } finally {
+      await tmp[Symbol.asyncDispose]()
     }
   })
 })

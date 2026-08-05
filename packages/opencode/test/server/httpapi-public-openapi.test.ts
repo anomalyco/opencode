@@ -10,6 +10,8 @@ type OpenApiSchema = {
   readonly enum?: readonly unknown[]
   readonly properties?: Record<string, OpenApiSchema>
   readonly required?: readonly string[]
+  readonly contentSchema?: OpenApiSchema
+  readonly contentMediaType?: string
 }
 type OpenApiResponse = {
   readonly description?: string
@@ -68,6 +70,20 @@ function isBuiltInEndpointError(name: string) {
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
+  test("includes plugin-facing core schemas", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    expect(Object.keys(spec.components.schemas)).toEqual(
+      expect.arrayContaining([
+        "CredentialValue",
+        "IntegrationInputs",
+        "IntegrationMethod",
+        "IntegrationRef",
+        "SkillV2Source",
+      ]),
+    )
+  })
+
   test("documents nested legacy global sync events", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
     const schema = spec.components.schemas.SyncEventSessionCreated
@@ -82,6 +98,21 @@ describe("PublicApi OpenAPI v2 errors", () => {
         seq: { type: "number" },
         aggregateID: { type: "string" },
       },
+    })
+  })
+
+  test("names the v2 event union without the SSE string wrapper collision", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    expect(spec.components.schemas.V2Event1).toBeUndefined()
+    expect(spec.components.schemas.V2Event?.anyOf?.length).toBeGreaterThan(0)
+    expect(spec.components.schemas.V2EventStream).toMatchObject({
+      type: "string",
+      contentMediaType: "application/json",
+      contentSchema: { $ref: "#/components/schemas/V2Event" },
+    })
+    expect(spec.paths["/api/event"]?.get?.responses?.["200"]?.content?.["text/event-stream"]?.schema).toEqual({
+      $ref: "#/components/schemas/V2Event",
     })
   })
 

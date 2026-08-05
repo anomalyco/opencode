@@ -1,6 +1,6 @@
 import "@pierre/trees/web-components"
 import { FileTree } from "@pierre/trees"
-import { Dialog, DialogFooter } from "@opencode-ai/ui/v2/dialog-v2"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -8,6 +8,7 @@ import { createEffect, createMemo, createResource, createSignal, For, onCleanup,
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
+import type { Path } from "@opencode-ai/sdk/v2/client"
 import {
   absoluteTreePath,
   activeTreeNavigation,
@@ -19,6 +20,7 @@ import {
   pickerMode,
   preloadTreeDirectories,
   cleanPickerInput,
+  createPriorityTaskQueue,
   createDirectorySearch,
   currentPickerSuggestions,
   displayPickerPath,
@@ -26,6 +28,8 @@ import {
   pickerRoot,
 } from "./directory-picker-domain"
 import "./dialog-select-directory-v2.css"
+import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
+import { getFilename } from "@opencode-ai/core/util/path"
 
 interface DialogSelectDirectoryV2Props {
   title?: string
@@ -38,7 +42,7 @@ interface DialogSelectDirectoryV2Props {
 
 export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const global = useGlobal()
-  const { sync, sdk } = global.createServerCtx(props.server)
+  const { sync, sdk } = global.ensureServerCtx(props.server)
   const dialog = useDialog()
   const language = useLanguage()
   const policy = pickerMode(props.mode ?? "directory", props.start)
@@ -55,6 +59,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const [error, setError] = createSignal(false)
   const [rootValid, setRootValid] = createSignal(false)
   const listings = new Map<string, Promise<Array<{ name: string; type: "file" | "directory" }> | undefined>>()
+  const loads = createPriorityTaskQueue<Array<{ name: string; type: "file" | "directory" }> | undefined>(3)
   const advanced = new Set<string>()
   let tree: FileTree | undefined
   let container: HTMLDivElement | undefined
@@ -64,11 +69,13 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
     () => (missingBase() ? true : undefined),
-    () =>
-      sdk.client.path
+    async (): Promise<Path | undefined> => {
+      if ((await sdk.protocol) !== "v1") return
+      return sdk.client.path
         .get()
         .then((result) => result.data)
-        .catch(() => undefined),
+        .catch(() => undefined)
+    },
     { initialValue: undefined },
   )
   const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")
@@ -82,18 +89,26 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   )
   const search = createDirectorySearch({ sdk, home, base: () => root() || start() })
   const [suggestions] = createResource(input, async (value) => {
-    const typed = cleanPickerInput(value).replace(/\/+$/, "")
+    const cleaned = cleanPickerInput(value)
+    const typed = cleaned.replace(/\/+$/, "")
     const current = displayPickerPath(root(), value, home()).replace(/\/+$/, "")
-    if (!typed || typed === current) return { query: value, items: [] }
+    if (!cleaned || (root() && typed === current)) return { query: value, items: [] }
     const directories = (await search(value)).map((absolute) => ({ absolute, type: "directory" as const }))
     if (!policy.includeFiles) return { query: value, items: directories.slice(0, 5) }
-    const files = await sdk.client.find
-      .files({ directory: root(), query: pickerFileSearchQuery(root(), value, home()), type: "file", limit: 20 })
-      .then((result) => result.data ?? [])
+    const base = pickerRoot(cleaned) || root() || start()
+    if (!base) return { query: value, items: directories.slice(0, 5) }
+    const files = await sdk.api.file
+      .find({
+        location: { directory: base },
+        query: pickerFileSearchQuery(base, value, home()),
+        type: "file",
+        limit: 20,
+      })
+      .then((result) => result.data)
       .catch(() => [])
     const results = [
       ...directories,
-      ...files.map((path) => ({ absolute: absoluteTreePath(root(), path), type: "file" as const })),
+      ...files.map((entry) => ({ absolute: absoluteTreePath(base, entry.path), type: "file" as const })),
     ]
     return {
       query: value,
@@ -102,16 +117,26 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   })
   const currentSuggestions = createMemo(() => currentPickerSuggestions(suggestions(), input()))
 
-  async function load(path: string, generation: number, preload = true) {
+  async function load(path: string, generation: number, eager = false) {
     const key = path.replace(/\/+$/, "")
     setError(false)
     const absolute = absoluteTreePath(root(), key)
+    const existing = listings.get(key)
+    if (existing && !eager) loads.promote(`${generation}:${key}`)
     const request =
-      listings.get(key) ??
-      sdk.client.file
-        .list({ directory: absolute, path: "" })
-        .then((result) => result.data ?? [])
-        .catch(() => undefined)
+      existing ??
+      loads.schedule(`${generation}:${key}`, eager ? "background" : "user", () => {
+        if (!activeTreeNavigation(generation, navigation)) return Promise.resolve(undefined)
+        return sdk.api.file
+          .list({ location: { directory: absolute } })
+          .then((result) =>
+            result.data.map((entry) => ({
+              name: getFilename(entry.path.replace(/[\\/]+$/, "")),
+              type: entry.type,
+            })),
+          )
+          .catch(() => undefined)
+      })
     listings.set(key, request)
     const nodes = await request
     if (!activeTreeNavigation(generation, navigation)) return false
@@ -121,8 +146,8 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
       return false
     }
     tree?.batch(policy.entries(key, nodes).map((item) => ({ type: "add", path: item })))
-    if (preload && advanceTreePreload(advanced, key)) {
-      void Promise.all(preloadTreeDirectories(key, nodes).map((directory) => load(directory, generation, false)))
+    if (!eager && advanceTreePreload(advanced, key)) {
+      for (const directory of preloadTreeDirectories(key, nodes)) void load(directory, generation, true)
     }
     return true
   }
@@ -259,8 +284,12 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   onCleanup(() => tree?.cleanUp())
 
   return (
-    <Dialog title={props.title ?? language.t("command.project.open")} size="large" class="directory-picker-v2">
-      <div class="directory-picker-v2-body">
+    <Dialog size="large" class="directory-picker-v2">
+      <DialogHeader>
+        <DialogTitle>{props.title ?? language.t("command.project.open")}</DialogTitle>
+      </DialogHeader>
+      <DividerV2 />
+      <DialogBody class="directory-picker-v2-body pt-4!">
         <div class="directory-picker-v2-path" ref={pathArea}>
           <TextInputV2
             value={input()}
@@ -300,6 +329,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
                 {(suggestion, index) => (
                   <button
                     id={`directory-picker-v2-suggestion-${index()}`}
+                    data-directory-path={suggestion.absolute}
                     role="option"
                     aria-selected={index() === activeSuggestion()}
                     data-active={index() === activeSuggestion() ? "" : undefined}
@@ -342,7 +372,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
           </Show>
         </div>
         <div class="directory-picker-v2-selection">{policy.result(root(), selected(), rootValid())}</div>
-      </div>
+      </DialogBody>
       <DialogFooter>
         <ButtonV2 variant="neutral" onClick={() => dialog.close()}>
           {language.t("common.cancel")}

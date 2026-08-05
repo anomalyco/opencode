@@ -1,10 +1,10 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Provjeri ažuriranja...",
   "desktop.menu.installCli": "Instaliraj CLI...",
-  "desktop.menu.reloadWebview": "Ponovo učitavanje webview-a",
-  "desktop.menu.restart": "Restartuj",
+  "desktop.menu.reloadWebview": "Ponovo učitaj Webview",
+  "desktop.menu.restart": "Ponovo pokreni",
 
-  "desktop.dialog.chooseFolder": "Odaberi folder",
+  "desktop.dialog.chooseFolder": "Odaberi fasciklu",
   "desktop.dialog.chooseFile": "Odaberi datoteku",
   "desktop.dialog.saveFile": "Sačuvaj datoteku",
 
@@ -22,7 +22,7 @@ export const dict = {
 
   "desktop.cli.installed.title": "CLI instaliran",
   "desktop.cli.installed.message":
-    "CLI je instaliran u {{path}}\n\nRestartuj terminal da bi koristio komandu 'opencode'.",
+    "CLI je instaliran u {{path}}\n\nPonovo pokreni terminal da bi koristio komandu 'opencode'.",
   "desktop.cli.failed.title": "Instalacija nije uspjela",
   "desktop.cli.failed.message": "Neuspjela instalacija CLI-a: {{error}}",
 }

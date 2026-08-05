@@ -1,5 +1,4 @@
 import { describe, expect } from "bun:test"
-import { EventV2Bridge } from "@/event-v2-bridge"
 import { Project } from "@/project/project"
 import { $ } from "bun"
 import path from "path"
@@ -15,19 +14,17 @@ import { SessionID } from "@/session/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { NodePath } from "@effect/platform-node"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
-import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
 const encoder = new TextEncoder()
 
-const layer = Layer.mergeAll(Project.defaultLayer, Database.defaultLayer, CrossSpawnSpawner.defaultLayer)
-const it = testEffect(layer)
+const projectTestNode = LayerNode.group([Project.node, Database.node, CrossSpawnSpawner.node])
+const it = testEffect(AppNodeBuilder.build(projectTestNode))
 
 function remoteProjectID(remote: string) {
   return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
@@ -65,41 +62,37 @@ function mockGitFailure(failArg: string) {
         }),
       )
     }),
-  ).pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
+  ).pipe(Layer.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)))
 }
 
 function projectLayerWithFailure(failArg: string) {
-  return Project.layer.pipe(
-    Layer.provide(AppProcess.layer.pipe(Layer.provide(mockGitFailure(failArg)))),
-    Layer.provide(mockGitFailure(failArg)),
-    Layer.provide(ProjectV2.defaultLayer),
-    Layer.provide(ProjectDirectories.defaultLayer),
-    Layer.provide(EventV2Bridge.defaultLayer),
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(NodePath.layer),
-    Layer.provide(Database.defaultLayer),
-    Layer.provide(RuntimeFlags.defaultLayer),
-  )
+  return AppNodeBuilder.build(Project.node, [
+    [ProjectV2.node, projectV2FailureLayer()],
+    [CrossSpawnSpawner.node, mockGitFailure(failArg)],
+  ])
 }
 
-function projectLayerWithRuntimeFlags(flags: Parameters<typeof RuntimeFlags.layer>[0]) {
-  return Project.layer.pipe(
-    Layer.provide(EventV2Bridge.defaultLayer),
-    Layer.provide(ProjectV2.defaultLayer),
-    Layer.provide(ProjectDirectories.defaultLayer),
-    Layer.provide(AppProcess.defaultLayer),
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(NodePath.layer),
-    Layer.provide(Database.defaultLayer),
-    Layer.provide(RuntimeFlags.layer(flags)),
+function projectV2FailureLayer() {
+  return Layer.succeed(
+    ProjectV2.Service,
+    ProjectV2.Service.of({
+      directories: () => Effect.succeed([]),
+      resolve: (input) =>
+        Effect.succeed({
+          id: ProjectV2.ID.global,
+          directory: input,
+          vcs: { type: "git" as const, store: input },
+        }),
+      commit: () => Effect.void,
+    }),
   )
 }
 
 const failureIt = (failArg: string) =>
-  testEffect(Layer.mergeAll(projectLayerWithFailure(failArg), CrossSpawnSpawner.defaultLayer))
+  testEffect(AppNodeBuilder.build(projectTestNode, [[Project.node, projectLayerWithFailure(failArg)]]))
 
 const iconDiscoveryIt = testEffect(
-  Layer.provideMerge(projectLayerWithRuntimeFlags({ experimentalIconDiscovery: true }), CrossSpawnSpawner.defaultLayer),
+  AppNodeBuilder.build(projectTestNode, [[RuntimeFlags.node, RuntimeFlags.layer({ experimentalIconDiscovery: true })]]),
 )
 
 function waitForProjectIcon(id: ProjectV2.ID, attempts = 50): Effect.Effect<Project.Info, never, Project.Service> {

@@ -8,6 +8,7 @@ import {
   LLMEvent,
   Usage,
   type FinishReason,
+  type JsonSchema,
   type LLMRequest,
   type MediaPart,
   type ReasoningPart,
@@ -19,6 +20,7 @@ import {
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
+import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-chat"
@@ -174,12 +176,12 @@ const invalid = ProviderShared.invalidRequest
 // Lowering is the only place that knows how common LLM messages map onto the
 // OpenAI Chat wire format. Keep provider quirks here instead of leaking native
 // fields into `LLMRequest`.
-const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
+const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema): OpenAIChatTool => ({
   type: "function",
   function: {
     name: tool.name,
     description: tool.description,
-    parameters: ProviderShared.openAiToolInputSchema(tool.inputSchema),
+    parameters: ToolSchemaProjection.openAI(inputSchema),
   },
 })
 
@@ -343,10 +345,16 @@ const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMR
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Route.make`.
   const generation = request.generation
+  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
     model: request.model.id,
     messages: yield* lowerMessages(request),
-    tools: request.tools.length === 0 ? undefined : request.tools.map(lowerTool),
+    tools:
+      request.tools.length === 0
+        ? undefined
+        : request.tools.map((tool) =>
+            lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
+          ),
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     stream_options: { include_usage: true },
@@ -411,7 +419,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     if (delta?.reasoning_content)
       lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", delta.reasoning_content)
 
-    if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    if (delta?.content) {
+      lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
+      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    }
+
+    if (toolDeltas.length) lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
 
     for (const tool of toolDeltas) {
       const result = ToolStream.appendOrStart(

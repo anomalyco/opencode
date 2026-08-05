@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import os from "os"
-import { Effect, Layer } from "effect"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Effect } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { Global } from "@opencode-ai/core/global"
 
@@ -30,7 +30,7 @@ const testGlobal = Global.layerWith({
   log: os.tmpdir(),
 })
 
-const testLayer = EffectFlock.layer.pipe(Layer.provide(testGlobal), Layer.provide(FSUtil.defaultLayer))
+const testLayer = AppNodeBuilder.build(EffectFlock.node, [[Global.node, testGlobal]])
 
 async function job() {
   if (msg.ready) await fs.writeFile(msg.ready, String(process.pid))

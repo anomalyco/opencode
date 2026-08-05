@@ -29,8 +29,7 @@ const api: ElectronAPI = {
     refreshDistros: () => ipcRenderer.invoke("wsl-servers-refresh-distros"),
     installWsl: () => ipcRenderer.invoke("wsl-servers-install-wsl"),
     installDistro: (name) => ipcRenderer.invoke("wsl-servers-install-distro", name),
-    probeDistro: (name) => ipcRenderer.invoke("wsl-servers-probe-distro", name),
-    probeOpencode: (name) => ipcRenderer.invoke("wsl-servers-probe-opencode", name),
+    probeAddable: (distros) => ipcRenderer.invoke("wsl-servers-probe-addable", distros),
     installOpencode: (name) => ipcRenderer.invoke("wsl-servers-install-opencode", name),
     openTerminal: (name) => ipcRenderer.invoke("wsl-servers-open-terminal", name),
     addServer: (distro) => ipcRenderer.invoke("wsl-servers-add", distro),
@@ -60,9 +59,12 @@ const api: ElectronAPI = {
   consumeInitialDeepLinks: () => ipcRenderer.invoke("consume-initial-deep-links"),
   getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),
   setDefaultServerUrl: (url) => ipcRenderer.invoke("set-default-server-url", url),
+  isFirstLaunchOnboardingPending: () => ipcRenderer.invoke("is-first-launch-onboarding-pending"),
+  finishFirstLaunchOnboarding: (createDefaultProject) =>
+    ipcRenderer.invoke("finish-first-launch-onboarding", createDefaultProject),
+  isOldLayoutEligible: () => ipcRenderer.invoke("is-old-layout-eligible"),
   getDisplayBackend: () => ipcRenderer.invoke("get-display-backend"),
   setDisplayBackend: (backend) => ipcRenderer.invoke("set-display-backend", backend),
-  parseMarkdownCommand: (markdown) => ipcRenderer.invoke("parse-markdown", markdown),
   checkAppExists: (appName) => ipcRenderer.invoke("check-app-exists", appName),
   resolveAppPath: (appName) => ipcRenderer.invoke("resolve-app-path", appName),
   storeGet: (name, key) => ipcRenderer.invoke("store-get", name, key),
@@ -71,8 +73,13 @@ const api: ElectronAPI = {
   storeClear: (name) => ipcRenderer.invoke("store-clear", name),
   storeKeys: (name) => ipcRenderer.invoke("store-keys", name),
   storeLength: (name) => ipcRenderer.invoke("store-length", name),
+  draftGet: (key) => ipcRenderer.invoke("draft-get", key),
+  draftSet: (key, value) => ipcRenderer.invoke("draft-set", key, value),
+  draftDelete: (key) => ipcRenderer.invoke("draft-delete", key),
+  draftBlobPut: (data) => ipcRenderer.invoke("draft-blob-put", data),
+  draftBlobGet: (id) => ipcRenderer.invoke("draft-blob-get", id),
 
-  getWindowCount: () => ipcRenderer.invoke("get-window-count"),
+  getWindowID: () => ipcRenderer.invoke("get-window-id"),
   onMenuCommand: (cb) => {
     const handler = (_: unknown, id: string) => cb(id)
     ipcRenderer.on("menu-command", handler)
@@ -90,11 +97,18 @@ const api: ElectronAPI = {
   releasePickedFiles: (token) => ipcRenderer.invoke("release-picked-files", token),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   saveFilePicker: (opts) => ipcRenderer.invoke("save-file-picker", opts),
-  openLink: (url) => ipcRenderer.send("open-link", url),
+  openExternal: (url) => ipcRenderer.send("open-external", url),
+  openLocalFile: (url) => ipcRenderer.send("open-local-file", url),
   openPath: (path, app) => ipcRenderer.invoke("open-path", path, app),
+  revealPath: (path) => ipcRenderer.invoke("reveal-path", path),
   readClipboardImage: () => ipcRenderer.invoke("read-clipboard-image"),
-  showNotification: (title, body) => ipcRenderer.send("show-notification", title, body),
   getWindowFocused: () => ipcRenderer.invoke("get-window-focused"),
+  getWindowFullscreen: () => ipcRenderer.invoke("get-window-fullscreen"),
+  onWindowFullscreenChanged: (cb) => {
+    const handler = (_: unknown, fullscreen: boolean) => cb(fullscreen)
+    ipcRenderer.on("window-fullscreen-changed", handler)
+    return () => ipcRenderer.removeListener("window-fullscreen-changed", handler)
+  },
   setWindowFocus: () => ipcRenderer.invoke("set-window-focus"),
   showWindow: () => ipcRenderer.invoke("show-window"),
   relaunch: () => ipcRenderer.send("relaunch"),
@@ -116,7 +130,9 @@ const api: ElectronAPI = {
   runDesktopMenuAction: (action) => ipcRenderer.invoke("run-desktop-menu-action", action),
   setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
+  setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
+  setNativeTranslations: (bundle) => ipcRenderer.invoke("set-native-translations", bundle),
 }
 
 contextBridge.exposeInMainWorld("api", api)

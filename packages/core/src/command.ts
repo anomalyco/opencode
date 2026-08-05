@@ -1,49 +1,41 @@
 export * as CommandV2 from "./command"
 
-import { Context, Effect, Layer, Schema } from "effect"
-import { castDraft, type Draft } from "immer"
-import { ModelV2 } from "./model"
+import { makeLocationNode } from "./effect/app-node"
+import { Context, Effect, Layer, Types } from "effect"
+import { Command } from "@opencode-ai/schema/command"
 import { State } from "./state"
 
-export class Info extends Schema.Class<Info>("CommandV2.Info")({
-  name: Schema.String,
-  template: Schema.String,
-  description: Schema.String.pipe(Schema.optional),
-  agent: Schema.String.pipe(Schema.optional),
-  model: ModelV2.Ref.pipe(Schema.optional),
-  subtask: Schema.Boolean.pipe(Schema.optional),
-}) {}
+export const Info = Command.Info
+export type Info = Command.Info
 
 export type Data = {
-  commands: Map<string, Info>
+  commands: Map<string, Types.DeepMutable<Info>>
 }
 
-export type Editor = {
+export type Draft = {
   list: () => readonly Info[]
   get: (name: string) => Info | undefined
-  update: (name: string, update: (command: Draft<Info>) => void) => void
+  update: (name: string, update: (command: Types.DeepMutable<Info>) => void) => void
   remove: (name: string) => void
 }
 
-export interface Interface {
-  readonly transform: State.Interface<Data, Editor>["transform"]
-  readonly update: State.Interface<Data, Editor>["update"]
+export interface Interface extends State.Transformable<Draft> {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Command") {}
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.sync(() => {
-    const state = State.create<Data, Editor>({
+    const state = State.create<Data, Draft>({
       initial: () => ({ commands: new Map() }),
-      editor: (draft) => ({
+      draft: (draft) => ({
         list: () => Array.from(draft.commands.values()) as Info[],
         get: (name) => draft.commands.get(name),
         update: (name, update) => {
-          const current = draft.commands.get(name) ?? castDraft(new Info({ name, template: "" }))
+          const current = draft.commands.get(name) ?? ({ name, template: "" } as Types.DeepMutable<Info>)
           if (!draft.commands.has(name)) draft.commands.set(name, current)
           update(current)
           current.name = name
@@ -55,7 +47,7 @@ export const layer = Layer.effect(
     })
 
     return Service.of({
-      update: state.update,
+      reload: state.reload,
       transform: state.transform,
       get: Effect.fn("CommandV2.get")(function* (name) {
         return state.get().commands.get(name)
@@ -68,3 +60,5 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer
+
+export const node = makeLocationNode({ service: Service, layer, deps: [] })

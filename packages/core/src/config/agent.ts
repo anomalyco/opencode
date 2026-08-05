@@ -1,7 +1,7 @@
 export * as ConfigAgent from "./agent"
 
 import { Schema } from "effect"
-import { PermissionSchema } from "../permission/schema"
+import { Permission } from "@opencode-ai/schema/permission"
 import { ConfigProvider } from "./provider"
 import { PositiveInt } from "../schema"
 
@@ -21,5 +21,5 @@ export class Info extends Schema.Class<Info>("ConfigV2.Agent")({
   color: Color.pipe(Schema.optional),
   steps: PositiveInt.pipe(Schema.optional),
   disabled: Schema.Boolean.pipe(Schema.optional),
-  permissions: PermissionSchema.Ruleset.pipe(Schema.optional),
+  permissions: Permission.Ruleset.pipe(Schema.optional),
 }) {}

@@ -1,11 +1,27 @@
 // @ts-nocheck
 import { createStore } from "solid-js/store"
+import type { Todo } from "@opencode-ai/sdk/v2"
 import { createPromptState } from "@/context/prompt"
+import { SessionComposerRegion, createSessionComposerRegionController } from "@/pages/session/composer"
 import { createPromptInputHistory, PromptInput } from "./prompt-input"
 
-function PromptInputExample() {
+function createPromptInputStoryRuntime() {
   const state = createPromptState()
-  const history = createPromptInputHistory()
+  return {
+    state,
+    history: createPromptInputHistory(),
+    submission: {
+      abort() {},
+      handleSubmit(event: Event) {
+        event.preventDefault()
+        state.reset()
+      },
+    },
+  }
+}
+
+function PromptInputExample() {
+  const input = createPromptInputStoryRuntime()
   const [controls, setControls] = createStore({
     agent: "build",
     variant: undefined as string | undefined,
@@ -14,19 +30,20 @@ function PromptInputExample() {
     activeTab: undefined as string | undefined,
     reviewOpen: false,
   })
+  const storyModel = {
+    id: "claude-3-7-sonnet",
+    name: "Claude 3.7 Sonnet",
+    provider: { id: "anthropic", name: "Anthropic" },
+  }
   const model = {
-    current: () => ({ id: "claude-3-7-sonnet", name: "Claude 3.7 Sonnet", provider: { id: "anthropic" } }),
+    current: () => storyModel,
+    list: () => [storyModel],
+    visible: () => true,
+    set: () => {},
     variant: {
       list: () => ["fast", "thinking"],
       current: () => controls.variant,
       set: (variant?: string) => setControls("variant", variant),
-    },
-  }
-  const submission = {
-    abort() {},
-    handleSubmit(event: Event) {
-      event.preventDefault()
-      state.reset()
     },
   }
   const inputControls = {
@@ -45,12 +62,6 @@ function PromptInputExample() {
       paid: true,
       loading: false,
     },
-    projects: {
-      available: [{ name: "Story project", worktree: "/tmp/story", sandboxes: [] }],
-      directory: "/tmp/story",
-      select() {},
-      add() {},
-    },
     session: {
       id: "story-session",
       tabs: {
@@ -64,12 +75,11 @@ function PromptInputExample() {
         open: () => setControls("reviewOpen", true),
       },
     },
-    newLayoutDesigns: true,
   }
   const addReviewComment = () => {
     const comment = controls.comments + 1
     setControls("comments", comment)
-    state.context.add({
+    input.state.context.add({
       type: "file",
       path: "src/components/prompt-input.tsx",
       selection: {
@@ -87,7 +97,7 @@ function PromptInputExample() {
 
   return (
     <div class="flex flex-col gap-3">
-      <PromptInput controls={inputControls} state={state} history={history} submission={submission} />
+      <PromptInput controls={inputControls} {...input} />
       <div>
         <button
           type="button"
@@ -98,6 +108,93 @@ function PromptInputExample() {
         </button>
       </div>
     </div>
+  )
+}
+
+const todos: Todo[] = [
+  { id: "todo-1", content: "Inspect the session composer animation", status: "completed" },
+  { id: "todo-2", content: "Keep the dock settled on initial render", status: "in_progress" },
+  { id: "todo-3", content: "Verify session navigation behavior", status: "pending" },
+]
+
+function PromptInputWithOpenDock() {
+  const input = createPromptInputStoryRuntime()
+  const [controls, setControls] = createStore({
+    agent: "build",
+    activeTab: undefined as string | undefined,
+    todoCollapsed: false,
+  })
+  const inputControls = {
+    agents: {
+      available: [],
+      options: ["build"],
+      get current() {
+        return controls.agent
+      },
+      loading: false,
+      visible: true,
+      select: (agent?: string) => setControls("agent", agent ?? "build"),
+    },
+    model: {
+      selection: {
+        current: () => ({ id: "claude-3-7-sonnet", name: "Claude 3.7 Sonnet", provider: { id: "anthropic" } }),
+        variant: { list: () => [], current: () => undefined, set: () => {} },
+      },
+      paid: true,
+      loading: false,
+    },
+    session: {
+      id: "story-session",
+      tabs: {
+        active: () => controls.activeTab,
+        all: () => [],
+        open: () => {},
+        setActive: (tab: string) => setControls("activeTab", tab),
+      },
+      reviewPanel: { opened: () => false, open: () => {} },
+    },
+  }
+  const state = {
+    blocked: () => false,
+    questionRequest: () => undefined,
+    permissionRequest: () => undefined,
+    permissionResponding: () => false,
+    decide: () => {},
+    todos: () => todos,
+    dock: () => true,
+    closing: () => false,
+    opening: () => false,
+  }
+  return (
+    <SessionComposerRegion
+      controller={createSessionComposerRegionController({
+        state,
+        sessionKey: () => "story-session",
+        sessionID: () => "story-session",
+        prompt: input.state,
+        ready: () => true,
+        centered: () => false,
+        todo: {
+          collapsed: () => controls.todoCollapsed,
+          onToggle: () => setControls("todoCollapsed", (collapsed) => !collapsed),
+        },
+        followup: () => undefined,
+        revert: () => undefined,
+        onResponseSubmit: () => {},
+        openParent: () => {},
+        setPromptRef: () => {},
+        setDockRef: () => {},
+      })}
+      promptInput={
+        <PromptInput
+          controls={inputControls}
+          {...input}
+          ref={() => {}}
+          newSessionWorktree=""
+          onNewSessionWorktreeReset={() => {}}
+        />
+      }
+    />
   )
 }
 
@@ -112,6 +209,15 @@ export const Basic = {
     <div class="pt-10">
       <h1 class="mb-4">Prompt Input</h1>
       <PromptInputExample />
+    </div>
+  ),
+}
+
+export const DockAlreadyOpen = {
+  render: () => (
+    <div class="pt-10">
+      <h1 class="mb-4">Prompt Input with open Todo dock</h1>
+      <PromptInputWithOpenDock />
     </div>
   ),
 }

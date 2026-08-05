@@ -1,4 +1,7 @@
-import { type ComponentProps, type JSX, Show, onMount, splitProps } from "solid-js"
+import { For, Show, createSignal, onMount, splitProps, type ComponentProps, type JSX } from "solid-js"
+import { FileIcon } from "../../components/file-icon"
+import { useI18n } from "../../context/i18n"
+import { useFilteredList } from "../../hooks"
 import { ButtonV2 } from "./button-v2"
 import "./line-comment-v2.css"
 
@@ -53,6 +56,10 @@ export function LineCommentV2(props: LineCommentV2Props) {
   )
 }
 
+export type LineCommentEditorV2Mention = {
+  items: (query: string) => string[] | Promise<string[]>
+}
+
 export interface LineCommentEditorV2Props extends Omit<ComponentProps<"div">, "children" | "onInput" | "onSubmit"> {
   /** Visible field label above the textarea (default: “Comment”). */
   heading?: JSX.Element | string
@@ -66,10 +73,23 @@ export interface LineCommentEditorV2Props extends Omit<ComponentProps<"div">, "c
   cancelLabel?: string
   submitLabel?: string
   autofocus?: boolean
+  mention?: LineCommentEditorV2Mention
+}
+
+function pathFilename(path: string) {
+  const index = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
+  return index === -1 ? path : path.slice(index + 1)
+}
+
+function pathDirectory(path: string) {
+  const index = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
+  return index === -1 ? "" : path.slice(0, index + 1)
 }
 
 export function LineCommentEditorV2(props: LineCommentEditorV2Props) {
+  const i18n = useI18n()
   let textareaRef: HTMLTextAreaElement | undefined
+  const [mentionOpen, setMentionOpen] = createSignal(false)
 
   const [local, rest] = splitProps(props, [
     "heading",
@@ -83,12 +103,85 @@ export function LineCommentEditorV2(props: LineCommentEditorV2Props) {
     "cancelLabel",
     "submitLabel",
     "autofocus",
+    "mention",
     "class",
     "classList",
   ])
 
-  const heading = () => local.heading ?? "Comment"
+  const heading = () => local.heading ?? i18n.t("ui.lineComment.submit")
   const canSubmit = () => local.value.trim().length > 0
+
+  const closeMention = () => {
+    setMentionOpen(false)
+    mention.clear()
+  }
+
+  const currentMention = () => {
+    const textarea = textareaRef
+    if (!textarea) return
+    if (!local.mention) return
+    if (textarea.selectionStart !== textarea.selectionEnd) return
+
+    const end = textarea.selectionStart
+    const match = textarea.value.slice(0, end).match(/@(\S*)$/)
+    if (!match) return
+
+    return {
+      query: match[1] ?? "",
+      start: end - match[0].length,
+      end,
+    }
+  }
+
+  function selectMention(item: { path: string } | undefined) {
+    if (!item) return
+
+    const textarea = textareaRef
+    const query = currentMention()
+    if (!textarea || !query) return
+
+    const value = `${textarea.value.slice(0, query.start)}@${item.path} ${textarea.value.slice(query.end)}`
+    const cursor = query.start + item.path.length + 2
+
+    local.onInput(value)
+    closeMention()
+
+    requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(cursor, cursor)
+    })
+  }
+
+  const mention = useFilteredList<{ path: string }>({
+    items: async (query) => {
+      if (!local.mention) return []
+      if (!query.trim()) return []
+      const paths = await local.mention.items(query)
+      return paths.map((path) => ({ path }))
+    },
+    key: (item) => item.path,
+    filterKeys: ["path"],
+    skipFilter: () => true,
+    onSelect: selectMention,
+  })
+
+  const syncMention = () => {
+    const item = currentMention()
+    if (!item) {
+      closeMention()
+      return
+    }
+
+    setMentionOpen(true)
+    mention.onInput(item.query)
+  }
+
+  const selectActiveMention = () => {
+    const items = mention.flat()
+    if (items.length === 0) return
+    const active = mention.active()
+    selectMention(items.find((item) => item.path === active) ?? items[0])
+  }
 
   const submit = () => {
     const v = local.value.trim()
@@ -120,11 +213,41 @@ export function LineCommentEditorV2(props: LineCommentEditorV2Props) {
             }}
             data-slot="line-comment-v2-textarea"
             rows={local.rows ?? 3}
-            placeholder={local.placeholder ?? "Add context for this change"}
+            placeholder={local.placeholder ?? i18n.t("ui.lineComment.contextPlaceholder")}
             value={local.value}
-            onInput={(e) => local.onInput(e.currentTarget.value)}
+            onInput={(e) => {
+              local.onInput(e.currentTarget.value)
+              syncMention()
+            }}
+            onClick={() => syncMention()}
+            onSelect={() => syncMention()}
             onKeyDown={(e) => {
               e.stopPropagation()
+              if (e.isComposing || e.keyCode === 229) return
+
+              if (mentionOpen()) {
+                if (e.key === "Escape") {
+                  e.preventDefault()
+                  closeMention()
+                  return
+                }
+
+                if (e.key === "Tab") {
+                  if (mention.flat().length === 0) return
+                  e.preventDefault()
+                  selectActiveMention()
+                  return
+                }
+
+                const nav = e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Enter"
+                const ctrlNav = e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && (e.key === "n" || e.key === "p")
+                if ((nav || ctrlNav) && mention.flat().length > 0) {
+                  mention.onKeyDown(e)
+                  e.preventDefault()
+                  return
+                }
+              }
+
               if (e.key === "Escape") {
                 e.preventDefault()
                 e.currentTarget.blur()
@@ -137,15 +260,43 @@ export function LineCommentEditorV2(props: LineCommentEditorV2Props) {
               }
             }}
           />
+          <Show when={mentionOpen() && mention.flat().length > 0}>
+            <div data-slot="line-comment-v2-mention-list">
+              <For each={mention.flat().slice(0, 10)}>
+                {(item) => {
+                  const directory = item.path.endsWith("/") ? item.path : pathDirectory(item.path)
+                  const name = item.path.endsWith("/") ? "" : pathFilename(item.path)
+                  return (
+                    <button
+                      type="button"
+                      data-slot="line-comment-v2-mention-item"
+                      data-active={mention.active() === item.path ? "" : undefined}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onMouseEnter={() => mention.setActive(item.path)}
+                      onClick={() => selectMention(item)}
+                    >
+                      <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-4" />
+                      <div data-slot="line-comment-v2-mention-path">
+                        <span data-slot="line-comment-v2-mention-dir">{directory}</span>
+                        <Show when={name}>
+                          <span data-slot="line-comment-v2-mention-file">{name}</span>
+                        </Show>
+                      </div>
+                    </button>
+                  )
+                }}
+              </For>
+            </div>
+          </Show>
         </div>
         <div data-slot="line-comment-v2-footer">
           <div data-slot="line-comment-v2-footer-meta">{local.selection}</div>
           <div data-slot="line-comment-v2-footer-actions">
             <ButtonV2 type="button" size="normal" variant="neutral" onClick={() => local.onCancel()}>
-              {local.cancelLabel ?? "Cancel"}
+              {local.cancelLabel ?? i18n.t("ui.lineComment.cancel")}
             </ButtonV2>
             <ButtonV2 type="button" size="normal" variant="contrast" disabled={!canSubmit()} onClick={submit}>
-              {local.submitLabel ?? "Comment"}
+              {local.submitLabel ?? i18n.t("ui.lineComment.submit")}
             </ButtonV2>
           </div>
         </div>

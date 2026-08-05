@@ -256,6 +256,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     SECRET.UpstashRedisRestToken,
     AUTH_API_URL,
     STRIPE_WEBHOOK_SECRET,
+    SECRET.SupportApiKey,
     DISCORD_INCIDENT_WEBHOOK_URL,
     SECRET.HoneycombWebhookSecret,
     STRIPE_SECRET_KEY,
@@ -287,8 +288,12 @@ new sst.cloudflare.x.SolidStart("Console", {
     server: {
       placement: { region: "aws:us-east-2" },
       transform: {
-        worker: {
-          tailConsumers: [{ service: logProcessor.nodes.worker.scriptName }],
+        worker: (args) => {
+          args.compatibilityFlags = $resolve(args.compatibilityFlags).apply((flags) => [
+            ...(flags ?? []),
+            "global_fetch_strictly_public",
+          ])
+          args.tailConsumers = [{ service: logProcessor.nodes.worker.scriptName }]
         },
       },
     },
