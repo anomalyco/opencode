@@ -163,18 +163,22 @@ describe("opencode run (non-interactive subprocess)", () => {
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
-          reply().text("before tool").tool("bash", {
+          reply().reason("thinking it over").text("before tool").tool("bash", {
             command: "printf tool-output",
             description: "Print deterministic output",
           }),
         )
         yield* llm.text("after tool")
-        const result = yield* opencode.run("say hi", { format: "json", model: "test/test-model-alt" })
+        const result = yield* opencode.run("say hi", {
+          format: "json",
+          model: "test/test-model-alt",
+          extraArgs: ["--thinking"],
+        })
         opencode.expectExit(result, 0)
 
         const events = opencode.parseJsonEvents(result.stdout)
         expect(new Set(events.map((event) => event.type))).toEqual(
-          new Set(["step_start", "text", "tool_use", "step_finish"]),
+          new Set(["step_start", "reasoning", "text", "tool_use", "step_finish"]),
         )
         for (const event of events) {
           expect(event.providerID).toBe("test")
