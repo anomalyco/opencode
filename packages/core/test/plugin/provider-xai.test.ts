@@ -16,7 +16,7 @@ const addPlugin = Effect.fn(function* () {
 })
 
 describe("XAIPlugin", () => {
-  it.effect("registers browser OAuth, device OAuth, and API key methods", () =>
+  it.effect("registers device OAuth and API key methods", () =>
     Effect.gen(function* () {
       yield* addPlugin()
       const integrations = yield* Integration.Service
@@ -24,14 +24,9 @@ describe("XAIPlugin", () => {
       expect(integration?.name).toBe("xAI")
       expect(integration?.methods).toEqual([
         {
-          id: Integration.MethodID.make("browser"),
-          type: "oauth",
-          label: "xAI Grok OAuth (SuperGrok Subscription)",
-        },
-        {
           id: Integration.MethodID.make("device"),
           type: "oauth",
-          label: "xAI Grok OAuth (Headless / Remote / VPS)",
+          label: "SuperGrok Subscription",
         },
         { type: "key", label: "Manually enter API Key" },
       ])
