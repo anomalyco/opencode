@@ -6,6 +6,11 @@
   --sl-border-color: hsl(0, 1%, 85%);
   --sl-color-hairline-shade: hsl(0, 1%, 85%);
 
+  /* Brand accent (terracotta/rust), matching the TUI's leak-code theme */
+  --sl-color-accent-low: hsl(14, 40%, 90%);
+  --sl-color-accent: hsl(14, 58%, 45%);
+  --sl-color-accent-high: hsl(14, 60%, 30%);
+
   --color-background: hsl(0, 20%, 99%);
   --color-background-weak: hsl(0, 8%, 97%);
   --color-background-weak-hover: hsl(0, 8%, 94%);
@@ -40,6 +45,10 @@ body {
     --sl-color-text: hsl(0, 4%, 71%);
     --sl-border-color: hsl(0, 4%, 23%);
     --sl-color-hairline-shade: hsl(0, 4%, 23%);
+
+    --sl-color-accent-low: hsl(15, 35%, 20%);
+    --sl-color-accent: hsl(15, 63%, 60%);
+    --sl-color-accent-high: hsl(15, 68%, 78%);
 
     --color-background: hsl(0, 9%, 7%);
     --color-background-weak: hsl(0, 6%, 10%);

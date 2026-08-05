@@ -54,7 +54,7 @@ export function mapV2Foreground(
     "v2-icon-icon-muted": greyRef(pickGrey(primitives, bgBase, 3, 600)),
     "v2-icon-icon-inverse": greyRef(pickGrey(primitives, bgInverse, 7, inverseTarget)),
     "v2-icon-icon-contrast": greyRef(pickGrey(primitives, bgContrast, 7, 100)),
-    "v2-icon-icon-accent": isDark ? "var(--v2-blue-400)" : "var(--v2-blue-600)",
-    "v2-icon-icon-accent-hover": isDark ? "var(--v2-blue-300)" : "var(--v2-blue-700)",
+    "v2-icon-icon-accent": isDark ? "var(--v2-orange-400)" : "var(--v2-orange-800)",
+    "v2-icon-icon-accent-hover": isDark ? "var(--v2-orange-300)" : "var(--v2-orange-900)",
   }
 }
