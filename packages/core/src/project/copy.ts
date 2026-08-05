@@ -70,11 +70,6 @@ export class StrategyUnavailableError extends Schema.TaggedErrorClass<StrategyUn
   { strategy: StrategyID },
 ) {}
 
-export class DuplicateStrategyError extends Schema.TaggedErrorClass<DuplicateStrategyError>()(
-  "ProjectCopy.DuplicateStrategyError",
-  { strategy: StrategyID },
-) {}
-
 export type Error =
   | SourceDirectoryNotFoundError
   | DestinationExistsError
@@ -99,7 +94,6 @@ export interface Strategy {
 export { Event }
 
 export interface Interface {
-  readonly register: (strategy: Strategy) => Effect.Effect<void, DuplicateStrategyError>
   readonly create: (input: CreateInput) => Effect.Effect<Copy, Error>
   readonly remove: (input: RemoveInput) => Effect.Effect<void, Error>
   readonly refresh: (input: RefreshInput) => Effect.Effect<RefreshResult, Error>
@@ -144,17 +138,7 @@ const layer = Layer.effect(
       return resolved
     })
 
-    const registry = new Map<StrategyID, Strategy>()
-
-    const register = Effect.fn("ProjectCopy.register")(function* (strategy: Strategy) {
-      if (registry.has(strategy.id)) return yield* new DuplicateStrategyError({ strategy: strategy.id })
-      registry.set(strategy.id, strategy)
-    })
-
-    // Register default strategies
-    yield* register(makeGitWorktreeStrategy({ git, canonical })).pipe(Effect.orDie)
-
-    const strategies = () => Array.from(registry.values())
+    const strategy = makeGitWorktreeStrategy({ git, canonical })
 
     const source = Effect.fnUntraced(function* (input: AbsolutePath, projectID: Project.ID) {
       const sourceDirectory = yield* canonical(input)
@@ -164,9 +148,8 @@ const layer = Layer.effect(
     })
 
     const getStrategy = Effect.fnUntraced(function* (id: StrategyID) {
-      const found = registry.get(id)
-      if (!found) return yield* new StrategyUnavailableError({ strategy: id })
-      return found
+      if (id !== strategy.id) return yield* new StrategyUnavailableError({ strategy: id })
+      return strategy
     })
 
     const create = Effect.fn("ProjectCopy.create")(function* (input: CreateInput) {
@@ -226,20 +209,18 @@ const layer = Layer.effect(
       const discovered = yield* Effect.forEach(
         sourceDirectories,
         (sourceDirectory) =>
-          Effect.forEach(strategies(), (strategy) =>
-            strategy.list(sourceDirectory).pipe(
-              Effect.catchTag("ProjectCopy.DirectoryUnavailableError", () => Effect.succeed([])),
-              Effect.map((items) =>
-                items.map((item) => ({
-                  directory: item.directory,
-                  strategy: item.type === "copy" ? strategy.id : undefined,
-                })),
-              ),
+          strategy.list(sourceDirectory).pipe(
+            Effect.catchTag("ProjectCopy.DirectoryUnavailableError", () => Effect.succeed([])),
+            Effect.map((items) =>
+              items.map((item) => ({
+                directory: item.directory,
+                strategy: item.type === "copy" ? strategy.id : undefined,
+              })),
             ),
           ),
         { concurrency: "unbounded" },
       ).pipe(
-        Effect.map((sets) => new Map(sets.flat(2).map((item) => [item.directory, item] as const)).values().toArray()),
+        Effect.map((sets) => new Map(sets.flat().map((item) => [item.directory, item] as const)).values().toArray()),
       )
       const removed = checked.filter((item) => !item.exists).map((item) => item.directory)
       const result = yield* db
@@ -271,7 +252,6 @@ const layer = Layer.effect(
     })
 
     return Service.of({
-      register,
       create,
       remove,
       refresh,
