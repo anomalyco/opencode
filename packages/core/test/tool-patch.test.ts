@@ -8,6 +8,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Formatter } from "@opencode-ai/core/formatter"
 import { Location } from "@opencode-ai/core/location"
+import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
@@ -22,7 +23,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
-  deps: [Tool.node, Formatter.node, FSUtil.node, Location.node, Permission.node],
+  deps: [Tool.node, Formatter.node, FSUtil.node, LocationMutation.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_patch_tool_test")
@@ -828,7 +829,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("treats a sibling path inside the project worktree as internal", () =>
+  it.live("requires external permission for a sibling path inside the project worktree", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -847,7 +848,17 @@ describe("PatchTool", () => {
                       call("*** Begin Patch\n*** Update File: ../sibling.txt\n@@\n-before\n+after\n*** End Patch"),
                     ),
                   ).toMatchObject({ status: "completed" })
-                  expect(assertions.map((input) => input.action)).toEqual(["edit"])
+                  const root = yield* Effect.promise(() => fs.realpath(tmp.path))
+                  expect(assertions).toMatchObject([
+                    {
+                      action: "external_directory",
+                      resources: [path.join(root, "*").replaceAll("\\", "/")],
+                    },
+                    {
+                      action: "edit",
+                      resources: [path.join(root, "sibling.txt").replaceAll("\\", "/")],
+                    },
+                  ])
                   expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
                 }),
               tmp.path,

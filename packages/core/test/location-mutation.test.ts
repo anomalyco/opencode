@@ -37,6 +37,7 @@ describe("LocationMutation", () => {
         const target = yield* (yield* LocationMutation.Service).resolve({ path: "hello.txt" })
 
         expect(target).toMatchObject({
+          absolute: targetPath,
           canonical: yield* Effect.promise(() => fs.realpath(targetPath)),
           resource: "hello.txt",
         })
