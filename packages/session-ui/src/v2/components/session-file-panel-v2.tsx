@@ -34,10 +34,6 @@ export function SessionFilePanelV2(props: {
   )
 }
 
-export function SessionFilePanelV2Title(props: ParentProps) {
-  return <div data-slot="session-review-v2-toolbar-title">{props.children}</div>
-}
-
 export function SessionFilePanelV2Empty(props: ParentProps) {
   return <div data-slot="session-review-v2-empty">{props.children}</div>
 }
