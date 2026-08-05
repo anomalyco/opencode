@@ -1,7 +1,6 @@
 export * as Git from "./git"
 
 import path from "path"
-import { randomUUID } from "crypto"
 import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { AbsolutePath, RelativePath } from "./schema"
@@ -175,17 +174,10 @@ export interface Interface {
       context?: number
       paths?: readonly RelativePath[]
     }) => Effect.Effect<readonly File.Diff[], OperationError>
-    readonly preview: (input: {
-      repository: Repository
-      current: TreeID
-      files: ReadonlyMap<RelativePath, TreeID>
-      context?: number
-    }) => Effect.Effect<readonly File.Diff[], OperationError>
     readonly restore: (input: {
       repository: Repository
       files: ReadonlyMap<RelativePath, TreeID>
     }) => Effect.Effect<void, OperationError>
-    readonly checkout: (input: { repository: Repository; tree: TreeID }) => Effect.Effect<void, OperationError>
   }
 }
 
@@ -657,58 +649,6 @@ const layer = Layer.effect(
       return { mode: match[1], object: match[2] }
     })
 
-    const preview = Effect.fn("Git.tree.preview")(
-      (input: {
-        repository: Repository
-        current: TreeID
-        files: ReadonlyMap<RelativePath, TreeID>
-        context?: number
-      }) =>
-        locked(
-          input.repository,
-          Effect.gen(function* () {
-            const index = path.join(input.repository.gitDirectory, `preview-${randomUUID()}.index`)
-            const env = { GIT_INDEX_FILE: index }
-            return yield* Effect.gen(function* () {
-              yield* repositoryOperation("diff", input.repository, ["read-tree", input.current], { env })
-              yield* Effect.forEach(
-                input.files,
-                ([file, tree]) =>
-                  Effect.gen(function* () {
-                    const source = yield* entry(input.repository, tree, file)
-                    if (!source) {
-                      yield* repositoryOperation(
-                        "diff",
-                        input.repository,
-                        ["update-index", "--force-remove", "--", file],
-                        { env },
-                      )
-                      return
-                    }
-                    yield* repositoryOperation(
-                      "diff",
-                      input.repository,
-                      ["update-index", "--add", "--cacheinfo", source.mode, source.object, file],
-                      { env },
-                    )
-                  }),
-                { discard: true },
-              )
-              const target = TreeID.make(
-                (yield* repositoryOperation("diff", input.repository, ["write-tree"], { env })).text.trim(),
-              )
-              return yield* treeDiff({
-                repository: input.repository,
-                from: input.current,
-                to: target,
-                context: input.context,
-                paths: Array.from(input.files.keys()),
-              })
-            }).pipe(Effect.ensuring(fs.remove(index).pipe(Effect.catch(() => Effect.void))))
-          }),
-        ),
-    )
-
     const restore = Effect.fn("Git.tree.restore")(
       (input: { repository: Repository; files: ReadonlyMap<RelativePath, TreeID> }) =>
         locked(
@@ -736,16 +676,6 @@ const layer = Layer.effect(
             { discard: true },
           ),
         ),
-    )
-
-    const checkoutTree = Effect.fn("Git.tree.checkout")((input: { repository: Repository; tree: TreeID }) =>
-      locked(
-        input.repository,
-        Effect.gen(function* () {
-          yield* repositoryOperation("restore", input.repository, ["read-tree", input.tree])
-          yield* repositoryOperation("restore", input.repository, ["checkout-index", "--all", "--force"])
-        }),
-      ),
     )
 
     const capture = Effect.fn("Git.change.capture")(function* (input: { repository: Repository; path: AbsolutePath }) {
@@ -957,9 +887,7 @@ const layer = Layer.effect(
         write: writeTree,
         files: treeFiles,
         diff: treeDiff,
-        preview,
         restore,
-        checkout: checkoutTree,
       },
     })
   }),

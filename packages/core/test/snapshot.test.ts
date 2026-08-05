@@ -117,9 +117,6 @@ describe("Snapshot", () => {
               RelativePath.make("scope/tracked.txt"),
             ])
             const plan = new Map([[RelativePath.make("scope/tracked.txt"), before]])
-            const preview = yield* snapshot.preview({ files: plan, context: 1 })
-            expect(preview).toHaveLength(1)
-            expect(preview[0]?.file).toBe(RelativePath.make("scope/tracked.txt"))
             yield* snapshot.restore({ files: plan })
             expect(yield* read(path.join(location, "tracked.txt"))).toBe("one\n")
             expect(yield* read(path.join(location, "added.txt"))).toBe("added\n")
@@ -181,36 +178,6 @@ describe("Snapshot", () => {
           expect(
             yield* Effect.promise(() => fs.stat(path.join(tmp.path, "snapshot", projectID, Hash.fast(linked)))),
           ).toBeDefined()
-        }),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ),
-  )
-
-  testEffect(Layer.empty).live("checks out a legacy revert snapshot without removing unrelated files", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          const project = path.join(tmp.path, "project")
-          yield* Effect.promise(async () => {
-            await fs.mkdir(project)
-            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
-            await initGit(project)
-          })
-
-          yield* Effect.gen(function* () {
-            const snapshot = yield* Snapshot.Service
-            const before = yield* snapshot.capture()
-            expect(before).toBeDefined()
-            if (!before) return
-            yield* Effect.promise(async () => {
-              await fs.writeFile(path.join(project, "tracked.txt"), "two\n")
-              await fs.writeFile(path.join(project, "unrelated.txt"), "keep\n")
-            })
-            yield* snapshot.checkout(before)
-            expect(yield* read(path.join(project, "tracked.txt"))).toBe("one\n")
-            expect(yield* read(path.join(project, "unrelated.txt"))).toBe("keep\n")
-          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),

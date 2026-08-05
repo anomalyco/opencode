@@ -16,7 +16,7 @@ import { Hash } from "@opencode-ai/util/hash"
 export { ID }
 
 export class Error extends Schema.TaggedErrorClass<Error>()("Snapshot.Error", {
-  operation: Schema.Literals(["capture", "files", "diff", "preview", "restore"]),
+  operation: Schema.Literals(["capture", "files", "diff", "restore"]),
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
 }) {}
@@ -34,10 +34,6 @@ export interface DiffInput extends CompareInput {
 export interface RestoreInput {
   /** Paths are relative to the project root. */
   readonly files: ReadonlyMap<RelativePath, ID>
-}
-
-export interface PreviewInput extends RestoreInput {
-  readonly context?: number
 }
 
 export interface Interface {
@@ -61,24 +57,10 @@ export interface Interface {
   readonly diff: (input: DiffInput) => Effect.Effect<readonly File.Diff[], Error>
 
   /**
-   * Preview the filesystem result of a selective restore without modifying the
-   * worktree. Each project-relative path maps to the tree it would be restored
-   * from.
-   */
-  readonly preview: (input: PreviewInput) => Effect.Effect<readonly File.Diff[], Error>
-
-  /**
    * Restore selected project-relative paths from their associated trees. A path
    * absent from its selected tree is removed; paths outside the map are untouched.
-   */
+  */
   readonly restore: (input: RestoreInput) => Effect.Effect<void, Error>
-
-  /**
-   * Replace the snapshot index with a captured tree and check out all its entries.
-   * Files absent from the tree remain untouched. Prefer selective `restore` when
-   * only known paths should change.
-   */
-  readonly checkout: (snapshot: ID) => Effect.Effect<void, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
@@ -176,59 +158,26 @@ const layer = Layer.effect(
         .pipe(Effect.mapError((cause) => failure("diff", cause)))
     })
 
-    const plan = Effect.fnUntraced(function* (
-      operation: "preview" | "restore",
-      worktree: AbsolutePath,
-      input: RestoreInput,
-    ) {
+    const plan = Effect.fnUntraced(function* (worktree: AbsolutePath, input: RestoreInput) {
       const files = new Map<RelativePath, Git.TreeID>()
       for (const [file, snapshot] of input.files) {
         const absolute = path.resolve(worktree, file)
         if (!FSUtil.contains(worktree, absolute))
-          return yield* new Error({ operation, message: `Path escapes the project: ${file}` })
+          return yield* new Error({ operation: "restore", message: `Path escapes the project: ${file}` })
         files.set(file, Git.TreeID.make(snapshot))
       }
       return files
-    })
-
-    const preview = Effect.fn("Snapshot.preview")(function* (input: PreviewInput) {
-      if (!(yield* enabled())) return yield* new Error({ operation: "preview", message: "Snapshots are disabled" })
-      const repo = yield* repository.pipe(Effect.mapError((cause) => failure("preview", cause)))
-      const files = yield* plan("preview", repo.worktree, input)
-      const current = yield* git.tree
-        .capture({
-          repository: repo.snapshotRepository,
-          scopes: Array.from(files.keys()),
-          ignores: repo.source,
-          maximumUntrackedFileBytes: 2 * 1024 * 1024,
-        })
-        .pipe(Effect.mapError((cause) => failure("preview", cause)))
-      return yield* git.tree
-        .preview({
-          repository: repo.snapshotRepository,
-          current,
-          files,
-          context: input.context,
-        })
-        .pipe(Effect.mapError((cause) => failure("preview", cause)))
     })
 
     const restore = Effect.fn("Snapshot.restore")(function* (input: RestoreInput) {
       if (!(yield* enabled())) return yield* new Error({ operation: "restore", message: "Snapshots are disabled" })
       const repo = yield* repository.pipe(Effect.mapError((cause) => failure("restore", cause)))
       yield* git.tree
-        .restore({ repository: repo.snapshotRepository, files: yield* plan("restore", repo.worktree, input) })
+        .restore({ repository: repo.snapshotRepository, files: yield* plan(repo.worktree, input) })
         .pipe(Effect.mapError((cause) => failure("restore", cause)))
     })
 
-    const checkout = Effect.fn("Snapshot.checkout")(function* (snapshot: ID) {
-      const repo = yield* repository.pipe(Effect.mapError((cause) => failure("restore", cause)))
-      yield* git.tree
-        .checkout({ repository: repo.snapshotRepository, tree: Git.TreeID.make(snapshot) })
-        .pipe(Effect.mapError((cause) => failure("restore", cause)))
-    })
-
-    return Service.of({ capture, files, diff, preview, restore, checkout })
+    return Service.of({ capture, files, diff, restore })
   }).pipe(Effect.withSpan("Snapshot.boot")),
 )
 
@@ -244,9 +193,7 @@ export const noopLayer = Layer.succeed(
     capture: () => Effect.succeed(undefined),
     files: () => Effect.succeed([]),
     diff: () => Effect.succeed([]),
-    preview: () => Effect.succeed([]),
     restore: () => Effect.void,
-    checkout: () => Effect.void,
   }),
 )
 
