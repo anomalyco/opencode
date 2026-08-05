@@ -404,6 +404,72 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("authorizes external symlink entries when deleting and moving", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        if (process.platform === "win32") return Effect.void
+        const active = path.join(tmp.path, "active")
+        const outside = path.join(tmp.path, "outside")
+        const other = path.join(tmp.path, "other")
+        const target = path.join(other, "target.txt")
+        const link = path.join(outside, "link.txt")
+        const moved = path.join(active, "moved.txt")
+        return Effect.promise(async () => {
+          await Promise.all([fs.mkdir(active), fs.mkdir(outside), fs.mkdir(other)])
+          await fs.writeFile(target, "before\n")
+          await fs.symlink(target, link)
+        }).pipe(
+          Effect.andThen(
+            withTool(active, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(registry, call(`*** Begin Patch\n*** Delete File: ${link}\n*** End Patch`)),
+                ).toMatchObject({ status: "completed" })
+                const targetRoot = yield* Effect.promise(() => fs.realpath(other))
+                const entryRoot = yield* Effect.promise(() => fs.realpath(outside))
+                expect(assertions).toMatchObject([
+                  { action: "external_directory", resources: [path.join(targetRoot, "*")] },
+                  { action: "external_directory", resources: [path.join(entryRoot, "*")] },
+                  {
+                    action: "edit",
+                    resources: [path.join(targetRoot, "target.txt"), path.join(entryRoot, "link.txt")],
+                  },
+                ])
+                expect(yield* exists(link)).toBe(false)
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("before\n")
+
+                reset()
+                yield* Effect.promise(() => fs.symlink(target, link))
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call(
+                      `*** Begin Patch\n*** Update File: ${link}\n*** Move to: moved.txt\n@@\n-before\n+after\n*** End Patch`,
+                    ),
+                  ),
+                ).toMatchObject({ status: "completed" })
+                expect(assertions).toMatchObject([
+                  { action: "external_directory", resources: [path.join(targetRoot, "*")] },
+                  { action: "external_directory", resources: [path.join(entryRoot, "*")] },
+                  {
+                    action: "edit",
+                    resources: [path.join(targetRoot, "target.txt"), path.join(entryRoot, "link.txt"), "moved.txt"],
+                  },
+                ])
+                expect(yield* exists(link)).toBe(false)
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("before\n")
+                expect(yield* Effect.promise(() => fs.readFile(moved, "utf8"))).toBe("after\n")
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("includes move file info in output and metadata", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {

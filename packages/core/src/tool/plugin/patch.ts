@@ -6,6 +6,7 @@ import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
 import { PlatformError } from "effect/PlatformError"
+import path from "path"
 import { Bom } from "@opencode-ai/util/bom"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Formatter } from "../../formatter"
@@ -44,17 +45,21 @@ export const toModelOutput = (output: Output) =>
 
 type Prepared =
   | (Extract<Patch.Hunk, { readonly type: "add" | "delete" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: Target
       readonly before: string
       readonly after: string
     })
   | (Extract<Patch.Hunk, { readonly type: "update" }> & {
-      readonly target: LocationMutation.Target
+      readonly target: Target
       readonly content: string
       readonly before: string
       readonly after: string
       readonly moveTarget?: LocationMutation.Target
     })
+
+interface Target extends LocationMutation.Target {
+  readonly entry: string
+}
 
 export const Plugin = {
   id: "opencode.tool.patch",
@@ -97,12 +102,23 @@ export const Plugin = {
                     return yield* new ToolFailure({ message: "patch rejected: empty patch" })
                   }
                   const prepared: Prepared[] = []
-                  const targets: LocationMutation.Target[] = []
+                  const resources: string[] = []
                   const updates = new Map<string, string>()
                   for (const hunk of hunks) {
                     yield* Effect.gen(function* () {
-                      const target = yield* mutation.resolve({ path: hunk.path, kind: "file" })
-                      targets.push(target)
+                      const resolved = yield* mutation.resolve({ path: hunk.path, kind: "file" })
+                      const removesSource =
+                        hunk.type === "delete" || (hunk.type === "update" && hunk.movePath !== undefined)
+                      const entryDirectory = removesSource
+                        ? yield* mutation.resolve({ path: path.dirname(hunk.path), kind: "directory" })
+                        : undefined
+                      const target = {
+                        ...resolved,
+                        entry: entryDirectory
+                          ? path.join(entryDirectory.canonical, path.basename(hunk.path))
+                          : resolved.canonical,
+                      } satisfies Target
+                      resources.push(target.resource)
                       if (target.externalDirectory) {
                         yield* permission.assert({
                           ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
@@ -110,6 +126,21 @@ export const Plugin = {
                           agent: context.agent,
                           source,
                         })
+                      }
+                      if (
+                        entryDirectory?.externalDirectory &&
+                        entryDirectory.externalDirectory.resource !== target.externalDirectory?.resource
+                      ) {
+                        yield* permission.assert({
+                          ...LocationMutation.externalDirectoryPermission(entryDirectory.externalDirectory),
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
+                      }
+                      if (entryDirectory?.externalDirectory) {
+                        const entryResource = target.entry.replaceAll("\\", "/")
+                        if (entryResource !== target.resource) resources.push(entryResource)
                       }
                       if (hunk.type === "add") {
                         prepared.push({
@@ -172,7 +203,7 @@ export const Plugin = {
                       const moveTarget = hunk.movePath
                         ? yield* mutation.resolve({ path: hunk.movePath, kind: "file" })
                         : undefined
-                      if (moveTarget) targets.push(moveTarget)
+                      if (moveTarget) resources.push(moveTarget.resource)
                       if (moveTarget?.externalDirectory) {
                         yield* permission.assert({
                           ...LocationMutation.externalDirectoryPermission(moveTarget.externalDirectory),
@@ -202,10 +233,10 @@ export const Plugin = {
                   const patchFiles = prepared.map((change) => patchFile(change))
                   yield* permission.assert({
                     action: "edit",
-                    resources: [...new Set(targets.map((target) => target.resource))],
+                    resources: [...new Set(resources)],
                     save: ["*"],
                     metadata: {
-                      filepath: targets.map((target) => target.resource).join(", "),
+                      filepath: resources.join(", "),
                       diff: patchFiles.map((file) => `${file.patch}\n`).join(""),
                       files: patchFiles,
                     },
@@ -238,14 +269,14 @@ export const Plugin = {
                         }
                         if (change.type === "delete") {
                           yield* fs
-                            .remove(change.target.absolute)
+                            .remove(change.target.entry)
                             .pipe(
                               Effect.mapError((error) => fail(`Failed to delete ${change.target.resource}`, error)),
                             )
                           applied.push({
                             type: change.type,
                             resource: change.target.resource,
-                            target: change.target.absolute,
+                            target: change.target.entry,
                           })
                           return
                         }
@@ -254,7 +285,7 @@ export const Plugin = {
                           yield* fs
                             .writeWithDirs(moveTarget.canonical, change.content)
                             .pipe(Effect.mapError((error) => fail(`Failed to write ${moveTarget.resource}`, error)))
-                          yield* fs.remove(change.target.absolute).pipe(
+                          yield* fs.remove(change.target.entry).pipe(
                             Effect.mapError((error) =>
                               fail(`Wrote ${moveTarget.resource} but failed to remove ${change.target.resource}`, error),
                             ),

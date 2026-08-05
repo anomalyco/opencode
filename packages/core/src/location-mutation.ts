@@ -44,8 +44,6 @@ export const externalDirectoryPermission = (input: ExternalDirectoryAuthorizatio
 })
 
 export interface Target {
-  /** Absolute requested path before real-path canonicalization. */
-  readonly absolute: string
   /** Canonical existing path, or missing path below a canonical directory. */
   readonly canonical: string
   /** Permission resource: Location-relative for internal paths, canonical for external paths. */
@@ -133,7 +131,6 @@ const layer = Layer.effect(
         input.kind === "directory" && resolved.type === "Directory" ? resolved.canonical : resolved.directory
       const externalResource = slash(path.join(externalDirectory, "*"))
       return {
-        absolute,
         canonical: resolved.canonical,
         resource,
         externalDirectory: external
