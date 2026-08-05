@@ -948,10 +948,6 @@ function ExaOutput(props: { output?: string }) {
   )
 }
 
-export function registerPartComponent(type: string, component: PartComponent) {
-  PART_MAPPING[type] = component
-}
-
 export function Message(props: MessageProps) {
   return (
     <Switch>
