@@ -132,7 +132,10 @@ export function withCache(
     /** Custom TTL for individual cache entries. */
     ttlMs?: number
   },
-): (query: string, limit: number) => Promise<CatalogSearchResult> {
+  // The wrapper adds `freshness` to every result (live / fresh-cache /
+  // stale-cache), so the returned signature is wider than the fetcher's —
+  // matching `seedResult` below, which tags "seed" the same way.
+): (query: string, limit: number) => Promise<CatalogSearchResult & { freshness: CatalogFreshness }> {
   return async (query: string, limit: number) => {
     const key = cacheKey(query, limit)
     const hit = cache.get(key)
