@@ -36,33 +36,33 @@ const channel = (() => {
 })()
 
 const APP_IDS = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
+  dev: "ai.leak-code.desktop.dev",
+  beta: "ai.leak-code.desktop.beta",
+  prod: "ai.leak-code.desktop",
 } as const
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  artifactName: "leak-code-desktop-${os}-${arch}.${ext}",
   directories: {
     output: "dist",
     buildResources: "resources",
   },
   // Linux launchers are .desktop files, so this is the desktop file name,
-  // not just the app id. For prod, app id "ai.opencode.desktop" becomes
-  // "ai.opencode.desktop.desktop".
+  // not just the app id. For prod, app id "ai.leak-code.desktop" becomes
+  // "ai.leak-code.desktop.desktop".
   // https://developer.gnome.org/documentation/guidelines/maintainer/integrating.html
   // https://www.electron.build/docs/linux/
   extraMetadata: {
     desktopName: `${appId}.desktop`,
   },
-  files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
+  files: ["out/**/*", "resources/**/*", "!resources/leak-code-cli*"],
   extraResources: [
     ...(channel === "dev"
       ? [
           {
             from: "resources/",
             to: "",
-            filter: ["opencode-cli*"],
+            filter: ["leak-code-cli*"],
           },
         ]
       : []),
@@ -86,8 +86,8 @@ const getBase = (appId: string): Configuration => ({
     sign: true,
   },
   protocols: {
-    name: "OpenCode",
-    schemes: ["opencode"],
+    name: "Leak Code",
+    schemes: ["leak-code"],
   },
   win: {
     icon: `resources/icons/icon.ico`,
@@ -127,31 +127,31 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "OpenCode Dev",
+        productName: "Leak Code Dev",
         deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-dev", fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "leak-code-dev", fpm: [metainfoFpm(appId)] },
       }
     }
     case "beta": {
       return {
         ...base,
         appId,
-        productName: "OpenCode Beta",
-        protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
+        productName: "Leak Code Beta",
+        protocols: { name: "Leak Code Beta", schemes: ["leak-code"] },
+        publish: { provider: "github", owner: "leakdev0410", repo: "Leak-code", channel: "latest" },
         deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-beta", fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "leak-code-beta", fpm: [metainfoFpm(appId)] },
       }
     }
     case "prod": {
       return {
         ...base,
         appId,
-        productName: "OpenCode",
-        protocols: { name: "OpenCode", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        productName: "Leak Code",
+        protocols: { name: "Leak Code", schemes: ["leak-code"] },
+        publish: { provider: "github", owner: "leakdev0410", repo: "Leak-code", channel: "latest" },
         deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
-        rpm: { packageName: "opencode", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
+        rpm: { packageName: "leak-code", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
       }
     }
   }

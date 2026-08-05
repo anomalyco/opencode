@@ -65,7 +65,7 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         name: "opencode:virtual-server-module",
         enforce: "pre",
         resolveId(id) {
-          if (id === "virtual:opencode-server") return this.resolve(`${LEAKCODE_SERVER_DIST}/node.js`)
+          if (id === "virtual:leak-code-server") return this.resolve(`${LEAKCODE_SERVER_DIST}/node.js`)
         },
       },
       {

@@ -9,7 +9,7 @@ import { app } from "electron"
 const execFileAsync = promisify(execFile)
 const root = dirname(fileURLToPath(import.meta.url))
 const stateHome = process.env.XDG_STATE_HOME
-const desktopStateNames = ["ai.opencode.desktop.dev", "ai.opencode.desktop.beta", "ai.opencode.desktop"]
+const desktopStateNames = ["ai.leak-code.desktop.dev", "ai.leak-code.desktop.beta", "ai.leak-code.desktop"]
 
 type Logger = {
   log(message: string, meta?: Record<string, unknown>): void
@@ -121,5 +121,5 @@ function endpoint(url: string | undefined) {
 }
 
 function executableName() {
-  return process.platform === "win32" ? "opencode-cli.exe" : "opencode-cli"
+  return process.platform === "win32" ? "leak-code-cli.exe" : "leak-code-cli"
 }

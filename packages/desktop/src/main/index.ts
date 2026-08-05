@@ -51,14 +51,14 @@ import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
 
 const APP_NAMES: Record<string, string> = {
-  dev: "OpenCode Dev",
-  beta: "OpenCode Beta",
-  prod: "OpenCode",
+  dev: "Leak Code Dev",
+  beta: "Leak Code Beta",
+  prod: "Leak Code",
 }
 const APP_IDS: Record<string, string> = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
+  dev: "ai.leak-code.desktop.dev",
+  beta: "ai.leak-code.desktop.beta",
+  prod: "ai.leak-code.desktop",
 }
 const TEST_ONBOARDING = process.env.LEAKCODE_TEST_ONBOARDING === "1"
 const SIDECAR_VERSION = process.env.LEAKCODE_SIDECAR_V2 === "1" ? "v2" : "v1"
@@ -122,11 +122,11 @@ const main = Effect.gen(function* () {
 
   process.env.LEAKCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
-  const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
+  const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.leak-code.desktop.dev"
   const onboardingTestRoot = ((): string | undefined => {
     if (!TEST_ONBOARDING) return
 
-    const root = join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
+    const root = join(tmpdir(), `leak-code-onboarding-${randomUUID()}`)
     rmSync(root, { recursive: true, force: true })
     ;["data", "config", "cache", "state", "desktop", "session"].forEach((dir) =>
       mkdirSync(join(root, dir), { recursive: true }),
@@ -203,7 +203,7 @@ const main = Effect.gen(function* () {
   const shellEnv = preferAppEnv(app.getPath("userData"))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
-    const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
+    const urls = argv.filter((arg: string) => arg.startsWith("leak-code://"))
     if (urls.length) {
       logger.log("deep link received via second-instance", { urls })
       emitDeepLinks(urls)
