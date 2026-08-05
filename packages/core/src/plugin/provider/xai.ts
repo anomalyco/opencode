@@ -10,6 +10,7 @@ const issuer = "https://auth.x.ai/oauth2"
 const deviceGrant = "urn:ietf:params:oauth:grant-type:device_code"
 const scope = "openid profile email offline_access grok-cli:access api:access"
 const pollingSafetyMargin = 3000
+const browserMethodID = Integration.MethodID.make("browser")
 const deviceMethodID = Integration.MethodID.make("device")
 
 const Token = Schema.Struct({
@@ -72,6 +73,18 @@ const device = (app: App.Info) => ({
 export const XAIPlugin = define({
   id: "opencode.provider.xai",
   effect: Effect.fn(function* (ctx) {
+    const credentials = yield* Credential.Service
+    yield* Effect.forEach(
+      yield* credentials.list(Integration.ID.make("xai")),
+      (credential) => {
+        if (credential.value.type !== "oauth" || credential.value.methodID !== browserMethodID) return Effect.void
+        return credentials.update(credential.id, {
+          value: Credential.OAuth.make({ ...credential.value, methodID: deviceMethodID }),
+        })
+      },
+      { discard: true },
+    )
+
     yield* ctx.integration.transform((draft) => {
       draft.update("xai", (integration) => {
         integration.name = "xAI"
