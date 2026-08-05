@@ -9,6 +9,7 @@ import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { SessionReviewDiffStyle } from "../../components/session-review"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { useLocale } from "@kobalte/core/i18n"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Show, createEffect, createMemo, createSignal, type JSX } from "solid-js"
 import { getWorkerPool } from "../../pierre/worker"
@@ -149,6 +150,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
 
 export function SessionReviewV2(props: SessionReviewV2Props) {
   const i18n = useI18n()
+  const locale = useLocale()
 
   createEffect(() => {
     getWorkerPool(props.diffStyle)
@@ -175,6 +177,8 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
   }
 
   const canCycle = () => props.files.length > 0
+  const previousKey = () => (locale.direction() === "rtl" ? "ArrowRight" : "ArrowLeft")
+  const nextKey = () => (locale.direction() === "rtl" ? "ArrowLeft" : "ArrowRight")
   const showCollapsedMeta = () => props.sidebarOpen === false
   // Memoize slot getters so Show conditions do not instantiate throwaway elements.
   const title = createMemo(() => props.title)
@@ -189,11 +193,11 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
   // pane is mounted, but never while typing in an input or comment editor.
   makeEventListener(document, "keydown", (event) => {
     if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+    if (event.key !== previousKey() && event.key !== nextKey()) return
     const target = event.target
     if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select"))) return
     if (!props.hasDiffs || !canCycle()) return
-    const file = event.key === "ArrowLeft" ? prev() : next()
+    const file = event.key === previousKey() ? prev() : next()
     if (!file) return
     event.preventDefault()
     cycle(file)
@@ -221,7 +225,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           value={
             <>
               {i18n.t("ui.sessionReviewV2.previousFile")}
-              <KeybindV2 keys={["←"]} variant="neutral" />
+              <KeybindV2 keys={[locale.direction() === "rtl" ? "→" : "←"]} variant="neutral" />
             </>
           }
         >
@@ -241,7 +245,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           value={
             <>
               {i18n.t("ui.sessionReviewV2.nextFile")}
-              <KeybindV2 keys={["→"]} variant="neutral" />
+              <KeybindV2 keys={[locale.direction() === "rtl" ? "←" : "→"]} variant="neutral" />
             </>
           }
         >

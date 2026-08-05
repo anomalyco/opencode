@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/solid"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
 import { type Platform, PlatformProvider } from "@/context/platform"
+import { createBrowserDraftStore } from "@/utils/draft-store"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { authFromToken } from "@/utils/server"
@@ -116,6 +117,7 @@ const clearAuthToken = () => {
 
 const platform: Platform = {
   platform: "web",
+  draftStore: createBrowserDraftStore(),
   version: pkg.version,
   openExternal,
   restart,
