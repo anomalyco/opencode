@@ -1103,7 +1103,10 @@ async function load(input: {
       })
     }
 
-    const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies())
+    const ready = await Promise.race([
+      resolveExternalPlugins(records, () => TuiConfig.waitForDependencies()),
+      new Promise<PluginLoad[]>((resolve) => setTimeout(() => resolve([]), 3000)),
+    ])
     await addExternalPluginEntries(next, ready)
 
     applyInitialPluginEnabledState(next, config)
