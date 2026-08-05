@@ -6,7 +6,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
-import { cliIt } from "../../lib/cli-process"
+import { cliIt, testModelID } from "../../lib/cli-process"
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -122,13 +122,24 @@ describe("opencode run (non-interactive subprocess)", () => {
           expect(typeof evt.sessionID).toBe("string")
         }
         expect(events.map((event) => event.type)).toEqual(["step_start", "text", "step_finish"])
+        const [provider, model] = testModelID.split("/")
         expect(events.map(({ timestamp: _, sessionID: __, ...event }) => event)).toEqual([
-          { type: "step_start", part: expect.objectContaining({ type: "step-start" }) },
+          {
+            type: "step_start",
+            part: expect.objectContaining({ type: "step-start" }),
+            providerID: provider,
+            modelID: model,
+          },
           {
             type: "text",
             part: expect.objectContaining({ type: "text", text: "structured output" }),
           },
-          { type: "step_finish", part: expect.objectContaining({ type: "step-finish" }) },
+          {
+            type: "step_finish",
+            part: expect.objectContaining({ type: "step-finish" }),
+            providerID: provider,
+            modelID: model,
+          },
         ])
         expect(result.stdout.endsWith("\n")).toBe(true)
         expect(
