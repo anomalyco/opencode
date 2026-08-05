@@ -87,14 +87,10 @@ function endpoint(input: Config, modelID: string | ModelID) {
   const query = { "api-version": input.apiVersion ?? "v1", ...input.queryParams }
 
   if (input.useDeploymentBasedUrls) return { baseURL: `${baseURL}/deployments/${modelID}`, query }
-  if (input.baseURL !== undefined && !isAzureOpenAIURL(input.baseURL)) {
+  if (input.baseURL !== undefined && !new URL(input.baseURL).hostname.endsWith(".openai.azure.com")) {
     return { baseURL, query: input.queryParams }
   }
   return { baseURL: `${baseURL}/v1`, query }
-}
-
-function isAzureOpenAIURL(value: string) {
-  return new URL(value).hostname.endsWith(".openai.azure.com")
 }
 
 export const configure = (input: Config) => {
