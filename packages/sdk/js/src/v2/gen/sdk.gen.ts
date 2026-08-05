@@ -2567,6 +2567,7 @@ export class Loop extends HeyApiClient {
         testCommand?: string
         verifyCommand?: string
         defaultBranch?: string
+        cwd?: string
       }
     },
     options?: Options<never, ThrowOnError>,

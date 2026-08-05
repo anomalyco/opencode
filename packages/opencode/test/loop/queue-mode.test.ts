@@ -392,12 +392,14 @@ it.instance(
 
       const final = yield* waitForTerminal(info.id, 40)
 
-      // Three test-gate failures quarantine the change...
-      expect(final.report).toContain("gate-failing-change: quarantined")
-      expect(final.report).toContain("test gate failed")
-      // ...and each failure spent a real repair turn that carried the gate's
-      // failure output to the model, rather than re-passing the checkbox gate
-      // and burning strikes in a tight loop with no model involvement.
+      // A test gate that never passes once is treated as misconfiguration and
+      // halts the run, rather than quarantining changes one at a time against a
+      // broken command and blockering the whole backlog.
+      expect(final.status).toBe("error")
+      expect(final.report).toContain("suspected misconfigured test gate")
+      // Each failure still spent a real repair turn carrying the gate's failure
+      // output to the model, rather than re-passing the checkbox gate and
+      // burning strikes in a tight loop with no model involvement.
       const hits = yield* llm.hits
       const withFailure = hits.map((h) => JSON.stringify(h.body)).filter((b) => b.includes("TEST gate failed"))
       expect(withFailure.length).toBeGreaterThanOrEqual(2)

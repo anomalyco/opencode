@@ -6903,6 +6903,7 @@ export type LoopCreateData = {
       testCommand?: string
       verifyCommand?: string
       defaultBranch?: string
+      cwd?: string
     }
   }
   path?: never

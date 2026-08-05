@@ -3600,6 +3600,9 @@
                       },
                       "defaultBranch": {
                         "type": "string"
+                      },
+                      "cwd": {
+                        "type": "string"
                       }
                     },
                     "additionalProperties": false

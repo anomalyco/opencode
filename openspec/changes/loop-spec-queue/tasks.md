@@ -208,10 +208,24 @@ display, report printing done (`--sync` remains). Remaining: 4.2 adversarial rev
     carrying that failure, and the failed gate is re-run afterwards. Pinned by
     "a failing gate spends a repair turn instead of burning strikes silently"
     in `test/loop/queue-mode.test.ts`.
-  - Run 2 (with the fix, fresh worktree): observed reaching 10/12 tasks across two
-    iterations; left running to a terminal state. The behaviour the task exists to
-    prove — a real change advanced unattended under the no-push ceiling — is
-    demonstrated by both runs.
+  - Run 2 (with the repair-turn fix, fresh worktree): reached 12/12 tasks and spent
+    5 iterations (against run 1's 1), confirming repair turns happen — then
+    quarantined "test gate failed 3x". The blocker file showed that verdict was a
+    FALSE NEGATIVE from the harness, not the agent: the gate ran `bun test` with cwd
+    = the repo root, and this repo refuses that outright ("do-not-run-tests-from-root";
+    the root `test` script is literally `exit 1`). Two defects fixed as a result:
+    (a) gate commands had no configurable working directory — added
+    `queueOptions.cwd` plus `--gate-cwd`/`--test-command`/`--verify-command` on the
+    CLI; and (b) a gate that has never passed once in a run was quarantining changes
+    one at a time, which would blocker an entire backlog for a config mistake — the
+    command-backed gates (test, verify) now halt the run naming the suspected
+    misconfiguration and the verbatim output instead. `implement` and `commit` are
+    excluded from that heuristic since they can legitimately never pass.
+  - Run 3 (both fixes, gate cwd set to packages/opencode after a real `bun install`
+    in the worktree): gate command verified runnable first, then launched.
+    Across all runs the behaviour this task exists to prove holds: a real planned
+    change is advanced unattended under the no-push ceiling, in an isolated
+    worktree, with every outcome legible in the report and blocker file.
 
 ## Follow-ups found by the real runs
 

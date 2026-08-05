@@ -90,6 +90,20 @@ export const LoopCommand = effectCmd({
         alias: "i",
         describe: `seconds between iterations (default: ${LoopArgDefaults.intervalSeconds})`,
       })
+      .option("gate-cwd", {
+        type: "string",
+        describe:
+          "queue mode: directory the gate commands run in (default: the repo root). " +
+          "Set this when the test runner must be invoked from a package directory",
+      })
+      .option("test-command", {
+        type: "string",
+        describe: "queue mode: command for the test gate (default: bun test)",
+      })
+      .option("verify-command", {
+        type: "string",
+        describe: "queue mode: command for the verify gate (default: bun run typecheck)",
+      })
       .option("sync", {
         type: "boolean",
         default: false,
@@ -135,6 +149,14 @@ export const LoopCommand = effectCmd({
         mode: queueMode ? "queue" : undefined,
         queue: queueMode && args.queue && args.queue.length > 0 ? args.queue : undefined,
         queueSync: queueMode && args.sync ? true : undefined,
+        queueOptions:
+          queueMode && (args["gate-cwd"] || args["test-command"] || args["verify-command"])
+            ? {
+                cwd: args["gate-cwd"],
+                testCommand: args["test-command"],
+                verifyCommand: args["verify-command"],
+              }
+            : undefined,
       }),
     )
     if (created.error || !created.data) yield* fail("failed to create loop")

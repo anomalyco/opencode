@@ -142,6 +142,11 @@ export const CreateInput = Schema.Struct({
       testCommand: Schema.optional(Schema.String),
       verifyCommand: Schema.optional(Schema.String),
       defaultBranch: Schema.optional(Schema.String),
+      // Directory the gate commands run in. Defaults to the loop's directory
+      // (the repo root), which is wrong for repos whose test runner must be
+      // invoked from a package directory — this repo's root `test` script is
+      // literally `exit 1`, so a root-run gate can never pass here.
+      cwd: Schema.optional(Schema.String),
     }),
   ),
 })
@@ -196,6 +201,8 @@ type ChangeOutcome = {
 type QueueState = {
   only?: readonly string[]
   sync?: boolean
+  /** Gates that have passed at least once in this run — see the misconfiguration halt. */
+  gatesPassed: Set<Gate>
   options?: CreateInput["queueOptions"]
   syncs: { slug: string; ok: boolean; output: string }[]
   outcomes: ChangeOutcome[]
@@ -642,7 +649,7 @@ export const layer = Layer.effect(
     const runQueue = (id: LoopID): Effect.Effect<void> =>
       Effect.gen(function* () {
         const initial = (yield* Ref.get(state)).get(id)
-        const exec = execIn(initial?.info.directory ?? process.cwd())
+        const exec = execIn(initial?.queue?.options?.cwd ?? initial?.info.directory ?? process.cwd())
         const options = yield* gateOptions(exec, initial?.queue?.options)
 
         const running = () =>
@@ -689,15 +696,22 @@ export const layer = Layer.effect(
           let iterations = 0
           // Object property rather than a let: quarantineNow mutates it from
           // inside an Effect closure, which TS flow narrowing cannot see.
-          const ending: { outcome: "completed" | "quarantined" | "stopped"; cause?: string } = {
+          const ending: {
+            outcome: "completed" | "quarantined" | "stopped"
+            cause?: string
+            gate?: Gate
+            detail?: string
+          } = {
             outcome: "stopped",
           }
 
-          const quarantineNow = (why: string, detail: string) =>
+          const quarantineNow = (why: string, detail: string, byGate?: Gate) =>
             Effect.sync(() => {
               quarantine(change, { cause: why, detail })
               ending.outcome = "quarantined"
               ending.cause = why
+              ending.gate = byGate
+              ending.detail = detail
             })
 
           change: while (true) {
@@ -722,7 +736,7 @@ export const layer = Layer.effect(
                 failCounts[which] = (failCounts[which] ?? 0) + 1
                 failure = { gate: which, output }
                 if ((failCounts[which] ?? 0) >= GateFailureLimit) {
-                  yield* quarantineNow(`${which} gate failed ${GateFailureLimit}x consecutively`, output)
+                  yield* quarantineNow(`${which} gate failed ${GateFailureLimit}x consecutively`, output, which)
                   return true
                 }
                 // Any gate failure returns to implement with the output as
@@ -765,6 +779,7 @@ export const layer = Layer.effect(
                   failCounts.implement = 0
                   gate = "test"
                   queueState.anyGatePassed = true
+                  queueState.gatesPassed.add("implement")
                   continue
                 }
                 iterations += 1
@@ -788,6 +803,7 @@ export const layer = Layer.effect(
                   failure = undefined
                   gate = "test"
                   queueState.anyGatePassed = true
+                  queueState.gatesPassed.add("implement")
                 } else {
                   // Completion-claim verification (design D2): a token with
                   // unchecked boxes is a false claim; say so explicitly.
@@ -805,6 +821,7 @@ export const layer = Layer.effect(
                   failCounts.test = 0
                   gate = "verify"
                   queueState.anyGatePassed = true
+                  queueState.gatesPassed.add("test")
                   continue
                 }
                 if (yield* fail("test", result.output)) break change
@@ -816,6 +833,7 @@ export const layer = Layer.effect(
                   failCounts.verify = 0
                   gate = "commit"
                   queueState.anyGatePassed = true
+                  queueState.gatesPassed.add("verify")
                   continue
                 }
                 if (yield* fail("verify", result.output)) break change
@@ -871,6 +889,28 @@ export const layer = Layer.effect(
             }
           }
           if (ending.outcome === "quarantined") {
+            // A gate that has never once passed in this run is far more likely
+            // misconfigured than proof that the change is bad — e.g. a test
+            // command invoked from the wrong directory (this repo's root `test`
+            // script is `exit 1`, and `bun test` from the root refuses outright).
+            // Quarantining changes one at a time against a broken gate would
+            // blocker the whole backlog for a config mistake, so halt loudly and
+            // name the gate instead.
+            // Only the purely command-backed gates: `implement` is derived from
+            // checkboxes on disk and can legitimately never pass (the model
+            // simply did not finish), and `commit` failing usually means the
+            // model did not commit rather than that git is misconfigured.
+            const commandBacked = ending.gate === "test" || ending.gate === "verify"
+            if (ending.gate && commandBacked && !queueState.gatesPassed.has(ending.gate)) {
+              yield* finishQueue(
+                id,
+                "error",
+                `suspected misconfigured ${ending.gate} gate: it never passed once this run — ` +
+                  `check the command and its working directory (queueOptions.cwd). Verbatim output:\n` +
+                  (ending.detail ?? "").slice(-2_000),
+              )
+              return
+            }
             queueState.consecutiveQuarantines += 1
             // Systemic-failure guard (design D8): quarantine is for sick
             // changes, not a sick environment. Do not consume the backlog's
@@ -966,6 +1006,7 @@ export const layer = Layer.effect(
                 ? {
                     only: input.queue?.length ? [...input.queue] : undefined,
                     sync: input.queueSync ?? false,
+                    gatesPassed: new Set<Gate>(),
                     options: input.queueOptions,
                     syncs: [],
                     outcomes: [],
