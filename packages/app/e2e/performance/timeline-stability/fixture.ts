@@ -67,7 +67,7 @@ type ToolOptions<State extends ToolStatus> = State extends "pending"
     ? { title?: string; metadata?: Record<string, unknown>; output?: never; error?: never }
     : State extends "error"
       ? { error?: string; metadata?: Record<string, unknown>; output?: never; title?: never }
-      : { output?: string; title?: string; metadata?: Record<string, unknown>; error?: never }
+      : { output?: string; title?: string; metadata?: Record<string, unknown>; structured?: unknown; error?: never }
 
 const decodeOptions = { errors: "all", onExcessProperty: "error" } as const
 const decodeMessage = Schema.decodeUnknownSync(SessionV1.WithParts)
@@ -98,6 +98,7 @@ export async function setupTimeline(
     deviceScaleFactor?: number
     seedHistory?: boolean
     protocol?: "v1" | "v2"
+    onPrompt?: (input: { sessionID: string; body: unknown }) => void
   } = {},
 ) {
   const sessions = input.sessions ?? [session()]
@@ -121,6 +122,7 @@ export async function setupTimeline(
     provider: provider(),
     sessions,
     sessionStatus: { [sessionID]: initialStatus },
+    onPrompt: input.onPrompt,
     pageMessages: () => ({
       items: messages,
     }),
@@ -486,7 +488,7 @@ export function toolPart(
         time: { start: 1700000001000, end: 1700000002000 },
       },
     }
-  return {
+  const completed = {
     ...base,
     state: {
       status: state,
@@ -497,6 +499,8 @@ export function toolPart(
       time: { start: 1700000001000, end: 1700000002000 },
     },
   }
+  if (!Object.hasOwn(options, "structured")) return completed
+  return { ...completed, metadata: { __testStructured: options.structured } }
 }
 
 export function shell(

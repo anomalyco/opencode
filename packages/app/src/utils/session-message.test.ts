@@ -211,4 +211,206 @@ describe("normalizeSessionMessages", () => {
       }),
     ])
   })
+
+  test("preserves completed visualization structured data without moving it into metadata", () => {
+    const structured = { version: 1, title: "Chart", html: "<section>chart</section>" }
+    const source = [
+      { id: "msg_user", type: "user", text: "show chart", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "call_visualization",
+            name: "visualization_create",
+            state: {
+              status: "completed",
+              input: { title: "Chart" },
+              structured,
+              metadata: { renderer: "legacy" },
+              content: [{ type: "text", text: "Visualization created" }],
+            },
+            time: { created: 2, ran: 3, completed: 4 },
+          },
+        ],
+        time: { created: 2, completed: 4 },
+      },
+    ] as unknown as SessionMessageInfo[]
+
+    const part = normalizeSessionMessages("ses_1", source).parts.get("msg_assistant")?.[0]
+
+    expect(part).toMatchObject({
+      type: "tool",
+      state: {
+        status: "completed",
+        structured,
+        metadata: { renderer: "legacy" },
+      },
+    })
+    expect(part).not.toHaveProperty("state.metadata.html")
+  })
+
+  test("projects legacy tool metadata as structured data while preserving renderer metadata", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "show chart", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "call_visualization",
+            name: "visualization_create",
+            state: {
+              status: "completed",
+              input: { title: "Legacy" },
+              metadata: { version: 1, title: "Legacy", html: "<section>legacy</section>" },
+              content: [{ type: "text", text: "Visualization created" }],
+            },
+            time: { created: 2, ran: 3, completed: 4 },
+          },
+        ],
+        time: { created: 2, completed: 4 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const part = normalizeSessionMessages("ses_1", source).parts.get("msg_assistant")?.[0]
+
+    expect(part).toMatchObject({
+      type: "tool",
+      state: {
+        status: "completed",
+        structured: { version: 1, title: "Legacy", html: "<section>legacy</section>" },
+        metadata: { version: 1, title: "Legacy", html: "<section>legacy</section>" },
+      },
+    })
+  })
+
+  test("preserves structured data for running and error history states", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "run tools", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "call_running",
+            name: "visualization_create",
+            state: {
+              status: "running",
+              input: {},
+              structured: { phase: "running" },
+              metadata: { renderer: "running" },
+            },
+            time: { created: 2, ran: 3 },
+          },
+          {
+            type: "tool",
+            id: "call_error",
+            name: "visualization_create",
+            state: {
+              status: "error",
+              input: {},
+              structured: { phase: "error" },
+              metadata: { renderer: "error" },
+              error: { type: "unknown", message: "failed" },
+            },
+            time: { created: 4, ran: 5, completed: 6 },
+          },
+        ],
+        time: { created: 2, completed: 6 },
+      },
+    ] as unknown as SessionMessageInfo[]
+
+    expect(normalizeSessionMessages("ses_1", source).parts.get("msg_assistant")).toEqual([
+      expect.objectContaining({
+        state: expect.objectContaining({ status: "running", structured: { phase: "running" } }),
+      }),
+      expect.objectContaining({ state: expect.objectContaining({ status: "error", structured: { phase: "error" } }) }),
+    ])
+  })
+
+  test("uses current edit structured data as legacy renderer metadata", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "edit it", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          {
+            type: "tool",
+            id: "call_edit",
+            name: "edit",
+            state: {
+              status: "completed",
+              input: { path: "/repo/README.md", oldString: "old", newString: "new" },
+              structured: {
+                files: [
+                  {
+                    file: "README.md",
+                    patch: "@@ -1 +1 @@\n-old\n+new",
+                    additions: 1,
+                    deletions: 1,
+                  },
+                ],
+                replacements: 1,
+              },
+              content: [{ type: "text", text: "Edited file successfully" }],
+            },
+            time: { created: 2, ran: 3, completed: 4 },
+          },
+        ],
+        time: { created: 2, completed: 4 },
+      },
+    ] as unknown as SessionMessageInfo[]
+
+    const part = normalizeSessionMessages("ses_1", source).parts.get("msg_assistant")?.[0]
+
+    expect<unknown>(part?.type === "tool" ? part.state : undefined).toEqual({
+      status: "completed",
+      input: { path: "/repo/README.md", filePath: "/repo/README.md", oldString: "old", newString: "new" },
+      output: "Edited file successfully",
+      title: "edit",
+      structured: {
+        files: [
+          {
+            file: "README.md",
+            patch: "@@ -1 +1 @@\n-old\n+new",
+            additions: 1,
+            deletions: 1,
+          },
+        ],
+        replacements: 1,
+      },
+      metadata: {
+        files: [
+          {
+            file: "README.md",
+            patch: "@@ -1 +1 @@\n-old\n+new",
+            additions: 1,
+            deletions: 1,
+          },
+        ],
+        replacements: 1,
+        filediff: {
+          file: "README.md",
+          patch: "@@ -1 +1 @@\n-old\n+new",
+          additions: 1,
+          deletions: 1,
+        },
+      },
+      time: { start: 3, end: 4 },
+      attachments: undefined,
+    })
+  })
 })

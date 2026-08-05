@@ -18,21 +18,85 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 
 type DialogElement = () => JSX.Element
 
-type Active = {
+type DialogStackEntry = {
   id: string
-  node: JSX.Element
   dispose: () => void
+  notifyClose: () => void
+}
+
+type Active = DialogStackEntry & {
+  node: JSX.Element
   owner: Owner
-  onClose?: () => void
   setClosing: (closing: boolean) => void
+}
+
+export type DialogHandle = {
+  id: string
+  close: () => void
 }
 
 const Context = createContext<ReturnType<typeof init>>()
 
+export function createDialogCloseNotifier(onClose?: () => void) {
+  let notified = false
+
+  return () => {
+    if (notified) return
+    notified = true
+    onClose?.()
+  }
+}
+
+export function createDialogStackTransitions<T extends DialogStackEntry>(onChange?: (items: T[]) => void) {
+  let stack: T[] = []
+  let locked = false
+  const publish = () => onChange?.(stack)
+
+  const close = (id?: string) => {
+    const current = id ? stack.find((item) => item.id === id) : stack.at(-1)
+    if (!current || locked) return
+    locked = true
+    current.notifyClose()
+    return current
+  }
+
+  const handle = (item: T): DialogHandle => ({ id: item.id, close: () => close(item.id) })
+
+  return {
+    stack: () => stack,
+    close,
+    push: (create: (layer: number) => T) => {
+      const item = create(stack.length)
+      stack = [...stack, item]
+      publish()
+      return handle(item)
+    },
+    show: (create: (layer: number) => T) => {
+      for (const item of stack) {
+        item.notifyClose()
+        item.dispose()
+      }
+      locked = false
+      const item = create(0)
+      stack = [item]
+      publish()
+      return handle(item)
+    },
+    remove: (id: string) => {
+      stack = stack.filter((item) => item.id !== id)
+      locked = false
+      publish()
+    },
+    unlock: () => {
+      locked = false
+    },
+  }
+}
+
 function init() {
   const [stack, setStack] = createSignal<Active[]>([])
+  const transitions = createDialogStackTransitions<Active>(setStack)
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
-  const lock = { value: false }
 
   onCleanup(() => {
     if (timer.current === undefined) return
@@ -41,11 +105,8 @@ function init() {
   })
 
   const close = (id?: string) => {
-    const items = stack()
-    const current = id ? items.find((item) => item.id === id) : items.at(-1)
-    if (!current || lock.value) return
-    lock.value = true
-    current.onClose?.()
+    const current = transitions.close(id)
+    if (!current) return
     current.setClosing(true)
 
     const closed = current.id
@@ -57,8 +118,7 @@ function init() {
     timer.current = setTimeout(() => {
       timer.current = undefined
       current.dispose()
-      setStack((items) => items.filter((item) => item.id !== closed))
-      lock.value = false
+      transitions.remove(closed)
     }, 100)
   }
 
@@ -75,7 +135,7 @@ function init() {
     makeEventListener(window, "keydown", onKeyDown, { capture: true })
   })
 
-  const mount = (element: DialogElement, owner: Owner, onClose: (() => void) | undefined, layer: number) => {
+  const mount = (element: DialogElement, owner: Owner, onClose: (() => void) | undefined, layer: number): Active => {
     const id = Math.random().toString(36).slice(2)
     const zIndex = 50 + layer * 10
     let dispose: (() => void) | undefined
@@ -121,10 +181,9 @@ function init() {
       }),
     )
 
-    if (!dispose || !setClosing) return
+    if (!dispose || !setClosing) throw new Error("Failed to mount dialog")
 
-    const active: Active = { id, node, dispose, owner, onClose, setClosing }
-    setStack((items) => [...items, active])
+    return { id, node, dispose, owner, notifyClose: createDialogCloseNotifier(onClose), setClosing }
   }
 
   const push = (element: DialogElement, owner: Owner, onClose?: () => void) => {
@@ -132,19 +191,16 @@ function init() {
       clearTimeout(timer.current)
       timer.current = undefined
     }
-    lock.value = false
-    mount(element, owner, onClose, stack().length)
+    transitions.unlock()
+    return transitions.push((layer) => mount(element, owner, onClose, layer))
   }
 
   const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
-    for (const item of stack()) item.dispose()
-    setStack([])
     if (timer.current !== undefined) {
       clearTimeout(timer.current)
       timer.current = undefined
     }
-    lock.value = false
-    mount(element, owner, onClose, 0)
+    return transitions.show((layer) => mount(element, owner, onClose, layer))
   }
 
   return {
@@ -188,7 +244,7 @@ export function useDialog() {
     },
     push(element: DialogElement, onClose?: () => void) {
       const base = ctx.stack().at(-1)?.owner ?? owner
-      return startTransition(() => ctx.push(element, base, onClose))
+      return ctx.push(element, base, onClose)
     },
     close() {
       ctx.close()

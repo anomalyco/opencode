@@ -8,6 +8,7 @@ export interface MockServerConfig {
   provider: unknown | (() => unknown)
   integrationMethods?: Record<string, unknown[]>
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
+  onPrompt?: (input: { sessionID: string; body: unknown }) => void
   onInstanceDispose?: () => void
   directory: string
   project: unknown
@@ -120,6 +121,10 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         },
         data: [],
       })
+    if (path === "/api/provider") return json(route, { location: location(config), data: currentProviders(config) })
+    if (path === "/api/model") return json(route, { location: location(config), data: currentModels(config) })
+    if (path === "/api/model/default")
+      return json(route, { location: location(config), data: currentDefaultModel(config) })
     if (path === "/api/agent")
       return json(route, {
         location: location(config),
@@ -220,6 +225,11 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (/^\/api\/session\/[^/]+\/shell$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
+    const promptMatch = path.match(/^\/api\/session\/([^/]+)\/prompt$/)
+    if (promptMatch && route.request().method() === "POST") {
+      config.onPrompt?.({ sessionID: promptMatch[1]!, body: route.request().postDataJSON() })
+      return json(route, { data: {} })
+    }
     if (/^\/api\/session\/[^/]+\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
@@ -287,7 +297,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       const cursor = pageData.cursor ? `cursor_${++nextCursor}` : undefined
       if (cursor) cursors.set(cursor, pageData.cursor!)
       return json(route, {
-        data: pageData.items.map(currentMessage).reverse(),
+        data: pageData.items.map((item) => currentMessage(item, config.protocol)).reverse(),
         cursor: { next: cursor },
       })
     }
@@ -319,6 +329,61 @@ function location(config: MockServerConfig) {
     directory: config.directory,
     project: { id: (config.project as { id?: string }).id, directory: config.directory },
   }
+}
+
+function currentProviders(config: MockServerConfig) {
+  return providerCatalog(config).flatMap((provider) => {
+    if (typeof provider.id !== "string" || typeof provider.name !== "string") return []
+    return [{ id: provider.id, name: provider.name, settings: {} }]
+  })
+}
+
+function currentModels(config: MockServerConfig) {
+  return providerCatalog(config).flatMap((provider) => {
+    if (typeof provider.id !== "string" || !provider.models || typeof provider.models !== "object") return []
+    return Object.values(provider.models).flatMap((model) => {
+      if (!model || typeof model !== "object") return []
+      const value = model as Record<string, unknown>
+      const id = typeof value.id === "string" ? value.id : undefined
+      if (!id) return []
+      const limit = value.limit && typeof value.limit === "object" ? (value.limit as Record<string, unknown>) : {}
+      return [
+        {
+          id,
+          providerID: provider.id,
+          modelID: id,
+          package: provider.id,
+          name: typeof value.name === "string" ? value.name : id,
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          variants: [],
+          time: { released: 0 },
+          cost: [],
+          status: "active",
+          enabled: true,
+          limit: { context: typeof limit.context === "number" ? limit.context : 200_000, output: 8_192 },
+        },
+      ]
+    })
+  })
+}
+
+function currentDefaultModel(config: MockServerConfig) {
+  const provider = typeof config.provider === "function" ? config.provider() : config.provider
+  if (!provider || typeof provider !== "object" || Array.isArray(provider)) return null
+  const value = provider as Record<string, unknown>
+  const defaultModel = value.default
+  if (!defaultModel || typeof defaultModel !== "object" || Array.isArray(defaultModel)) return null
+  const model = defaultModel as Record<string, unknown>
+  return typeof model.providerID === "string" && typeof model.modelID === "string" ? model : null
+}
+
+function providerCatalog(config: MockServerConfig) {
+  const provider = typeof config.provider === "function" ? config.provider() : config.provider
+  if (!provider || typeof provider !== "object" || Array.isArray(provider)) return []
+  const all = (provider as Record<string, unknown>).all
+  return Array.isArray(all)
+    ? all.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    : []
 }
 
 function currentPermission(value: unknown) {
@@ -364,7 +429,7 @@ export function currentSession(session: { id: string } & Record<string, unknown>
   }
 }
 
-function currentMessage(value: unknown) {
+function currentMessage(value: unknown, protocol?: "v1" | "v2") {
   const item = value as {
     info: Record<string, unknown> & { id: string; role: "user" | "assistant"; time: { created: number } }
     parts: Array<Record<string, unknown> & { type: string }>
@@ -392,6 +457,18 @@ function currentMessage(value: unknown) {
       if (part.type === "text" || part.type === "reasoning") return [{ type: part.type, text: part.text ?? "" }]
       if (part.type !== "tool") return []
       const state = part.state as Record<string, unknown>
+      const metadata = part.metadata
+      const testStructured =
+        metadata &&
+        typeof metadata === "object" &&
+        !Array.isArray(metadata) &&
+        Object.hasOwn(metadata, "__testStructured")
+          ? (metadata as Record<string, unknown>).__testStructured
+          : undefined
+      const structured =
+        protocol === "v2" && metadata && typeof metadata === "object" && Object.hasOwn(metadata, "__testStructured")
+          ? testStructured
+          : (state.metadata ?? {})
       return [
         {
           type: "tool",
@@ -405,18 +482,18 @@ function currentMessage(value: unknown) {
                 ? {
                     status: "completed",
                     input: state.input ?? {},
-                    structured: state.metadata ?? {},
+                    structured,
                     content: [{ type: "text", text: state.output ?? "" }],
                   }
                 : state.status === "error"
                   ? {
                       status: "error",
                       input: state.input ?? {},
-                      structured: state.metadata ?? {},
+                      structured,
                       content: [],
                       error: { type: "ToolError", message: state.error ?? "Tool failed" },
                     }
-                  : { status: "running", input: state.input ?? {}, structured: state.metadata ?? {}, content: [] },
+                  : { status: "running", input: state.input ?? {}, structured, content: [] },
         },
       ]
     }),
