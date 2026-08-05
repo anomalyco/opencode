@@ -47,6 +47,8 @@ import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogLoopList } from "./component/dialog-loop-list"
 import { DialogAutoMode } from "./component/dialog-auto-mode"
+import { applyAutoMode } from "./component/auto-mode-apply"
+import { currentAutoMode, type ModeValue } from "./util/auto-mode"
 import { DialogTuning } from "./component/dialog-tuning"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
@@ -547,16 +549,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     if (workspace?.type !== "worktree" || !workspace.directory) return
     return workspace
   })
-  const applyAutoConfig = async (patch: { auto_mode?: boolean; auto_continue?: boolean }, message: string) => {
-    try {
-      await sdk.client.global.config.update({ config: patch }, { throwOnError: true })
-      const refreshed = await sdk.client.global.config.get({ throwOnError: true })
-      sync.set("config", refreshed.data!)
-      toast.show({ variant: "success", message })
-    } catch {
-      toast.show({ variant: "warning", message: "Failed to update auto mode setting" })
-    }
-  }
   const appCommands = createMemo(() =>
     [
       {
@@ -1004,14 +996,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
         category: "System",
         run: async () => {
+          dialog.clear()
           const config = sync.data.config
           const bothEnabled = (config.auto_mode ?? false) && (config.auto_continue ?? false)
-          const next = !bothEnabled
-          await applyAutoConfig(
-            { auto_mode: next, auto_continue: next },
-            next ? "Auto mode enabled (skip permissions + auto-continue)" : "Auto mode disabled",
-          )
-          dialog.clear()
+          await applyAutoMode({ sdk, sync, toast }, bothEnabled ? "manual" : "auto")
         },
       },
       {
@@ -1022,12 +1010,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
         category: "System",
         run: async () => {
-          const next = !(sync.data.config.auto_mode ?? false)
-          await applyAutoConfig(
-            { auto_mode: next },
-            next ? "Permission auto-approve enabled" : "Permission auto-approve disabled",
-          )
           dialog.clear()
+          const next = !(sync.data.config.auto_mode ?? false)
+          await applyAutoMode({ sdk, sync, toast }, currentAutoMode(next, sync.data.config.auto_continue ?? false))
         },
       },
       {
@@ -1057,20 +1042,14 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
         category: "System",
         run: async () => {
-          const config = sync.data.config
-          const skip = config.auto_mode ?? false
-          const cont = config.auto_continue ?? false
-          // off -> skip-ask -> loop -> auto -> off
-          const next =
-            !skip && !cont
-              ? { auto_mode: true, auto_continue: false, label: "Skip-ask (permissions auto-approved)" }
-              : skip && !cont
-                ? { auto_mode: false, auto_continue: true, label: "Loop (auto-continue)" }
-                : !skip && cont
-                  ? { auto_mode: true, auto_continue: true, label: "Auto (skip permissions + auto-continue)" }
-                  : { auto_mode: false, auto_continue: false, label: "Manual (off)" }
-          await applyAutoConfig({ auto_mode: next.auto_mode, auto_continue: next.auto_continue }, next.label)
           dialog.clear()
+          const order: ModeValue[] = ["manual", "skip-ask", "continue", "auto"]
+          const at = order.indexOf(
+            currentAutoMode(sync.data.config.auto_mode ?? false, sync.data.config.auto_continue ?? false),
+          )
+          // Same path as the picker, so cycling into Auto starts the backlog
+          // run exactly as selecting Auto does.
+          await applyAutoMode({ sdk, sync, toast }, order[(at + 1) % order.length])
         },
       },
       {
@@ -1081,9 +1060,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
         category: "System",
         run: async () => {
-          const next = !(sync.data.config.auto_continue ?? false)
-          await applyAutoConfig({ auto_continue: next }, next ? "Auto-continue enabled" : "Auto-continue disabled")
           dialog.clear()
+          const next = !(sync.data.config.auto_continue ?? false)
+          await applyAutoMode({ sdk, sync, toast }, currentAutoMode(sync.data.config.auto_mode ?? false, next))
         },
       },
     ].map((command) => ({
