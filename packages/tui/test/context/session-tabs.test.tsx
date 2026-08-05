@@ -2,7 +2,7 @@
 import { afterAll, expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode-ai/client"
 import { testRender } from "@opentui/solid"
-import { mkdtempSync, readdirSync, rmSync, watch } from "fs"
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, watch } from "fs"
 import { tmpdir } from "os"
 import path from "path"
 import { ConfigProvider } from "../../src/config"
@@ -49,15 +49,33 @@ function stateDir(prefix: string) {
   return dir
 }
 
-async function renderSessionTabs(initialSessionID: string, options?: { state?: string; title?: string }) {
+async function renderSessionTabs(
+  initialSessionID: string,
+  options?: { state?: string; title?: string; home?: boolean; persisted?: string[]; sessionGate?: Promise<void> },
+) {
   const state = options?.state ?? stateDir("opencode-session-tabs-")
+  if (options?.persisted) {
+    const file = path.join(state, "test", "tui", "tabs.json")
+    mkdirSync(path.dirname(file), { recursive: true })
+    await Bun.write(
+      file,
+      JSON.stringify({
+        global: { tabs: options.persisted.map((sessionID) => ({ sessionID })), unread: {} },
+        cwd: {},
+      }),
+    )
+  }
   const events = createEventStream()
-  const calls = createFetch((url) => {
-    if (url.pathname !== `/api/session/${initialSessionID}`) return
+  const sessions: string[] = []
+  const calls = createFetch(async (url) => {
+    const sessionID = url.pathname.match(/^\/api\/session\/([^/]+)$/)?.[1]
+    if (!sessionID) return undefined
+    sessions.push(sessionID)
+    await options?.sessionGate
     return json({
       data: {
-        id: initialSessionID,
-        title: options?.title,
+        id: sessionID,
+        title: sessionID === initialSessionID ? options?.title : undefined,
         projectID: "project",
         location: { directory },
         cost: 0,
@@ -84,7 +102,9 @@ async function renderSessionTabs(initialSessionID: string, options?: { state?: s
       <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
         <StorageProvider>
           <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
-            <RouteProvider initialRoute={{ type: "session", sessionID: initialSessionID }}>
+            <RouteProvider
+              initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
+            >
               <ClientProvider api={createApi(calls.fetch)}>
                 <DataProvider>
                   <SessionTabsProvider>
@@ -104,6 +124,7 @@ async function renderSessionTabs(initialSessionID: string, options?: { state?: s
     tabs,
     route,
     data,
+    sessions,
     state,
     emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
     destroy() {
@@ -111,6 +132,26 @@ async function renderSessionTabs(initialSessionID: string, options?: { state?: s
     },
   }
 }
+
+test("loads persisted tab metadata concurrently on connect", async () => {
+  let release!: () => void
+  const sessionGate = new Promise<void>((resolve) => (release = resolve))
+  const setup = await renderSessionTabs("first", {
+    home: true,
+    persisted: ["first", "second"],
+    sessionGate,
+  })
+
+  try {
+    await wait(() => setup.sessions.length === 2)
+    expect(setup.sessions.toSorted()).toEqual(["first", "second"])
+    release()
+    await wait(() => setup.data.session.get("first") !== undefined && setup.data.session.get("second") !== undefined)
+  } finally {
+    release()
+    setup.destroy()
+  }
+})
 
 test("stores session tabs globally by default", async () => {
   const setup = await renderSessionTabs("first")
