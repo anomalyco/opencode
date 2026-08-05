@@ -13,17 +13,15 @@ export const Plugin = define({
     const loaded = { entries: yield* config.entries() }
     yield* ctx.integration.transform((integrations) => {
       const files = loaded.entries.filter((entry): entry is Config.Document => entry.type === "document")
-      const configuredIntegrations = new Set(
-        files.flatMap((file) =>
-          Object.entries(file.info.providers ?? {}).flatMap(([id, provider]) =>
-            provider.env === undefined ? [] : [id],
-          ),
-        ),
-      )
       for (const file of files) {
         for (const [id, item] of Object.entries(file.info.providers ?? {})) {
           const integrationID = id
-          if (!configuredIntegrations.has(id) && !integrations.get(integrationID)) continue
+          if (!integrations.get(integrationID)) {
+            integrations.method.update({
+              integrationID,
+              method: { type: "key", label: "Manually enter API Key" },
+            })
+          }
           integrations.update(integrationID, (integration) => {
             integration.name = item.name ?? integration.name
           })
