@@ -12,7 +12,7 @@ import { Truncate } from "@/tool/truncate"
 import { Plugin } from "@/plugin"
 import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
@@ -20,6 +20,9 @@ import { PartID } from "./schema"
 import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { AutoMode } from "@/auto-mode/service"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { QueueAuthority } from "@/loop/spec-queue/authority"
 
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
@@ -34,6 +37,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const run = yield* EffectBridge.make()
   const plugin = yield* Plugin.Service
   const permission = yield* Permission.Service
+  const autoMode = yield* AutoMode.Service
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
@@ -43,7 +47,15 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     abort: options.abortSignal!,
     messageID: input.processor.message.id,
     callID: options.toolCallId,
-    extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
+    extra: {
+      model: input.model,
+      bypassAgentCheck: input.bypassAgentCheck,
+      promptOps: input.promptOps,
+      // Defence in depth for unattended runs (loop-spec-queue D4): a session
+      // whose ruleset denies pushing also gets a credential-less shell, so a
+      // pattern gap cannot become a successful push.
+      denyPush: QueueAuthority.deniesPush(Permission.merge(input.agent.permission, input.session.permission ?? [])),
+    },
     agent: input.agent.name,
     messages: input.messages,
     metadata: (val) =>
@@ -61,14 +73,41 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }
       }),
     ask: (req) =>
-      permission
-        .ask({
-          ...req,
-          sessionID: input.session.id,
-          tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
-        })
-        .pipe(Effect.orDie),
+      Effect.gen(function* () {
+        const baseRuleset = Permission.merge(input.agent.permission, input.session.permission ?? [])
+        const mergedRuleset = baseRuleset
+
+        // Deny rules are evaluated BEFORE the auto-mode skip: auto mode means
+        // "approve what would have asked", never "ignore what was explicitly
+        // denied". An unattended queue loop's authority ceiling (no push, no
+        // deploy) depends on this ordering.
+        let needsAsk = false
+        for (const pattern of req.patterns) {
+          const rule = Permission.evaluate(req.permission, pattern, mergedRuleset)
+          if (rule.action === "deny") {
+            throw new PermissionV1.DeniedError({
+              ruleset: mergedRuleset.filter((r: PermissionV1.Rule) => r.permission === req.permission),
+            })
+          }
+          if (rule.action === "allow") continue
+          needsAsk = true
+        }
+
+        if (!needsAsk) return
+
+        // Auto mode: skip the remaining permission prompts
+        const autoEnabled = yield* autoMode.isEnabled()
+        if (autoEnabled) return
+
+        yield* permission
+          .ask({
+            ...req,
+            sessionID: input.session.id,
+            tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+            ruleset: mergedRuleset,
+          })
+          .pipe(Effect.orDie)
+      }).pipe(Effect.orDie),
   })
 
   for (const item of yield* registry.tools({

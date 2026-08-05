@@ -1,6 +1,6 @@
 import { Loop } from "@/loop/loop"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { notFound } from "../errors"
 
@@ -19,7 +19,11 @@ export const loopHandlers = HttpApiBuilder.group(InstanceHttpApi, "loop", (handl
     })
 
     const create = Effect.fn("LoopHttpApi.create")(function* (ctx: { payload: typeof Loop.CreateInput.Type }) {
-      return yield* loop.create(ctx.payload)
+      // A second queue loop over the same directory would fight the first for
+      // the derived cursor and working tree — surfaced as a 400.
+      return yield* loop
+        .create(ctx.payload)
+        .pipe(Effect.catchTag("LoopQueueActiveError", () => Effect.fail(new HttpApiError.BadRequest({}))))
     })
 
     const pause = Effect.fn("LoopHttpApi.pause")(function* (ctx: { params: { loopID: Loop.LoopID } }) {

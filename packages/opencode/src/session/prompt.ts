@@ -29,6 +29,7 @@ import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { ConfigMarkdown } from "@/config/markdown"
+import { AutoMode } from "@/auto-mode/service"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { SessionProcessor } from "./processor"
@@ -141,6 +142,7 @@ export const layer = Layer.effect(
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const autoMode = yield* AutoMode.Service
     const database = yield* Database.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
@@ -1348,6 +1350,7 @@ export const layer = Layer.effect(
               Effect.provideService(ToolRegistry.Service, registry),
               Effect.provideService(MCP.Service, mcp),
               Effect.provideService(Truncate.Service, truncate),
+              Effect.provideService(AutoMode.Service, autoMode),
             )
 
             if (lastUser.format?.type === "json_schema") {
@@ -1679,6 +1682,7 @@ export const defaultLayer = Layer.suspend(() =>
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
         EventV2Bridge.defaultLayer,
+        AutoMode.defaultLayer,
       ),
     ),
   ),
@@ -1813,6 +1817,7 @@ export const node = LayerNode.make(layer, [
   LLM.node,
   EventV2Bridge.node,
   RuntimeFlags.node,
+  AutoMode.node,
   Database.node,
 ])
 

@@ -249,7 +249,15 @@ export function Prompt(props: PromptProps) {
   // interrupt/submit paths can stop it (a loop re-prompts the session, so it
   // must be cancelled to hand control back to the user).
   const [activeLoop, setActiveLoop] = createSignal<
-    { id: string; status: string; iteration: number; maxIterations: number } | undefined
+    | {
+        id: string
+        status: string
+        iteration: number
+        maxIterations: number
+        currentChange?: string
+        currentGate?: string
+      }
+    | undefined
   >()
   const isLoopLive = (status: string) => status === "running" || status === "paused"
   const refreshActiveLoop = async () => {
@@ -263,17 +271,36 @@ export function Prompt(props: PromptProps) {
       .sort((a, b) => b.startedAt - a.startedAt)[0]
     setActiveLoop(
       live
-        ? { id: live.id, status: live.status, iteration: live.iteration, maxIterations: live.maxIterations }
+        ? {
+            id: live.id,
+            status: live.status,
+            iteration: live.iteration,
+            maxIterations: live.maxIterations,
+            currentChange: live.currentChange,
+            currentGate: live.currentGate,
+          }
         : undefined,
     )
   }
-  createEffect(on(() => props.sessionID, () => void refreshActiveLoop()))
+  createEffect(
+    on(
+      () => props.sessionID,
+      () => void refreshActiveLoop(),
+    ),
+  )
   event.on("loop.updated", (evt) => {
     const loop = evt.properties.loop
     if (loop.sessionID !== props.sessionID) return
     setActiveLoop(
       isLoopLive(loop.status)
-        ? { id: loop.id, status: loop.status, iteration: loop.iteration, maxIterations: loop.maxIterations }
+        ? {
+            id: loop.id,
+            status: loop.status,
+            iteration: loop.iteration,
+            maxIterations: loop.maxIterations,
+            currentChange: loop.currentChange,
+            currentGate: loop.currentGate,
+          }
         : undefined,
     )
   })
@@ -1145,24 +1172,33 @@ export function Prompt(props: PromptProps) {
       const rest = firstLine.slice("/loop".length).trim()
       try {
         const parsed = parseLoopArgs(rest)
-        if (!parsed.prompt) {
+        if (!parsed.prompt && !parsed.queue) {
           dialog.replace(() => <DialogLoopList />)
         } else {
           move.startSubmit()
           sdk.client.loop
             .create({
-              prompt: parsed.prompt,
-              sessionID: props.sessionID,
+              prompt: parsed.queue ? "" : parsed.prompt,
+              // Queue mode drives openspec changes, not this session — it
+              // creates its own anchor session; slugs come from the args.
+              sessionID: parsed.queue ? undefined : props.sessionID,
               interval: parsed.interval,
               maxIterations: parsed.max,
               noProgressLimit: parsed.noProgressLimit,
+              completionToken: parsed.completionToken,
+              mode: parsed.queue ? "queue" : undefined,
+              queue: parsed.queue && parsed.prompt ? parsed.prompt.split(/\s+/) : undefined,
+              queueSync: parsed.queue && parsed.sync ? true : undefined,
             })
             .then((result) => {
               if (result.error || !result.data) {
                 toast.show({ title: "Failed to start loop", message: errorMessage(result.error), variant: "error" })
                 return
               }
-              toast.show({ variant: "success", message: `Loop ${result.data.id} started (max ${result.data.maxIterations} iterations)` })
+              toast.show({
+                variant: "success",
+                message: `Loop ${result.data.id} started (max ${result.data.maxIterations} iterations, stops on ${result.data.completionToken})`,
+              })
             })
             .catch((error) => {
               toast.show({ title: "Failed to start loop", message: errorMessage(error), variant: "error" })
@@ -1194,6 +1230,7 @@ export function Prompt(props: PromptProps) {
       })
     } else {
       move.startSubmit()
+      const autoContinueEnabled = sync.data.config.auto_continue ?? false
       sdk.client.session
         .prompt(
           {
@@ -1213,6 +1250,47 @@ export function Prompt(props: PromptProps) {
           },
           { throwOnError: true },
         )
+        .then((result) => {
+          if (!autoContinueEnabled) return
+          // Auto-continue: a turn that made real progress (tool calls) but
+          // didn't reach a natural stopping point (a question back to the
+          // user) looks stalled rather than finished, so nudge continuation
+          // via the same engine /loop uses — its own completion-token and
+          // no-progress detection govern every iteration after this one.
+          const parts = result.data.parts
+          const hasToolCall = parts.some((part) => part.type === "tool")
+          if (!hasToolCall) return
+          const finalText = parts
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("")
+            .trim()
+          const looksLikeQuestion =
+            /\?\s*$/.test(finalText) ||
+            /\b(would you like|should i|shall i|let me know|do you want|can you confirm|please confirm|waiting for your|need your input)\b/i.test(
+              finalText,
+            )
+          if (looksLikeQuestion) return
+          sdk.client.loop
+            .create({ prompt: inputText, sessionID })
+            .then((loopResult) => {
+              if (loopResult.error || !loopResult.data) {
+                toast.show({
+                  title: "Auto-continue: failed",
+                  message: errorMessage(loopResult.error),
+                  variant: "error",
+                })
+                return
+              }
+              toast.show({
+                variant: "success",
+                message: `Auto-continue: looping (max ${loopResult.data.maxIterations} iterations)`,
+              })
+            })
+            .catch((error) => {
+              toast.show({ title: "Auto mode: failed to continue", message: errorMessage(error), variant: "error" })
+            })
+        })
         .catch((error) => {
           toast.show({
             title: "Failed to send prompt",
@@ -1551,6 +1629,35 @@ export function Prompt(props: PromptProps) {
                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
                       </text>
                       <Show when={store.mode === "normal"}>
+                        <text
+                          fg={fadeColor(
+                            (sync.data.config.auto_mode ?? false) || (sync.data.config.auto_continue ?? false)
+                              ? theme.success
+                              : theme.textMuted,
+                            modelMetaAlpha(),
+                          )}
+                        >
+                          {(() => {
+                            const skip = sync.data.config.auto_mode ?? false
+                            const cont = sync.data.config.auto_continue ?? false
+                            const dot = skip || cont ? "●" : "○"
+                            // Name the state exactly: "Auto" only when both are
+                            // on, "Manual" when neither, and a single active
+                            // flag names itself — the indicator must never
+                            // imply a mode that isn't actually enabled.
+                            const label = skip && cont ? "Auto" : !skip && !cont ? "Manual" : skip ? "Skip-ask" : "Loop"
+                            // A live loop in this session is the other half of
+                            // the story: show where it is, and for a queue run
+                            // which change and gate it is working.
+                            const live = activeLoop()
+                            const where = live
+                              ? live.currentChange
+                                ? ` · queue ${live.currentChange} [${live.currentGate ?? "?"}] ${live.iteration}/${live.maxIterations}`
+                                : ` · loop ${live.iteration}/${live.maxIterations}`
+                              : ""
+                            return `${dot} ${label}${where}`
+                          })()}
+                        </text>
                         <box flexDirection="row" gap={1}>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
                           <text
@@ -1675,7 +1782,11 @@ export function Prompt(props: PromptProps) {
                       return (
                         <Show when={retry()}>
                           {(() => {
-                            return <ClickText fg={theme.error} onMouseUp={handleMessageClick}>{retryText()}</ClickText>
+                            return (
+                              <ClickText fg={theme.error} onMouseUp={handleMessageClick}>
+                                {retryText()}
+                              </ClickText>
+                            )
                           })()}
                         </Show>
                       )

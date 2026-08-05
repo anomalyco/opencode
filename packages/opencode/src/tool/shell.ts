@@ -21,6 +21,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
 import { BashArity } from "@/permission/arity"
+import { QueueAuthority } from "@/loop/spec-queue/authority"
 
 export { Parameters } from "./shell/prompt"
 
@@ -260,6 +261,18 @@ const parse = Effect.fn("ShellTool.parse")(function* (command: string, ps: boole
   return tree
 })
 
+/**
+ * The permission patterns a command string yields — one per command node in
+ * the parsed AST, exactly as `collect` derives them (same `parse`, `commands`,
+ * and `source` primitives). Exported so an authority boundary (e.g. the
+ * unattended queue loop's deny profile) can be adversarially reviewed against
+ * the real derivation rather than against an assumption about it.
+ */
+export const commandPatterns = Effect.fn("ShellTool.commandPatterns")(function* (command: string, ps = false) {
+  const tree = yield* parse(command, ps)
+  return commands(tree.rootNode).map((node) => source(node))
+})
+
 const ask = Effect.fn("ShellTool.ask")(function* (
   ctx: Tool.Context,
   scan: Scan,
@@ -425,10 +438,13 @@ export const ShellTool = Tool.define(
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
-      return {
+      const env: Record<string, string | undefined> = {
         ...process.env,
         ...extra.env,
       }
+      // An unattended session that denies pushing must not hold the
+      // credentials a push would need (loop-spec-queue D4).
+      return ctx.extra?.["denyPush"] === true ? QueueAuthority.withoutCredentials(env) : env
     })
 
     const run = Effect.fn("ShellTool.run")(function* (

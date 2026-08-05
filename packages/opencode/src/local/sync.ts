@@ -68,6 +68,14 @@ function baseURLHost(baseURL: string | undefined): string {
 // lease names) and may only add brand-new entries, never modify existing ones.
 // Providers not found in the scan are left untouched — they may be offline.
 const syncLocalProviders = Effect.gen(function* () {
+  // Tests (and any embedder that wants a hermetic provider set) must be able
+  // to opt out: the scan probes the real LAN and writes whatever fleet it
+  // finds into the global config, which then becomes eligible for default
+  // model resolution — a unit test silently prompting a real machine.
+  if (process.env["OPENCODE_DISABLE_LOCAL_SYNC"]) {
+    log.info("local provider sync disabled via OPENCODE_DISABLE_LOCAL_SYNC")
+    return
+  }
   const configSvc = yield* Config.Service
   const discovered = yield* Effect.promise(() => scanLlamaSwap(1000, false))
   const online = discovered.filter((svc) => svc.online)
@@ -177,9 +185,7 @@ const syncLocalProviders = Effect.gen(function* () {
 // Run synchronously so Provider (which reads cfg.provider) gets the discovered
 // entries. The 1–2 s mDNS + LAN scan is bounded and only runs once at startup.
 export const layer = Layer.effectDiscard(
-  syncLocalProviders.pipe(
-    Effect.catch((err) => Effect.sync(() => log.error("sync failed", { error: String(err) }))),
-  ),
+  syncLocalProviders.pipe(Effect.catch((err) => Effect.sync(() => log.error("sync failed", { error: String(err) })))),
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))

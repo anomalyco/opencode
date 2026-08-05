@@ -3,8 +3,8 @@ import { Cause, Deferred, Duration, Effect, Exit, Fiber, Latch, Schema, Scope, S
 export interface Runner<A, E = never> {
   readonly state: State<A, E>
   readonly busy: boolean
-  readonly ensureRunning: (work: Effect.Effect<A, E>) => Effect.Effect<A, E>
-  readonly startShell: (work: Effect.Effect<A, E>, ready?: Latch.Latch) => Effect.Effect<A, E | Busy>
+  readonly ensureRunning: <R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  readonly startShell: <R>(work: Effect.Effect<A, E, R>, ready?: Latch.Latch) => Effect.Effect<A, E | Busy, R>
   readonly cancel: Effect.Effect<void>
 }
 
@@ -27,7 +27,7 @@ interface ShellHandle<A, E> {
 interface PendingHandle<A, E> {
   id: number
   done: Deferred.Deferred<A, E | Cancelled>
-  work: Effect.Effect<A, E>
+  work: Effect.Effect<A, E, unknown>
 }
 
 export type State<A, E> =
@@ -91,7 +91,7 @@ export const make = <A, E = never>(
         ] as const,
     ).pipe(Effect.flatten)
 
-  const startRun = (work: Effect.Effect<A, E>, done: Deferred.Deferred<A, E | Cancelled>) =>
+  const startRun = (work: Effect.Effect<A, E, unknown>, done: Deferred.Deferred<A, E | Cancelled>) =>
     Effect.gen(function* () {
       const id = next()
       const fiber = yield* work.pipe(
@@ -123,7 +123,7 @@ export const make = <A, E = never>(
       yield* Fiber.interrupt(shell.fiber)
     })
 
-  const ensureRunning = (work: Effect.Effect<A, E>) =>
+  const ensureRunning = <R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     SynchronizedRef.modifyEffect(
       ref,
       Effect.fnUntraced(function* (st) {
@@ -135,15 +135,15 @@ export const make = <A, E = never>(
             const run = {
               id: next(),
               done: yield* Deferred.make<A, E | Cancelled>(),
-              work,
+              work: work as Effect.Effect<A, E, unknown>,
             } satisfies PendingHandle<A, E>
             return [awaitDone(run.done), { _tag: "ShellThenRun", shell: st.shell, run }] as const
           }
           // Cancelling behaves like Idle here on purpose: the user pressing Esc
-          // and immediately submitting a new prompt must not have to wait for
-          // the outgoing fiber to finish draining. The replacement run takes
-          // over the state; finishCancel() is id-scoped, so the still-running
-          // cancellation cannot clobber it when it completes.
+          // and immediately submitting a new prompt must not have to wait for the
+          // outgoing fiber to finish draining. The replacement run takes over the
+          // state; finishCancel() is id-scoped, so the still-running cancellation
+          // cannot clobber it when it completes.
           case "Cancelling":
           case "Idle": {
             const done = yield* Deferred.make<A, E | Cancelled>()
@@ -152,9 +152,9 @@ export const make = <A, E = never>(
           }
         }
       }),
-    ).pipe(Effect.flatten)
+    ).pipe(Effect.flatten) as Effect.Effect<A, E, R>
 
-  const startShell = (work: Effect.Effect<A, E>, ready?: Latch.Latch): Effect.Effect<A, E | Busy> =>
+  const startShell = <R>(work: Effect.Effect<A, E, R>, ready?: Latch.Latch): Effect.Effect<A, E | Busy, R> =>
     SynchronizedRef.modifyEffect(
       ref,
       Effect.fnUntraced(function* (st) {
@@ -183,7 +183,7 @@ export const make = <A, E = never>(
           { _tag: "Shell", shell },
         ] as const
       }),
-    ).pipe(Effect.flatten)
+    ).pipe(Effect.flatten) as Effect.Effect<A, E | Busy, R>
 
   // Commit Idle only once the run is genuinely released. Previously `cancel`
   // used SynchronizedRef.modify, which writes the new state BEFORE running the

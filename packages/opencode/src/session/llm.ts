@@ -15,6 +15,7 @@ import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
+import { StreamStalledError } from "./stream-stalled"
 import { Plugin } from "@/plugin"
 import { Permission } from "@/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -365,7 +366,23 @@ const live: Layer.Layer<
 
             const result = yield* run({ ...input, abort: ctrl.signal })
 
-            if (result.type === "native") return result.stream
+            // Inactivity watchdog: a wedged provider (half-open socket, dead
+            // upstream) is detected rather than waited on. Checked per pull —
+            // any event resets it — so slow-but-live streams are unaffected.
+            // 0 disables. Applied at this seam so both runtimes are covered.
+            const cfg = yield* config.get()
+            const deadline = cfg.experimental?.stream_inactivity_seconds ?? 300
+            const watchdog = <A, E, R>(self: Stream.Stream<A, E, R>): Stream.Stream<A, E | StreamStalledError, R> =>
+              deadline <= 0
+                ? self
+                : self.pipe(
+                    Stream.timeoutOrElse({
+                      duration: `${deadline} seconds`,
+                      orElse: () => Stream.fail(new StreamStalledError(deadline)),
+                    }),
+                  )
+
+            if (result.type === "native") return watchdog(result.stream)
 
             // Adapter seam: both runtimes expose the same LLMEvent stream. Native
             // already returns one; AI SDK streams are converted here.
@@ -375,6 +392,7 @@ const live: Layer.Layer<
             ).pipe(
               Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
               Stream.flatMap((events) => Stream.fromIterable(events)),
+              watchdog,
             )
           }),
         ),

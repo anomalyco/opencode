@@ -7,62 +7,87 @@
 // Mirrors the server-side defaults in packages/opencode/src/loop/loop.ts —
 // these two must be kept in step by hand (the server cannot import the SDK).
 export const LoopArgDefaults = {
-	maxIterations: 50,
-	noProgressLimit: 3,
-	intervalSeconds: 2,
-	completionToken: "<promise>COMPLETE</promise>",
-} as const;
+  maxIterations: 50,
+  noProgressLimit: 3,
+  intervalSeconds: 2,
+  completionToken: "<promise>COMPLETE</promise>",
+} as const
 
 export interface ParsedLoopArgs {
-	prompt: string;
-	interval?: number;
-	max: number;
-	noProgressLimit: number;
+  prompt: string
+  interval?: number
+  max: number
+  noProgressLimit: number
+  completionToken?: string
+  /** true when --queue was passed; the prompt tokens are then change slugs */
+  queue: boolean
+  /** true when --sync was passed (queue mode: specsync completed changes) */
+  sync: boolean
 }
 
-const FLAGS: Record<string, keyof Omit<ParsedLoopArgs, "prompt">> = {
-	"--interval": "interval",
-	"-i": "interval",
-	"--max": "max",
-	"-n": "max",
-	"--no-progress-limit": "noProgressLimit",
-};
+const NUMERIC_FLAGS: Record<string, "interval" | "max" | "noProgressLimit"> = {
+  "--interval": "interval",
+  "-i": "interval",
+  "--max": "max",
+  "-n": "max",
+  "--no-progress-limit": "noProgressLimit",
+}
 
 export class LoopArgError extends Error {}
 
 /**
- * Parses `<prompt text> [--interval <sec>] [--max <n>] [--no-progress-limit <n>]`.
- * Flags may appear anywhere in the string; everything else is joined back
- * together (in order) to form the prompt.
+ * Parses `<prompt text> [--interval <sec>] [--max <n>] [--no-progress-limit <n>]
+ * [--completion-token <word>]`. Flags may appear anywhere in the string;
+ * everything else is joined back together (in order) to form the prompt.
  */
 export function parseLoopArgs(input: string): ParsedLoopArgs {
-	const tokens = input.trim().length > 0 ? input.trim().split(/\s+/) : [];
-	const promptParts: string[] = [];
-	let interval: number | undefined;
-	let max: number = LoopArgDefaults.maxIterations;
-	let noProgressLimit: number = LoopArgDefaults.noProgressLimit;
+  const tokens = input.trim().length > 0 ? input.trim().split(/\s+/) : []
+  const promptParts: string[] = []
+  let interval: number | undefined
+  let max: number = LoopArgDefaults.maxIterations
+  let noProgressLimit: number = LoopArgDefaults.noProgressLimit
+  let completionToken: string | undefined
+  let queue = false
+  let sync = false
 
-	for (let i = 0; i < tokens.length; i++) {
-		const token = tokens[i];
-		const field = FLAGS[token];
-		if (!field) {
-			promptParts.push(token);
-			continue;
-		}
-		const raw = tokens[++i];
-		const value = raw !== undefined ? Number(raw) : NaN;
-		if (raw === undefined || Number.isNaN(value)) {
-			throw new LoopArgError(`${token} requires a numeric value`);
-		}
-		if (field === "interval") interval = value;
-		if (field === "max") max = value;
-		if (field === "noProgressLimit") noProgressLimit = value;
-	}
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]
+    if (token === "--queue") {
+      queue = true
+      continue
+    }
+    if (token === "--sync") {
+      sync = true
+      continue
+    }
+    if (token === "--completion-token") {
+      const raw = tokens[++i]
+      if (raw === undefined) throw new LoopArgError(`${token} requires a value`)
+      completionToken = raw
+      continue
+    }
+    const field = NUMERIC_FLAGS[token]
+    if (!field) {
+      promptParts.push(token)
+      continue
+    }
+    const raw = tokens[++i]
+    const value = raw !== undefined ? Number(raw) : NaN
+    if (raw === undefined || Number.isNaN(value)) {
+      throw new LoopArgError(`${token} requires a numeric value`)
+    }
+    if (field === "interval") interval = value
+    if (field === "max") max = value
+    if (field === "noProgressLimit") noProgressLimit = value
+  }
 
-	return {
-		prompt: promptParts.join(" ").trim(),
-		interval,
-		max,
-		noProgressLimit,
-	};
+  return {
+    prompt: promptParts.join(" ").trim(),
+    interval,
+    max,
+    noProgressLimit,
+    completionToken,
+    queue,
+    sync,
+  }
 }

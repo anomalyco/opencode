@@ -49,6 +49,21 @@ export const LocalOffloadRecommendation = Schema.Struct({
   ctx_size: Schema.optional(Schema.Int),
 }).annotate({ identifier: "LocalOffloadRecommendation" })
 
+export const LocalCapacitySnapshot = Schema.Struct({
+  provider: Schema.String,
+  baseURL: Schema.String,
+  reachable: Schema.Boolean,
+  signal: Schema.optional(Schema.Union([Schema.Literal("exact"), Schema.Literal("inferred")])),
+  slotsTotal: Schema.optional(Schema.Number),
+  inFlight: Schema.optional(Schema.Number),
+  freeSlots: Schema.optional(Schema.Number),
+  busy: Schema.optional(Schema.Boolean),
+  loadedModel: Schema.optional(Schema.String),
+  probedAt: Schema.Number,
+  ageMs: Schema.Number,
+  stale: Schema.Boolean,
+}).annotate({ identifier: "LocalCapacitySnapshot" })
+
 export const LocalApi = HttpApi.make("local").add(
   HttpApiGroup.make("local")
     .add(
@@ -122,8 +137,18 @@ export const LocalApi = HttpApi.make("local").add(
         OpenApi.annotations({
           identifier: "local.model.offloadRecommendation",
           summary: "Recommend model CPU/MoE offload",
+          description: "Fetch llama-skein's recommended n_cpu_moe for a model given current free VRAM. MoE-scoped.",
+        }),
+      ),
+      HttpApiEndpoint.get("capacity", `${root}/capacity`, {
+        query: WorkspaceRoutingQuery,
+        success: described(Schema.Array(LocalCapacitySnapshot), "Capacity snapshots for all known local providers"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "local.capacity",
+          summary: "Provider capacity snapshots",
           description:
-            "Fetch llama-skein's recommended n_cpu_moe for a model given current free VRAM. MoE-scoped.",
+            "Probe every known local provider for hardware telemetry and return a normalised capacity snapshot per host. The signal field distinguishes exact queue depth from GPU-utilisation inference.",
         }),
       ),
     )

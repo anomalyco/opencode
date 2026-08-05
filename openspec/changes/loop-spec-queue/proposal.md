@@ -41,7 +41,7 @@ iteration's brief.
 
 A change is complete when **every checkbox in its `tasks.md` is checked** and the
 validation commands named in those tasks exit zero. The model's completion token is
-treated as a *claim* that triggers verification — never as proof. If the model emits the
+treated as a _claim_ that triggers verification — never as proof. If the model emits the
 token while unchecked tasks remain, the iteration is rejected and the discrepancy is fed
 back as the next iteration's prompt.
 
@@ -54,12 +54,12 @@ recomputes its position by reading checkboxes.
 
 Within a change, the loop advances through gates and will not skip one:
 
-| Gate | Passes when |
-|---|---|
-| `implement` | all `tasks.md` checkboxes checked |
-| `test` | the repo test command exits zero |
-| `verify` | typecheck exits zero and each task's stated `Validation:` command exits zero |
-| `commit` | a commit exists on a non-default branch containing the change's work |
+| Gate        | Passes when                                                                  |
+| ----------- | ---------------------------------------------------------------------------- |
+| `implement` | all `tasks.md` checkboxes checked                                            |
+| `test`      | the repo test command exits zero                                             |
+| `verify`    | typecheck exits zero and each task's stated `Validation:` command exits zero |
+| `commit`    | a commit exists on a non-default branch containing the change's work         |
 
 A gate failure returns the loop to `implement` with the failure output as context. Three
 consecutive failures of the same gate halt the queue.
@@ -79,26 +79,53 @@ unattended use.
 Tracker writes are likewise off by default: `--sync` opts into
 `specsync -change <change>` after a change completes.
 
-### 5. Halt semantics
+### 5. Relentless semantics: quarantine, don't halt
+
+The queue exists to keep the fleet saturated with useful work. One stuck change must
+never idle the whole run.
 
 - A change completing cleanly → advance to the next.
-- Any gate failing three times, a stall, `max_reached`, or an error → **halt the whole
-  queue**, leave the working tree as-is, and report which change stopped it and why.
-- The model may halt deliberately by emitting `<promise>BLOCKED</promise>` with a reason —
-  the escape hatch for "this spec is wrong" rather than grinding against it.
+- Any gate failing three times consecutively, a stall, or `max_reached` on one change →
+  **quarantine that change** (write `.skein/blocker.md` into it with the gate, the
+  verbatim failure output, and a timestamp) and **advance to the next change**. The
+  blocker file is the same mechanism queue resolution already excludes on, so the
+  quarantined change stays out of this run and every later run until a human (or
+  `/skein-interpret-stuck`) clears it.
+- The model may quarantine deliberately by emitting `<promise>BLOCKED</promise>` with a
+  reason — the escape hatch for "this spec is wrong" rather than grinding against it.
+  The reason lands in the blocker file.
+- Because the cursor is derived from disk every iteration (design D1), changes added to
+  `openspec/changes/` while the run is live join the queue automatically. The run ends
+  only when a fresh resolution finds no eligible change with unchecked tasks.
+- **Systemic-failure guard**: quarantining is for sick changes, not a sick environment.
+  If three consecutive changes are quarantined without a single gate passing anywhere,
+  the run halts and reports a suspected systemic cause (broken test runner, dead
+  provider) — relentlessly quarantining the whole backlog against a broken harness
+  would destroy a night of queue eligibility for nothing.
+
+### 6. Fleet utilization: fan-out nudge in the brief
+
+When `experimental.local_subagent_placement` is enabled and idle local peers exist, the
+per-iteration brief SHALL tell the model so, and remind it that the task tool can place
+subagents on those peers (implement/test/verify in parallel where the change's tasks
+allow it). This is a prompt-level nudge only — placement, slot reservation, and context
+fitting stay in the existing `ctx-aware-subagent-placement` machinery.
 
 ## Capabilities
 
 ### New Capabilities
+
 - `loop-spec-queue`: chained, gated execution of openspec changes under a loop, with a
   disk-derived definition of done and an enforced authority ceiling.
 
 ### Modified Capabilities
+
 - `loop-service`: gains queue mode and per-iteration brief construction.
 
 ## Dependencies
 
 This change is not shippable before all three of:
+
 - `loop-completion-contract` — without a disclosed token there is no completion signal.
 - `session-cancellation-integrity` — an unattended driver that cannot be stopped is not
   shippable.
@@ -109,7 +136,8 @@ This change is not shippable before all three of:
 
 - **No deploy.** Explicitly out of the autonomy ceiling for this change.
 - No cross-repo or fleet orchestration — one queue, one repo, one working tree. Fleet
-  dispatch stays skein's job.
+  dispatch stays skein's job. (The fan-out nudge in §6 delegates _within_ a change via
+  the existing task-tool placement; it is not queue-level orchestration.)
 - No parallel execution of changes. Serial only; parallel edits to one working tree need
   worktree isolation, which is a separate change.
 - No automatic `openspec archive` — archiving is a human decision after review.

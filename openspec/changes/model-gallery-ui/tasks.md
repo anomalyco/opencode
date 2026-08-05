@@ -1,0 +1,131 @@
+## 1. Upstream and fork baseline
+
+- [ ] 1.1 Run the existing opencode upstream sync in a dedicated worktree and
+      merge current `upstream/dev`; do not rebase the long-lived fork.
+- [ ] 1.2 Resolve and validate the V2 model selector, settings, search,
+      context-tooltip, provider-connect, and model-selection E2E surfaces.
+- [ ] 1.3 Update the fork manifest with gallery-owned modules and thin hooks in
+      local routes, settings, picker, commands, and TUI navigation.
+- [ ] 1.4 Verify llama-skein is based on current llama-swap lifecycle/routing
+      behavior and record supported host contract capabilities.
+
+## 2. Source adoption and provenance
+
+- [x] 2.1 Add an adoption manifest for llmfit and Skein source commits,
+      destination modules, transformations, tests, and MIT attribution.
+- [ ] 2.2 Build a reviewed importer for selected llmfit catalog fields and
+      emit deterministic TypeScript/JSON data.
+- [ ] 2.3 Port llmfit quant bpp/quality/speed mappings, capability/use-case,
+      generation, MoE active-parameter, and GGUF-source tests needed by the first
+      slice.
+- [ ] 2.4 Port Skein quant parsing/ranking, installed-family keyword
+      extraction, upgrade/fresh classification, and context-floor tests.
+- [ ] 2.5 Add a scout command that reports relevant upstream llmfit catalog,
+      benchmark, algorithm, and UI changes without merging repository histories.
+
+## 3. Generated host contract
+
+- [x] 3.1 Merge/regenerate the llama-skein hypothetical-fit contract and
+      replace handwritten fit response types where generated types exist.
+- [ ] 3.2 Regenerate the host-model-management operation client after its
+      OpenAPI change lands.
+- [ ] 3.3 Add capability negotiation for hypothetical fit, inventory detail,
+      install operations, cancellation, and event observation.
+- [ ] 3.4 Preserve existing installed-model discovery and inference against
+      older/non-llama-skein providers.
+
+## 4. Catalog domain
+
+- [x] 4.1 Define candidate, variant, artifact set, provenance, evidence,
+      policy, freshness, and unknown-field schemas.
+- [x] 4.2 Implement reviewed seed loading, deterministic merge precedence, and
+      local overlays.
+- [x] 4.3 Implement bounded Hugging Face search plus explicit repository
+      resolution at an immutable revision.
+- [x] 4.4 Resolve model card, config, repository tree, LFS sizes/digests,
+      license, task tags, architecture, total/active params, context, quants,
+      shards, and auxiliary files.
+- [x] 4.5 Implement ETag/revision-aware cache, TTL, offline seed fallback, and
+      explicit stale status.
+- [x] 4.6 Add policy filters for unsupported formats, gated repos, licenses,
+      missing sizes, incomplete shards, ambiguous quants, and provenance.
+
+## 5. Multi-host gallery
+
+- [ ] 5.1 Reuse discovered llama-skein identities/base URLs rather than
+      introducing a second discovery mechanism.
+- [ ] 5.2 Batch each candidate's exact variants through bounded concurrent
+      hypothetical-fit calls to all compatible hosts.
+- [ ] 5.3 Join inventory, runtime state, hardware/storage, fit, and candidate
+      evidence by stable host/variant identity.
+- [ ] 5.4 Implement hard compatibility filters before ranking.
+- [ ] 5.5 Implement explained fit/context, quality, speed/benchmark,
+      capability, provenance, recency, and popularity evidence.
+- [ ] 5.6 Add installed, upgrade, fresh, stale, offline, unsupported, and
+      unknown classifications.
+- [ ] 5.7 Expose typed local HTTP API endpoints shared by app and TUI.
+
+## 6. Web and desktop experience
+
+- [ ] 6.1 Extend current upstream V2 Model Settings with Installed, Discover,
+      and Operations sections.
+- [ ] 6.2 Implement gallery search, filters, candidate cards/table, empty,
+      offline, stale, and progressive host-result states.
+- [ ] 6.3 Implement candidate detail with model card link, provenance,
+      license, capabilities, exact artifacts, quants, context, quality, and speed.
+- [ ] 6.4 Implement host comparison with fit/context, disk, loaded/busy state,
+      expected eviction, and evidence explanations.
+- [ ] 6.5 Port useful llmfit browse/filter/detail/compare/plan/download
+      interactions into native Solid components with attribution.
+- [ ] 6.6 Add “Browse models…” to the V2 session picker without embedding the
+      complete gallery in the picker.
+
+## 7. Host operations
+
+- [ ] 7.1 Build immutable install plans and require confirmation of host,
+      revision, artifacts, bytes, license, disk, and expected fit.
+- [ ] 7.2 Submit, observe, cancel, and reconnect to llama-skein operations by
+      ID without making opencode the operation authority.
+- [ ] 7.3 Implement Operations UI with aggregate/per-artifact progress,
+      terminal outcomes, warnings, retry/resume, and actionable errors.
+- [ ] 7.4 Refresh provider inventory/model picker after registration without
+      application restart.
+- [ ] 7.5 Add explicit load, unload, and remove flows with affected-model and
+      eviction confirmation.
+
+## 8. Terminal experience
+
+- [ ] 8.1 Add compact Installed, Discover, and Operations views using the same
+      backend API and evidence vocabulary.
+- [ ] 8.2 Add search, task/capability/context/host filters and per-host fit
+      badges.
+- [ ] 8.3 Add install confirmation, progress, cancellation, and failure
+      rendering.
+- [ ] 8.4 Preserve the normal installed-model picker when gallery capabilities
+      are unavailable.
+
+## 9. Skein parity and retirement
+
+- [ ] 9.1 Add golden parity tests for Skein's current HF search, quant,
+      context-floor, family-upgrade, URL, and pull-selection behavior.
+- [ ] 9.2 Port any still-superior behavior to opencode-skein or llama-skein at
+      the owning boundary.
+- [ ] 9.3 Migrate Skein's autonomous placement caller to generated
+      llama-skein contracts where still required.
+- [ ] 9.4 Remove duplicate Skein gallery/recommend/pull presentation after
+      opencode web/TUI parity and end-to-end validation.
+
+## 10. Verification
+
+- [ ] 10.1 Contract tests across current and older llama-skein capabilities.
+- [ ] 10.2 Catalog tests for deterministic merge, cache, revision pinning,
+      metadata inference, shards, auxiliaries, policy, and offline behavior.
+- [ ] 10.3 Ranking tests proving compatibility/context outrank popularity and
+      portable estimates cannot override runtime no-fit.
+- [ ] 10.4 App component and E2E tests for search, detail, host comparison,
+      operations, reconnect, cancellation, and picker refresh.
+- [ ] 10.5 TUI tests for the same state matrix.
+- [ ] 10.6 Regression test installed-model chat with Hugging Face and Skein
+      unavailable.
+- [ ] 10.7 Live end-to-end on CUDA/ROCm and Apple hosts: explicit repo →
+      compare → install/resume → verify → load → use in an existing session.
