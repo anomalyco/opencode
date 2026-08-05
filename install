@@ -2,6 +2,12 @@
 set -euo pipefail
 APP=opencode
 
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+AUTH_HEADERS=()
+if [[ -n "$GITHUB_TOKEN" ]]; then
+  AUTH_HEADERS=(-H "Authorization: Bearer $GITHUB_TOKEN")
+fi
+
 MUTED='\033[0;2m'
 RED='\033[0;31m'
 ORANGE='\033[38;5;214m'
@@ -182,7 +188,7 @@ else
 
     if [ -z "$requested_version" ]; then
         url="https://github.com/anomalyco/opencode/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+        specific_version=$(curl -s "${AUTH_HEADERS[@]}" https://api.github.com/repos/anomalyco/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 
         if [[ $? -ne 0 || -z "$specific_version" ]]; then
             echo -e "${RED}Failed to fetch version information${NC}"
@@ -195,7 +201,7 @@ else
         specific_version=$requested_version
 
         # Verify the release exists before downloading
-        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/opencode/releases/tag/v${requested_version}")
+        http_status=$(curl -sI "${AUTH_HEADERS[@]}" -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/opencode/releases/tag/v${requested_version}")
         if [ "$http_status" = "404" ]; then
             echo -e "${RED}Error: Release v${requested_version} not found${NC}"
             echo -e "${MUTED}Available releases: https://github.com/anomalyco/opencode/releases${NC}"
@@ -287,7 +293,7 @@ download_with_progress() {
     trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
 
     (
-        curl --trace-ascii "$tracefile" -s -L -o "$output" "$url"
+        curl "${AUTH_HEADERS[@]}" --trace-ascii "$tracefile" -s -L -o "$output" "$url"
     ) &
     local curl_pid=$!
 
@@ -331,7 +337,7 @@ download_and_install() {
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
-        curl -# -L -o "$tmp_dir/$filename" "$url"
+        curl "${AUTH_HEADERS[@]}" -# -L -o "$tmp_dir/$filename" "$url"
     fi
 
     if [ "$os" = "linux" ]; then
