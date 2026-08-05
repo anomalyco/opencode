@@ -11,6 +11,7 @@ import { migrations } from "@opencode-ai/core/database/migration.gen"
 import { Database } from "@opencode-ai/core/database/database"
 import { tmpdir } from "./fixture/tmpdir"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
+import { importLegacyCredentials } from "@opencode-ai/core/database/migration/20260805200742_import_legacy_credentials"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
   Effect.runPromise(
@@ -103,6 +104,64 @@ describe("DatabaseMigration", () => {
         ])
       }),
     )
+  })
+
+  test("imports legacy JSON credentials without changing the source file or existing credentials", async () => {
+    await using tmp = await tmpdir()
+    const source = path.join(tmp.path, "auth.json")
+    const content = JSON.stringify({
+      openai: { type: "oauth", refresh: "refresh", access: "access", expires: 123, accountId: "account" },
+      anthropic: { type: "api", key: "legacy-key", metadata: { region: "us" } },
+      "https://example.com/": { type: "wellknown", key: "TOKEN", token: "wellknown-key" },
+      invalid: { type: "unknown" },
+    })
+    await Bun.write(source, content)
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        const now = Date.now()
+        yield* db.run(sql`
+          INSERT INTO credential (id, integration_id, label, value, time_created, time_updated)
+          VALUES ('existing', 'anthropic', 'Existing', ${JSON.stringify({ type: "key", key: "current-key" })}, ${now}, ${now})
+        `)
+
+        yield* db.transaction((tx) => importLegacyCredentials(tx, source))
+
+        expect(yield* db.all(sql`SELECT integration_id, label, value FROM credential ORDER BY integration_id`)).toEqual(
+          [
+            {
+              integration_id: "anthropic",
+              label: "Existing",
+              value: JSON.stringify({ type: "key", key: "current-key" }),
+            },
+            {
+              integration_id: "https://example.com",
+              label: "default",
+              value: JSON.stringify({ type: "key", key: "wellknown-key" }),
+            },
+            {
+              integration_id: "openai",
+              label: "default",
+              value: JSON.stringify({
+                type: "oauth",
+                methodID: "chatgpt-browser",
+                refresh: "refresh",
+                access: "access",
+                expires: 123,
+                metadata: { accountID: "account" },
+              }),
+            },
+          ],
+        )
+        expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'wellknown:sources'`)).toEqual({
+          value: JSON.stringify(["https://example.com"]),
+        })
+      }),
+    )
+
+    expect(await Bun.file(source).text()).toBe(content)
   })
 
   test("rolls back a failed migration without recording it", async () => {
