@@ -2,7 +2,7 @@
 set -euo pipefail
 APP=opencode
 
-GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+GITHUB_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
 AUTH_HEADERS=()
 if [[ -n "$GITHUB_TOKEN" ]]; then
   AUTH_HEADERS=(-H "Authorization: Bearer $GITHUB_TOKEN")
