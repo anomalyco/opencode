@@ -219,14 +219,15 @@ describe("provider package entrypoints", () => {
     })
     const gateway = Azure.model("gateway-model", {
       apiKey: "fixture",
-      baseURL: "https://gateway.example/azure",
+      baseURL: "https://gateway.example/azure/",
     })
 
     expect(deployment.route.endpoint).toMatchObject({
       baseURL: "https://opencode-test.openai.azure.com/openai/deployments/custom-deployment",
       query: { "api-version": "2025-01-01-preview" },
     })
-    expect(gateway.route.endpoint).toMatchObject({ baseURL: "https://gateway.example/azure", query: {} })
+    expect(gateway.route.endpoint.baseURL).toBe("https://gateway.example/azure")
+    expect(gateway.route.endpoint.query).toBeUndefined()
   })
 
   test("maps Google package settings onto the Gemini model", async () => {

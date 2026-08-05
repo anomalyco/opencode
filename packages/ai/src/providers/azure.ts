@@ -5,6 +5,7 @@ import type { ProviderPackage } from "../provider-package"
 import { ProviderID, type ModelID } from "../schema"
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
+import { ProviderShared } from "../protocols/shared"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
 
 export const id = ProviderID.make("azure")
@@ -75,23 +76,25 @@ const auth = (input: Config) => {
   )
 }
 
-const configuredRoute = <Body, Prepared>(route: RouteDef<Body, Prepared>, input: Config, modelID: string | ModelID) => {
-  const baseURL = input.baseURL ?? resourceBaseURL(input.resourceName!)
-  const azure = input.baseURL === undefined || new URL(input.baseURL).hostname.endsWith(".openai.azure.com")
-  return route.with({
+const configuredRoute = <Body, Prepared>(route: RouteDef<Body, Prepared>, input: Config, modelID: string | ModelID) =>
+  route.with({
     auth: auth(input),
-    endpoint: {
-      baseURL: input.useDeploymentBasedUrls
-        ? `${baseURL.replace(/\/$/, "")}/deployments/${modelID}`
-        : azure
-          ? `${baseURL.replace(/\/$/, "")}/v1`
-          : baseURL,
-      query: {
-        ...(azure || input.useDeploymentBasedUrls ? { "api-version": input.apiVersion ?? "v1" } : {}),
-        ...input.queryParams,
-      },
-    },
+    endpoint: endpoint(input, modelID),
   })
+
+function endpoint(input: Config, modelID: string | ModelID) {
+  const baseURL = ProviderShared.trimBaseUrl(input.baseURL ?? resourceBaseURL(input.resourceName!))
+  const query = { "api-version": input.apiVersion ?? "v1", ...input.queryParams }
+
+  if (input.useDeploymentBasedUrls) return { baseURL: `${baseURL}/deployments/${modelID}`, query }
+  if (input.baseURL !== undefined && !isAzureOpenAIURL(input.baseURL)) {
+    return { baseURL, query: input.queryParams }
+  }
+  return { baseURL: `${baseURL}/v1`, query }
+}
+
+function isAzureOpenAIURL(value: string) {
+  return new URL(value).hostname.endsWith(".openai.azure.com")
 }
 
 export const configure = (input: Config) => {
