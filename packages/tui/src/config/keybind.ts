@@ -57,7 +57,7 @@ export const Definitions = {
   app_toggle_automode: keybind("none", "Toggle auto mode"),
   app_toggle_automode_permissions: keybind("<leader>p", "Toggle permission auto-approve"),
   app_toggle_automode_continue: keybind("<leader>k", "Toggle auto-continue"),
-  app_automode_cycle: keybind("<leader>o", "Cycle auto mode (off / skip-ask / loop / auto)"),
+  app_automode_cycle: keybind("<leader>o", "Cycle auto mode (manual / skip-ask / continue / auto)"),
   loop_list: keybind("<leader>j", "Manage loops and queue runs"),
   command_list: keybind("ctrl+p", "List available commands"),
   help_show: keybind("none", "Open help dialog"),

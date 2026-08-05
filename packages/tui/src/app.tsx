@@ -46,6 +46,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogLoopList } from "./component/dialog-loop-list"
+import { DialogAutoMode } from "./component/dialog-auto-mode"
 import { DialogTuning } from "./component/dialog-tuning"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
@@ -1032,6 +1033,18 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
+        // The discoverable route: `/auto` or the palette opens a picker that
+        // names all four states and what each does. Cycling and the individual
+        // toggles stay for people who already know what they want.
+        name: "app.automode.show",
+        title: "Auto mode…",
+        category: "System",
+        slashName: "auto",
+        run: () => {
+          dialog.replace(() => <DialogAutoMode />)
+        },
+      },
+      {
         // One key steps through the whole space instead of hunting two
         // separate toggles: off -> skip-ask -> loop -> auto -> off. Mirrors
         // Claude Code's permission-mode cycle; the status pill names the
@@ -1041,7 +1054,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           const config = sync.data.config
           const skip = config.auto_mode ?? false
           const cont = config.auto_continue ?? false
-          const label = !skip && !cont ? "off" : skip && cont ? "auto" : skip ? "skip-ask" : "loop"
+          const label = !skip && !cont ? "manual" : skip && cont ? "auto" : skip ? "skip-ask" : "continue"
           return `Cycle auto mode (now: ${label})`
         },
         category: "System",

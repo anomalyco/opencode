@@ -46,6 +46,7 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { parseLoopArgs } from "@opencode-ai/sdk/v2"
 import { DialogLoopList } from "../dialog-loop-list"
+import { DialogAutoMode } from "../dialog-auto-mode"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
@@ -1634,6 +1635,11 @@ export function Prompt(props: PromptProps) {
                       </text>
                       <Show when={store.mode === "normal"}>
                         <text
+                          // Clickable: a keybind you have to remember is not a
+                          // control most people will ever find. Clicking the
+                          // indicator opens the mode picker, which names every
+                          // state instead of making you cycle blind.
+                          onMouseDown={() => dialog.replace(() => <DialogAutoMode />)}
                           fg={fadeColor(
                             (sync.data.config.auto_mode ?? false) || (sync.data.config.auto_continue ?? false)
                               ? theme.success
@@ -1649,19 +1655,32 @@ export function Prompt(props: PromptProps) {
                             // on, "Manual" when neither, and a single active
                             // flag names itself — the indicator must never
                             // imply a mode that isn't actually enabled.
-                            const label = skip && cont ? "Auto" : !skip && !cont ? "Manual" : skip ? "Skip-ask" : "Loop"
+                            // "Continue", not "Loop": /loop is a command that
+                            // starts one now, and reusing the word for the
+                            // auto-continue switch made the two read as the
+                            // same feature.
+                            const label =
+                              skip && cont ? "Auto" : !skip && !cont ? "Manual" : skip ? "Skip-ask" : "Continue"
                             // A live loop in this session is the other half of
                             // the story: show where it is, and for a queue run
                             // which change and gate it is working.
-                            const live = activeLoop()
-                            const where = live
-                              ? live.currentChange
-                                ? ` · queue ${live.currentChange} [${live.currentGate ?? "?"}] ${live.iteration}/${live.maxIterations}`
-                                : ` · loop ${live.iteration}/${live.maxIterations}`
-                              : ""
-                            return `${dot} ${label}${where}`
+                            return `${dot} ${label}`
                           })()}
                         </text>
+                        <Show when={activeLoop()}>
+                          {(live) => (
+                            <text
+                              // Clicking the live loop position opens the loops
+                              // dialog, where it can be paused or cancelled.
+                              onMouseDown={() => dialog.replace(() => <DialogLoopList />)}
+                              fg={fadeColor(theme.success, modelMetaAlpha())}
+                            >
+                              {live().currentChange
+                                ? `· queue ${live().currentChange} [${live().currentGate ?? "?"}] ${live().iteration}/${live().maxIterations}`
+                                : `· loop ${live().iteration}/${live().maxIterations}`}
+                            </text>
+                          )}
+                        </Show>
                         <box flexDirection="row" gap={1}>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
                           <text

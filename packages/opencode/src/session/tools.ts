@@ -95,8 +95,17 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
         if (!needsAsk) return
 
-        // Auto mode: skip the remaining permission prompts
-        const autoEnabled = yield* autoMode.isEnabled()
+        // Auto mode: skip the remaining permission prompts.
+        //
+        // A session that declares an authority ceiling (the queue loop's deny
+        // profile) is by definition unattended, so it auto-approves whatever
+        // that ceiling already permits regardless of the global toggle —
+        // otherwise the first prompt parks an unattended run forever with
+        // nobody there to answer it. The ceiling is the control here, not the
+        // prompt: deny rules were evaluated above and still hold, and such a
+        // session also runs with its push credentials stripped.
+        const unattended = QueueAuthority.deniesPush(mergedRuleset)
+        const autoEnabled = unattended || (yield* autoMode.isEnabled())
         if (autoEnabled) return
 
         yield* permission

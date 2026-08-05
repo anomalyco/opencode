@@ -128,3 +128,24 @@ describe("credential-less environment (defence in depth)", () => {
     expect(env["SSH_ASKPASS"]).toBe("/bin/false")
   })
 })
+
+describe("an unattended session is self-sufficient on permissions", () => {
+  // A queue run has nobody at the keyboard. If the first tool that would have
+  // prompted parks the run, "relentless" is a lie — so a session carrying the
+  // deny ceiling auto-approves what that ceiling permits, regardless of the
+  // user's global auto-mode toggle. The ceiling is the control, not the prompt.
+  test("the deny ceiling is what marks a session unattended", () => {
+    expect(deniesPush(QueueDenyRules)).toBe(true)
+    // An ordinary session is never treated as unattended by accident.
+    expect(deniesPush([])).toBe(false)
+    expect(deniesPush([{ permission: "bash", pattern: "rm -rf *", action: "deny" }])).toBe(false)
+    expect(deniesPush([{ permission: "bash", pattern: "*", action: "allow" }])).toBe(false)
+  })
+
+  test("auto-approval never extends to the denied commands themselves", async () => {
+    for (const command of ["git push origin main", "gh release create v1", "ssh m5 git push"]) {
+      const result = await denied(command)
+      expect(result.denied).toBe(true)
+    }
+  })
+})
