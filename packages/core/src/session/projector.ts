@@ -1,6 +1,6 @@
 export * as SessionProjector from "./projector"
 
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, lt, lte, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import { Database } from "../database/database"
 import { Bus } from "../bus"
@@ -255,65 +255,21 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       .pipe(Effect.orDie)
     if (rows.length === 0) break
 
-    const idMap = new Map(rows.map((row) => [row.id, SessionMessage.ID.create()]))
     yield* db
       .insert(SessionMessageTable)
       .values(
-        rows.map((row) => {
-          const id = idMap.get(row.id)
-          if (!id) throw new Error(`Fork message ID mapping missing: ${row.id}`)
-          return {
-            id,
-            session_id: event.data.sessionID,
-            type: row.type,
-            seq: row.seq,
-            time_created: row.time_created,
-            time_updated: row.time_updated,
-            data: row.data,
-          }
-        }),
+        rows.map((row) => ({
+          id: SessionMessage.ID.create(),
+          session_id: event.data.sessionID,
+          type: row.type,
+          seq: row.seq,
+          time_created: row.time_created,
+          time_updated: row.time_updated,
+          data: row.data,
+        })),
       )
       .run()
       .pipe(Effect.orDie)
-
-    const pendingRows = yield* db
-      .select()
-      .from(SessionPendingTable)
-      .where(
-        and(
-          eq(SessionPendingTable.session_id, event.data.parentID),
-          inArray(
-            SessionPendingTable.id,
-            rows.map((row) => row.id),
-          ),
-        ),
-      )
-      .all()
-      .pipe(Effect.orDie)
-    if (pendingRows.length > 0) {
-      yield* db
-        .insert(SessionPendingTable)
-        .values(
-          pendingRows.flatMap((row) => {
-            const id = idMap.get(row.id)
-            return id && row.type !== "compaction"
-              ? [
-                  {
-                    id,
-                    session_id: event.data.sessionID,
-                    type: row.type,
-                    data: row.data,
-                    delivery: row.delivery,
-                    admitted_seq: row.admitted_seq,
-                    time_created: row.time_created,
-                  },
-                ]
-              : []
-          }),
-        )
-        .run()
-        .pipe(Effect.orDie)
-    }
 
     cursor = rows.at(-1)!.seq
   }
