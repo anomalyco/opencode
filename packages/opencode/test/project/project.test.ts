@@ -362,6 +362,30 @@ describe("Project.fromDirectory with worktrees", () => {
     }),
   )
 
+  it.live("separate clones of the same repo should not add clone as sandbox", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+
+      // Create a bare remote, push, then clone into a second directory
+      const bare = tmp + "-bare"
+      const clone = tmp + "-clone"
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => $`rm -rf ${bare} ${clone}`.quiet().nothrow()).pipe(Effect.ignore),
+      )
+      yield* Effect.promise(() => $`git clone --bare ${tmp} ${bare}`.quiet())
+      yield* Effect.promise(() => $`git clone ${bare} ${clone}`.quiet())
+
+      yield* project.fromDirectory(tmp)
+      const next = yield* project.fromDirectory(clone)
+
+      // The clone is an independent checkout, not a linked git worktree.
+      // It must NOT appear in sandboxes — otherwise the front-end surfaces
+      // stale branch info from the first directory.
+      expect(next.project.sandboxes).not.toContain(clone)
+    }),
+  )
+
   it.live("should accumulate multiple worktrees in sandboxes", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service
