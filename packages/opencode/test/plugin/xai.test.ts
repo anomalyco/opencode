@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
   accessTokenIsExpiring,
-  buildAuthorizeUrl,
   pollDeviceCodeToken,
   requestDeviceCode,
   XaiAuthPlugin,
@@ -76,32 +75,6 @@ describe("plugin.xai", () => {
     })
   })
 
-  describe("buildAuthorizeUrl", () => {
-    const pkce = { verifier: "ver", challenge: "chal" }
-
-    test("includes required OAuth + PKCE + OIDC params", () => {
-      const url = new URL(buildAuthorizeUrl(pkce, "state-abc", "nonce-xyz"))
-      const params = url.searchParams
-
-      expect(url.origin + url.pathname).toBe("https://auth.x.ai/oauth2/authorize")
-      expect(params.get("response_type")).toBe("code")
-      expect(params.get("client_id")).toBe("b1a00492-073a-47ea-816f-4c329264a828")
-      expect(params.get("redirect_uri")).toBe("http://127.0.0.1:56121/callback")
-      expect(params.get("scope")).toBe("openid profile email offline_access grok-cli:access api:access")
-      expect(params.get("code_challenge")).toBe("chal")
-      expect(params.get("code_challenge_method")).toBe("S256")
-      expect(params.get("state")).toBe("state-abc")
-      expect(params.get("nonce")).toBe("nonce-xyz")
-      expect(params.get("plan")).toBe("generic")
-      expect(params.get("referrer")).toBe("opencode")
-    })
-
-    test("supports endpoint override for local integration tests", () => {
-      const url = new URL(buildAuthorizeUrl(pkce, "s", "n", { authorizeUrl: "http://127.0.0.1/oauth2/authorize" }))
-      expect(url.origin + url.pathname).toBe("http://127.0.0.1/oauth2/authorize")
-    })
-  })
-
   describe("loader", () => {
     test("returns no options unless stored auth is OAuth and exposes methods in order", async () => {
       const hooks = await XaiAuthPlugin({} as any)
@@ -110,8 +83,7 @@ describe("plugin.xai", () => {
         await hooks.auth!.loader!(async () => ({ type: "wellknown", key: "k", token: "t" }) as any, {} as any),
       ).toEqual({})
       expect(hooks.auth!.methods.map((m) => [m.type, m.label])).toEqual([
-        ["oauth", "xAI Grok OAuth (SuperGrok Subscription)"],
-        ["oauth", "xAI Grok OAuth (Headless / Remote / VPS)"],
+        ["oauth", "SuperGrok Subscription"],
         ["api", "Manually enter API Key"],
       ])
     })
@@ -426,7 +398,7 @@ describe("plugin.xai", () => {
       const hooks = await XaiAuthPlugin({} as any, serverOptions(server))
       const headless = hooks.auth!.methods.find(
         (m): m is Extract<typeof m, { type: "oauth" }> =>
-          m.type === "oauth" && m.label === "xAI Grok OAuth (Headless / Remote / VPS)",
+          m.type === "oauth" && m.label === "SuperGrok Subscription",
       )!
       const result = await headless.authorize!()
 
@@ -450,7 +422,7 @@ describe("plugin.xai", () => {
       })
       const headless = (await XaiAuthPlugin({} as any, serverOptions(server))).auth!.methods.find(
         (m): m is Extract<typeof m, { type: "oauth" }> =>
-          m.type === "oauth" && m.label === "xAI Grok OAuth (Headless / Remote / VPS)",
+          m.type === "oauth" && m.label === "SuperGrok Subscription",
       )!
       expect((await headless.authorize!()).url).toBe("https://x.ai/device")
     })
@@ -474,6 +446,7 @@ describe("plugin.xai", () => {
       expect(parsed.get("scope")).toContain("offline_access")
       expect(parsed.get("scope")).toContain("grok-cli:access")
       expect(parsed.get("scope")).toContain("api:access")
+      expect(parsed.get("referrer")).toBe("opencode")
       await expect(
         requestDeviceCode({ deviceAuthorizationUrl: new URL("/error", server.url).toString() }),
       ).rejects.toThrow(/429.*rate limited/)
@@ -612,7 +585,7 @@ describe("plugin.xai", () => {
       })
       const headless = (await XaiAuthPlugin({} as any, serverOptions(server))).auth!.methods.find(
         (m): m is Extract<typeof m, { type: "oauth" }> =>
-          m.type === "oauth" && m.label === "xAI Grok OAuth (Headless / Remote / VPS)",
+          m.type === "oauth" && m.label === "SuperGrok Subscription",
       )!
       expect(await ((await headless.authorize!()) as any).callback()).toEqual({ type: "failed" })
     })
