@@ -1,4 +1,5 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import { shouldUseResponsesApi } from "@opencode-ai/ai/providers/github-copilot"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
@@ -140,14 +141,6 @@ const oauth = (app: App.Info) => ({
     }),
 }) satisfies IntegrationOAuthMethodRegistration
 
-function shouldUseResponses(modelID: string) {
-  // Copilot supports Responses for GPT-5 class models, except mini variants
-  // which still need the chat-completions endpoint.
-  const match = /^gpt-(\d+)/.exec(modelID)
-  if (!match) return false
-  return Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")
-}
-
 export const GithubCopilotPlugin = define({
   id: "opencode.provider.github-copilot",
   effect: Effect.fn(function* (ctx) {
@@ -269,7 +262,7 @@ export const GithubCopilotPlugin = define({
           return
         }
         const id = evt.model.modelID ?? evt.model.id
-        evt.language = shouldUseResponses(id) ? evt.sdk.responses(id) : evt.sdk.chat(id)
+        evt.language = shouldUseResponsesApi(id) ? evt.sdk.responses(id) : evt.sdk.chat(id)
       }),
     )
   }),
