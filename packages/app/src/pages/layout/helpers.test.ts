@@ -6,7 +6,7 @@ import {
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import { type Session } from "@leak-code/sdk/v2/client"
 import {
   childSessionOnPath,
   closeHomeProject,
@@ -100,10 +100,10 @@ describe("layout deep links", () => {
 
   test("drains global deep links once", () => {
     const target = {
-      __OPENCODE__: {
+      __LEAKCODE__: {
         deepLinks: ["opencode://open-project?directory=/a"],
       },
-    } as unknown as Window & { __OPENCODE__?: { deepLinks?: string[] } }
+    } as unknown as Window & { __LEAKCODE__?: { deepLinks?: string[] } }
 
     expect(drainPendingDeepLinks(target)).toEqual(["opencode://open-project?directory=/a"])
     expect(drainPendingDeepLinks(target)).toEqual([])

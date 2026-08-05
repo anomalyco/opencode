@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionApi, SessionInfo, SessionListInput } from "@opencode-ai/client/promise"
+import type { SessionApi, SessionInfo, SessionListInput } from "@leak-code/client/promise"
 import { listAllSessions, normalizeSessionInfo } from "./session"
 
 describe("normalizeSessionInfo", () => {

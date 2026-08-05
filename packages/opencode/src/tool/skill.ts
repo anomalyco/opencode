@@ -1,6 +1,6 @@
 import path from "path"
 import { Effect, Schema } from "effect"
-import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { Ripgrep } from "@leak-code/core/ripgrep"
 import { Skill } from "../skill"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"

@@ -98,7 +98,7 @@ function parseReadableProviderModelNotFoundError(errorInput: ProviderModelNotFou
   const m = errorInput.data.modelID.trim()
   const list = (errorInput.data.suggestions ?? []).map((v) => v.trim()).filter(Boolean)
   const body = tr(translator, "error.chain.modelNotFound", `Model not found: ${p}/${m}`, { provider: p, model: m })
-  const tail = tr(translator, "error.chain.checkConfig", "Check your config (opencode.json) provider/model names")
+  const tail = tr(translator, "error.chain.checkConfig", "Check your config (leak-code.json) provider/model names")
   if (list.length) {
     const suggestions = list.slice(0, 5).join(", ")
     return [body, tr(translator, "error.chain.didYouMean", `Did you mean: ${suggestions}`, { suggestions }), tail].join(

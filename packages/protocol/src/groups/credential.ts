@@ -1,4 +1,4 @@
-import { Credential } from "@opencode-ai/schema/credential"
+import { Credential } from "@leak-code/schema/credential"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location"

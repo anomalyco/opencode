@@ -48,7 +48,7 @@ Examples:
 await rm(file, { force: true })
 
 const quiet = values.quiet
-const cmd = ["opencode", "run"]
+const cmd = ["leak-code", "run"]
 cmd.push("--variant", values.variant)
 cmd.push("--command", "changelog", "--", ...args)
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/stats-app",
+  "name": "@leak-code/stats-app",
   "version": "1.18.13",
   "private": true,
   "type": "module",
@@ -14,8 +14,8 @@
   "dependencies": {
     "@ibm/plex": "6.4.1",
     "@kobalte/core": "catalog:",
-    "@opencode-ai/stats-core": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@leak-code/stats-core": "workspace:*",
+    "@leak-code/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",

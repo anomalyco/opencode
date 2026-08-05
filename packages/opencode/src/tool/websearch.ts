@@ -3,8 +3,8 @@ import { HttpClient } from "effect/unstable/http"
 import * as Tool from "./tool"
 import * as McpWebSearch from "./mcp-websearch"
 import DESCRIPTION from "./websearch.txt"
-import { checksum } from "@opencode-ai/core/util/encode"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { checksum } from "@leak-code/core/util/encode"
+import { InstallationVersion } from "@leak-code/core/installation/version"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 export const Parameters = Schema.Struct({
@@ -28,7 +28,7 @@ const WebSearchProviderSchema = Schema.Literals(["exa", "parallel"])
 export type WebSearchProvider = Schema.Schema.Type<typeof WebSearchProviderSchema>
 
 export function selectWebSearchProvider(sessionID: string, flags = { exa: false, parallel: false }): WebSearchProvider {
-  const override = process.env.OPENCODE_WEBSEARCH_PROVIDER
+  const override = process.env.LEAKCODE_WEBSEARCH_PROVIDER
   if (override === "exa" || override === "parallel") return override
   if (flags.parallel) return "parallel"
   if (flags.exa) return "exa"

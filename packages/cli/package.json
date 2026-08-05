@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/cli",
+  "name": "@leak-code/cli",
   "version": "1.18.13",
   "type": "module",
   "license": "MIT",
@@ -17,10 +17,10 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/server": "workspace:*",
-    "@opencode-ai/tui": "workspace:*",
+    "@leak-code/core": "workspace:*",
+    "@leak-code/sdk": "workspace:*",
+    "@leak-code/server": "workspace:*",
+    "@leak-code/tui": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/solid": "catalog:",
     "@parcel/watcher": "2.5.1",
@@ -28,7 +28,7 @@
     "solid-js": "catalog:"
   },
   "devDependencies": {
-    "@opencode-ai/script": "workspace:*",
+    "@leak-code/script": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:"

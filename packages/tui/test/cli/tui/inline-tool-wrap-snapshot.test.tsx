@@ -48,7 +48,7 @@ const tools: readonly ToolFixture[] = [
   {
     icon: "✱",
     label:
-      'Grep "export const OPENCODE_DB|OPENCODE_DB|OPENCODE_DEV|Global\\.Path\\.data|data =" in packages/opencode/src (115 matches)',
+      'Grep "export const LEAKCODE_DB|LEAKCODE_DB|LEAKCODE_DEV|Global\\.Path\\.data|data =" in packages/opencode/src (115 matches)',
   },
 ] as const
 

@@ -1,5 +1,5 @@
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { BackgroundJob as CoreBackgroundJob } from "@opencode-ai/core/background-job"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
+import { BackgroundJob as CoreBackgroundJob } from "@leak-code/core/background-job"
 import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer } from "effect"
 
@@ -12,7 +12,7 @@ export {
   type Status,
   type WaitInput,
   type WaitResult,
-} from "@opencode-ai/core/background-job"
+} from "@leak-code/core/background-job"
 
 /** Keeps the legacy service instance-scoped while sharing the core registry engine. */
 const layer = Layer.effect(

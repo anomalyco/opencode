@@ -5,7 +5,7 @@ import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { makeLocationNode } from "../effect/app-node"
 import { Cause, Context, Effect, Layer } from "effect"
-import { FileSystemWatcher } from "@opencode-ai/schema/filesystem-watcher"
+import { FileSystemWatcher } from "@leak-code/schema/filesystem-watcher"
 import path from "path"
 import { Config } from "../config"
 import { EventV2 } from "../event"
@@ -17,7 +17,7 @@ import { lazy } from "../util/lazy"
 import { Ignore } from "./ignore"
 import { Protected } from "./protected"
 
-declare const OPENCODE_LIBC: string | undefined
+declare const LEAKCODE_LIBC: string | undefined
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 
@@ -25,7 +25,7 @@ export const Event = FileSystemWatcher.Event
 
 const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
   try {
-    const libc = typeof OPENCODE_LIBC === "undefined" ? undefined : OPENCODE_LIBC
+    const libc = typeof LEAKCODE_LIBC === "undefined" ? undefined : LEAKCODE_LIBC
     const binding = require(
       `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${libc || "glibc"}` : ""}`,
     )
@@ -57,7 +57,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    if (yield* Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return Service.of({})
+    if (yield* Flag.LEAKCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return Service.of({})
 
     const backend = getBackend()
     const location = yield* Location.Service
@@ -106,7 +106,7 @@ const layer = Layer.effect(
     const config = (yield* (yield* Config.Service).entries())
       .filter((entry): entry is Config.Document => entry.type === "document")
       .flatMap((item) => item.info.watcher?.ignore ?? [])
-    if (location.vcs && (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER)) {
+    if (location.vcs && (yield* Flag.LEAKCODE_EXPERIMENTAL_FILEWATCHER)) {
       yield* Effect.forkScoped(
         subscribe(location.directory, [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)]),
       )

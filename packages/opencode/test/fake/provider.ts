@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect"
 import { Provider } from "@/provider/provider"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@leak-code/core/provider"
+import { ModelV2 } from "@leak-code/core/model"
 
 export namespace ProviderTest {
   export function model(override: Partial<Provider.Model> = {}): Provider.Model {

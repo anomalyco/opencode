@@ -1,16 +1,16 @@
 import { $ } from "bun"
-import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { ConfigV1 } from "@leak-code/core/v1/config/config"
 import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { Effect, Context, Layer } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import type * as Scope from "effect/Scope"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { CrossSpawnSpawner } from "@leak-code/core/cross-spawn-spawner"
+import { AppNodeBuilder } from "@leak-code/core/effect/app-node-builder"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "@/config/config"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import type { InstanceContext } from "../../src/project/instance-context"
@@ -94,7 +94,7 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   }
   if (options?.config) {
     await Bun.write(
-      path.join(dirpath, "opencode.json"),
+      path.join(dirpath, "leak-code.json"),
       JSON.stringify({
         $schema: "https://opencode.ai/config.json",
         ...options.config,
@@ -153,7 +153,7 @@ export function tmpdirScoped<E = never, R = never>(options?: {
       const resolved = typeof options.config === "function" ? options.config() : options.config
       yield* Effect.promise(() =>
         fs.writeFile(
-          path.join(dir, "opencode.json"),
+          path.join(dir, "leak-code.json"),
           JSON.stringify({ $schema: "https://opencode.ai/config.json", ...resolved }),
         ),
       )

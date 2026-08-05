@@ -2,10 +2,10 @@ export * as ConfigCommand from "./command"
 
 import path from "path"
 import { Cause, Exit, Schema } from "effect"
-import { Glob } from "@opencode-ai/core/util/glob"
-import { ConfigCommandV1 } from "@opencode-ai/core/v1/config/command"
+import { Glob } from "@leak-code/core/util/glob"
+import { ConfigCommandV1 } from "@leak-code/core/v1/config/command"
 import { configEntryNameFromPath } from "./entry-name"
-import { InvalidError } from "@opencode-ai/core/v1/config/error"
+import { InvalidError } from "@leak-code/core/v1/config/error"
 import * as ConfigMarkdown from "./markdown"
 
 const decodeInfo = Schema.decodeUnknownExit(ConfigCommandV1.Info)

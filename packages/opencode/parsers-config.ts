@@ -1,1 +1,1 @@
-export { default } from "@opencode-ai/tui/parsers-config"
+export { default } from "@leak-code/tui/parsers-config"

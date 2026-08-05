@@ -1,5 +1,5 @@
-import { Skill } from "@opencode-ai/schema/skill"
-import { Location } from "@opencode-ai/schema/location"
+import { Skill } from "@leak-code/schema/skill"
+import { Location } from "@leak-code/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location"

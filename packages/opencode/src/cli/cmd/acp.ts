@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ServerAuth } from "@/server/auth"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient } from "@leak-code/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { ACPProfile } from "@/acp/profile"
 
@@ -20,7 +20,7 @@ export const AcpCommand = effectCmd({
     const { Server } = yield* Effect.promise(() => import("@/server/server"))
     const { ACP } = yield* Effect.promise(() => import("@/acp/agent"))
     ACPProfile.mark("cli.acp.handler")
-    process.env.OPENCODE_CLIENT = "acp"
+    process.env.LEAKCODE_CLIENT = "acp"
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => ACPProfile.measure("cli.acp.server.listen", () => Server.listen(opts)))
 

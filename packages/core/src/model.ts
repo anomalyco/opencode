@@ -1,5 +1,5 @@
 import { Types } from "effect"
-import { Model } from "@opencode-ai/schema/model"
+import { Model } from "@leak-code/schema/model"
 import { ProviderV2 } from "./provider"
 
 export const ID = Model.ID

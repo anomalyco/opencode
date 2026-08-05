@@ -1,5 +1,5 @@
-import { PermissionV1 } from "@opencode-ai/core/v1/permission"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { PermissionV1 } from "@leak-code/core/v1/permission"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { Agent } from "../../src/agent/agent"

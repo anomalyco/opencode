@@ -8,7 +8,7 @@ import { Global } from "./global"
 import { makeGlobalNode, makeLocationNode } from "./effect/app-node"
 import { SessionSchema } from "./session/schema"
 import { Identifier } from "./util/identifier"
-import type { ToolOutput } from "@opencode-ai/llm"
+import type { ToolOutput } from "@leak-code/llm"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024

@@ -19,10 +19,10 @@ const categories = [
 ]
 
 export async function startChromeTrace(page: Page, name: string) {
-  const directory = process.env.OPENCODE_PERFORMANCE_TRACE_DIR
+  const directory = process.env.LEAKCODE_PERFORMANCE_TRACE_DIR
   if (!directory) return
 
-  const selectors = process.env.OPENCODE_PERFORMANCE_SELECTOR_TRACE === "1"
+  const selectors = process.env.LEAKCODE_PERFORMANCE_SELECTOR_TRACE === "1"
   const file = await prepareChromeTrace(directory, name, selectors)
   const session = await page.context().newCDPSession(page)
   try {
@@ -73,7 +73,7 @@ export async function prepareChromeTrace(
   nonce = randomUUID().slice(0, 8),
 ) {
   await mkdir(directory, { recursive: true })
-  const run = process.env.OPENCODE_PERFORMANCE_RUN_ID ?? "manual"
+  const run = process.env.LEAKCODE_PERFORMANCE_RUN_ID ?? "manual"
   const hash = createHash("sha256").update(name).digest("hex").slice(0, 8)
   return path.join(
     directory,

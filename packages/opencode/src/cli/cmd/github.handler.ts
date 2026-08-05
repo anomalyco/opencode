@@ -17,7 +17,7 @@ import type {
   PullRequestEvent,
 } from "@octokit/webhooks-types"
 import { UI } from "../ui"
-import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { ModelsDev } from "@leak-code/core/models-dev"
 import { InstanceRef } from "@/effect/instance-ref"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
@@ -26,7 +26,7 @@ import { MessageID, PartID } from "../../session/schema"
 import { Provider } from "@/provider/provider"
 import { MessageV2 } from "../../session/message-v2"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2 } from "@leak-code/core/event"
 import { SessionPrompt } from "@/session/prompt"
 import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -516,7 +516,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         await runLocalEffect(sessionShare.share(session.id))
         return session.id.slice(-8)
       })()
-      console.log("opencode session", session.id)
+      console.log("leak-code session", session.id)
 
       // Handle event types:
       // REPO_EVENTS (schedule, workflow_dispatch): no issue/PR context, output to logs/PR only

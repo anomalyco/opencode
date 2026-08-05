@@ -1,21 +1,21 @@
 import { test, expect, describe, afterEach, beforeEach, spyOn } from "bun:test"
-import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+import { ConfigV1 } from "@leak-code/core/v1/config/config"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
+import { httpClient } from "@leak-code/core/effect/app-node-platform"
 import { Cause, Effect, Exit, Layer, Option } from "effect"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@leak-code/core/util/error"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
-import { Npm } from "@opencode-ai/core/npm"
+import { Npm } from "@leak-code/core/npm"
 
 import { InstanceRef } from "../../src/effect/instance-ref"
 import type { InstanceContext } from "../../src/project/instance-context"
 import { Auth } from "../../src/auth"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FSUtil } from "@leak-code/core/fs-util"
 import { Env } from "../../src/env"
 import {
   provideTmpdirInstance,
@@ -27,17 +27,17 @@ import {
   testInstanceStoreLayer,
 } from "../fixture/fixture"
 import { InstanceRuntime } from "@/project/instance-runtime"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@leak-code/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import path from "path"
 import fs from "fs/promises"
 import os from "os"
 import { pathToFileURL } from "url"
-import { Global } from "@opencode-ai/core/global"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { Global } from "@leak-code/core/global"
+import { ProjectV2 } from "@leak-code/core/project"
 import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
-import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
+import { ConfigPluginV1 } from "@leak-code/core/v1/config/plugin"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
@@ -129,9 +129,9 @@ const clearEffect = (wait = false) =>
     )
 const clear = (wait = false) => Effect.runPromise(clearEffect(wait))
 // Get managed config directory from environment (set in preload.ts)
-const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
+const managedConfigDir = process.env.LEAKCODE_TEST_MANAGED_CONFIG_DIR!
 const originalTestToken = process.env.TEST_TOKEN
-const originalConsoleToken = process.env.OPENCODE_CONSOLE_TOKEN
+const originalConsoleToken = process.env.LEAKCODE_CONSOLE_TOKEN
 
 beforeEach(async () => {
   await clear(true)
@@ -141,19 +141,19 @@ afterEach(async () => {
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
   if (originalTestToken === undefined) delete process.env.TEST_TOKEN
   else process.env.TEST_TOKEN = originalTestToken
-  if (originalConsoleToken === undefined) delete process.env.OPENCODE_CONSOLE_TOKEN
-  else process.env.OPENCODE_CONSOLE_TOKEN = originalConsoleToken
+  if (originalConsoleToken === undefined) delete process.env.LEAKCODE_CONSOLE_TOKEN
+  else process.env.LEAKCODE_CONSOLE_TOKEN = originalConsoleToken
   await clear(true)
 })
 
 const writeManagedSettingsEffect = (settings: object, filename?: string) =>
-  FSUtil.use.writeWithDirs(path.join(managedConfigDir, filename ?? "opencode.json"), JSON.stringify(settings))
+  FSUtil.use.writeWithDirs(path.join(managedConfigDir, filename ?? "leak-code.json"), JSON.stringify(settings))
 
-async function writeConfig(dir: string, config: object, name = "opencode.json") {
+async function writeConfig(dir: string, config: object, name = "leak-code.json") {
   await Filesystem.write(path.join(dir, name), JSON.stringify(config))
 }
 
-const writeConfigEffect = (dir: string, config: object, name = "opencode.json") =>
+const writeConfigEffect = (dir: string, config: object, name = "leak-code.json") =>
   FSUtil.use.writeWithDirs(path.join(dir, name), JSON.stringify(config))
 
 const withInstanceDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =>
@@ -313,23 +313,23 @@ it.effect("creates global jsonc config with schema when no global configs exist"
     Effect.gen(function* () {
       yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
-      const content = yield* FSUtil.use.readFileString(path.join(dir, "opencode.jsonc"))
+      const content = yield* FSUtil.use.readFileString(path.join(dir, "leak-code.jsonc"))
       expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
     }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
   ),
 )
 
-it.effect("does not create global config when OPENCODE_CONFIG_DIR is set", () =>
+it.effect("does not create global config when LEAKCODE_CONFIG_DIR is set", () =>
   Effect.gen(function* () {
     const custom = yield* tmpdirScoped()
     yield* withGlobalConfig({}, ({ dir }) =>
       withProcessEnv(
-        "OPENCODE_CONFIG_DIR",
+        "LEAKCODE_CONFIG_DIR",
         custom,
         Effect.gen(function* () {
           yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
-          expect(yield* FSUtil.use.existsSafe(path.join(dir, "opencode.jsonc"))).toBe(false)
+          expect(yield* FSUtil.use.existsSafe(path.join(dir, "leak-code.jsonc"))).toBe(false)
         }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
       ),
     )
@@ -376,18 +376,18 @@ it.effect("updates global config and omits empty shell key in json", () =>
     Effect.gen(function* () {
       yield* Config.use.updateGlobal({ shell: "" })
 
-      const writtenConfig = yield* FSUtil.use.readJson(path.join(dir, "opencode.json"))
+      const writtenConfig = yield* FSUtil.use.readJson(path.join(dir, "leak-code.json"))
       expect(writtenConfig).not.toHaveProperty("shell")
     }),
   ),
 )
 
 it.effect("updates global config and omits empty shell key in jsonc", () =>
-  withGlobalConfig({ config: { shell: "bash", model: "test/model" }, name: "opencode.jsonc" }, ({ dir }) =>
+  withGlobalConfig({ config: { shell: "bash", model: "test/model" }, name: "leak-code.jsonc" }, ({ dir }) =>
     Effect.gen(function* () {
       yield* Config.use.updateGlobal({ shell: "" })
 
-      const file = path.join(dir, "opencode.jsonc")
+      const file = path.join(dir, "leak-code.jsonc")
       const writtenConfig = yield* FSUtil.use.readFileString(file)
       const parsed = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(writtenConfig, file), file)
       expect(writtenConfig).not.toContain('"shell"')
@@ -453,7 +453,7 @@ it.instance("loads JSONC config file", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* FSUtil.use.writeWithDirs(
-      path.join(test.directory, "opencode.jsonc"),
+      path.join(test.directory, "leak-code.jsonc"),
       `{
         // This is a comment
         "$schema": "https://opencode.ai/config.json",
@@ -477,7 +477,7 @@ it.instance("jsonc overrides json in the same directory", () =>
         model: "base",
         username: "base",
       },
-      "opencode.jsonc",
+      "leak-code.jsonc",
     )
     yield* writeConfigEffect(test.directory, {
       $schema: "https://opencode.ai/config.json",
@@ -513,14 +513,14 @@ it.instance("preserves env variables when adding $schema to config", () =>
       const test = yield* TestInstance
       // Config without $schema - should trigger auto-add
       yield* FSUtil.use.writeWithDirs(
-        path.join(test.directory, "opencode.json"),
+        path.join(test.directory, "leak-code.json"),
         JSON.stringify({ username: "{env:PRESERVE_VAR}" }),
       )
       const config = yield* Config.use.get()
       expect(config.username).toBe("secret_value")
 
       // Read the file to verify the env variable was preserved
-      const content = yield* FSUtil.use.readFileString(path.join(test.directory, "opencode.json"))
+      const content = yield* FSUtil.use.readFileString(path.join(test.directory, "leak-code.json"))
       expect(content).toContain("{env:PRESERVE_VAR}")
       expect(content).not.toContain("secret_value")
       expect(content).toContain("$schema")
@@ -583,7 +583,7 @@ const accountTokenIt = configIt({
     config: () =>
       Effect.succeed(
         Option.some({
-          provider: { opencode: { options: { apiKey: "{env:OPENCODE_CONSOLE_TOKEN}" } } },
+          provider: { opencode: { options: { apiKey: "{env:LEAKCODE_CONSOLE_TOKEN}" } } },
         }),
       ),
     token: () => Effect.succeed(Option.some(AccessToken.make("st_test_token"))),
@@ -612,7 +612,7 @@ it.instance("validates config schema and throws on invalid fields", () =>
 it.instance("throws error for invalid JSON", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
-    yield* FSUtil.use.writeWithDirs(path.join(test.directory, "opencode.json"), "{ invalid json }")
+    yield* FSUtil.use.writeWithDirs(path.join(test.directory, "leak-code.json"), "{ invalid json }")
     const exit = yield* Config.use.get().pipe(Effect.exit)
     expect(Exit.isFailure(exit)).toBe(true)
   }),
@@ -909,7 +909,7 @@ it.instance("gets config directories", () =>
   }),
 )
 
-it.effect("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR", () =>
+it.effect("does not try to install dependencies in read-only LEAKCODE_CONFIG_DIR", () =>
   Effect.gen(function* () {
     if (process.platform === "win32") return
 
@@ -919,11 +919,11 @@ it.effect("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR
     yield* FSUtil.use.chmod(readonly, 0o555)
     yield* Effect.addFinalizer(() => FSUtil.use.chmod(readonly, 0o755).pipe(Effect.ignore))
 
-    yield* withProcessEnv("OPENCODE_CONFIG_DIR", readonly, Config.use.get().pipe(provideInstanceEffect(dir)))
+    yield* withProcessEnv("LEAKCODE_CONFIG_DIR", readonly, Config.use.get().pipe(provideInstanceEffect(dir)))
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
-it.effect("ignores an inaccessible OPENCODE_CONFIG_DIR", () =>
+it.effect("ignores an inaccessible LEAKCODE_CONFIG_DIR", () =>
   Effect.gen(function* () {
     if (process.platform === "win32") return
 
@@ -933,29 +933,29 @@ it.effect("ignores an inaccessible OPENCODE_CONFIG_DIR", () =>
     yield* FSUtil.use.chmod(configDir, 0o000)
     yield* Effect.addFinalizer(() => FSUtil.use.chmod(configDir, 0o755).pipe(Effect.ignore))
 
-    yield* withProcessEnv("OPENCODE_CONFIG_DIR", configDir, Config.use.get().pipe(provideInstanceEffect(dir)))
+    yield* withProcessEnv("LEAKCODE_CONFIG_DIR", configDir, Config.use.get().pipe(provideInstanceEffect(dir)))
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
-it.effect("creates a missing OPENCODE_CONFIG_DIR", () =>
+it.effect("creates a missing LEAKCODE_CONFIG_DIR", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped()
     const configDir = path.join(dir, "configdir")
 
-    yield* withProcessEnv("OPENCODE_CONFIG_DIR", configDir, Config.use.get().pipe(provideInstanceEffect(dir)))
+    yield* withProcessEnv("LEAKCODE_CONFIG_DIR", configDir, Config.use.get().pipe(provideInstanceEffect(dir)))
 
     expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("node_modules")
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
-it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
+it.effect("installs dependencies in writable LEAKCODE_CONFIG_DIR", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped()
     const configDir = path.join(dir, "configdir")
     yield* FSUtil.use.ensureDir(configDir)
 
     yield* withProcessEnv(
-      "OPENCODE_CONFIG_DIR",
+      "LEAKCODE_CONFIG_DIR",
       configDir,
       Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
         provideInstanceEffect(dir),
@@ -1026,7 +1026,7 @@ it.effect("global config remains global when project config is disabled", () =>
       local: { model: "local/model" },
     },
     withProcessEnv(
-      "OPENCODE_DISABLE_PROJECT_CONFIG",
+      "LEAKCODE_DISABLE_PROJECT_CONFIG",
       "true",
       Effect.gen(function* () {
         const config = yield* Config.use.get()
@@ -1180,7 +1180,7 @@ it.instance("migrates legacy write tool to edit permission", () =>
 )
 
 // Managed settings tests
-// Note: preload.ts sets OPENCODE_TEST_MANAGED_CONFIG which Global.Path.managedConfig uses
+// Note: preload.ts sets LEAKCODE_TEST_MANAGED_CONFIG which Global.Path.managedConfig uses
 
 it.instance(
   "managed settings override user settings",
@@ -1218,7 +1218,7 @@ it.instance(
 it.instance("managed jsonc settings override managed json settings", () =>
   Effect.gen(function* () {
     yield* writeManagedSettingsEffect({ model: "managed/json" })
-    yield* writeManagedSettingsEffect({ model: "managed/jsonc" }, "opencode.jsonc")
+    yield* writeManagedSettingsEffect({ model: "managed/jsonc" }, "leak-code.jsonc")
 
     const config = yield* Config.use.get()
     expect(config.model).toBe("managed/jsonc")
@@ -1388,7 +1388,7 @@ it.instance("project config can override MCP server enabled status", () =>
           },
         },
       },
-      "opencode.jsonc",
+      "leak-code.jsonc",
     )
 
     const config = yield* Config.use.get()
@@ -1433,7 +1433,7 @@ it.instance("MCP config deep merges preserving base config properties", () =>
           },
         },
       },
-      "opencode.jsonc",
+      "leak-code.jsonc",
     )
 
     const config = yield* Config.use.get()
@@ -1474,7 +1474,7 @@ it.instance("local .opencode config can override MCP from project config", () =>
           },
         },
       },
-      "opencode.json",
+      "leak-code.json",
     )
 
     const config = yield* Config.use.get()
@@ -1566,7 +1566,7 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
 
 const templatedHeaderWellKnown = wellKnown({
   remoteConfig: {
-    url: "https://config.example.com/opencode.json",
+    url: "https://config.example.com/leak-code.json",
     headers: { Authorization: "Bearer {env:TEST_TOKEN}" },
   },
   remote: {
@@ -1578,7 +1578,7 @@ templatedHeaderWellKnown.it.instance("wellknown remote_config supports templated
   Effect.gen(function* () {
     const config = yield* Config.use.get()
     expect(templatedHeaderWellKnown.seen.wellKnown).toBe("https://example.com/.well-known/opencode")
-    expect(templatedHeaderWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
+    expect(templatedHeaderWellKnown.seen.remote).toBe("https://config.example.com/leak-code.json")
     expect(templatedHeaderWellKnown.seen.authorization).toBe("Bearer test-token")
     expect(config.mcp?.confluence?.enabled).toBe(true)
   }),
@@ -1588,7 +1588,7 @@ const remotePrecedenceWellKnown = wellKnown({
   config: {
     mcp: { confluence: { type: "remote", url: "https://confluence.example.com/mcp", enabled: false } },
   },
-  remoteConfig: { url: "https://config.example.com/{env:TEST_TOKEN}/opencode.json" },
+  remoteConfig: { url: "https://config.example.com/{env:TEST_TOKEN}/leak-code.json" },
   remote: {
     config: { mcp: { confluence: { type: "remote", url: "https://confluence.example.com/mcp", enabled: true } } },
   },
@@ -1599,14 +1599,14 @@ remotePrecedenceWellKnown.it.instance(
   () =>
     Effect.gen(function* () {
       const config = yield* Config.use.get()
-      expect(remotePrecedenceWellKnown.seen.remote).toBe("https://config.example.com/test-token/opencode.json")
+      expect(remotePrecedenceWellKnown.seen.remote).toBe("https://config.example.com/test-token/leak-code.json")
       expect(config.mcp?.confluence?.enabled).toBe(true)
     }),
 )
 
 const envIsolationWellKnown = wellKnown({
   remoteConfig: {
-    url: "https://config.example.com/opencode.json",
+    url: "https://config.example.com/leak-code.json",
     headers: { Authorization: "Bearer {env:TEST_TOKEN}" },
   },
   remote: {
@@ -1630,7 +1630,7 @@ envIsolationWellKnown.it.instance(
 const nullConfigWellKnown = wellKnown({
   wellKnown: {
     config: null,
-    remote_config: { url: "https://config.example.com/opencode.json" },
+    remote_config: { url: "https://config.example.com/leak-code.json" },
   },
   remote: {
     mcp: { confluence: { type: "remote", url: "https://confluence.example.com/mcp", enabled: true } },
@@ -1640,26 +1640,26 @@ const nullConfigWellKnown = wellKnown({
 nullConfigWellKnown.it.instance("wellknown config null is treated as absent", () =>
   Effect.gen(function* () {
     const config = yield* Config.use.get()
-    expect(nullConfigWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
+    expect(nullConfigWellKnown.seen.remote).toBe("https://config.example.com/leak-code.json")
     expect(config.mcp?.confluence?.enabled).toBe(true)
   }),
 )
 
 const invalidRemoteWellKnown = wellKnown({
-  remoteConfig: { url: "https://config.example.com/opencode.json" },
+  remoteConfig: { url: "https://config.example.com/leak-code.json" },
   remote: "not an object",
 })
 
 invalidRemoteWellKnown.it.instance("wellknown remote_config rejects non-object config responses", () =>
   Effect.gen(function* () {
     const exit = yield* Config.use.get().pipe(Effect.exit)
-    expect(invalidRemoteWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
+    expect(invalidRemoteWellKnown.seen.remote).toBe("https://config.example.com/leak-code.json")
     expect(Exit.isFailure(exit)).toBe(true)
   }),
 )
 
 const loginPageWellKnown = wellKnown({
-  remoteConfig: { url: "https://config.example.com/opencode.json" },
+  remoteConfig: { url: "https://config.example.com/leak-code.json" },
   remoteHtml: "<!DOCTYPE html><html><head><title>Sign in</title></head><body>Login required</body></html>",
 })
 
@@ -1668,7 +1668,7 @@ loginPageWellKnown.it.instance(
   () =>
     Effect.gen(function* () {
       const exit = yield* Config.use.get().pipe(Effect.exit)
-      expect(loginPageWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
+      expect(loginPageWellKnown.seen.remote).toBe("https://config.example.com/leak-code.json")
       expect(Exit.isFailure(exit)).toBe(true)
       const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
       expect(NamedError.hasName(error, "ConfigRemoteAuthError")).toBe(true)
@@ -1679,7 +1679,7 @@ loginPageWellKnown.it.instance(
 describe("resolvePluginSpec", () => {
   test("keeps package specs unchanged", async () => {
     await using tmp = await tmpdir()
-    const file = path.join(tmp.path, "opencode.json")
+    const file = path.join(tmp.path, "leak-code.json")
     expect(await ConfigPlugin.resolvePluginSpec("oh-my-opencode@2.4.3", file)).toBe("oh-my-opencode@2.4.3")
     expect(await ConfigPlugin.resolvePluginSpec("@scope/pkg", file)).toBe("@scope/pkg")
   })
@@ -1695,7 +1695,7 @@ describe("resolvePluginSpec", () => {
       },
     })
 
-    const file = path.join(tmp.path, "opencode.json")
+    const file = path.join(tmp.path, "leak-code.json")
     const hit = await ConfigPlugin.resolvePluginSpec(".\\plugin", file)
     expect(ConfigPlugin.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
   })
@@ -1707,7 +1707,7 @@ describe("resolvePluginSpec", () => {
       },
     })
 
-    const file = path.join(tmp.path, "opencode.json")
+    const file = path.join(tmp.path, "leak-code.json")
     const hit = await ConfigPlugin.resolvePluginSpec("./plugin.ts", file)
     expect(ConfigPlugin.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin.ts")).href)
   })
@@ -1726,7 +1726,7 @@ describe("resolvePluginSpec", () => {
       },
     })
 
-    const file = path.join(tmp.path, "opencode.json")
+    const file = path.join(tmp.path, "leak-code.json")
     const hit = await ConfigPlugin.resolvePluginSpec("./plugin", file)
     expect(ConfigPlugin.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin")).href)
   })
@@ -1740,7 +1740,7 @@ describe("resolvePluginSpec", () => {
       },
     })
 
-    const file = path.join(tmp.path, "opencode.json")
+    const file = path.join(tmp.path, "leak-code.json")
     const hit = await ConfigPlugin.resolvePluginSpec("./plugin", file)
     expect(ConfigPlugin.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
   })
@@ -1810,12 +1810,12 @@ describe("deduplicatePluginOrigins", () => {
   )
 })
 
-describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
+describe("LEAKCODE_DISABLE_PROJECT_CONFIG", () => {
   it.instance(
     "skips project config files when flag is set",
     () =>
       withProcessEnv(
-        "OPENCODE_DISABLE_PROJECT_CONFIG",
+        "LEAKCODE_DISABLE_PROJECT_CONFIG",
         "true",
         Effect.gen(function* () {
           const config = yield* Config.use.get()
@@ -1828,7 +1828,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
 
   it.instance("skips project .opencode/ directories when flag is set", () =>
     withProcessEnv(
-      "OPENCODE_DISABLE_PROJECT_CONFIG",
+      "LEAKCODE_DISABLE_PROJECT_CONFIG",
       "true",
       Effect.gen(function* () {
         const test = yield* TestInstance
@@ -1844,7 +1844,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
 
   it.instance("still loads global config when flag is set", () =>
     withProcessEnv(
-      "OPENCODE_DISABLE_PROJECT_CONFIG",
+      "LEAKCODE_DISABLE_PROJECT_CONFIG",
       "true",
       Effect.gen(function* () {
         const config = yield* Config.use.get()
@@ -1858,7 +1858,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
     "skips relative instructions with warning when flag is set but no config dir",
     () =>
       withProcessEnvs(
-        { OPENCODE_CONFIG_DIR: undefined, OPENCODE_DISABLE_PROJECT_CONFIG: "true" },
+        { LEAKCODE_CONFIG_DIR: undefined, LEAKCODE_DISABLE_PROJECT_CONFIG: "true" },
         Effect.gen(function* () {
           const test = yield* TestInstance
           yield* FSUtil.use.writeWithDirs(path.join(test.directory, "CUSTOM.md"), "# Custom Instructions")
@@ -1871,12 +1871,12 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   )
 
   it.instance(
-    "OPENCODE_CONFIG_DIR still works when flag is set",
+    "LEAKCODE_CONFIG_DIR still works when flag is set",
     () =>
       Effect.gen(function* () {
         const configDir = yield* tmpdirScoped({ config: { model: "configdir/model" } })
         yield* withProcessEnvs(
-          { OPENCODE_DISABLE_PROJECT_CONFIG: "true", OPENCODE_CONFIG_DIR: configDir },
+          { LEAKCODE_DISABLE_PROJECT_CONFIG: "true", LEAKCODE_CONFIG_DIR: configDir },
           Effect.gen(function* () {
             const config = yield* Config.use.get()
             expect(config.model).toBe("configdir/model")
@@ -1887,13 +1887,13 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   )
 })
 
-// Regression for #28206: malformed OPENCODE_PERMISSION JSON used to crash
+// Regression for #28206: malformed LEAKCODE_PERMISSION JSON used to crash
 // the app on startup with an unhandled SyntaxError. Loading the config with
 // an invalid JSON value in this env var should not throw.
-describe("OPENCODE_PERMISSION env var", () => {
-  it.instance("does not crash when OPENCODE_PERMISSION contains invalid JSON", () =>
+describe("LEAKCODE_PERMISSION env var", () => {
+  it.instance("does not crash when LEAKCODE_PERMISSION contains invalid JSON", () =>
     withProcessEnv(
-      "OPENCODE_PERMISSION",
+      "LEAKCODE_PERMISSION",
       "{invalid",
       Effect.gen(function* () {
         const config = yield* Config.use.get()
@@ -1904,13 +1904,13 @@ describe("OPENCODE_PERMISSION env var", () => {
   )
 })
 
-describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
-  it.instance("substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT", () =>
+describe("LEAKCODE_CONFIG_CONTENT token substitution", () => {
+  it.instance("substitutes {env:} tokens in LEAKCODE_CONFIG_CONTENT", () =>
     withProcessEnv(
       "TEST_CONFIG_VAR",
       "test_api_key_12345",
       withProcessEnv(
-        "OPENCODE_CONFIG_CONTENT",
+        "LEAKCODE_CONFIG_CONTENT",
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           username: "{env:TEST_CONFIG_VAR}",
@@ -1923,12 +1923,12 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
     ),
   )
 
-  it.instance("substitutes {file:} tokens in OPENCODE_CONFIG_CONTENT", () =>
+  it.instance("substitutes {file:} tokens in LEAKCODE_CONFIG_CONTENT", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
       yield* FSUtil.use.writeWithDirs(path.join(test.directory, "api_key.txt"), "secret_key_from_file")
       yield* withProcessEnv(
-        "OPENCODE_CONFIG_CONTENT",
+        "LEAKCODE_CONFIG_CONTENT",
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           username: "{file:./api_key.txt}",

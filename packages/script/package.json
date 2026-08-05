@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package",
-  "name": "@opencode-ai/script",
+  "name": "@leak-code/script",
   "license": "MIT",
   "dependencies": {
     "semver": "^7.6.3"

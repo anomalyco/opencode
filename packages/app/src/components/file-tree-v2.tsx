@@ -1,6 +1,6 @@
 import { useFile } from "@/context/file"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
-import "@opencode-ai/ui/v2/file-tree-v2.css"
+import { FileIcon } from "@leak-code/ui/file-icon"
+import "@leak-code/ui/v2/file-tree-v2.css"
 import {
   createEffect,
   createMemo,
@@ -12,8 +12,8 @@ import {
   type ParentProps,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import type { FileNode } from "@opencode-ai/sdk/v2"
-import { Icon } from "@opencode-ai/ui/v2/icon"
+import type { FileNode } from "@leak-code/sdk/v2"
+import { Icon } from "@leak-code/ui/v2/icon"
 import { pathToFileUrl, withFileDragImage, type Kind } from "@/components/file-tree"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
 import {

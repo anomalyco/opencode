@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/enterprise",
+  "name": "@leak-code/enterprise",
   "version": "1.18.13",
   "private": true,
   "type": "module",
@@ -8,14 +8,14 @@
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev",
     "build": "vite build",
-    "build:cloudflare": "OPENCODE_DEPLOYMENT_TARGET=cloudflare vite build",
+    "build:cloudflare": "LEAKCODE_DEPLOYMENT_TARGET=cloudflare vite build",
     "start": "vite start",
     "shell-prod": "sst shell --target Teams --stage production"
   },
   "dependencies": {
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/session-ui": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@leak-code/core": "workspace:*",
+    "@leak-code/session-ui": "workspace:*",
+    "@leak-code/ui": "workspace:*",
     "aws4fetch": "^1.0.20",
     "@pierre/diffs": "catalog:",
     "@solidjs/router": "catalog:",

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { SessionV1 } from "@leak-code/core/v1/session"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { HttpClientResponse } from "effect/unstable/http"
 import { Session as SessionNs } from "@/session/session"
@@ -9,8 +9,8 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@leak-code/core/provider"
+import { ModelV2 } from "@leak-code/core/model"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 const it = testEffect(Layer.mergeAll(LayerNode.compile(SessionNs.node), httpApiLayer))
@@ -28,15 +28,15 @@ const withoutWatcher = <A, E, R>(effect: Effect.Effect<A, E, R>) => {
   if (process.platform !== "win32") return effect
   return Effect.acquireUseRelease(
     Effect.sync(() => {
-      const previous = process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER
-      process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER = "true"
+      const previous = process.env.LEAKCODE_EXPERIMENTAL_DISABLE_FILEWATCHER
+      process.env.LEAKCODE_EXPERIMENTAL_DISABLE_FILEWATCHER = "true"
       return previous
     }),
     () => effect,
     (previous) =>
       Effect.sync(() => {
-        if (previous === undefined) delete process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER
-        else process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER = previous
+        if (previous === undefined) delete process.env.LEAKCODE_EXPERIMENTAL_DISABLE_FILEWATCHER
+        else process.env.LEAKCODE_EXPERIMENTAL_DISABLE_FILEWATCHER = previous
       }),
   )
 }

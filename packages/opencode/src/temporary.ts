@@ -1,6 +1,6 @@
 import yargs from "yargs"
 import { TuiThreadCommand } from "./cli/cmd/tui"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@leak-code/core/installation/version"
 import { hideBin } from "yargs/helpers"
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
@@ -24,8 +24,8 @@ const cli = yargs(hideBin(process.argv))
     type: "boolean",
   })
   .middleware((opts) => {
-    if (opts.printLogs) process.env.OPENCODE_PRINT_LOGS = "1"
-    if (opts.logLevel) process.env.OPENCODE_LOG_LEVEL = opts.logLevel
+    if (opts.printLogs) process.env.LEAKCODE_PRINT_LOGS = "1"
+    if (opts.logLevel) process.env.LEAKCODE_LOG_LEVEL = opts.logLevel
   })
   .command(TuiThreadCommand)
   .parse()

@@ -1,11 +1,11 @@
 import { afterEach, expect } from "bun:test"
 import { createServer, type Server } from "node:http"
 import { streamText } from "ai"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
+import { CrossSpawnSpawner } from "@leak-code/core/cross-spawn-spawner"
 import { Effect } from "effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@leak-code/core/provider"
+import { ModelV2 } from "@leak-code/core/model"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { testProviderConfig } from "../lib/test-provider"
@@ -214,15 +214,15 @@ async function delayedBodyServer(delay: number): Promise<{ server: Server; url: 
 function withAuthContent<A, E, R>(self: Effect.Effect<A, E, R>, value: Record<string, unknown> = defaultAuthContent()) {
   return Effect.acquireUseRelease(
     Effect.sync(() => {
-      const previous = process.env.OPENCODE_AUTH_CONTENT
-      process.env.OPENCODE_AUTH_CONTENT = JSON.stringify(value)
+      const previous = process.env.LEAKCODE_AUTH_CONTENT
+      process.env.LEAKCODE_AUTH_CONTENT = JSON.stringify(value)
       return previous
     }),
     () => self,
     (previous) =>
       Effect.sync(() => {
-        if (previous === undefined) delete process.env.OPENCODE_AUTH_CONTENT
-        else process.env.OPENCODE_AUTH_CONTENT = previous
+        if (previous === undefined) delete process.env.LEAKCODE_AUTH_CONTENT
+        else process.env.LEAKCODE_AUTH_CONTENT = previous
       }),
   )
 }

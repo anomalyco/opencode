@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@leak-code/core/util/encode"
 import { ServerConnection } from "@/context/server"
 import { decode64 } from "@/utils/base64"
 

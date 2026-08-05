@@ -7,7 +7,7 @@ import type {
   Part,
   SessionMessageResponse,
   ToolPart,
-} from "@opencode-ai/sdk/v2"
+} from "@leak-code/sdk/v2"
 import { Effect } from "effect"
 import { ACPSession } from "./session"
 import { ACPPermission } from "./permission"

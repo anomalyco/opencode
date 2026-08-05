@@ -1,7 +1,7 @@
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
-import { AssistantMessage, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
-import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/message-part"
+import type { SessionMessageInfo } from "@leak-code/client/promise"
+import { AssistantMessage, Part, SessionStatus, UserMessage } from "@leak-code/sdk/v2"
+import { groupParts, renderable, type PartGroup } from "@leak-code/session-ui/message-part"
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
 import { uniqueSummaryDiffs } from "./summary-diffs"
 

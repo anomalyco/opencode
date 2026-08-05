@@ -1,2 +1,2 @@
-export * from "@opencode-ai/schema/session-event"
-export * as SessionEvent from "@opencode-ai/schema/session-event"
+export * from "@leak-code/schema/session-event"
+export * as SessionEvent from "@leak-code/schema/session-event"

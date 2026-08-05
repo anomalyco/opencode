@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { Effect } from "effect"
 import path from "path"
 import { unlink } from "fs/promises"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@leak-code/core/global"
 import { Filesystem } from "@/util/filesystem"
 import { Env } from "../../src/env"
 import { Provider } from "@/provider/provider"
 
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@leak-code/core/provider"
+import { ModelV2 } from "@leak-code/core/model"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Provider.node, Env.node])))
 

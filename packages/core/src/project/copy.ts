@@ -13,8 +13,8 @@ import { Slug } from "../util/slug"
 import { EventV2 } from "../event"
 import { Database } from "../database/database"
 import { Location } from "../location"
-import { Event } from "@opencode-ai/schema/project-directories"
-import { ProjectCopy } from "@opencode-ai/schema/project-copy"
+import { Event } from "@leak-code/schema/project-directories"
+import { ProjectCopy } from "@leak-code/schema/project-copy"
 
 export const StrategyID = ProjectCopy.StrategyID
 export type StrategyID = typeof StrategyID.Type

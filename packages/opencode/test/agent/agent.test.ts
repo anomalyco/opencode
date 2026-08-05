@@ -1,5 +1,5 @@
 import { afterEach, expect } from "bun:test"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
@@ -8,9 +8,9 @@ import { Agent } from "../../src/agent/agent"
 import { Auth } from "../../src/auth"
 import { Config } from "../../src/config/config"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@leak-code/core/global"
 import { Permission } from "../../src/permission"
-import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { PermissionV1 } from "@leak-code/core/v1/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider } from "../../src/provider/provider"
 import { Skill } from "../../src/skill"
@@ -612,11 +612,11 @@ description: Permission skill.
         ),
       )
 
-      const home = process.env.OPENCODE_TEST_HOME
-      process.env.OPENCODE_TEST_HOME = test.directory
+      const home = process.env.LEAKCODE_TEST_HOME
+      process.env.LEAKCODE_TEST_HOME = test.directory
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
-          process.env.OPENCODE_TEST_HOME = home
+          process.env.LEAKCODE_TEST_HOME = home
         }),
       )
 

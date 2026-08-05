@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
 import path from "path"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { Effect } from "effect"
 import { LSP } from "@/lsp/lsp"
 import * as LSPServer from "@/lsp/server"

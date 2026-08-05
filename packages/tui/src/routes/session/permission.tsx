@@ -4,7 +4,7 @@ import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, selectedForeground } from "../../context/theme"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest } from "@leak-code/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useSync } from "../../context/sync"
@@ -14,7 +14,7 @@ import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../config"
-import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
+import { LEAKCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 
 type PermissionStage = "permission" | "always" | "reject"
@@ -447,7 +447,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: LEAKCODE_BASE_MODE,
     commands: [
       {
         name: "app.exit",
@@ -542,7 +542,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
 
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: LEAKCODE_BASE_MODE,
     commands: [
       {
         name: "app.exit",

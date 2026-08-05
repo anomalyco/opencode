@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { MessageID, SessionID } from "../../src/session/schema"

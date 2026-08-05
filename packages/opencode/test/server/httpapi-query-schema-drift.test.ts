@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { OpenApi } from "effect/unstable/httpapi"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@leak-code/core/flag/flag"
 import { Server } from "../../src/server/server"
 import { SessionID } from "../../src/session/schema"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
@@ -24,13 +24,13 @@ import {
   SessionPaths,
 } from "../../src/server/routes/instance/httpapi/groups/session"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
-import { SessionMessagesQuery } from "@opencode-ai/protocol/groups/message"
+import { SessionMessagesQuery } from "@leak-code/protocol/groups/message"
 import { QueryBoolean, QueryBooleanOpenApi } from "../../src/server/routes/instance/httpapi/groups/query"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
 
-const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+const originalWorkspaces = Flag.LEAKCODE_EXPERIMENTAL_WORKSPACES
 
 type Method = "get" | "post" | "put" | "delete" | "patch"
 type QuerySchema = { readonly fields: Record<string, unknown> }
@@ -144,7 +144,7 @@ function assertAdvertisedQueryParamsAreRuntimeFields(input: {
 }
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
+  Flag.LEAKCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   await disposeAllInstances()
   await resetDatabase()
 })

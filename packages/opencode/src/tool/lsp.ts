@@ -6,7 +6,7 @@ import DESCRIPTION from "./lsp.txt"
 import { InstanceState } from "@/effect/instance-state"
 import { pathToFileURL } from "url"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FSUtil } from "@leak-code/core/fs-util"
 
 const operations = [
   "goToDefinition",

@@ -1,10 +1,10 @@
-import { Location } from "@opencode-ai/core/location"
-import { ProjectCopy } from "@opencode-ai/core/project/copy"
-import { Git } from "@opencode-ai/core/git"
+import { Location } from "@leak-code/core/location"
+import { ProjectCopy } from "@leak-code/core/project/copy"
+import { Git } from "@leak-code/core/git"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { ProjectCopyError } from "@opencode-ai/protocol/groups/project-copy"
+import { ProjectCopyError } from "@leak-code/protocol/groups/project-copy"
 
 export const ProjectCopyHandler = HttpApiBuilder.group(Api, "server.projectCopy", (handlers) =>
   Effect.succeed(

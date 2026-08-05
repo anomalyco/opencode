@@ -1,6 +1,6 @@
 export * as SessionRunner from "./index"
 
-import type { LLMError } from "@opencode-ai/llm"
+import type { LLMError } from "@leak-code/llm"
 import { Context, Effect } from "effect"
 import { SessionSchema } from "../schema"
 import type { ContextSnapshotDecodeError, MessageDecodeError } from "../error"

@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Npm } from "@opencode-ai/core/npm"
+import { Npm } from "@leak-code/core/npm"
 import { Effect } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -17,8 +17,8 @@ import { ProviderTest } from "../fake/provider"
 import { SkillTest } from "../fake/skill"
 import { testEffect } from "../lib/effect"
 import { PLUGIN_AGENT } from "../fixture/agent-plugin.constants"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@leak-code/core/effect/app-node-builder"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 
 // `it.instance` skips InstanceBootstrap so LSP / MCP don't spin up — those
 // services hang during scope teardown on Windows and aren't needed

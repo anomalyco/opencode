@@ -1,7 +1,7 @@
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
-import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
-import type { UpdaterState } from "@opencode-ai/app/updater"
-import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
+import type { DesktopMenuAction } from "@leak-code/app/desktop-menu"
+import type { WslServersPlatform } from "@leak-code/app/wsl/types"
+import type { UpdaterState } from "@leak-code/app/updater"
+import type { DesktopNativeBundle } from "@leak-code/app/i18n/desktop-native"
 export type {
   WslDistroProbe,
   WslInstalledDistro,
@@ -14,7 +14,7 @@ export type {
   WslServerRuntime,
   WslServersEvent,
   WslServersState,
-} from "@opencode-ai/app/wsl/types"
+} from "@leak-code/app/wsl/types"
 
 export type ServerReadyData = {
   url: string

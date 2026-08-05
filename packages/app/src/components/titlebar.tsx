@@ -12,14 +12,14 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { IconButton } from "@leak-code/ui/icon-button"
+import { Icon } from "@leak-code/ui/icon"
+import { Button } from "@leak-code/ui/button"
+import { Tooltip, TooltipKeybind } from "@leak-code/ui/tooltip"
+import { IconButtonV2 } from "@leak-code/ui/v2/icon-button-v2"
+import { Icon as IconV2 } from "@leak-code/ui/v2/icon"
+import { KeybindV2 } from "@leak-code/ui/v2/keybind-v2"
+import { TooltipV2 } from "@leak-code/ui/v2/tooltip-v2"
 
 import { LayoutRoute, useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -646,7 +646,7 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
 }
 
 function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () => void } }) {
-  const channel = import.meta.env.VITE_OPENCODE_CHANNEL
+  const channel = import.meta.env.VITE_LEAKCODE_CHANNEL
   if (channel === "dev" && props.debugTools) {
     return (
       <button

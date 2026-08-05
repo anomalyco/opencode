@@ -9,7 +9,7 @@ const reuse = !process.env.CI
 const workers = Number(process.env.PLAYWRIGHT_WORKERS ?? (process.env.CI ? 5 : 0)) || undefined
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: process.env.OPENCODE_PERFORMANCE === "1" ? "performance/**/*.test.ts" : "performance/**",
+  testIgnore: process.env.LEAKCODE_PERFORMANCE === "1" ? "performance/**/*.test.ts" : "performance/**",
   outputDir: "./e2e/test-results",
   timeout: 60_000,
   expect: {
@@ -26,8 +26,8 @@ export default defineConfig({
     reuseExistingServer: reuse,
     timeout: 120_000,
     env: {
-      VITE_OPENCODE_SERVER_HOST: serverHost,
-      VITE_OPENCODE_SERVER_PORT: serverPort,
+      VITE_LEAKCODE_SERVER_HOST: serverHost,
+      VITE_LEAKCODE_SERVER_PORT: serverPort,
     },
   },
   use: {

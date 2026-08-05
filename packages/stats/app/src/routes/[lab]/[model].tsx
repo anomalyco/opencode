@@ -1,5 +1,5 @@
 import { Meta, Title } from "@solidjs/meta"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { ProviderIcon } from "@leak-code/ui/provider-icon"
 import { geoEquirectangular, geoPath } from "d3-geo"
 import { scaleSqrt } from "d3-scale"
 import countryCodesSource from "i18n-iso-countries/codes.json?raw"
@@ -12,7 +12,7 @@ import {
   type ModelUsagePoint,
   type StatsModelData,
   type UsageRange,
-} from "@opencode-ai/stats-core/domain/home"
+} from "@leak-code/stats-core/domain/home"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"

@@ -1,7 +1,7 @@
 import path from "path"
 import { writeHeapSnapshot } from "node:v8"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@leak-code/core/flag/flag"
+import { Global } from "@leak-code/core/global"
 const MINUTE = 60_000
 const LIMIT = 2 * 1024 * 1024 * 1024
 
@@ -10,7 +10,7 @@ let lock = false
 let armed = true
 
 export function start() {
-  if (!Flag.OPENCODE_AUTO_HEAP_SNAPSHOT) return
+  if (!Flag.LEAKCODE_AUTO_HEAP_SNAPSHOT) return
   if (timer) return
 
   const run = async () => {

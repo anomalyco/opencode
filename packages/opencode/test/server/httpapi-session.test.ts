@@ -1,17 +1,17 @@
-import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { PermissionV1 } from "@leak-code/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { SessionV1 } from "@leak-code/core/v1/session"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Cause, Config, Effect, Exit, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { AppNodeBuilder } from "@leak-code/core/effect/app-node-builder"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
+import { CrossSpawnSpawner } from "@leak-code/core/cross-spawn-spawner"
+import { Flag } from "@leak-code/core/flag/flag"
+import { Ripgrep } from "@leak-code/core/ripgrep"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
@@ -25,11 +25,11 @@ import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/grou
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
-import { Database } from "@opencode-ai/core/database/database"
-import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Database } from "@leak-code/core/database/database"
+import { SessionInputTable, SessionMessageTable, SessionTable } from "@leak-code/core/session/sql"
+import { SessionMessage } from "@leak-code/core/session/message"
+import { ModelV2 } from "@leak-code/core/model"
+import { ProviderV2 } from "@leak-code/core/provider"
 import * as DateTime from "effect/DateTime"
 import { eq } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
@@ -38,7 +38,7 @@ import { TestLLMServer } from "../lib/llm-server"
 import { testProviderConfig } from "../lib/test-provider"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 
-const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+const originalWorkspaces = Flag.LEAKCODE_EXPERIMENTAL_WORKSPACES
 const noopBootstrapLayer = Layer.succeed(
   InstanceBootstrapService.Service,
   InstanceBootstrapService.Service.of({ run: Effect.void }),
@@ -229,7 +229,7 @@ function requestJson<T>(path: string, init?: RequestInit) {
 }
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
+  Flag.LEAKCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   await disposeAllInstances()
   await resetDatabase()
 })
@@ -797,7 +797,7 @@ describe("session HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+        Flag.LEAKCODE_EXPERIMENTAL_WORKSPACES = true
         const project = yield* Project.use.fromDirectory(test.directory)
         const workspace = yield* createLocalWorkspace({
           projectID: project.project.id,

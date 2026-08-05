@@ -1,15 +1,15 @@
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { AgentV2 } from "@opencode-ai/core/agent"
-import { Config } from "@opencode-ai/core/config"
-import { ConfigExternalPlugin } from "@opencode-ai/core/config/plugin/external"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Location } from "@opencode-ai/core/location"
-import { Npm } from "@opencode-ai/core/npm"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AgentV2 } from "@leak-code/core/agent"
+import { Config } from "@leak-code/core/config"
+import { ConfigExternalPlugin } from "@leak-code/core/config/plugin/external"
+import { FSUtil } from "@leak-code/core/fs-util"
+import { Location } from "@leak-code/core/location"
+import { Npm } from "@leak-code/core/npm"
+import { PluginV2 } from "@leak-code/core/plugin"
+import { PluginHost } from "@leak-code/core/plugin/host"
+import { AbsolutePath } from "@leak-code/core/schema"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -25,7 +25,7 @@ describe("ConfigExternalPlugin", () => {
       const location = yield* Location.Service
       const npm = yield* Npm.Service
       const host = yield* PluginHost.make(plugins)
-      const document = path.join(import.meta.dir, "opencode.json")
+      const document = path.join(import.meta.dir, "leak-code.json")
 
       yield* ConfigExternalPlugin.Plugin.effect(host).pipe(
         Effect.provideService(PluginV2.Service, plugins),
@@ -82,7 +82,7 @@ describe("ConfigExternalPlugin", () => {
               Effect.succeed([
                 new Config.Document({
                   type: "document",
-                  path: path.join(import.meta.dir, "opencode.json"),
+                  path: path.join(import.meta.dir, "leak-code.json"),
                   info: decode({
                     plugins: [
                       {
@@ -125,7 +125,7 @@ describe("ConfigExternalPlugin", () => {
               Effect.succeed([
                 new Config.Document({
                   type: "document",
-                  path: path.join(import.meta.dir, "opencode.json"),
+                  path: path.join(import.meta.dir, "leak-code.json"),
                   info: decode({
                     plugins: [
                       "../plugin/fixtures/missing-plugin.ts",

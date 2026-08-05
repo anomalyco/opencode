@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { LLMEvent, ToolFailure } from "@opencode-ai/llm"
-import { LLMClient, RequestExecutor, WebSocketExecutor, type LLMClientShape } from "@opencode-ai/llm/route"
+import { LLMEvent, ToolFailure } from "@leak-code/llm"
+import { LLMClient, RequestExecutor, WebSocketExecutor, type LLMClientShape } from "@leak-code/llm/route"
 import { jsonSchema, tool, type ModelMessage, type Tool } from "ai"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
@@ -10,8 +10,8 @@ import type { Provider } from "@/provider/provider"
 
 import { OAUTH_DUMMY_KEY } from "@/auth"
 import { testEffect } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@leak-code/core/provider"
+import { ModelV2 } from "@leak-code/core/model"
 
 const baseModel: Provider.Model = {
   id: ModelV2.ID.make("gpt-5-mini"),

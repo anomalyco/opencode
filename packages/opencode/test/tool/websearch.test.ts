@@ -5,7 +5,7 @@ import { selectWebSearchProvider, webSearchModelName, webSearchProviderLabel } f
 
 import { webSearchEnabled } from "../../src/tool/registry"
 import { it } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ProviderV2 } from "@leak-code/core/provider"
 
 const SESSION_ID = "ses_0196aabbccddeeff001122334455"
 
@@ -15,17 +15,17 @@ describe("websearch provider", () => {
   })
 
   test("supports an operational override", () => {
-    const original = process.env.OPENCODE_WEBSEARCH_PROVIDER
+    const original = process.env.LEAKCODE_WEBSEARCH_PROVIDER
 
     try {
-      process.env.OPENCODE_WEBSEARCH_PROVIDER = "parallel"
+      process.env.LEAKCODE_WEBSEARCH_PROVIDER = "parallel"
       expect(selectWebSearchProvider(SESSION_ID)).toBe("parallel")
 
-      process.env.OPENCODE_WEBSEARCH_PROVIDER = "exa"
+      process.env.LEAKCODE_WEBSEARCH_PROVIDER = "exa"
       expect(selectWebSearchProvider(SESSION_ID)).toBe("exa")
     } finally {
-      if (original === undefined) delete process.env.OPENCODE_WEBSEARCH_PROVIDER
-      else process.env.OPENCODE_WEBSEARCH_PROVIDER = original
+      if (original === undefined) delete process.env.LEAKCODE_WEBSEARCH_PROVIDER
+      else process.env.LEAKCODE_WEBSEARCH_PROVIDER = original
     }
   })
 

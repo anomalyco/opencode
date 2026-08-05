@@ -5,7 +5,7 @@ import { testRender, useRenderer } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onCleanup } from "solid-js"
 import { TuiKeybind } from "../src/config/keybind"
-import { getOpencodeModeStack, OPENCODE_BASE_MODE, OpencodeKeymapProvider, registerOpencodeKeymap } from "../src/keymap"
+import { getOpencodeModeStack, LEAKCODE_BASE_MODE, OpencodeKeymapProvider, registerOpencodeKeymap } from "../src/keymap"
 
 function createResolvedKeymapConfig(input: TuiKeybind.KeybindOverrides = {}) {
   const keybinds = TuiKeybind.parse(input)
@@ -86,7 +86,7 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
       ]),
     })
     const offBase = keymap.registerLayer({
-      mode: OPENCODE_BASE_MODE,
+      mode: LEAKCODE_BASE_MODE,
       commands: [{ name: "model.list", run() {} }],
       bindings: config.keybinds.gather("test.base", ["model.list"]),
     })

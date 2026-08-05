@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Part as PartType } from "@opencode-ai/sdk/v2"
+import type { Part as PartType } from "@leak-code/sdk/v2"
 import { partDefaultOpen } from "./part-default-open"
 
 describe("partDefaultOpen", () => {

@@ -437,7 +437,7 @@ export const dict = {
 
   "dialog.lsp.empty": "已根据文件类型自动检测 LSP",
 
-  "dialog.plugins.empty": "在 opencode.json 中配置的插件",
+  "dialog.plugins.empty": "在 leak-code.json 中配置的插件",
 
   "mcp.status.connected": "已连接",
   "mcp.status.failed": "失败",
@@ -687,7 +687,7 @@ export const dict = {
   "error.chain.responseBody": "响应内容：\n{{body}}",
   "error.chain.didYouMean": "你是不是想输入：{{suggestions}}",
   "error.chain.modelNotFound": "未找到模型：{{provider}}/{{model}}",
-  "error.chain.checkConfig": "请检查你的配置 (opencode.json) 中的 provider/model 名称",
+  "error.chain.checkConfig": "请检查你的配置 (leak-code.json) 中的 provider/model 名称",
   "error.chain.mcpFailed": 'MCP 服务器 "{{name}}" 启动失败。注意：OpenCode 暂不支持 MCP 认证。',
   "error.chain.providerAuthFailed": "提供商认证失败（{{provider}}）：{{message}}",
   "error.chain.providerInitFailed": '无法初始化提供商 "{{provider}}"。请检查凭据和配置。',

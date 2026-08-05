@@ -1,13 +1,13 @@
-import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-// CLI entry point for `opencode run` and `opencode --mini`.
+import type { PermissionV1 } from "@leak-code/core/v1/permission"
+import { FSUtil } from "@leak-code/core/fs-util"
+// CLI entry point for `leak-code run` and `leak-code --mini`.
 //
 // Handles three modes:
 //   1. Non-interactive (default): sends a single prompt, streams events to
 //      stdout, and exits when the session goes idle.
-//   2. Interactive local (`opencode --mini`): boots the split-footer direct mode
+//   2. Interactive local (`leak-code --mini`): boots the split-footer direct mode
 //      with an in-process server (no external HTTP).
-//   3. Interactive attach (`opencode --mini --attach`): connects to a running
+//   3. Interactive attach (`leak-code --mini --attach`): connects to a running
 //      opencode server and runs interactive mode against it.
 //
 // Also supports `--command` for slash-command execution, `--format json` for
@@ -22,7 +22,7 @@ import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
-import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@leak-code/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
@@ -194,12 +194,12 @@ export const RunCommand = effectCmd({
       .option("password", {
         alias: ["p"],
         type: "string",
-        describe: "basic auth password (defaults to OPENCODE_SERVER_PASSWORD)",
+        describe: "basic auth password (defaults to LEAKCODE_SERVER_PASSWORD)",
       })
       .option("username", {
         alias: ["u"],
         type: "string",
-        describe: "basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')",
+        describe: "basic auth username (defaults to LEAKCODE_SERVER_USERNAME or 'opencode')",
       })
       .option("dir", {
         type: "string",

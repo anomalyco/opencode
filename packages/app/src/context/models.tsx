@@ -2,7 +2,7 @@ import { type Accessor, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DateTime } from "luxon"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@leak-code/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
 

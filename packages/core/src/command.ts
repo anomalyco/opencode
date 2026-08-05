@@ -2,7 +2,7 @@ export * as CommandV2 from "./command"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Types } from "effect"
-import { Command } from "@opencode-ai/schema/command"
+import { Command } from "@leak-code/schema/command"
 import { State } from "./state"
 
 export const Info = Command.Info

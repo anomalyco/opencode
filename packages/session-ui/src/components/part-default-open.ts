@@ -1,4 +1,4 @@
-import type { Part as PartType, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Part as PartType, ToolPart } from "@leak-code/sdk/v2"
 
 function deletionOnly(part: ToolPart) {
   if (!("metadata" in part.state)) return false

@@ -1,6 +1,6 @@
-import type { SessionApi } from "@opencode-ai/client/promise"
+import type { SessionApi } from "@leak-code/client/promise"
 import { normalizeSessionInfo } from "@/utils/session"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
+import type { OpencodeClient } from "@leak-code/sdk/v2/client"
 
 export async function loadRootSessions(input: { api: Pick<SessionApi, "list">; directory: string; limit: number }) {
   const result = await input.api.list({

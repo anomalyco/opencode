@@ -1,4 +1,4 @@
-import type { FilePartSource } from "@opencode-ai/sdk/v2/client"
+import type { FilePartSource } from "@leak-code/sdk/v2/client"
 
 type PromptInputV2PartBase = {
   content: string

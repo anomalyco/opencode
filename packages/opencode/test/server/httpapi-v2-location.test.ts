@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { EventV2 } from "@opencode-ai/core/event"
-import { Location } from "@opencode-ai/core/location"
+import { EventV2 } from "@leak-code/core/event"
+import { Location } from "@leak-code/core/location"
 import { Context, Schema } from "effect"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { resetDatabase } from "../fixture/db"

@@ -13,7 +13,7 @@ import {
   type ServerCapabilities,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { MCP } from "../../src/mcp/index"

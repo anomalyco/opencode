@@ -1,5 +1,5 @@
-import { Binary } from "@opencode-ai/core/util/binary"
-import type { Message, Part, Session } from "@opencode-ai/sdk/v2/client"
+import { Binary } from "@leak-code/core/util/binary"
+import type { Message, Part, Session } from "@leak-code/sdk/v2/client"
 import { createMemo } from "solid-js"
 import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
 import type { createServerSdkContext } from "./server-sdk"

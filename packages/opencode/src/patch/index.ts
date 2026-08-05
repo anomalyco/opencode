@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import * as path from "path"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FSUtil } from "@leak-code/core/fs-util"
 import * as Bom from "../util/bom"
 
 export const PatchSchema = Schema.Struct({

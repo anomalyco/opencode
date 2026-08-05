@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/storybook",
+  "name": "@leak-code/storybook",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,8 +9,8 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "catalog:",
-    "@opencode-ai/session-ui": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@leak-code/session-ui": "workspace:*",
+    "@leak-code/ui": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@storybook/addon-a11y": "^10.2.13",
     "@storybook/addon-docs": "^10.2.13",

@@ -1,8 +1,8 @@
-import { QuestionV2 } from "@opencode-ai/core/question"
+import { QuestionV2 } from "@leak-code/core/question"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { QuestionNotFoundError } from "@opencode-ai/protocol/errors"
+import { QuestionNotFoundError } from "@leak-code/protocol/errors"
 import { response } from "../location"
 
 function missingRequest(id: QuestionV2.ID) {

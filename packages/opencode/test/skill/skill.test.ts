@@ -1,14 +1,14 @@
 import { describe, expect } from "bun:test"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
 import { Discovery } from "../../src/skill/discovery"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Config } from "../../src/config/config"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Global } from "@opencode-ai/core/global"
+import { CrossSpawnSpawner } from "@leak-code/core/cross-spawn-spawner"
+import { FSUtil } from "@leak-code/core/fs-util"
+import { Global } from "@leak-code/core/global"
 import { provideInstance, provideTmpdirInstance, testInstanceStoreLayer, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import path from "path"
@@ -52,14 +52,14 @@ This skill is loaded from the global home directory.
 const withHome = <A, E, R>(home: string, self: Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
-      const prev = process.env.OPENCODE_TEST_HOME
-      process.env.OPENCODE_TEST_HOME = home
+      const prev = process.env.LEAKCODE_TEST_HOME
+      process.env.LEAKCODE_TEST_HOME = home
       return prev
     }),
     () => self,
     (prev) =>
       Effect.sync(() => {
-        process.env.OPENCODE_TEST_HOME = prev
+        process.env.LEAKCODE_TEST_HOME = prev
       }),
   )
 

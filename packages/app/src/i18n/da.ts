@@ -317,7 +317,7 @@ export const dict = {
   "dialog.mcp.empty": "Ingen MCP'er konfigureret",
 
   "dialog.lsp.empty": "LSP'er registreret automatisk fra filtyper",
-  "dialog.plugins.empty": "Plugins konfigureret i opencode.json",
+  "dialog.plugins.empty": "Plugins konfigureret i leak-code.json",
 
   "mcp.status.connected": "forbundet",
   "mcp.status.failed": "mislykkedes",
@@ -571,7 +571,7 @@ export const dict = {
   "error.chain.responseBody": "Svarindhold:\n{{body}}",
   "error.chain.didYouMean": "Mente du: {{suggestions}}",
   "error.chain.modelNotFound": "Model ikke fundet: {{provider}}/{{model}}",
-  "error.chain.checkConfig": "Kontrollér udbyder- og modelnavnene i din konfiguration (opencode.json)",
+  "error.chain.checkConfig": "Kontrollér udbyder- og modelnavnene i din konfiguration (leak-code.json)",
   "error.chain.mcpFailed": 'MCP-server "{{name}}" fejlede. Bemærk, OpenCode understøtter ikke MCP-godkendelse endnu.',
   "error.chain.providerAuthFailed": "Udbydergodkendelse mislykkedes ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":

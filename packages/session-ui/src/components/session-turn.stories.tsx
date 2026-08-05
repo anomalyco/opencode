@@ -1,6 +1,6 @@
 // @ts-nocheck
 import * as mod from "./session-turn"
-import { create } from "@opencode-ai/ui/storybook/scaffold"
+import { create } from "@leak-code/ui/storybook/scaffold"
 
 const story = create({ title: "UI/SessionTurn", mod })
 export default { title: "UI/SessionTurn", id: "components-session-turn", component: story.meta.component }

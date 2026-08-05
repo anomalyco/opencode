@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
+import { FSUtil } from "@leak-code/core/fs-util"
 import { Effect, Layer } from "effect"
 import path from "path"
 import { resetDatabase } from "../fixture/db"
@@ -356,7 +356,7 @@ describe("provider HttpApi", () => {
     Effect.gen(function* () {
       const directory = (yield* TestInstance).directory
       yield* setEnvScoped(
-        "OPENCODE_AUTH_CONTENT",
+        "LEAKCODE_AUTH_CONTENT",
         JSON.stringify({
           google: { type: "oauth", refresh: "dummy", access: "dummy", expires: 9999999999999 },
         }),

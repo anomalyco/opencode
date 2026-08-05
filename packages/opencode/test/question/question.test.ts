@@ -1,5 +1,5 @@
 import { afterEach, expect } from "bun:test"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { Cause, Effect, Exit, Fiber, Layer, Queue } from "effect"
 import { Question } from "../../src/question"
 import { InstanceRef } from "../../src/effect/instance-ref"
@@ -8,7 +8,7 @@ import { QuestionID } from "../../src/question/schema"
 import { disposeAllInstances, provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@leak-code/core/cross-spawn-spawner"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 
 const questionLayer = LayerNode.compile(LayerNode.group([Question.node, EventV2Bridge.node, CrossSpawnSpawner.node]))

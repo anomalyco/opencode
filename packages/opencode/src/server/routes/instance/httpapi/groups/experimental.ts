@@ -4,7 +4,7 @@ import { MCP } from "@/mcp"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { Worktree } from "@/worktree"
-import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { NonNegativeInt } from "@leak-code/core/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
@@ -16,8 +16,8 @@ import {
 } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 import { QueryBoolean } from "./query"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@leak-code/core/provider"
+import { ModelV2 } from "@leak-code/core/model"
 
 const ConsoleStateResponse = Schema.Struct({
   consoleManagedProviders: Schema.mutable(Schema.Array(Schema.String)),

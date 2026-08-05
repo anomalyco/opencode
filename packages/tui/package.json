@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/tui",
+  "name": "@leak-code/tui",
   "version": "1.18.13",
   "private": true,
   "type": "module",
@@ -48,10 +48,10 @@
     "./component/register-spinner": "./src/component/register-spinner.ts"
   },
   "dependencies": {
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@leak-code/core": "workspace:*",
+    "@leak-code/plugin": "workspace:*",
+    "@leak-code/sdk": "workspace:*",
+    "@leak-code/ui": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",

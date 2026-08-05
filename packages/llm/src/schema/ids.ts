@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { ProviderMetadata } from "@opencode-ai/schema/llm"
+import { ProviderMetadata } from "@leak-code/schema/llm"
 
 export { ProviderMetadata }
 

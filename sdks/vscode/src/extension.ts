@@ -34,7 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     if (terminal.name === TERMINAL_NAME) {
       // @ts-ignore
-      const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
+      const port = terminal.creationOptions.env?.["_EXTENSION_LEAKCODE_PORT"]
       port ? await appendPrompt(parseInt(port), fileRef) : terminal.sendText(fileRef, false)
       terminal.show()
     }
@@ -56,13 +56,13 @@ export function activate(context: vscode.ExtensionContext) {
         preserveFocus: false,
       },
       env: {
-        _EXTENSION_OPENCODE_PORT: port.toString(),
-        OPENCODE_CALLER: "vscode",
+        _EXTENSION_LEAKCODE_PORT: port.toString(),
+        LEAKCODE_CALLER: "vscode",
       },
     })
 
     terminal.show()
-    terminal.sendText(`opencode --port ${port}`)
+    terminal.sendText(`leak-code --port ${port}`)
 
     const fileRef = getActiveFile()
     if (!fileRef) {

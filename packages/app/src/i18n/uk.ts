@@ -421,7 +421,7 @@ export const dict = {
   "dialog.mcp.empty": "MCP не налаштовано",
 
   "dialog.lsp.empty": "Сервери LSP автоматично виявляються за типами файлів",
-  "dialog.plugins.empty": "Плагіни налаштовані в opencode.json",
+  "dialog.plugins.empty": "Плагіни налаштовані в leak-code.json",
 
   "mcp.status.connected": "підключено",
   "mcp.status.failed": "помилка",
@@ -713,7 +713,7 @@ export const dict = {
   "error.chain.responseBody": "Тіло відповіді:\n{{body}}",
   "error.chain.didYouMean": "Можливо, ви мали на увазі: {{suggestions}}",
   "error.chain.modelNotFound": "Модель не знайдено: {{provider}}/{{model}}",
-  "error.chain.checkConfig": "Перевірте назви провайдерів/моделей у конфігурації (opencode.json)",
+  "error.chain.checkConfig": "Перевірте назви провайдерів/моделей у конфігурації (leak-code.json)",
   "error.chain.mcpFailed":
     'Сервер MCP "{{name}}" не працює. Зверніть увагу, OpenCode ще не підтримує автентифікацію MCP.',
   "error.chain.providerAuthFailed": "Автентифікація провайдера не вдалася ({{provider}}): {{message}}",

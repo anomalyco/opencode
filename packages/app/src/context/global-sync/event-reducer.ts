@@ -1,4 +1,4 @@
-import { Binary } from "@opencode-ai/core/util/binary"
+import { Binary } from "@leak-code/core/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
   Message,
@@ -9,8 +9,8 @@ import type {
   Session,
   SessionStatus,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
+} from "@leak-code/sdk/v2/client"
+import type { FileDiffInfo } from "@leak-code/client/promise"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"

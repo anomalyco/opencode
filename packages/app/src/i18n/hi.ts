@@ -397,7 +397,7 @@ export const dict = {
   "dialog.mcp.description": "{{total}} में से {{enabled}} सक्षम",
   "dialog.mcp.empty": "कोई MCP कॉन्फ़िगर नहीं किया गया",
   "dialog.lsp.empty": "फ़ाइल प्रकारों से LSP का स्वतः पता लगाया जाता है",
-  "dialog.plugins.empty": "प्लगइन opencode.json में कॉन्फ़िगर किए गए हैं",
+  "dialog.plugins.empty": "प्लगइन leak-code.json में कॉन्फ़िगर किए गए हैं",
   "mcp.status.connected": "कनेक्टेड",
   "mcp.status.failed": "असफल",
   "mcp.status.needs_auth": "प्रमाणीकरण की आवश्यकता है",
@@ -658,7 +658,7 @@ export const dict = {
   "error.chain.responseBody": "प्रतिक्रिया निकाय:\n{{body}}",
   "error.chain.didYouMean": "क्या आपका मतलब था: {{suggestions}}",
   "error.chain.modelNotFound": "मॉडल नहीं मिला: {{provider}}/{{model}}",
-  "error.chain.checkConfig": "अपने कॉन्फ़िगरेशन (opencode.json) प्रोवाइडर/मॉडल नामों की जाँच करें",
+  "error.chain.checkConfig": "अपने कॉन्फ़िगरेशन (leak-code.json) प्रोवाइडर/मॉडल नामों की जाँच करें",
   "error.chain.mcpFailed":
     'MCP सर्वर "{{name}}" विफल रहा। ध्यान दें, OpenCode अभी तक MCP प्रमाणीकरण का समर्थन नहीं करता है।',
   "error.chain.providerAuthFailed": "प्रोवाइडर प्रमाणीकरण विफल ({{provider}}): {{message}}",

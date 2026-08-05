@@ -142,7 +142,7 @@ async function install() {
 }
 
 async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: number) {
-  console.log(`  Trying to auto-resolve ${files.length} conflict(s) with opencode...`)
+  console.log(`  Trying to auto-resolve ${files.length} conflict(s) with leak-code...`)
 
   const done = lines(prs.filter((x) => applied.includes(x.number)))
   const next = lines(prs.slice(idx + 1))
@@ -168,9 +168,9 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: n
   ].join("\n")
 
   try {
-    await $`opencode run -m ${model} ${prompt}`
+    await $`leak-code run -m ${model} ${prompt}`
   } catch (err) {
-    console.log(`  opencode failed: ${err}`)
+    console.log(`  leak-code failed: ${err}`)
     return false
   }
 
@@ -184,7 +184,7 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: n
 
   if (!(await typecheck())) return false
 
-  console.log("  Conflicts resolved with opencode")
+  console.log("  Conflicts resolved with leak-code")
   return true
 }
 
@@ -193,7 +193,7 @@ async function smoke(prs: PR[], applied: number[]) {
 
   if (await validate()) return commitSmokeChanges()
 
-  console.log("\nTrying to fix final smoke check with opencode...")
+  console.log("\nTrying to fix final smoke check with leak-code...")
 
   const done = lines(prs.filter((x) => applied.includes(x.number)))
   const prompt = [
@@ -206,7 +206,7 @@ async function smoke(prs: PR[], applied: number[]) {
   ].join("\n")
 
   try {
-    await $`opencode run -m ${model} ${prompt}`
+    await $`leak-code run -m ${model} ${prompt}`
   } catch (err) {
     console.log(`Smoke fix failed: ${err}`)
     return false

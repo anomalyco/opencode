@@ -8,7 +8,7 @@
  * extracted from the response body, plus `.status` and `.body` attached.
  */
 import { afterEach, describe, expect, test } from "bun:test"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient } from "@leak-code/sdk/v2"
 import { Server } from "../../src/server/server"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"

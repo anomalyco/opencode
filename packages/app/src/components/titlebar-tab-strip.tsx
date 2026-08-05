@@ -15,11 +15,11 @@ import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
 import { useTabs } from "@/context/tabs"
 import { createTabPromptState } from "@/context/prompt"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@leak-code/core/util/encode"
 import { showToast } from "@/utils/toast"
 import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./titlebar-tab-order"
-import type { Session } from "@opencode-ai/sdk/v2"
+import type { Session } from "@leak-code/sdk/v2"
 
 function SessionTabSlot(props: {
   tab: SessionTab

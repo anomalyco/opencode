@@ -1,4 +1,4 @@
-import { Resource } from "@opencode-ai/console-resource"
+import { Resource } from "@leak-code/console-resource"
 import { Redis } from "@upstash/redis/cloudflare"
 
 let redis: Redis | undefined

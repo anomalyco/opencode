@@ -363,8 +363,8 @@ async function translate(
   )
   const agent = `translate-app-${plan.locale}-${process.pid}`
   const env = isolatedEnvironment()
-  env.OPENCODE_DISABLE_PROJECT_CONFIG = "1"
-  env.OPENCODE_CONFIG_CONTENT = JSON.stringify(
+  env.LEAKCODE_DISABLE_PROJECT_CONFIG = "1"
+  env.LEAKCODE_CONFIG_CONTENT = JSON.stringify(
     translationConfig(
       agent,
       model,
@@ -374,7 +374,7 @@ async function translate(
 
   const proc = Bun.spawn(
     [
-      "opencode",
+      "leak-code",
       "--pure",
       "run",
       "--dir",
@@ -406,7 +406,7 @@ async function translate(
   if (result[2] !== 0) return { locale: plan.locale, stdout: result[0], stderr: result[1], code: result[2] }
 
   const sessionID = sessionIDFromEvents(result[0])
-  const exported = Bun.spawn(["opencode", "--pure", "export", sessionID, "--sanitize"], {
+  const exported = Bun.spawn(["leak-code", "--pure", "export", sessionID, "--sanitize"], {
     cwd: root,
     env,
     stdout: "pipe",
@@ -466,8 +466,8 @@ async function resolveModelVariant(model: string, variant: string) {
   const provider = model.split("/")[0]
   if (!provider || !model.includes("/")) throw new Error(`Model must use provider/model syntax: ${model}`)
   const env = isolatedEnvironment()
-  env.OPENCODE_DISABLE_PROJECT_CONFIG = "1"
-  const proc = Bun.spawn(["opencode", "--pure", "models", provider, "--verbose"], {
+  env.LEAKCODE_DISABLE_PROJECT_CONFIG = "1"
+  const proc = Bun.spawn(["leak-code", "--pure", "models", provider, "--verbose"], {
     cwd: root,
     env,
     stdin: "ignore",
@@ -483,11 +483,11 @@ async function resolveModelVariant(model: string, variant: string) {
 
 function isolatedEnvironment() {
   const env = { ...process.env }
-  delete env.OPENCODE_CONFIG
-  delete env.OPENCODE_CONFIG_DIR
-  delete env.OPENCODE_CONFIG_CONTENT
-  delete env.OPENCODE_PERMISSION
-  delete env.OPENCODE_AUTO_SHARE
+  delete env.LEAKCODE_CONFIG
+  delete env.LEAKCODE_CONFIG_DIR
+  delete env.LEAKCODE_CONFIG_CONTENT
+  delete env.LEAKCODE_PERMISSION
+  delete env.LEAKCODE_AUTO_SHARE
   return env
 }
 

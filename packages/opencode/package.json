@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.18.13",
-  "name": "opencode",
+  "name": "leak-code",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -16,7 +16,7 @@
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "leak-code": "./bin/opencode"
   },
   "exports": {
     "./*": "./src/*.ts"
@@ -31,9 +31,9 @@
   "devDependencies": {
     "@babel/core": "7.28.4",
     "@octokit/webhooks-types": "7.6.1",
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/http-recorder": "workspace:*",
-    "@opencode-ai/script": "workspace:*",
+    "@leak-code/core": "workspace:*",
+    "@leak-code/http-recorder": "workspace:*",
+    "@leak-code/script": "workspace:*",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "catalog:",
     "@types/babel__core": "7.20.5",
@@ -84,15 +84,15 @@
     "@octokit/graphql": "9.0.2",
     "@octokit/rest": "catalog:",
     "@openauthjs/openauth": "catalog:",
-    "@opencode-ai/codemode": "workspace:*",
-    "@opencode-ai/llm": "workspace:*",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*",
-    "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/server": "workspace:*",
-    "@opencode-ai/tui": "workspace:*",
+    "@leak-code/codemode": "workspace:*",
+    "@leak-code/llm": "workspace:*",
+    "@leak-code/plugin": "workspace:*",
+    "@leak-code/protocol": "workspace:*",
+    "@leak-code/schema": "workspace:*",
+    "@leak-code/script": "workspace:*",
+    "@leak-code/sdk": "workspace:*",
+    "@leak-code/server": "workspace:*",
+    "@leak-code/tui": "workspace:*",
     "@openrouter/ai-sdk-provider": "2.9.0",
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/context-async-hooks": "2.6.1",

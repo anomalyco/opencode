@@ -1,13 +1,13 @@
 import { afterEach, expect, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
+import { AppNodeBuilder } from "@leak-code/core/effect/app-node-builder"
 import { Effect, Layer } from "effect"
-import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Global } from "@opencode-ai/core/global"
+import { ModelsDev } from "@leak-code/core/models-dev"
+import { FSUtil } from "@leak-code/core/fs-util"
+import { CrossSpawnSpawner } from "@leak-code/core/cross-spawn-spawner"
+import { Global } from "@leak-code/core/global"
 import { disposeAllInstances, provideInstanceEffect, tmpdirScoped, TestInstance } from "../fixture/fixture"
 import { markPluginDependenciesReady } from "../fixture/plugin"
 import { Auth } from "@/auth"
@@ -21,8 +21,8 @@ import { Filesystem } from "@/util/filesystem"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { testEffect } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@leak-code/core/provider"
+import { ModelV2 } from "@leak-code/core/model"
 
 const originalEnv = new Map<string, string | undefined>()
 
@@ -1191,7 +1191,7 @@ it.instance("ModelNotFoundError for provider includes suggestions", () =>
 
 it.instance("ModelNotFoundError suggests catalog models for unloaded providers", () =>
   Effect.gen(function* () {
-    yield* remove("OPENCODE_API_KEY")
+    yield* remove("LEAKCODE_API_KEY")
     const error = yield* Provider.use
       .getModel(ProviderV2.ID.opencode, ModelV2.ID.make("claude-haiku-fake-model"))
       .pipe(Effect.flip)

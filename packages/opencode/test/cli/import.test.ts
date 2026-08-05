@@ -6,7 +6,7 @@ import {
   transformShareData,
   type ShareData,
 } from "../../src/cli/cmd/import"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FSUtil } from "@leak-code/core/fs-util"
 import { PlatformError } from "effect"
 
 test("formats import file errors", () => {

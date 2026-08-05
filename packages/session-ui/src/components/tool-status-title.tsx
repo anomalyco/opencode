@@ -1,6 +1,6 @@
 import { Show, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { TextShimmer } from "@leak-code/ui/text-shimmer"
 
 function common(active: string, done: string) {
   const a = Array.from(active)

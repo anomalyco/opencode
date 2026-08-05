@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock } from "bun:test"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"

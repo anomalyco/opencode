@@ -1,11 +1,11 @@
 import * as i18n from "@solid-primitives/i18n"
 import { createEffect, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
-import { pluralCategory, type UiI18nPluralKey } from "@opencode-ai/ui/context/i18n"
+import { createSimpleContext } from "@leak-code/ui/context"
+import { pluralCategory, type UiI18nPluralKey } from "@leak-code/ui/context/i18n"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
-import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
+import { dict as uiEn } from "@leak-code/ui/i18n/en"
 import {
   createDesktopNativeBundle,
   DESKTOP_NATIVE_ENGLISH,
@@ -110,33 +110,33 @@ const merge = (app: Promise<Source>, ui: Promise<Source>) =>
   Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...i18n.flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
 
 const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
-  zh: () => merge(import("@/i18n/zh"), import("@opencode-ai/ui/i18n/zh")),
-  zht: () => merge(import("@/i18n/zht"), import("@opencode-ai/ui/i18n/zht")),
-  ko: () => merge(import("@/i18n/ko"), import("@opencode-ai/ui/i18n/ko")),
-  de: () => merge(import("@/i18n/de"), import("@opencode-ai/ui/i18n/de")),
-  es: () => merge(import("@/i18n/es"), import("@opencode-ai/ui/i18n/es")),
-  fr: () => merge(import("@/i18n/fr"), import("@opencode-ai/ui/i18n/fr")),
-  da: () => merge(import("@/i18n/da"), import("@opencode-ai/ui/i18n/da")),
-  ja: () => merge(import("@/i18n/ja"), import("@opencode-ai/ui/i18n/ja")),
-  pl: () => merge(import("@/i18n/pl"), import("@opencode-ai/ui/i18n/pl")),
-  ru: () => merge(import("@/i18n/ru"), import("@opencode-ai/ui/i18n/ru")),
-  uk: () => merge(import("@/i18n/uk"), import("@opencode-ai/ui/i18n/uk")),
-  ar: () => merge(import("@/i18n/ar"), import("@opencode-ai/ui/i18n/ar")),
-  no: () => merge(import("@/i18n/no"), import("@opencode-ai/ui/i18n/no")),
-  br: () => merge(import("@/i18n/br"), import("@opencode-ai/ui/i18n/br")),
-  th: () => merge(import("@/i18n/th"), import("@opencode-ai/ui/i18n/th")),
-  bs: () => merge(import("@/i18n/bs"), import("@opencode-ai/ui/i18n/bs")),
-  tr: () => merge(import("@/i18n/tr"), import("@opencode-ai/ui/i18n/tr")),
-  hi: () => merge(import("@/i18n/hi"), import("@opencode-ai/ui/i18n/hi")),
-  nl: () => merge(import("@/i18n/nl"), import("@opencode-ai/ui/i18n/nl")),
-  id: () => merge(import("@/i18n/id"), import("@opencode-ai/ui/i18n/id")),
-  vi: () => merge(import("@/i18n/vi"), import("@opencode-ai/ui/i18n/vi")),
-  it: () => merge(import("@/i18n/it"), import("@opencode-ai/ui/i18n/it")),
-  ur: () => merge(import("@/i18n/ur"), import("@opencode-ai/ui/i18n/ur")),
-  pa: () => merge(import("@/i18n/pa"), import("@opencode-ai/ui/i18n/pa")),
-  az: () => merge(import("@/i18n/az"), import("@opencode-ai/ui/i18n/az")),
-  fi: () => merge(import("@/i18n/fi"), import("@opencode-ai/ui/i18n/fi")),
-  sv: () => merge(import("@/i18n/sv"), import("@opencode-ai/ui/i18n/sv")),
+  zh: () => merge(import("@/i18n/zh"), import("@leak-code/ui/i18n/zh")),
+  zht: () => merge(import("@/i18n/zht"), import("@leak-code/ui/i18n/zht")),
+  ko: () => merge(import("@/i18n/ko"), import("@leak-code/ui/i18n/ko")),
+  de: () => merge(import("@/i18n/de"), import("@leak-code/ui/i18n/de")),
+  es: () => merge(import("@/i18n/es"), import("@leak-code/ui/i18n/es")),
+  fr: () => merge(import("@/i18n/fr"), import("@leak-code/ui/i18n/fr")),
+  da: () => merge(import("@/i18n/da"), import("@leak-code/ui/i18n/da")),
+  ja: () => merge(import("@/i18n/ja"), import("@leak-code/ui/i18n/ja")),
+  pl: () => merge(import("@/i18n/pl"), import("@leak-code/ui/i18n/pl")),
+  ru: () => merge(import("@/i18n/ru"), import("@leak-code/ui/i18n/ru")),
+  uk: () => merge(import("@/i18n/uk"), import("@leak-code/ui/i18n/uk")),
+  ar: () => merge(import("@/i18n/ar"), import("@leak-code/ui/i18n/ar")),
+  no: () => merge(import("@/i18n/no"), import("@leak-code/ui/i18n/no")),
+  br: () => merge(import("@/i18n/br"), import("@leak-code/ui/i18n/br")),
+  th: () => merge(import("@/i18n/th"), import("@leak-code/ui/i18n/th")),
+  bs: () => merge(import("@/i18n/bs"), import("@leak-code/ui/i18n/bs")),
+  tr: () => merge(import("@/i18n/tr"), import("@leak-code/ui/i18n/tr")),
+  hi: () => merge(import("@/i18n/hi"), import("@leak-code/ui/i18n/hi")),
+  nl: () => merge(import("@/i18n/nl"), import("@leak-code/ui/i18n/nl")),
+  id: () => merge(import("@/i18n/id"), import("@leak-code/ui/i18n/id")),
+  vi: () => merge(import("@/i18n/vi"), import("@leak-code/ui/i18n/vi")),
+  it: () => merge(import("@/i18n/it"), import("@leak-code/ui/i18n/it")),
+  ur: () => merge(import("@/i18n/ur"), import("@leak-code/ui/i18n/ur")),
+  pa: () => merge(import("@/i18n/pa"), import("@leak-code/ui/i18n/pa")),
+  az: () => merge(import("@/i18n/az"), import("@leak-code/ui/i18n/az")),
+  fi: () => merge(import("@/i18n/fi"), import("@leak-code/ui/i18n/fi")),
+  sv: () => merge(import("@/i18n/sv"), import("@leak-code/ui/i18n/sv")),
 }
 
 function loadDict(locale: Locale) {

@@ -2,7 +2,7 @@ export * as PermissionV2 from "./permission"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Deferred, Effect as EffectRuntime, Layer, Schema } from "effect"
-import { Permission } from "@opencode-ai/schema/permission"
+import { Permission } from "@leak-code/schema/permission"
 import { EventV2 } from "./event"
 import { Location } from "./location"
 import { AgentV2 } from "./agent"
@@ -11,7 +11,7 @@ import { SessionStore } from "./session/store"
 import { Wildcard } from "./util/wildcard"
 import { PermissionSaved } from "./permission/saved"
 
-export { Effect, Rule, Ruleset } from "@opencode-ai/schema/permission"
+export { Effect, Rule, Ruleset } from "@leak-code/schema/permission"
 const missingAgentPermissions: Permission.Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
 
 export const ID = Permission.ID

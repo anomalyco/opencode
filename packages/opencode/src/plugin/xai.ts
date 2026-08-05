@@ -1,6 +1,6 @@
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
+import type { Hooks, PluginInput } from "@leak-code/plugin"
 import { OAUTH_DUMMY_KEY } from "../auth"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@leak-code/core/installation/version"
 
 // Public Grok-CLI OAuth client.
 const CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828"

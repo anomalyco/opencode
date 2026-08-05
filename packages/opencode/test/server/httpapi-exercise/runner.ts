@@ -1,6 +1,6 @@
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Flag } from "@leak-code/core/flag/flag"
+import { ConfigV1 } from "@leak-code/core/v1/config/config"
+import { SessionV1 } from "@leak-code/core/v1/session"
 import { Cause, Duration, Effect, Layer, Scope } from "effect"
 import { TestLLMServer } from "../../lib/llm-server"
 import type { Config } from "../../../src/config/config"
@@ -11,8 +11,8 @@ import { call, callAuthProbe, disposeApps } from "./backend"
 import { original } from "./environment"
 import { runtime } from "./runtime"
 import type { ActiveScenario, Options, ProjectOptions, Result, Scenario, ScenarioContext, SeededContext } from "./types"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@leak-code/core/provider"
+import { ModelV2 } from "@leak-code/core/model"
 
 export function runScenario(options: Options) {
   return (scenario: Scenario) => {
@@ -258,8 +258,8 @@ function fakeLlmConfig(url: string): Partial<ConfigV1.Info> {
 
 const resetState = Effect.promise(async () => {
   const modules = await runtime()
-  Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
-  Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
+  Flag.LEAKCODE_SERVER_PASSWORD = original.LEAKCODE_SERVER_PASSWORD
+  Flag.LEAKCODE_SERVER_USERNAME = original.LEAKCODE_SERVER_USERNAME
   await disposeApps()
   await modules.disposeAllInstances()
   await modules.resetDatabase()

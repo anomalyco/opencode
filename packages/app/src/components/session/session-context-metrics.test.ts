@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Message } from "@opencode-ai/sdk/v2/client"
+import type { Message } from "@leak-code/sdk/v2/client"
 import { getSessionContext } from "./session-context-metrics"
 
 const assistant = (

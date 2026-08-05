@@ -1,10 +1,10 @@
 import path from "path"
 import { fileURLToPath } from "url"
 
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@leak-code/core/flag/flag"
+import { Global } from "@leak-code/core/global"
 import { Filesystem } from "@/util/filesystem"
-import { Flock } from "@opencode-ai/core/util/flock"
+import { Flock } from "@leak-code/core/util/flock"
 
 import { parsePluginSpecifier, pluginSource } from "./shared"
 
@@ -46,7 +46,7 @@ type Core = Omit<Entry, "first_time" | "last_time" | "time_changed" | "load_coun
 type Row = Touch & { core: Core }
 
 function storePath() {
-  return Flag.OPENCODE_PLUGIN_META_FILE ?? path.join(Global.Path.state, "plugin-meta.json")
+  return Flag.LEAKCODE_PLUGIN_META_FILE ?? path.join(Global.Path.state, "plugin-meta.json")
 }
 
 function lock(file: string) {

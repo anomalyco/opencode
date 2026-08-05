@@ -302,7 +302,7 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} von {{total}} aktiviert",
   "dialog.mcp.empty": "Keine MCPs konfiguriert",
   "dialog.lsp.empty": "LSPs automatisch nach Dateityp erkannt",
-  "dialog.plugins.empty": "In opencode.json konfigurierte Plugins",
+  "dialog.plugins.empty": "In leak-code.json konfigurierte Plugins",
   "mcp.status.connected": "verbunden",
   "mcp.status.failed": "fehlgeschlagen",
   "mcp.status.needs_auth": "Authentifizierung erforderlich",
@@ -532,7 +532,7 @@ export const dict = {
   "error.chain.responseBody": "Antwortinhalt:\n{{body}}",
   "error.chain.didYouMean": "Meinten Sie: {{suggestions}}",
   "error.chain.modelNotFound": "Modell nicht gefunden: {{provider}}/{{model}}",
-  "error.chain.checkConfig": "Überprüfen Sie die Anbieter- und Modellnamen in Ihrer Konfiguration (opencode.json)",
+  "error.chain.checkConfig": "Überprüfen Sie die Anbieter- und Modellnamen in Ihrer Konfiguration (leak-code.json)",
   "error.chain.mcpFailed":
     'MCP-Server "{{name}}" fehlgeschlagen. Hinweis: OpenCode unterstützt noch keine MCP-Authentifizierung.',
   "error.chain.providerAuthFailed": "Anbieter-Authentifizierung fehlgeschlagen ({{provider}}): {{message}}",

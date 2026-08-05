@@ -1,11 +1,11 @@
-import { ImagePreview } from "@opencode-ai/ui/image-preview"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon } from "@opencode-ai/ui/v2/icon"
-import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
+import { ImagePreview } from "@leak-code/ui/image-preview"
+import { useDialog } from "@leak-code/ui/context/dialog"
+import { ProviderIcon } from "@leak-code/ui/provider-icon"
+import { ButtonV2 } from "@leak-code/ui/v2/button-v2"
+import { Icon } from "@leak-code/ui/v2/icon"
+import { KeybindV2 } from "@leak-code/ui/v2/keybind-v2"
+import { TooltipV2 } from "@leak-code/ui/v2/tooltip-v2"
+import type { ReferenceInfo } from "@leak-code/sdk/v2/client"
 import { createEffect, createMemo, on, Show } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
@@ -26,12 +26,12 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { showToast } from "@/utils/toast"
-import { PromptInputV2, type PromptInputV2Suggestion } from "@opencode-ai/session-ui/v2/prompt-input"
+import { PromptInputV2, type PromptInputV2Suggestion } from "@leak-code/session-ui/v2/prompt-input"
 import {
   createPromptInputV2Controller,
   createPromptInputV2State,
   type PromptInputV2Interaction,
-} from "@opencode-ai/session-ui/v2/prompt-input/interaction"
+} from "@leak-code/session-ui/v2/prompt-input/interaction"
 
 export type PromptInputV2ComposerProps = {
   class?: string

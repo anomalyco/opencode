@@ -1,10 +1,10 @@
 import { Component, Show, createMemo, createResource } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
-import { Switch } from "@opencode-ai/ui/v2/switch-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { ButtonV2 } from "@leak-code/ui/v2/button-v2"
+import { SelectV2 } from "@leak-code/ui/v2/select-v2"
+import { Switch } from "@leak-code/ui/v2/switch-v2"
+import { TextInputV2 } from "@leak-code/ui/v2/text-input-v2"
+import { useDialog } from "@leak-code/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useUpdaterAction } from "../updater-action"
@@ -369,7 +369,7 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
 
-        <Show when={mobile() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
+        <Show when={mobile() && import.meta.env.VITE_LEAKCODE_CHANNEL !== "prod"}>
           <SettingsRowV2
             title={language.t("settings.general.row.mobileTitlebarBottom.title")}
             description={language.t("settings.general.row.mobileTitlebarBottom.description")}

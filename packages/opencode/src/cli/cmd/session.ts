@@ -6,13 +6,13 @@ import { Session } from "@/session/session"
 import { SessionID } from "../../session/schema"
 import { UI } from "../ui"
 import { Locale } from "@/util/locale"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@leak-code/core/flag/flag"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { NotFoundError } from "@/storage/storage"
 import { EOL } from "os"
 import path from "path"
-import { which } from "@opencode-ai/core/util/which"
+import { which } from "@leak-code/core/util/which"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -26,8 +26,8 @@ function pagerCmd(): string[] {
     if (Filesystem.stat(lessOnPath)?.size) return [lessOnPath, ...lessOptions]
   }
 
-  if (Flag.OPENCODE_GIT_BASH_PATH) {
-    const less = path.join(Flag.OPENCODE_GIT_BASH_PATH, "..", "..", "usr", "bin", "less.exe")
+  if (Flag.LEAKCODE_GIT_BASH_PATH) {
+    const less = path.join(Flag.LEAKCODE_GIT_BASH_PATH, "..", "..", "usr", "bin", "less.exe")
     if (Filesystem.stat(less)?.size) return [less, ...lessOptions]
   }
 

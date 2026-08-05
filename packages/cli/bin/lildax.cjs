@@ -29,12 +29,12 @@ function run(target) {
   })
 }
 
-const envPath = process.env.OPENCODE_BIN_PATH
+const envPath = process.env.LEAKCODE_BIN_PATH
 const scriptDir = path.dirname(fs.realpathSync(__filename))
 const cached = path.join(scriptDir, ".lildax")
 const platform = { darwin: "darwin", linux: "linux", win32: "windows" }[os.platform()] || os.platform()
 const arch = { x64: "x64", arm64: "arm64", arm: "arm" }[os.arch()] || os.arch()
-const base = "@opencode-ai/cli-" + platform + "-" + arch
+const base = "@leak-code/cli-" + platform + "-" + arch
 const binary = platform === "windows" ? "lildax.exe" : "lildax"
 
 function supportsAvx2() {

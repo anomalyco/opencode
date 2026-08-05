@@ -1,7 +1,7 @@
 import { useCommand, type CommandOption } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLocal, type ModelSelection } from "@/context/local"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@leak-code/ui/context/dialog"
 import { getCursorPosition, setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { useSessionLayout } from "./session-layout"
 import { createSessionOwnership } from "./session-ownership"

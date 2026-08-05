@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { useSpring } from "@leak-code/ui/motion-spring"
 import { createRoot, createSignal } from "solid-js"
 
 test("snaps spring progress when the session changes", async () => {

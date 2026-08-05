@@ -4,10 +4,10 @@ import type {
   ModelListOutput,
   PermissionV2Request,
   ProviderListOutput,
-} from "@opencode-ai/client/promise"
-import type { Agent, PermissionRequest, Project, Provider, ProviderListResponse } from "@opencode-ai/sdk/v2/client"
-import type { Project as CurrentProject } from "@opencode-ai/client/promise"
-import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
+} from "@leak-code/client/promise"
+import type { Agent, PermissionRequest, Project, Provider, ProviderListResponse } from "@leak-code/sdk/v2/client"
+import type { Project as CurrentProject } from "@leak-code/client/promise"
+import { NormalizedProviderListResponse } from "@leak-code/session-ui/context"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/utils/path-key"
 
 export const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)

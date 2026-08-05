@@ -1,4 +1,4 @@
-import type { AgentPart as MessageAgentPart, FilePart, Part, TextPart } from "@opencode-ai/sdk/v2"
+import type { AgentPart as MessageAgentPart, FilePart, Part, TextPart } from "@leak-code/sdk/v2"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { createLegacyBlobReference } from "@/utils/draft-store"
 

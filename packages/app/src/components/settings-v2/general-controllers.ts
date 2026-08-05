@@ -1,6 +1,6 @@
 import { createMemo, createResource, onMount, type Accessor } from "solid-js"
-import type { ColorScheme } from "@opencode-ai/ui/theme/context"
-import { useTheme } from "@opencode-ai/ui/theme/context"
+import type { ColorScheme } from "@leak-code/ui/theme/context"
+import { useTheme } from "@leak-code/ui/theme/context"
 import { usePermission } from "@/context/permission"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"

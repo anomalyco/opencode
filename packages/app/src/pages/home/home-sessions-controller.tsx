@@ -1,6 +1,6 @@
-import type { Session } from "@opencode-ai/sdk/v2/client"
-import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import type { Session } from "@leak-code/sdk/v2/client"
+import { preloadMarkdown } from "@leak-code/session-ui/markdown-cache"
+import { useDialog } from "@leak-code/ui/context/dialog"
 import { useQuery } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, createRoot, type JSX, startTransition } from "solid-js"
@@ -19,7 +19,7 @@ import { displayName, errorMessage, projectForSession } from "@/pages/layout/hel
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { pathKey } from "@/utils/path-key"
 import { showToast } from "@/utils/toast"
-import { Binary } from "@opencode-ai/core/util/binary"
+import { Binary } from "@leak-code/core/util/binary"
 import { archiveHomeSession } from "../home-session-archive"
 import type { HomeController } from "./home-controller"
 

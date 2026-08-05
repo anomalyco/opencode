@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createStore } from "solid-js/store"
-import type { Todo } from "@opencode-ai/sdk/v2"
+import type { Todo } from "@leak-code/sdk/v2"
 import { createPromptState } from "@/context/prompt"
 import { SessionComposerRegion, createSessionComposerRegionController } from "@/pages/session/composer"
 import { createPromptInputHistory, PromptInput } from "./prompt-input"

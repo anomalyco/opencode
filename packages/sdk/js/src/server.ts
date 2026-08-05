@@ -32,10 +32,10 @@ export async function createOpencodeServer(options?: ServerOptions) {
   const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
   if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
 
-  const proc = launch(`opencode`, args, {
+  const proc = launch(`leak-code`, args, {
     env: {
       ...process.env,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
+      LEAKCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
     },
   })
   let clear = () => {}
@@ -115,11 +115,11 @@ export function createOpencodeTui(options?: TuiOptions) {
     args.push(`--agent=${options.agent}`)
   }
 
-  const proc = launch(`opencode`, args, {
+  const proc = launch(`leak-code`, args, {
     stdio: "inherit",
     env: {
       ...process.env,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify(options?.config ?? {}),
+      LEAKCODE_CONFIG_CONTENT: JSON.stringify(options?.config ?? {}),
     },
   })
 

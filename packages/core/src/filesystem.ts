@@ -7,8 +7,8 @@ import { FSUtil } from "./fs-util"
 import { Location } from "./location"
 import { PositiveInt, RelativePath } from "./schema"
 import { FileSystemSearch } from "./filesystem/search"
-import { Entry, FileSystem, FindInput, Match } from "@opencode-ai/schema/filesystem"
-export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
+import { Entry, FileSystem, FindInput, Match } from "@leak-code/schema/filesystem"
+export { Entry, Match, Submatch } from "@leak-code/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,

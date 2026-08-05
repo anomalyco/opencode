@@ -1,4 +1,4 @@
-import type { ReferenceGitSource, ReferenceLocalSource } from "@opencode-ai/sdk/v2/types"
+import type { ReferenceGitSource, ReferenceLocalSource } from "@leak-code/sdk/v2/types"
 import type { Hooks } from "./registration.js"
 
 export interface ReferenceDraft {

@@ -1,14 +1,14 @@
 import "@pierre/trees/web-components"
 import { FileTree } from "@pierre/trees"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@leak-code/ui/v2/dialog-v2"
+import { ButtonV2 } from "@leak-code/ui/v2/button-v2"
+import { TextInputV2 } from "@leak-code/ui/v2/text-input-v2"
+import { useDialog } from "@leak-code/ui/context/dialog"
 import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
-import type { Path } from "@opencode-ai/sdk/v2/client"
+import type { Path } from "@leak-code/sdk/v2/client"
 import {
   absoluteTreePath,
   activeTreeNavigation,
@@ -28,8 +28,8 @@ import {
   pickerRoot,
 } from "./directory-picker-domain"
 import "./dialog-select-directory-v2.css"
-import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { DividerV2 } from "@leak-code/ui/v2/divider-v2"
+import { getFilename } from "@leak-code/core/util/path"
 
 interface DialogSelectDirectoryV2Props {
   title?: string

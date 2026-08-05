@@ -3,7 +3,7 @@ export * as Pty from "./pty"
 import { makeLocationNode } from "./effect/app-node"
 import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
-import { Pty } from "@opencode-ai/schema/pty"
+import { Pty } from "@leak-code/schema/pty"
 import { Config } from "./config"
 import { EventV2 } from "./event"
 import { Location } from "./location"
@@ -171,7 +171,7 @@ const layer = Layer.effect(
         ...process.env,
         ...input.env,
         TERM: "xterm-256color",
-        OPENCODE_TERMINAL: "1",
+        LEAKCODE_TERMINAL: "1",
       } as Record<string, string>
       if (process.platform === "win32") {
         env.LC_ALL = "C.UTF-8"

@@ -1,5 +1,5 @@
-import { and, Database, inArray, sql } from "@opencode-ai/console-core/drizzle/index.js"
-import { ModelTpsRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
+import { and, Database, inArray, sql } from "@leak-code/console-core/drizzle/index.js"
+import { ModelTpsRateLimitTable } from "@leak-code/console-core/schema/ip.sql.js"
 import { UsageInfo } from "./provider/provider"
 
 export function createModelTpsLimiter(providers: { id: string; model: string; tpsGoal?: number }[]) {

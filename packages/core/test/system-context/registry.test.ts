@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Schema, Scope } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { SystemContext } from "@opencode-ai/core/system-context"
-import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
+import { AppNodeBuilder } from "@leak-code/core/effect/app-node-builder"
+import { SystemContext } from "@leak-code/core/system-context"
+import { SystemContextRegistry } from "@leak-code/core/system-context/registry"
 import { testEffect } from "../lib/effect"
 
 const entry = (key: string, text: string, sourceKey = key) => ({

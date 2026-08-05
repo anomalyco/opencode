@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionV1 } from "@leak-code/core/v1/session"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
+import { SessionProjector } from "@leak-code/core/session/projector"
 import fs from "fs/promises"
 import path from "path"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@leak-code/core/cross-spawn-spawner"
 import { Effect } from "effect"
 import { Session } from "@/session/session"
 
@@ -14,8 +14,8 @@ import { Snapshot } from "../../src/snapshot"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@leak-code/core/provider"
+import { ModelV2 } from "@leak-code/core/model"
 
 const it = testEffect(
   LayerNode.compile(

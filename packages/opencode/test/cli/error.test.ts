@@ -8,14 +8,14 @@ describe("cli.error", () => {
     const cases = [
       {
         tag: "ConfigJsonError",
-        data: { path: "/tmp/opencode.jsonc", message: "Unexpected token" },
-        expected: "Config file at /tmp/opencode.jsonc is not valid JSON(C): Unexpected token",
+        data: { path: "/tmp/leak-code.jsonc", message: "Unexpected token" },
+        expected: "Config file at /tmp/leak-code.jsonc is not valid JSON(C): Unexpected token",
       },
       {
         tag: "ConfigDirectoryTypoError",
-        data: { path: "/tmp/opencode.jsonc", dir: ".opencode", suggestion: "opencode" },
+        data: { path: "/tmp/leak-code.jsonc", dir: ".opencode", suggestion: "opencode" },
         expected:
-          'Directory ".opencode" in /tmp/opencode.jsonc is not valid. Rename the directory to "opencode" or remove it. This is a common typo.',
+          'Directory ".opencode" in /tmp/leak-code.jsonc is not valid. Rename the directory to "opencode" or remove it. This is a common typo.',
       },
       {
         tag: "ConfigFrontmatterError",
@@ -25,11 +25,11 @@ describe("cli.error", () => {
       {
         tag: "ConfigInvalidError",
         data: {
-          path: "/tmp/opencode.jsonc",
+          path: "/tmp/leak-code.jsonc",
           message: "schema mismatch",
           issues: [{ message: "Expected string", path: ["provider", "id"] }],
         },
-        expected: "Configuration is invalid at /tmp/opencode.jsonc: schema mismatch\n↳ Expected string provider.id",
+        expected: "Configuration is invalid at /tmp/leak-code.jsonc: schema mismatch\n↳ Expected string provider.id",
       },
     ]
 
@@ -41,7 +41,7 @@ describe("cli.error", () => {
 
   test("preserves multiline JSONC diagnostics for tagged config errors", () => {
     const data = {
-      path: "/tmp/opencode.jsonc",
+      path: "/tmp/leak-code.jsonc",
       message:
         '\n--- JSONC Input ---\n{\n  "model": \n}\n--- Errors ---\nValueExpected at line 3, column 1\n   Line 3: }\n          ^\n--- End ---',
     }
@@ -74,7 +74,7 @@ describe("cli.error", () => {
       "Model not found: anthropic/claude-sonet-4",
       "Did you mean: claude-sonnet-4",
       "Try: `opencode models` to list available models",
-      "Or check your config (opencode.json) provider/model names",
+      "Or check your config (leak-code.json) provider/model names",
     ].join("\n")
 
     expect(FormatError({ name: "ProviderModelNotFoundError", data })).toBe(expected)

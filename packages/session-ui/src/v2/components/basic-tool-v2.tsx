@@ -1,7 +1,7 @@
 import { Collapsible } from "@kobalte/core/collapsible"
 import { type ComponentProps, type JSX, For, Show, createMemo, splitProps } from "solid-js"
-import { DiffChanges } from "@opencode-ai/ui/v2/diff-changes-v2"
-import { TextShimmerV2 } from "@opencode-ai/ui/v2/text-shimmer-v2"
+import { DiffChanges } from "@leak-code/ui/v2/diff-changes-v2"
+import { TextShimmerV2 } from "@leak-code/ui/v2/text-shimmer-v2"
 import "./basic-tool-v2.css"
 
 function ChevronIcon() {

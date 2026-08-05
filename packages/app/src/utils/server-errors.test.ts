@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionNotFoundError } from "@opencode-ai/sdk/v2/client"
+import type { SessionNotFoundError } from "@leak-code/sdk/v2/client"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./server-errors"
 import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./server-errors"
 

@@ -11,14 +11,14 @@ const channels = [
 
 for (const channel of channels) {
   test(`uses one Linux desktop identity for ${channel.channel}`, async () => {
-    const previous = process.env.OPENCODE_CHANNEL
-    process.env.OPENCODE_CHANNEL = channel.channel
+    const previous = process.env.LEAKCODE_CHANNEL
+    process.env.LEAKCODE_CHANNEL = channel.channel
 
     const module = await import(`./electron-builder.config.ts?channel=${channel.channel}`)
     const config = module.default as Configuration
 
-    if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-    else process.env.OPENCODE_CHANNEL = previous
+    if (previous === undefined) delete process.env.LEAKCODE_CHANNEL
+    else process.env.LEAKCODE_CHANNEL = previous
 
     expect(config.appId).toBe(channel.appId)
     expect(config.extraMetadata?.desktopName).toBe(`${channel.appId}.desktop`)
@@ -30,14 +30,14 @@ for (const channel of channels) {
 }
 
 test("keeps a hidden prod launcher for old Linux pins", async () => {
-  const previous = process.env.OPENCODE_CHANNEL
-  process.env.OPENCODE_CHANNEL = "prod"
+  const previous = process.env.LEAKCODE_CHANNEL
+  process.env.LEAKCODE_CHANNEL = "prod"
 
   const module = await import("./electron-builder.config.ts?compat=prod")
   const config = module.default as Configuration
 
-  if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-  else process.env.OPENCODE_CHANNEL = previous
+  if (previous === undefined) delete process.env.LEAKCODE_CHANNEL
+  else process.env.LEAKCODE_CHANNEL = previous
 
   expect(
     config.deb?.fpm?.some((entry) =>
@@ -58,12 +58,12 @@ test("keeps a hidden prod launcher for old Linux pins", async () => {
 })
 
 test("bundles the CLI outside the dev app archive", async () => {
-  const previous = process.env.OPENCODE_CHANNEL
-  process.env.OPENCODE_CHANNEL = "dev"
+  const previous = process.env.LEAKCODE_CHANNEL
+  process.env.LEAKCODE_CHANNEL = "dev"
   const module = await import("./electron-builder.config.ts?cli-resource")
   const config = module.default as Configuration
-  if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-  else process.env.OPENCODE_CHANNEL = previous
+  if (previous === undefined) delete process.env.LEAKCODE_CHANNEL
+  else process.env.LEAKCODE_CHANNEL = previous
 
   expect(config.files).toContain("!resources/opencode-cli*")
   expect(config.extraResources).toContainEqual({
@@ -75,12 +75,12 @@ test("bundles the CLI outside the dev app archive", async () => {
 
 for (const channel of ["beta", "prod"] as const) {
   test(`does not bundle the CLI in ${channel} builds`, async () => {
-    const previous = process.env.OPENCODE_CHANNEL
-    process.env.OPENCODE_CHANNEL = channel
+    const previous = process.env.LEAKCODE_CHANNEL
+    process.env.LEAKCODE_CHANNEL = channel
     const module = await import(`./electron-builder.config.ts?no-cli-resource=${channel}`)
     const config = module.default as Configuration
-    if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-    else process.env.OPENCODE_CHANNEL = previous
+    if (previous === undefined) delete process.env.LEAKCODE_CHANNEL
+    else process.env.LEAKCODE_CHANNEL = previous
 
     expect(config.extraResources).not.toContainEqual({
       from: "resources/",

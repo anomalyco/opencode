@@ -1,6 +1,6 @@
 import { createEffect, on, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { useFilteredList } from "@opencode-ai/ui/hooks"
+import { useFilteredList } from "@leak-code/ui/hooks"
 import { createPromptInputV2Attachments, type PromptInputV2AttachmentConfig } from "./attachments"
 import { createPromptInputV2Store, type PromptInputV2StoreInput } from "./store"
 import type {

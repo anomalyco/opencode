@@ -1,5 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { Resource } from "@opencode-ai/console-resource"
+import { Resource } from "@leak-code/console-resource"
 import { LOCALE_HEADER, cookie, localeFromRequest, route, tag } from "~/lib/language"
 
 const dataPath = "/data"

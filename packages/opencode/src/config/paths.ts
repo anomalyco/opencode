@@ -1,11 +1,11 @@
 export * as ConfigPaths from "./paths"
 
 import path from "path"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@leak-code/core/flag/flag"
+import { Global } from "@leak-code/core/global"
 import { unique } from "remeda"
 import * as Effect from "effect/Effect"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FSUtil } from "@leak-code/core/fs-util"
 
 export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   name: string,
@@ -24,7 +24,7 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
   const afs = yield* FSUtil.Service
   return unique([
     Global.Path.config,
-    ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+    ...(!Flag.LEAKCODE_DISABLE_PROJECT_CONFIG
       ? yield* afs.up({
           targets: [".opencode"],
           start: directory,
@@ -36,7 +36,7 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
       start: Global.Path.home,
       stop: Global.Path.home,
     })),
-    ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
+    ...(Flag.LEAKCODE_CONFIG_DIR ? [Flag.LEAKCODE_CONFIG_DIR] : []),
   ])
 })
 

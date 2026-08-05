@@ -1,1 +1,1 @@
-export * from "@opencode-ai/tui/prompt/display"
+export * from "@leak-code/tui/prompt/display"

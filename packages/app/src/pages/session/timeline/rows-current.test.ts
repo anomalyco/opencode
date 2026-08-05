@@ -1,8 +1,8 @@
 import { describe, expect, mock, test } from "bun:test"
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { SessionMessageInfo } from "@leak-code/client/promise"
 import { normalizeSessionMessages } from "@/utils/session-message"
 
-mock.module("@opencode-ai/session-ui/message-part", () => ({
+mock.module("@leak-code/session-ui/message-part", () => ({
   renderable: () => true,
   groupParts: (refs: Array<{ messageID: string; part: { id: string } }>) =>
     refs.map((ref) => ({

@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { Effect } from "effect"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FSUtil } from "@leak-code/core/fs-util"
 import { provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { ProviderAuth } from "@/provider/auth"
 
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { TestConfig } from "../fixture/config"
 import { testEffect } from "../lib/effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { CrossSpawnSpawner } from "@leak-code/core/cross-spawn-spawner"
+import { ProviderV2 } from "@leak-code/core/provider"
 import { Config } from "@/config/config"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node, FSUtil.node])))
@@ -26,7 +26,7 @@ function providerAuthLayer(directory: string, plugins: string[]) {
             plugin: plugins,
             plugin_origins: plugins.map((plugin) => ({
               spec: plugin,
-              source: path.join(directory, "opencode.json"),
+              source: path.join(directory, "leak-code.json"),
               scope: "local" as const,
             })),
           }),

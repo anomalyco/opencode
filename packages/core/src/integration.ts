@@ -15,7 +15,7 @@ import {
   SynchronizedRef,
   Types,
 } from "effect"
-import { Integration } from "@opencode-ai/schema/integration"
+import { Integration } from "@leak-code/schema/integration"
 import { Credential } from "./credential"
 import { State } from "./state"
 import { EventV2 } from "./event"

@@ -1,4 +1,4 @@
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { ProviderIcon } from "@leak-code/ui/provider-icon"
 import { For, Show } from "solid-js"
 import { catalogSlug, formatCatalogLabName, type ModelCatalogEntry } from "./model-catalog"
 

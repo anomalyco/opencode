@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+import type { SnapshotFileDiff } from "@leak-code/sdk/v2"
 import { uniqueSummaryDiffs } from "./summary-diffs"
 
 const diff = (file: string, additions: number) =>

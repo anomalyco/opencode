@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { ServerEvent } from "@opencode-ai/schema/server-event"
+import { ServerEvent } from "@leak-code/schema/server-event"
 
 export const Event = ServerEvent
 

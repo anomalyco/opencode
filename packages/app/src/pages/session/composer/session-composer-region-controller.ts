@@ -1,5 +1,5 @@
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { useSpring } from "@leak-code/ui/motion-spring"
 import { type Accessor, createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { PromptInputState } from "@/components/prompt-input"

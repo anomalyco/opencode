@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
-import { SkillV2 } from "@opencode-ai/core/skill"
+import { AppNodeBuilder } from "@leak-code/core/effect/app-node-builder"
+import { SkillPlugin } from "@leak-code/core/plugin/skill"
+import { SkillV2 } from "@leak-code/core/skill"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
 

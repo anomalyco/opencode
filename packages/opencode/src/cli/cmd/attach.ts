@@ -1,6 +1,6 @@
 import { cmd } from "./cmd"
 import { UI } from "@/cli/ui"
-import { errorMessage } from "@opencode-ai/tui/util/error"
+import { errorMessage } from "@leak-code/tui/util/error"
 import { validateSession } from "../tui/validate-session"
 import { ServerAuth } from "@/server/auth"
 
@@ -35,12 +35,12 @@ export const AttachCommand = cmd({
       .option("password", {
         alias: ["p"],
         type: "string",
-        describe: "basic auth password (defaults to OPENCODE_SERVER_PASSWORD)",
+        describe: "basic auth password (defaults to LEAKCODE_SERVER_PASSWORD)",
       })
       .option("username", {
         alias: ["u"],
         type: "string",
-        describe: "basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')",
+        describe: "basic auth username (defaults to LEAKCODE_SERVER_USERNAME or 'opencode')",
       })
       .option("mini", {
         type: "boolean",

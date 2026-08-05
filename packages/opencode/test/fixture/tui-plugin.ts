@@ -1,6 +1,6 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient } from "@leak-code/sdk/v2"
 import { RGBA, type CliRenderer } from "@opentui/core"
-import type { HostPluginApi } from "@opencode-ai/tui/plugin/slots"
+import type { HostPluginApi } from "@leak-code/tui/plugin/slots"
 import { createTuiResolvedConfig } from "./tui-runtime"
 
 type Count = {

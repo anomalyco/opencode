@@ -1,7 +1,7 @@
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import type { Model } from "@opencode-ai/sdk/v2"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
+import type { Hooks, PluginInput } from "@leak-code/plugin"
+import type { Model } from "@leak-code/sdk/v2"
+import { InstallationVersion } from "@leak-code/core/installation/version"
+import { OauthCallbackPage } from "@leak-code/core/oauth/page"
 import { createServer } from "http"
 import open from "open"
 

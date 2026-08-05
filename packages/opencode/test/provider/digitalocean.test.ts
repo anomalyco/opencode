@@ -1,10 +1,10 @@
 import { expect } from "bun:test"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@leak-code/core/effect/layer-node"
 import { Provider } from "../../src/provider/provider"
 
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ProviderV2 } from "@leak-code/core/provider"
 
 const DIGITALOCEAN = ProviderV2.ID.make("digitalocean")
 const it = testEffect(LayerNode.compile(Provider.node))
@@ -29,7 +29,7 @@ const withEnv = <A, E, R>(values: Record<string, string>, effect: Effect.Effect<
 const withAuth = <A, E, R>(metadata: Record<string, string> | undefined, effect: Effect.Effect<A, E, R>) =>
   withEnv(
     {
-      OPENCODE_AUTH_CONTENT: JSON.stringify({
+      LEAKCODE_AUTH_CONTENT: JSON.stringify({
         digitalocean: {
           type: "api",
           key: "sk_do_test",

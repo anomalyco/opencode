@@ -1,5 +1,5 @@
-import type { GlobalEvent } from "@opencode-ai/sdk/v2"
-import type { EventSource } from "@opencode-ai/tui/context/sdk"
+import type { GlobalEvent } from "@leak-code/sdk/v2"
+import type { EventSource } from "@leak-code/tui/context/sdk"
 
 export const worktree = "/tmp/opencode"
 export const directory = `${worktree}/packages/opencode`

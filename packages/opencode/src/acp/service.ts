@@ -29,9 +29,9 @@ import {
   type SetSessionModeRequest,
   type SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import type { AssistantMessage, Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import { InstallationVersion } from "@leak-code/core/installation/version"
+import { AppNodeBuilder } from "@leak-code/core/effect/app-node-builder"
+import type { AssistantMessage, Message, OpencodeClient, SessionMessageResponse } from "@leak-code/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPError from "./error"
 import { buildConfigOptions, parseModelSelection } from "./config-option"
@@ -41,8 +41,8 @@ import { ACPEvent } from "./event"
 import { ACPSession } from "./session"
 import { UsageService } from "./usage"
 import { ACPProfile } from "./profile"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@leak-code/core/provider"
+import { ModelV2 } from "@leak-code/core/model"
 import { Provider } from "@/provider/provider"
 import type { Command } from "@/command"
 
@@ -94,7 +94,7 @@ export function make(input: {
   const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
     const authMethod: AuthMethod = {
-      description: "Run `opencode auth login` in the terminal",
+      description: "Run `leak-code auth login` in the terminal",
       name: "Login with opencode",
       id: AuthMethodID,
     }

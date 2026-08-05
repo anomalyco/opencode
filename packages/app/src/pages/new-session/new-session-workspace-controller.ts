@@ -3,7 +3,7 @@ import { useSDK } from "@/context/sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 
-const workspaceBarEnabled = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+const workspaceBarEnabled = import.meta.env.VITE_LEAKCODE_CHANNEL !== "prod"
 
 export function resolveNewSessionWorktree(input: {
   enabled: boolean

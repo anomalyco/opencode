@@ -1,6 +1,6 @@
 export * as GrepTool from "./grep"
 
-import { ToolFailure } from "@opencode-ai/llm"
+import { ToolFailure } from "@leak-code/llm"
 import { Effect, Layer, Schema } from "effect"
 import path from "path"
 import { makeLocationNode } from "../effect/app-node"

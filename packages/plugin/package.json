@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/plugin",
+  "name": "@leak-code/plugin",
   "version": "1.18.13",
   "type": "module",
   "license": "MIT",
@@ -22,7 +22,7 @@
   ],
   "dependencies": {
     "@ai-sdk/provider": "3.0.8",
-    "@opencode-ai/sdk": "workspace:*",
+    "@leak-code/sdk": "workspace:*",
     "effect": "catalog:",
     "zod": "catalog:"
   },

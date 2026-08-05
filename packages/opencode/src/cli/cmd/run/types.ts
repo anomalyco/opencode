@@ -1,4 +1,4 @@
-// Shared type vocabulary for the direct interactive mode (`opencode --mini`).
+// Shared type vocabulary for the direct interactive mode (`leak-code --mini`).
 //
 // Direct mode uses a split-footer terminal layout: immutable scrollback for the
 // session transcript, and a mutable footer for prompt input, status, and
@@ -11,8 +11,8 @@
 //     → stream.ts bridges to footer API
 //       → footer.ts queues commits and patches the footer view
 //         → OpenTUI split-footer renderer writes to terminal
-import type { OpencodeClient, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
-import type { TuiConfig } from "@opencode-ai/tui/config"
+import type { OpencodeClient, PermissionRequest, QuestionRequest, ToolPart } from "@leak-code/sdk/v2"
+import type { TuiConfig } from "@leak-code/tui/config"
 
 export type RunFilePart = {
   type: "file"

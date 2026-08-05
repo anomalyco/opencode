@@ -1,5 +1,5 @@
 import { Index, createMemo } from "solid-js"
-import type { UiI18nPluralKey } from "@opencode-ai/ui/context"
+import type { UiI18nPluralKey } from "@leak-code/ui/context"
 import { AnimatedCountLabel } from "./tool-count-label"
 
 export type CountItem = {
