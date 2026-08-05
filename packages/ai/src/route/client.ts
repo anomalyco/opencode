@@ -20,8 +20,8 @@ import {
   LanguageModel,
   LanguageModelLimits,
   LLMEvent,
+  InvalidProviderOutputReason,
   ProviderID,
-  TransportReason,
   mergeGenerationOptions,
   mergeHttpOptions,
   mergeProviderOptions,
@@ -232,13 +232,14 @@ const streamError = (route: string, message: string, cause: Cause.Cause<unknown>
   return ProviderShared.eventError(route, message, Cause.pretty(cause))
 }
 
-const incompleteStreamError = () =>
+const incompleteStreamError = (route: string) =>
   new AIError({
     module: "LLMClient",
     method: "stream",
-    reason: new TransportReason({
-      kind: "IncompleteStream",
+    reason: new InvalidProviderOutputReason({
+      classification: "incomplete-stream",
       message: "Provider stream ended without a terminal finish event",
+      route,
     }),
   })
 
@@ -258,7 +259,7 @@ const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent,
         Effect.suspend(() =>
           terminal
             ? Effect.void
-            : Effect.fail(incompleteStreamError()),
+            : Effect.fail(incompleteStreamError(route)),
         ),
       ),
     )
@@ -427,7 +428,7 @@ const generateWith = (stream: Interface["stream"]) =>
     const state = yield* stream(request, options).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
     const response = LLMResponse.complete(state)
     if (response) return response
-    return yield* incompleteStreamError()
+    return yield* incompleteStreamError(`${request.model.provider}/${request.model.route.id}`)
   })
 
 export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, AIError, Service> {

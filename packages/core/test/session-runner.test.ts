@@ -513,6 +513,16 @@ const providerUnavailable = () =>
     reason: new TransportReason({ message: "Provider unavailable" }),
   })
 
+const incompleteStream = () =>
+  new AIError({
+    module: "test",
+    method: "stream",
+    reason: new InvalidProviderOutputReason({
+      classification: "incomplete-stream",
+      message: "Provider stream ended without a terminal finish event",
+    }),
+  })
+
 const invalidRequest = () =>
   new AIError({
     module: "test",
@@ -3949,6 +3959,26 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("retries an incomplete stream before output", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Retry incomplete stream")
+      yield* TestLLM.push(Stream.fail(incompleteStream()))
+      yield* TestLLM.push(TestLLM.text("Recovered", "incomplete-stream-success"))
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      yield* TestClock.adjust("2 seconds")
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(2)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
   it.effect("uses a larger provider retry-after delay", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -3969,7 +3999,7 @@ describe("SessionRunnerLLM", () => {
   it.effect("does not retry eligible failures after observable output", () =>
     Effect.gen(function* () {
       const session = yield* setup
-      const failure = rateLimited()
+      const failure = incompleteStream()
       yield* TestLLM.push(
         TestLLM.failAfter(
           failure,
@@ -3987,7 +4017,7 @@ describe("SessionRunnerLLM", () => {
         {
           type: "assistant",
           finish: "error",
-          error: { type: "provider.rate-limit" },
+          error: { type: "provider.invalid-output" },
           content: [{ type: "text", text: "Partial" }],
         },
       ])

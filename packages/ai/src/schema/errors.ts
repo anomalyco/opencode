@@ -105,6 +105,7 @@ export class InvalidProviderOutputReason extends Schema.Class<InvalidProviderOut
 )({
   _tag: Schema.tag("InvalidProviderOutput"),
   message: Schema.String,
+  classification: Schema.optional(Schema.Literals(["incomplete-stream"])),
   route: Schema.optional(Schema.String),
   raw: Schema.optional(Schema.String),
   providerMetadata: Schema.optional(ProviderMetadata),
