@@ -23,6 +23,10 @@ export interface ParsedLoopArgs {
   queue: boolean
   /** true when --sync was passed (queue mode: specsync completed changes) */
   sync: boolean
+  /** queue mode gate overrides; unset falls back to experimental.queue_gate */
+  gateCwd?: string
+  testCommand?: string
+  verifyCommand?: string
 }
 
 const NUMERIC_FLAGS: Record<string, "interval" | "max" | "noProgressLimit"> = {
@@ -49,6 +53,18 @@ export function parseLoopArgs(input: string): ParsedLoopArgs {
   let completionToken: string | undefined
   let queue = false
   let sync = false
+  let gateCwd: string | undefined
+  let testCommand: string | undefined
+  let verifyCommand: string | undefined
+
+  // Flags that take a free-text value. Quoting is not available inside the
+  // TUI's single-line `/loop …` string, so a value runs to the next token —
+  // wrap multi-word commands in the config instead (experimental.queue_gate).
+  const STRING_FLAGS: Record<string, "gateCwd" | "testCommand" | "verifyCommand"> = {
+    "--gate-cwd": "gateCwd",
+    "--test-command": "testCommand",
+    "--verify-command": "verifyCommand",
+  }
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i]
@@ -58,6 +74,15 @@ export function parseLoopArgs(input: string): ParsedLoopArgs {
     }
     if (token === "--sync") {
       sync = true
+      continue
+    }
+    const stringField = STRING_FLAGS[token]
+    if (stringField) {
+      const raw = tokens[++i]
+      if (raw === undefined) throw new LoopArgError(`${token} requires a value`)
+      if (stringField === "gateCwd") gateCwd = raw
+      if (stringField === "testCommand") testCommand = raw
+      if (stringField === "verifyCommand") verifyCommand = raw
       continue
     }
     if (token === "--completion-token") {
@@ -89,5 +114,8 @@ export function parseLoopArgs(input: string): ParsedLoopArgs {
     completionToken,
     queue,
     sync,
+    gateCwd,
+    testCommand,
+    verifyCommand,
   }
 }

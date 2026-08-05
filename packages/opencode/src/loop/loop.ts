@@ -190,6 +190,13 @@ function promptHead(prompt: string) {
   return trimmed.length > 40 ? trimmed.slice(0, 40) + "…" : trimmed
 }
 
+type QueueGateConfig = {
+  cwd?: string
+  test_command?: string
+  verify_command?: string
+  default_branch?: string
+}
+
 type ChangeOutcome = {
   slug: string
   outcome: "completed" | "quarantined"
@@ -558,17 +565,35 @@ export const layer = Layer.effect(
         }
       }
 
+    // Gate commands resolve per-loop options first, then the repo's
+    // `experimental.queue_gate` config, then built-in defaults. The config
+    // layer exists for the TUI: typing `--test-command "…" --gate-cwd …` into
+    // a prompt box every time is not a workflow, and the built-in default
+    // (`bun test` at the repo root) is wrong for any repo that refuses to run
+    // tests from the root — this one included.
     const gateOptions = (exec: Exec, overrides?: CreateInput["queueOptions"]) =>
-      Effect.promise(async (): Promise<GateOptions> => {
-        const detect = async () => {
-          const head = await exec("git symbolic-ref --short refs/remotes/origin/HEAD")
-          return head.code === 0 && head.output.trim() ? head.output.trim().replace(/^origin\//, "") : "main"
-        }
-        return {
-          testCommand: overrides?.testCommand ?? "bun test",
-          verifyCommand: overrides?.verifyCommand ?? "bun run typecheck",
-          defaultBranch: overrides?.defaultBranch ?? (await detect()),
-        }
+      Effect.gen(function* () {
+        const cfg = yield* config.get().pipe(Effect.orElseSucceed(() => ({}) as never))
+        const fromConfig = (cfg as { experimental?: { queue_gate?: QueueGateConfig } }).experimental?.queue_gate
+        return yield* Effect.promise(async (): Promise<GateOptions> => {
+          const detect = async () => {
+            const head = await exec("git symbolic-ref --short refs/remotes/origin/HEAD")
+            return head.code === 0 && head.output.trim() ? head.output.trim().replace(/^origin\//, "") : "main"
+          }
+          return {
+            testCommand: overrides?.testCommand ?? fromConfig?.test_command ?? "bun test",
+            verifyCommand: overrides?.verifyCommand ?? fromConfig?.verify_command ?? "bun run typecheck",
+            defaultBranch: overrides?.defaultBranch ?? fromConfig?.default_branch ?? (await detect()),
+          }
+        })
+      })
+
+    /** Resolved gate working directory: per-loop, then config, then the repo root. */
+    const gateCwd = (record: Record_ | undefined) =>
+      Effect.gen(function* () {
+        const cfg = yield* config.get().pipe(Effect.orElseSucceed(() => ({}) as never))
+        const fromConfig = (cfg as { experimental?: { queue_gate?: QueueGateConfig } }).experimental?.queue_gate
+        return record?.queue?.options?.cwd ?? fromConfig?.cwd ?? record?.info.directory ?? process.cwd()
       })
 
     // Idle local peers for the brief's fan-out nudge (design D9). Only
@@ -669,7 +694,7 @@ export const layer = Layer.effect(
     const runQueue = (id: LoopID): Effect.Effect<void> =>
       Effect.gen(function* () {
         const initial = (yield* Ref.get(state)).get(id)
-        const exec = execIn(initial?.queue?.options?.cwd ?? initial?.info.directory ?? process.cwd())
+        const exec = execIn(yield* gateCwd(initial))
         // The spec requires the resolved order be reported before the first
         // iteration: an unattended run is only auditable if you can see what it
         // decided to work, and in what order, up front.

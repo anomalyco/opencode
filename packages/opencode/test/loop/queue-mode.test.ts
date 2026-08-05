@@ -410,3 +410,57 @@ it.instance(
     }),
   { config: {} },
 )
+
+it.instance(
+  "gate commands come from experimental.queue_gate so the TUI needs no flags",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      const marker = path.join(dir, "gate-ran-here.txt")
+      // The whole point of the config layer: a bare `/loop --queue` from the
+      // TUI must pick these up, because typing gate flags into a prompt box
+      // every time is not a workflow.
+      yield* writeConfig(dir, {
+        ...providerCfg(llm.url),
+        experimental: {
+          queue_gate: {
+            cwd: dir,
+            // Records that it ran, then fails — enough to prove which command
+            // was used without needing a real test suite.
+            test_command: `pwd > ${marker}; exit 1`,
+            verify_command: "exit 0",
+            default_branch: "main",
+          },
+        },
+      })
+      const changeDir = writeChange(dir, "config-gate-change", "- [ ] 1.1 do the work\n")
+      const loop = yield* Loop.Service
+
+      for (let i = 0; i < 8; i++) yield* llm.text("working on it")
+
+      // No queueOptions at all — exactly what the palette command sends.
+      const info = yield* loop.create({ prompt: "", mode: "queue", interval: 0, maxIterations: 10 })
+
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const hits = yield* llm.hits
+          return hits.length > 0 ? true : undefined
+        }),
+        "first implement turn never reached the provider",
+        "10 seconds",
+      )
+      fs.writeFileSync(path.join(changeDir, "tasks.md"), "- [x] 1.1 do the work\n")
+
+      const final = yield* waitForTerminal(info.id, 40)
+
+      // The configured test command ran, in the configured directory.
+      expect(fs.existsSync(marker)).toBe(true)
+      expect(fs.readFileSync(marker, "utf8")).toContain(dir.replace(/\/$/, "").split("/").pop()!)
+      // And because it never passes, the misconfiguration halt still protects
+      // the change rather than blockering it.
+      expect(final.status).toBe("error")
+      expect(fs.existsSync(path.join(changeDir, ".skein", "blocker.md"))).toBe(false)
+    }),
+  { config: {} },
+)

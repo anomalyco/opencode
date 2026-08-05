@@ -2108,6 +2108,12 @@ export type Config = {
     mcp_protocol_mode?: McpProtocolMode
     local_subagent_placement?: boolean
     local_subagent_placement_models?: Array<string>
+    queue_gate?: {
+      cwd?: string
+      test_command?: string
+      verify_command?: string
+      default_branch?: string
+    }
     stream_inactivity_seconds?: number
     policies?: Array<ConfigV2ExperimentalPolicy>
   }

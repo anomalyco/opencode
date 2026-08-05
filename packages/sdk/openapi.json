@@ -22173,6 +22173,24 @@
                   "type": "string"
                 }
               },
+              "queue_gate": {
+                "type": "object",
+                "properties": {
+                  "cwd": {
+                    "type": "string"
+                  },
+                  "test_command": {
+                    "type": "string"
+                  },
+                  "verify_command": {
+                    "type": "string"
+                  },
+                  "default_branch": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
               "stream_inactivity_seconds": {
                 "type": "integer",
                 "exclusiveMinimum": 0

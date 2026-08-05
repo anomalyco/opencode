@@ -73,8 +73,10 @@ export function DialogLoopList() {
       skipFilter={true}
       emptyView={
         <text>
-          No loops yet — start one with /loop &lt;prompt&gt;. The agent is told to emit
-          &lt;promise&gt;COMPLETE&lt;/promise&gt; when the task is done.
+          No loops yet. /loop &lt;prompt&gt; repeats a prompt until the agent emits
+          &lt;promise&gt;COMPLETE&lt;/promise&gt;. /loop --queue works the openspec backlog change by change
+          (implement, test, verify, commit — never pushes). Set experimental.queue_gate in your config so
+          the queue's test and verify commands run in the right directory.
         </text>
       }
       onSelect={(option) => {

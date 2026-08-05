@@ -203,6 +203,20 @@ export const Info = Schema.Struct({
         description:
           "Model IDs trusted for local subagent placement (the parent's own model is always trusted). Unset: any tool-capable model on an idle provider qualifies",
       }),
+      queue_gate: Schema.optional(
+        Schema.Struct({
+          cwd: Schema.optional(Schema.String),
+          test_command: Schema.optional(Schema.String),
+          verify_command: Schema.optional(Schema.String),
+          default_branch: Schema.optional(Schema.String),
+        }),
+      ).annotate({
+        description:
+          "Default gate commands for `loop --queue` / `/loop --queue`. Set once per repo so the queue works " +
+          "without retyping flags: 'cwd' is where the commands run (some repos refuse to run tests from the root), " +
+          "'test_command' and 'verify_command' are the test and verify gates, and 'default_branch' is the branch " +
+          "the commit gate must never commit to. Per-loop options override these.",
+      }),
       stream_inactivity_seconds: Schema.optional(PositiveInt).annotate({
         description:
           "Fail a provider stream that delivers no events for this many seconds (default: 300, 0 disables). Guards against half-open connections that would otherwise park a turn forever.",

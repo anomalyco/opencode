@@ -1189,6 +1189,10 @@ export function Prompt(props: PromptProps) {
               mode: parsed.queue ? "queue" : undefined,
               queue: parsed.queue && parsed.prompt ? parsed.prompt.split(/\s+/) : undefined,
               queueSync: parsed.queue && parsed.sync ? true : undefined,
+              queueOptions:
+                parsed.queue && (parsed.gateCwd || parsed.testCommand || parsed.verifyCommand)
+                  ? { cwd: parsed.gateCwd, testCommand: parsed.testCommand, verifyCommand: parsed.verifyCommand }
+                  : undefined,
             })
             .then((result) => {
               if (result.error || !result.data) {

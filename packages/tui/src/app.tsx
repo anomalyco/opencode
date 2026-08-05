@@ -634,7 +634,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         // per change, quarantining stuck changes rather than idling. Runs
         // under the no-push authority ceiling.
         name: "loop.queue.start",
-        title: "Start openspec queue run (all eligible changes)",
+        title: "Start openspec queue run (all eligible changes, never pushes)",
         category: "Loop",
         slashName: "queue",
         run: async () => {
@@ -644,7 +644,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             const info = result.data!
             toast.show({
               variant: "success",
-              message: `Queue run ${info.id} started — never stops until the backlog is drained or quarantined`,
+              message:
+                `Queue run ${info.id} started — it works the backlog until nothing is eligible. ` +
+                `Gate commands come from experimental.queue_gate; watch /loops for the change and gate.`,
             })
           } catch (error) {
             toast.show({ title: "Failed to start queue run", message: errorMessage(error), variant: "error" })
