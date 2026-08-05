@@ -59,16 +59,6 @@ export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
   readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
-  /**
-   * Temporary bridge method for writing the resolved project ID to the repo-local cache.
-   *
-   * This exists while the old opencode project service and this core project
-   * service work together: core resolves the ID, while the old service still owns
-   * database migration and persistence. The old service should call this after it
-   * finishes migrating from `resolve().previous` to `resolve().id`; once project
-   * persistence moves into core, this separate bridge method can go away.
-   */
-  readonly commit: (input: { store: AbsolutePath; id: ID }) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
@@ -268,11 +258,7 @@ const layer = Layer.effect(
       return yield* persist({ id: ID.global, directory, canonical: directory, vcs: undefined })
     })
 
-    const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {
-      yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
-    })
-
-    return Service.of({ list, directories, resolve, commit })
+    return Service.of({ list, directories, resolve })
   }),
 )
 

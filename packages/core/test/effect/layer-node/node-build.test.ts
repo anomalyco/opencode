@@ -80,7 +80,6 @@ describe("node build", () => {
           list: () => Effect.succeed([]),
           directories: () => Effect.succeed([]),
           resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
-          commit: () => Effect.void,
         })
       }),
     )
