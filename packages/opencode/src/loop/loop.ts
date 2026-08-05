@@ -734,10 +734,35 @@ export const layer = Layer.effect(
 
             switch (gate) {
               case "implement": {
+                // A downstream gate (test/verify/commit) that failed sends us
+                // back here to REPAIR, and repair always costs a model turn.
+                // Short-circuiting on "all checkboxes are still checked" would
+                // re-pass instantly and burn every strike without the model
+                // ever seeing the failure — observed on the first real
+                // unattended run, where three test-gate failures quarantined a
+                // finished change with zero repair attempts.
+                if (failure) {
+                  const repairing = failure
+                  iterations += 1
+                  const attempt = yield* queueTurn(id, change, "implement", repairing)
+                  if (!attempt) return
+                  if (attempt.aborted) {
+                    yield* finishQueue(id, "cancelled", "cancelled by user")
+                    return
+                  }
+                  if (matchesCompletion(attempt.output, BLOCKED_TOKEN, "")) {
+                    yield* quarantineNow("model signalled BLOCKED", attempt.output.slice(-2_000))
+                    break change
+                  }
+                  // Re-run the gate that failed; its own strike counter decides
+                  // when repair attempts have been exhausted.
+                  gate = repairing.gate
+                  failure = undefined
+                  continue
+                }
                 const check = evaluateImplement(change)
                 if (check.passed) {
                   failCounts.implement = 0
-                  failure = undefined
                   gate = "test"
                   queueState.anyGatePassed = true
                   continue

@@ -353,3 +353,54 @@ it.instance(
     }),
   { config: {} },
 )
+
+it.instance(
+  "a failing gate spends a repair turn instead of burning strikes silently",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      const changeDir = writeChange(dir, "gate-failing-change", "- [ ] 1.1 do the work\n")
+      const tasksFile = path.join(changeDir, "tasks.md")
+      const loop = yield* Loop.Service
+
+      for (let i = 0; i < 8; i++) yield* llm.text("I looked at the failure and tried a fix")
+
+      const info = yield* loop.create({
+        prompt: "",
+        mode: "queue",
+        interval: 0,
+        maxIterations: 10,
+        // A test command that can never pass, so every implement->test cycle
+        // must come back through a repair turn.
+        queueOptions: { testCommand: "exit 1", verifyCommand: "exit 0", defaultBranch: "main" },
+      })
+
+      // Stand in for the agent finishing the work: once its first turn has
+      // reached the provider, check the task off so the implement gate passes
+      // and the failing test gate becomes reachable.
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const hits = yield* llm.hits
+          return hits.length > 0 ? true : undefined
+        }),
+        "first implement turn never reached the provider",
+        "10 seconds",
+      )
+      fs.writeFileSync(tasksFile, "- [x] 1.1 do the work\n")
+
+      const final = yield* waitForTerminal(info.id, 40)
+
+      // Three test-gate failures quarantine the change...
+      expect(final.report).toContain("gate-failing-change: quarantined")
+      expect(final.report).toContain("test gate failed")
+      // ...and each failure spent a real repair turn that carried the gate's
+      // failure output to the model, rather than re-passing the checkbox gate
+      // and burning strikes in a tight loop with no model involvement.
+      const hits = yield* llm.hits
+      const withFailure = hits.map((h) => JSON.stringify(h.body)).filter((b) => b.includes("TEST gate failed"))
+      expect(withFailure.length).toBeGreaterThanOrEqual(2)
+    }),
+  { config: {} },
+)

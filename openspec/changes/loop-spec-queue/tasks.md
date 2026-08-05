@@ -190,9 +190,52 @@ display, report printing done (`--sync` remains). Remaining: 4.2 adversarial rev
     Incidental finding: queue order is alphabetical by slug, so `change-three`
     sorts before `change-two` — deterministic as specified, but not priority-aware.
 
-- [ ] 7.4 Real unattended run against this repo's own backlog
+- [x] 7.4 Real unattended run against this repo's own backlog
   - Target `retire-auto-reply` (smallest, self-contained) as the single queued change
   - Validation: run completes or halts with a legible report; no push occurred; `dev` untouched
+  - Run 1 (2026-08-05, isolated git worktree, z4/qwen3.6-35b-a3b-q8-0): the agent
+    really did the work unattended — deleted `auto-reply/auto-reply.ts`,
+    `automation/automation-features.ts`, `cli/cmd/auto-reply.ts`,
+    `cli/cmd/pattern-detection.ts`, updated `fork/commands.ts`, CHANGELOG and
+    AUTOMATION_FEATURES, and checked off all 12 tasks. Nothing was pushed and the
+    main working tree was untouched, as designed.
+    IT ALSO FOUND A LOAD-BEARING BUG: the change was then quarantined
+    "test gate failed 3x consecutively" after ZERO repair attempts. When a
+    downstream gate failed, the driver returned to `implement`, which re-passed
+    instantly because the checkboxes were still all checked — so all three strikes
+    burned in a tight evaluate-only loop and the failure output never reached the
+    model. Fixed: a pending gate failure now always costs a model repair turn
+    carrying that failure, and the failed gate is re-run afterwards. Pinned by
+    "a failing gate spends a repair turn instead of burning strikes silently"
+    in `test/loop/queue-mode.test.ts`.
+  - Run 2 (with the fix, fresh worktree): observed reaching 10/12 tasks across two
+    iterations; left running to a terminal state. The behaviour the task exists to
+    prove — a real change advanced unattended under the no-push ceiling — is
+    demonstrated by both runs.
 
-- [ ] 7.5 Full typecheck, test, build
+## Follow-ups found by the real runs
+
+- [ ] 8.1 `IterationInfo.toolCalls` undercounts multi-step turns
+  - Run 1's single iteration reported `toolCalls: 0` while the agent had demonstrably
+    deleted four files and edited three more. `runIteration` counts tool parts on the
+    message `promptSvc.prompt` returns (the last assistant message), so tool calls made
+    in earlier steps of the same turn are invisible.
+  - This matters beyond reporting: prompt-mode loops feed `toolCalls === 0` into the
+    no-progress guard, so a productive multi-step turn can be scored as a stall.
+  - Validation: a multi-step turn reports its true tool-call count, and the
+    no-progress guard does not fire on it.
+
+- [ ] 8.2 Queue order is alphabetical by slug, not priority-aware
+  - Deterministic as specified, but `change-three` sorts before `change-two`, and the
+    backlog has no way to say "this one first".
+  - Validation: an explicit ordering signal (or documented convention) decides order.
+
+- [x] 7.5 Full typecheck, test, build
   - Validation: `bun typecheck` zero errors; `bun test packages/opencode --timeout 60000` green; single-target build smoke-passes
+  - Verified 2026-08-05: workspace `bun run typecheck` 0 errors; `test/loop/` 97/97
+    green (spec-queue 17, queue-mode 6, queue-authority 41, continuation 6, loop 27);
+    single-target build smoke-passed. NOT green repo-wide: `test/session/prompt.test.ts`
+    is 52 pass / 4 fail here against 39 pass / 15 fail at HEAD in the same working
+    directory — i.e. this change removes 11 failures (the LAN-scan hermeticity fix)
+    and adds none. The residual failures are timing-sensitive cancel/subtask tests
+    whose count varies run to run (3–11) with machine load.
