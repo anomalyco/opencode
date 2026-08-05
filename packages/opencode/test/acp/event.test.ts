@@ -167,6 +167,17 @@ function toolUpdated(part: ToolPart): Event {
   }
 }
 
+function todoUpdated(
+  sessionID: string,
+  todos: Array<{ content: string; status: string; priority: string }>,
+): Event {
+  return {
+    id: `evt_todo_${sessionID}`,
+    type: "todo.updated",
+    properties: { sessionID, todos },
+  }
+}
+
 function assistantMessage(sessionID: string, messageID: string, partID: string, type: DeltaPartType) {
   return {
     info: {
@@ -712,6 +723,37 @@ describe("acp event routing", () => {
       content: [{ type: "content", content: { type: "text", text: "failed hard" } }],
       rawOutput: { error: "failed hard", metadata: { exit: 1 } },
     })
+  })
+
+  it("emits an ACP plan from todo.updated events", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_todo", cwd: "/workspace" }))
+
+    await harness.subscription.handle(
+      todoUpdated("ses_todo", [
+        { content: "Analyze", status: "completed", priority: "high" },
+        { content: "Implement", status: "in_progress", priority: "high" },
+        { content: "Ship", status: "pending", priority: "medium" },
+        { content: "Dropped", status: "cancelled", priority: "low" },
+      ]),
+    )
+
+    const plan = harness.updates.find((update) => update.update.sessionUpdate === "plan")
+    expect(plan?.sessionId).toBe("ses_todo")
+    expect((plan!.update as { entries: unknown[] }).entries).toEqual([
+      { content: "Analyze", status: "completed", priority: "high" },
+      { content: "Implement", status: "in_progress", priority: "high" },
+      { content: "Ship", status: "pending", priority: "medium" },
+      { content: "Dropped", status: "completed", priority: "low" },
+    ])
+  })
+
+  it("ignores todo.updated for unknown sessions", async () => {
+    const harness = createHarness()
+    await harness.subscription.handle(
+      todoUpdated("ses_missing", [{ content: "x", status: "pending", priority: "low" }]),
+    )
+    expect(harness.updates).toHaveLength(0)
   })
 
   it("emits image attachments as ACP image content for live and replayed completed tool updates", async () => {

@@ -102,6 +102,8 @@ export class Subscription {
         return this.handlePartUpdated(event)
       case "message.part.delta":
         return this.handlePartDelta(event)
+      case "todo.updated":
+        return this.handleTodoUpdated(event)
     }
   }
 
@@ -256,6 +258,22 @@ export class Subscription {
         },
       })
     }
+  }
+
+  private async handleTodoUpdated(event: Extract<Event, { type: "todo.updated" }>) {
+    const session = await Effect.runPromise(this.input.session.tryGet(event.properties.sessionID))
+    if (!session) return
+    await this.input.connection.sessionUpdate({
+      sessionId: session.id,
+      update: {
+        sessionUpdate: "plan",
+        entries: event.properties.todos.map((todo) => ({
+          content: todo.content,
+          priority: planPriority(todo.priority),
+          status: planStatus(todo.status),
+        })),
+      },
+    })
   }
 
   private async fetchPartMetadata(sessionId: string, cwd: string, messageId: string, partId: string) {
@@ -416,6 +434,17 @@ function signal() {
     resolve: () => state.resolve(),
     reject: (reason?: unknown) => state.reject(reason),
   }
+}
+
+function planStatus(status: string): "pending" | "in_progress" | "completed" {
+  if (status === "in_progress") return "in_progress"
+  if (status === "pending") return "pending"
+  return "completed"
+}
+
+function planPriority(priority: string): "high" | "medium" | "low" {
+  if (priority === "high" || priority === "medium" || priority === "low") return priority
+  return "medium"
 }
 
 export * as ACPEvent from "./event"
