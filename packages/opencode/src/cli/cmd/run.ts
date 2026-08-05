@@ -696,20 +696,27 @@ export const RunCommand = effectCmd({
         // created, and replies issued from inside the loop must use that client.
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
+          // messageID -> model that produced it, so step events can carry the
+          // attribution that only lives on the assistant message.
+          const models = new Map<string, { providerID: string; modelID: string }>()
           let error: string | undefined
 
           for await (const event of events.stream) {
             if (
               event.type === "message.updated" &&
               event.properties.sessionID === sessionID &&
-              event.properties.info.role === "assistant" &&
-              args.format !== "json" &&
-              toggles.get("start") !== true
+              event.properties.info.role === "assistant"
             ) {
-              UI.empty()
-              UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
-              UI.empty()
-              toggles.set("start", true)
+              models.set(event.properties.info.id, {
+                providerID: event.properties.info.providerID,
+                modelID: event.properties.info.modelID,
+              })
+              if (args.format !== "json" && toggles.get("start") !== true) {
+                UI.empty()
+                UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
+                UI.empty()
+                toggles.set("start", true)
+              }
             }
 
             if (event.type === "message.part.updated") {
@@ -738,11 +745,11 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "step-start") {
-                if (emit("step_start", { part })) continue
+                if (emit("step_start", { part, ...models.get(part.messageID) })) continue
               }
 
               if (part.type === "step-finish") {
-                if (emit("step_finish", { part })) continue
+                if (emit("step_finish", { part, ...models.get(part.messageID) })) continue
               }
 
               if (part.type === "text" && part.time?.end) {
