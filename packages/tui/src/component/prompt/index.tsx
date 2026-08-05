@@ -260,16 +260,26 @@ export function Prompt(props: PromptProps) {
       }
     | undefined
   >()
+function matchesVerb(input: string, verb: string): boolean {
+  return input === verb || input.startsWith(`${verb} `) || input.startsWith(`${verb}\n`)
+}
+
 /**
  * `/loop` and `/queue` are intercepted before server prompt-templates so they
  * can take arguments. Matching is exact-verb-then-boundary so a genuine message
  * like "/loopback is broken" is still sent to the model.
  */
 function isLoopCommand(input: string): boolean {
-  for (const verb of ["/loop", "/queue"]) {
-    if (input === verb || input.startsWith(`${verb} `) || input.startsWith(`${verb}\n`)) return true
-  }
-  return false
+  return matchesVerb(input, "/loop") || matchesVerb(input, "/queue")
+}
+
+/**
+ * Inputs that must NOT cancel a running loop: the run-management verbs, and
+ * `/btw`, whose whole purpose is asking something without disturbing the work
+ * in progress.
+ */
+function isRunControlInput(input: string): boolean {
+  return isLoopCommand(input) || matchesVerb(input, "/btw")
 }
 
   const isLoopLive = (status: string) => status === "running" || status === "paused"
@@ -1063,9 +1073,13 @@ function isLoopCommand(input: string): boolean {
       return true
     }
     // Sending a message while a loop drives this session would race the loop's
-    // own iteration prompts. Stop the loop first so the user's message takes
-    // over cleanly (the /loop command itself is handled earlier and skips this).
-    if (activeLoop() && !trimmed.startsWith("/loop")) {
+    // own iteration prompts, so a real message stops the loop first and takes
+    // over. Not everything typed is a real message though: `/btw` is a side
+    // question that runs no tools and never joins the conversation, and
+    // `/loop` / `/queue` manage runs rather than compete with them. Cancelling
+    // an hours-long backlog run because someone asked "what was that file
+    // called?" is the opposite of what those commands are for.
+    if (activeLoop() && !isRunControlInput(trimmed)) {
       const loop = activeLoop()!
       await sdk.client.loop.cancel({ loopID: loop.id }).catch(() => undefined)
       await sdk.client.session.abort({ sessionID: props.sessionID! }).catch(() => undefined)

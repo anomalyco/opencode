@@ -619,18 +619,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
-        // Palette trigger (and bare `/loop` with no prompt text, handled in
-        // prompt/index.tsx) both just open the management dialog — starting
-        // a loop with a prompt needs argument text the palette can't supply.
-        name: "loop.start",
-        title: "Start loop",
-        category: "Loop",
-        slashName: "loop",
-        run: () => {
-          dialog.replace(() => <DialogLoopList />)
-        },
-      },
-      {
         // Relentless openspec queue run: implement -> test -> verify -> commit
         // per change, quarantining stuck changes rather than idling. Runs
         // under the no-push authority ceiling.
@@ -652,7 +640,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
               variant: "success",
               message:
                 `Queue run ${info.id} started — it works the backlog until nothing is eligible. ` +
-                `Gate commands come from experimental.queue_gate; watch /loops for the change and gate.`,
+                `Gate commands come from experimental.queue_gate; watch /loop for the change and gate.`,
             })
           } catch (error) {
             toast.show({ title: "Failed to start queue run", message: errorMessage(error), variant: "error" })
@@ -660,10 +648,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
+        // One entry, not two: `loop.start` and `loop.list` both opened this
+        // exact dialog, so `/loop` and `/loops` differed by one character and
+        // did the same thing. Starting a run needs argument text the palette
+        // cannot supply, so the palette's job is only to open the dialog —
+        // `/loop <prompt>` and `/queue …` are intercepted in the prompt.
         name: "loop.list",
-        title: "Manage loops",
+        title: "Loops — running and past runs",
         category: "Loop",
-        slashName: "loops",
+        slashName: "loop",
         run: () => {
           dialog.replace(() => <DialogLoopList />)
         },
