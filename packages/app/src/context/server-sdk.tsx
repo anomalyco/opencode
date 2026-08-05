@@ -281,7 +281,6 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
           for await (const event of events) {
             streamErrorLogged = false
             const legacy = "payload" in event
-            if (legacy && event.payload.type === "sync") continue
             const directory = legacy ? (event.directory ?? "global") : (event.location?.directory ?? "global")
             const payload = legacy ? (event.payload as Event) : adaptServerEvent(event)
             if (enqueueServerEvent(queue, { directory, payload })) schedule()
