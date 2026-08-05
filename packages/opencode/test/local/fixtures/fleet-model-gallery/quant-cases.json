@@ -1,0 +1,240 @@
+[
+  {
+    "note": "plain Q8_0",
+    "name": "Qwen3-32B-Q8_0.gguf",
+    "quant": "q8_0",
+    "rank": 1,
+    "bpw": 8
+  },
+  {
+    "note": "plain Q6_K",
+    "name": "Qwen3-32B-Q6_K.gguf",
+    "quant": "q6_k",
+    "rank": 2,
+    "bpw": 6
+  },
+  {
+    "note": "plain Q5_K_M",
+    "name": "Qwen3-32B-Q5_K_M.gguf",
+    "quant": "q5_k_m",
+    "rank": 3,
+    "bpw": 5.5
+  },
+  {
+    "note": "plain Q5_K_S",
+    "name": "Qwen3-32B-Q5_K_S.gguf",
+    "quant": "q5_k_s",
+    "rank": 4,
+    "bpw": 5.5
+  },
+  {
+    "note": "plain Q4_K_M, the default recommendation",
+    "name": "Qwen3-32B-Q4_K_M.gguf",
+    "quant": "q4_k_m",
+    "rank": 5,
+    "bpw": 4.5
+  },
+  {
+    "note": "plain Q4_K_S",
+    "name": "Qwen3-32B-Q4_K_S.gguf",
+    "quant": "q4_k_s",
+    "rank": 6,
+    "bpw": 4.2
+  },
+  {
+    "note": "legacy Q4_0",
+    "name": "Qwen3-32B-Q4_0.gguf",
+    "quant": "q4_0",
+    "rank": 7,
+    "bpw": 4
+  },
+  {
+    "note": "plain Q3_K_M",
+    "name": "Qwen3-32B-Q3_K_M.gguf",
+    "quant": "q3_k_m",
+    "rank": 8,
+    "bpw": 3.3
+  },
+  {
+    "note": "plain Q3_K_S",
+    "name": "Qwen3-32B-Q3_K_S.gguf",
+    "quant": "q3_k_s",
+    "rank": 9,
+    "bpw": 3
+  },
+  {
+    "note": "plain Q2_K",
+    "name": "Qwen3-32B-Q2_K.gguf",
+    "quant": "q2_k",
+    "rank": 10,
+    "bpw": 2.5
+  },
+  {
+    "note": "IQ4_NL ranks with Q4_K_M",
+    "name": "Qwen3-32B-IQ4_NL.gguf",
+    "quant": "iq4_nl",
+    "rank": 5,
+    "bpw": 4.5
+  },
+  {
+    "note": "IQ4_XS ranks with Q4_K_S; bpw falls through to plain q4",
+    "name": "Qwen3-32B-IQ4_XS.gguf",
+    "quant": "iq4_xs",
+    "rank": 6,
+    "bpw": 4.5
+  },
+  {
+    "note": "IQ3_M ranks with Q3_K_M",
+    "name": "Qwen3-32B-IQ3_M.gguf",
+    "quant": "iq3_m",
+    "rank": 8,
+    "bpw": 4.5
+  },
+  {
+    "note": "IQ2_M ranks with Q2_K",
+    "name": "Qwen3-32B-IQ2_M.gguf",
+    "quant": "iq2_m",
+    "rank": 10,
+    "bpw": 4.5
+  },
+  {
+    "note": "IQ2_XS, the lowest ranked quant",
+    "name": "Qwen3-32B-IQ2_XS.gguf",
+    "quant": "iq2_xs",
+    "rank": 11,
+    "bpw": 4.5
+  },
+  {
+    "note": "UD-Q4_K_M is recognised and ranks as Q4_K_M",
+    "name": "Qwen3-32B-UD-Q4_K_M.gguf",
+    "quant": "ud_q4_k_m",
+    "rank": 5,
+    "bpw": 4.5
+  },
+  {
+    "note": "UD-Q5_K_M parses but is UNRANKED (rank 0), so it sorts below Q2_K",
+    "name": "Qwen3-32B-UD-Q5_K_M.gguf",
+    "quant": "ud_q5_k_m",
+    "rank": 0,
+    "bpw": 5.5
+  },
+  {
+    "note": "UD-Q8_0 parses but is UNRANKED (rank 0), so it sorts below Q2_K",
+    "name": "Qwen3-32B-UD-Q8_0.gguf",
+    "quant": "ud_q8_0",
+    "rank": 0,
+    "bpw": 8
+  },
+  {
+    "note": "UD-Q4_K_XL is NOT recognised: unknown, rank 0",
+    "name": "Qwen3-32B-UD-Q4_K_XL.gguf",
+    "quant": "unknown",
+    "rank": 0,
+    "bpw": 4.5
+  },
+  {
+    "note": "APEX Balanced maps to Q4_K_M",
+    "name": "Qwen3.6-35B-A3B-APEX-Balanced.gguf",
+    "quant": "q4_k_m",
+    "rank": 5,
+    "bpw": 4.5
+  },
+  {
+    "note": "APEX Quality maps to Q5_K_M",
+    "name": "Qwen3.6-35B-A3B-APEX-Quality.gguf",
+    "quant": "q5_k_m",
+    "rank": 3,
+    "bpw": 4.5
+  },
+  {
+    "note": "APEX Compact maps to Q4_K_S",
+    "name": "Qwen3.6-35B-A3B-APEX-Compact.gguf",
+    "quant": "q4_k_s",
+    "rank": 6,
+    "bpw": 4.5
+  },
+  {
+    "note": "APEX Mini maps to Q3_K_M",
+    "name": "Qwen3.6-35B-A3B-APEX-Mini.gguf",
+    "quant": "q3_k_m",
+    "rank": 8,
+    "bpw": 4.5
+  },
+  {
+    "note": "APEX Nano maps to Q2_K",
+    "name": "Qwen3.6-35B-A3B-APEX-Nano.gguf",
+    "quant": "q2_k",
+    "rank": 10,
+    "bpw": 4.5
+  },
+  {
+    "note": "i-quality tier variant",
+    "name": "SomeModel-i-quality.gguf",
+    "quant": "q5_k_m",
+    "rank": 3,
+    "bpw": 4.5
+  },
+  {
+    "note": "no quant token at all: unknown, but bpw assumes Q4_K_M",
+    "name": "Qwen3-32B.gguf",
+    "quant": "unknown",
+    "rank": 0,
+    "bpw": 4.5
+  },
+  {
+    "note": "F16 is unranked by name but sized correctly",
+    "name": "Qwen3-32B-F16.gguf",
+    "quant": "unknown",
+    "rank": 0,
+    "bpw": 16
+  },
+  {
+    "note": "BF16 is unranked by name but sized correctly",
+    "name": "Qwen3-32B-BF16.gguf",
+    "quant": "unknown",
+    "rank": 0,
+    "bpw": 16
+  },
+  {
+    "note": "nonsense quant token",
+    "name": "Qwen3-32B-Q9_Z_ZZ.gguf",
+    "quant": "unknown",
+    "rank": 0,
+    "bpw": 4.5
+  },
+  {
+    "note": "sharded Q4_K_M, first shard",
+    "name": "Qwen3-235B-Q4_K_M-00001-of-00005.gguf",
+    "quant": "q4_k_m",
+    "rank": 5,
+    "bpw": 4.5
+  },
+  {
+    "note": "sharded Q4_K_M, later shard parses identically",
+    "name": "Qwen3-235B-Q4_K_M-00003-of-00005.gguf",
+    "quant": "q4_k_m",
+    "rank": 5,
+    "bpw": 4.5
+  },
+  {
+    "note": "sharded with no quant token",
+    "name": "Qwen3-235B-00001-of-00005.gguf",
+    "quant": "unknown",
+    "rank": 0,
+    "bpw": 4.5
+  },
+  {
+    "note": "full repo path, quant in the file segment",
+    "name": "unsloth/Qwen3-32B-GGUF/Qwen3-32B-Q4_K_M.gguf",
+    "quant": "q4_k_m",
+    "rank": 5,
+    "bpw": 4.5
+  },
+  {
+    "note": "model-ID form uses dashes, not underscores",
+    "name": "qwen3-32b-q4-k-m",
+    "quant": "q4_k_m",
+    "rank": 5,
+    "bpw": 4.5
+  }
+]

@@ -17,7 +17,14 @@ export type FamilyVersion = {
 // letters followed by an optional v and a version number.
 // "Qwen3.6-35B-A3B" -> {family: "qwen", version: 3.6}; "gemma-4-26B" ->
 // {family: "gemma", version: 4}; "deepseek-v4" -> {family: "deepseek", version: 4}.
-const MODEL_FAMILY_RE = /([a-z]{3,})[-_. ]?v?(\d+(?:\.\d+)?)/g
+//
+// The decimal separator accepts "_" as well as "." (internlm2_5 -> 2.5), matching
+// the convention quant.ts's generationFromArchitecture already uses for the same
+// naming pattern (qwen3_5 -> 3.5). Skein's Go original accepted only ".", which
+// truncated internlm2_5/internlm2_6 to the same version and made a real point
+// release silently vanish from upgrade detection (fleet-model-gallery fixtures
+// §10); fixed here since this is active destination code, not a historical pin.
+const MODEL_FAMILY_RE = /([a-z]{3,})[-_. ]?v?(\d+(?:[._]\d+)?)/g
 const TRAILING_V_SEP_RE = /[-_. ]*v?$/
 
 /**
@@ -26,6 +33,17 @@ const TRAILING_V_SEP_RE = /[-_. ]*v?$/
  * version ("mistral-small-3.1" -> "mistralsmall"), so sibling lines like
  * mistral-small vs mistral-large stay distinct. Parameter counts like "35B" are
  * not versions: digits immediately followed by "b" are skipped.
+ *
+ * Known gap, deliberately not fixed here: an MoE "NxM" expert-count marker
+ * (Mixtral-8x7B, Mixtral-8x22B) is read as version N because "x" doesn't match
+ * the size-marker exclusion below, so both tie at version 8 and a genuinely
+ * larger model silently vanishes from upgrade detection. A correct fix isn't a
+ * narrow regex patch — MoE expert counts aren't a "version" at all, and
+ * skipping the false match here just shifts `family` to include whatever
+ * unrelated text precedes the next real version token. Comparing MoE model
+ * sizes needs a different signal (parameter count) than this function
+ * produces, so it is pinned rather than patched; see fleet-model-gallery
+ * fixtures §10.
  */
 export function modelFamilyVersion(name: string): FamilyVersion | null {
   const lower = basename(name).toLowerCase()
@@ -35,7 +53,7 @@ export function modelFamilyVersion(name: string): FamilyVersion | null {
     const matchEnd = match.index + match[0].length
     const versionStart = matchEnd - versionText.length
     if (lower.slice(matchEnd).startsWith("b")) continue // "35b" is a size, not a version
-    const version = Number(versionText)
+    const version = Number(versionText.replace("_", "."))
     if (!Number.isFinite(version)) continue
     const family = [...lower.slice(0, versionStart).replace(TRAILING_V_SEP_RE, "")]
       .filter((char) => char >= "a" && char <= "z")
@@ -141,10 +159,22 @@ export function parseRecommendationQuant(filename: string): string {
 }
 
 // Lower rank is better quality; quants absent from this table are unranked.
+//
+// ud_q5_k_m and ud_q8_0 are ranked at their base quant's quality, fixing a Skein
+// defect where only ud_q4_k_m was ranked: UD-Q5_K_M and UD-Q8_0 parsed correctly
+// but fell through to rank 0 (unranked), sorting *below* Q2_K — the single most
+// consequential defect the fixture export found, since it would make a smart-pull
+// ranking prefer the lowest-quality file over a much better one. Fixed here since
+// this is active destination code. UD-Q4_K_XL and other UD tiers still parse to
+// "unknown" (see parseRecommendationQuant) — left unranked/unpinned rather than
+// patched here, since generalizing UD-tier recognition is a broader decision than
+// this table; see fleet-model-gallery fixtures §9.
 const RECOMMENDATION_QUANT_RANK: Record<string, number> = {
   q8_0: 1,
+  ud_q8_0: 1,
   q6_k: 2,
   q5_k_m: 3,
+  ud_q5_k_m: 3,
   q5_k_s: 4,
   q4_k_m: 5,
   iq4_nl: 5,
