@@ -1,7 +1,6 @@
 import { AIError, ToolFailure } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { PlatformError } from "effect/PlatformError"
 import { Permission } from "../permission"
 import { Question } from "../question"
 import { Integration } from "../integration"
@@ -41,11 +40,10 @@ export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof Question.RejectedError) return { type: "aborted", message: cause.message }
   if (cause instanceof ToolFailure || cause instanceof Tool.Error) {
     if (cause.error === undefined) return { type: "tool.execution", message: cause.message }
-    if (cause.error instanceof PlatformError)
-      return { type: "tool.execution", message: `${cause.message}: ${platformErrorMessage(cause.error)}` }
+    // The canonical error is the sole model-visible representation, so a cause
+    // with no message must not erase the tool's curated failure message.
     const unwrapped = toSessionError(cause.error)
-    if (unwrapped.message === "") return { ...unwrapped, type: "tool.execution", message: cause.message }
-    return unwrapped
+    return unwrapped.message === "" ? { ...unwrapped, type: "tool.execution", message: cause.message } : unwrapped
   }
   if (cause instanceof StepFailedError) return cause.error
   if (cause instanceof AgentNotFoundError) return { type: "unknown", message: cause.message }
@@ -58,7 +56,6 @@ export function toSessionError(cause: unknown): SessionError.Error {
   )
     return { type: "provider.no-route", message: cause.message }
   if (cause instanceof Integration.AuthorizationError) return { type: "provider.auth", message: cause.message }
-  if (cause instanceof PlatformError) return { type: "unknown", message: platformErrorMessage(cause) }
   return { type: "unknown", message: cause instanceof Error ? cause.message : String(cause) }
 }
 
@@ -66,40 +63,4 @@ function providerError(type: string, reason: AIError["reason"]): SessionError.Er
   const status =
     ("http" in reason ? reason.http?.response?.status : undefined) ?? ("status" in reason ? reason.status : undefined)
   return { type, message: reason.message, ...(status === undefined ? {} : { status }) }
-}
-
-function platformErrorMessage(error: PlatformError) {
-  const reason = error.reason
-  if (reason._tag === "BadArgument")
-    return `invalid argument${reason.description ? `: ${reason.description}` : ""}`
-
-  const label = (() => {
-    switch (reason._tag) {
-      case "AlreadyExists":
-        return "already exists"
-      case "BadResource":
-        return "resource is invalid or closed"
-      case "Busy":
-        return "resource is busy"
-      case "InvalidData":
-        return "invalid data"
-      case "NotFound":
-        return "not found"
-      case "PermissionDenied":
-        return "permission denied"
-      case "TimedOut":
-        return "timed out"
-      case "UnexpectedEof":
-        return "unexpected end of input"
-      case "Unknown":
-        return "system error"
-      case "WouldBlock":
-        return "would block"
-      case "WriteZero":
-        return "wrote zero bytes"
-    }
-  })()
-  const target = reason.pathOrDescriptor === undefined ? "" : `: ${reason.pathOrDescriptor}`
-  const description = reason.description === undefined ? "" : ` (${reason.description})`
-  return `${label}${target}${description}`
 }

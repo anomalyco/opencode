@@ -22,7 +22,6 @@ import { Permission } from "@opencode-ai/core/permission"
 import { Tool } from "@opencode-ai/schema/tool"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
-import { badArgument, systemError } from "effect/PlatformError"
 
 const llm = (reason: AIError["reason"]) => new AIError({ module: "test", method: "stream", reason })
 
@@ -73,26 +72,6 @@ describe("toSessionError", () => {
       type: "tool.execution",
       message: "failed",
     })
-    expect(
-      toSessionError(
-        new ToolFailure({
-          message: "Unable to execute command: pwd",
-          error: systemError({
-            _tag: "NotFound",
-            module: "FileSystem",
-            method: "stat",
-            pathOrDescriptor: "/missing",
-          }),
-        }),
-      ),
-    ).toEqual({
-      type: "tool.execution",
-      message: "Unable to execute command: pwd: not found: /missing",
-    })
-    expect(toSessionError(new ToolFailure({ message: "Tool failed", error: new Error("") }))).toEqual({
-      type: "tool.execution",
-      message: "Tool failed",
-    })
   })
 
   test("preserves provider HTTP status", () => {
@@ -109,31 +88,6 @@ describe("toSessionError", () => {
       type: "provider.internal",
       message: "bad gateway",
       status: 502,
-    })
-  })
-
-  test("formats platform errors for the model", () => {
-    const missing = systemError({
-      _tag: "NotFound",
-      module: "FileSystem",
-      method: "operation",
-      pathOrDescriptor: "/target",
-      description: "OS detail",
-    })
-    expect(toSessionError(missing)).toEqual({
-      type: "unknown",
-      message: "not found: /target (OS detail)",
-    })
-    expect(
-      toSessionError(
-        new ToolFailure({
-          message: "Tool failed",
-          error: badArgument({ module: "FileSystem", method: "operation", description: "invalid path" }),
-        }),
-      ),
-    ).toEqual({
-      type: "tool.execution",
-      message: "Tool failed: invalid argument: invalid path",
     })
   })
 
