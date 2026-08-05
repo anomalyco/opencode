@@ -184,6 +184,8 @@ export const dict = {
   "command.session.redo.description": "ทำซ้ำข้อความที่ถูกยกเลิกล่าสุด",
   "command.session.compact": "บีบอัดเซสชัน",
   "command.session.compact.description": "สรุปเซสชันเพื่อลดขนาดบริบท",
+  "command.session.handoff": "ส่งต่อเซสชัน",
+  "command.session.handoff.description": "บีบอัดเซสชันและทำงานต่อในเซสชันใหม่",
   "command.session.fork": "แตกแขนงจากข้อความ",
   "command.session.fork.description": "สร้างเซสชันใหม่จากข้อความก่อนหน้า",
   "command.session.share": "แชร์เซสชัน",
@@ -651,6 +653,8 @@ export const dict = {
   "toast.session.share.success.description": "คัดลอก URL แชร์ไปยังคลิปบอร์ดแล้ว!",
   "toast.session.share.failed.title": "ไม่สามารถแชร์เซสชัน",
   "toast.session.share.failed.description": "เกิดข้อผิดพลาดระหว่างการแชร์เซสชัน",
+  "toast.session.handoff.failed.title": "ส่งต่อเซสชันไม่สำเร็จ",
+  "toast.session.handoff.failed.description": "ไม่สามารถสรุปเซสชันนี้เพื่อส่งต่อได้",
 
   "toast.session.unshare.success.title": "ยกเลิกการแชร์เซสชันแล้ว",
   "toast.session.unshare.success.description": "ยกเลิกการแชร์เซสชันสำเร็จ!",

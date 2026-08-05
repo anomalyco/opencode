@@ -85,6 +85,8 @@ export const dict = {
   "command.session.redo.description": "Omgør den sidste fortrudte besked",
   "command.session.compact": "Komprimér session",
   "command.session.compact.description": "Opsummer sessionen for at reducere kontekststørrelsen",
+  "command.session.handoff": "Overdrag session",
+  "command.session.handoff.description": "Komprimér sessionen og fortsæt arbejdet i en ny session",
   "command.session.fork": "Forgren fra besked",
   "command.session.fork.description": "Opret en ny session fra en tidligere besked",
   "command.session.share": "Del session",
@@ -536,6 +538,8 @@ export const dict = {
   "toast.session.share.success.description": "Delings-URL kopieret til udklipsholder!",
   "toast.session.share.failed.title": "Kunne ikke dele session",
   "toast.session.share.failed.description": "Der opstod en fejl under deling af sessionen",
+  "toast.session.handoff.failed.title": "Kunne ikke overdrage sessionen",
+  "toast.session.handoff.failed.description": "Denne session kunne ikke opsummeres til overdragelse",
 
   "toast.session.unshare.success.title": "Deling af session stoppet",
   "toast.session.unshare.success.description": "Deling af session blev stoppet!",

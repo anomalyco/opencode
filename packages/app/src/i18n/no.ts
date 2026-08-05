@@ -184,6 +184,8 @@ export const dict = {
   "command.session.redo.description": "Gjør om siste angrede melding",
   "command.session.compact": "Komprimer sesjon",
   "command.session.compact.description": "Oppsummer sesjonen for å redusere kontekststørrelsen",
+  "command.session.handoff": "Overfør sesjon",
+  "command.session.handoff.description": "Komprimer sesjonen og fortsett arbeidet i en ny sesjon",
   "command.session.fork": "Forgren fra melding",
   "command.session.fork.description": "Opprett en ny sesjon fra en tidligere melding",
   "command.session.share": "Del sesjon",
@@ -560,6 +562,8 @@ export const dict = {
   "toast.session.share.success.description": "Delings-URL kopiert til utklippstavlen!",
   "toast.session.share.failed.title": "Kunne ikke dele sesjon",
   "toast.session.share.failed.description": "Det oppstod en feil under deling av sesjonen",
+  "toast.session.handoff.failed.title": "Kunne ikke overføre sesjonen",
+  "toast.session.handoff.failed.description": "Denne sesjonen kunne ikke oppsummeres for overføring",
 
   "toast.session.unshare.success.title": "Deling av sesjon stoppet",
   "toast.session.unshare.success.description": "Sesjonen deles ikke lenger!",

@@ -85,7 +85,7 @@ const serialize = (message: SessionV1.WithParts) => {
     .join("\n")
 }
 
-function summaryText(message: SessionV1.WithParts) {
+export function summaryText(message: SessionV1.WithParts) {
   const text = message.parts
     .filter((part): part is SessionV1.TextPart => part.type === "text")
     .map((part) => part.text.trim())
