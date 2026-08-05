@@ -66,7 +66,10 @@ export const layer = (options?: Options) => Layer.effect(
           fs.resolve,
         ),
       )
-      const paths = Array.dedupe([yield* fs.resolve(join(global.config, "AGENTS.md")), ...discovered])
+      const globalPath = yield* fs.resolve(join(global.config, "AGENTS.md"))
+      const observed = new Set(discovered)
+      if (yield* fs.exists(globalPath)) observed.add(globalPath)
+      const paths = Array.dedupe([globalPath, ...discovered])
       const files = yield* Effect.forEach(
         paths,
         (path) =>
@@ -79,7 +82,7 @@ export const layer = (options?: Options) => Layer.effect(
             ),
         { concurrency: "unbounded" },
       )
-      if (files.some((file, index) => file === undefined && discovered.has(paths[index])))
+      if (files.some((file, index) => file === undefined && observed.has(paths[index])))
         return Instructions.unavailable
       return files.filter((file): file is File => file !== undefined)
     })

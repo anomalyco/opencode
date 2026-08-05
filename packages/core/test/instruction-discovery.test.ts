@@ -199,6 +199,42 @@ describe("InstructionDiscovery", () => {
     }),
   )
 
+  it.effect("preserves admitted instructions when the global file disappears before read", () =>
+    Effect.gen(function* () {
+      const file = AbsolutePath.make("/global/AGENTS.md")
+      const racingFS = Layer.effect(
+        FSUtil.Service,
+        FSUtil.Service.pipe(
+          Effect.map((fs) =>
+            FSUtil.Service.of({
+              ...fs,
+              exists: () => Effect.succeed(true),
+              up: () => Effect.succeed([]),
+              readFileStringSafe: () => Effect.succeed(undefined),
+            }),
+          ),
+        ),
+      ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+      const context = yield* InstructionDiscovery.Service.pipe(
+        Effect.flatMap((service) => service.load()),
+        Effect.provide(
+          instructionLayer({
+            config: "/global",
+            filesystemLayer: racingFS,
+            locationServiceLayer: Layer.succeed(
+              Location.Service,
+              Location.Service.of(location({ directory: AbsolutePath.make("/repo") })),
+            ),
+          }),
+        ),
+      )
+
+      expect(
+        (yield* readUpdate(context, state({ "core/instructions": [{ path: file, content: "old" }] }))).changed,
+      ).toBe(false)
+    }),
+  )
+
   it.effect("canonicalizes upward discovery boundaries", () =>
     Effect.gen(function* () {
       let observed: { targets: string[]; start: string; stop?: string } | undefined
