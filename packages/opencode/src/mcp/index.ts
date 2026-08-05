@@ -35,7 +35,7 @@ import { McpCatalog } from "./catalog"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
 
-const DEFAULT_TIMEOUT = 30_000
+const DEFAULT_TIMEOUT = 5_000
 const CLIENT_OPTIONS = {
   capabilities: {
     // https://github.com/anomalyco/opencode/issues/11948
