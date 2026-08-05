@@ -60,7 +60,6 @@ describe("Formatter", () => {
     withTemp((directory) =>
       Effect.gen(function* () {
         const file = path.join(directory, "test.disabled")
-        yield* Effect.promise(() => fs.writeFile(file, "x"))
         expect(yield* Formatter.Service.use((formatter) => formatter.file(file))).toBe(false)
       }).pipe(
         Effect.provide(
@@ -87,19 +86,17 @@ describe("Formatter", () => {
   )
 
   it.live("loads formatter state per directory", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
-      ([off, on]) =>
+    withTemp((off) =>
+      withTemp((on) =>
         Effect.gen(function* () {
-          const offFile = path.join(off.path, "test.isolated")
-          const onFile = path.join(on.path, "test.isolated")
-          yield* Effect.promise(() => Promise.all([fs.writeFile(offFile, "x"), fs.writeFile(onFile, "x")]))
+          const offFile = path.join(off, "test.isolated")
+          const onFile = path.join(on, "test.isolated")
           const disabled = yield* Formatter.Service.use((formatter) => formatter.file(offFile)).pipe(
-            Effect.provide(formatterLayer(off.path, false)),
+            Effect.provide(formatterLayer(off, false)),
           )
           const enabled = yield* Formatter.Service.use((formatter) => formatter.file(onFile)).pipe(
             Effect.provide(
-              formatterLayer(on.path, {
+              formatterLayer(on, {
                 isolated: {
                   command: [process.execPath, "-e", "process.exit(0)", "$FILE"],
                   extensions: [".isolated"],
@@ -110,8 +107,7 @@ describe("Formatter", () => {
           expect(disabled).toBe(false)
           expect(enabled).toBe(true)
         }),
-      (directories) =>
-        Effect.promise(() => Promise.all(directories.map((tmp) => tmp[Symbol.asyncDispose]())).then(() => undefined)),
+      ),
     ),
   )
 
