@@ -125,7 +125,7 @@ export const Plugin = {
               input: Input,
               output: Output,
               execute: (input, context) => {
-                return Effect.gen(function* () {
+                return files.withLock(Effect.gen(function* () {
                   const permissionSource = {
                     type: "tool" as const,
                     messageID: context.messageID,
@@ -219,7 +219,7 @@ export const Plugin = {
                     files: [fileDiff(result.resource, source, formatted)],
                     replacements,
                   } satisfies Output
-                }).pipe(
+                })).pipe(
                   Effect.map((output) => ({
                     output,
                     content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,

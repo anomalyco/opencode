@@ -10,6 +10,7 @@ import path from "path"
 import { Bom } from "@opencode-ai/util/bom"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Formatter } from "../../formatter"
+import { FileMutation } from "../../file-mutation"
 import { Location } from "../../location"
 import { Patch } from "@opencode-ai/util/patch"
 import { Permission } from "../../permission"
@@ -70,6 +71,7 @@ export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: PluginContext) {
     const fs = yield* FSUtil.Service
+    const mutation = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
@@ -91,7 +93,7 @@ export const Plugin = {
                     message: `${operation}: ${errorMessage(error)}${completed ? `. Completed before failure: ${completed}` : ""}`,
                   })
                 }
-                return Effect.gen(function* () {
+                return mutation.withLock(Effect.gen(function* () {
                   const source = {
                     type: "tool" as const,
                     messageID: context.messageID,
@@ -322,7 +324,7 @@ export const Plugin = {
                     return Effect.succeed(patchFile(change, formatted.get(target.canonical)))
                   })
                   return { applied, files }
-                }).pipe(
+                })).pipe(
                   Effect.map((output) => ({
                     output,
                     content: toModelOutput(output),

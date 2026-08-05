@@ -645,6 +645,43 @@ describe("EditTool", () => {
     ),
   )
 
+  it.live("serializes concurrent edit transactions", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "concurrent.txt")
+        afterRead = () => (reads === 1 ? Effect.sleep("50 millis") : Effect.void)
+        return Effect.promise(() => fs.writeFile(target, "one\ntwo\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.all(
+                [
+                  executeTool(
+                    registry,
+                    call({ path: "concurrent.txt", oldString: "one", newString: "ONE" }, "call-edit-one"),
+                  ),
+                  executeTool(
+                    registry,
+                    call({ path: "concurrent.txt", oldString: "two", newString: "TWO" }, "call-edit-two"),
+                  ),
+                ],
+                { concurrency: "unbounded" },
+              ),
+            ),
+          ),
+          Effect.andThen((results) =>
+            Effect.gen(function* () {
+              expect(results.map((result) => result.status)).toEqual(["completed", "completed"])
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("ONE\nTWO\n")
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("applies the edit when content changes after matching", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
