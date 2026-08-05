@@ -127,11 +127,30 @@ export function createHuggingFaceCatalog(options: HuggingFaceClientOptions = {})
   }
 }
 
+// Top-level Hugging Face URL segments that are resource types, not organization
+// namespaces. Without this check, "huggingface.co/spaces/foo/bar" silently
+// parsed as repository "spaces/foo" — a plausible-looking but wrong ID, not an
+// error — because the code only knew to strip the literal "models" segment and
+// treated everything else as if it were an org name.
+const NON_MODEL_URL_SEGMENTS = new Set([
+  "spaces",
+  "datasets",
+  "papers",
+  "posts",
+  "collections",
+  "docs",
+  "blog",
+  "organizations",
+  "settings",
+])
+
 export function parseRepository(value: string): string {
   const input = value.trim().replace(/^hf:\/\//i, "")
   const pathname = input.startsWith("http://") || input.startsWith("https://") ? new URL(input).pathname : input
   const parts = pathname.split("/").filter(Boolean)
   if (parts[0] === "models") parts.shift()
+  else if (parts[0] && NON_MODEL_URL_SEGMENTS.has(parts[0].toLowerCase()))
+    throw new Error(`Invalid Hugging Face repository: ${value} (this is a Hugging Face "${parts[0]}" URL, not a model)`)
   if (parts.length < 2) throw new Error(`Invalid Hugging Face repository: ${value}`)
   return `${parts[0]}/${parts[1].replace(/\.git$/i, "")}`
 }

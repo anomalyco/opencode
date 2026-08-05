@@ -274,14 +274,223 @@ describe("Hugging Face policy filters", () => {
   })
 })
 
+describe("Hugging Face file-info cases", () => {
+  test("prefers the LFS size and sha256 digest when present", async () => {
+    const endpoint = serve(() =>
+      Response.json({
+        id: "org/model-GGUF",
+        sha: "deadbeef",
+        tags: ["gguf"],
+        siblings: [{ rfilename: "model-Q4_K_M.gguf", size: 1, lfs: { size: 999, sha256: "aaa" } }],
+      }),
+    )
+    const candidate = await createHuggingFaceCatalog({ endpoint }).resolve({
+      repository: "org/model-GGUF",
+      revision: "deadbeef",
+    })
+    // The plain `size` field is what the Hub reports for non-LFS storage; `lfs.size`
+    // is the real file size for LFS-tracked weights and must win when both are present.
+    expect(candidate.variants[0].artifacts[0]).toMatchObject({ size: 999, digest: "sha256:aaa" })
+  })
+
+  test("falls back to the plain size field for a non-LFS file", async () => {
+    const endpoint = serve(() =>
+      Response.json({
+        id: "org/model-GGUF",
+        sha: "deadbeef",
+        tags: ["gguf"],
+        siblings: [{ rfilename: "model-Q4_K_M.gguf", size: 500 }],
+      }),
+    )
+    const candidate = await createHuggingFaceCatalog({ endpoint }).resolve({
+      repository: "org/model-GGUF",
+      revision: "deadbeef",
+    })
+    expect(candidate.variants[0].artifacts[0]).toMatchObject({ size: 500, digest: null })
+  })
+
+  test("KNOWN GAP: a non-LFS file's blobId is accepted by the schema but never surfaced as a digest", async () => {
+    // GGUF weights are always LFS-tracked in practice, so this has never been
+    // observed to matter for a real model. It is pinned here, not fixed, because
+    // fixing it means deciding whether ModelArtifact.digest should accept a git
+    // blob SHA-1 as a weaker-than-sha256 fallback — a type-level decision with
+    // consumers beyond this file, not something to change while writing cases.
+    const endpoint = serve(() =>
+      Response.json({
+        id: "org/model-GGUF",
+        sha: "deadbeef",
+        tags: ["gguf"],
+        siblings: [{ rfilename: "model-Q4_K_M.gguf", size: 500, blobId: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4" }],
+      }),
+    )
+    const candidate = await createHuggingFaceCatalog({ endpoint }).resolve({
+      repository: "org/model-GGUF",
+      revision: "deadbeef",
+    })
+    expect(candidate.variants[0].artifacts[0].digest).toBeNull()
+  })
+
+  test("missing size on both fields leaves the artifact size null and the variant untotalled", async () => {
+    const endpoint = serve(() =>
+      Response.json({
+        id: "org/model-GGUF",
+        sha: "deadbeef",
+        tags: ["gguf"],
+        siblings: [{ rfilename: "model-Q4_K_M.gguf" }],
+      }),
+    )
+    const candidate = await createHuggingFaceCatalog({ endpoint }).resolve({
+      repository: "org/model-GGUF",
+      revision: "deadbeef",
+    })
+    expect(candidate.variants[0].artifacts[0].size).toBeNull()
+    // One artifact with an unknown size must poison the whole variant's total,
+    // not silently report a total that is short by an unknown amount.
+    expect(candidate.variants[0].totalBytes).toBeNull()
+  })
+})
+
+describe("Hugging Face nested-path cases", () => {
+  test("groups, sizes, and builds correct URLs for weights stored under a subdirectory", async () => {
+    const endpoint = serve(() =>
+      Response.json({
+        id: "org/model-GGUF",
+        sha: "deadbeef",
+        tags: ["gguf"],
+        siblings: [
+          { rfilename: "gguf/model-Q4_K_M-00001-of-00002.gguf", lfs: { size: 100, sha256: "aaa" } },
+          { rfilename: "gguf/model-Q4_K_M-00002-of-00002.gguf", lfs: { size: 120, sha256: "bbb" } },
+        ],
+      }),
+    )
+    const candidate = await createHuggingFaceCatalog({ endpoint }).resolve({
+      repository: "org/model-GGUF",
+      revision: "deadbeef",
+    })
+    expect(candidate.variants).toHaveLength(1)
+    expect(candidate.variants[0]).toMatchObject({ quantization: "Q4_K_M", complete: true, totalBytes: 220 })
+    // Each path segment is percent-encoded independently — the "/" between
+    // "gguf" and the filename must stay a literal separator, not become %2F.
+    expect(candidate.variants[0].artifacts[0].downloadURL).toBe(
+      `${endpoint}/org/model-GGUF/resolve/deadbeef/gguf/model-Q4_K_M-00001-of-00002.gguf`,
+    )
+  })
+
+  test("a projector nested under its own subdirectory is still recognised and attached to every variant", async () => {
+    const endpoint = serve(() =>
+      Response.json({
+        id: "org/model-GGUF",
+        sha: "deadbeef",
+        tags: ["gguf"],
+        siblings: [
+          { rfilename: "model-Q4_K_M.gguf", lfs: { size: 100, sha256: "aaa" } },
+          { rfilename: "vision/mmproj-f16.gguf", lfs: { size: 10, sha256: "bbb" } },
+        ],
+      }),
+    )
+    const candidate = await createHuggingFaceCatalog({ endpoint }).resolve({
+      repository: "org/model-GGUF",
+      revision: "deadbeef",
+    })
+    expect(candidate.variants[0].artifacts).toHaveLength(2)
+    expect(candidate.variants[0].artifacts.find((a) => a.role === "projection")?.path).toBe("vision/mmproj-f16.gguf")
+  })
+})
+
+describe("Hugging Face gated-repository cases", () => {
+  test("boolean gated:true blocks the repository, same as the string form", async () => {
+    const endpoint = serve(() =>
+      Response.json({
+        id: "org/gated-GGUF",
+        sha: "deadbeef",
+        gated: true,
+        tags: ["gguf"],
+        cardData: { license: "mit" },
+        siblings: [{ rfilename: "model-Q4_K_M.gguf", lfs: { size: 100, sha256: "aaa" } }],
+      }),
+    )
+    const candidate = await createHuggingFaceCatalog({ endpoint }).resolve({
+      repository: "org/gated-GGUF",
+      revision: "deadbeef",
+    })
+    expect(candidate.policy).toEqual({
+      allowed: false,
+      reasons: ["repository requires Hugging Face gated access approval"],
+    })
+  })
+
+  test("gated:false is not gated", async () => {
+    const endpoint = serve(() =>
+      Response.json({
+        id: "org/open-GGUF",
+        sha: "deadbeef",
+        gated: false,
+        tags: ["gguf"],
+        cardData: { license: "mit" },
+        siblings: [{ rfilename: "model-Q4_K_M.gguf", lfs: { size: 100, sha256: "aaa" } }],
+      }),
+    )
+    const candidate = await createHuggingFaceCatalog({ endpoint }).resolve({
+      repository: "org/open-GGUF",
+      revision: "deadbeef",
+    })
+    expect(candidate.policy).toEqual({ allowed: true, reasons: [] })
+  })
+
+  test("a gated repository still resolves its variants — gating blocks policy, not resolution", async () => {
+    const endpoint = serve(() =>
+      Response.json({
+        id: "org/gated-GGUF",
+        sha: "deadbeef",
+        gated: "manual",
+        tags: ["gguf"],
+        siblings: [{ rfilename: "model-Q4_K_M.gguf", lfs: { size: 100, sha256: "aaa" } }],
+      }),
+    )
+    const candidate = await createHuggingFaceCatalog({ endpoint }).resolve({
+      repository: "org/gated-GGUF",
+      revision: "deadbeef",
+    })
+    expect(candidate.variants).toHaveLength(1)
+    expect(candidate.policy.allowed).toBe(false)
+    expect(candidate.policy.reasons).toContain("repository requires Hugging Face gated access approval")
+  })
+})
+
 describe("parseRepository", () => {
   test("accepts repository IDs, hf URLs, and hf scheme references", () => {
     expect(parseRepository("org/model")).toBe("org/model")
     expect(parseRepository("https://huggingface.co/org/model/tree/main")).toBe("org/model")
     expect(parseRepository("hf://org/model")).toBe("org/model")
+    // The scheme match is case-insensitive and a trailing slash is tolerated.
+    expect(parseRepository("HF://org/model")).toBe("org/model")
+    expect(parseRepository("org/model/")).toBe("org/model")
+  })
+
+  test("strips a .git suffix from the repository name", () => {
+    expect(parseRepository("https://huggingface.co/org/model.git")).toBe("org/model")
+  })
+
+  test("ignores path segments beyond org/name, such as a branch, tag, or PR ref", () => {
+    expect(parseRepository("https://huggingface.co/org/model/tree/main")).toBe("org/model")
+    expect(parseRepository("https://huggingface.co/org/model/tree/refs%2Fpr%2F3")).toBe("org/model")
   })
 
   test("rejects incomplete repository IDs", () => {
     expect(() => parseRepository("model")).toThrow("Invalid Hugging Face repository")
+  })
+
+  test("rejects an empty reference", () => {
+    expect(() => parseRepository("")).toThrow("Invalid Hugging Face repository")
+  })
+
+  test("rejects Spaces, Datasets, and other non-model Hugging Face URLs instead of misreading the resource type as an org", () => {
+    expect(() => parseRepository("https://huggingface.co/spaces/foo/bar")).toThrow(/not a model/)
+    expect(() => parseRepository("https://huggingface.co/datasets/foo/bar")).toThrow(/not a model/)
+    expect(() => parseRepository("https://huggingface.co/papers/2401.12345")).toThrow(/not a model/)
+  })
+
+  test("an explicit /models/ prefix is still accepted", () => {
+    expect(parseRepository("https://huggingface.co/models/org/model")).toBe("org/model")
   })
 })
