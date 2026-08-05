@@ -128,6 +128,12 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
     throw new ACPError.SessionNotFoundError({ sessionId: sessionID })
   }
 
+  const detach = (sessionID: string) => {
+    sessions.get(sessionID)?.abort.abort()
+    sessions.delete(sessionID)
+    registeredMcp.delete(sessionID)
+  }
+
   const attach = async (session: SessionInfo, cwd: string, mcpServers: readonly McpServer[]) => {
     const currentCatalog = await catalog(cwd)
     sessions.get(session.id)?.abort.abort()
@@ -237,9 +243,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       await input.client.session.remove({ sessionID: params.sessionId }).catch((error) => {
         if (!isSessionNotFoundError(error)) throw error
       })
-      sessions.get(params.sessionId)?.abort.abort()
-      sessions.delete(params.sessionId)
-      registeredMcp.delete(params.sessionId)
+      detach(params.sessionId)
       return {}
     },
     resumeSession: async (params) => {
@@ -248,9 +252,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       return { configOptions: configOptions(state) }
     },
     closeSession: async (params) => {
-      sessions.get(params.sessionId)?.abort.abort()
-      sessions.delete(params.sessionId)
-      registeredMcp.delete(params.sessionId)
+      detach(params.sessionId)
       const turn = active.get(params.sessionId)
       if (turn) {
         turn.cancelled = true
@@ -312,6 +314,10 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       const prepared = preparePrompt(state.catalog, params.prompt, messageID)
       const control: TurnControl = { cancelled: false, admission: new AbortController() }
       const extNotification = input.connection.extNotification
+      const childSessionUpdate =
+        capabilities.childSessionUpdates && extNotification
+          ? (update: ChildSessionUpdate) => extNotification(ChildSessionUpdateMethod, update).then(() => {})
+          : undefined
       active.set(state.id, control)
       const response = await streamTurn({
         client: input.client,
@@ -324,12 +330,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         connectionSignal: input.connection.signal,
         sessionSignal: state.abort.signal,
         submit: (signal) => submitPrompt(input.client, state, prepared, signal),
-        ...(capabilities.childSessionUpdates && extNotification
-          ? {
-              childSessionUpdate: (update: ChildSessionUpdate) =>
-                extNotification(ChildSessionUpdateMethod, update).then(() => {}),
-            }
-          : {}),
+        ...(childSessionUpdate ? { childSessionUpdate } : {}),
       }).finally(() => {
         if (active.get(state.id) === control) active.delete(state.id)
       })

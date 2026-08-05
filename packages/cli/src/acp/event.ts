@@ -48,15 +48,15 @@ type ChildSessionUpdateBase = {
   readonly title?: string
 }
 
-export type ChildSessionUpdate = ChildSessionUpdateBase &
-  (
-    | { readonly type: "update"; readonly update: SessionUpdate }
-    | {
-        readonly type: "status"
-        readonly status: "created" | "running" | "completed" | "failed" | "interrupted"
-        readonly error?: { readonly type: string; readonly message: string }
-      }
-  )
+type ChildSessionEvent =
+  | { readonly type: "update"; readonly update: SessionUpdate }
+  | {
+      readonly type: "status"
+      readonly status: "created" | "running" | "completed" | "failed" | "interrupted"
+      readonly error?: { readonly type: string; readonly message: string }
+    }
+
+export type ChildSessionUpdate = ChildSessionUpdateBase & ChildSessionEvent
 
 type ChildSession = {
   readonly id: string
@@ -97,19 +97,9 @@ export async function streamTurn(input: {
   const tools = new Map<string, ToolState>()
   const children = new Map<string, ChildSession>()
   const openChildren = new Set<string>()
-  let standard = true
   let handedOff = false
 
-  const notifyChild = async (
-    child: ChildSession,
-    value:
-      | { readonly type: "update"; readonly update: SessionUpdate }
-      | {
-          readonly type: "status"
-          readonly status: "created" | "running" | "completed" | "failed" | "interrupted"
-          readonly error?: { readonly type: string; readonly message: string }
-        },
-  ) => {
+  const notifyChild = async (child: ChildSession, value: ChildSessionEvent) => {
     if (!input.childSessionUpdate) return
     await input
       .childSessionUpdate({
@@ -123,9 +113,9 @@ export async function streamTurn(input: {
       .catch(() => {})
   }
 
-  const updateSession = async (value: SessionUpdate, child?: ChildSession) => {
+  const updateSession = async (value: SessionUpdate, child: ChildSession | undefined, mode: "turn" | "background") => {
     const projected = child ? projectChildUpdate(value, child) : value
-    if (standard && (!child || !input.childSessionUpdate)) {
+    if (mode === "turn" && (!child || !input.childSessionUpdate)) {
       await input.connection.sessionUpdate({ sessionId: input.sessionID, update: projected })
     }
     if (child) await notifyChild(child, { type: "update", update: projected })
@@ -154,9 +144,9 @@ export async function streamTurn(input: {
         continue
       }
 
-      const eventSessionID = sessionID(event)
+      const eventSessionID = sessionIDFromEvent(event)
       const child = eventSessionID ? children.get(eventSessionID) : undefined
-      const send = (update: SessionUpdate) => updateSession(update, child)
+      const send = (update: SessionUpdate) => updateSession(update, child, mode)
       if (mode === "background" && !child) continue
 
       if (event.type === "permission.asked" && (event.data.sessionID === input.sessionID || child)) {
@@ -367,7 +357,6 @@ export async function streamTurn(input: {
     }
     const terminal = await completed
     if (input.childSessionUpdate && openChildren.size > 0 && !input.sessionSignal?.aborted) {
-      standard = false
       handedOff = true
       input.sessionSignal?.addEventListener("abort", connectionAbort, { once: true })
       void consume("background")
@@ -395,7 +384,7 @@ export async function streamTurn(input: {
   }
 }
 
-function sessionID(event: EventSubscribeOutput) {
+function sessionIDFromEvent(event: EventSubscribeOutput) {
   if ("sessionID" in event.data && typeof event.data.sessionID === "string") return event.data.sessionID
   if (event.type === "form.created") return event.data.form.sessionID
   return undefined
@@ -406,8 +395,9 @@ function toolKey(sessionID: string, callID: string) {
 }
 
 function projectChildUpdate(update: SessionUpdate, child: ChildSession) {
-  update._meta = {
-    ...update._meta,
+  const projected = { ...update }
+  projected._meta = {
+    ...projected._meta,
     "opencode/child-session": {
       id: child.id,
       parentID: child.parentID,
@@ -415,11 +405,11 @@ function projectChildUpdate(update: SessionUpdate, child: ChildSession) {
       ...(child.title ? { title: child.title } : {}),
     },
   }
-  if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") {
-    update.toolCallId = `${child.id}:${update.toolCallId}`
-    if (update.title && child.title) update.title = `${child.title}: ${update.title}`
+  if (projected.sessionUpdate === "tool_call" || projected.sessionUpdate === "tool_call_update") {
+    projected.toolCallId = `${child.id}:${projected.toolCallId}`
+    if (projected.title && child.title) projected.title = `${child.title}: ${projected.title}`
   }
-  return update
+  return projected
 }
 
 export async function replayMessages(

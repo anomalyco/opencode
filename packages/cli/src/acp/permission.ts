@@ -29,20 +29,18 @@ export async function replyPermission(input: {
   const toolName = input.tool?.name ?? input.event.data.action
   const toolInput = { ...input.event.data.metadata, ...input.tool?.input }
   const previews = await permissionPreviews(toolName, toolInput, input.cwd)
+  const toolCallID = input.event.data.source?.callID ?? input.event.data.id
+  const title = permissionTitle(toolName, toolInput, previews)
   const result = await input.connection
     .requestPermission({
       sessionId: input.clientSessionID ?? input.sessionID,
       toolCall: {
         ...pendingToolCall({
-          toolCallId: [input.toolCallPrefix, input.event.data.source?.callID ?? input.event.data.id]
-            .filter((value) => value !== undefined)
-            .join(":"),
+          toolCallId: input.toolCallPrefix ? `${input.toolCallPrefix}:${toolCallID}` : toolCallID,
           toolName,
           state: {
             input: toolInput,
-            title: [input.titlePrefix, permissionTitle(toolName, toolInput, previews)]
-              .filter((value) => value !== undefined)
-              .join(": "),
+            title: prefixedTitle(input.titlePrefix, title),
           },
           cwd: input.cwd,
         }),
@@ -59,6 +57,12 @@ export async function replyPermission(input: {
     requestID: input.event.data.id,
     reply,
   })
+}
+
+function prefixedTitle(prefix: string | undefined, title: string | undefined) {
+  if (!prefix) return title
+  if (!title) return prefix
+  return `${prefix}: ${title}`
 }
 
 export async function syncEditedFiles(input: {
