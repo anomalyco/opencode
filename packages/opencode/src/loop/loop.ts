@@ -132,6 +132,9 @@ export const CreateInput = Schema.Struct({
   // means every eligible change under openspec/changes/.
   mode: Schema.optional(Mode),
   queue: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  // Optional standing instruction repeated on every iteration of a queue run.
+  // Steers how the work is done; never what work is chosen.
+  queueGuidance: Schema.optional(Schema.String),
   // Tracker sync after a change completes. Off by default: writing to
   // GitHub/beads is an outward-facing side effect an unattended run must not
   // take unless asked. When on, a dry run is executed and logged first.
@@ -208,6 +211,7 @@ type ChangeOutcome = {
 
 type QueueState = {
   only?: readonly string[]
+  guidance?: string
   sync?: boolean
   /** Gates that have passed at least once in this run — see the misconfiguration halt. */
   gatesPassed: Set<Gate>
@@ -664,7 +668,7 @@ export const layer = Layer.effect(
         const record = (yield* Ref.get(state)).get(id)
         if (!record) return undefined
         const peers = yield* idlePeers
-        const brief = buildBrief({ change, gate, failure, idlePeers: peers })
+        const brief = buildBrief({ change, gate, failure, idlePeers: peers, guidance: record.queue?.guidance })
         const result = yield* runIteration(record, {
           promptText: brief,
           title: `queue ${change.slug} [${gate}] iter ${record.info.iteration + 1}`,
@@ -1070,6 +1074,7 @@ export const layer = Layer.effect(
               mode === "queue"
                 ? {
                     only: input.queue?.length ? [...input.queue] : undefined,
+                    guidance: input.queueGuidance,
                     sync: input.queueSync ?? false,
                     gatesPassed: new Set<Gate>(),
                     options: input.queueOptions,

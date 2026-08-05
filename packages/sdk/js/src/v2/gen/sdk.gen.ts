@@ -2562,6 +2562,7 @@ export class Loop extends HeyApiClient {
       completionToken?: string
       mode?: "prompt" | "queue"
       queue?: Array<string>
+      queueGuidance?: string
       queueSync?: boolean
       queueOptions?: {
         testCommand?: string
@@ -2587,6 +2588,7 @@ export class Loop extends HeyApiClient {
             { in: "body", key: "completionToken" },
             { in: "body", key: "mode" },
             { in: "body", key: "queue" },
+            { in: "body", key: "queueGuidance" },
             { in: "body", key: "queueSync" },
             { in: "body", key: "queueOptions" },
           ],

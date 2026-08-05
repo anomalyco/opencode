@@ -15,7 +15,7 @@ type Deps = {
  * keybind and the individual toggles. They used to each write config on their
  * own, which is how the indicator and the actual behaviour drift apart.
  */
-export async function applyAutoMode(deps: Deps, value: ModeValue): Promise<void> {
+export async function applyAutoMode(deps: Deps, value: ModeValue, guidance?: string): Promise<void> {
   const { sdk, sync, toast } = deps
   const mode = modeSpec(value)
 
@@ -35,7 +35,13 @@ export async function applyAutoMode(deps: Deps, value: ModeValue): Promise<void>
     const result = await reconcileQueue({
       mode: value,
       list: async () => (await sdk.client.loop.list()).data ?? [],
-      start: async () => (await sdk.client.loop.create({ prompt: "", mode: "queue" }, { throwOnError: true })).data,
+      start: async () =>
+        (
+          await sdk.client.loop.create(
+            { prompt: "", mode: "queue", queueGuidance: guidance?.trim() || undefined },
+            { throwOnError: true },
+          )
+        ).data,
       cancel: async (loopID) => {
         await sdk.client.loop.cancel({ loopID }).catch(() => undefined)
       },

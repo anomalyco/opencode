@@ -5,7 +5,8 @@ import { useSDK } from "../context/sdk"
 import { useSync } from "../context/sync"
 import { useToast } from "../ui/toast"
 import { applyAutoMode } from "./auto-mode-apply"
-import { currentAutoMode, MODES, type ModeValue } from "../util/auto-mode"
+import { DialogPrompt } from "../ui/dialog-prompt"
+import { currentAutoMode, liveQueueRuns, modeSpec, MODES, type ModeValue } from "../util/auto-mode"
 
 export { currentAutoMode }
 
@@ -37,8 +38,41 @@ export function DialogAutoMode() {
       options={options()}
       skipFilter={true}
       onSelect={async (option) => {
-        dialog.clear()
-        await applyAutoMode({ sdk, sync, toast }, option.value as ModeValue)
+        const value = option.value as ModeValue
+        // Entering Auto commits the agent to hours of unattended work, so it
+        // asks once rather than starting on a keystroke. The instruction is
+        // optional and steers HOW the work is done — what gets worked is still
+        // decided by the checkboxes on disk, which is what makes the run
+        // trustworthy. Leaving Auto, or any mode that starts nothing, is
+        // immediate.
+        if (!modeSpec(value).queue) {
+          dialog.clear()
+          await applyAutoMode({ sdk, sync, toast }, value)
+          return
+        }
+        const running = liveQueueRuns((await sdk.client.loop.list()).data ?? []).length > 0
+        if (running) {
+          dialog.clear()
+          await applyAutoMode({ sdk, sync, toast }, value)
+          return
+        }
+        dialog.replace(() => (
+          <DialogPrompt
+            title="Auto — work the openspec backlog"
+            placeholder="Optional: a standing instruction for every iteration (leave blank to just go)"
+            description={() => (
+              <text>
+                Works every eligible change through implement, test, verify and commit. Never pushes. Type a message
+                any time to take over.
+              </text>
+            )}
+            onConfirm={async (text) => {
+              dialog.clear()
+              await applyAutoMode({ sdk, sync, toast }, value, text)
+            }}
+            onCancel={() => dialog.clear()}
+          />
+        ))
       }}
     />
   )

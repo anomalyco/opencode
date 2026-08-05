@@ -16,6 +16,13 @@ export interface BriefInput {
   failure?: { gate: Gate; output: string }
   /** names of idle local peer providers; empty → no fan-out nudge */
   idlePeers: readonly string[]
+  /**
+   * Optional standing instruction from the operator, repeated on every
+   * iteration of the run. Steers HOW the work is done ("prefer small commits",
+   * "leave the CLI alone"); it never decides WHAT is worked, because that is
+   * derived from the checkboxes on disk and must stay that way.
+   */
+  guidance?: string
 }
 
 function readIfExists(file: string): string | undefined {
@@ -82,6 +89,13 @@ export function buildBrief(input: BriefInput): string {
         "```",
       ].join("\n"),
     )
+  }
+
+  // Placed before the change documents so a long proposal cannot bury it, and
+  // repeated every iteration because each one runs in a fresh child session
+  // with no memory of the last.
+  if (input.guidance?.trim()) {
+    parts.push(`Standing instruction from the operator, applies to every iteration:\n${input.guidance.trim()}`)
   }
 
   const next = uncheckedTasks(change.tasks)[0]

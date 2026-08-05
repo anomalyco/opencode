@@ -335,3 +335,41 @@ describe("queue ordering (priority, then creation date, then slug)", () => {
     expect(compareOrder(a, a)).toBe(0)
   })
 })
+
+describe("standing instruction (Auto's optional prompt)", () => {
+  test("guidance is repeated in the brief and marked as applying to every iteration", () => {
+    const brief = buildBrief({
+      change: fixtureChange(),
+      gate: "implement",
+      idlePeers: [],
+      guidance: "prefer small commits; do not touch the CLI",
+    })
+    expect(brief).toContain("Standing instruction from the operator")
+    expect(brief).toContain("prefer small commits; do not touch the CLI")
+  })
+
+  test("guidance sits ahead of the change documents so a long proposal cannot bury it", () => {
+    const root = fixtureTree({ demo: { tasks: OPEN } })
+    const dir = path.join(root, "openspec", "changes", "demo")
+    fs.writeFileSync(path.join(dir, "proposal.md"), "# Demo\n\n" + "filler ".repeat(500))
+    const change = cursor(resolveQueue(root))!
+    const brief = buildBrief({ change, gate: "implement", idlePeers: [], guidance: "STEER-ME" })
+    expect(brief.indexOf("STEER-ME")).toBeLessThan(brief.indexOf("## proposal.md"))
+  })
+
+  test("blank or whitespace guidance adds nothing", () => {
+    for (const guidance of [undefined, "", "   ", "\n\t "]) {
+      const brief = buildBrief({ change: fixtureChange(), gate: "implement", idlePeers: [], guidance })
+      expect(brief).not.toContain("Standing instruction")
+    }
+  })
+
+  test("guidance never decides WHAT is worked — the cursor still comes from disk", () => {
+    // The invariant that makes an unattended run trustworthy: prose steers how,
+    // checkboxes decide what.
+    const root = fixtureTree({ "aaa-first": { tasks: OPEN }, "zzz-second": { tasks: OPEN } })
+    fs.writeFileSync(path.join(root, "openspec", "changes", "aaa-first", ".openspec.yaml"), "created: 2026-01-01\n")
+    fs.writeFileSync(path.join(root, "openspec", "changes", "zzz-second", ".openspec.yaml"), "created: 2026-02-01\n")
+    expect(cursor(resolveQueue(root))?.slug).toBe("aaa-first")
+  })
+})

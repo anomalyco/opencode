@@ -3586,6 +3586,9 @@
                       "type": "string"
                     }
                   },
+                  "queueGuidance": {
+                    "type": "string"
+                  },
                   "queueSync": {
                     "type": "boolean"
                   },

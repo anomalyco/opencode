@@ -6904,6 +6904,7 @@ export type LoopCreateData = {
     completionToken?: string
     mode?: "prompt" | "queue"
     queue?: Array<string>
+    queueGuidance?: string
     queueSync?: boolean
     queueOptions?: {
       testCommand?: string
