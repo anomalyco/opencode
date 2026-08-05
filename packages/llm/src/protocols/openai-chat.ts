@@ -121,6 +121,7 @@ const OpenAIChatUsage = Schema.Struct({
   prompt_tokens_details: optionalNull(
     Schema.Struct({
       cached_tokens: Schema.optional(Schema.Number),
+      cache_creation_tokens: Schema.optional(Schema.Number),
     }),
   ),
   completion_tokens_details: optionalNull(
@@ -393,11 +394,13 @@ const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   const cached = usage.prompt_tokens_details?.cached_tokens
   const reasoning = usage.completion_tokens_details?.reasoning_tokens
   const nonCached = ProviderShared.subtractTokens(usage.prompt_tokens, cached)
+  const cacheWrite = usage.prompt_tokens_details?.cache_creation_tokens
   return new Usage({
     inputTokens: usage.prompt_tokens,
     outputTokens: usage.completion_tokens,
     nonCachedInputTokens: nonCached,
     cacheReadInputTokens: cached,
+    cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.prompt_tokens, usage.completion_tokens, usage.total_tokens),
     providerMetadata: { openai: usage },
