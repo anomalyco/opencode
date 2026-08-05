@@ -238,7 +238,7 @@ const incompleteStreamError = (route: string) =>
     method: "stream",
     reason: new InvalidProviderOutputReason({
       classification: "incomplete-stream",
-      message: "Provider stream ended without a terminal finish event",
+      message: "The provider response ended unexpectedly.",
       route,
     }),
   })

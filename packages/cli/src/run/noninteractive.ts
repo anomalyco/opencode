@@ -470,7 +470,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (event.type === "session.step.failed") {
         if (
           input.compatibility === "v1" &&
-          event.data.error.message === "Provider stream ended without a terminal finish event"
+          event.data.error.message === "The provider response ended unexpectedly."
         ) {
           pendingStep = undefined
           v1InvalidOutput = true

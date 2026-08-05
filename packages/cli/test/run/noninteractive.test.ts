@@ -503,8 +503,8 @@ describe("runNonInteractivePrompt", () => {
       turn: (messageID) => [
         prompted(messageID),
         stepStarted(),
-        stepFailed("Provider stream ended without a terminal finish event"),
-        executionFailed("Provider stream ended without a terminal finish event"),
+        stepFailed("The provider response ended unexpectedly."),
+        executionFailed("The provider response ended unexpectedly."),
       ],
     })
 

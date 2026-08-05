@@ -1140,8 +1140,8 @@ describe("OpenAI Chat route", () => {
         _tag: "InvalidProviderOutput",
         classification: "incomplete-stream",
       })
-      expect(streamError.message).toContain("Provider stream ended without a terminal finish event")
-      expect(error.message).toContain("Provider stream ended without a terminal finish event")
+      expect(streamError.message).toContain("The provider response ended unexpectedly.")
+      expect(error.message).toContain("The provider response ended unexpectedly.")
     }),
   )
 
