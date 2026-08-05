@@ -168,9 +168,10 @@ describe("parent capacity gate", () => {
     expect(capacityFromProbe(probe([]), 1)).toBe("no-slot")
   })
 
-  test("unprobeable parent is unknown, not no-slot", () => {
-    // A provider that simply does not serve /api/hardware is not necessarily
-    // busy; hard-failing those would break working setups.
+  test("unprobeable parent is unknown — blocks inheritance to avoid hangs", () => {
+    // A probe failure means we cannot confirm the parent has a free slot.
+    // Inheriting would risk queuing behind it on a single-slot server.
+    // task.ts treats "unknown" the same as "no-slot" for this reason.
     expect(capacityFromProbe(undefined, 0)).toBe("unknown")
   })
 
@@ -183,11 +184,12 @@ describe("parent capacity gate", () => {
     expect(got).toBe("free")
   })
 
-  test("unknown parent provider does not block", async () => {
+  test("unknown parent provider blocks inheritance", async () => {
     const got = await parentCapacity({
       parent: { providerID: "ghost" as never, modelID: "m" as never },
       providers: {},
     })
     expect(got).toBe("unknown")
+    // task.ts checks `capacity !== "free"` — unknown blocks inheritance.
   })
 })

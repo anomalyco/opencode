@@ -53,6 +53,7 @@ import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LocalProviderSync } from "@/local/sync"
+import { AutoMode } from "@/auto-mode/service"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
@@ -79,6 +80,7 @@ export const AppLayer = Layer.mergeAll(
   SessionStatus.defaultLayer,
   BackgroundJob.defaultLayer,
   RuntimeFlags.defaultLayer,
+  AutoMode.defaultLayer,
   EventV2Bridge.defaultLayer,
   LocalProviderSync.defaultLayer,
   SessionRunState.defaultLayer,

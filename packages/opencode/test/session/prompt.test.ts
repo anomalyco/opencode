@@ -1,5 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { AutoMode } from "@/auto-mode/service"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
@@ -182,6 +183,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     status,
     Database.defaultLayer,
     EventV2Bridge.defaultLayer,
+    AutoMode.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
@@ -2323,4 +2325,65 @@ noLLMServer.instance(
       }
     }),
   30_000,
+)
+
+// ── stream watchdog (session-cancellation-integrity) ─────────────────────────
+
+const watchdogCfg =
+  (seconds: number) =>
+  (url: string): Partial<ConfigV1.Info> => ({
+    ...providerCfg(url),
+    experimental: { stream_inactivity_seconds: seconds },
+  })
+
+it.instance("watchdog fails a half-open stream with a stalled error, not a generic abort", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(watchdogCfg(1))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    // Headers and one delta arrive, then the connection goes silent forever —
+    // the observed 18h wedge shape.
+    yield* llm.push(reply().text("partial response").hang())
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    const error = result.info.role === "assistant" ? result.info.error : undefined
+    expect(error?.name).toBe("APIError")
+    expect(JSON.stringify(error)).toContain("STREAM_STALLED")
+    expect(error?.name).not.toBe("MessageAbortedError")
+  }),
+)
+
+it.instance("watchdog leaves a slow-but-live stream alone", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(watchdogCfg(3))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    // A 1s gap before the body — well under the 3s deadline.
+    const gap = new Promise((resolve) => setTimeout(resolve, 1000))
+    yield* llm.push(reply().wait(gap).text("slow but alive").stop())
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    const error = result.info.role === "assistant" ? result.info.error : undefined
+    expect(error).toBeUndefined()
+    const text = result.parts.filter((p) => p.type === "text").map((p) => p.text)
+    expect(text).toContain("slow but alive")
+  }),
 )

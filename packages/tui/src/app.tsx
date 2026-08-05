@@ -546,6 +546,16 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     if (workspace?.type !== "worktree" || !workspace.directory) return
     return workspace
   })
+  const applyAutoConfig = async (patch: { auto_mode?: boolean; auto_continue?: boolean }, message: string) => {
+    try {
+      await sdk.client.global.config.update({ config: patch }, { throwOnError: true })
+      const refreshed = await sdk.client.global.config.get({ throwOnError: true })
+      sync.set("config", refreshed.data!)
+      toast.show({ variant: "success", message })
+    } catch {
+      toast.show({ variant: "warning", message: "Failed to update auto mode setting" })
+    }
+  }
   const appCommands = createMemo(() =>
     [
       {
@@ -617,6 +627,28 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "loop",
         run: () => {
           dialog.replace(() => <DialogLoopList />)
+        },
+      },
+      {
+        // Relentless openspec queue run: implement -> test -> verify -> commit
+        // per change, quarantining stuck changes rather than idling. Runs
+        // under the no-push authority ceiling.
+        name: "loop.queue.start",
+        title: "Start openspec queue run (all eligible changes)",
+        category: "Loop",
+        slashName: "queue",
+        run: async () => {
+          dialog.clear()
+          try {
+            const result = await sdk.client.loop.create({ prompt: "", mode: "queue" }, { throwOnError: true })
+            const info = result.data!
+            toast.show({
+              variant: "success",
+              message: `Queue run ${info.id} started — never stops until the backlog is drained or quarantined`,
+            })
+          } catch (error) {
+            toast.show({ title: "Failed to start queue run", message: errorMessage(error), variant: "error" })
+          }
         },
       },
       {
@@ -957,6 +989,87 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: async () => {
           kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
           await sync.session.refresh()
+          dialog.clear()
+        },
+      },
+      {
+        name: "app.toggle.automode",
+        title: () => {
+          const config = sync.data.config
+          const enabled = (config.auto_mode ?? false) && (config.auto_continue ?? false)
+          return enabled
+            ? "Disable auto mode (skip permissions + auto-continue)"
+            : "Enable auto mode (skip permissions + auto-continue)"
+        },
+        category: "System",
+        run: async () => {
+          const config = sync.data.config
+          const bothEnabled = (config.auto_mode ?? false) && (config.auto_continue ?? false)
+          const next = !bothEnabled
+          await applyAutoConfig(
+            { auto_mode: next, auto_continue: next },
+            next ? "Auto mode enabled (skip permissions + auto-continue)" : "Auto mode disabled",
+          )
+          dialog.clear()
+        },
+      },
+      {
+        name: "app.toggle.automode.permissions",
+        title: () => {
+          const enabled = sync.data.config.auto_mode ?? false
+          return enabled ? "Disable permission auto-approve" : "Enable permission auto-approve"
+        },
+        category: "System",
+        run: async () => {
+          const next = !(sync.data.config.auto_mode ?? false)
+          await applyAutoConfig(
+            { auto_mode: next },
+            next ? "Permission auto-approve enabled" : "Permission auto-approve disabled",
+          )
+          dialog.clear()
+        },
+      },
+      {
+        // One key steps through the whole space instead of hunting two
+        // separate toggles: off -> skip-ask -> loop -> auto -> off. Mirrors
+        // Claude Code's permission-mode cycle; the status pill names the
+        // state it lands on.
+        name: "app.automode.cycle",
+        title: () => {
+          const config = sync.data.config
+          const skip = config.auto_mode ?? false
+          const cont = config.auto_continue ?? false
+          const label = !skip && !cont ? "off" : skip && cont ? "auto" : skip ? "skip-ask" : "loop"
+          return `Cycle auto mode (now: ${label})`
+        },
+        category: "System",
+        run: async () => {
+          const config = sync.data.config
+          const skip = config.auto_mode ?? false
+          const cont = config.auto_continue ?? false
+          // off -> skip-ask -> loop -> auto -> off
+          const next =
+            !skip && !cont
+              ? { auto_mode: true, auto_continue: false, label: "Skip-ask (permissions auto-approved)" }
+              : skip && !cont
+                ? { auto_mode: false, auto_continue: true, label: "Loop (auto-continue)" }
+                : !skip && cont
+                  ? { auto_mode: true, auto_continue: true, label: "Auto (skip permissions + auto-continue)" }
+                  : { auto_mode: false, auto_continue: false, label: "Manual (off)" }
+          await applyAutoConfig({ auto_mode: next.auto_mode, auto_continue: next.auto_continue }, next.label)
+          dialog.clear()
+        },
+      },
+      {
+        name: "app.toggle.automode.continue",
+        title: () => {
+          const enabled = sync.data.config.auto_continue ?? false
+          return enabled ? "Disable auto-continue" : "Enable auto-continue"
+        },
+        category: "System",
+        run: async () => {
+          const next = !(sync.data.config.auto_continue ?? false)
+          await applyAutoConfig({ auto_continue: next }, next ? "Auto-continue enabled" : "Auto-continue disabled")
           dialog.clear()
         },
       },

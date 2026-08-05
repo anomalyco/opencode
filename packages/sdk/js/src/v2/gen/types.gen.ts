@@ -90,6 +90,7 @@ export type Event =
   | EventLoopUpdated
   | EventWorktreeReady
   | EventWorktreeFailed
+  | EventSideQuestionResponse
   | EventServerConnected
   | EventGlobalDisposed
   | EventServerInstanceDisposed
@@ -736,6 +737,7 @@ export type Loop = {
   maxIterations: number
   interval?: number
   noProgressLimit: number
+  completionToken: string
   iteration: number
   iterations: Array<{
     iteration: number
@@ -743,9 +745,15 @@ export type Loop = {
     toolCalls: number
     outputLength: number
     complete: boolean
+    skipped?: boolean
     startedAt: number
     finishedAt: number
   }>
+  iterationSessionID?: string
+  mode?: "prompt" | "queue"
+  currentChange?: string
+  currentGate?: string
+  report?: string
   startedAt: number
   lastRunAt?: number
   finishedAt?: number
@@ -1645,6 +1653,15 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "side-question.response"
+        properties: {
+          sessionID: string
+          messageID: string
+          text: string
+        }
+      }
+    | {
+        id: string
         type: "server.connected"
         properties: {
           [key: string]: unknown
@@ -1875,6 +1892,8 @@ export type ProviderConfig = {
   }
 }
 
+export type McpProtocolMode = "legacy" | "auto" | "modern"
+
 export type McpLocalConfig = {
   /**
    * Type of MCP server connection
@@ -1890,6 +1909,8 @@ export type McpLocalConfig = {
   }
   enabled?: boolean
   timeout?: number
+  protocolMode?: McpProtocolMode
+  toolProfile?: string
 }
 
 export type McpOAuthConfig = {
@@ -1918,6 +1939,8 @@ export type McpRemoteConfig = {
    */
   oauth?: McpOAuthConfig | false
   timeout?: number
+  protocolMode?: McpProtocolMode
+  toolProfile?: string
 }
 
 /**
@@ -1965,6 +1988,8 @@ export type Config = {
     ignore?: Array<string>
   }
   snapshot?: boolean
+  auto_mode?: boolean
+  auto_continue?: boolean
   plugin?: Array<
     | string
     | [
@@ -2011,6 +2036,9 @@ export type Config = {
       | {
           enabled: boolean
         }
+  }
+  mcpToolProfiles?: {
+    [key: string]: Array<string>
   }
   /**
    * Enable or configure formatters. Omit or set to false to disable, true to enable built-ins, or an object to enable built-ins with overrides.
@@ -2077,6 +2105,10 @@ export type Config = {
     primary_tools?: Array<string>
     continue_loop_on_deny?: boolean
     mcp_timeout?: number
+    mcp_protocol_mode?: McpProtocolMode
+    local_subagent_placement?: boolean
+    local_subagent_placement_models?: Array<string>
+    stream_inactivity_seconds?: number
     policies?: Array<ConfigV2ExperimentalPolicy>
   }
 }
@@ -2091,6 +2123,7 @@ export type Model = {
   }
   name: string
   family?: string
+  sizeBytes?: number
   capabilities: {
     temperature: boolean
     reasoning: boolean
@@ -2177,6 +2210,25 @@ export type Provider = {
   models: {
     [key: string]: Model
   }
+}
+
+export type AgentPresence = {
+  owner: "opencode-skein"
+  instanceID: string
+  sessionID: string
+  loopID?: string
+  directory: string
+  agent?: string
+  provider?: string
+  model?: string
+  status: "idle" | "busy" | "awaiting-permission" | "cancelling" | "stalled" | "unreachable"
+  loopStatus?: "running" | "paused" | "completed" | "stalled" | "cancelled" | "max_reached" | "error"
+  loopIteration?: number
+  lastEventAt: number
+  heartbeatAt: number
+  canPrompt: boolean
+  canBtw: boolean
+  canAbort: boolean
 }
 
 export type ConsoleState = {
@@ -2470,6 +2522,21 @@ export type LocalOffloadRecommendation = {
   ctx_size?: number
 }
 
+export type LocalCapacitySnapshot = {
+  provider: string
+  baseURL: string
+  reachable: boolean
+  signal?: "exact" | "inferred"
+  slotsTotal?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  inFlight?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  freeSlots?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  busy?: boolean
+  loadedModel?: string
+  probedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  ageMs: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  stale: boolean
+}
+
 export type NotFoundError = {
   name: "NotFoundError"
   data: {
@@ -2479,6 +2546,10 @@ export type NotFoundError = {
 
 export type McpStatusConnected = {
   status: "connected"
+  era?: "legacy" | "modern"
+  protocolVersion?: string
+  transport?: string
+  capabilities?: Array<string>
 }
 
 export type McpStatusDisabled = {
@@ -5214,6 +5285,16 @@ export type EventWorktreeFailed = {
   }
 }
 
+export type EventSideQuestionResponse = {
+  id: string
+  type: "side-question.response"
+  properties: {
+    sessionID: string
+    messageID: string
+    text: string
+  }
+}
+
 export type EventServerConnected = {
   id: string
   type: "server.connected"
@@ -5637,6 +5718,34 @@ export type ConfigProvidersResponses = {
 }
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+
+export type AgentsListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/agents"
+}
+
+export type AgentsListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AgentsListError = AgentsListErrors[keyof AgentsListErrors]
+
+export type AgentsListResponses = {
+  /**
+   * Metadata-only Agent presence records
+   */
+  200: Array<AgentPresence>
+}
+
+export type AgentsListResponse = AgentsListResponses[keyof AgentsListResponses]
 
 export type ExperimentalConsoleGetData = {
   body?: never
@@ -6723,6 +6832,34 @@ export type LocalModelOffloadRecommendationResponses = {
 export type LocalModelOffloadRecommendationResponse =
   LocalModelOffloadRecommendationResponses[keyof LocalModelOffloadRecommendationResponses]
 
+export type LocalCapacityData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/capacity"
+}
+
+export type LocalCapacityErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalCapacityError = LocalCapacityErrors[keyof LocalCapacityErrors]
+
+export type LocalCapacityResponses = {
+  /**
+   * Capacity snapshots for all known local providers
+   */
+  200: Array<LocalCapacitySnapshot>
+}
+
+export type LocalCapacityResponse = LocalCapacityResponses[keyof LocalCapacityResponses]
+
 export type LoopListData = {
   body?: never
   path?: never
@@ -6758,6 +6895,15 @@ export type LoopCreateData = {
     maxIterations?: number
     interval?: number
     noProgressLimit?: number
+    completionToken?: string
+    mode?: "prompt" | "queue"
+    queue?: Array<string>
+    queueSync?: boolean
+    queueOptions?: {
+      testCommand?: string
+      verifyCommand?: string
+      defaultBranch?: string
+    }
   }
   path?: never
   query?: {
@@ -8773,6 +8919,50 @@ export type SessionCommandResponses = {
 }
 
 export type SessionCommandResponse = SessionCommandResponses[keyof SessionCommandResponses]
+
+export type SessionSideQuestionData = {
+  body?: {
+    question: string
+    agent?: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/side_question"
+}
+
+export type SessionSideQuestionErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionSideQuestionError = SessionSideQuestionErrors[keyof SessionSideQuestionErrors]
+
+export type SessionSideQuestionResponses = {
+  /**
+   * Side question response
+   */
+  200: {
+    info: Message
+    parts: Array<Part>
+  }
+}
+
+export type SessionSideQuestionResponse = SessionSideQuestionResponses[keyof SessionSideQuestionResponses]
 
 export type SessionShellData = {
   body?: {

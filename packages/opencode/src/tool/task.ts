@@ -243,10 +243,15 @@ export const TaskTool = Tool.define(
               Effect.promise(() => LocalPlacement.parentCapacity({ parent: inherited, providers })),
             ),
           )
-        if (capacity === "no-slot") {
+        // Block inheritance when the parent is busy OR unreachable. A probe
+        // failure returns "unknown" — we cannot confirm the parent has a free
+        // slot, so inheriting would risk queuing behind it on a single-slot
+        // server and hanging forever.
+        if (capacity !== "free") {
           return yield* Effect.fail(
             new Error(
               `No capacity for subagent: local provider "${inherited.providerID}" has no free slot ` +
+                (capacity === "unknown" ? "(unreachable) " : "") +
                 `and no idle local peer was available. It serves one session at a time, so running ` +
                 `here would queue behind this session and never return. Retry when it frees up, or ` +
                 `pass an explicit model on a different provider.`,

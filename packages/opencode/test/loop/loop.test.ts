@@ -1,5 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { AutoMode } from "@/auto-mode/service"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
@@ -41,7 +42,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Database } from "@opencode-ai/core/database/database"
 import { TestInstance } from "../fixture/fixture"
 import { pollWithTimeout, testEffect } from "../lib/effect"
-import { TestLLMServer } from "../lib/llm-server"
+import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const summary = Layer.succeed(
@@ -119,6 +120,7 @@ function makeLoop() {
     status,
     Database.defaultLayer,
     EventV2Bridge.defaultLayer,
+    AutoMode.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
@@ -330,11 +332,100 @@ it.instance(
       const final = yield* waitForTerminal(info.id)
       expect(final.status).toBe("completed")
       expect(final.iterations).toHaveLength(1)
-      // The iteration ran inside the given session — no loop-owned session
-      // was created for it.
-      expect(final.iterations[0]?.sessionID).toBe(existing.id)
+      // The caller's session anchors the loop — no loop-owned parent session
+      // was created for it — and the iteration ran in a fresh child of it
+      // (fix-loop-reliability: per-iteration child sessions).
+      const iterationSession = yield* session.get(final.iterations[0]!.sessionID)
+      expect(iterationSession?.parentID).toBe(existing.id)
+      expect(final.iterationSessionID).toBe(final.iterations[0]?.sessionID)
       const sessions = yield* session.list()
       expect(sessions.filter((item) => item.title?.startsWith("loop:"))).toHaveLength(0)
+    }),
+  { config: {} },
+)
+
+it.instance(
+  "cancel mid-iteration aborts the turn and wins the race against late completion",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      const loop = yield* Loop.Service
+
+      // The provider holds the response open until we release it — an
+      // iteration that is genuinely in flight when cancel arrives.
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      yield* llm.push(reply().wait(gate).text("all done <promise>COMPLETE</promise>").stop())
+
+      const info = yield* loop.create({ prompt: "long task", maxIterations: 3, interval: 0 })
+
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const hits = yield* llm.hits
+          return hits.length > 0 ? true : undefined
+        }),
+        "iteration request never reached the mock provider",
+        "10 seconds",
+      )
+
+      const cancelled = yield* loop.cancel(info.id)
+      expect(cancelled).toBe(true)
+      const afterCancel = yield* loop.get(info.id)
+      expect(afterCancel?.status).toBe("cancelled")
+      const finishedAt = afterCancel?.finishedAt
+
+      // Late completion: the provider finally delivers the token. The loop's
+      // terminal status is sticky — cancelled stays cancelled, finishedAt is
+      // not rewritten.
+      release()
+      yield* Effect.sleep("1 second")
+
+      const final = yield* loop.get(info.id)
+      expect(final?.status).toBe("cancelled")
+      expect(final?.finishedAt).toBe(finishedAt!)
+    }),
+  { config: {} },
+)
+
+it.instance(
+  "a stalled iteration gets a directive continuation prompt in a fresh child session",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      const loop = yield* Loop.Service
+
+      // Two short no-tool-call outputs (a stall), then a completion.
+      yield* llm.text("on it")
+      yield* llm.text("on it")
+      yield* llm.text("all finished <promise>COMPLETE</promise>")
+
+      const info = yield* loop.create({
+        prompt: "fix the flaky test",
+        maxIterations: 5,
+        interval: 0,
+        noProgressLimit: 0,
+      })
+      const final = yield* waitForTerminal(info.id)
+      expect(final.status).toBe("completed")
+      expect(final.iterations.length).toBeGreaterThanOrEqual(3)
+
+      // Every iteration ran in its own child session — no two alike.
+      const iterationSessions = final.iterations.map((i) => i.sessionID)
+      expect(new Set(iterationSessions).size).toBe(iterationSessions.length)
+
+      // The iteration after a stall carries the directive, prepended to the
+      // user's own prompt (which must never be lost).
+      const hits = yield* llm.hits
+      const bodies = hits.map((h) => JSON.stringify(h.body))
+      const directive = bodies.filter((b) => b.includes("used no tools"))
+      expect(directive.length).toBeGreaterThanOrEqual(1)
+      for (const body of directive) expect(body).toContain("fix the flaky test")
     }),
   { config: {} },
 )

@@ -7,6 +7,8 @@ import { withGlobalConfigLock } from "@/local/config-lock"
 import { probeModelIDs, scanLlamaSwap } from "@/local/mdns"
 import { createClient, createConfig } from "@/local/llama-skein/gen/client"
 import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
+import { capacitySnapshot, unreachableSnapshot } from "@/local/capacity"
+import type { CapacitySnapshot } from "@/local/capacity"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
@@ -97,7 +99,9 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
         }
       }
 
-      const discovered = yield* Effect.promise<Awaited<ReturnType<typeof scanLlamaSwap>>>(() => scanLlamaSwap(1000, true))
+      const discovered = yield* Effect.promise<Awaited<ReturnType<typeof scanLlamaSwap>>>(() =>
+        scanLlamaSwap(1000, true),
+      )
 
       // Index mDNS/localhost results by normalised baseURL.
       const byURL = new Map<
@@ -211,7 +215,8 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
         if (
           !previous ||
           (isMdns && !prevMdns) ||
-          (isMdns === prevMdns && ((hasConfigured && !previousConfigured) || svc.models.length > previous.models.length))
+          (isMdns === prevMdns &&
+            ((hasConfigured && !previousConfigured) || svc.models.length > previous.models.length))
         ) {
           deduped.set(dedupeKey, {
             ...svc,
@@ -238,8 +243,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           const normalised = normalizeBaseURL(baseURL)
           const existingKey = Object.entries(providers).find(
             ([, p]) =>
-              normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? "")) ===
-              normalised,
+              normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? "")) === normalised,
           )?.[0]
           const existing = (providers[id] ?? (existingKey ? providers[existingKey] : undefined) ?? {}) as ProviderEntry
           if (existingKey && existingKey !== id) delete providers[existingKey]
@@ -276,7 +280,8 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       const { providerID, modelID } = ctx.params
       const { ctx_size } = ctx.payload
       const config = yield* configSvc.get()
-      const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options?.baseURL
+      const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options
+        ?.baseURL
       if (!baseURL) return false
       const client = llamaClient(baseURL)
       // fork: last line of defence against writing a --ctx-size the model cannot
@@ -308,7 +313,8 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
     const setModelOffload = Effect.fn("LocalHttpApi.setModelOffload")(function* (ctx) {
       const { providerID, modelID } = ctx.params
       const config = yield* configSvc.get()
-      const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options?.baseURL
+      const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options
+        ?.baseURL
       if (!baseURL) return false
       const res = yield* Effect.tryPromise(() =>
         llamaClient(baseURL).patchConfigModel({ id: modelID, configModelPatchRequest: ctx.payload }),
@@ -319,7 +325,8 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
     const getModelOffloadRecommendation = Effect.fn("LocalHttpApi.getModelOffloadRecommendation")(function* (ctx) {
       const { providerID, modelID } = ctx.params
       const config = yield* configSvc.get()
-      const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options?.baseURL
+      const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options
+        ?.baseURL
       const unavailable = { applicable: false, backend: "llamacpp", reason: "recommendation unavailable" }
       if (!baseURL) return { applicable: false, backend: "llamacpp", reason: "provider not configured" }
       const res = yield* Effect.tryPromise(() =>
@@ -329,6 +336,42 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       return res.data
     })
 
+    const capacity = Effect.fn("LocalHttpApi.capacity")(function* () {
+      const config = yield* configSvc.get()
+      const providers = config.provider ?? {}
+      const entries = Object.entries(providers).filter(([, p]) => {
+        const url = (p as { options?: { baseURL?: string } }).options?.baseURL
+        return typeof url === "string" && url.length > 0
+      })
+      if (entries.length === 0) return []
+
+      const timeoutMs = 1_500
+      const snapshots: CapacitySnapshot[] = yield* Effect.promise(() =>
+        Promise.all(
+          entries.map(async ([id, p]) => {
+            const baseURL = String((p as { options?: { baseURL?: string } }).options?.baseURL)
+            const normalized = baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")
+            const client = new LlamaSkeinClient({
+              client: createClient(createConfig({ baseUrl: normalized })),
+            })
+            const probedAt = Date.now()
+            const aborter = new AbortController()
+            const timer = setTimeout(() => aborter.abort(), timeoutMs)
+            try {
+              const hw = await client.getHardware({ signal: aborter.signal }).then((r) => r.data ?? null)
+              if (!hw) return unreachableSnapshot({ provider: id, baseURL, probedAt })
+              return capacitySnapshot({ provider: id, baseURL, hardware: hw, probedAt })
+            } catch {
+              return unreachableSnapshot({ provider: id, baseURL, probedAt })
+            } finally {
+              clearTimeout(timer)
+            }
+          }),
+        ),
+      )
+      return snapshots
+    })
+
     return handlers
       .handle("scan", scan)
       .handle("connect", connect)
@@ -336,5 +379,6 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       .handle("setModelCtxSize", setModelCtxSize)
       .handle("setModelOffload", setModelOffload)
       .handle("getModelOffloadRecommendation", getModelOffloadRecommendation)
+      .handle("capacity", capacity)
   }),
 )

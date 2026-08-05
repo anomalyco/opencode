@@ -56,7 +56,9 @@ export function DialogLoopList() {
       .map((loop) => ({
         title: Locale.truncate(loop.prompt, 60),
         value: loop.id,
-        footer: `${statusLabel(loop.status)} · iter ${loop.iteration}/${loop.maxIterations}`,
+        footer:
+          `${statusLabel(loop.status)} · iter ${loop.iteration}/${loop.maxIterations}` +
+          (loop.currentChange ? ` · ${loop.currentChange} [${loop.currentGate ?? "?"}]` : ""),
       })),
   )
 
@@ -69,7 +71,12 @@ export function DialogLoopList() {
       title="Loops"
       options={options()}
       skipFilter={true}
-      emptyView={<text>No loops yet — start one with /loop &lt;prompt&gt;</text>}
+      emptyView={
+        <text>
+          No loops yet — start one with /loop &lt;prompt&gt;. The agent is told to emit
+          &lt;promise&gt;COMPLETE&lt;/promise&gt; when the task is done.
+        </text>
+      }
       onSelect={(option) => {
         const loop = loops().find((x) => x.id === option.value)
         if (!loop) return
@@ -82,7 +89,8 @@ export function DialogLoopList() {
           disabled: (option) => loops().find((x) => x.id === option?.value)?.status !== "running",
           onTrigger: async (option) => {
             const result = await sdk.client.loop.pause({ loopID: option.value })
-            if (result.error) toast.show({ variant: "error", title: "Failed to pause loop", message: errorMessage(result.error) })
+            if (result.error)
+              toast.show({ variant: "error", title: "Failed to pause loop", message: errorMessage(result.error) })
             await refetch()
           },
         },
@@ -92,7 +100,8 @@ export function DialogLoopList() {
           disabled: (option) => loops().find((x) => x.id === option?.value)?.status !== "paused",
           onTrigger: async (option) => {
             const result = await sdk.client.loop.resume({ loopID: option.value })
-            if (result.error) toast.show({ variant: "error", title: "Failed to resume loop", message: errorMessage(result.error) })
+            if (result.error)
+              toast.show({ variant: "error", title: "Failed to resume loop", message: errorMessage(result.error) })
             await refetch()
           },
         },
@@ -105,7 +114,8 @@ export function DialogLoopList() {
           },
           onTrigger: async (option) => {
             const result = await sdk.client.loop.cancel({ loopID: option.value })
-            if (result.error) toast.show({ variant: "error", title: "Failed to cancel loop", message: errorMessage(result.error) })
+            if (result.error)
+              toast.show({ variant: "error", title: "Failed to cancel loop", message: errorMessage(result.error) })
             await refetch()
           },
         },
@@ -119,11 +129,13 @@ function DialogLoopIterations(props: { loop: Loop }) {
   const route = useRoute()
 
   const options = createMemo(() =>
-    props.loop.iterations.toSorted((a, b) => b.iteration - a.iteration).map((iteration) => ({
-      title: `iteration ${iteration.iteration}${iteration.complete ? " (complete)" : ""}`,
-      value: iteration.sessionID,
-      footer: `${iteration.toolCalls} tool call(s) · ${iteration.outputLength} chars output`,
-    })),
+    props.loop.iterations
+      .toSorted((a, b) => b.iteration - a.iteration)
+      .map((iteration) => ({
+        title: `iteration ${iteration.iteration}${iteration.complete ? " (complete)" : ""}`,
+        value: iteration.sessionID,
+        footer: `${iteration.toolCalls} tool call(s) · ${iteration.outputLength} chars output`,
+      })),
   )
 
   onMount(() => {

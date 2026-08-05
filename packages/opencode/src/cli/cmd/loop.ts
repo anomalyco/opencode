@@ -48,12 +48,14 @@ async function follow(sdk: ReturnType<typeof createOpencodeClient>, id: string) 
     if (info.iteration !== iteration) {
       iteration = info.iteration
       const last = info.iterations.at(-1)
+      const where = info.currentChange ? ` — ${info.currentChange} [${info.currentGate ?? "?"}]` : ""
       UI.println(
-        `${UI.Style.TEXT_DIM}[${id}] iteration ${iteration}/${info.maxIterations} — ${last?.toolCalls ?? 0} tool call(s)${UI.Style.TEXT_NORMAL}`,
+        `${UI.Style.TEXT_DIM}[${id}] iteration ${iteration}/${info.maxIterations}${where} — ${last?.toolCalls ?? 0} tool call(s)${UI.Style.TEXT_NORMAL}`,
       )
     }
     if (TERMINAL_STATUSES.has(info.status)) {
       UI.println(`${statusColor(info.status)}[${id}] ${info.status}${UI.Style.TEXT_NORMAL}`)
+      if (info.report) UI.println(info.report)
       return
     }
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
@@ -63,12 +65,20 @@ async function follow(sdk: ReturnType<typeof createOpencodeClient>, id: string) 
 // ── loop (root run command) ──────────────────────────────────────────────────
 
 export const LoopCommand = effectCmd({
-  command: "loop <prompt>",
-  describe: "run a prompt in a loop until complete or max iterations reached",
+  command: "loop [prompt]",
+  describe: `run a prompt in a loop until the agent emits ${LoopArgDefaults.completionToken} (disclosed to it each iteration) or max iterations is reached`,
   instance: false,
   builder: (yargs) =>
     yargs
-      .positional("prompt", { type: "string", describe: "prompt to repeat", demandOption: true })
+      .positional("prompt", { type: "string", describe: "prompt to repeat (omit with --queue)" })
+      .option("queue", {
+        type: "string",
+        array: true,
+        describe:
+          "queue mode: work openspec changes to completion (implement, test, verify, commit — never push). " +
+          "Pass change slugs to restrict/order the queue; bare --queue takes every eligible change. " +
+          "Stuck changes are quarantined via .skein/blocker.md and the run continues.",
+      })
       .option("max", {
         type: "number",
         alias: "n",
@@ -80,10 +90,15 @@ export const LoopCommand = effectCmd({
         alias: "i",
         describe: `seconds between iterations (default: ${LoopArgDefaults.intervalSeconds})`,
       })
-      // NOTE: --completion-token is intentionally absent until the v2 SDK is
-      // regenerated to carry the field (the server already accepts it and
-      // defaults it). A flag that parses but never reaches the server is worse
-      // than no flag.
+      .option("sync", {
+        type: "boolean",
+        default: false,
+        describe: "queue mode: run specsync for each completed change (a dry run is executed first). Off by default",
+      })
+      .option("completion-token", {
+        type: "string",
+        describe: `stop word the agent must emit to end the loop (default: ${LoopArgDefaults.completionToken})`,
+      })
       .option("no-progress-limit", {
         type: "number",
         describe: `consecutive no-progress iterations before stopping (default: ${LoopArgDefaults.noProgressLimit}, 0 disables)`,
@@ -93,24 +108,41 @@ export const LoopCommand = effectCmd({
         type: "string",
         describe: "opencode server URL (default: http://localhost:2525)",
         default: "http://localhost:2525",
-      }),
+      })
+      // Subcommands must be registered under the parent, not as separate
+      // top-level `loop <verb>` commands: yargs matches commands by their
+      // first token, so five commands all starting with "loop" collide and
+      // the last-registered one wins — which is why `opencode loop "<prompt>"`
+      // and `opencode loop list` both used to print the help for
+      // `loop resume <id>`.
+      .command(LoopListCommand)
+      .command(LoopCancelCommand)
+      .command(LoopPauseCommand)
+      .command(LoopResumeCommand),
   handler: Effect.fn("Cli.loop")(function* (args) {
+    const queueMode = args.queue !== undefined
     const prompt = args.prompt
-    if (!prompt) yield* fail("prompt is required")
+    if (!prompt && !queueMode) yield* fail("prompt is required (or pass --queue)")
 
     const sdk = createOpencodeClient({ baseUrl: args.server })
     const created = yield* Effect.promise(() =>
       sdk.loop.create({
-        prompt,
+        prompt: prompt ?? "",
         maxIterations: args.max,
         interval: args.interval,
         noProgressLimit: args["no-progress-limit"],
+        completionToken: args["completion-token"],
+        mode: queueMode ? "queue" : undefined,
+        queue: queueMode && args.queue && args.queue.length > 0 ? args.queue : undefined,
+        queueSync: queueMode && args.sync ? true : undefined,
       }),
     )
     if (created.error || !created.data) yield* fail("failed to create loop")
     const info = created.data!
 
-    UI.println(`${UI.Style.TEXT_SUCCESS_BOLD}loop ${info.id}${UI.Style.TEXT_NORMAL} started (max ${info.maxIterations} iterations)`)
+    UI.println(
+      `${UI.Style.TEXT_SUCCESS_BOLD}loop ${info.id}${UI.Style.TEXT_NORMAL} started (max ${info.maxIterations} iterations)`,
+    )
 
     yield* Effect.promise(() => follow(sdk, info.id))
   }),
@@ -119,7 +151,7 @@ export const LoopCommand = effectCmd({
 // ── loop list ────────────────────────────────────────────────────────────────
 
 export const LoopListCommand = effectCmd({
-  command: "loop list",
+  command: "list",
   describe: "list loops known to the server",
   instance: false,
   builder: (yargs) =>
@@ -147,16 +179,14 @@ export const LoopListCommand = effectCmd({
 // ── loop cancel / pause / resume ────────────────────────────────────────────
 
 const serverOption = (yargs: import("yargs").Argv) =>
-  yargs
-    .positional("id", { type: "string" as const, describe: "loop ID", demandOption: true })
-    .option("server", {
-      type: "string" as const,
-      describe: "opencode server URL (default: http://localhost:2525)",
-      default: "http://localhost:2525",
-    })
+  yargs.positional("id", { type: "string" as const, describe: "loop ID", demandOption: true }).option("server", {
+    type: "string" as const,
+    describe: "opencode server URL (default: http://localhost:2525)",
+    default: "http://localhost:2525",
+  })
 
 export const LoopCancelCommand = effectCmd({
-  command: "loop cancel <id>",
+  command: "cancel <id>",
   describe: "cancel a running loop",
   instance: false,
   builder: serverOption,
@@ -169,7 +199,7 @@ export const LoopCancelCommand = effectCmd({
 })
 
 export const LoopPauseCommand = effectCmd({
-  command: "loop pause <id>",
+  command: "pause <id>",
   describe: "pause a running loop",
   instance: false,
   builder: serverOption,
@@ -182,7 +212,7 @@ export const LoopPauseCommand = effectCmd({
 })
 
 export const LoopResumeCommand = effectCmd({
-  command: "loop resume <id>",
+  command: "resume <id>",
   describe: "resume a paused loop",
   instance: false,
   builder: serverOption,

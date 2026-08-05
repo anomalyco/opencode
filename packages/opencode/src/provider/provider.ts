@@ -1203,20 +1203,14 @@ export type Error = ModelNotFoundError | InitError | NoProvidersError | NoModels
 export interface Interface {
   readonly list: () => Effect.Effect<Record<ProviderV2.ID, Info>>
   readonly getProvider: (providerID: ProviderV2.ID) => Effect.Effect<Info>
-  readonly getModel: (
-    providerID: ProviderV2.ID,
-    modelID: ModelV2.ID,
-  ) => Effect.Effect<Model, ModelNotFoundError>
+  readonly getModel: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<Model, ModelNotFoundError>
   readonly getLanguage: (model: Model) => Effect.Effect<LanguageModelV3, ModelNotFoundError>
   readonly closest: (
     providerID: ProviderV2.ID,
     query: string[],
   ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
-  readonly defaultModel: () => Effect.Effect<
-    { providerID: ProviderV2.ID; modelID: ModelV2.ID },
-    DefaultModelError
-  >
+  readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }, DefaultModelError>
   /**
    * fork: update a model's cached context limit after a deliberate ctx-size
    * change (local providers). Keeps the sidebar's context window in sync
@@ -1477,8 +1471,8 @@ export async function adjustLocalContextOnOverflow(
 async function fetchLocalModelFit(
   controlBase: string,
   signal?: AbortSignal,
-): Promise<Map<string, { maxSafeCtx: number; configuredCtx?: number }>> {
-  const out = new Map<string, { maxSafeCtx: number; configuredCtx?: number }>()
+): Promise<Map<string, { maxSafeCtx: number; configuredCtx?: number; modelMb?: number }>> {
+  const out = new Map<string, { maxSafeCtx: number; configuredCtx?: number; modelMb?: number }>()
   try {
     const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: controlBase })) })
     // fork: bounded by the caller's discovery abort budget — a host that
@@ -1498,7 +1492,11 @@ async function fetchLocalModelFit(
       // can't-compute yields max_safe_ctx 0, caught below → fall back.
       const safe = numberFrom(fit.max_safe_ctx)
       if (!safe) continue
-      out.set(fit.model, { maxSafeCtx: safe, configuredCtx: numberFrom(fit.configured_ctx) })
+      out.set(fit.model, {
+        maxSafeCtx: safe,
+        configuredCtx: numberFrom(fit.configured_ctx),
+        modelMb: numberFrom(fit.model_mb),
+      })
     }
   } catch {
     // not a llama-skein backend, or unreachable — fall back silently.
@@ -1614,11 +1612,19 @@ async function discoverOpenAICompatibleModels(input: {
         const contextMax =
           fit?.configuredCtx ?? numberFrom(item.context_length) ?? numberFrom(item.max_context_length) ?? undefined
         const output = numberFrom(item.max_output_tokens) ?? existingModel?.limit.output ?? 0
+        // fork: size_bytes from /v1/models is the primary source; fall back to
+        // model_mb from the fit report (in MB → bytes) when the models endpoint
+        // omits it (peer models, un-resolvable path). existingModel?.sizeBytes
+        // is the last resort — a value persisted from a prior discovery.
+        const sizeBytes =
+          numberFrom(item.size_bytes) ??
+          (fit?.modelMb ? fit.modelMb * 1024 * 1024 : undefined) ??
+          existingModel?.sizeBytes
         discovered[modelID] = {
           id: ModelV2.ID.make(modelID),
           providerID: input.providerID,
           name,
-          sizeBytes: numberFrom(item.size_bytes) ?? existingModel?.sizeBytes,
+          sizeBytes,
           api: {
             id: existingModel?.api.id ?? modelID,
             url: input.provider.api ?? existingModel?.api.url ?? "",
@@ -1641,8 +1647,7 @@ async function discoverOpenAICompatibleModels(input: {
             // first) render their thinking instead of appearing frozen. A
             // hand-configured capability still wins over discovery.
             reasoning:
-              existingModel?.capabilities.reasoning ??
-              (typeof item.reasoning === "boolean" ? item.reasoning : false),
+              existingModel?.capabilities.reasoning ?? (typeof item.reasoning === "boolean" ? item.reasoning : false),
             attachment: existingModel?.capabilities.attachment ?? false,
             toolcall: existingModel?.capabilities.toolcall ?? true,
             input: existingModel?.capabilities.input ?? {

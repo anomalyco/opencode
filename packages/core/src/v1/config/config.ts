@@ -53,6 +53,14 @@ export const Info = Schema.Struct({
     description:
       "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
   }),
+  auto_mode: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Enable or disable auto-approving tool permission prompts. When true, all tool permission prompts are automatically approved for the session. Independent of 'auto_continue'; the TUI's 'Toggle auto mode' command enables both together as a convenience. Defaults to false.",
+  }),
+  auto_continue: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Enable or disable automatic continuation past a stalled turn. When true, the TUI nudges the agent to keep working (via the /loop engine, with its iteration cap, no-progress detection, and completion token) after a turn that made tool calls but didn't reach a natural stopping point. Independent of 'auto_mode'. Defaults to false.",
+  }),
   plugin: Schema.optional(Schema.mutable(Schema.Array(ConfigPluginV1.Spec))),
   share: Schema.optional(Schema.Literals(["manual", "auto", "disabled"])).annotate({
     description:
@@ -110,13 +118,11 @@ export const Info = Schema.Struct({
   mcp: Schema.optional(
     Schema.Record(Schema.String, Schema.Union([ConfigMCPV1.Info, Schema.Struct({ enabled: Schema.Boolean })])),
   ).annotate({ description: "MCP (Model Context Protocol) server configurations" }),
-  mcpToolProfiles: Schema.optional(Schema.Record(Schema.String, Schema.mutable(Schema.Array(Schema.String)))).annotate(
-    {
-      description:
-        "Named tool allowlists (profile name -> list of tool names) for MCP servers. Referenced by a server's " +
-        "`mcp.<name>.toolProfile` field; a server with no toolProfile set exposes all of its tools unfiltered.",
-    },
-  ),
+  mcpToolProfiles: Schema.optional(Schema.Record(Schema.String, Schema.mutable(Schema.Array(Schema.String)))).annotate({
+    description:
+      "Named tool allowlists (profile name -> list of tool names) for MCP servers. Referenced by a server's " +
+      "`mcp.<name>.toolProfile` field; a server with no toolProfile set exposes all of its tools unfiltered.",
+  }),
   formatter: Schema.optional(ConfigFormatterV1.Info).annotate({
     description:
       "Enable or configure formatters. Omit or set to false to disable, true to enable built-ins, or an object to enable built-ins with overrides.",
@@ -196,6 +202,10 @@ export const Info = Schema.Struct({
       local_subagent_placement_models: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
         description:
           "Model IDs trusted for local subagent placement (the parent's own model is always trusted). Unset: any tool-capable model on an idle provider qualifies",
+      }),
+      stream_inactivity_seconds: Schema.optional(PositiveInt).annotate({
+        description:
+          "Fail a provider stream that delivers no events for this many seconds (default: 300, 0 disables). Guards against half-open connections that would otherwise park a turn forever.",
       }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",

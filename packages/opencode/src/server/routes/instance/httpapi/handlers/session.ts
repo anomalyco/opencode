@@ -32,11 +32,13 @@ import {
   PromptPayload,
   RevertPayload,
   ShellPayload,
+  SideQuestionPayload,
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
 import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
+import { SideQuestion } from "@/side-question"
 
 const tryParseJson = (text: string) =>
   Effect.try({
@@ -336,6 +338,24 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
     })
 
+    const sideQuestion = Effect.fn("SessionHttpApi.sideQuestion")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof SideQuestionPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      const sideQuestionSvc = yield* SideQuestion.Service
+      return yield* sideQuestionSvc
+        .ask({
+          sessionID: ctx.params.sessionID,
+          question: ctx.payload.question,
+          model: ctx.payload.model
+            ? { providerID: ctx.payload.model.providerID, modelID: ctx.payload.model.modelID }
+            : undefined,
+          agent: ctx.payload.agent,
+        })
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+    })
+
     const shell = Effect.fn("SessionHttpApi.shell")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof ShellPayload.Type
@@ -429,6 +449,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("prompt", prompt)
       .handle("promptAsync", promptAsync)
       .handle("command", command)
+      .handle("sideQuestion", sideQuestion)
       .handle("shell", shell)
       .handle("revert", revert)
       .handle("unrevert", unrevert)

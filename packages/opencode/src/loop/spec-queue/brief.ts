@@ -1,0 +1,116 @@
+// Per-iteration brief for a queue loop: the change's own documents plus the
+// next unchecked task, and — when the fleet has idle capacity — a fan-out
+// nudge (design D9: awareness only; placement machinery does the rest).
+import fs from "fs"
+import path from "path"
+
+import { uncheckedTasks } from "./tasks-md"
+import type { QueueChange } from "./queue"
+
+export type Gate = "implement" | "test" | "verify" | "commit"
+
+export interface BriefInput {
+  change: QueueChange
+  gate: Gate
+  /** failure output from the previous gate evaluation, when returning to implement */
+  failure?: { gate: Gate; output: string }
+  /** names of idle local peer providers; empty → no fan-out nudge */
+  idlePeers: readonly string[]
+}
+
+function readIfExists(file: string): string | undefined {
+  if (!fs.existsSync(file)) return undefined
+  return fs.readFileSync(file, "utf8")
+}
+
+function specFiles(changeDir: string): string[] {
+  const specsDir = path.join(changeDir, "specs")
+  if (!fs.existsSync(specsDir)) return []
+  const out: string[] = []
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) walk(full)
+      else if (entry.name === "spec.md") out.push(full)
+    }
+  }
+  walk(specsDir)
+  return out.sort()
+}
+
+const GATE_INSTRUCTIONS: Record<Gate, string> = {
+  implement: [
+    "You are in the IMPLEMENT gate. Work the next unchecked task to completion,",
+    "check it off in tasks.md with a short note of what you verified, and keep the",
+    "change's own Validation commands passing as you go. Do not push, tag, publish,",
+    "or deploy anything.",
+  ].join(" "),
+  test: [
+    "You are in the TEST gate. Run the repository test suite relevant to this change",
+    "and fix failures your change caused. Do not weaken or delete tests to make them pass.",
+  ].join(" "),
+  verify: [
+    "You are in the VERIFY gate. Run the typecheck and each task's stated Validation",
+    "command; fix what fails. Do not check off tasks that do not pass their validation.",
+  ].join(" "),
+  commit: [
+    "You are in the COMMIT gate. Commit the change's work to a non-default branch",
+    "named loop/<change-slug>. Never commit to the default branch and never push.",
+  ].join(" "),
+}
+
+/** Composes the brief text sent as the iteration's prompt. */
+export function buildBrief(input: BriefInput): string {
+  const { change } = input
+  const parts: string[] = []
+
+  parts.push(
+    [
+      `You are working the openspec change "${change.slug}" as part of an unattended queue run.`,
+      `The change lives at ${change.directory}.`,
+      GATE_INSTRUCTIONS[input.gate],
+    ].join("\n"),
+  )
+
+  if (input.failure) {
+    parts.push(
+      [
+        `The previous ${input.failure.gate.toUpperCase()} gate failed. Fix the cause before anything else.`,
+        "Failure output:",
+        "```",
+        input.failure.output.trim().slice(0, 8_000),
+        "```",
+      ].join("\n"),
+    )
+  }
+
+  const next = uncheckedTasks(change.tasks)[0]
+  if (next) {
+    parts.push(`Next unchecked task: ${next.id ? `${next.id} ` : ""}${next.text}`)
+  }
+
+  const proposal = readIfExists(path.join(change.directory, "proposal.md"))
+  if (proposal) parts.push(`## proposal.md\n\n${proposal}`)
+
+  const tasks = readIfExists(path.join(change.directory, "tasks.md"))
+  if (tasks) parts.push(`## tasks.md\n\n${tasks}`)
+
+  for (const file of specFiles(change.directory)) {
+    parts.push(`## ${path.relative(change.directory, file)}\n\n${fs.readFileSync(file, "utf8")}`)
+  }
+
+  if (input.idlePeers.length > 0) {
+    parts.push(
+      [
+        `Fleet capacity: ${input.idlePeers.length} idle local provider${input.idlePeers.length === 1 ? "" : "s"}`,
+        `(${input.idlePeers.join(", ")}) can take delegated work right now. Where this change's`,
+        "tasks allow parallel work (implementation vs tests vs verification), use the task tool",
+        "to delegate subtasks — placement will put them on idle peers automatically.",
+      ].join(" "),
+    )
+  }
+
+  return parts.join("\n\n")
+}
+
+export * as SpecQueueBrief from "./brief"

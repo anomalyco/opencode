@@ -228,9 +228,9 @@ export const RunCommand = effectCmd({
         describe: "run in direct interactive split-footer mode",
         default: false,
       })
-      .option("dangerously-skip-permissions", {
+      .option("auto", {
         type: "boolean",
-        describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
+        describe: "auto-approve permissions that are not explicitly denied",
         default: false,
       })
       .option("demo", {
@@ -243,9 +243,15 @@ export const RunCommand = effectCmd({
     const { RuntimeFlags } = yield* Effect.promise(() => import("@/effect/runtime-flags"))
     const { InstanceRef } = yield* Effect.promise(() => import("@/effect/instance-ref"))
     const { ServerAuth } = yield* Effect.promise(() => import("@/server/auth"))
+    const { setAutoMode } = yield* Effect.promise(() => import("@/auto-mode/service"))
     const agentSvc = yield* Agent.Service
     const flags = yield* RuntimeFlags.Service
     const localInstance = yield* InstanceRef
+    const autoModeEnabled = args["auto"] || flags.autoMode
+    if (autoModeEnabled) {
+      setAutoMode(true)
+      yield* Effect.logInfo("Auto mode enabled", { auto: args["auto"], env: flags.autoMode })
+    }
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
@@ -732,7 +738,7 @@ export const RunCommand = effectCmd({
               const permission = event.properties
               if (permission.sessionID !== sessionID) continue
 
-              if (args["dangerously-skip-permissions"]) {
+              if (args["auto"]) {
                 await client.permission.reply({
                   requestID: permission.id,
                   reply: "once",

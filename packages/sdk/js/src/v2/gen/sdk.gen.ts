@@ -4,6 +4,8 @@ import { client } from "./client.gen.js"
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from "./client/index.js"
 import type {
   AgentPartInput,
+  AgentsListErrors,
+  AgentsListResponses,
   AppAgentsErrors,
   AppAgentsResponses,
   AppLogErrors,
@@ -88,6 +90,8 @@ import type {
   GlobalUpgradeResponses,
   InstanceDisposeErrors,
   InstanceDisposeResponses,
+  LocalCapacityErrors,
+  LocalCapacityResponses,
   LocalConnectErrors,
   LocalConnectPayload,
   LocalConnectResponses,
@@ -234,6 +238,8 @@ import type {
   SessionShareResponses,
   SessionShellErrors,
   SessionShellResponses,
+  SessionSideQuestionErrors,
+  SessionSideQuestionResponses,
   SessionStatusErrors,
   SessionStatusResponses,
   SessionSummarizeErrors,
@@ -1471,6 +1477,38 @@ export class Config2 extends HeyApiClient {
   }
 }
 
+export class Agents extends HeyApiClient {
+  /**
+   * List Agent presence
+   *
+   * List live Agent metadata for this opencode instance without session content.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AgentsListResponses, AgentsListErrors, ThrowOnError>({
+      url: "/agents",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Tool extends HeyApiClient {
   /**
    * List tools
@@ -2440,6 +2478,36 @@ export class Local extends HeyApiClient {
     })
   }
 
+  /**
+   * Provider capacity snapshots
+   *
+   * Probe every known local provider for hardware telemetry and return a normalised capacity snapshot per host. The signal field distinguishes exact queue depth from GPU-utilisation inference.
+   */
+  public capacity<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LocalCapacityResponses, LocalCapacityErrors, ThrowOnError>({
+      url: "/local/capacity",
+      ...options,
+      ...params,
+    })
+  }
+
   private _model?: Model
   get model(): Model {
     return (this._model ??= new Model({ client: this.client }))
@@ -2491,6 +2559,15 @@ export class Loop extends HeyApiClient {
       maxIterations?: number
       interval?: number
       noProgressLimit?: number
+      completionToken?: string
+      mode?: "prompt" | "queue"
+      queue?: Array<string>
+      queueSync?: boolean
+      queueOptions?: {
+        testCommand?: string
+        verifyCommand?: string
+        defaultBranch?: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2506,6 +2583,11 @@ export class Loop extends HeyApiClient {
             { in: "body", key: "maxIterations" },
             { in: "body", key: "interval" },
             { in: "body", key: "noProgressLimit" },
+            { in: "body", key: "completionToken" },
+            { in: "body", key: "mode" },
+            { in: "body", key: "queue" },
+            { in: "body", key: "queueSync" },
+            { in: "body", key: "queueOptions" },
           ],
         },
       ],
@@ -4643,6 +4725,54 @@ export class Session2 extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  /**
+   * Ask side question
+   *
+   * Ask a quick side question without adding to conversation history. The response has full visibility into the current conversation but does not persist to history.
+   */
+  public sideQuestion<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      question?: string
+      agent?: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "question" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionSideQuestionResponses, SessionSideQuestionErrors, ThrowOnError>(
+      {
+        url: "/session/{sessionID}/side_question",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
   }
 
   /**
@@ -7186,6 +7316,11 @@ export class OpencodeClient extends HeyApiClient {
   private _config?: Config2
   get config(): Config2 {
     return (this._config ??= new Config2({ client: this.client }))
+  }
+
+  private _agents?: Agents
+  get agents(): Agents {
+    return (this._agents ??= new Agents({ client: this.client }))
   }
 
   private _tool?: Tool
