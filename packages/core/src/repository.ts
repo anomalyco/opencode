@@ -44,16 +44,6 @@ export class InvalidBranchError extends Schema.TaggedErrorClass<InvalidBranchErr
   message: Schema.String,
 }) {}
 
-export type Error = InvalidReferenceError | UnsupportedLocalRepositoryError | InvalidBranchError
-
-export function isError(error: unknown): error is Error {
-  return (
-    error instanceof InvalidReferenceError ||
-    error instanceof UnsupportedLocalRepositoryError ||
-    error instanceof InvalidBranchError
-  )
-}
-
 export function parse(input: string): Reference | undefined {
   const cleaned = normalizeInput(input)
   if (!cleaned) return

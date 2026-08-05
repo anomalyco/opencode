@@ -101,13 +101,10 @@ describe("RepositoryCache", () => {
     ),
   )
 
-  it.live("returns typed validation and clone failures", () =>
+  it.live("returns typed branch validation and clone failures", () =>
     withRemote((fixture) =>
       Effect.gen(function* () {
         const cache = yield* RepositoryCache.Service
-        const invalidRepository = yield* Effect.flip(RepositoryCache.parseRemote("not-a-repo"))
-        expect(invalidRepository).toBeInstanceOf(RepositoryCache.InvalidRepositoryError)
-
         const invalidBranch = yield* Effect.flip(cache.ensure({ reference: fixture.reference, branch: "../unsafe" }))
         expect(invalidBranch).toBeInstanceOf(RepositoryCache.InvalidBranchError)
 

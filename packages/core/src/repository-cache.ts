@@ -31,14 +31,6 @@ export type EnsureInput = {
   readonly branch?: string
 }
 
-export class InvalidRepositoryError extends Schema.TaggedErrorClass<InvalidRepositoryError>()(
-  "RepositoryCacheInvalidRepositoryError",
-  {
-    repository: Schema.String,
-    message: Schema.String,
-  },
-) {}
-
 export class InvalidBranchError extends Schema.TaggedErrorClass<InvalidBranchError>()(
   "RepositoryCacheInvalidBranchError",
   {
@@ -86,7 +78,6 @@ export class CacheOperationError extends Schema.TaggedErrorClass<CacheOperationE
 ) {}
 
 export type Error =
-  | InvalidRepositoryError
   | InvalidBranchError
   | CloneFailedError
   | FetchFailedError
@@ -103,7 +94,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Re
 
 export function isError(error: unknown): error is Error {
   return (
-    error instanceof InvalidRepositoryError ||
     error instanceof InvalidBranchError ||
     error instanceof CloneFailedError ||
     error instanceof FetchFailedError ||
@@ -113,13 +103,6 @@ export function isError(error: unknown): error is Error {
     error instanceof CacheOperationError
   )
 }
-
-export const parseRemote = Effect.fn("RepositoryCache.parseRemote")(function* (repository: string) {
-  return yield* Effect.try({
-    try: () => Repository.parseRemote(repository),
-    catch: (error) => new InvalidRepositoryError({ repository, message: errorMessage(error) }),
-  })
-})
 
 export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(function* (branch: string) {
   return yield* Effect.try({
