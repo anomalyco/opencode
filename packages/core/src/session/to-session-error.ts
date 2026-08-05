@@ -1,6 +1,7 @@
 import { AIError, ToolFailure } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
+import { PlatformError } from "effect/PlatformError"
 import { Permission } from "../permission"
 import { Question } from "../question"
 import { Integration } from "../integration"
@@ -40,10 +41,9 @@ export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof Question.RejectedError) return { type: "aborted", message: cause.message }
   if (cause instanceof ToolFailure || cause instanceof Tool.Error) {
     if (cause.error === undefined) return { type: "tool.execution", message: cause.message }
-    // The canonical error is the sole model-visible representation, so a cause
-    // with no message must not erase the tool's curated failure message.
     const unwrapped = toSessionError(cause.error)
-    return unwrapped.message === "" ? { ...unwrapped, type: "tool.execution", message: cause.message } : unwrapped
+    // Platform errors are internal diagnostics; tools provide the model-facing context.
+    return cause.error instanceof PlatformError ? { ...unwrapped, message: cause.message } : unwrapped
   }
   if (cause instanceof StepFailedError) return cause.error
   if (cause instanceof AgentNotFoundError) return { type: "unknown", message: cause.message }

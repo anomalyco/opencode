@@ -22,6 +22,7 @@ import { Permission } from "@opencode-ai/core/permission"
 import { Tool } from "@opencode-ai/schema/tool"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
+import { systemError } from "effect/PlatformError"
 
 const llm = (reason: AIError["reason"]) => new AIError({ module: "test", method: "stream", reason })
 
@@ -71,6 +72,22 @@ describe("toSessionError", () => {
     expect(toSessionError(new Tool.Error({ message: "failed" }))).toEqual({
       type: "tool.execution",
       message: "failed",
+    })
+    expect(
+      toSessionError(
+        new ToolFailure({
+          message: "Unable to execute command: pwd",
+          error: systemError({
+            _tag: "NotFound",
+            module: "FileSystem",
+            method: "stat",
+            pathOrDescriptor: "/missing",
+          }),
+        }),
+      ),
+    ).toEqual({
+      type: "unknown",
+      message: "Unable to execute command: pwd",
     })
   })
 

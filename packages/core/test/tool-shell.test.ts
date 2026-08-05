@@ -257,6 +257,28 @@ describe("ShellTool", () => {
     ),
   )
 
+  it.live("hides filesystem details when the workdir does not exist", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          executeTool(registry, call({ command: cwdCommand, workdir: "missing" })),
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() =>
+              expect(settled).toEqual({
+                status: "error",
+                error: { type: "unknown", message: `Unable to execute command: ${cwdCommand}` },
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   it.live("permissions compound commands separately", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
