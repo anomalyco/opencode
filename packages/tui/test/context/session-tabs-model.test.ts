@@ -93,6 +93,17 @@ describe("session tabs", () => {
     expect(cycleSessionTab(tabs, "b", 1)?.sessionID).toBe("a")
   })
 
+  test("cycles to the nearest matching tab from an unmatched active tab", () => {
+    const tabs = ["a", "b", "c", "d", "e"].map((sessionID) => ({ sessionID }))
+    const unread = new Set(["a", "d"])
+    const matches = (tab: { sessionID: string }) => unread.has(tab.sessionID)
+
+    expect(cycleSessionTab(tabs, "c", 1, matches)?.sessionID).toBe("d")
+    expect(cycleSessionTab(tabs, "c", -1, matches)?.sessionID).toBe("a")
+    expect(cycleSessionTab(tabs, "e", 1, matches)?.sessionID).toBe("a")
+    expect(cycleSessionTab(tabs, "a", -1, matches)?.sessionID).toBe("d")
+  })
+
   test("moves backward and forward through selection history", () => {
     const tabs = ["a", "b", "c", "d"].map((sessionID) => ({ sessionID }))
     const history = ["a", "b", "c", "d"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
