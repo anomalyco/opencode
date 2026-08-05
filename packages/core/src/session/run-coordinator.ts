@@ -1,6 +1,7 @@
 export * as SessionRunCoordinator from "./run-coordinator"
 
 import { Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
+import { makeUnsafe, type Semaphore } from "effect/Semaphore"
 
 /** Serializes execution for each key while allowing different keys to run concurrently. */
 export interface Coordinator<Key, E> {
@@ -12,6 +13,8 @@ export interface Coordinator<Key, E> {
   readonly wake: (key: Key) => Effect.Effect<void>
   /** Stops active execution and waits for its cleanup. */
   readonly interrupt: (key: Key) => Effect.Effect<void>
+  /** Runs the aside after any active execution settles. Never joins and never coalesces. */
+  readonly runAside: (key: Key) => Effect.Effect<void, E>
 }
 
 type Entry<E> = {
@@ -23,10 +26,33 @@ type Entry<E> = {
 
 export const make = <Key, E>(options: {
   readonly drain: (key: Key, force: boolean) => Effect.Effect<void, E>
+  readonly aside?: (key: Key) => Effect.Effect<void, E>
 }): Effect.Effect<Coordinator<Key, E>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const active = new Map<Key, Entry<E>>()
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
+
+    // Guards a key against concurrent bodies. Drains and asides both take it, so an aside
+    // never overlaps a provider turn for the same key. Reference counted because keys are
+    // unbounded over a process lifetime; waiters keep the entry alive while queued.
+    const gates = new Map<Key, { readonly semaphore: Semaphore; users: number }>()
+    const withGate = <A>(key: Key, effect: Effect.Effect<A, E>) =>
+      Effect.suspend(() => {
+        const existing = gates.get(key)
+        const entry = existing ?? { semaphore: makeUnsafe(1), users: 0 }
+        if (!existing) gates.set(key, entry)
+        entry.users++
+        return entry.semaphore
+          .withPermits(1)(effect)
+          .pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                entry.users--
+                if (entry.users === 0) gates.delete(key)
+              }),
+            ),
+          )
+      })
 
     const makeEntry = (): Entry<E> => ({
       done: Deferred.makeUnsafe<void, E>(),
@@ -38,7 +64,7 @@ export const make = <Key, E>(options: {
       const ready = Deferred.makeUnsafe<void>()
       const owner = fork(
         (successor ? Effect.yieldNow : Deferred.await(ready)).pipe(
-          Effect.andThen(Effect.suspend(() => options.drain(key, force))),
+          Effect.andThen(Effect.suspend(() => withGate(key, options.drain(key, force)))),
           Effect.onExit((exit) => Effect.sync(() => settle(key, entry, exit))),
           Effect.exit,
           Effect.asVoid,
@@ -100,5 +126,12 @@ export const make = <Key, E>(options: {
         return Fiber.interrupt(entry.owner)
       })
 
-    return { active: Effect.sync(() => new Set(active.keys())), run, wake, interrupt }
+    const runAside = (key: Key): Effect.Effect<void, E> =>
+      Effect.suspend(() => {
+        const aside = options.aside
+        if (aside === undefined) return Effect.void
+        return withGate(key, aside(key))
+      })
+
+    return { active: Effect.sync(() => new Set(active.keys())), run, wake, interrupt, runAside }
   })

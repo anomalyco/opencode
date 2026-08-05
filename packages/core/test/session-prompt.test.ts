@@ -23,6 +23,7 @@ import { testEffect } from "./lib/effect"
 const executionCalls: SessionV2.ID[] = []
 const interruptCalls: SessionV2.ID[] = []
 const wakeCalls: SessionV2.ID[] = []
+const compactCalls: SessionV2.ID[] = []
 const activeSessions = new Set<SessionV2.ID>()
 const execution = Layer.succeed(
   SessionExecution.Service,
@@ -39,6 +40,10 @@ const execution = Layer.succeed(
     wake: (sessionID) =>
       Effect.sync(() => {
         wakeCalls.push(sessionID)
+      }),
+    compact: (sessionID) =>
+      Effect.sync(() => {
+        compactCalls.push(sessionID)
       }),
   }),
 )

@@ -163,7 +163,9 @@ export interface Interface {
     skill: string
     resume?: boolean
   }) => Effect.Effect<void, OperationUnavailableError>
-  readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  readonly compact: (
+    input: CompactInput,
+  ) => Effect.Effect<void, NotFoundError | OperationUnavailableError | SessionRunner.RunError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
@@ -416,7 +418,10 @@ const layer = Layer.effect(
       }),
       compact: Effect.fn("V2Session.compact")(function* (input) {
         yield* result.get(input.sessionID)
-        return yield* new OperationUnavailableError({ operation: "compact" })
+        // A follow-up prompt is a separate durable admission, so it stays unsupported
+        // until callers need it rather than being silently dropped here.
+        if (input.prompt !== undefined) return yield* new OperationUnavailableError({ operation: "compact" })
+        yield* execution.compact(input.sessionID)
       }),
       wait: Effect.fn("V2Session.wait")(function* (sessionID) {
         yield* result.get(sessionID)
