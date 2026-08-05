@@ -1455,7 +1455,14 @@ const layer = Layer.effect(
       const inputFiles = new Set(
         input.parts?.filter((part) => new URL(part.url).protocol === "file:").map((part) => fileURLToPath(part.url)),
       )
-      const uniqueTemplateParts = templateParts.filter(
+      const compactSkill = cmd.source === "skill" && (yield* config.get()).skill_display === "compact"
+      const visibleTemplateParts = compactSkill
+        ? [
+            { type: "text" as const, text: `[skill: ${chained.commands.map((c) => c.name).join(" ")}]` },
+            ...templateParts.map((part) => (part.type === "text" ? { ...part, synthetic: true as const } : part)),
+          ]
+        : templateParts
+      const uniqueTemplateParts = visibleTemplateParts.filter(
         (part) => part.type !== "file" || !inputFiles.has(fileURLToPath(part.url)),
       )
       const isSubtask = (agent.mode === "subagent" && cmd.subtask !== false) || cmd.subtask === true

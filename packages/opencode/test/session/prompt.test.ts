@@ -1819,6 +1819,45 @@ it.instance(
 )
 
 it.instance(
+  "skill command marks text parts synthetic when skill_display is compact",
+  () =>
+    Effect.gen(function* () {
+      const { dir, llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        skill_display: "compact",
+      }))
+      yield* writeSkill(dir, "skill-a", "Skill A body.")
+      yield* writeSkill(dir, "skill-b", "Skill B body.")
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
+      yield* llm.text("done")
+
+      yield* prompt.command({
+        sessionID: chat.id,
+        command: "skill-a",
+        arguments: "/skill-b build routing",
+      })
+
+      const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+      const user = msgs.findLast((m) => m.info.role === "user")
+      expect(user).toBeDefined()
+      const parts = user!.parts.filter(
+        (p): p is Extract<SessionV1.Part, { type: "text" }> & { synthetic: true } =>
+          p.type === "text" && p.synthetic === true,
+      )
+      expect(parts.length).toBeGreaterThan(0)
+      const body = JSON.stringify(user!.parts)
+      expect(body).toContain("[skill: skill-a skill-b]")
+      expect(body).toContain("Skill A body.")
+      expect(body).toContain("Skill B body.")
+      expect(parts.some((p) => p.text.includes("Skill A body."))).toBe(true)
+    }),
+  30_000,
+)
+
+it.instance(
   "skill command leaves unknown chained slash command as text",
   () =>
     Effect.gen(function* () {

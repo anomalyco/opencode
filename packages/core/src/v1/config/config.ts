@@ -42,6 +42,9 @@ export const Info = Schema.Struct({
     description: "Command configuration, see https://opencode.ai/docs/commands",
   }),
   skills: Schema.optional(ConfigSkillsV1.Info).annotate({ description: "Additional skill folder paths" }),
+  skill_display: Schema.optional(Schema.Literals(["full", "compact"])).annotate({
+    description: "How skill content is shown in the user message. 'full' injects the whole SKILL.md; 'compact' injects a [skill: name] marker instead",
+  }),
   references: Schema.optional(ConfigReference.Info).annotate({
     description: "Named git or local directory references",
   }),
