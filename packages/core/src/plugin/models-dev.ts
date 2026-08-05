@@ -24,10 +24,7 @@ export const ModelsDevPlugin = define({
           integrationID,
           method: {
             type: "env",
-            names:
-              provider.info.id === Provider.ID.azure
-                ? provider.environment.filter((name) => name.endsWith("_API_KEY"))
-                : [...provider.environment],
+            names: environmentNames(provider),
           },
         })
       }
@@ -55,6 +52,11 @@ export const ModelsDevPlugin = define({
     )
   }),
 })
+
+function environmentNames(provider: ModelsDev.Snapshot) {
+  if (provider.info.id !== Provider.ID.azure) return [...provider.environment]
+  return [...provider.environment.filter((name) => name.endsWith("_API_KEY")), "AZURE_COGNITIVE_SERVICES_API_KEY"]
+}
 
 function snapshots(data: readonly ModelsDev.Snapshot[]) {
   return structuredClone(data).filter(

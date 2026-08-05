@@ -266,7 +266,7 @@ describe("ModelsDevPlugin", () => {
       expect(yield* catalog.provider.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toMatchObject({
-        methods: [{ type: "key" }, { type: "env", names: ["AZURE_API_KEY"] }],
+        methods: [{ type: "key" }, { type: "env", names: ["AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_API_KEY"] }],
       })
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
