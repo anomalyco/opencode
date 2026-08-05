@@ -20,8 +20,6 @@ import { Slug } from "../util/slug"
 import { Money } from "@opencode-ai/schema/money"
 
 type DatabaseService = Database.Interface["db"]
-type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
-type MessageEvent = Exclude<CurrentDurableEvent, typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type>
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
@@ -275,7 +273,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     yield* InstructionState.initialize(db, event.data.sessionID, event.durable.seq, event.data.instructions)
 })
 
-function run(db: DatabaseService, event: MessageEvent) {
+function run(db: DatabaseService, event: SessionMessageUpdater.Event) {
   return Effect.gen(function* () {
     const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type })

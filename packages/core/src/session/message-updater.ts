@@ -19,7 +19,35 @@ export interface Adapter {
   readonly appendMessage: (message: SessionMessage.Info) => Effect.Effect<void, never, never>
 }
 
-export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
+export type Event =
+  | SessionEvent.AgentSelected
+  | SessionEvent.ModelSelected
+  | SessionEvent.Execution.Succeeded
+  | SessionEvent.Execution.Failed
+  | SessionEvent.Execution.Interrupted
+  | SessionEvent.InstructionsUpdated
+  | SessionEvent.Synthetic
+  | SessionEvent.Skill.Activated
+  | SessionEvent.Shell.Started
+  | SessionEvent.Shell.Ended
+  | SessionEvent.Step.Started
+  | SessionEvent.Step.Ended
+  | SessionEvent.Step.Failed
+  | SessionEvent.Text.Started
+  | SessionEvent.Text.Ended
+  | SessionEvent.Tool.Input.Started
+  | SessionEvent.Tool.Input.Ended
+  | SessionEvent.Tool.Called
+  | SessionEvent.Tool.Success
+  | SessionEvent.Tool.Failed
+  | SessionEvent.Reasoning.Started
+  | SessionEvent.Reasoning.Ended
+  | SessionEvent.RetryScheduled
+  | SessionEvent.Compaction.Started
+  | SessionEvent.Compaction.Ended
+  | SessionEvent.Compaction.Failed
+
+export function update(adapter: Adapter, event: Event) {
   type DraftAssistant = WritableDraft<SessionMessage.Assistant>
   type DraftTool = WritableDraft<SessionMessage.AssistantTool>
   type DraftText = WritableDraft<SessionMessage.AssistantText>
@@ -54,9 +82,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
   })
 
   const project = pipe(
-    Match.type<SessionEvent.DurableEvent>(),
+    Match.type<Event>(),
     Match.discriminatorsExhaustive("type")({
-      "session.usage.recorded": () => Effect.void,
       "session.agent.selected": (event) => {
         return adapter.appendMessage(
           SessionMessage.AgentSelected.make({
@@ -83,13 +110,6 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           )
         })
       },
-      "session.moved": () => Effect.void,
-      "session.renamed": () => Effect.void,
-      "session.deleted": () => Effect.void,
-      "session.forked": () => Effect.void,
-      "session.input.promoted": () => Effect.void,
-      "session.input.admitted": () => Effect.void,
-      "session.execution.started": () => Effect.void,
       "session.execution.succeeded": () => clearCurrentRetry,
       "session.execution.failed": () => clearCurrentRetry,
       "session.execution.interrupted": () => clearCurrentRetry,
@@ -354,7 +374,6 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           }
         })
       },
-      "session.compaction.admitted": () => Effect.void,
       "session.compaction.started": (event) =>
         adapter.appendMessage(
           SessionMessage.CompactionRunning.make({
@@ -410,9 +429,6 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           if (current?.status === "running") return yield* adapter.updateCompaction(failed)
           yield* adapter.appendMessage(failed)
         }),
-      "session.revert.staged": () => Effect.void,
-      "session.revert.cleared": () => Effect.void,
-      "session.revert.committed": () => Effect.void,
     }),
   )
   return project(event)
