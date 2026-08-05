@@ -245,8 +245,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
   "go.banner.text": "GPT 5.6 Luna 限时享受 2 倍使用额度",
-  "go.meta.description":
-    "Go 首月 $5，之后 $10/月，提供对 Grok 4.5、GLM-5.2、GLM-5.1、GPT 5.6 Luna、Kimi K3、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro、DeepSeek V4 Flash 和 Hy3 的 5 小时充裕请求额度。",
+  "go.meta.description": "Go 首月 $5，之后 $10/月，提供充裕的使用限额，并可可靠访问领先的编程模型。",
   "go.hero.title": "人人可用的低成本编程模型",
   "go.hero.body":
     "Go 将代理编程带给全世界的程序员。提供充裕的限额和对最强大的开源模型的可靠访问，让您可以利用强大的代理进行构建，而无需担心成本或可用性。",
@@ -292,8 +291,7 @@ export const dict = {
   "go.problem.item1": "低成本订阅定价",
   "go.problem.item2": "充裕的限额和可靠的访问",
   "go.problem.item3": "为尽可能多的程序员打造",
-  "go.problem.item4":
-    "包含 Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code、Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro、DeepSeek V4 Flash 和 Hy3",
+  "go.problem.item4": "经过代理编程测试的精选模型阵容",
   "go.how.title": "Go 如何工作",
   "go.how.body": "Go 起价为首月 $5，之后 $10/月。您可以将其与 OpenCode 或任何代理搭配使用。",
   "go.how.step1.title": "创建账户",
@@ -314,8 +312,7 @@ export const dict = {
   "go.faq.q2": "Go 包含哪些模型？",
   "go.faq.a2": "Go 包含下方列出的模型，提供充足的限额和可靠的访问。",
   "go.faq.q3": "Go 和 Zen 一样吗？",
-  "go.faq.a3":
-    "不。Zen 是按量付费，而 Go 首月 $5，之后 $10/月，提供充裕的额度，并可可靠地访问 Grok 4.5、GLM-5.2、GLM-5.1、GPT 5.6 Luna、Kimi K3、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro、DeepSeek V4 Flash 和 Hy3 等开源模型。",
+  "go.faq.a3": "不。Zen 是按量付费，而 Go 首月 $5，之后 $10/月，提供充裕的限额，并可可靠访问精选模型阵容。",
   "go.faq.q4": "Go 多少钱？",
   "go.faq.a4.p1.beforePricing": "Go 费用为",
   "go.faq.a4.p1.pricingLink": "首月 $5",
@@ -324,7 +321,19 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "账户",
   "go.faq.a4.p3": "中管理订阅。随时取消。",
   "go.faq.q5": "数据和隐私如何？",
-  "go.faq.a5.body": "该计划主要面向国际用户，提供稳定的全球访问。您的数据不会用于模型训练。",
+  "go.faq.a5.model": "模型",
+  "go.faq.a5.training": "模型训练",
+  "go.faq.a5.retention": "数据留存",
+  "go.faq.a5.retention30": "30 天",
+  "go.faq.a5.retention0": "0 天",
+  "go.faq.a5.used": "使用",
+  "go.faq.a5.notUsed": "不使用",
+  "go.faq.a5.noAgreement": "无协议",
+  "go.faq.a5.grokRetention":
+    "ZDR 会禁用依赖所存储数据的重要 API 功能，包括有状态的 Responses API、Files and Collections 和 Batch API。",
+  "go.faq.a5.gptRetention": "所有 API 功能的使用都会生成滥用监控日志，并最多保留 30 天。",
+  "go.faq.a5.learnMore": "了解更多",
+  "go.faq.a5.deepseekRetention": "ZDR 协议每月续签。当前协议有效期至 2026 年 8 月 31 日。",
   "go.faq.a5.beforeExceptions": "Go 模型托管在美国。提供商遵循零留存政策，不使用您的数据进行模型训练，",
   "go.faq.a5.exceptionsLink": "以下例外情况除外",
   "go.faq.q6": "我可以充值余额吗？",
@@ -336,7 +345,7 @@ export const dict = {
 
   "go.faq.q9": "免费模型和 Go 之间的区别是什么？",
   "go.faq.a9":
-    "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 包含 Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code、Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro、DeepSeek V4 Flash 和 Hy3，并在滚动窗口（5 小时、每周和每月）内执行更高的请求配额，大致相当于每 5 小时 $12、每周 $30 和每月 $60（实际请求计数因模型和使用情况而异）。",
+    "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 提供精选模型阵容，并在滚动窗口（5 小时、每周和每月）内执行更高的请求配额，大致相当于每 5 小时 $12、每周 $30 和每月 $60（实际请求计数因模型和使用情况而异）。",
 
   "zen.api.error.rateLimitExceeded": "超出速率限制。请稍后重试。",
   "zen.api.error.modelNotSupported": "不支持模型 {{model}}",

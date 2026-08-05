@@ -258,7 +258,7 @@ export const dict = {
   "go.title": "OpenCode Go | Modelos de codificação de baixo custo para todos",
   "go.banner.text": "GPT 5.6 Luna tem limites de uso 2x maiores por tempo limitado",
   "go.meta.description":
-    "O Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos de solicitação de 5 horas para Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash e Hy3.",
+    "O Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos de uso e acesso confiável aos principais modelos de codificação.",
   "go.hero.title": "Modelos de codificação de baixo custo para todos",
   "go.hero.body":
     "O Go traz a codificação com agentes para programadores em todo o mundo. Oferecendo limites generosos e acesso confiável aos modelos de código aberto mais capazes, para que você possa construir com agentes poderosos sem se preocupar com custos ou disponibilidade.",
@@ -306,8 +306,7 @@ export const dict = {
   "go.problem.item1": "Preço de assinatura de baixo custo",
   "go.problem.item2": "Limites generosos e acesso confiável",
   "go.problem.item3": "Feito para o maior número possível de programadores",
-  "go.problem.item4":
-    "Inclui Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash e Hy3",
+  "go.problem.item4": "Uma seleção de modelos testados para codificação com agentes",
   "go.how.title": "Como o Go funciona",
   "go.how.body":
     "O Go começa em $5 no primeiro mês, depois $10/mês. Você pode usá-lo com o OpenCode ou qualquer agente.",
@@ -333,7 +332,7 @@ export const dict = {
   "go.faq.a2": "O Go inclui os modelos listados abaixo, com limites generosos e acesso confiável.",
   "go.faq.q3": "O Go é o mesmo que o Zen?",
   "go.faq.a3":
-    "Não. Zen é pay-as-you-go, enquanto o Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos e acesso confiável aos modelos open source Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash e Hy3.",
+    "Não. Zen é pay-as-you-go, enquanto o Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos e acesso confiável a uma seleção de modelos.",
   "go.faq.q4": "Quanto custa o Go?",
   "go.faq.a4.p1.beforePricing": "O Go custa",
   "go.faq.a4.p1.pricingLink": "$5 no primeiro mês",
@@ -342,8 +341,21 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "conta",
   "go.faq.a4.p3": "Cancele a qualquer momento.",
   "go.faq.q5": "E sobre dados e privacidade?",
-  "go.faq.a5.body":
-    "O plano foi desenvolvido principalmente para usuários internacionais e oferece acesso global estável. Seus dados não serão usados para treinamento de modelos.",
+  "go.faq.a5.model": "Modelo",
+  "go.faq.a5.training": "Treinamento de modelos",
+  "go.faq.a5.retention": "Retenção de dados",
+  "go.faq.a5.retention30": "30 dias",
+  "go.faq.a5.retention0": "0 dias",
+  "go.faq.a5.used": "Usado",
+  "go.faq.a5.notUsed": "Não usado",
+  "go.faq.a5.noAgreement": "Sem acordo",
+  "go.faq.a5.grokRetention":
+    "O ZDR desativa recursos importantes da API que dependem de dados armazenados, incluindo a Responses API com estado, Files and Collections e a Batch API.",
+  "go.faq.a5.gptRetention":
+    "Logs de monitoramento de abuso são gerados para todo uso de recursos da API e retidos por até 30 dias.",
+  "go.faq.a5.learnMore": "Saiba mais",
+  "go.faq.a5.deepseekRetention":
+    "O acordo de ZDR é renovado mensalmente. O acordo atual é válido até 31 de agosto de 2026.",
   "go.faq.a5.beforeExceptions":
     "Os modelos Go são hospedados nos EUA. Os provedores seguem uma política de retenção zero e não usam seus dados para treinamento de modelos, com as",
   "go.faq.a5.exceptionsLink": "seguintes exceções",
@@ -357,7 +369,7 @@ export const dict = {
 
   "go.faq.q9": "Qual a diferença entre os modelos gratuitos e o Go?",
   "go.faq.a9":
-    "Os modelos gratuitos incluem Big Pickle e modelos promocionais disponíveis no momento, com uma cota de 200 requisições/dia. O Go inclui Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash e Hy3 com cotas de requisição mais altas aplicadas em janelas móveis (5 horas, semanal e mensal), aproximadamente equivalentes a $12 por 5 horas, $30 por semana e $60 por mês (as contagens reais de requisições variam de acordo com o modelo e o uso).",
+    "Os modelos gratuitos incluem Big Pickle e modelos promocionais disponíveis no momento, com uma cota de 200 requisições/dia. O Go oferece uma seleção de modelos com cotas de requisição mais altas aplicadas em janelas móveis (5 horas, semanal e mensal), aproximadamente equivalentes a $12 por 5 horas, $30 por semana e $60 por mês (as contagens reais de requisições variam de acordo com o modelo e o uso).",
 
   "zen.api.error.rateLimitExceeded": "Limite de taxa excedido. Por favor, tente novamente mais tarde.",
   "zen.api.error.modelNotSupported": "Modelo {{model}} não suportado",

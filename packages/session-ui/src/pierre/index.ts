@@ -26,35 +26,52 @@ const unsafeCSS = `
     color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-deletion-base)),
     color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-deletion-base))
   );
+  --diffs-bg-deletion-number-override: var(--diffs-bg-deletion-override);
   --diffs-bg-addition-override: light-dark(
     color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-addition-base)),
     color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-addition-base))
   );
-  --diffs-selection-base: var(--surface-warning-strong);
-  --diffs-selection-border: var(--border-warning-base);
-  --diffs-selection-number-fg: #1c1917;
+  --diffs-bg-addition-number-override: var(--diffs-bg-addition-override);
+  --diffs-selection-base: var(--v2-background-bg-accent);
+  --diffs-selection-number-fg: var(--v2-text-text-accent);
+  --diffs-comment-bg: rgb(from var(--v2-background-bg-accent) r g b / 0.06);
   /* Use explicit alpha instead of color-mix(..., transparent) to avoid Safari's non-premultiplied interpolation bugs. */
-  --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--surface-warning-base) r g b / 0.65));
-  --diffs-bg-selection-number: var(
-    --diffs-bg-selection-number-override,
-    rgb(from var(--surface-warning-base) r g b / 0.85)
-  );
-  --diffs-bg-selection-text: rgb(from var(--surface-warning-strong) r g b / 0.2);
-}
-
-:host([data-color-scheme='dark']) [data-diff],
-:host([data-color-scheme='dark']) [data-file] {
-  --diffs-selection-number-fg: #fdfbfb;
-  --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--solaris-dark-6) r g b / 0.65));
-  --diffs-bg-selection-number: var(
-    --diffs-bg-selection-number-override,
-    rgb(from var(--solaris-dark-6) r g b / 0.85)
-  );
+  --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--diffs-selection-base) r g b / 0.2));
+  --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, var(--diffs-bg-selection));
+  --diffs-bg-selection-text: rgb(from var(--diffs-selection-base) r g b / 0.2);
 }
 
 [data-diff] ::selection,
 [data-file] ::selection {
   background-color: var(--diffs-bg-selection-text);
+}
+
+[data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before,
+[data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
+  width: 2px;
+}
+
+[data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
+  background-image: none;
+  background-color: var(--diffs-deletion-base);
+}
+
+[data-background] [data-column-number] {
+  --mix-light: 88%;
+  --mix-dark: 80%;
+}
+
+[data-diff-type='split'] [data-additions],
+[data-diff-type='split'] [data-additions] [data-gutter],
+[data-diff-type='split'] [data-deletions],
+[data-diff-type='split'] [data-deletions] [data-content] {
+  border-left: 0;
+  border-right: 0;
+}
+
+[data-content-buffer] {
+  background-image: none;
+  background-color: var(--diffs-bg-context-gutter);
 }
 
 ::highlight(opencode-find) {
@@ -83,22 +100,24 @@ const unsafeCSS = `
   color: var(--diffs-selection-number-fg);
 }
 
-[data-diff] [data-line-annotation][data-comment-selected]:not([data-selected-line]) [data-annotation-content] {
-  box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
-}
-
-[data-file] [data-line-annotation][data-comment-selected]:not([data-selected-line]) [data-annotation-content] {
-  box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
+[data-diff] [data-line-annotation],
+[data-diff] [data-gutter-buffer='annotation'],
+[data-file] [data-line-annotation],
+[data-file] [data-gutter-buffer='annotation'] {
+  --diffs-annotation-bg: var(--diffs-comment-bg);
+  --diffs-computed-decoration-bg: var(--diffs-comment-bg);
+  --diffs-computed-diff-line-bg: var(--diffs-comment-bg);
+  --diffs-computed-selected-line-bg: var(--diffs-comment-bg);
+  --diffs-line-bg: var(--diffs-comment-bg);
+  background-color: var(--diffs-comment-bg);
 }
 
 [data-diff] [data-line][data-selected-line] {
   background-color: var(--diffs-bg-selection);
-  box-shadow: inset 2px 0 0 var(--diffs-selection-border);
 }
 
 [data-file] [data-line][data-selected-line] {
   background-color: var(--diffs-bg-selection);
-  box-shadow: inset 2px 0 0 var(--diffs-selection-border);
 }
 
 [data-diff] [data-column-number][data-selected-line] {
@@ -118,6 +137,19 @@ const unsafeCSS = `
   color: var(--diffs-selection-number-fg);
 }
 
+@media (pointer: fine) {
+  [data-gutter-utility-slot] {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  [data-column-number][data-hovered] [data-gutter-utility-slot],
+  [data-gutter-utility-slot]:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 /* The deletion word-diff emphasis is stronger than additions; soften it while selected so the selection highlight reads consistently. */
 [data-diff] [data-line][data-line-type='change-deletion'][data-selected-line] {
   --diffs-bg-deletion-emphasis: light-dark(
@@ -133,7 +165,6 @@ const unsafeCSS = `
     height: 24px;
   }
   [data-column-number] {
-    background-color: var(--diffs-bg);
     cursor: default !important;
   }
 
@@ -182,5 +213,6 @@ export const styleVariables = {
   "--diffs-font-features": "var(--font-family-mono--font-feature-settings)",
   "--diffs-header-font-family": "var(--font-family-sans)",
   "--diffs-gap-block": 0,
-  "--diffs-min-number-column-width": "4ch",
+  "--diffs-gap-style": 0,
+  "--diffs-min-number-column-width": "3ch",
 }

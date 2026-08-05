@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process"
 import { stat } from "node:fs/promises"
-import { basename } from "node:path"
+import { basename, join } from "node:path"
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
@@ -21,10 +22,12 @@ import {
 } from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
+import { createDesktopDraftStore } from "./draft-store"
+import { nativeT } from "./native-translations"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
-  return [{ name: "Files", extensions: ext }]
+  return [{ name: nativeT("desktop.dialog.files"), extensions: ext }]
 }
 
 const pickedFiles = createPickedFileAuthorizations()
@@ -48,11 +51,16 @@ type Deps = {
   setBackgroundColor: (color: string) => void
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
+  setNativeTranslations: (bundle: DesktopNativeBundle) => void
 }
 
 export function registerIpcHandlers(deps: Deps) {
+  const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
   const updaterSubscriptions = createUpdaterSubscriptions()
   app.once("will-quit", updaterSubscriptions.clear)
+  app.on("before-quit", () => drafts.flush())
+  app.once("will-quit", () => drafts.close())
+  app.on("browser-window-created", (_event, win) => win.on("session-end", () => drafts.flush()))
 
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
   ipcMain.handle("await-initialization", () => deps.awaitInitialization())
@@ -94,6 +102,15 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
   )
+  ipcMain.handle("set-native-translations", (event: IpcMainInvokeEvent, value: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed() || win.webContents !== event.sender || event.senderFrame !== event.sender.mainFrame) {
+      throw new Error("Invalid native translation sender")
+    }
+    const bundle = parseDesktopNativeBundle(value)
+    if (!bundle) throw new Error("Invalid native translation bundle")
+    deps.setNativeTranslations(bundle)
+  })
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {
       const store = getStore(name)
@@ -123,13 +140,21 @@ export function registerIpcHandlers(deps: Deps) {
     const store = getStore(name)
     return Object.keys(store.store).length
   })
+  ipcMain.handle("draft-get", (_event, key: string) => drafts.get(key))
+  ipcMain.handle("draft-set", (_event, key: string, value: string) => drafts.set(key, value))
+  ipcMain.handle("draft-delete", (_event, key: string) => drafts.set(key, null))
+  ipcMain.handle("draft-blob-put", (_event, data: ArrayBuffer) => drafts.putBlob(new Uint8Array(data)))
+  ipcMain.handle("draft-blob-get", (_event, id: string) => {
+    const data = drafts.getBlob(id)
+    return data ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
+  })
 
   ipcMain.handle(
     "open-directory-picker",
     async (_event: IpcMainInvokeEvent, opts?: { multiple?: boolean; title?: string; defaultPath?: string }) => {
       const result = await dialog.showOpenDialog({
         properties: ["openDirectory", ...(opts?.multiple ? ["multiSelections" as const] : []), "createDirectory"],
-        title: opts?.title ?? "Choose a folder",
+        title: opts?.title ?? nativeT("desktop.dialog.chooseFolder"),
         defaultPath: opts?.defaultPath,
       })
       if (result.canceled) return null
@@ -145,7 +170,7 @@ export function registerIpcHandlers(deps: Deps) {
     ) => {
       const result = await dialog.showOpenDialog({
         properties: ["openFile", ...(opts?.multiple ? ["multiSelections" as const] : [])],
-        title: opts?.title ?? "Choose a file",
+        title: opts?.title ?? nativeT("desktop.dialog.chooseFile"),
         defaultPath: opts?.defaultPath,
         filters: pickerFilters(opts?.extensions),
       })
@@ -175,7 +200,7 @@ export function registerIpcHandlers(deps: Deps) {
     "save-file-picker",
     async (_event: IpcMainInvokeEvent, opts?: { title?: string; defaultPath?: string }) => {
       const result = await dialog.showSaveDialog({
-        title: opts?.title ?? "Save file",
+        title: opts?.title ?? nativeT("desktop.dialog.saveFile"),
         defaultPath: opts?.defaultPath,
       })
       if (result.canceled) return null

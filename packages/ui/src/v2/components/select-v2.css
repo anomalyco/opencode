@@ -52,7 +52,8 @@
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  padding: 0 6px 0 0;
+  padding-block: 0;
+  padding-inline: 0 6px;
   gap: 8px;
   width: 280px;
   height: 28px;
@@ -74,7 +75,8 @@
 
 [data-component="select-v2"][data-appearance="large"] {
   height: 32px;
-  padding: 0 8px 0 0;
+  padding-block: 0;
+  padding-inline: 0 8px;
 }
 
 [data-component="select-v2"]:where(:hover):not([data-disabled], [data-invalid]):not(:focus-within):not(
@@ -126,12 +128,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0 0 0 8px;
+  padding-block: 0;
+  padding-inline: 8px 0;
   margin: 0;
   border: 0;
   background: transparent;
   outline: none;
-  text-align: left;
+  text-align: start;
   font-style: normal;
   font-weight: 440;
   font-size: 13px;
@@ -188,7 +191,8 @@
   width: fit-content;
   max-width: 100%;
   height: 24px;
-  padding: 4px 4px 4px 8px;
+  padding-block: 4px;
+  padding-inline: 8px 4px;
   gap: 4px;
   border-radius: 4px;
   background: transparent;
@@ -276,6 +280,13 @@
 
 [data-slot="select-v2-listbox"] [data-component="menu-v2-item"][data-selected] [data-slot="menu-v2-item-indicator"] {
   color: var(--menu-v2-accent);
+}
+
+[data-slot="select-v2-listbox"]
+  [data-component="menu-v2-item"][data-selected]
+  [data-slot="menu-v2-item-indicator"]
+  svg {
+  visibility: visible;
 }
 
 [data-slot="select-v2-listbox"]
