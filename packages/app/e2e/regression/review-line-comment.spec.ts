@@ -18,6 +18,7 @@ test("opens the comment editor when code is clicked", async ({ page }) => {
   await line.click()
 
   await expect(review.getByRole("textbox")).toBeVisible()
+  await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 2")
 })
 
 test("opens the comment editor when a line number is clicked", async ({ page }) => {
@@ -27,6 +28,7 @@ test("opens the comment editor when a line number is clicked", async ({ page }) 
   await lineNumber.click()
 
   await expect(review.getByRole("textbox")).toBeVisible()
+  await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 1")
 })
 
 test("opens the comment editor for a line number range", async ({ page }) => {
@@ -36,15 +38,10 @@ test("opens the comment editor for a line number range", async ({ page }) => {
   await expectAppVisible(start)
   await expectAppVisible(end)
 
-  const from = await start.boundingBox()
-  const to = await end.boundingBox()
-  if (!from || !to) throw new Error("Missing line number bounds")
-  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2)
-  await page.mouse.up()
+  await start.dragTo(end)
 
   await expect(review.getByRole("textbox")).toBeVisible()
+  await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on lines 1-3")
 })
 
 test("shows a comment button when a line number is hovered", async ({ page }) => {
@@ -54,31 +51,38 @@ test("shows a comment button when a line number is hovered", async ({ page }) =>
 
   const comment = review.getByRole("button", { name: "Comment", exact: true })
   await expect(async () => {
-    await page.mouse.move(0, 0)
     await lineNumber.hover()
-    await expect(comment).toBeVisible({ timeout: 500 })
-    await comment.click({ timeout: 500 })
-  }).toPass()
+    await expect(lineNumber).toHaveAttribute("data-hovered", "")
+    await expect(comment).toHaveCount(1)
+    await expect(comment).toHaveCSS("pointer-events", "auto")
+    await comment.focus()
+    await expect(comment).toBeFocused()
+  }).toPass({ timeout: 10_000 })
+  await comment.press("Enter")
   await expect(review.getByRole("textbox")).toBeVisible()
+  await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 1")
 })
 
 test("stages a submitted line comment in the prompt context", async ({ page }) => {
-  const requests: string[] = []
   page.on("request", (request) => {
-    if (request.method() !== "GET") requests.push(`${request.method()} ${new URL(request.url()).pathname}`)
+    expect.soft(request.method(), `unexpected ${request.method()} ${new URL(request.url()).pathname}`).toBe("GET")
   })
 
   const review = page.locator('[data-component="session-review"]')
   await review.getByText("export const value = 'after'", { exact: true }).click()
-  await review.getByRole("textbox").fill("Use the existing value instead")
-  await review.locator('[data-slot="line-comment-action"][data-variant="primary"]').click()
+  const textbox = review.getByRole("textbox")
+  await expect(textbox).toBeVisible()
+  await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 2")
+  await textbox.fill("Use the existing value instead")
+  const submit = review.locator('[data-slot="line-comment-action"][data-variant="primary"]')
+  await expect(submit).toBeEnabled()
+  await submit.click()
 
   await expect(review.getByText("Use the existing value instead", { exact: true })).toBeVisible()
   await page.getByRole("tab", { name: "Session" }).click()
   const context = page.getByText("Use the existing value instead", { exact: true }).last()
   await expect(context).toBeVisible()
   await expect(context.locator("..")).toContainText("review.ts:2")
-  expect(requests).toEqual([])
 })
 
 async function openReview(page: Page) {
@@ -144,15 +148,22 @@ async function openReview(page: Page) {
 
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
-  const diffResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/vcs/diff")
-  await page.getByRole("tab", { name: "Changes" }).click()
+  const changes = page.getByRole("tab", { name: "Changes" })
+  const diffResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" && response.ok() && new URL(response.url()).pathname === "/api/vcs/diff",
+  )
+  await changes.click()
   expect((await (await diffResponse).json()).data).toHaveLength(1)
+  await expect(page.getByRole("tab", { selected: true })).toHaveAccessibleName(/Files Changed/)
 
   const review = page.locator('[data-component="session-review"]')
   await expectAppVisible(review)
-  await review
-    .getByRole("heading", { name: /review\.ts/ })
-    .getByRole("button")
-    .first()
-    .click()
+  const file = review.locator('[data-file="src/review.ts"]')
+  await expectAppVisible(file)
+  const trigger = file.getByRole("button", { expanded: false })
+  await expect(trigger).toHaveCount(1)
+  await trigger.click()
+  await expect(file.getByRole("button", { expanded: true })).toBeVisible()
+  await expect(file.getByText("export const value = 'after'", { exact: true })).toBeVisible()
 }

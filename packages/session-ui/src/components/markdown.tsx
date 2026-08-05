@@ -1,4 +1,3 @@
-import { useMarked } from "@opencode-ai/ui/context/marked"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/core/util/encode"
@@ -6,7 +5,6 @@ import {
   type Accessor,
   type ComponentProps,
   createEffect,
-  createMemo,
   createResource,
   createSignal,
   createUniqueId,
@@ -18,14 +16,17 @@ import { isServer, render } from "solid-js/web"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { bundledLanguages } from "shiki"
-import { canReusePendingBlock, project, type Block, type Projection } from "./markdown-stream"
+import { canReusePendingBlock, completedProjection } from "./markdown-projection"
+import type { Block, Projection } from "./markdown-stream"
 import {
+  disposeMarkdownProjection,
   disposeStreamingCode,
   highlightStreamingCode,
   MarkdownWorkerDisposedError,
   MarkdownWorkerSupersededError,
   MarkdownWorkerUnavailableError,
+  parseMarkdown,
+  projectMarkdown,
 } from "./markdown-worker"
 import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol"
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
@@ -67,10 +68,14 @@ function fallback(markdown: string) {
 }
 
 async function code(text: string, language: string | undefined, key: string, complete = false) {
-  const name = language && language in bundledLanguages ? language : "text"
   try {
-    const result = await highlightStreamingCode(key, text, name, complete)
-    return { language: name, generation: result.generation, stable: result.stable, unstable: result.unstable }
+    const result = await highlightStreamingCode(key, text, language ?? "text", complete)
+    return {
+      language: result.language,
+      generation: result.generation,
+      stable: result.stable,
+      unstable: result.unstable,
+    }
   } catch (error) {
     if (
       !(error instanceof MarkdownWorkerDisposedError) &&
@@ -78,7 +83,7 @@ async function code(text: string, language: string | undefined, key: string, com
       !(error instanceof MarkdownWorkerUnavailableError)
     )
       console.error("Markdown highlighting worker failed", error)
-    return { language: name, generation: 0, stable: [], unstable: [[text, ""] as MarkdownToken] }
+    return { language: language ?? "text", generation: 0, stable: [], unstable: [[text, ""] as MarkdownToken] }
   }
 }
 
@@ -352,6 +357,10 @@ function initialResult(text: string, key: string | undefined, projection: Projec
   }
 }
 
+function pendingProjection(text: string): Projection {
+  return { text, blocks: text ? [{ raw: text, src: text, mode: "live" }] : [] }
+}
+
 export function Markdown(
   props: ComponentProps<"div"> & {
     text: string
@@ -362,21 +371,44 @@ export function Markdown(
   },
 ) {
   const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
-  const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
   const activeCodeKeys = new Set<string>()
   const completedCode = new Map<string, Extract<RenderedBlock, { mode: "code" }>>()
-  const projection = createMemo((previous: Projection | undefined) =>
-    project(previous, local.text, local.streaming ?? false),
+  let streamed = false
+  const [projection] = createResource(
+    () => {
+      if (isServer) return
+      const live = local.streaming ?? false
+      if (live) streamed = true
+      if (!live && !streamed) return
+      return { key: owner, text: local.text, live }
+    },
+    (src) => projectMarkdown(src.key, src.text, src.live),
+    { initialValue: pendingProjection("") },
   )
+  const currentProjection = () => {
+    if (!(local.streaming ?? false) && !streamed) return completedProjection(local.text)
+    const value = projection.latest
+    if (value?.text === local.text) return value
+    if (value?.text) return value
+    return pendingProjection(local.text)
+  }
   const [html] = createResource(
     () => {
+      if (isServer)
+        return {
+          text: local.text,
+          key: local.cacheKey,
+          projection: pendingProjection(local.text),
+        }
+      const value = !(local.streaming ?? false) && !streamed ? completedProjection(local.text) : projection.latest
+      if (!value || value.text !== local.text) return
       return {
         text: local.text,
         key: local.cacheKey,
-        projection: projection(),
+        projection: value,
       }
     },
     async (src) => {
@@ -426,7 +458,7 @@ export function Markdown(
           }
 
           const hash = checksum(block.raw)
-          const safe = sanitizeMarkdown(await Promise.resolve(marked.parse(block.src)))
+          const safe = sanitizeMarkdown(await parseMarkdown(block.src))
           if (key && hash) touchCachedMarkdown(key, { raw: block.raw, hash, html: safe })
           return { key: blockKey, mode: block.mode, raw: block.raw, hash: hash ?? "", html: safe }
         }),
@@ -449,7 +481,12 @@ export function Markdown(
         )
     },
     {
-      initialValue: initialResult(local.text, local.cacheKey, projection(), owner),
+      initialValue: initialResult(
+        local.text,
+        local.cacheKey,
+        local.streaming ? pendingProjection(local.text) : completedProjection(local.text),
+        owner,
+      ),
     },
   )
 
@@ -458,7 +495,7 @@ export function Markdown(
   createEffect(() => {
     const container = root()
     const result = html.latest ?? html()
-    const projected = projection()
+    const projected = currentProjection()
     const content = local.text ? pendingBlocks(result, projected, local.cacheKey, owner) : []
     if (!container) return
     if (isServer) return
@@ -497,6 +534,7 @@ export function Markdown(
 
   onCleanup(() => {
     if (copyCleanup) copyCleanup()
+    disposeMarkdownProjection(owner)
     activeCodeKeys.forEach(disposeCode)
     completedCode.clear()
   })
@@ -504,6 +542,7 @@ export function Markdown(
   return (
     <div
       data-component="markdown"
+      dir="auto"
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,

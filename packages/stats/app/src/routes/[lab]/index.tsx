@@ -6,7 +6,6 @@ import {
   type LabUsageModelEntry,
   type MarketDay,
   type ModelUsagePoint,
-  type StatsHomeData,
   type StatsLabData,
 } from "@opencode-ai/stats-core/domain/home"
 import { createAsync, query, useParams } from "@solidjs/router"
@@ -20,7 +19,7 @@ import {
   catalogSlug,
   findModelCatalogLab,
   formatCatalogLabName,
-  getModelCatalog,
+  loadModelCatalog,
   type ModelCatalogEntry,
   type ModelCatalogLab,
 } from "../model-catalog"
@@ -42,15 +41,33 @@ import {
 
 const statsUnfurlPath = "banner.png"
 
-const getLabData = query(async (lab: string) => {
-  "use server"
-  return runStatsEffect(getStatsLabData(lab))
-}, "getStatsLabData")
+type RelatedCatalogLab = Pick<ModelCatalogLab, "id" | "name" | "description"> & {
+  models: Pick<ModelCatalogEntry, "name">[]
+}
 
-const getHomeData = query(async () => {
+type LabPageData = {
+  lab: ModelCatalogLab | null
+  labs: RelatedCatalogLab[]
+  market: MarketDay[]
+  stats: StatsLabData | null
+}
+
+const getLabPageData = query(async (labParam: string) => {
   "use server"
-  return runStatsEffect(getStatsHomeData())
-}, "getStatsHomeData")
+  const [catalog, home] = await Promise.all([loadModelCatalog(), runStatsEffect(getStatsHomeData())])
+  const lab = findModelCatalogLab(catalog, labParam) ?? null
+  return {
+    lab,
+    labs: catalog.labs.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      description: entry.description,
+      models: entry.models.map((model) => ({ name: model.name })),
+    })),
+    market: home.market["2M"],
+    stats: lab ? await runStatsEffect(getStatsLabData(lab.id)) : null,
+  } satisfies LabPageData
+}, "getStatsLabPageData")
 
 type LabModelTooltipState = {
   model: ModelCatalogEntry
@@ -67,19 +84,9 @@ export default function StatsLab() {
   setStatsPageCacheHeaders(event?.response.headers)
   const params = useParams()
   const labParam = createMemo(() => params.lab ?? "")
-  const catalog = createAsync(() => getModelCatalog())
-  const lab = createMemo(() => {
-    const data = catalog()
-    if (!data) return undefined
-    return findModelCatalogLab(data, labParam()) ?? null
-  })
-  const stats = createAsync(() => {
-    const entry = lab()
-    if (catalog() === undefined || entry === undefined) return Promise.resolve(undefined)
-    if (!entry) return Promise.resolve(null)
-    return getLabData(entry.id)
-  })
-  const homeStats = createAsync((): Promise<StatsHomeData | undefined> => getHomeData())
+  const page = createAsync(() => getLabPageData(labParam()))
+  const lab = createMemo(() => page()?.lab)
+  const stats = createMemo(() => page()?.stats)
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const labName = createMemo(() => lab()?.name ?? formatCatalogLabName(labParam()))
@@ -137,19 +144,15 @@ export default function StatsLab() {
       <Header githubStars={githubStars() ?? "150K"} links={labHeaderLinks()} brandHref={import.meta.env.BASE_URL} />
       <div data-component="container">
         <div data-component="content">
-          <Show when={catalog() !== undefined} fallback={<LabLoading />}>
-            <Show when={lab()} fallback={<LabNotFound lab={labParam()} labs={catalog()?.labs ?? []} />}>
+          <Show when={page() !== undefined} fallback={<LabLoading />}>
+            <Show when={lab()} fallback={<LabNotFound lab={labParam()} labs={page()?.labs ?? []} />}>
               {(data) => (
                 <>
-                  <LabHero lab={data()} labs={catalog()?.labs ?? []} />
+                  <LabHero lab={data()} labs={page()?.labs ?? []} />
                   <LabOverview lab={data()} data={stats() ?? null} />
                   <LabUsageSection lab={data()} data={stats() ?? null} />
                   <LabModelsSection lab={data()} usage={stats()?.models ?? []} />
-                  <LabRelatedSection
-                    lab={data()}
-                    labs={catalog()?.labs ?? []}
-                    market={homeStats()?.market["2M"] ?? []}
-                  />
+                  <LabRelatedSection lab={data()} labs={page()?.labs ?? []} market={page()?.market ?? []} />
                   <ComparisonCardsSection
                     pairs={labComparisonPairs(data(), stats()?.models ?? [])}
                     title={`${data().name} Model Comparisons`}
@@ -182,7 +185,7 @@ function LabLoading() {
   )
 }
 
-function LabNotFound(props: { lab: string; labs: ModelCatalogLab[] }) {
+function LabNotFound(props: { lab: string; labs: RelatedCatalogLab[] }) {
   const i18n = useI18n()
   const labName = () => formatCatalogLabName(props.lab)
   return (
@@ -194,7 +197,7 @@ function LabNotFound(props: { lab: string; labs: ModelCatalogLab[] }) {
   )
 }
 
-function LabHero(props: { lab: ModelCatalogLab; labs: ModelCatalogLab[] }) {
+function LabHero(props: { lab: ModelCatalogLab; labs: RelatedCatalogLab[] }) {
   return (
     <section id="overview" data-section="lab-hero">
       <LabHeroBreadcrumb label={props.lab.name} labs={props.labs} />
@@ -203,7 +206,7 @@ function LabHero(props: { lab: ModelCatalogLab; labs: ModelCatalogLab[] }) {
   )
 }
 
-function LabHeroBreadcrumb(props: { label: string; labs?: ModelCatalogLab[] }) {
+function LabHeroBreadcrumb(props: { label: string; labs?: RelatedCatalogLab[] }) {
   const language = useLanguage()
   const labs = () => props.labs ?? []
   const current = () => labs().find((lab) => lab.name === props.label)
@@ -668,7 +671,7 @@ function LabModelTooltip(props: { state: LabModelTooltipState }) {
   )
 }
 
-function LabRelatedSection(props: { lab: ModelCatalogLab; labs: ModelCatalogLab[]; market: MarketDay[] }) {
+function LabRelatedSection(props: { lab: ModelCatalogLab; labs: RelatedCatalogLab[]; market: MarketDay[] }) {
   const related = createMemo(() => relatedLabs(props.lab, props.labs, props.market))
   return (
     <section id="related-labs" data-section="model-panel" data-variant="lab-related">
@@ -757,9 +760,9 @@ function labComparisonPairs(lab: ModelCatalogLab, usage: LabUsageModelEntry[]) {
   )
 }
 
-type RelatedLabEntry = { lab: ModelCatalogLab; share: number; tokens: number }
+type RelatedLabEntry = { lab: RelatedCatalogLab; share: number; tokens: number }
 
-function relatedLabs(current: ModelCatalogLab, labs: ModelCatalogLab[], market: MarketDay[]): RelatedLabEntry[] {
+function relatedLabs(current: ModelCatalogLab, labs: RelatedCatalogLab[], market: MarketDay[]): RelatedLabEntry[] {
   const stats = relatedLabStats(labs, market)
   return labs
     .filter((lab) => lab.id !== current.id)
@@ -768,8 +771,8 @@ function relatedLabs(current: ModelCatalogLab, labs: ModelCatalogLab[], market: 
     .slice(0, 3)
 }
 
-function relatedLabStats(labs: ModelCatalogLab[], market: MarketDay[]) {
-  const labByKey = new Map<string, ModelCatalogLab>()
+function relatedLabStats(labs: RelatedCatalogLab[], market: MarketDay[]) {
+  const labByKey = new Map<string, RelatedCatalogLab>()
   labs.forEach((lab) => {
     labByKey.set(lab.id, lab)
     labByKey.set(catalogSlug(lab.name), lab)
@@ -794,7 +797,7 @@ function relatedLabStats(labs: ModelCatalogLab[], market: MarketDay[]) {
   )
 }
 
-function labRelatedDescription(lab: ModelCatalogLab) {
+function labRelatedDescription(lab: RelatedCatalogLab) {
   return lab.description ?? ""
 }
 
