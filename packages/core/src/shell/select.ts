@@ -7,16 +7,16 @@ import { Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { which } from "../util/which"
 
-const META: Record<string, { deny?: boolean; login?: boolean; posix?: boolean; ps?: boolean }> = {
-  bash: { login: true, posix: true },
-  dash: { login: true, posix: true },
+const META: Record<string, { deny?: boolean; login?: boolean; ps?: boolean }> = {
+  bash: { login: true },
+  dash: { login: true },
   fish: { deny: true, login: true },
-  ksh: { login: true, posix: true },
+  ksh: { login: true },
   nu: { deny: true },
   powershell: { ps: true },
   pwsh: { ps: true },
-  sh: { login: true, posix: true },
-  zsh: { login: true, posix: true },
+  sh: { login: true },
+  zsh: { login: true },
 }
 
 export type Item = {
@@ -114,10 +114,6 @@ export function name(file: string) {
 
 export function login(file: string) {
   return meta(file)?.login === true
-}
-
-export function posix(file: string) {
-  return meta(file)?.posix === true
 }
 
 export function ps(file: string) {
