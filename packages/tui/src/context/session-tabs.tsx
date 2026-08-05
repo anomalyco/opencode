@@ -298,10 +298,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       cycleUnread(direction: 1 | -1) {
         if (!enabled()) return
-        const tab = cycleSessionTab(
-          state().tabs.filter((tab) => state().unread[tab.sessionID] || status(tab.sessionID).attention),
-          current(),
-          direction,
+        const tab = cycleSessionTab(state().tabs, current(), direction, (tab) =>
+          Boolean(state().unread[tab.sessionID] || status(tab.sessionID).attention),
         )
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },

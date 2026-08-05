@@ -133,8 +133,8 @@ describe("llm route", () => {
     Effect.gen(function* () {
       const error = yield* (yield* LLMClient.Service).stream(request).pipe(Stream.runDrain, Effect.flip)
 
-      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
-      expect(error.message).toContain("Provider stream ended without a terminal finish event")
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+      expect(error.message).toContain("The provider response ended unexpectedly.")
     }),
   )
 

@@ -82,11 +82,19 @@ export function moveSessionTab(tabs: SessionTab[], sessionID: string, index: num
   return next
 }
 
-export function cycleSessionTab(tabs: readonly SessionTab[], active: string | undefined, direction: 1 | -1) {
+export function cycleSessionTab(
+  tabs: readonly SessionTab[],
+  active: string | undefined,
+  direction: 1 | -1,
+  matches: (tab: SessionTab) => boolean = () => true,
+) {
   if (tabs.length === 0) return
   const index = tabs.findIndex((tab) => tab.sessionID === active)
   const start = index === -1 ? (direction === 1 ? -1 : 0) : index
-  return tabs[(start + direction + tabs.length) % tabs.length]
+  return Array.from(
+    { length: tabs.length },
+    (_, offset) => tabs[(start + direction * (offset + 1) + tabs.length * 2) % tabs.length],
+  ).find(matches)
 }
 
 // In-memory navigation history is bounded so a long-lived TUI does not accumulate one entry per

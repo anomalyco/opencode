@@ -241,13 +241,13 @@ export function createV2SessionReducer() {
       case "session.tool.input.started":
         return updateAssistant(source, event.data.assistantMessageID, sessionID, (item) => ({
           ...item,
-          content: item.content.some((content) => content.type === "tool" && content.id === event.data.callID)
+          content: item.content.some((content) => content.type === "tool" && content.id === event.data.id)
             ? item.content
             : [
                 ...item.content,
                 {
                   type: "tool",
-                  id: event.data.callID,
+                  id: event.data.id,
                   name: event.data.name,
                   state: { status: "streaming", input: "" },
                   time: { created: event.created },
@@ -255,17 +255,17 @@ export function createV2SessionReducer() {
               ],
         }))
       case "session.tool.input.delta":
-        return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) =>
+        return updateTool(source, event.data.assistantMessageID, event.data.id, sessionID, (tool) =>
           tool.state.status === "streaming"
             ? { ...tool, state: { ...tool.state, input: tool.state.input + event.data.delta } }
             : tool,
         )
       case "session.tool.input.ended":
-        return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) =>
+        return updateTool(source, event.data.assistantMessageID, event.data.id, sessionID, (tool) =>
           tool.state.status === "streaming" ? { ...tool, state: { ...tool.state, input: event.data.text } } : tool,
         )
       case "session.tool.called":
-        return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) => ({
+        return updateTool(source, event.data.assistantMessageID, event.data.id, sessionID, (tool) => ({
           ...tool,
           executed: event.data.executed,
           providerState: event.data.state,
@@ -274,7 +274,7 @@ export function createV2SessionReducer() {
           time: { ...tool.time, ran: event.created },
         }))
       case "session.tool.progress":
-        return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) =>
+        return updateTool(source, event.data.assistantMessageID, event.data.id, sessionID, (tool) =>
           tool.state.status === "running"
             ? {
                 ...tool,
@@ -284,7 +284,7 @@ export function createV2SessionReducer() {
             : tool,
         )
       case "session.tool.success":
-        return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) => {
+        return updateTool(source, event.data.assistantMessageID, event.data.id, sessionID, (tool) => {
           if (tool.state.status !== "running") return tool
           return {
             ...tool,
@@ -302,7 +302,7 @@ export function createV2SessionReducer() {
           }
         })
       case "session.tool.failed":
-        return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) => {
+        return updateTool(source, event.data.assistantMessageID, event.data.id, sessionID, (tool) => {
           if (tool.state.status !== "streaming" && tool.state.status !== "running") return tool
           return {
             ...tool,

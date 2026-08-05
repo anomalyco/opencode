@@ -31,7 +31,7 @@ export async function replyPermission(input: {
       sessionId: input.sessionID,
       toolCall: {
         ...pendingToolCall({
-          toolCallId: input.event.data.source?.callID ?? input.event.data.id,
+          toolCallId: input.event.data.source?.id ?? input.event.data.id,
           toolName,
           state: { input: toolInput, title: permissionTitle(toolName, toolInput, previews) },
           cwd: input.cwd,

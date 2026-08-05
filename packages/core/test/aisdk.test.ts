@@ -98,6 +98,23 @@ it.effect("projects request settings, headers, and body overlays", () =>
   }),
 )
 
+it.effect("leaves max output tokens unset when the request omits them", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model({
+      ...model("@openrouter/ai-sdk-provider"),
+      limit: { context: 500_000, output: 500_000 },
+    })
+    const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+
+    expect(prepared.body.maxOutputTokens).toBeUndefined()
+  }),
+)
+
 it.effect("maps pro reasoning bodies to AI SDK provider options", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service

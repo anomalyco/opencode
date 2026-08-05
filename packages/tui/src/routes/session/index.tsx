@@ -2227,7 +2227,7 @@ function useToolPermission(part: () => SessionMessageAssistantTool | undefined) 
   return createMemo(() => {
     if (local.permission.mode === "auto") return false
     const request = data.session.permission.list(ctx.sessionID)?.[0]
-    return request?.source?.type === "tool" && request.source.callID === part()?.id
+    return request?.source?.type === "tool" && request.source.id === part()?.id
   })
 }
 

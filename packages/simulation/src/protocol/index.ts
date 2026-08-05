@@ -503,7 +503,7 @@ export namespace Backend {
       sessionID: Schema.String,
       agent: Schema.String,
       messageID: Schema.String,
-      callID: Schema.String,
+      id: Schema.String,
     }),
   })
   export interface ToolInvocation extends Schema.Schema.Type<typeof ToolInvocation> {}

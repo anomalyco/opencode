@@ -72,7 +72,7 @@ export async function streamTurn(input: {
       if (next.done) throw new Error("event stream disconnected during prompt execution")
       const event = next.value
       if (event.type === "permission.asked" && event.data.sessionID === input.sessionID) {
-        const tool = event.data.source?.callID ? tools.get(event.data.source.callID) : undefined
+        const tool = event.data.source?.id ? tools.get(event.data.source.id) : undefined
         await replyPermission({
           client: input.client,
           connection: input.connection,
@@ -120,11 +120,11 @@ export async function streamTurn(input: {
       }
       if (event.type === "session.tool.input.started") {
         assistantMessageID = event.data.assistantMessageID
-        tools.set(event.data.callID, { name: event.data.name, input: {}, metadata: {}, content: [] })
+        tools.set(event.data.id, { name: event.data.name, input: {}, metadata: {}, content: [] })
         await update({
           sessionUpdate: "tool_call",
           ...pendingToolCall({
-            toolCallId: event.data.callID,
+            toolCallId: event.data.id,
             toolName: event.data.name,
             state: { input: {} },
             cwd: input.cwd,
@@ -134,13 +134,13 @@ export async function streamTurn(input: {
       }
       if (event.type === "session.tool.called") {
         assistantMessageID = event.data.assistantMessageID
-        const current = tools.get(event.data.callID) ?? emptyToolState()
+        const current = tools.get(event.data.id) ?? emptyToolState()
         current.input = event.data.input
-        tools.set(event.data.callID, current)
+        tools.set(event.data.id, current)
         await update({
           sessionUpdate: "tool_call_update",
           ...runningToolUpdate({
-            toolCallId: event.data.callID,
+            toolCallId: event.data.id,
             toolName: current.name,
             state: { input: current.input },
             cwd: input.cwd,
@@ -149,13 +149,13 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.progress") {
-        const current = tools.get(event.data.callID)
+        const current = tools.get(event.data.id)
         if (!current) continue
         current.metadata = event.data.metadata
         await update({
           sessionUpdate: "tool_call_update",
           ...runningToolUpdate({
-            toolCallId: event.data.callID,
+            toolCallId: event.data.id,
             toolName: current.name,
             state: { input: current.input },
             cwd: input.cwd,
@@ -164,8 +164,8 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.success") {
-        const current = tools.get(event.data.callID) ?? emptyToolState()
-        tools.delete(event.data.callID)
+        const current = tools.get(event.data.id) ?? emptyToolState()
+        tools.delete(event.data.id)
         await syncEditedFiles({
           connection: input.connection,
           writeTextFile: input.writeTextFile,
@@ -178,7 +178,7 @@ export async function streamTurn(input: {
         await update({
           sessionUpdate: "tool_call_update",
           ...completedToolUpdate({
-            toolCallId: event.data.callID,
+            toolCallId: event.data.id,
             toolName: current.name,
             input: current.input,
             metadata: event.data.metadata,
@@ -188,12 +188,12 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.failed") {
-        const current = tools.get(event.data.callID) ?? emptyToolState()
-        tools.delete(event.data.callID)
+        const current = tools.get(event.data.id) ?? emptyToolState()
+        tools.delete(event.data.id)
         await update({
           sessionUpdate: "tool_call_update",
           ...errorToolUpdate({
-            toolCallId: event.data.callID,
+            toolCallId: event.data.id,
             toolName: current.name,
             input: current.input,
             metadata: event.data.metadata ?? current.metadata,

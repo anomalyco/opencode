@@ -90,10 +90,10 @@ test("resolves message navigation defaults", () => {
   const config = resolve({}, { terminalSuspend: true })
 
   expect(config.keybinds.get("session.first")).toMatchObject([{ key: "ctrl+g,home,alt+home" }])
-  expect(config.keybinds.get("session.message.previous")).toMatchObject([{ key: "alt+up" }])
-  expect(config.keybinds.get("session.message.next")).toMatchObject([{ key: "alt+down" }])
-  expect(config.keybinds.get("session.message.user.previous")).toMatchObject([{ key: "alt+shift+up" }])
-  expect(config.keybinds.get("session.message.user.next")).toMatchObject([{ key: "alt+shift+down" }])
+  expect(config.keybinds.get("session.message.previous")).toEqual([])
+  expect(config.keybinds.get("session.message.next")).toEqual([])
+  expect(config.keybinds.get("session.message.user.previous")).toEqual([])
+  expect(config.keybinds.get("session.message.user.next")).toEqual([])
   expect(config.keybinds.get("session.messages_last_user")).toMatchObject([{ key: "alt+end" }])
 })
 
@@ -116,15 +116,13 @@ test("opens the subagent picker with down", () => {
   expect(config.keybinds.get("session.child.first")).toMatchObject([{ key: "down" }])
 })
 
-test("navigates session tabs with leader arrows", () => {
+test("navigates session tabs with option arrows", () => {
   const config = resolve({}, { terminalSuspend: true })
 
-  expect(config.keybinds.get("session.tab.next")).toMatchObject([{ key: "ctrl+tab,<leader>right,alt+shift+]" }])
-  expect(config.keybinds.get("session.tab.previous")).toMatchObject([
-    { key: "ctrl+shift+tab,<leader>left,alt+shift+[" },
-  ])
-  expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "<leader>down" }])
-  expect(config.keybinds.get("session.tab.previous_unread")).toMatchObject([{ key: "<leader>up" }])
+  expect(config.keybinds.get("session.tab.next")).toMatchObject([{ key: "ctrl+tab,alt+down" }])
+  expect(config.keybinds.get("session.tab.previous")).toMatchObject([{ key: "ctrl+shift+tab,alt+up" }])
+  expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "alt+shift+down" }])
+  expect(config.keybinds.get("session.tab.previous_unread")).toMatchObject([{ key: "alt+shift+up" }])
 })
 
 test("preserves pinned session bindings alongside tab bindings", () => {

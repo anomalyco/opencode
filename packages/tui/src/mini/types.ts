@@ -244,11 +244,11 @@ type MiniToolState =
 // Retained only for the noninteractive run JSON/V1 compatibility boundary.
 // Interactive Mini commits carry SessionMessageAssistantTool directly.
 export type MiniToolPart = {
-  id: string
+  partID: string
   sessionID: string
   messageID: string
   type?: "tool"
-  callID: string
+  id: string
   tool: string
   state: MiniToolState
 }

@@ -153,12 +153,16 @@ function provide(directory: string, vcs?: Location.Interface["vcs"]) {
 
 function withTmp<A, E, R>(
   f: (directory: string, vcs?: Location.Interface["vcs"]) => Effect.Effect<A, E, R>,
-  options?: { git?: boolean; init?: (directory: string) => Promise<void> },
+  options?: { vcs?: "git" | "hg"; init?: (directory: string) => Promise<void> },
 ) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
       const tmp = await tmpdir()
-      if (!options?.git) return { tmp, vcs: undefined }
+      if (options?.vcs === "hg") {
+        await fs.mkdir(path.join(tmp.path, ".hg"))
+        return { tmp, vcs: { type: "hg" as const, store: AbsolutePath.make(path.join(tmp.path, ".hg")) } }
+      }
+      if (options?.vcs !== "git") return { tmp, vcs: undefined }
       await $`git init`.cwd(tmp.path).quiet()
       await $`git config core.fsmonitor false`.cwd(tmp.path).quiet()
       await $`git config commit.gpgsign false`.cwd(tmp.path).quiet()
@@ -292,7 +296,7 @@ describeWatcher("LocationWatcher", () => {
             })
           }
         }),
-      { git: true },
+      { vcs: "git" },
     ),
   )
 
@@ -322,7 +326,7 @@ describeWatcher("LocationWatcher", () => {
             }),
           )
         }),
-      { git: true },
+      { vcs: "git" },
     ),
   )
 
@@ -359,7 +363,7 @@ describeWatcher("LocationWatcher", () => {
               .pipe(Effect.andThen(Effect.promise(() => $`git add .`.cwd(directory).quiet())), Effect.asVoid),
           )
         }),
-      { git: true },
+      { vcs: "git" },
     ),
   )
 
@@ -376,7 +380,7 @@ describeWatcher("LocationWatcher", () => {
             yield* nextUpdate((event) => event.file === head, fs.writeFileString(head, `ref: refs/heads/${branch}\n`)),
           ).toMatchObject({ file: head })
         }),
-      { git: true },
+      { vcs: "git" },
     ),
   )
 
@@ -401,7 +405,7 @@ describeWatcher("LocationWatcher", () => {
             ).toEqual({ file: path.join(actual, "HEAD"), event: "change" })
           }),
         {
-          git: true,
+          vcs: "git",
           init: async (directory) => {
             const actual = path.join(directory, "..", `actual_${path.basename(directory)}`)
             await fs.rename(path.join(directory, ".git"), actual)
@@ -411,4 +415,19 @@ describeWatcher("LocationWatcher", () => {
       ),
     )
   })
+
+  it.live("publishes .hg/branch events", () =>
+    withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const fs = yield* FSUtil.Service
+          const branch = path.join(directory, ".hg", "branch")
+          yield* ready(directory)
+          expect(
+            yield* nextUpdate((event) => event.file === branch, fs.writeFileString(branch, "feature\n")),
+          ).toMatchObject({ file: branch })
+        }),
+      { vcs: "hg" },
+    ),
+  )
 })

@@ -6,7 +6,6 @@ import { App } from "../../app"
 import { Credential } from "../../credential"
 import { Integration } from "../../integration"
 import { OauthCallbackPage } from "../../oauth/page"
-import { Provider } from "../../provider"
 
 const clientID = "b1a00492-073a-47ea-816f-4c329264a828"
 const issuer = "https://auth.x.ai/oauth2"
@@ -162,21 +161,6 @@ export const XAIPlugin = define({
       draft.method.update(device(ctx.app))
       draft.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
     })
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/xai") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/xai"))
-        evt.sdk = mod.createXai(evt.options)
-      }),
-    )
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.make("xai")) return
-        evt.language = evt.sdk.responses(evt.model.modelID ?? evt.model.id)
-      }),
-    )
   }),
 })
 

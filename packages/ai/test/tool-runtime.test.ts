@@ -169,7 +169,7 @@ describe("LLMClient tools", () => {
         LLMEvent.toolCall({ id: "call_projected", name: "projected", input: { prefix: "count" } }),
       )
 
-      expect(calls).toEqual([{ callID: "call_projected", parameters: { prefix: "count" }, output: { count: "2" } }])
+      expect(calls).toEqual([{ id: "call_projected", parameters: { prefix: "count" }, output: { count: "2" } }])
       expect(dispatched.result).toEqual({ type: "text", value: "count:2" })
       expect(dispatched.output).toEqual({ structured: { count: "2" }, content: [{ type: "text", text: "count:2" }] })
       expect(dispatched.events).toEqual([

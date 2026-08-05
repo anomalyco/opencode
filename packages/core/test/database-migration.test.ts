@@ -714,7 +714,7 @@ describe("DatabaseMigration", () => {
           sql`INSERT INTO event VALUES ('evt_success', 'session.tool.success.1', ${JSON.stringify({
             sessionID: "ses_test",
             assistantMessageID: "msg_tools",
-            callID: "call_hosted",
+            id: "call_hosted",
             structured: {},
             content: [],
             result: { type: "json", value: [{ url: "https://example.com" }] },
@@ -725,7 +725,7 @@ describe("DatabaseMigration", () => {
           sql`INSERT INTO event VALUES ('evt_failed', 'session.tool.failed.1', ${JSON.stringify({
             sessionID: "ses_test",
             assistantMessageID: "msg_tools",
-            callID: "call_failed",
+            id: "call_failed",
             error: { type: "tool.execution", message: "timed out" },
             metadata: { truncated: false },
             executed: false,
@@ -795,7 +795,7 @@ describe("DatabaseMigration", () => {
         expect(JSON.parse(event!.data)).toEqual({
           sessionID: "ses_test",
           assistantMessageID: "msg_tools",
-          callID: "call_hosted",
+          id: "call_hosted",
           structured: {},
           content: [],
           result: { type: "json", value: [{ url: "https://example.com" }] },
@@ -806,7 +806,7 @@ describe("DatabaseMigration", () => {
         expect(JSON.parse(failedEvent!.data)).toEqual({
           sessionID: "ses_test",
           assistantMessageID: "msg_tools",
-          callID: "call_failed",
+          id: "call_failed",
           error: { type: "tool.execution", message: "timed out" },
           metadata: { truncated: false },
           executed: false,

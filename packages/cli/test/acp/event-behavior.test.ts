@@ -200,7 +200,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.input.started", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_ok",
+            id: "call_ok",
             name: "shell",
           }),
         )
@@ -208,7 +208,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.called", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_ok",
+            id: "call_ok",
             input: { command: "printf done", workdir: "sub" },
             executed: false,
           }),
@@ -217,7 +217,7 @@ describe("acp event behavior", () => {
           ephemeralEvent("session.tool.progress", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_ok",
+            id: "call_ok",
             metadata: { phase: 1 },
           }),
         )
@@ -225,7 +225,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.success", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_ok",
+            id: "call_ok",
             metadata: { exit: 0 },
             content: [{ type: "text", text: "done" }],
             executed: true,
@@ -235,7 +235,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.input.started", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_fail",
+            id: "call_fail",
             name: "read",
           }),
         )
@@ -243,7 +243,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.called", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_fail",
+            id: "call_fail",
             input: { path: "/workspace/missing.ts" },
             executed: false,
           }),
@@ -252,7 +252,7 @@ describe("acp event behavior", () => {
           ephemeralEvent("session.tool.progress", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_fail",
+            id: "call_fail",
             metadata: { bytes: 0 },
           }),
         )
@@ -260,7 +260,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.failed", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_fail",
+            id: "call_fail",
             error: { type: "tool.error", message: "not found" },
             metadata: { bytes: 0 },
             content: [{ type: "text", text: "opening" }],

@@ -34,7 +34,7 @@ interface ToolHooks {
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID
-    readonly callID: Tool.CallID
+    readonly id: Tool.CallID
     input: unknown
   }
   readonly "execute.after": {
@@ -42,7 +42,7 @@ interface ToolHooks {
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID
-    readonly callID: Tool.CallID
+    readonly id: Tool.CallID
     readonly input: unknown
   } & (
     | {

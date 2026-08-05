@@ -15,7 +15,7 @@ export interface Context {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly messageID: SessionMessage.ID
-  readonly callID: CallID
+  readonly id: CallID
   readonly progress: (update: Metadata) => Effect.Effect<void>
 }
 

@@ -257,6 +257,31 @@ describe("ShellTool", () => {
     ),
   )
 
+  it.live("reports a missing workdir", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          executeTool(registry, call({ command: cwdCommand, workdir: "missing" })),
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() =>
+              expect(settled).toEqual({
+                status: "error",
+                error: {
+                  type: "unknown",
+                  message: `Working directory does not exist: ${path.join(tmp.path, "missing")}`,
+                },
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   it.live("permissions compound commands separately", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

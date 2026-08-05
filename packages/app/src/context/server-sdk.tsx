@@ -39,7 +39,7 @@ export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
         metadata: event.data.metadata ?? {},
         tool:
           event.data.source?.type === "tool"
-            ? { messageID: event.data.source.messageID, callID: event.data.source.callID }
+            ? { messageID: event.data.source.messageID, callID: event.data.source.id }
             : undefined,
       },
       current: event,
@@ -142,7 +142,7 @@ function currentDelta(event: OpenCodeEvent | undefined): CurrentDelta | undefine
 
 function currentDeltaKey(event: CurrentDelta) {
   if (event.type === "session.tool.input.delta")
-    return `${event.type}:${event.data.sessionID}:${event.data.assistantMessageID}:${event.data.callID}`
+    return `${event.type}:${event.data.sessionID}:${event.data.assistantMessageID}:${event.data.id}`
   if (event.type === "session.compaction.delta") return `${event.type}:${event.data.sessionID}`
   return `${event.type}:${event.data.sessionID}:${event.data.assistantMessageID}:${event.data.ordinal}`
 }

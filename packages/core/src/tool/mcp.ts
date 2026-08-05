@@ -59,7 +59,7 @@ export const layer = Layer.effectDiscard(
                   source: {
                     type: "tool",
                     messageID: context.messageID,
-                    callID: context.callID,
+                    id: context.id,
                   },
                 })
                 const result = yield* mcp

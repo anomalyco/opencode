@@ -89,7 +89,7 @@ describe("run permission shared", () => {
       permissionInfo(
         req({
           action: "shell",
-          source: { type: "tool", messageID: "msg-shell", callID: "call-shell" },
+          source: { type: "tool", messageID: "msg-shell", id: "call-shell" },
           tool: canonicalToolPart(
             "shell",
             {
@@ -134,7 +134,7 @@ describe("run permission shared", () => {
         req({
           action: "websearch",
           metadata: { provider: "parallel" },
-          source: { type: "tool", messageID: "msg-search", callID: "call-search" },
+          source: { type: "tool", messageID: "msg-search", id: "call-search" },
           tool: canonicalToolPart(
             "websearch",
             {
@@ -157,7 +157,7 @@ describe("run permission shared", () => {
     const request = req({
       action: "edit",
       resources: ["src/index.ts"],
-      source: { type: "tool", messageID: "msg-edit", callID: "call-edit" },
+      source: { type: "tool", messageID: "msg-edit", id: "call-edit" },
       tool: canonicalToolPart(
         "edit",
         {

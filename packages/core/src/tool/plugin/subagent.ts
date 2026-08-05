@@ -159,7 +159,7 @@ export const Plugin = {
                     source: {
                       type: "tool",
                       messageID: context.messageID,
-                      callID: context.callID,
+                      id: context.id,
                     },
                   })
                   .pipe(Effect.mapError((error) => new ToolFailure({ message: `Subagent denied: ${agent.id}`, error })))

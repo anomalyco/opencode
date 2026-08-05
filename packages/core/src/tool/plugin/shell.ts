@@ -89,10 +89,10 @@ export const Plugin = {
 
     const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(function* (
       sessionID: SessionSchema.ID,
-      callID: string,
+      id: string,
       command: string,
     ) {
-      yield* runtime.job.wait({ id: callID }).pipe(
+      yield* runtime.job.wait({ id: id }).pipe(
         Effect.flatMap((result) => {
           const state =
             result.info?.status === "completed"
@@ -111,7 +111,7 @@ export const Plugin = {
                 : "Command cancelled"
           return runtime.session.synthetic({
             sessionID,
-            text: `<shell id="${callID}" state="${state}" command="${command}">\n${text}\n</shell>`,
+            text: `<shell id="${id}" state="${state}" command="${command}">\n${text}\n</shell>`,
             description: command,
             metadata: { source: "shell", state },
           })
@@ -134,7 +134,7 @@ export const Plugin = {
                 const source = {
                   type: "tool" as const,
                   messageID: context.messageID,
-                  callID: context.callID,
+                  id: context.id,
                 }
                 const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
                 let finalTimeout = timeout
@@ -176,7 +176,12 @@ export const Plugin = {
                           agent: context.agent,
                           source,
                         })
-                      if ((yield* fsUtil.stat(target.canonical)).type !== "Directory")
+                      const workdir = yield* fsUtil.stat(target.canonical).pipe(
+                        Effect.catchReason("PlatformError", "NotFound", () =>
+                          Effect.fail(new Error(`Working directory does not exist: ${target.canonical}`)),
+                        ),
+                      )
+                      if (workdir.type !== "Directory")
                         return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
                     }),
                 )
@@ -227,7 +232,7 @@ export const Plugin = {
                   Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
                 )
                 const job = yield* runtime.job.start({
-                  id: context.callID,
+                  id: context.id,
                   type: name,
                   title: info.command,
                   metadata: { sessionID: context.sessionID, shellID: info.id },
@@ -236,7 +241,7 @@ export const Plugin = {
 
                 if (input.background === true) {
                   yield* runtime.job.background(job.id)
-                  yield* notifyWhenDone(context.sessionID, context.callID, info.command)
+                  yield* notifyWhenDone(context.sessionID, context.id, info.command)
                   return {
                     output: BACKGROUND_STARTED,
                     shellID: info.id,
@@ -250,7 +255,7 @@ export const Plugin = {
                 )
                 if (result?.type === "backgrounded") {
                   yield* shell.timeout(info.id, 0)
-                  yield* notifyWhenDone(context.sessionID, context.callID, info.command)
+                  yield* notifyWhenDone(context.sessionID, context.id, info.command)
                   return {
                     output: BACKGROUND_STARTED,
                     shellID: info.id,

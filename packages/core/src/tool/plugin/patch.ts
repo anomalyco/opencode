@@ -95,7 +95,7 @@ export const Plugin = {
                   const source = {
                     type: "tool" as const,
                     messageID: context.messageID,
-                    callID: context.callID,
+                    id: context.id,
                   }
                   if (!input.patchText) return yield* new ToolFailure({ message: "patchText is required" })
                   const hunks = yield* Effect.fromResult(Patch.parse(input.patchText)).pipe(

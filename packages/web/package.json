@@ -20,7 +20,6 @@
     "@shikijs/transformers": "3.20.0",
     "@solid-primitives/resize-observer": "2.1.5",
     "@types/luxon": "catalog:",
-    "ai": "catalog:",
     "astro": "5.7.13",
     "diff": "catalog:",
     "js-base64": "3.7.7",

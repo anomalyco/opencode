@@ -27,6 +27,7 @@ import type {
   SessionPendingInfo,
   ShellInfo,
   SkillInfo,
+  VcsInfo,
   OpenCodeEvent,
   WebSearchProvider,
 } from "@opencode-ai/client"
@@ -49,6 +50,7 @@ type ShellWithLocation = ShellInfo & { readonly location: LocationRef }
 
 type LocationData = {
   info?: LocationGetOutput
+  vcs?: VcsInfo
   agent?: AgentInfo[]
   command?: CommandInfo[]
   integration?: IntegrationInfo[]
@@ -206,10 +208,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         const item = messages.findLast((item) => item.type === "compaction" && item.status === "running")
         return item?.type === "compaction" ? item : undefined
       },
-      latestTool(assistant: SessionMessageAssistant | undefined, callID?: string) {
+      latestTool(assistant: SessionMessageAssistant | undefined, id?: string) {
         return assistant?.content.findLast(
           (item): item is SessionMessageAssistantTool =>
-            item.type === "tool" && (callID === undefined || item.id === callID),
+            item.type === "tool" && (id === undefined || item.id === id),
         )
       },
       latestText(assistant: SessionMessageAssistant | undefined) {
@@ -338,6 +340,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "skill.updated":
           result.location.skill.invalidate(event.location)
           void result.location.skill.sync(event.location)
+          break
+        case "vcs.branch.updated":
+          setStore("location", locationKey(event.location ?? defaultLocation()), (data) => ({
+            ...data,
+            vcs: {
+              branch: {
+                ...data?.vcs?.branch,
+                current: event.data.branch,
+              },
+            },
+          }))
           break
         case "session.agent.selected":
           if (store.session.info[event.data.sessionID])
@@ -579,7 +592,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
               type: "tool",
-              id: event.data.callID,
+              id: event.data.id,
               name: event.data.name,
               time: { created: event.created },
               state: { status: "streaming", input: "" },
@@ -590,7 +603,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (match?.state.status === "streaming") match.state.input += event.data.delta
           })
@@ -599,7 +612,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (match?.state.status === "streaming") match.state.input = event.data.text
           })
@@ -608,7 +621,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (!match) return
             match.time.ran = event.created
@@ -621,7 +634,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (match?.state.status !== "running") return
             match.state.metadata = event.data.metadata
@@ -631,7 +644,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (match?.state.status !== "running") return
             match.state = {
@@ -649,7 +662,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (!match || (match.state.status !== "streaming" && match.state.status !== "running")) return
             match.state = {
@@ -1152,6 +1165,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           const location = ref ?? defaultLocation()
           await Promise.all([
+            result.location.vcs.sync(location),
             result.location.agent.sync(location),
             result.location.command.sync(location),
             result.location.integration.sync(location),
@@ -1168,6 +1182,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         invalidate(ref?: LocationRef) {
           const location = ref ?? defaultLocation()
           sync.invalidate(`location:${locationKey(location)}`)
+          result.location.vcs.invalidate(location)
           result.location.agent.invalidate(location)
           result.location.command.invalidate(location)
           result.location.integration.invalidate(location)
@@ -1179,6 +1194,22 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           result.location.skill.invalidate(location)
           result.shell.invalidate(location)
           result.session.form.invalidate("global", location)
+        },
+        vcs: {
+          info(location?: LocationRef) {
+            return store.location[locationKey(location ?? defaultLocation())]?.vcs
+          },
+          sync(ref?: LocationRef) {
+            const location = ref ?? defaultLocation()
+            return sync.run(`location.vcs:${locationKey(location)}`, async () => {
+              const response = await client.api.vcs.get({ location: locationQuery(location) })
+              const key = locationKey(response.location)
+              setStore("location", key, { ...store.location[key], vcs: response.data })
+            })
+          },
+          invalidate(ref?: LocationRef) {
+            sync.invalidate(`location.vcs:${locationKey(ref ?? defaultLocation())}`)
+          },
         },
         agent: {
           list(location?: LocationRef) {
@@ -1377,6 +1408,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               setStore("location", key, { ...store.location[key], info: location })
             })
             .catch((error) => console.error("Failed to preload location", error))
+          void result.location.vcs.sync().catch((error) => console.error("Failed to preload VCS info", error))
           void result.project.sync().catch((error) => console.error("Failed to preload projects", error))
           return
         }

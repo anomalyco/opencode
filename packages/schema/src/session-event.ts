@@ -365,7 +365,7 @@ export namespace Tool {
   const ToolBase = {
     ...Base,
     assistantMessageID: SessionMessage.ID,
-    callID: Schema.String,
+    id: Schema.String,
   }
 
   export namespace Input {

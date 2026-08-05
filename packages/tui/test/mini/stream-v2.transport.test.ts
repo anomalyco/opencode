@@ -416,7 +416,7 @@ describe("V2 mini transport", () => {
       sessionID: "ses_child",
       action: "shell",
       resources: ["git status --short"],
-      source: { type: "tool", messageID: "msg_child_source", callID: "call_child_source" },
+      source: { type: "tool", messageID: "msg_child_source", id: "call_child_source" },
     }
     const client = sdk({
       streams: [events],
@@ -2032,7 +2032,7 @@ describe("V2 mini transport", () => {
         created: index * 3 + 1,
         type: "session.tool.input.started",
         durable: durable("ses_1", index * 3),
-        data: { sessionID: "ses_1", assistantMessageID: messageID, callID: "call_repeated", name: "read" },
+        data: { sessionID: "ses_1", assistantMessageID: messageID, id: "call_repeated", name: "read" },
       })
       events.push({
         id: `evt_repeated_called_${index}`,
@@ -2042,7 +2042,7 @@ describe("V2 mini transport", () => {
         data: {
           sessionID: "ses_1",
           assistantMessageID: messageID,
-          callID: "call_repeated",
+          id: "call_repeated",
           input: { path: `${index + 1}.txt` },
           executed: true,
         },
@@ -2055,7 +2055,7 @@ describe("V2 mini transport", () => {
         data: {
           sessionID: "ses_1",
           assistantMessageID: messageID,
-          callID: "call_repeated",
+          id: "call_repeated",
           metadata: {},
           content: [{ type: "text", text: "" }],
           executed: true,
@@ -2098,7 +2098,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_progress",
-        callID: "call_progress",
+        id: "call_progress",
         name: "shell",
       },
     })
@@ -2110,7 +2110,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_progress",
-        callID: "call_progress",
+        id: "call_progress",
         input: { command: "printf partial && false" },
         executed: true,
       },
@@ -2122,7 +2122,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_progress",
-        callID: "call_progress",
+        id: "call_progress",
         metadata: { checkpoint: 1 },
       },
     })
@@ -2134,7 +2134,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_progress",
-        callID: "call_progress",
+        id: "call_progress",
         error: { type: "unknown", message: "boom" },
         metadata: { checkpoint: 1 },
         content: [{ type: "text", text: "partial" }],
@@ -2933,7 +2933,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_failed_subagent",
-        callID: "call_failed_subagent",
+        id: "call_failed_subagent",
         name: "subagent",
       },
     })
@@ -2945,7 +2945,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_failed_subagent",
-        callID: "call_failed_subagent",
+        id: "call_failed_subagent",
         input: { agent: "explore", description: "Inspect failure", prompt: "inspect" },
         executed: true,
       },
@@ -2958,7 +2958,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_failed_subagent",
-        callID: "call_failed_subagent",
+        id: "call_failed_subagent",
         error: { type: "unknown", message: "subagent failed" },
         metadata: { sessionID: "ses_child_failed", status: "running" },
         executed: true,
@@ -2996,7 +2996,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_subagent",
-        callID: "call_subagent",
+        id: "call_subagent",
         name: "subagent",
       },
     })
@@ -3008,7 +3008,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_subagent",
-        callID: "call_subagent",
+        id: "call_subagent",
         input: { agent: "explore", description: "Inspect progress", prompt: "inspect" },
         executed: true,
       },
@@ -3020,7 +3020,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_subagent",
-        callID: "call_subagent",
+        id: "call_subagent",
         metadata: { sessionID: "ses_child_progress", status: "running" },
       },
     })
@@ -3046,7 +3046,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_child_progress",
         assistantMessageID: "msg_child_tool",
-        callID: "call_child_shell",
+        id: "call_child_shell",
         name: "shell",
       },
     })
@@ -3058,7 +3058,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_child_progress",
         assistantMessageID: "msg_child_tool",
-        callID: "call_child_shell",
+        id: "call_child_shell",
         input: { command: "printf child && false" },
         executed: true,
       },
@@ -3070,7 +3070,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_child_progress",
         assistantMessageID: "msg_child_tool",
-        callID: "call_child_shell",
+        id: "call_child_shell",
         metadata: { checkpoint: "child" },
       },
     })
@@ -3083,7 +3083,7 @@ describe("V2 mini transport", () => {
         sessionID: "ses_child_progress",
         action: "shell",
         resources: ["printf child && false"],
-        source: { type: "tool", messageID: "msg_child_tool", callID: "call_child_shell" },
+        source: { type: "tool", messageID: "msg_child_tool", id: "call_child_shell" },
       },
     })
     events.push({
@@ -3094,7 +3094,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_child_progress",
         assistantMessageID: "msg_child_tool",
-        callID: "call_child_shell",
+        id: "call_child_shell",
         error: { type: "unknown", message: "child boom" },
         metadata: { checkpoint: "child" },
         content: [{ type: "text", text: "child partial" }],
@@ -3531,24 +3531,24 @@ describe("V2 mini transport", () => {
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
-    const inputStarted = (callID: string, name: string, seq: number) =>
+    const inputStarted = (id: string, name: string, seq: number) =>
       events.push({
-        id: `evt_started_${callID}`,
+        id: `evt_started_${id}`,
         created: seq,
         type: "session.tool.input.started",
         durable: durable("ses_child", seq),
-        data: { sessionID: "ses_child", assistantMessageID: "msg_tool_projected", callID, name },
+        data: { sessionID: "ses_child", assistantMessageID: "msg_tool_projected", id, name },
       })
-    const called = (callID: string, input: Record<string, unknown>, seq: number) =>
+    const called = (id: string, input: Record<string, unknown>, seq: number) =>
       events.push({
-        id: `evt_called_${callID}`,
+        id: `evt_called_${id}`,
         created: seq,
         type: "session.tool.called",
         durable: durable("ses_child", seq),
         data: {
           sessionID: "ses_child",
           assistantMessageID: "msg_tool_projected",
-          callID,
+          id,
           input,
           executed: true,
         },
@@ -3567,7 +3567,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_child",
         assistantMessageID: "msg_tool_projected",
-        callID: "call_terminal",
+        id: "call_terminal",
         metadata: {},
         content: [{ type: "text", text: "found" }],
         executed: true,
@@ -3705,7 +3705,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_parent_a",
-        callID: "call_sub",
+        id: "call_sub",
         name: "subagent",
       },
     })
@@ -3717,7 +3717,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_parent_a",
-        callID: "call_sub",
+        id: "call_sub",
         input: { agent: "explore", description: "Find things", prompt: "go", background: true },
         executed: true,
       },
@@ -3730,7 +3730,7 @@ describe("V2 mini transport", () => {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_parent_a",
-        callID: "call_sub",
+        id: "call_sub",
         metadata: { sessionID: "ses_child", status: "running", output: "" },
         content: [{ type: "text", text: "" }],
         executed: true,

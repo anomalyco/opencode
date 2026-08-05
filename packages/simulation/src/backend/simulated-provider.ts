@@ -477,7 +477,7 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
                     sessionID: context.sessionID,
                     agent: context.agent,
                     messageID: context.messageID,
-                    callID: context.callID,
+                    id: context.id,
                   },
                 }
                 const pending: PendingToolInvocation = {

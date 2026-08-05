@@ -344,8 +344,8 @@ argument to `tools.add` to configure the registration with
   `execute` CodeMode tool. Set `codemode: false` to expose it directly to the
   provider.
 
-The executor receives a second context argument containing `sessionID`,
-`agent`, `messageID`, `callID`, and `progress`. A tool with `output`
+The executor receives a second context argument containing `id`, `sessionID`,
+`agent`, `messageID`, and `progress`. A tool with `output`
 must return `output`; Effect and Standard Schema codecs validate it, while raw
 JSON Schema definitions enforce JSON compatibility only. A tool
 without `output` returns model-visible `content` instead.

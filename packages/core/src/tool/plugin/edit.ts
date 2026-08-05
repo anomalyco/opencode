@@ -129,7 +129,7 @@ export const Plugin = {
                   const permissionSource = {
                     type: "tool" as const,
                     messageID: context.messageID,
-                    callID: context.callID,
+                    id: context.id,
                   }
                   if (input.oldString === input.newString) {
                     return yield* new ToolFailure({

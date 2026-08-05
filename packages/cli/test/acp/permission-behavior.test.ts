@@ -43,14 +43,14 @@ describe("acp permission behavior", () => {
           permissionAsked("ses_allow", "perm_once", {
             action: "shell",
             metadata: { command: "printf hello" },
-            source: { type: "tool", messageID: "msg_allow", callID: "call_once" },
+            source: { type: "tool", messageID: "msg_allow", id: "call_once" },
           }),
         )
         send(
           permissionAsked("ses_allow", "perm_always", {
             action: "read",
             metadata: { path: "/workspace/file.ts" },
-            source: { type: "tool", messageID: "msg_allow", callID: "call_always" },
+            source: { type: "tool", messageID: "msg_allow", id: "call_always" },
           }),
         )
         send(durableEvent("session.execution.succeeded", { sessionID: "ses_allow" }))
@@ -166,7 +166,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.input.started", {
             sessionID: "ses_edit",
             assistantMessageID: "msg_edit",
-            callID: "call_edit",
+            id: "call_edit",
             name: "edit",
           }),
         )
@@ -174,7 +174,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.called", {
             sessionID: "ses_edit",
             assistantMessageID: "msg_edit",
-            callID: "call_edit",
+            id: "call_edit",
             input: { path: "file.ts", oldString: "before", newString: "after" },
             executed: false,
           }),
@@ -182,7 +182,7 @@ describe("acp permission behavior", () => {
         send(
           permissionAsked("ses_edit", "perm_edit", {
             action: "edit",
-            source: { type: "tool", messageID: "msg_edit", callID: "call_edit" },
+            source: { type: "tool", messageID: "msg_edit", id: "call_edit" },
           }),
         )
       },
@@ -192,7 +192,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.success", {
             sessionID: "ses_edit",
             assistantMessageID: "msg_edit",
-            callID: "call_edit",
+            id: "call_edit",
             metadata: { files: [{ file: "file.ts" }], replacements: 1 },
             content: [{ type: "text", text: "edited" }],
             executed: true,
@@ -256,7 +256,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.input.started", {
             sessionID: "ses_patch",
             assistantMessageID: "msg_patch",
-            callID: "call_patch",
+            id: "call_patch",
             name: "patch",
           }),
         )
@@ -264,7 +264,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.called", {
             sessionID: "ses_patch",
             assistantMessageID: "msg_patch",
-            callID: "call_patch",
+            id: "call_patch",
             input: { patchText },
             executed: false,
           }),
@@ -272,7 +272,7 @@ describe("acp permission behavior", () => {
         send(
           permissionAsked("ses_patch", "perm_patch", {
             action: "edit",
-            source: { type: "tool", messageID: "msg_patch", callID: "call_patch" },
+            source: { type: "tool", messageID: "msg_patch", id: "call_patch" },
           }),
         )
       },
@@ -285,7 +285,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.success", {
             sessionID: "ses_patch",
             assistantMessageID: "msg_patch",
-            callID: "call_patch",
+            id: "call_patch",
             metadata: { files: [{ file: "first.ts" }, { file: "second.ts" }] },
             content: [{ type: "text", text: "patched" }],
             executed: true,
@@ -499,7 +499,7 @@ function permissionAsked(
   input: {
     readonly action?: string
     readonly metadata?: Record<string, unknown>
-    readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
+    readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
   } = {},
 ) {
   return ephemeralEvent("permission.asked", {
