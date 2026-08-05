@@ -1,15 +1,12 @@
 export * as ShellSelect from "./select"
 
 import path from "path"
-import { spawn, type ChildProcess } from "child_process"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
-import { setTimeout } from "node:timers/promises"
 import { Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { which } from "../util/which"
 
-const SIGKILL_TIMEOUT_MS = 200
 const META: Record<string, { deny?: boolean; login?: boolean; posix?: boolean; ps?: boolean }> = {
   bash: { login: true, posix: true },
   dash: { login: true, posix: true },
@@ -32,37 +29,6 @@ export const Options = Schema.Struct({
   gitbash: Schema.optional(Schema.String),
 })
 export type Options = typeof Options.Type
-
-export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
-  const pid = proc.pid
-  if (!pid || opts?.exited?.()) return
-
-  if (process.platform === "win32") {
-    await new Promise<void>((resolve) => {
-      const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
-        stdio: "ignore",
-        windowsHide: true,
-      })
-      killer.once("exit", () => resolve())
-      killer.once("error", () => resolve())
-    })
-    return
-  }
-
-  try {
-    process.kill(-pid, "SIGTERM")
-    await setTimeout(SIGKILL_TIMEOUT_MS)
-    if (!opts?.exited?.()) {
-      process.kill(-pid, "SIGKILL")
-    }
-  } catch {
-    proc.kill("SIGTERM")
-    await setTimeout(SIGKILL_TIMEOUT_MS)
-    if (!opts?.exited?.()) {
-      proc.kill("SIGKILL")
-    }
-  }
-}
 
 function stat(file: string) {
   return statSync(file, { throwIfNoEntry: false }) ?? undefined
