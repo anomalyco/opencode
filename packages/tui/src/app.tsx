@@ -637,6 +637,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         name: "loop.queue.start",
         title: "Start openspec queue run (all eligible changes, never pushes)",
         category: "Loop",
+        // slashName makes `/queue` discoverable in the prompt's autocomplete;
+        // selecting it there starts a full-backlog run, which is the right
+        // default for a bare `/queue`. Typing arguments after it
+        // (`/queue slug --sync`) is handled by the prompt's own intercept, the
+        // same way `/loop` works.
         slashName: "queue",
         run: async () => {
           dialog.clear()

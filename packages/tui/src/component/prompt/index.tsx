@@ -260,6 +260,18 @@ export function Prompt(props: PromptProps) {
       }
     | undefined
   >()
+/**
+ * `/loop` and `/queue` are intercepted before server prompt-templates so they
+ * can take arguments. Matching is exact-verb-then-boundary so a genuine message
+ * like "/loopback is broken" is still sent to the model.
+ */
+function isLoopCommand(input: string): boolean {
+  for (const verb of ["/loop", "/queue"]) {
+    if (input === verb || input.startsWith(`${verb} `) || input.startsWith(`${verb}\n`)) return true
+  }
+  return false
+}
+
   const isLoopLive = (status: string) => status === "running" || status === "paused"
   const refreshActiveLoop = async () => {
     if (!props.sessionID) {
@@ -1163,16 +1175,24 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
-    } else if (inputText === "/loop" || inputText.startsWith("/loop ") || inputText.startsWith("/loop\n")) {
-      // /loop is an imperative TUI command (start a background loop), not a
-      // server prompt-template command, so it doesn't go through
-      // session.command — it parses its own argument string and either
-      // starts a loop directly or opens the management dialog.
+    } else if (isLoopCommand(inputText)) {
+      // /loop and /queue are imperative TUI commands (start a background run),
+      // not server prompt-template commands, so they don't go through
+      // session.command — they parse their own argument string and either
+      // start a run directly or open the management dialog.
+      //
+      // /queue is its own verb rather than a flag on /loop: the two do
+      // different things (repeat a prompt vs work the openspec backlog), and
+      // hiding one behind a parameter of the other reads as an afterthought.
+      // `/loop --queue` still works so nothing that already exists breaks.
       const firstLineEnd = inputText.indexOf("\n")
       const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
-      const rest = firstLine.slice("/loop".length).trim()
+      const verb = firstLine.startsWith("/queue") ? "/queue" : "/loop"
+      const rest = firstLine.slice(verb.length).trim()
       try {
-        const parsed = parseLoopArgs(rest)
+        const parsedArgs = parseLoopArgs(rest)
+        // `/queue …` means queue mode even without the flag.
+        const parsed = verb === "/queue" ? { ...parsedArgs, queue: true } : parsedArgs
         if (!parsed.prompt && !parsed.queue) {
           dialog.replace(() => <DialogLoopList />)
         } else {
@@ -1202,7 +1222,9 @@ export function Prompt(props: PromptProps) {
               }
               toast.show({
                 variant: "success",
-                message: `Loop ${result.data.id} started (max ${result.data.maxIterations} iterations, stops on ${result.data.completionToken})`,
+                message: parsed.queue
+                  ? `Queue run ${result.data.id} started — works the backlog until nothing is eligible, and never pushes`
+                  : `Loop ${result.data.id} started (max ${result.data.maxIterations} iterations, stops on ${result.data.completionToken})`,
               })
             })
             .catch((error) => {
@@ -1210,7 +1232,7 @@ export function Prompt(props: PromptProps) {
             })
         }
       } catch (error) {
-        toast.show({ title: "Invalid /loop arguments", message: errorMessage(error), variant: "error" })
+        toast.show({ title: `Invalid ${verb} arguments`, message: errorMessage(error), variant: "error" })
       }
     } else if (
       inputText.startsWith("/") &&
