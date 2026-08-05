@@ -2275,7 +2275,7 @@ body {
 
 [data-page="stats"] [data-slot="geo-countries"] path[data-active="true"] {
   fill: color-mix(in srgb, var(--stats-accent) 70%, var(--stats-text));
-  opacity: 1;
+  opacity: var(--geo-country-opacity);
 }
 
 [data-page="stats"] [data-slot="geo-country-markers"] circle {
@@ -2292,7 +2292,7 @@ body {
 
 [data-page="stats"] [data-slot="geo-country-markers"] circle[data-active="true"] {
   fill: color-mix(in srgb, var(--stats-accent) 70%, var(--stats-text));
-  opacity: 1;
+  opacity: var(--geo-country-opacity);
 }
 
 [data-page="stats"] [data-slot="geo-borders"] {

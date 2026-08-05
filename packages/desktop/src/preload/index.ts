@@ -73,6 +73,11 @@ const api: ElectronAPI = {
   storeClear: (name) => ipcRenderer.invoke("store-clear", name),
   storeKeys: (name) => ipcRenderer.invoke("store-keys", name),
   storeLength: (name) => ipcRenderer.invoke("store-length", name),
+  draftGet: (key) => ipcRenderer.invoke("draft-get", key),
+  draftSet: (key, value) => ipcRenderer.invoke("draft-set", key, value),
+  draftDelete: (key) => ipcRenderer.invoke("draft-delete", key),
+  draftBlobPut: (data) => ipcRenderer.invoke("draft-blob-put", data),
+  draftBlobGet: (id) => ipcRenderer.invoke("draft-blob-get", id),
 
   getWindowID: () => ipcRenderer.invoke("get-window-id"),
   onMenuCommand: (cb) => {
@@ -127,6 +132,7 @@ const api: ElectronAPI = {
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
   setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
+  setNativeTranslations: (bundle) => ipcRenderer.invoke("set-native-translations", bundle),
 }
 
 contextBridge.exposeInMainWorld("api", api)
