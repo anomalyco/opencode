@@ -11,6 +11,9 @@ export function testProviderConfig(llmUrl: string) {
   return {
     formatter: false,
     lsp: false,
+    // Default model, so a run without --model still resolves one and tests can
+    // tell a value read off the message from one read off the argv.
+    model: "test/test-model",
     provider: {
       test: {
         name: "Test",
