@@ -44,7 +44,6 @@ export type Draft = {
 
 export interface Interface extends State.Transformable<Draft> {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
-  readonly default: () => Effect.Effect<Info | undefined>
   readonly resolve: (id?: ID | string) => Effect.Effect<Info | undefined>
   readonly select: (id?: ID | string) => Effect.Effect<Selection>
   readonly list: () => Effect.Effect<Info[]>
@@ -109,9 +108,6 @@ const layer = Layer.effect(
       reload: state.reload,
       get: Effect.fn("Agent.get")(function* (id) {
         return state.get().agents.get(id)
-      }),
-      default: Effect.fn("Agent.default")(function* () {
-        return selectedDefault()
       }),
       resolve: Effect.fn("Agent.resolve")(function* (id) {
         if (id !== undefined) return state.get().agents.get(ID.make(id))
