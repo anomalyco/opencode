@@ -265,6 +265,15 @@ backfill. Existing rows naturally receive `NULL` when the generated migration ad
 
 ## Execution
 
+Before transforming V1 rows, look for `opencode-next.db` in the data directory. This file was used by pre-launch V2
+builds. Open it read-only with Bun SQLite and copy its `project`, `session`, and `session_message` rows directly into the
+current `project`, `session_v2`, and `session_message` tables. Existing current projects and Sessions win ID collisions.
+Do not copy its durable events or runtime caches; initialize each imported Session's `event_sequence` watermark from its
+maximum message sequence. Commit each imported Session independently and leave the source database untouched.
+
+The previous V2 import is part of this migration and uses the same completion marker. It needs no source-specific cursor:
+the destination Session row is the per-Session idempotency boundary, so a retry skips transactions that already committed.
+
 Store V1 backfill state in `kv`; do not retain a dedicated `data_migration` table. Store the last successfully migrated
 session ID under `migration.v1-v2.session.cursor` and write `migration.v1-v2.completed` with value `true` after every
 session finishes. Delete the cursor key on completion and return immediately on later calls when the completion key

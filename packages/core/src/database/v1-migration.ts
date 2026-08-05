@@ -9,6 +9,10 @@ import { SessionSchema } from "../session/schema"
 import { KVTable } from "../kv/sql"
 import { EventSequenceTable, EventTable } from "../event/sql"
 import { eq, sql } from "drizzle-orm"
+import { Global } from "@opencode-ai/util/global"
+import { existsSync } from "node:fs"
+import path from "node:path"
+import type { Database as SQLiteDatabase } from "bun:sqlite"
 
 export type SourceMessage = {
   readonly id: string
@@ -78,6 +82,70 @@ export type Result = {
   readonly status: "completed"
 }
 
+type Options = {
+  readonly nextDatabasePath?: string
+}
+
+type NextProject = {
+  readonly id: string
+  readonly worktree: string
+  readonly vcs: string | null
+  readonly name: string | null
+  readonly icon_url: string | null
+  readonly icon_url_override: string | null
+  readonly icon_color: string | null
+  readonly time_created: number
+  readonly time_updated: number
+  readonly time_initialized: number | null
+  readonly sandboxes: string
+  readonly commands: string | null
+}
+
+type NextSession = {
+  readonly id: string
+  readonly project_id: string
+  readonly workspace_id: string | null
+  readonly parent_id: string | null
+  readonly fork_session_id: string | null
+  readonly fork_boundary: string | null
+  readonly slug: string
+  readonly directory: string
+  readonly path: string | null
+  readonly title: string | null
+  readonly version: string
+  readonly share_url: string | null
+  readonly summary_additions: number | null
+  readonly summary_deletions: number | null
+  readonly summary_files: number | null
+  readonly summary_diffs: string | null
+  readonly metadata: string | null
+  readonly cost: number
+  readonly tokens_input: number
+  readonly tokens_output: number
+  readonly tokens_reasoning: number
+  readonly tokens_cache_read: number
+  readonly tokens_cache_write: number
+  readonly revert: string | null
+  readonly permission: string | null
+  readonly agent: string | null
+  readonly model: string | null
+  readonly time_created: number
+  readonly time_updated: number
+  readonly time_compacting: number | null
+  readonly time_archived: number | null
+  readonly time_suspended: number | null
+}
+
+type NextMessage = {
+  readonly id: string
+  readonly session_id: string
+  readonly type: string
+  readonly seq: number
+  readonly time_created: number
+  readonly time_updated: number
+  readonly data: string
+}
+
 const lock = Semaphore.makeUnsafe(1)
 const cursorKey = "migration.v1-v2.session.cursor"
 const completedKey = "migration.v1-v2.completed"
@@ -85,6 +153,7 @@ const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 const decodeMessage = Schema.decodeUnknownOption(SessionV1.Info)
 const decodePart = Schema.decodeUnknownOption(SessionV1.Part)
 let running = false
+let nextCompleted = 0
 
 export function transformSession(input: TransformInput): TransformResult {
   const warnings: Warning[] = []
@@ -346,7 +415,7 @@ export function transformSession(input: TransformInput): TransformResult {
   }
 }
 
-export function status(): Effect.Effect<Status, never, Database.Service> {
+export function status(options: Options = {}): Effect.Effect<Status, never, Database.Service> {
   return Effect.gen(function* () {
     const { db } = yield* Database.Service
     if (!(yield* hasLegacySessions(db))) return { status: "completed" as const, completed: 0, total: 0 }
@@ -363,13 +432,16 @@ export function status(): Effect.Effect<Status, never, Database.Service> {
       .where(eq(KVTable.key, cursorKey))
       .get()
       .pipe(Effect.orDie)
-    const total = (yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session`))?.value ?? 0
+    const legacyTotal = (yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session`))?.value ?? 0
+    const sourceTotal = yield* countNextSessions(nextPath(options))
+    const total = legacyTotal + sourceTotal
     const cursorValue = typeof cursor?.value === "string" ? cursor.value : undefined
-    const migrated =
+    const migratedLegacy =
       cursorValue !== undefined
         ? ((yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session WHERE id >= ${cursorValue}`))
             ?.value ?? 0)
         : 0
+    const migrated = migratedLegacy + (completed ? sourceTotal : running ? nextCompleted : 0)
     return {
       status: completed ? ("completed" as const) : running ? ("running" as const) : ("required" as const),
       completed: completed ? total : migrated,
@@ -378,7 +450,7 @@ export function status(): Effect.Effect<Status, never, Database.Service> {
   }).pipe(Effect.orDie)
 }
 
-export function run(): Effect.Effect<Result, never, Database.Service> {
+export function run(options: Options = {}): Effect.Effect<Result, never, Database.Service> {
   return lock.withPermit(
     Effect.gen(function* () {
       const { db } = yield* Database.Service
@@ -386,6 +458,7 @@ export function run(): Effect.Effect<Result, never, Database.Service> {
       if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
       running = true
       const migrate = Effect.gen(function* () {
+        yield* importNextDatabase(db, nextPath(options))
         while (true) {
           const cursor = yield* db
             .select({ value: KVTable.value })
@@ -488,6 +561,146 @@ export function run(): Effect.Effect<Result, never, Database.Service> {
       )
     }).pipe(Effect.orDie),
   )
+}
+
+function nextPath(options: Options) {
+  if (options.nextDatabasePath) return options.nextDatabasePath
+  if (process.env.OPENCODE_DB === ":memory:") return undefined
+  return path.join(Global.Path.data, "opencode-next.db")
+}
+
+function openNextDatabase(sourcePath: string) {
+  return Effect.acquireRelease(
+    Effect.gen(function* () {
+      const sqlite = yield* Effect.promise(() => import("bun:sqlite"))
+      return new sqlite.Database(sourcePath, { readonly: true, strict: true })
+    }),
+    (source) => Effect.sync(() => source.close()),
+  )
+}
+
+function countNextSessions(sourcePath: string | undefined) {
+  if (!sourcePath || !existsSync(sourcePath)) return Effect.succeed(0)
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const source = yield* openNextDatabase(sourcePath)
+      if (!isNextDatabase(source)) return 0
+      return source.query<{ value: number }, []>("SELECT COUNT(*) AS value FROM session").get()?.value ?? 0
+    }),
+  ).pipe(Effect.orElseSucceed(() => 0))
+}
+
+function importNextDatabase(
+  db: Database.Interface["db"],
+  sourcePath: string | undefined,
+): Effect.Effect<void, unknown> {
+  if (!sourcePath || !existsSync(sourcePath)) return Effect.void
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const source = yield* openNextDatabase(sourcePath)
+      if (!isNextDatabase(source)) {
+        yield* Effect.logWarning("Skipped incompatible opencode-next.db", { path: sourcePath })
+        return
+      }
+      source.run("BEGIN")
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          if (source.inTransaction) source.run("ROLLBACK")
+        }),
+      )
+      const projects = new Map(
+        source
+          .query<NextProject, []>("SELECT * FROM project")
+          .all()
+          .map((project) => [project.id, project]),
+      )
+      const sessions = source.query<NextSession, []>("SELECT * FROM session ORDER BY id DESC").all()
+      nextCompleted = 0
+      for (const session of sessions) {
+        const project = projects.get(session.project_id)
+        if (!project)
+          return yield* Effect.die(
+            new Error(`Previous V2 session ${session.id} references missing project ${session.project_id}`),
+          )
+        const messages = source
+          .query<NextMessage, [string]>(
+            "SELECT id, session_id, type, seq, time_created, time_updated, data FROM session_message WHERE session_id = ? ORDER BY seq",
+          )
+          .all(session.id)
+        yield* db
+          .transaction((tx) =>
+            Effect.gen(function* () {
+              yield* tx.run(sql`
+                INSERT OR IGNORE INTO project (
+                  id, worktree, vcs, name, icon_url, icon_url_override, icon_color,
+                  time_created, time_updated, time_initialized, sandboxes, commands
+                ) VALUES (
+                  ${project.id}, ${project.worktree}, ${project.vcs}, ${project.name}, ${project.icon_url},
+                  ${project.icon_url_override}, ${project.icon_color}, ${project.time_created}, ${project.time_updated},
+                  ${project.time_initialized}, ${project.sandboxes}, ${project.commands}
+                )
+              `)
+              const existing = yield* tx
+                .select({ id: SessionTable.id })
+                .from(SessionTable)
+                .where(eq(SessionTable.id, SessionSchema.ID.make(session.id)))
+                .get()
+              if (existing) return
+              yield* tx.run(sql`
+                INSERT INTO session_v2 (
+                  id, project_id, workspace_id, parent_id, fork_session_id, fork_boundary, slug, directory,
+                  path, title, version, share_url, summary_additions, summary_deletions, summary_files,
+                  summary_diffs, metadata, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read,
+                  tokens_cache_write, revert, permission, agent, model, time_created, time_updated, time_compacting,
+                  time_archived, time_suspended
+                ) VALUES (
+                  ${session.id}, ${session.project_id}, ${session.workspace_id}, ${session.parent_id},
+                  ${session.fork_session_id}, ${session.fork_boundary}, ${session.slug}, ${session.directory},
+                  ${session.path}, ${session.title}, ${session.version}, ${session.share_url},
+                  ${session.summary_additions}, ${session.summary_deletions}, ${session.summary_files},
+                  ${session.summary_diffs}, ${session.metadata}, ${session.cost}, ${session.tokens_input},
+                  ${session.tokens_output}, ${session.tokens_reasoning}, ${session.tokens_cache_read},
+                  ${session.tokens_cache_write}, ${session.revert}, ${session.permission}, ${session.agent},
+                  ${session.model}, ${session.time_created}, ${session.time_updated}, ${session.time_compacting},
+                  ${session.time_archived}, ${session.time_suspended}
+                )
+              `)
+              yield* Effect.forEach(messages, (message) =>
+                tx.run(sql`
+                  INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+                  VALUES (
+                    ${message.id}, ${message.session_id}, ${message.type}, ${message.seq},
+                    ${message.time_created}, ${message.time_updated}, ${message.data}
+                  )
+                `),
+              )
+              yield* tx
+                .insert(EventSequenceTable)
+                .values({ aggregate_id: session.id, seq: messages.at(-1)?.seq ?? -1 })
+                .onConflictDoUpdate({
+                  target: EventSequenceTable.aggregate_id,
+                  set: { seq: messages.at(-1)?.seq ?? -1, owner_id: null },
+                })
+                .run()
+            }),
+          )
+          .pipe(Effect.orDie)
+        nextCompleted++
+        yield* Effect.yieldNow
+      }
+      source.run("COMMIT")
+    }),
+  )
+}
+
+function isNextDatabase(source: SQLiteDatabase) {
+  const tables = new Set(
+    source
+      .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all()
+      .map((table) => table.name),
+  )
+  return tables.has("project") && tables.has("session") && tables.has("session_message")
 }
 
 function row(
