@@ -37,6 +37,7 @@ const CUSTOMIZE_OPENCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
 export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
+  disableModelInvocation: Schema.optional(Schema.Boolean),
   location: Schema.String,
   content: Schema.String,
 })
@@ -50,11 +51,14 @@ const Issue = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 
-function isSkillFrontmatter(data: unknown): data is { name: string; description?: string } {
+function isSkillFrontmatter(
+  data: unknown,
+): data is { name: string; description?: string; "disable-model-invocation"?: boolean } {
   return (
     isRecord(data) &&
     typeof data.name === "string" &&
-    (data.description === undefined || typeof data.description === "string")
+    (data.description === undefined || typeof data.description === "string") &&
+    (data["disable-model-invocation"] === undefined || typeof data["disable-model-invocation"] === "boolean")
   )
 }
 
@@ -134,6 +138,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
   state.skills[md.data.name] = {
     name: md.data.name,
     description: md.data.description,
+    disableModelInvocation: md.data["disable-model-invocation"],
     location: match,
     content: md.content,
   }
@@ -307,9 +312,13 @@ const layer = Layer.effect(
       return (yield* InstanceState.get(discovered)).dirs
     })
 
+    // Skills with `disable-model-invocation` stay in `all()` so they remain
+    // reachable as slash commands, but never reach the model.
     const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
       const s = yield* InstanceState.get(state)
-      const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
+      const list = Object.values(s.skills)
+        .filter((skill) => !skill.disableModelInvocation)
+        .toSorted((a, b) => a.name.localeCompare(b.name))
       if (!agent) return list
       return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
     })

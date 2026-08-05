@@ -71,7 +71,7 @@ const layer = Layer.effectDiscard(
             Effect.gen(function* () {
               const current = yield* skills.list()
               const skill = current.find((skill) => skill.name === input.name)
-              if (!skill) return yield* unableToLoad(input.name)
+              if (!skill || skill.disableModelInvocation) return yield* unableToLoad(input.name)
               return yield* Effect.gen(function* () {
                 yield* permission.assert({
                   action: name,
