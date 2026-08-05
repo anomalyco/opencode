@@ -489,18 +489,6 @@
         "@typescript/native-preview": "catalog:",
       },
     },
-    "packages/effect-sqlite-node": {
-      "name": "@opencode-ai/effect-sqlite-node",
-      "version": "1.18.8",
-      "dependencies": {
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@tsconfig/bun": "catalog:",
-        "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:",
-      },
-    },
     "packages/enterprise": {
       "name": "@opencode-ai/enterprise",
       "version": "1.18.8",
@@ -2066,8 +2054,6 @@
     "@opencode-ai/desktop": ["@opencode-ai/desktop@workspace:packages/desktop"],
 
     "@opencode-ai/effect-drizzle-sqlite": ["@opencode-ai/effect-drizzle-sqlite@workspace:packages/effect-drizzle-sqlite"],
-
-    "@opencode-ai/effect-sqlite-node": ["@opencode-ai/effect-sqlite-node@workspace:packages/effect-sqlite-node"],
 
     "@opencode-ai/enterprise": ["@opencode-ai/enterprise@workspace:packages/enterprise"],
 
