@@ -128,4 +128,26 @@ describe("toSessionError", () => {
     expect(eligible.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true])
     expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false, false, false, false, false])
   })
+
+  test("retries transport failures only when delivery is absent or not sent", () => {
+    const retryable = [
+      llm(new TransportReason({ message: "http transport" })),
+      llm(new TransportReason({ message: "connect failed", delivery: "not-sent", phase: "connect" })),
+    ]
+    const ineligible = [
+      llm(new TransportReason({ message: "send uncertain", delivery: "ambiguous", phase: "send" })),
+      llm(new TransportReason({ message: "response interrupted", delivery: "accepted", phase: "receive" })),
+      llm(
+        new TransportReason({
+          message: "continuation rejected",
+          delivery: "rejected",
+          recovery: "retry-full",
+          phase: "receive",
+        }),
+      ),
+    ]
+
+    expect(retryable.map(SessionRunnerRetry.isRetryable)).toEqual([true, true])
+    expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false])
+  })
 })
