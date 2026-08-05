@@ -19,7 +19,6 @@ export type LanguageModelOptions = AzureURL &
   ProviderAuthOption<"optional"> & {
     readonly apiVersion?: string
     readonly queryParams?: Record<string, string>
-    readonly useCompletionUrls?: boolean
     readonly useDeploymentBasedUrls?: boolean
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
@@ -55,7 +54,6 @@ const defaults = (input: Config) => {
     apiKey: _,
     apiVersion: _apiVersion,
     resourceName: _resourceName,
-    useCompletionUrls: _useCompletionUrls,
     useDeploymentBasedUrls: _useDeploymentBasedUrls,
     baseURL: _baseURL,
     queryParams: _queryParams,
@@ -111,7 +109,7 @@ export const configure = (input: Config) => {
 
   return {
     id,
-    model: (modelID: string | ModelID) => (input.useCompletionUrls === true ? chat(modelID) : responses(modelID)),
+    model: responses,
     responses,
     chat,
     configure,
