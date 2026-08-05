@@ -409,7 +409,9 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const events: LLMEvent[] = []
     const usage = mapUsage(event.usage) ?? state.usage
     const choice = event.choices[0]
-    const finishReason = choice?.finish_reason ? mapFinishReason(choice.finish_reason) : state.finishReason
+    const finishReason = choice?.finish_reason
+      ? mapFinishReason(choice.finish_reason)
+      : state.finishReason ?? (event.choices.length === 0 && event.usage ? "stop" : undefined)
     const delta = choice?.delta
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools

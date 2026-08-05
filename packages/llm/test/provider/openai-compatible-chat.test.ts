@@ -235,4 +235,29 @@ describe("OpenAI-compatible Chat route", () => {
       expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
     }),
   )
+
+  it.effect("treats usage-only stream tails as completed when finish_reason is missing", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.succeed(
+              input.respond(
+                [
+                  `data: ${JSON.stringify(deltaChunk({ role: "assistant", content: "OK" }))}`,
+                  `data: ${JSON.stringify(usageChunk({ prompt_tokens: 11, completion_tokens: 5, total_tokens: 16 }))}`,
+                  `data: ${JSON.stringify({ choices: [], cost: "0" })}`,
+                ].join("\n\n") + "\n\n",
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("OK")
+      expect(response.usage).toMatchObject({ inputTokens: 11, outputTokens: 5, totalTokens: 16 })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
+    }),
+  )
 })
