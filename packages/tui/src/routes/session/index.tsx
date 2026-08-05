@@ -2581,7 +2581,7 @@ function Skill(props: ToolProps) {
   const name = stringValue(props.input.name)
   return (
     <InlineTool
-      icon="->"
+      icon="→"
       pending="Loading skill..."
       complete={tuiConfig.skill_display === "compact" ? `[skill: ${name}]` : name}
       part={props.part}

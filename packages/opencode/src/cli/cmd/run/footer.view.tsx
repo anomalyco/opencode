@@ -752,7 +752,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                                 parts: [],
                                 command: {
                                   name,
-                                  arguments: argumentsText ? `${argumentsText} ` : "",
+                                  arguments: argumentsText,
                                 },
                               })
                               closePanel()
