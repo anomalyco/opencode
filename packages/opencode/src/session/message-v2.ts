@@ -17,6 +17,7 @@ import {
 } from "@opencode-ai/core/v1/session"
 
 import { NamedError } from "@opencode-ai/core/util/error"
+import { TypeValidationError } from "@ai-sdk/provider"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -699,6 +700,8 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    case TypeValidationError.isInstance(e):
+      return fromError(e.value, ctx)
     case e instanceof Error:
       return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
     default:

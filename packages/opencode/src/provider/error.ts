@@ -105,6 +105,16 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
   if (!body) return
 
   const responseBody = JSON.stringify(body)
+  // TODO: Remove when https://github.com/BerriAI/litellm/pull/33352 is fixed.
+  // LiteLLM can emit its OpenAI-shaped error envelope inside an Anthropic SSE stream.
+  if (body.type !== "error" && /^5\d\d$/.test(String(body?.error?.code))) {
+    return {
+      type: "api_error",
+      message: typeof body?.error?.message === "string" ? body.error.message : "Server error.",
+      isRetryable: true,
+      responseBody,
+    }
+  }
   if (body.type !== "error") return
 
   switch (body?.error?.code) {

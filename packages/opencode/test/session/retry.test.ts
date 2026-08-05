@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { NamedError } from "@opencode-ai/core/util/error"
+import { TypeValidationError } from "@ai-sdk/provider"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Effect, Schedule, Schema } from "effect"
@@ -436,5 +437,28 @@ describe("session.message-v2.fromError", () => {
     expect(SessionRetry.retryable(result, retryProvider)).toEqual({
       message: "An error occurred while processing your request.",
     })
+  })
+
+  test("retries malformed LiteLLM Anthropic stream errors", () => {
+    const body = {
+      error: {
+        message: "Connection closed.",
+        type: "None",
+        param: "None",
+        code: "500",
+      },
+    }
+    const result = MessageV2.fromError(new TypeValidationError({ value: body, cause: new Error("Invalid input") }), {
+      providerID,
+    })
+
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data).toMatchObject({
+      message: "Connection closed.",
+      isRetryable: true,
+      responseBody: JSON.stringify(body),
+    })
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: "Connection closed." })
   })
 })
