@@ -439,7 +439,7 @@ const layer = Layer.effect(
             .install(dir, {
               add: [
                 {
-                  name: "@leak-code/plugin",
+                  name: "@opencode-ai/plugin",
                   version: InstallationLocal ? undefined : InstallationVersion,
                 },
               ],
