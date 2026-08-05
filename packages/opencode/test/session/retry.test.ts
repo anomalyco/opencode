@@ -170,7 +170,11 @@ describe("session.retry.retryable", () => {
 
   test.each([
     "Internal server error",
+    "internal error",
+    "server-error",
     "Provider returned error",
+    "provider-returned-error",
+    "terminated",
     "fetch failed",
     "connection refused",
     "connect ECONNREFUSED",
@@ -179,9 +183,16 @@ describe("session.retry.retryable", () => {
     "EAI_AGAIN",
     "response timed out",
     "Please retry your request",
+    "try your request again",
     "upstream returned status 524",
   ])("retries matching API error text: %s", (message) => {
     expect(SessionRetry.retryable(wrap(message), retryProvider)).toEqual({ message })
+  })
+
+  test("retries hyphenated service-unavailable errors", () => {
+    expect(SessionRetry.retryable(wrap("service-unavailable"), retryProvider)).toEqual({
+      message: "Provider is overloaded",
+    })
   })
 
   test("matches retryable API response bodies", () => {
