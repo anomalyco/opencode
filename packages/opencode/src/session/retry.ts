@@ -28,11 +28,13 @@ export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 
-const RETRYABLE_MESSAGE = [
-  /\b(?:server[_\s-]?error|internal[_\s-]?error|service[_\s-]?unavailable|overloaded|too many requests|rate increased too quickly|provider[_\s-]?returned[_\s-]?error)\b|\brate[_\s-]?limit/i,
-  /\b(?:fetch failed|network error|upstream connect|connection (?:error|refused|lost)|socket connection was closed|socket hang up|reset before headers|getaddrinfo|enotfound|eai_again)\b|^timeout$|\b(?:request|response|connection|network|stream|read) (?:timeout|timed? out)\b/i,
-  /\b(?:resource[_\s-]?exhausted|please retry your request|you can retry your request|try your request again)\b/i,
+const RETRYABLE_MESSAGE_PATTERNS = [
   /\b(?:429|500|502|503|504|524)\b/,
+  /rate increased too quickly|rate limit|rate-limit|rate_limit|too many requests/i,
+  /internal server error|internal_error|server error|server_error|service unavailable|service_unavailable|overloaded|provider returned error/i,
+  /fetch failed|network error|upstream connect|connection error|connection refused|connection lost|socket connection was closed|socket hang up|reset before headers|getaddrinfo|enotfound|eai_again/i,
+  /^timeout$|\b(?:request|response|connection|network|stream|read) (?:timeout|timed out|time out)\b/i,
+  /resource exhausted|resource_exhausted|retry your request/i,
 ]
 
 function cap(ms: number) {
@@ -134,7 +136,7 @@ export function retryable(error: Err, provider: string) {
   const lower = message.toLowerCase()
   if (lower.includes("too_many_requests")) return { message: "Too Many Requests" }
   if (lower.includes("exhausted") || lower.includes("unavailable")) return { message: "Provider is overloaded" }
-  if (RETRYABLE_MESSAGE.some((pattern) => pattern.test(message))) return { message }
+  if (RETRYABLE_MESSAGE_PATTERNS.some((pattern) => pattern.test(message))) return { message }
   return undefined
 }
 
