@@ -270,7 +270,7 @@ describe("ShellTool", () => {
               expect(settled).toEqual({
                 status: "error",
                 error: {
-                  type: "tool.execution",
+                  type: "unknown",
                   message: `Working directory does not exist: ${path.join(tmp.path, "missing")}`,
                 },
               }),

@@ -178,7 +178,7 @@ export const Plugin = {
                         })
                       const workdir = yield* fsUtil.stat(target.canonical).pipe(
                         Effect.catchReason("PlatformError", "NotFound", () =>
-                          Effect.fail(new ToolFailure({ message: `Working directory does not exist: ${target.canonical}` })),
+                          Effect.fail(new Error(`Working directory does not exist: ${target.canonical}`)),
                         ),
                       )
                       if (workdir.type !== "Directory")
@@ -285,10 +285,7 @@ export const Plugin = {
                   }
                 }),
                 Effect.mapError(
-                  (error) =>
-                    error instanceof ToolFailure
-                      ? error
-                      : new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
+                  (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
                 ),
               ),
           }),
