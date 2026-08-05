@@ -7,6 +7,7 @@ import { Agent } from "../agent"
 import { Catalog } from "../catalog"
 import { Command } from "../command"
 import { Config } from "../config"
+import { Credential } from "../credential"
 import { ConfigAgentPlugin } from "../config/plugin/agent"
 import { ConfigCommandPlugin } from "../config/plugin/command"
 import { ConfigProviderPlugin } from "../config/plugin/provider"
@@ -67,6 +68,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const catalog = yield* Catalog.Service
   const command = yield* Command.Service
   const config = yield* Config.Service
+  const credential = yield* Credential.Service
   const bus = yield* Bus.Service
   const mutation = yield* FileMutation.Service
   const formatter = yield* Formatter.Service
@@ -98,6 +100,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Catalog.Service, catalog),
     Context.make(Command.Service, command),
     Context.make(Config.Service, config),
+    Context.make(Credential.Service, credential),
     Context.make(Bus.Service, bus),
     Context.make(FileMutation.Service, mutation),
     Context.make(Formatter.Service, formatter),
