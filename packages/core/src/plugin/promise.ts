@@ -2,7 +2,6 @@ export * as PluginPromise from "./promise"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import type { Context, Plugin } from "@opencode-ai/plugin/promise/plugin"
-import type { SessionHooks, SessionHttp, SessionHttpMiddleware } from "@opencode-ai/plugin/promise/session"
 import type { Info } from "@opencode-ai/plugin/promise/tool"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Integration } from "@opencode-ai/schema/integration"
@@ -57,62 +56,6 @@ export function fromPromise(plugin: Plugin) {
                 callback(draft)
               }),
             )
-
-        function sessionHook<Name extends keyof SessionHooks>(
-          name: Name,
-          callback: (event: SessionHooks[Name]) => Promise<void> | void,
-        ): Promise<Registration>
-        function sessionHook(
-          ...registration: {
-            [Name in keyof SessionHooks]: [
-              name: Name,
-              callback: (event: SessionHooks[Name]) => Promise<void> | void,
-            ]
-          }[keyof SessionHooks]
-        ) {
-          if (registration[0] !== "http")
-            return register(
-              host.session.hook(registration[0], (event) =>
-                Effect.promise(() => Promise.resolve(registration[1](event))),
-              ),
-            )
-          return register(
-            host.session.hook("http", (event) => {
-              const middlewares: SessionHttpMiddleware[] = []
-              const output: SessionHttp = {
-                ...event,
-                use: (item) => {
-                  middlewares.push(item)
-                },
-              }
-              return Effect.promise(() => Promise.resolve(registration[1](output))).pipe(
-                Effect.flatMap(() =>
-                  Effect.forEach(
-                    middlewares,
-                    (item) =>
-                      event.use((input, next) =>
-                        Effect.tryPromise({
-                          try: (signal) => {
-                            const inputSignal = AbortSignal.any([signal, input.signal])
-                            return Promise.resolve(
-                              item(new Request(input, { signal: inputSignal }), (request) => {
-                                const requestSignal = AbortSignal.any([signal, request.signal])
-                                return Effect.runPromiseWith(
-                                  context,
-                                )(next(new Request(request, { signal: requestSignal })), { signal: requestSignal })
-                              }),
-                            )
-                          },
-                          catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-                        }),
-                      ),
-                    { discard: true },
-                  ),
-                ),
-              )
-            }),
-          )
-        }
 
         const context2: Context = {
           app: host.app,
@@ -322,7 +265,8 @@ export function fromPromise(plugin: Plugin) {
               ),
           },
           session: {
-            hook: sessionHook,
+            hook: (name, callback) =>
+              register(host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
             create: (input) =>
               run(
                 host.session.create(

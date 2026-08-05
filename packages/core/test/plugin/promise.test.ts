@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Message, SystemPart } from "@opencode-ai/ai"
-import { DateTime, Deferred, Effect, Fiber, Schema } from "effect"
+import { DateTime, Effect, Schema } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Model } from "@opencode-ai/core/model"
@@ -15,7 +15,7 @@ import { SessionPending } from "@opencode-ai/core/session/pending"
 import { Tool } from "@opencode-ai/core/tool"
 import { Provider } from "@opencode-ai/core/provider"
 import { define } from "@opencode-ai/plugin/promise/plugin"
-import type { SessionHooks, SessionHttpHandler } from "@opencode-ai/plugin/effect/session"
+import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import { host as testHost } from "./host"
@@ -223,102 +223,45 @@ describe("fromPromise", () => {
     }),
   )
 
-  it.effect("adapts promise session HTTP hooks", () =>
+  it.effect("adapts promise session HTTP request and response hooks", () =>
     Effect.gen(function* () {
       const plugin = yield* Plugin.Service
       const hooks = yield* PluginHooks.Service
       const host = yield* PluginHost.make(plugin)
-      const bodies: string[] = []
       yield* PluginPromise.fromPromise(
         define({
           id: "promise-session-http",
           setup: async (ctx) => {
-            await ctx.session.hook("http", (event) => {
-              event.use(async (request, next) => {
-                request.headers.set("x-hook", "promise")
-                await next(request)
-                const response = await next(request)
-                return new Response(`${await response.text()}-response`)
-              })
+            await ctx.session.hook("http.request", (event) => {
+              event.request = new Request("https://provider.test/changed", event.request)
+              event.request.headers.set("x-hook", "promise")
             })
-            await ctx.session.hook("http", (event) => {
-              event.use(async (request, next) => {
-                const response = await next(request)
-                return new Response(`${await response.text()}-outer`)
+            await ctx.session.hook("http.response", async (event) => {
+              event.response = new Response(`${await event.response.text()}-response`, {
+                status: event.response.status,
               })
             })
           },
         }),
       ).effect(host)
-      const middlewares: Parameters<PluginHooks.Domains["session"]["http"]["use"]>[0][] = []
-      const event: PluginHooks.Domains["session"]["http"] = {
+      const context = {
         sessionID: Session.ID.make("ses_promise_session_http"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("model") }),
-        use: (item) =>
-          Effect.sync(() => {
-            middlewares.push(item)
-          }),
       }
 
-      yield* hooks.trigger("session", "http", event)
-      const request = middlewares.reduce<SessionHttpHandler>(
-        (next, item) => (input: Request) => item(input, next),
-        (input: Request) =>
-          Effect.promise(() => input.text()).pipe(
-            Effect.tap((body) => Effect.sync(() => bodies.push(body))),
-            Effect.as(new Response(input.headers.get("x-hook") ?? "missing")),
-          ),
-      )
-      const response = yield* request(new Request("https://provider.test", { method: "POST", body: "payload" }))
+      const request = yield* hooks.trigger("session", "http.request", {
+        ...context,
+        request: new Request("https://provider.test", { method: "POST", body: "payload" }),
+      })
+      const response = yield* hooks.trigger("session", "http.response", {
+        ...context,
+        request: request.request,
+        response: new Response(request.request.headers.get("x-hook") ?? "missing"),
+      })
 
-      expect(bodies).toEqual(["payload", "payload"])
-      expect(yield* Effect.promise(() => response.text())).toBe("promise-response-outer")
-    }),
-  )
-
-  it.effect("interrupts the Effect request through a promise session HTTP hook", () =>
-    Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
-      const hooks = yield* PluginHooks.Service
-      const host = yield* PluginHost.make(plugin)
-      yield* PluginPromise.fromPromise(
-        define({
-          id: "promise-session-http-interrupt",
-          setup: async (ctx) => {
-            await ctx.session.hook("http", (event) => {
-              event.use((request, next) => next(request))
-            })
-          },
-        }),
-      ).effect(host)
-      const started = yield* Deferred.make<void>()
-      const interrupted = yield* Deferred.make<void>()
-      const middlewares: Parameters<PluginHooks.Domains["session"]["http"]["use"]>[0][] = []
-      const event: PluginHooks.Domains["session"]["http"] = {
-        sessionID: Session.ID.make("ses_promise_session_http_interrupt"),
-        agent: Agent.ID.make("build"),
-        model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("model") }),
-        use: (item) =>
-          Effect.sync(() => {
-            middlewares.push(item)
-          }),
-      }
-
-      yield* hooks.trigger("session", "http", event)
-      const request = middlewares.reduce<SessionHttpHandler>(
-        (next, item) => (input: Request) => item(input, next),
-        () =>
-          Deferred.succeed(started, undefined).pipe(
-            Effect.andThen(Effect.never),
-            Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
-          ),
-      )
-      const fiber = yield* request(new Request("https://provider.test")).pipe(Effect.forkChild)
-      yield* Deferred.await(started)
-      yield* Fiber.interrupt(fiber)
-
-      expect(yield* Deferred.isDone(interrupted)).toBeTrue()
+      expect(request.request.url).toBe("https://provider.test/changed")
+      expect(yield* Effect.promise(() => response.response.text())).toBe("promise-response")
     }),
   )
 
