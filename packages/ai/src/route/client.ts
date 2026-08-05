@@ -5,7 +5,7 @@ import { Endpoint, type EndpointPatch } from "./endpoint"
 import { RequestExecutor } from "./executor"
 import { Framing } from "./framing"
 import { HttpTransport } from "./transport"
-import type { HttpRequestTransform, Transport, TransportRuntime } from "./transport"
+import type { HttpMiddleware, Transport, TransportRuntime } from "./transport"
 import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
@@ -20,6 +20,7 @@ import {
   LanguageModel,
   LanguageModelLimits,
   LLMEvent,
+  InvalidProviderOutputReason,
   ProviderID,
   mergeGenerationOptions,
   mergeHttpOptions,
@@ -155,7 +156,7 @@ export interface Interface {
 }
 
 export interface StreamOptions {
-  readonly transform?: HttpRequestTransform
+  readonly http?: HttpMiddleware
 }
 
 export interface StreamMethod {
@@ -231,6 +232,17 @@ const streamError = (route: string, message: string, cause: Cause.Cause<unknown>
   return ProviderShared.eventError(route, message, Cause.pretty(cause))
 }
 
+const incompleteStreamError = (route: string) =>
+  new AIError({
+    module: "LLMClient",
+    method: "stream",
+    reason: new InvalidProviderOutputReason({
+      classification: "incomplete-stream",
+      message: "The provider response ended unexpectedly.",
+      route,
+    }),
+  })
+
 const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent, AIError>) =>
   Stream.suspend(() => {
     let terminal = false
@@ -247,7 +259,7 @@ const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent,
         Effect.suspend(() =>
           terminal
             ? Effect.void
-            : Effect.fail(ProviderShared.eventError(route, "Provider stream ended without a terminal finish event")),
+            : Effect.fail(incompleteStreamError(route)),
         ),
       ),
     )
@@ -307,7 +319,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           auth: routeInput.auth ?? Auth.none,
           encodeBody,
           headers: routeInput.headers,
-          transform: options?.transform,
+          middleware: options?.http,
         }),
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
         const route = `${request.model.provider}/${request.model.route.id}`
@@ -416,10 +428,7 @@ const generateWith = (stream: Interface["stream"]) =>
     const state = yield* stream(request, options).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
     const response = LLMResponse.complete(state)
     if (response) return response
-    return yield* ProviderShared.eventError(
-      `${request.model.provider}/${request.model.route.id}`,
-      "Provider stream ended without a terminal finish event",
-    )
+    return yield* incompleteStreamError(`${request.model.provider}/${request.model.route.id}`)
   })
 
 export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, AIError, Service> {

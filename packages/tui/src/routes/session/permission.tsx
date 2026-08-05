@@ -123,7 +123,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
     if (!tool) return { input: undefined, metadata: undefined }
     const message = data.session.message.get(props.request.sessionID, tool.messageID)
     if (message?.type !== "assistant") return { input: undefined, metadata: undefined }
-    const part = message.content.find((part) => part.type === "tool" && part.id === tool.callID)
+    const part = message.content.find((part) => part.type === "tool" && part.id === tool.id)
     if (part?.type === "tool" && part.state.status !== "streaming") {
       return { input: part.state.input, metadata: part.state.metadata }
     }

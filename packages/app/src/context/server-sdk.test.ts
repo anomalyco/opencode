@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { adaptServerEvent, coalesceServerEvents, enqueueServerEvent, resumeStreamAfterPageShow } from "./server-sdk"
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import type { Event } from "@opencode-ai/sdk/v2/client"
+import type { Event } from "@/types"
 
 describe("resumeStreamAfterPageShow", () => {
   test("restarts a stream only after a back-forward cache restore", () => {
@@ -21,12 +21,24 @@ describe("adaptServerEvent", () => {
       id: "evt_1",
       created: 1,
       type: "permission.asked",
-      data: { id: "perm_1", sessionID: "ses_1", action: "read", resources: ["src/**"] },
+      data: {
+        id: "perm_1",
+        sessionID: "ses_1",
+        action: "read",
+        resources: ["src/**"],
+        source: { type: "tool", messageID: "msg_1", id: "call_1" },
+      },
     } as OpenCodeEvent
 
     expect(adaptServerEvent(current)).toMatchObject({
       type: "permission.asked",
-      properties: { id: "perm_1", sessionID: "ses_1", permission: "read", patterns: ["src/**"] },
+      properties: {
+        id: "perm_1",
+        sessionID: "ses_1",
+        permission: "read",
+        patterns: ["src/**"],
+        tool: { messageID: "msg_1", callID: "call_1" },
+      },
       current,
     })
   })
@@ -68,6 +80,26 @@ describe("coalesceServerEvents", () => {
 
     expect(result).toHaveLength(1)
     expect(result[0]?.payload.current).toMatchObject({ id: "evt_2", data: { delta: "hello world" } })
+  })
+
+  test("coalesces current tool input deltas by tool ID", () => {
+    const current = (eventID: string, id: string, delta: string) =>
+      adaptServerEvent({
+        id: eventID,
+        created: 1,
+        type: "session.tool.input.delta",
+        location: { directory: "/repo" },
+        data: { sessionID: "ses", assistantMessageID: "msg", id, delta },
+      } as OpenCodeEvent)
+    const result = coalesceServerEvents([
+      { directory: "/repo", payload: current("evt_1", "call_1", "{") },
+      { directory: "/repo", payload: current("evt_2", "call_1", "}") },
+      { directory: "/repo", payload: current("evt_3", "call_2", "[]") },
+    ])
+
+    expect(result).toHaveLength(2)
+    expect(result[0]?.payload.current).toMatchObject({ id: "evt_2", data: { id: "call_1", delta: "{}" } })
+    expect(result[1]?.payload.current).toMatchObject({ id: "evt_3", data: { id: "call_2", delta: "[]" } })
   })
 
   test("preserves event boundaries and distinct fields", () => {

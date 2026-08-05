@@ -24,7 +24,7 @@ export type ToolExecute<Parameters extends ToolSchema<any>, Success extends Tool
 ) => Effect.Effect<Schema.Schema.Type<Success>, ToolFailure>
 
 export interface ToolModelOutputInput<Parameters, Output> {
-  readonly callID: ToolCallPart["id"]
+  readonly id: ToolCallPart["id"]
   readonly parameters: Parameters
   readonly output: Output
 }
@@ -59,7 +59,7 @@ export interface Definition<Parameters extends ToolSchema<any>, Success extends 
   /** @internal */
   readonly _project: (
     parameters: Schema.Schema.Type<Parameters>,
-    callID: ToolCallPart["id"],
+    id: ToolCallPart["id"],
     output: unknown,
   ) => ToolOutputType
   /** @internal */
@@ -173,8 +173,8 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
       toStructuredOutput: config.toStructuredOutput,
       _decode: Effect.succeed,
       _encode: Effect.succeed,
-      _project: (parameters, callID, output) =>
-        project(config.toModelOutput, config.toStructuredOutput, parameters, callID, output),
+      _project: (parameters, id, output) =>
+        project(config.toModelOutput, config.toStructuredOutput, parameters, id, output),
       _legacyResult: config.toModelOutput === undefined && config.toStructuredOutput === undefined,
       _definition: new ToolDefinition({
         name: "",
@@ -193,8 +193,8 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
     toStructuredOutput: config.toStructuredOutput,
     _decode: Schema.decodeUnknownEffect(config.parameters),
     _encode: Schema.encodeEffect(config.success),
-    _project: (parameters, callID, output) =>
-      project(config.toModelOutput, config.toStructuredOutput, parameters, callID, output),
+    _project: (parameters, id, output) =>
+      project(config.toModelOutput, config.toStructuredOutput, parameters, id, output),
     _legacyResult: false,
     _definition: new ToolDefinition({
       name: "",
@@ -239,12 +239,12 @@ const project = (
   toModelOutput: ((input: ToolModelOutputInput<any, any>) => ReadonlyArray<Tool.Content>) | undefined,
   toStructuredOutput: ((output: unknown) => unknown) | undefined,
   parameters: unknown,
-  callID: ToolCallPart["id"],
+  id: ToolCallPart["id"],
   output: unknown,
 ): ToolOutputType =>
   ToolOutput.make(
     toStructuredOutput?.(output) ?? output,
-    toModelOutput?.({ callID, parameters, output }) ??
+    toModelOutput?.({ id, parameters, output }) ??
       (typeof output === "string" ? [{ type: "text", text: output }] : []),
   )
 

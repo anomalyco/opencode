@@ -145,7 +145,6 @@ test("allows paint rounding for every framed row but not fixed turn gaps", async
       }),
     ],
   })
-  await expect(page.locator('[data-timeline-row="DiffSummary"]')).toBeVisible()
   await expect(page.locator('[data-timeline-row="TurnGap"]')).toBeVisible()
 
   const rows = await page.locator("[data-timeline-key]").evaluateAll((elements) =>

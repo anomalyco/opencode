@@ -928,7 +928,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
       source: {
         type: "tool",
         messageID: toolIdentity.messageID,
-        callID: "call_mcp_permission",
+        id: "call_mcp_permission",
       },
     })
     expect(calls).toBe(0)

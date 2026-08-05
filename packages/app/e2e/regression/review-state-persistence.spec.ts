@@ -19,35 +19,24 @@ test("restores review mode and selected file per session", async ({ page }) => {
   await expectSessionTitle(page, titleA)
   await page.getByRole("button", { name: "Toggle review" }).click()
 
-  await selectMode(page, "Git changes", "Branch changes")
-  await selectFile(page, "beta.ts")
+  await selectFile(page, "alpha.ts")
 
   await switchSession(page, titleB)
   await expect(page.getByRole("button", { name: "Git changes" })).toBeVisible()
   await selectFile(page, "gamma.ts")
 
   await switchSession(page, titleA)
-  await expect(page.getByRole("button", { name: "Branch changes" })).toBeVisible()
-  await expectSelectedFile(page, "beta.ts")
-  await selectMode(page, "Branch changes", "Git changes")
   await expectSelectedFile(page, "alpha.ts")
-  await selectMode(page, "Git changes", "Branch changes")
-  await expectSelectedFile(page, "beta.ts")
 
   await page.reload()
   await expectSessionTitle(page, titleA)
-  await expect(page.getByRole("button", { name: "Branch changes" })).toBeVisible()
-  await expectSelectedFile(page, "beta.ts")
+  await expect(page.getByRole("button", { name: "Git changes" })).toBeVisible()
+  await expectSelectedFile(page, "alpha.ts")
 
   await switchSession(page, titleB)
   await expect(page.getByRole("button", { name: "Git changes" })).toBeVisible()
   await expectSelectedFile(page, "gamma.ts")
 })
-
-async function selectMode(page: Page, current: string, next: string) {
-  await page.getByRole("button", { name: current }).click()
-  await page.getByRole("option", { name: next }).dispatchEvent("click")
-}
 
 async function selectFile(page: Page, file: string) {
   await page.getByRole("button", { name: file }).click()
@@ -65,7 +54,7 @@ async function switchSession(page: Page, title: string) {
 
 async function setup(page: Page) {
   await mockOpenCodeServer(page, {
-    protocol: "v1",
+    protocol: "v2",
     directory,
     project: {
       id: projectID,
@@ -89,22 +78,27 @@ async function setup(page: Page) {
     sessions: [session(sessionA, titleA, 1700000000000), session(sessionB, titleB, 1700000001000)],
     pageMessages: () => ({ items: [] }),
   })
-  await page.route(/\/vcs(?:\?.*)?$/, (route) =>
+  await page.route(/\/api\/vcs(?:\?.*)?$/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ branch: "feature", default_branch: "dev" }),
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory, canonical: directory } },
+        data: { branch: "feature", defaultBranch: "dev" },
+      }),
     }),
   )
-  await page.route("**/vcs/diff**", (route) =>
+  await page.route("**/api/vcs/diff**", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(
-        new URL(route.request().url()).searchParams.get("mode") === "branch"
-          ? [diff("src/alpha.ts"), diff("src/beta.ts")]
-          : [diff("src/alpha.ts"), diff("src/gamma.ts")],
-      ),
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory, canonical: directory } },
+        data:
+          new URL(route.request().url()).searchParams.get("mode") === "branch"
+            ? [diff("src/alpha.ts"), diff("src/beta.ts")]
+            : [diff("src/alpha.ts"), diff("src/gamma.ts")],
+      }),
     }),
   )
   await page.addInitScript(

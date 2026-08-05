@@ -61,7 +61,7 @@ export const Plugin = {
             execute: (input, context) =>
               Effect.gen(function* () {
                 const searchPath = input.path === "undefined" || input.path === "null" ? undefined : input.path
-                const source = { type: "tool" as const, messageID: context.messageID, callID: context.callID }
+                const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
                 const target = yield* mutation.resolve({ path: searchPath ?? ".", kind: "directory" })
                 const external = target.externalDirectory
                 if (external)

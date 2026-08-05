@@ -122,16 +122,18 @@ const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => 
 
   const disconnect = async (providerID: string, name: string) => {
     if (isConfigCustom(providerID)) {
-      await serverSDK()
-        .client.auth.remove({ providerID })
-        .catch(() => undefined)
+      await serverSDK().legacy.auth.remove({ providerID }).catch(() => undefined)
       await disableProvider(providerID, name)
       return
     }
     await serverSDK()
-      .client.auth.remove({ providerID })
-      .then(async () => {
-        await serverSDK().client.global.dispose()
+      .currentApi.integration.get({ integrationID: providerID })
+      .then(async (integration) => {
+        const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
+        if (credentials.length === 0) throw new Error(`No removable credentials found for ${name}`)
+        await Promise.all(
+          credentials.map((credential) => serverSDK().currentApi.credential.remove({ credentialID: credential.id })),
+        )
         showToast({
           variant: "success",
           icon: "circle-check",

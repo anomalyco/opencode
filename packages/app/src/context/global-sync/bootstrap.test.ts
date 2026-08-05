@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
-import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
+import type { Config, Project } from "@/types"
+import type { LegacyCapabilities } from "@/utils/server-compat"
 import type { AgentApi, CatalogApi, CommandApi, ReferenceApi } from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import {
@@ -75,9 +76,30 @@ function directoryState() {
 }
 
 describe("bootstrapDirectory", () => {
-  test("uses legacy MCP endpoints while refreshing a v1 directory", async () => {
+  test("uses current MCP endpoints while retaining unsupported v1 directory reads", async () => {
     const mcpReads: string[] = []
     const [store, setStore] = directoryState()
+    const currentApi = {
+      ...api,
+      command: {
+        list: async () => {
+          mcpReads.push("command")
+          return { location: {}, data: [] }
+        },
+      },
+      mcp: {
+        list: async () => {
+          mcpReads.push("status")
+          return { location: {}, data: [] }
+        },
+        resource: {
+          catalog: async () => {
+            mcpReads.push("resource")
+            return { location: {}, data: { resources: [], templates: [] } }
+          },
+        },
+      },
+    } as unknown as ServerApi
 
     await bootstrapDirectory({
       directory: "/project",
@@ -89,37 +111,8 @@ describe("bootstrapDirectory", () => {
         project: [{ id: "project", worktree: "/project" } as Project],
         provider,
       },
-      sdk: {
-        app: { agents: async () => ({ data: [{ name: "build", mode: "primary" }] }) },
-        config: { get: async () => ({ data: {} }) },
-        session: { status: async () => ({ data: {} }) },
-        vcs: { get: async () => ({ data: undefined }) },
-        command: {
-          list: async () => {
-            mcpReads.push("command")
-            return { data: [] }
-          },
-        },
-        permission: { list: async () => ({ data: [] }) },
-        question: { list: async () => ({ data: [] }) },
-        v2: { reference: { list: async () => ({ data: { data: [] } }) } },
-        mcp: {
-          status: async () => {
-            mcpReads.push("status")
-            return { data: {} }
-          },
-        },
-        experimental: {
-          resource: {
-            list: async () => {
-              mcpReads.push("resource")
-              return { data: {} }
-            },
-          },
-        },
-        provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
-      } as unknown as OpencodeClient,
-      api,
+      legacy: { config: { directory: async () => ({}) } } as unknown as LegacyCapabilities,
+      api: currentApi,
       store,
       setStore,
       vcsCache: { setStore() {} } as unknown as VcsCache,
@@ -140,12 +133,20 @@ describe("bootstrapDirectory", () => {
 
 describe("query keys", () => {
   test("partitions identical directories by server scope", () => {
-    const client = {} as Parameters<typeof loadPathQuery>[2]
+    const location = {} as Parameters<typeof loadPathQuery>[2]
     const api = {} as CatalogApi
     const remote = "https://debian.example" as typeof ServerScope.local
 
-    expect([...loadPathQuery(ServerScope.local, "/repo", client).queryKey]).toEqual(["local", "/repo", "path"])
-    expect([...loadPathQuery(remote, "/repo", client).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
+    expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual([
+      "local",
+      "/repo",
+      "path",
+    ])
+    expect([...loadPathQuery(remote, "/repo", location).queryKey]).toEqual([
+      "https://debian.example",
+      "/repo",
+      "path",
+    ])
     expect([...loadProvidersQuery(remote, null, api).queryKey]).toEqual(["https://debian.example", null, "providers"])
   })
 

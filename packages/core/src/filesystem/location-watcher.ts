@@ -71,6 +71,14 @@ const layer = Layer.effect(
           yield* updates.pipe(Stream.runForEach(publish), Effect.forkScoped)
         }
       }
+      if (location.vcs?.type === "hg") {
+        const store = location.vcs.store
+        const vcs = yield* fs.realPath(store).pipe(Effect.catch(() => Effect.succeed(store)))
+        if (!config.includes(".hg") && !config.includes(vcs)) {
+          const updates = yield* watcher.subscribe({ path: path.join(vcs, "branch"), type: "file" })
+          yield* updates.pipe(Stream.runForEach(publish), Effect.forkScoped)
+        }
+      }
     }).pipe(
       Effect.withSpan("LocationWatcher.start", { attributes: { directory: location.directory } }),
       Effect.catchCause((cause) => Effect.logError("failed to init location watcher service", { cause })),

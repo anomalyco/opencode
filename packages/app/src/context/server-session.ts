@@ -3,14 +3,14 @@ import { retry } from "@opencode-ai/core/util/retry"
 import type { OpenCodeEvent, SessionApi, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type {
   Message,
-  OpencodeClient,
   Part,
   PermissionRequest,
   QuestionRequest,
   Session,
   SessionStatus,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@/types"
+import type { LegacyCapabilities } from "@/utils/server-compat"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -183,10 +183,14 @@ function reconcileFetched<T extends { id: string }>(
   return [...result.values()].sort((a, b) => cmp(a.id, b.id))
 }
 
-type ServerSessionOptions = { retry?: typeof retry; protocol?: Promise<"v1" | "v2"> }
+type ServerSessionOptions = {
+  retry?: typeof retry
+  protocol?: Promise<"v1" | "v2">
+  legacy?: LegacyCapabilities
+}
 
 export function createServerSession(
-  client: OpencodeClient,
+  client: { session: Pick<LegacyCapabilities["session"], "get" | "messages" | "message"> },
   sessionApiOrOptions?: SessionApi | ServerSessionOptions,
   messageApi?: MessageApi,
   currentOptions?: ServerSessionOptions,
@@ -563,7 +567,7 @@ export function createServerSession(
         sourceMode: before ? ("older" as const) : ("latest" as const),
         projectSource: true,
         cursor: response.cursor.next ?? undefined,
-        complete: response.data.length === 0,
+        complete: !response.cursor.next,
       }
     }
     const response = await (options?.retry ?? retry)(() => {
@@ -683,7 +687,14 @@ export function createServerSession(
       ? (() => {
           const incoming = new Map(page.source.map((message) => [message.id, message]))
           const existing = data.session_message[sessionID] ?? []
-          const current = existing.filter((message) => !incoming.has(message.id))
+          const boundary = Math.min(...page.source.map((message) => message.time.created))
+          const current = existing.filter(
+            (message) =>
+              !incoming.has(message.id) &&
+              (page.sourceMode === "older" ||
+                load?.touchedSource.has(message.id) ||
+                (!page.complete && message.time.created < boundary)),
+          )
           const live = new Map(existing.map((message) => [message.id, message]))
           return (page.sourceMode === "older" ? [...page.source, ...current] : [...current, ...page.source]).map(
             (message) => (load?.touchedSource.has(message.id) ? (live.get(message.id) ?? message) : message),
@@ -1382,14 +1393,16 @@ export function createServerSession(
       touch(sessionID)
       if (data.todo[sessionID] !== undefined && !request?.force) return
       if ((await options?.protocol) === "v2") {
+        // TODO: Restore todos when the V2 API exposes a session todo snapshot.
         setData("todo", sessionID, [])
         return
       }
       return runInflight(inflightTodo, sessionID, () => {
         const active = generation(sessionID)
-        return (options?.retry ?? retry)(() => client.session.todo({ sessionID })).then((result) => {
+        if (!options?.legacy) return Promise.resolve()
+        return (options.retry ?? retry)(() => options.legacy!.session.todo(sessionID)).then((result) => {
           if (generations.get(sessionID) !== active) return
-          setData("todo", sessionID, reconcile(result.data ?? [], { key: "id" }))
+          setData("todo", sessionID, reconcile(result, { key: "id" }))
         })
       })
     },

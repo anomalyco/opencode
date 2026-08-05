@@ -255,19 +255,19 @@ it.effect("generates from fresh settled Session context without durable mutation
     yield* bus.publish(SessionEvent.Tool.Input.Started, {
       sessionID,
       assistantMessageID: activeAssistant,
-      callID: "active-call",
+      id: "active-call",
       name: "echo",
     })
     yield* bus.publish(SessionEvent.Tool.Input.Ended, {
       sessionID,
       assistantMessageID: activeAssistant,
-      callID: "active-call",
+      id: "active-call",
       text: "{}",
     })
     yield* bus.publish(SessionEvent.Tool.Called, {
       sessionID,
       assistantMessageID: activeAssistant,
-      callID: "active-call",
+      id: "active-call",
       input: {},
       executed: false,
     })

@@ -111,9 +111,9 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
   type DraftText = WritableDraft<SessionMessage.AssistantText>
   type DraftReasoning = WritableDraft<SessionMessage.AssistantReasoning>
 
-  const latestTool = (assistant: DraftAssistant | undefined, callID?: string) =>
+  const latestTool = (assistant: DraftAssistant | undefined, id?: string) =>
     assistant?.content.findLast(
-      (item): item is DraftTool => item.type === "tool" && (callID === undefined || item.id === callID),
+      (item): item is DraftTool => item.type === "tool" && (id === undefined || item.id === id),
     )
 
   const latestText = (assistant: DraftAssistant | undefined) =>
@@ -331,7 +331,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             castDraft(
               SessionMessage.AssistantTool.make({
                 type: "tool",
-                id: event.data.callID,
+                id: event.data.id,
                 name: event.data.name,
                 time: { created: event.created },
                 state: SessionMessage.ToolStateStreaming.make({ status: "streaming", input: "" }),
@@ -343,13 +343,13 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.tool.input.delta": () => Effect.void,
       "session.tool.input.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestTool(draft, event.data.callID)
+          const match = latestTool(draft, event.data.id)
           if (match && match.state.status === "streaming") match.state.input = event.data.text
         })
       },
       "session.tool.called": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestTool(draft, event.data.callID)
+          const match = latestTool(draft, event.data.id)
           if (match) {
             match.executed = event.data.executed
             match.providerState = event.data.state
@@ -366,7 +366,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.tool.progress": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestTool(draft, event.data.callID)
+          const match = latestTool(draft, event.data.id)
           if (match && match.state.status === "running") {
             match.state.metadata = event.data.metadata
           }
@@ -376,7 +376,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       // never reaches into ephemeral progress history.
       "session.tool.success": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestTool(draft, event.data.callID)
+          const match = latestTool(draft, event.data.id)
           if (match && match.state.status === "running") {
             match.executed = event.data.executed || match.executed === true
             match.providerResultState = event.data.resultState
@@ -394,7 +394,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.tool.failed": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          const match = latestTool(draft, event.data.callID)
+          const match = latestTool(draft, event.data.id)
           if (match && (match.state.status === "streaming" || match.state.status === "running")) {
             match.executed = event.data.executed || match.executed === true
             match.providerResultState = event.data.resultState

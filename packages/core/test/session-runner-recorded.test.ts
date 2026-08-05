@@ -41,6 +41,7 @@ import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer, Stream } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
 import { agentHost, catalogHost, host } from "./plugin/host"
@@ -104,37 +105,39 @@ const promptCatalog = Layer.mock(Catalog.Service, {
     small: () => Effect.succeed(undefined),
   },
 })
-const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
-  [Snapshot.node, Snapshot.noopLayer],
-  [LayerNodePlatform.llmClient, client],
-  [SessionRunnerModel.node, models],
-  [InstructionBuiltIns.node, systemContext],
-  [InstructionDiscovery.node, instructionContext],
-  [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-  [SkillInstructions.node, skillInstructions],
-  [ReferenceInstructions.node, referenceInstructions],
-  [McpInstructions.node, mcpInstructions],
-  [Config.node, config],
-  [Permission.node, permission],
-  [PluginSupervisor.node, pluginSupervisor],
-])
-const execution = Layer.effect(
-  SessionExecution.Service,
-  Effect.gen(function* () {
-    const sessionRunner = yield* SessionRunner.Service
-    const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError>({
-      drain: (sessionID, force) => sessionRunner.drain({ sessionID, force }),
-    })
-    return SessionExecution.Service.of({
-      active: coordinator.active,
-      resume: coordinator.run,
-      wake: coordinator.wake,
-      interrupt: coordinator.interrupt,
-      awaitIdle: coordinator.awaitIdle,
-    })
-  }),
-).pipe(Layer.provide(runnerLayer))
-const it = testEffect(
+const runnerLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
+  AppNodeBuilder.build(SessionRunnerLLM.node, [
+    [Snapshot.node, Snapshot.noopLayer],
+    [LayerNodePlatform.llmClient, llmClient],
+    [SessionRunnerModel.node, models],
+    [InstructionBuiltIns.node, systemContext],
+    [InstructionDiscovery.node, instructionContext],
+    [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+    [SkillInstructions.node, skillInstructions],
+    [ReferenceInstructions.node, referenceInstructions],
+    [McpInstructions.node, mcpInstructions],
+    [Config.node, config],
+    [Permission.node, permission],
+    [PluginSupervisor.node, pluginSupervisor],
+  ])
+const execution = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
+  Layer.effect(
+    SessionExecution.Service,
+    Effect.gen(function* () {
+      const sessionRunner = yield* SessionRunner.Service
+      const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError>({
+        drain: (sessionID, force) => sessionRunner.drain({ sessionID, force }),
+      })
+      return SessionExecution.Service.of({
+        active: coordinator.active,
+        resume: coordinator.run,
+        wake: coordinator.wake,
+        interrupt: coordinator.interrupt,
+        awaitIdle: coordinator.awaitIdle,
+      })
+    }),
+  ).pipe(Layer.provide(runnerLayer(llmClient)))
+const testLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
   AppNodeBuilder.build(
     LayerNode.group([
       Database.node,
@@ -156,7 +159,7 @@ const it = testEffect(
       Session.node,
     ]),
     [
-      [LayerNodePlatform.llmClient, client],
+      [LayerNodePlatform.llmClient, llmClient],
       [Permission.node, permission],
       [Catalog.node, promptCatalog],
       [SessionRunnerModel.node, models],
@@ -168,10 +171,10 @@ const it = testEffect(
       [Config.node, config],
       [Snapshot.node, Snapshot.noopLayer],
       [PluginSupervisor.node, pluginSupervisor],
-      [SessionExecution.node, execution],
+      [SessionExecution.node, execution(llmClient)],
     ],
-  ),
-)
+  )
+const it = testEffect(testLayer(client))
 const sessionID = Session.ID.make("ses_runner_recorded")
 
 describe("SessionRunnerLLM recorded", () => {
@@ -244,6 +247,93 @@ describe("SessionRunnerLLM recorded", () => {
         "session.text.ended.1",
         "session.step.ended.1",
       ])
+    }),
+  )
+})
+
+describe("SessionModelRequest HTTP bridge", () => {
+  const bodies: Uint8Array[] = []
+  const methods: string[] = []
+  const response = [
+    'data: {"id":"chatcmpl_test","object":"chat.completion.chunk","created":0,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"role":"assistant","content":"Hello!"},"finish_reason":null}]}',
+    'data: {"id":"chatcmpl_test","object":"chat.completion.chunk","created":0,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+    "data: [DONE]",
+    "",
+  ].join("\n\n")
+  const transport = Layer.succeed(
+    HttpClient.HttpClient,
+    HttpClient.make((request) =>
+      Effect.sync(() => {
+        if (request.body._tag !== "Uint8Array") throw new Error(`Unexpected request body: ${request.body._tag}`)
+        methods.push(request.method)
+        bodies.push(request.body.body.slice())
+        return HttpClientResponse.fromWeb(
+          request,
+          new Response(response, { headers: { "content-type": "text/event-stream" } }),
+        )
+      }),
+    ),
+  )
+  const retryIt = testEffect(
+    testLayer(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer.pipe(Layer.provide(transport))))),
+  )
+
+  retryIt.effect("lets an Effect plugin send the same POST Request twice", () =>
+    Effect.gen(function* () {
+      bodies.length = 0
+      methods.length = 0
+      const agents = yield* Agent.Service
+      const catalog = yield* Catalog.Service
+      const hooks = yield* PluginHooks.Service
+      yield* agents.transform((draft) =>
+        draft.update(Agent.ID.make("build"), (agent) => {
+          agent.mode = "primary"
+          agent.permissions.push({ action: "execute", resource: "*", effect: "deny" })
+        }),
+      )
+      const pluginHost = host({
+        agent: agentHost(agents),
+        catalog: catalogHost(catalog),
+        session: { hook: (name, callback) => hooks.register("session", name, callback) },
+      })
+      yield* pluginHost.session.hook("http", (event) =>
+        event.use((request, next) =>
+          Effect.gen(function* () {
+            yield* next(request).pipe(Effect.flatMap((response) => Effect.promise(() => response.text())))
+            return yield* next(request)
+          }),
+        ),
+      )
+      yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      const retrySessionID = Session.ID.make("ses_model_request_http_retry")
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: retrySessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const session = yield* Session.Service
+      yield* session.prompt({ sessionID: retrySessionID, text: "Say hello.", resume: false })
+
+      yield* session.resume(retrySessionID)
+
+      expect(methods).toEqual(["POST", "POST"])
+      expect(bodies).toHaveLength(2)
+      expect(bodies[0]?.byteLength).toBeGreaterThan(0)
+      expect(bodies[1]).toEqual(bodies[0])
     }),
   )
 })

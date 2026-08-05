@@ -150,9 +150,7 @@ export async function streamTurn(input: {
       if (mode === "background" && !child) continue
 
       if (event.type === "permission.asked" && (event.data.sessionID === input.sessionID || child)) {
-        const tool = event.data.source?.callID
-          ? tools.get(toolKey(event.data.sessionID, event.data.source.callID))
-          : undefined
+        const tool = event.data.source?.id ? tools.get(toolKey(event.data.sessionID, event.data.source.id)) : undefined
         await replyPermission({
           client: input.client,
           connection: input.connection,
@@ -209,7 +207,7 @@ export async function streamTurn(input: {
       }
       if (event.type === "session.tool.input.started") {
         if (!child) assistantMessageID = event.data.assistantMessageID
-        tools.set(toolKey(event.data.sessionID, event.data.callID), {
+        tools.set(toolKey(event.data.sessionID, event.data.id), {
           name: event.data.name,
           input: {},
           metadata: {},
@@ -218,7 +216,7 @@ export async function streamTurn(input: {
         await send({
           sessionUpdate: "tool_call",
           ...pendingToolCall({
-            toolCallId: event.data.callID,
+            toolCallId: event.data.id,
             toolName: event.data.name,
             state: { input: {} },
             cwd: input.cwd,
@@ -228,14 +226,14 @@ export async function streamTurn(input: {
       }
       if (event.type === "session.tool.called") {
         if (!child) assistantMessageID = event.data.assistantMessageID
-        const key = toolKey(event.data.sessionID, event.data.callID)
+        const key = toolKey(event.data.sessionID, event.data.id)
         const current = tools.get(key) ?? emptyToolState()
         current.input = event.data.input
         tools.set(key, current)
         await send({
           sessionUpdate: "tool_call_update",
           ...runningToolUpdate({
-            toolCallId: event.data.callID,
+            toolCallId: event.data.id,
             toolName: current.name,
             state: { input: current.input },
             cwd: input.cwd,
@@ -244,13 +242,13 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.progress") {
-        const current = tools.get(toolKey(event.data.sessionID, event.data.callID))
+        const current = tools.get(toolKey(event.data.sessionID, event.data.id))
         if (!current) continue
         current.metadata = event.data.metadata
         await send({
           sessionUpdate: "tool_call_update",
           ...runningToolUpdate({
-            toolCallId: event.data.callID,
+            toolCallId: event.data.id,
             toolName: current.name,
             state: { input: current.input },
             cwd: input.cwd,
@@ -259,7 +257,7 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.success") {
-        const key = toolKey(event.data.sessionID, event.data.callID)
+        const key = toolKey(event.data.sessionID, event.data.id)
         const current = tools.get(key) ?? emptyToolState()
         tools.delete(key)
         await syncEditedFiles({
@@ -274,7 +272,7 @@ export async function streamTurn(input: {
         await send({
           sessionUpdate: "tool_call_update",
           ...completedToolUpdate({
-            toolCallId: event.data.callID,
+            toolCallId: event.data.id,
             toolName: current.name,
             input: current.input,
             metadata: event.data.metadata,
@@ -284,13 +282,13 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.failed") {
-        const key = toolKey(event.data.sessionID, event.data.callID)
+        const key = toolKey(event.data.sessionID, event.data.id)
         const current = tools.get(key) ?? emptyToolState()
         tools.delete(key)
         await send({
           sessionUpdate: "tool_call_update",
           ...errorToolUpdate({
-            toolCallId: event.data.callID,
+            toolCallId: event.data.id,
             toolName: current.name,
             input: current.input,
             metadata: event.data.metadata ?? current.metadata,
@@ -390,8 +388,8 @@ function sessionIDFromEvent(event: EventSubscribeOutput) {
   return undefined
 }
 
-function toolKey(sessionID: string, callID: string) {
-  return `${sessionID}:${callID}`
+function toolKey(sessionID: string, id: string) {
+  return `${sessionID}:${id}`
 }
 
 function projectChildUpdate(update: SessionUpdate, child: ChildSession) {

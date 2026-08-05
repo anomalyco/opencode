@@ -67,7 +67,7 @@ export const Plugin = {
                   const source = {
                     type: "tool" as const,
                     messageID: context.messageID,
-                    callID: context.callID,
+                    id: context.id,
                   }
                   const target = yield* mutation.resolve({ path: input.path, kind: "file" })
                   const external = target.externalDirectory

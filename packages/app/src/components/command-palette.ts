@@ -1,5 +1,5 @@
 import { getFilename } from "@opencode-ai/core/util/path"
-import type { Project } from "@opencode-ai/sdk/v2/client"
+import type { Project } from "@/types"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createMemo, onCleanup } from "solid-js"
@@ -146,7 +146,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     server: ServerConnection.key(serverSDK.server),
     opened: serverCtx.projects.list,
     stored: () => serverCtx.sync.data.project,
-    load: (search, signal) => serverSDK.api.session.list({ parentID: null, search, limit: 50 }, { signal }),
+    load: (search, signal) => serverSDK.currentApi.session.list({ parentID: null, search, limit: 50 }, { signal }),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
   })

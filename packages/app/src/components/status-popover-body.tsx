@@ -318,10 +318,12 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
             {mcpConnected() > 0 ? `${mcpConnected()} ` : ""}
             {language.t("status.popover.tab.mcp")}
           </Tabs.Trigger>
-          <Tabs.Trigger value="lsp" data-slot="tab" class="text-12-regular">
-            {lspCount() > 0 ? `${lspCount()} ` : ""}
-            {language.t("status.popover.tab.lsp")}
-          </Tabs.Trigger>
+          <Show when={protocol() === "v1"}>
+            <Tabs.Trigger value="lsp" data-slot="tab" class="text-12-regular">
+              {lspCount() > 0 ? `${lspCount()} ` : ""}
+              {language.t("status.popover.tab.lsp")}
+            </Tabs.Trigger>
+          </Show>
           <Show when={protocol() === "v1"}>
             <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
               {pluginCount() > 0 ? `${pluginCount()} ` : ""}
@@ -459,7 +461,8 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
           </div>
         </Tabs.Content>
 
-        <Tabs.Content value="lsp">
+        <Show when={protocol() === "v1"}>
+          <Tabs.Content value="lsp">
           <div class="flex flex-col px-2 pb-2">
             <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
               <Show
@@ -485,7 +488,8 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
               </Show>
             </div>
           </div>
-        </Tabs.Content>
+          </Tabs.Content>
+        </Show>
 
         <Show when={protocol() === "v1"}>
           <Tabs.Content value="plugins">

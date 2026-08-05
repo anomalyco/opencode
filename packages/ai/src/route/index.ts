@@ -23,4 +23,4 @@ export type { ApiKeyMode, AuthOverride, ProviderAuthOption } from "./auth-option
 export type { Definition as EndpointFn, EndpointInput } from "./endpoint"
 export type { Definition as FramingDef } from "./framing"
 export type { Protocol as ProtocolDef } from "./protocol"
-export type { HttpRequest, HttpRequestTransform, Transport as TransportDef, TransportRuntime } from "./transport"
+export type { HttpHandler, HttpMiddleware, Transport as TransportDef, TransportRuntime } from "./transport"

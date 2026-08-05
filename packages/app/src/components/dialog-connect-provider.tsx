@@ -418,7 +418,7 @@ function ProviderConnection(props: {
     () => ({ provider: props.provider, directory: directory() }),
     (input) =>
       serverSDK()
-        .api.integration.get({
+        .currentApi.integration.get({
           integrationID: input.provider,
           location: input.directory ? { directory: input.directory } : undefined,
         })
@@ -547,7 +547,7 @@ function ProviderConnection(props: {
       }
       dispatch({ type: "auth.pending" })
       await serverSDK()
-        .api.integration.oauth.connect({
+        .currentApi.integration.oauth.connect({
           integrationID: props.provider,
           methodID: method.id,
           inputs: inputs ?? {},
@@ -816,7 +816,7 @@ function ProviderConnection(props: {
       }
 
       setFormStore("error", undefined)
-      await serverSDK().api.integration.connect.key({
+      await serverSDK().currentApi.integration.connect.key({
         integrationID: props.provider,
         location: location(),
         key: apiKey,
@@ -947,7 +947,7 @@ function ProviderConnection(props: {
 
       setFormStore("error", undefined)
       const result = await serverSDK()
-        .api.integration.oauth.complete({
+        .currentApi.integration.oauth.complete({
           integrationID: props.provider,
           attemptID: store.authorization!.attemptID,
           location: location(),
@@ -1044,7 +1044,7 @@ function ProviderConnection(props: {
         const authorization = store.authorization
         if (!authorization || !alive.value) return
         const result = await serverSDK()
-          .api.integration.oauth.status({
+          .currentApi.integration.oauth.status({
             integrationID: props.provider,
             attemptID: authorization.attemptID,
             location: location(),

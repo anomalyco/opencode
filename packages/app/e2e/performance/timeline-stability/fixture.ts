@@ -4,15 +4,13 @@ import { SessionStatusEvent } from "@opencode-ai/schema/session-status-event"
 import { SessionV1 } from "@opencode-ai/schema/session-v1"
 import type {
   AssistantMessage,
-  GlobalEvent,
   Message,
   Part,
-  Session,
-  SessionStatus,
   ToolPart,
   ToolState,
   UserMessage,
-} from "@opencode-ai/sdk/v2/client"
+} from "../../../src/types"
+import type { SessionV1Info, SessionStatus } from "@opencode-ai/client/promise"
 import { expect, type Page } from "@playwright/test"
 import { Schema } from "effect"
 import { mockOpenCodeServer } from "../../utils/mock-server"
@@ -27,18 +25,29 @@ export const assistantID = "msg_1001_timeline_assistant"
 export const title = "Timeline visual stability"
 export const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
-type TimelinePayload = Extract<
-  GlobalEvent["payload"],
-  {
-    type:
-      | "message.updated"
-      | "message.removed"
-      | "message.part.updated"
-      | "message.part.removed"
-      | "message.part.delta"
-      | "session.status"
+type Session = SessionV1Info
+type GlobalEvent = {
+  directory: string
+  project?: string
+  workspace?: string
+  payload: {
+    id: string
+    type: string
+    properties: Record<string, unknown>
   }
->
+}
+
+type TimelineProperties = {
+  "message.updated": { sessionID: string; info: Message }
+  "message.removed": { sessionID: string; messageID: string }
+  "message.part.updated": { sessionID: string; part: Part; time: number }
+  "message.part.removed": { sessionID: string; messageID: string; partID: string }
+  "message.part.delta": { sessionID: string; messageID: string; partID: string; field: string; delta: string }
+  "session.status": { sessionID: string; status: SessionStatus }
+}
+type TimelinePayload = {
+  [Type in keyof TimelineProperties]: { id: string; type: Type; properties: TimelineProperties[Type] }
+}[keyof TimelineProperties]
 
 type DeepReadonly<Value> = Value extends readonly unknown[]
   ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
@@ -97,7 +106,6 @@ export async function setupTimeline(
     locale?: string
     deviceScaleFactor?: number
     seedHistory?: boolean
-    protocol?: "v1" | "v2"
   } = {},
 ) {
   const sessions = input.sessions ?? [session()]
@@ -115,7 +123,7 @@ export async function setupTimeline(
     retry: input.eventRetry ?? 20,
   })
   await mockOpenCodeServer(page, {
-    protocol: input.protocol,
+    protocol: "v2",
     directory,
     project: project(),
     provider: provider(),
@@ -235,7 +243,7 @@ export function event(type: TimelinePayload["type"], properties: TimelinePayload
 }
 
 export function validateTimelineEvent(input: unknown): TimelineEvent {
-  return decodeEvent(input, decodeOptions)
+  return decodeEvent(input, decodeOptions) as TimelineEvent
 }
 
 export function validateTimelineMessages(input: readonly TimelineMessage[]): TimelineMessage[] {
@@ -460,7 +468,7 @@ export function toolPart(
   input: Record<string, unknown>,
   options: ToolOptions<ToolStatus> = {},
 ): Omit<ToolPart, "sessionID" | "messageID"> {
-  const base = { id, type: "tool" as const, callID: `call_${id}`, tool }
+  const base = { id, type: "tool" as const, callID: id, tool }
   if (state === "pending") return { ...base, state: { status: state, input, raw: "" } }
   if (state === "running")
     return {

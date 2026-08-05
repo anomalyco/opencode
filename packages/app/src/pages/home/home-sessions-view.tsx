@@ -1,4 +1,4 @@
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "@/types"
 import { type Accessor, createMemo, For, Show } from "solid-js"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
@@ -43,6 +43,7 @@ export type HomeSessionsViewProps = {
   showProjectName: Accessor<boolean>
   server: Accessor<ServerConnection.Key>
   canCreateSession: Accessor<boolean>
+  canArchiveSession: Accessor<boolean>
   searchValue: Accessor<string>
   searchPlaceholder: Accessor<string>
   searchOpen: Accessor<boolean>
@@ -460,7 +461,8 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
             group-hover/session:opacity-100 focus-within:opacity-100
           `}
         >
-          <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
+          <Show when={props.canArchiveSession()}>
+            <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
             <IconButtonV2
               data-action="home-session-archive"
               variant="ghost-muted"
@@ -473,7 +475,8 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
                 void props.onArchiveSession(props.record.session)
               }}
             />
-          </TooltipV2>
+            </TooltipV2>
+          </Show>
         </div>
       </Show>
     </div>

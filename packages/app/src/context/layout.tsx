@@ -7,7 +7,7 @@ import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
 import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
-import { Project } from "@opencode-ai/sdk/v2"
+import type { Project } from "@/types"
 import { normalizeProjectInfo } from "./global-sync/utils"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { pathKey } from "@/utils/path-key"
@@ -574,7 +574,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         void (async () => {
           const sdk = serverSdk()
           if ((await sdk.protocol) !== "v1") return
-          return sdk.client.project
+          return sdk.legacy.project
             .update({ projectID, directory: worktree, icon: { color } })
             .then((response) => response.data)
             .then((result) => {

@@ -13,7 +13,7 @@ import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform, type DisplayBackend } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
-import { useServerSDK } from "@/context/server-sdk"
+import { useServerProtocol, useServerSDK } from "@/context/server-sdk"
 import { useUpdaterAction } from "./updater-action"
 import {
   monoDefault,
@@ -125,16 +125,11 @@ export const SettingsGeneral: Component = () => {
 
   const serverSync = useServerSync()
   const serverSdk = useServerSDK()
+  const protocol = useServerProtocol()
 
   const [shells] = createResource(
-    async () => {
-      const sdk = serverSdk()
-      if ((await sdk.protocol) === "v1") {
-        return (await sdk.client.pty.shells()).data ?? []
-      }
-      // return (await sdk.api.pty.shells()).data
-      return [] as ShellOption[]
-    },
+    () => (protocol() === "v1" ? serverSdk() : undefined),
+    (sdk) => sdk.legacy.pty.shells().catch(() => [] as ShellOption[]),
     { initialValue: [] as ShellOption[] },
   )
 
@@ -325,10 +320,11 @@ export const SettingsGeneral: Component = () => {
           </div>
         </SettingsRow>
 
-        <SettingsRow
-          title={language.t("settings.general.row.shell.title")}
-          description={language.t("settings.general.row.shell.description")}
-        >
+        <Show when={protocol() === "v1"}>
+          <SettingsRow
+            title={language.t("settings.general.row.shell.title")}
+            description={language.t("settings.general.row.shell.description")}
+          >
           <Select
             data-action="settings-shell"
             options={shellOptions()}
@@ -345,7 +341,8 @@ export const SettingsGeneral: Component = () => {
             triggerVariant="settings"
             triggerStyle={{ "min-width": "180px" }}
           />
-        </SettingsRow>
+          </SettingsRow>
+        </Show>
 
         <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}

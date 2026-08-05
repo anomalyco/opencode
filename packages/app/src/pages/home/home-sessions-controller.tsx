@@ -1,4 +1,4 @@
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session, V2SessionListResponse } from "@/types"
 import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMarked } from "@opencode-ai/ui/context/marked"
@@ -69,7 +69,10 @@ export function createHomeSessionsController(home: HomeController) {
       const cache = homeSessions()
       const eventSequence = cache.eventSequence()
       const index = await loadHomeSessionIndex(
-        (input, options) => ctx.sdk.client.v2.session.list(input, options),
+        (input, options) =>
+          ctx.sdk.currentApi.session.list(input, options).then((data) => ({
+            data: data as unknown as V2SessionListResponse,
+          })),
         eventSequence,
         signal,
       )
@@ -179,6 +182,7 @@ export function createHomeSessionsController(home: HomeController) {
       showProjectName: () => !home.project.selected(),
       server: () => home.selection.value().server,
       canCreate: () => !!home.project.newSession(),
+      canArchive: () => home.server.focusedContext()?.sdk.protocolKind() === "v1",
       create: home.project.openNewSession,
       open: (session: Session, options?: OpenSessionOptions) => {
         const directoryKey = pathKey(session.directory)
@@ -211,16 +215,10 @@ export function createHomeSessionsController(home: HomeController) {
         const ctx = home.server.focusedContext()
         if (!conn || !ctx) return
         const [, setStore] = ctx.sync.child(session.directory)
-        if ((await ctx.sdk.protocol) !== "v1") return
         await archiveHomeSession({
           server: ServerConnection.key(conn),
           session,
-          archive: (sessionID) =>
-            ctx.sdk.client.session.update({
-              sessionID,
-              directory: session.directory,
-              time: { archived: Date.now() },
-            }),
+          archive: (sessionID) => ctx.sdk.legacy.session.archive(sessionID, session.directory),
           remove: () =>
             setStore(
               produce((draft) => {

@@ -601,6 +601,34 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("maps tool calls without a finish reason", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [
+                {
+                  content: {
+                    role: "model",
+                    parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
+                  },
+                },
+              ],
+              usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 1 },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: undefined })
+    }),
+  )
+
   it.effect("assigns unique ids to multiple streamed tool calls", () =>
     Effect.gen(function* () {
       const body = sseEvents({

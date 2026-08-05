@@ -81,8 +81,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       normalizeDir: path.normalizeDir,
       list: (dir) =>
         sdk()
-          .client.file.list({ path: dir })
-          .then((x) => x.data ?? []),
+          .currentApi.file.list({ path: dir, location: { directory: scope() } })
+          .then((x) =>
+            x.data.map((entry) => ({
+              ...entry,
+              name: entry.path.split("/").at(-1) ?? entry.path,
+              absolute: `${scope()}/${entry.path}`,
+              ignored: false,
+            })),
+          ),
       onError: (message) => {
         showToast({
           variant: "error",
@@ -181,10 +188,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setLoading(file)
 
       const promise = sdk()
-        .client.file.read({ path: file })
-        .then((x) => {
+        .currentApi.file.read({ path: file, location: { directory } })
+        .then((data) => {
           if (scope() !== directory) return
-          const content = x.data
+          const content = { type: "text" as const, content: new TextDecoder().decode(data) }
           setLoaded(file, content)
 
           if (!content) return
@@ -205,7 +212,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     const search = (query: string, dirs: "true" | "false", options?: { limit?: number; signal?: AbortSignal }) =>
       serverSDK()
-        .api.file.find(
+        .currentApi.file.find(
           {
             location: { directory: sdk().directory },
             query,

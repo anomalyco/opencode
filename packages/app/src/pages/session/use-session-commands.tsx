@@ -15,10 +15,11 @@ import { showToast } from "@/utils/toast"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
-import { UserMessage } from "@opencode-ai/sdk/v2"
+import type { UserMessage } from "@/types"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionOwnership } from "./session-ownership"
 import { useLocal } from "@/context/local"
+import { useServerProtocol } from "@/context/server-sdk"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -43,6 +44,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const permission = usePermission()
   const prompt = usePrompt()
   const sdk = useSDK()
+  const protocol = useServerProtocol()
   const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
@@ -194,7 +196,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }
 
     const url = await sdk()
-      .client.session.share({ sessionID })
+      .legacy.session.share(sessionID)
       .then((res) => res.data?.share?.url)
       .catch(() => undefined)
     if (!url) {
@@ -214,7 +216,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!sessionID) return
 
     await sdk()
-      .client.session.unshare({ sessionID })
+      .legacy.session.unshare(sessionID)
       .then(() =>
         showToast({
           title: language.t("toast.session.unshare.success.title"),
@@ -306,7 +308,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
     const owner = sessionOwnership.capture()
-    const session = sdk().api.session
+    const session = sdk().currentApi.session
     const directory = sdk().directory
     const promptSession = prompt.capture()
     const revert = info()?.revert?.messageID
@@ -334,7 +336,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
     const owner = sessionOwnership.capture()
-    const session = sdk().api.session
+    const session = sdk().currentApi.session
     const messages = userMessages()
     const promptSession = prompt.capture()
 
@@ -366,19 +368,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    const model = local.model.current()
-    if (!model) {
-      showToast({
-        title: language.t("toast.model.none.title"),
-        description: language.t("toast.model.none.description"),
-      })
-      return
-    }
-
-    await sdk().api.session.compact({
-      sessionID,
-      model: { providerID: model.provider.id, modelID: model.id },
-    })
+    await sdk().currentApi.session.compact({ sessionID })
   }
 
   const fork = () => {
@@ -389,6 +379,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const shareCmds = () => {
+    if (protocol() !== "v1") return []
     if (sync().data.config.share === "disabled") return []
     return [
       sessionCommand({

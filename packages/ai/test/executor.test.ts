@@ -67,6 +67,18 @@ const expectAIError = (error: unknown) => {
 const errorHttp = (error: AIError) => ("http" in error.reason ? error.reason.http : undefined)
 
 describe("RequestExecutor", () => {
+  it.effect("preserves middleware error messages", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor
+        .execute(request, () => Effect.fail(new Error("plugin rejected request")))
+        .pipe(Effect.flip)
+
+      expectAIError(error)
+      expect(error.reason.message).toBe("plugin rejected request")
+    }).pipe(Effect.provide(responsesLayer([]))),
+  )
+
   it.effect("classifies context overflow responses", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service

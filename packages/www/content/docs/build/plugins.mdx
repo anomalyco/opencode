@@ -239,16 +239,29 @@ without restarting OpenCode.
 
 ### Runtime hooks
 
-Runtime hooks intercept live operations. Their event objects expose specific
-mutable fields:
+Runtime hooks intercept live operations:
 
 | Hook                                        | Mutable fields                                                                 |
 | ------------------------------------------- | ------------------------------------------------------------------------------ |
 | `ctx.aisdk.hook("sdk", callback)`           | `sdk`, after inspecting `model`, `package`, and `options`                      |
 | `ctx.aisdk.hook("language", callback)`      | `language`, after inspecting `model`, `sdk`, and `options`                     |
-| `ctx.session.hook("request", callback)`     | `system`, `messages`, and the `tools` record immediately before model dispatch |
+| `ctx.session.hook("context", callback)`     | `system`, `messages`, and the `tools` record immediately before model dispatch |
+| `ctx.session.hook("http", callback)`       | `use`, registering request and response handling                               |
 | `ctx.tool.hook("execute.before", callback)` | `input`, before the selected tool executes                                     |
-| `ctx.tool.hook("execute.after", callback)`  | Terminal `result` on success or `error` on failure                            |
+| `ctx.tool.hook("execute.after", callback)`  | Terminal `result` on success or `error` on failure                             |
+
+HTTP hooks can modify requests, inspect responses, retry, or return a
+response without calling the provider. It applies to native models; AI SDK
+models do not currently pass through this hook.
+
+```ts
+await ctx.session.hook("http", (event) => {
+  event.use((request, next) => {
+    request.headers.set("x-session-id", event.sessionID)
+    return next(request)
+  })
+})
+```
 
 For example, remove a tool from selected model requests and normalize another
 tool's input:
@@ -259,7 +272,7 @@ import { Plugin } from "@opencode-ai/plugin"
 export default Plugin.define({
   id: "acme.guards",
   setup: async (ctx) => {
-    await ctx.session.hook("request", (event) => {
+    await ctx.session.hook("context", (event) => {
       delete event.tools.write
     })
 
@@ -331,8 +344,8 @@ argument to `tools.add` to configure the registration with
   `execute` CodeMode tool. Set `codemode: false` to expose it directly to the
   provider.
 
-The executor receives a second context argument containing `sessionID`,
-`agent`, `messageID`, `callID`, and `progress`. A tool with `output`
+The executor receives a second context argument containing `id`, `sessionID`,
+`agent`, `messageID`, and `progress`. A tool with `output`
 must return `output`; Effect and Standard Schema codecs validate it, while raw
 JSON Schema definitions enforce JSON compatibility only. A tool
 without `output` returns model-visible `content` instead.

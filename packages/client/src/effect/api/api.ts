@@ -605,7 +605,7 @@ export type Endpoint5_26Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
-            readonly callID: string
+            readonly id: string
             readonly name: string
           }
         }
@@ -619,7 +619,7 @@ export type Endpoint5_26Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
-            readonly callID: string
+            readonly id: string
             readonly text: string
           }
         }
@@ -633,7 +633,7 @@ export type Endpoint5_26Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
-            readonly callID: string
+            readonly id: string
             readonly input: { readonly [x: string]: unknown }
             readonly executed: boolean
             readonly state?: SessionMessage.ProviderState | undefined
@@ -649,7 +649,7 @@ export type Endpoint5_26Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
-            readonly callID: string
+            readonly id: string
             readonly content: readonly [
               (
                 | { readonly type: "text"; readonly text: string }
@@ -685,7 +685,7 @@ export type Endpoint5_26Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
-            readonly callID: string
+            readonly id: string
             readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
             readonly content?:
               | readonly [

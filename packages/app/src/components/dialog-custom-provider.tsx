@@ -136,7 +136,7 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
       const nextDisabled = disabledProviders.filter((id) => id !== result.providerID)
 
       if (result.key) {
-        await serverSDK().client.auth.set({
+        await serverSDK().legacy.auth.set({
           providerID: result.providerID,
           auth: {
             type: "api",

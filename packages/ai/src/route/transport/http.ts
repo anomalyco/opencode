@@ -3,7 +3,7 @@ import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { Auth } from "../auth"
 import { render as renderEndpoint } from "../endpoint"
 import { Framing } from "../framing"
-import type { Transport, TransportPrepareInput } from "./index"
+import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index"
 import * as ProviderShared from "../../protocols/shared"
 import { mergeJsonRecords, type LLMRequest } from "../../schema"
 
@@ -19,6 +19,7 @@ export interface JsonRequestParts<Body = unknown> {
 export interface HttpPrepared<Frame> {
   readonly request: HttpClientRequest.HttpClientRequest
   readonly framing: Framing.Definition<Frame>
+  readonly middleware?: HttpMiddleware
 }
 
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
@@ -74,21 +75,21 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
   prepare: (prepareInput) =>
     Effect.gen(function* () {
       const parts = yield* jsonRequestParts({ ...prepareInput })
-      const request = { url: parts.url, method: "POST", headers: { ...parts.headers }, body: parts.bodyText }
-      yield* (prepareInput.transform?.(request) ?? Effect.void)
+      const request = ProviderShared.jsonPost({
+        url: parts.url,
+        body: parts.bodyText,
+        headers: parts.headers,
+      })
       return {
-        request: ProviderShared.jsonPost({
-          url: request.url,
-          body: request.body ?? "",
-          headers: Headers.fromInput(request.headers),
-        }),
+        request,
         framing: input.framing,
+        middleware: prepareInput.middleware,
       }
     }),
   frames: (prepared, request, runtime) =>
     Stream.unwrap(
       runtime.http
-        .execute(prepared.request)
+        .execute(prepared.request, prepared.middleware)
         .pipe(
           Effect.map((response) =>
             prepared.framing.frame(

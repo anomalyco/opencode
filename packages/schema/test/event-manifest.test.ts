@@ -177,7 +177,7 @@ describe("public event manifest", () => {
     const tool = SessionEvent.Tool.Called.data.make({
       sessionID,
       assistantMessageID,
-      callID: "call_test",
+      id: "call_test",
       input: {},
       executed: true,
       state: { itemId: "item_test" },

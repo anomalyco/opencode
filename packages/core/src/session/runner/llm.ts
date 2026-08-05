@@ -488,7 +488,7 @@ const layer = Layer.effect(
           yield* bus.publish(SessionEvent.Tool.Failed, {
             sessionID,
             assistantMessageID: message.id,
-            callID: tool.id,
+            id: tool.id,
             error: { type: "aborted", message: `Tool execution interrupted: ${tool.name}` },
             executed: tool.executed === true,
           })

@@ -1,5 +1,5 @@
 import { createMemo, createResource, createSignal, Show, type JSX } from "solid-js"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { SnapshotFileDiff, VcsFileDiff } from "@/types"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
@@ -102,8 +102,8 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
 
   const readFile = async (path: string) =>
     sdk()
-      .client.file.read({ path })
-      .then((x) => x.data)
+      .currentApi.file.read({ path, location: { directory: sdk().directory } })
+      .then((content) => ({ type: "text" as const, content: new TextDecoder().decode(content) }))
       .catch((error) => {
         console.debug("[session-review-v2] failed to read file", { path, error })
         return undefined

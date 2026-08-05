@@ -4,7 +4,10 @@ import { createCompatibleApi } from "./server-compat"
 
 function setup(
   protocol: "v1" | "v2" | Promise<"v1" | "v2">,
-  responses?: { vcs?: { branch: string; default_branch: string } },
+  responses?: {
+    vcs?: { branch: string; default_branch: string }
+    question?: { id: string; sessionID: string; questions: never[]; tool?: { messageID: string; callID: string } }[]
+  },
 ) {
   const requests: Request[] = []
   const fetcher = Object.assign(
@@ -36,6 +39,8 @@ function setup(
       }
       if (request.method === "GET" && new URL(request.url).pathname === "/vcs")
         return Response.json(responses?.vcs ?? {})
+      if (request.method === "GET" && new URL(request.url).pathname === "/question")
+        return Response.json(responses?.question ?? [])
       if (request.method === "GET") return Response.json([])
       return new Response(undefined, { status: 204 })
     },
@@ -161,6 +166,21 @@ describe("createCompatibleApi", () => {
     await api.session.list({ parentID: null, search: "session", limit: 50 })
 
     expect(new URL(requests[0]!.url).pathname).toBe("/experimental/session")
+  })
+
+  test("translates V1 question tool call IDs", async () => {
+    const { api } = setup("v1", {
+      question: [
+        {
+          id: "que_1",
+          sessionID: "ses_1",
+          questions: [],
+          tool: { messageID: "msg_1", callID: "call_1" },
+        },
+      ],
+    })
+
+    expect((await api.question.request.list()).data[0]?.tool).toEqual({ messageID: "msg_1", id: "call_1" })
   })
 
   /*

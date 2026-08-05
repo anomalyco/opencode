@@ -538,7 +538,8 @@ describe("Anthropic Messages route", () => {
 
       expect(error.reason).toMatchObject({
         _tag: "InvalidProviderOutput",
-        message: "Provider stream ended without a terminal finish event",
+        classification: "incomplete-stream",
+        message: "The provider response ended unexpectedly.",
       })
     }),
   )

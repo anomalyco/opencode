@@ -339,7 +339,7 @@ describe("Tool", () => {
         call: { type: "tool-call", id: "call-context", name: "context", input: {} },
       })
       expect(contexts).toEqual([
-        { sessionID, ...identity, callID: Tool.CallID.make("call-context"), progress: expect.any(Function) },
+        { sessionID, ...identity, id: Tool.CallID.make("call-context"), progress: expect.any(Function) },
       ])
     }),
   )

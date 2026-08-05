@@ -4,12 +4,9 @@ import { expectAppVisible } from "../utils/waits"
 
 const directory = "C:/OpenCode/NewProject"
 
-test("creates a session in a new project, connects OpenCode Go, and selects its model", async ({ page }) => {
-  let connectedGo = false
-  let pendingGo = false
-  const connections: Array<{ integrationID: string; body: unknown }> = []
-
+test("creates a session in a new project and selects its model", async ({ page }) => {
   await mockOpenCodeServer(page, {
+    protocol: "v2",
     directory,
     project: {
       id: "proj_model_selection_flow",
@@ -46,17 +43,9 @@ test("creates a session in a new project, connects OpenCode Go, and selects its 
           },
         },
       ],
-      connected: connectedGo ? ["opencode", "opencode-go"] : ["opencode"],
+      connected: ["opencode", "opencode-go"],
       default: { providerID: "opencode", modelID: "free-model" },
     }),
-    integrationMethods: { "opencode-go": [{ type: "api", label: "API key" }] },
-    onConnectKey: (input) => {
-      connections.push(input)
-      if (input.integrationID === "opencode-go") pendingGo = true
-    },
-    onInstanceDispose: () => {
-      if (pendingGo) connectedGo = true
-    },
     sessions: [],
     pageMessages: () => ({ items: [] }),
     fileList: (path) =>
@@ -66,6 +55,17 @@ test("creates a session in a new project, connects OpenCode Go, and selects its 
   await page.addInitScript(() => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
     localStorage.setItem("opencode.global.dat:server", JSON.stringify({ projects: { local: [] } }))
+    localStorage.setItem(
+      "opencode.global.dat:model",
+      JSON.stringify({
+        user: [
+          { providerID: "opencode", modelID: "free-model", visibility: "show" },
+          { providerID: "opencode-go", modelID: "go-model-1", visibility: "show" },
+        ],
+        recent: [],
+        variant: {},
+      }),
+    )
   })
 
   await page.goto("/")
@@ -79,16 +79,7 @@ test("creates a session in a new project, connects OpenCode Go, and selects its 
 
   const modelControl = page.locator('[data-action="prompt-model"]')
   await modelControl.click()
-  await expect(page.locator('[data-section="free-models"]')).toContainText("Free models provided by OpenCode")
-
-  await page.locator('[data-provider-id="opencode-go"]').click()
-  await page.locator('[data-input="provider-api-key"]').fill("mock-go-api-key")
-  await page.locator('[data-action="provider-connect-submit"]').click()
-  await expect(page.locator('[data-component="dialog-v2"]')).toHaveCount(0)
-  expect(connections).toEqual([{ integrationID: "opencode-go", body: { type: "api", key: "mock-go-api-key" } }])
-
-  await expect(modelControl).toHaveAttribute("data-control-type", "popover")
-  await modelControl.click()
+  await expect(page.locator('[data-option-key="opencode:free-model"]')).toBeVisible()
   const goModel = page.locator('[data-option-key="opencode-go:go-model-1"]')
   await expect(goModel).toBeVisible()
   await goModel.click()

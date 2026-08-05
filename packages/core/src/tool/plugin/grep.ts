@@ -76,7 +76,7 @@ export const Plugin = {
             output: Output,
             execute: (input, context) =>
               Effect.gen(function* () {
-                const source = { type: "tool" as const, messageID: context.messageID, callID: context.callID }
+                const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
                 const target = yield* mutation.resolve({ path: input.path ?? "." })
                 if (target.externalDirectory)
                   yield* permission.assert({

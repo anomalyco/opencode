@@ -103,7 +103,7 @@ test("moves busy through retry and recovery to final idle content", async ({ pag
   await timeline.send(status("idle"), 350)
   await expect(page.locator('[data-timeline-row="Retry"]')).toHaveCount(0)
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-  await expect(page.locator('[data-timeline-row="DiffSummary"]')).toBeVisible()
+  await expect(page.locator('[data-timeline-part-id="prt_recovered"]')).toContainText("Recovered response")
 })
 
 function lines(count: number) {

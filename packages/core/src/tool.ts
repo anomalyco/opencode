@@ -93,7 +93,7 @@ const layer = Layer.effect(
         sessionID: context.sessionID,
         agent: context.agent,
         messageID: context.messageID,
-        callID: context.callID,
+        id: context.id,
         input,
       }
       yield* hooks.trigger("tool", "execute.before", beforeEvent)
@@ -106,7 +106,7 @@ const layer = Layer.effect(
         sessionID: context.sessionID,
         agent: context.agent,
         messageID: context.messageID,
-        callID: context.callID,
+        id: context.id,
         input: beforeEvent.input,
       }
       if ("failure" in execution) {
@@ -228,7 +228,7 @@ const layer = Layer.effect(
                   sessionID: input.sessionID,
                   agent: input.agent,
                   messageID: input.messageID,
-                  callID: Tool.CallID.make(input.call.id),
+                  id: Tool.CallID.make(input.call.id),
                   progress: input.progress ?? (() => Effect.void),
                 }
                 if (input.call.name === "execute" && codemodeTool)

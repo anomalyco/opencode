@@ -133,7 +133,7 @@ test("scopes file autocomplete to the current browser root", () => {
 test("resolves directory autocomplete from the current browser root", async () => {
   const directories: string[] = []
   const sdk = {
-    api: {
+    currentApi: {
       file: {
         find: (input: { location?: { directory?: string } }) => {
           directories.push(input.location?.directory ?? "")
@@ -155,7 +155,7 @@ test("resolves directory autocomplete from the current browser root", async () =
 test("searches from an absolute root without a default base", async () => {
   const directories: string[] = []
   const sdk = {
-    api: {
+    currentApi: {
       file: {
         list: (input: { location?: { directory?: string } }) => {
           directories.push(input.location?.directory ?? "")

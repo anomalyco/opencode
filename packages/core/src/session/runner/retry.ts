@@ -20,10 +20,11 @@ export function isRetryable(error: AIError) {
     case "ProviderInternal":
     case "Transport":
       return true
+    case "InvalidProviderOutput":
+      return error.reason.classification === "incomplete-stream"
     case "Authentication":
     case "QuotaExceeded":
     case "ContentPolicy":
-    case "InvalidProviderOutput":
     case "InvalidRequest":
     case "NoRoute":
     case "UnknownProvider":

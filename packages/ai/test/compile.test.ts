@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { Effect, Ref, Schema } from "effect"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LLM, mergeProviderOptions } from "../src"
 import { AnthropicMessages, OpenAIChat } from "../src/protocols"
 import { Auth, LLMClient } from "../src/route"
@@ -146,12 +146,16 @@ describe("request option precedence", () => {
         prompt: "Say hello.",
       }),
       {
-        transform: (request) =>
-          Effect.sync(() => {
-            expect(request.headers.authorization).toBe("Bearer fresh-key")
-            request.url = "https://proxy.test/v1/chat/completions"
-            request.headers["x-plugin"] = "transformed"
-            request.body = JSON.stringify({ transformed: true })
+        http: (request, handler) =>
+          Effect.gen(function* () {
+            return yield* handler(
+              request.pipe(
+                HttpClientRequest.setUrl("https://proxy.test/v1/chat/completions"),
+                HttpClientRequest.setMethod("PUT"),
+                HttpClientRequest.setHeader("x-plugin", "transformed"),
+                HttpClientRequest.bodyText(JSON.stringify({ transformed: true }), "application/custom+json"),
+              ),
+            )
           }),
       },
     ).pipe(
@@ -160,7 +164,9 @@ describe("request option precedence", () => {
           Effect.gen(function* () {
             const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
             expect(web.url).toBe("https://proxy.test/v1/chat/completions")
+            expect(web.method).toBe("PUT")
             expect(web.headers.get("x-plugin")).toBe("transformed")
+            expect(web.headers.get("content-type")).toBe("application/custom+json")
             expect(decodeJson(input.text)).toEqual({ transformed: true })
             return input.respond(sseEvents(deltaChunk({}, "stop")), {
               headers: { "content-type": "text/event-stream" },
@@ -169,6 +175,82 @@ describe("request option precedence", () => {
         ),
       ),
     ),
+  )
+
+  it.effect("transforms the HTTP response before protocol decoding", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: OpenAIChat.route
+            .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+            .model({ id: "gpt-4o-mini" }),
+          prompt: "Say hello.",
+        }),
+        {
+          http: (request, handler) =>
+            Effect.gen(function* () {
+              const response = yield* handler(request)
+              return HttpClientResponse.fromWeb(
+                response.request,
+                new Response((yield* response.text).replace("network", "hooked"), {
+                  status: response.status,
+                  headers: response.headers,
+                }),
+              )
+            }),
+        },
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.succeed(
+              input.respond(sseEvents(deltaChunk({ content: "network" }, "stop")), {
+                headers: { "content-type": "text/event-stream" },
+              }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("hooked")
+    }),
+  )
+
+  it.effect("can inspect an error response and retry the native request", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0)
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: OpenAIChat.route
+            .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("stale") })
+            .model({ id: "gpt-4o-mini" }),
+          prompt: "Say hello.",
+        }),
+        {
+          http: (request, handler) =>
+            Effect.gen(function* () {
+              const response = yield* handler(request)
+              expect(response.status).toBe(401)
+              return yield* handler(HttpClientRequest.setHeader(request, "authorization", "Bearer refreshed"))
+            }),
+        },
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              yield* Ref.update(attempts, (value) => value + 1)
+              if (input.request.headers.authorization !== "Bearer refreshed")
+                return input.respond("unauthorized", { status: 401 })
+              return input.respond(sseEvents(deltaChunk({ content: "retried" }, "stop")), {
+                headers: { "content-type": "text/event-stream" },
+              })
+            }),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("retried")
+      expect(yield* Ref.get(attempts)).toBe(2)
+    }),
   )
 
   it.effect("applies raw body overlays after protocol lowering", () =>

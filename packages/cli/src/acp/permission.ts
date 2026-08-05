@@ -29,7 +29,7 @@ export async function replyPermission(input: {
   const toolName = input.tool?.name ?? input.event.data.action
   const toolInput = { ...input.event.data.metadata, ...input.tool?.input }
   const previews = await permissionPreviews(toolName, toolInput, input.cwd)
-  const toolCallID = input.event.data.source?.callID ?? input.event.data.id
+  const toolCallID = input.event.data.source?.id ?? input.event.data.id
   const title = permissionTitle(toolName, toolInput, previews)
   const result = await input.connection
     .requestPermission({

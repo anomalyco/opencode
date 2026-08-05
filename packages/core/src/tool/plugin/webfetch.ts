@@ -139,7 +139,7 @@ export const Plugin = {
                   metadata: input,
                   sessionID: context.sessionID,
                   agent: context.agent,
-                  source: { type: "tool", messageID: context.messageID, callID: context.callID },
+                  source: { type: "tool", messageID: context.messageID, id: context.id },
                 })
 
                 const { body, contentType } = yield* Effect.gen(function* () {

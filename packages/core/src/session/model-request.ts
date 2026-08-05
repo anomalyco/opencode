@@ -2,9 +2,11 @@ export * as SessionModelRequest from "./model-request"
 
 import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
+import type { SessionHttpHandler, SessionHttpMiddleware } from "@opencode-ai/plugin/effect/session"
 import type { Content } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Cause, Config, Context, Effect, Layer, Result } from "effect"
+import { Cause, Config, Context, Effect, Layer, Result, Stream } from "effect"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app"
 import { Model } from "../model"
@@ -48,9 +50,7 @@ interface Prepared {
    * One request-scoped execution operation. Unknown, hook-removed, and
    * step-limit-violating calls fail individually through the same seam.
    */
-  readonly executeTool: (
-    input: Parameters<Tool.Snapshot["execute"]>[0],
-  ) => Effect.Effect<Tool.Result, ExecuteError>
+  readonly executeTool: (input: Parameters<Tool.Snapshot["execute"]>[0]) => Effect.Effect<Tool.Result, ExecuteError>
   /** True when this request is the final Step; violating calls are rejected and no continuation follows. */
   readonly stepLimitReached: boolean
 }
@@ -137,8 +137,7 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
           result: {
             ...part.result,
             value: part.result.value.map((item: Content) => {
-              if (item.type !== "file" || !isImage(item.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET)
-                return item
+              if (item.type !== "file" || !isImage(item.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET) return item
               removed += Buffer.byteLength(item.uri)
               return { type: "text" as const, text: IMAGE_REMOVED }
             }),
@@ -229,24 +228,47 @@ export const layer = Layer.effect(
         toolChoice: stepLimitReached ? "none" : undefined,
       })
       const options: StreamOptions = {
-        transform: (request) =>
-          hooks
-            .trigger("session", "request", {
+        http: (request, handler) =>
+          Effect.gen(function* () {
+            let latest = request
+            const origins = new WeakMap<Response, HttpClientRequest.HttpClientRequest>()
+            const middlewares: SessionHttpMiddleware[] = []
+            const web = yield* HttpClientRequest.toWeb(request)
+            yield* hooks.trigger("session", "http", {
               sessionID: session.id,
               agent: agent.id,
               model: resolved.ref,
-              ...request,
-            })
-            .pipe(
-              Effect.tap((event) =>
+              use: (item) =>
                 Effect.sync(() => {
-                  request.url = event.url
-                  request.headers = event.headers
-                  request.body = event.body
+                  middlewares.push(item)
                 }),
-              ),
-              Effect.asVoid,
-            ),
+            })
+            const send = (input: Request) =>
+              Effect.gen(function* () {
+                let sent = HttpClientRequest.fromWeb(input)
+                if (input.body)
+                  sent = HttpClientRequest.bodyUint8Array(
+                    sent,
+                    new Uint8Array(yield* Effect.promise(() => input.clone().arrayBuffer())),
+                    input.headers.get("content-type") ?? undefined,
+                  )
+                latest = sent
+                const response = yield* handler(sent)
+                const body = [204, 205, 304].includes(response.status)
+                  ? null
+                  : yield* Stream.toReadableStreamEffect(response.stream)
+                const output = new Response(body, { status: response.status, headers: response.headers })
+                origins.set(output, sent)
+                return output
+              })
+            const dispatch = middlewares.reduce<SessionHttpHandler>(
+              (next, item) => (input: Request) => item(input, next),
+              send,
+            )
+            const response = yield* dispatch(web)
+            const origin = origins.get(response) ?? latest
+            return HttpClientResponse.fromWeb(origin, response)
+          }).pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause))))),
       }
       if (promptCacheSnapshots) {
         const current = PromptCacheDiagnostics.snapshot(request)

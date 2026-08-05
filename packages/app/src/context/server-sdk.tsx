@@ -1,5 +1,5 @@
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import type { Event } from "@opencode-ai/sdk/v2/client"
+import type { Event, PermissionRequest } from "@/types"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -12,13 +12,19 @@ import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerScope } from "@/utils/server-scope"
 import { detectServerProtocol, type ServerProtocol } from "@/utils/server-protocol"
-import { createCompatibleApi, type CompatibleApi } from "@/utils/server-compat"
+import {
+  createCompatibleApi,
+  createLegacyCapabilities,
+  type CompatibleApi,
+  type LegacyCapabilities,
+} from "@/utils/server-compat"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 
 const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
 
 const isStreamClosed = (error: unknown, signal?: AbortSignal) => isAbortError(error) || signal?.aborted === true
-export type ServerEvent = Event & { current?: OpenCodeEvent }
+export type ServerEvent = Event & { id?: string; current?: OpenCodeEvent }
 type QueuedServerEvent = { directory: string; payload: ServerEvent }
 type CurrentDelta = Extract<
   OpenCodeEvent,
@@ -39,11 +45,11 @@ export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
         metadata: event.data.metadata ?? {},
         tool:
           event.data.source?.type === "tool"
-            ? { messageID: event.data.source.messageID, callID: event.data.source.callID }
+            ? { messageID: event.data.source.messageID, callID: event.data.source.id }
             : undefined,
-      },
+      } satisfies PermissionRequest,
       current: event,
-    } as ServerEvent
+    }
   }
   return { id: event.id, type: event.type, properties: event.data, current: event } as ServerEvent
 }
@@ -142,7 +148,7 @@ function currentDelta(event: OpenCodeEvent | undefined): CurrentDelta | undefine
 
 function currentDeltaKey(event: CurrentDelta) {
   if (event.type === "session.tool.input.delta")
-    return `${event.type}:${event.data.sessionID}:${event.data.assistantMessageID}:${event.data.callID}`
+    return `${event.type}:${event.data.sessionID}:${event.data.assistantMessageID}:${event.data.id}`
   if (event.type === "session.compaction.delta") return `${event.type}:${event.data.sessionID}`
   return `${event.type}:${event.data.sessionID}:${event.data.assistantMessageID}:${event.data.ordinal}`
 }
@@ -165,6 +171,7 @@ type ServerSDKBase = {
   url: string
   client: ReturnType<typeof createSdkForServer>
   api: CompatibleApi
+  legacy: LegacyCapabilities
   currentApi: ServerApi
   event: {
     on: ServerEventEmitter["on"]
@@ -192,11 +199,6 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   })()
 
   const eventApi = createApiForServer({ server: server.http, fetch: eventFetch })
-  const eventSdk = createSdkForServer({
-    signal: abort.signal,
-    fetch: eventFetch,
-    server: server.http,
-  })
   const protocol = detectServerProtocol(server.http, platform.fetch ?? globalThis.fetch)
   const [protocolKind] = createResource(
     () => protocol,
@@ -264,18 +266,12 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
         }
         abort.signal.addEventListener("abort", onAbort)
         try {
-          const kind = await protocol
-          const events =
-            kind === "v1"
-              ? (await eventSdk.global.event({ signal: attempt.signal })).stream
-              : eventApi.event.subscribe({ signal: attempt.signal })
+          const events = eventApi.event.subscribe({ signal: attempt.signal })
           let yielded = Date.now()
           for await (const event of events) {
             streamErrorLogged = false
-            const legacy = "payload" in event
-            if (legacy && event.payload.type === "sync") continue
-            const directory = legacy ? (event.directory ?? "global") : (event.location?.directory ?? "global")
-            const payload = legacy ? (event.payload as Event) : adaptServerEvent(event)
+            const directory = event.location?.directory ?? "global"
+            const payload = adaptServerEvent(event)
             if (enqueueServerEvent(queue, { directory, payload })) schedule()
 
             if (Date.now() - yielded < STREAM_YIELD_MS) continue
@@ -339,6 +335,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
       directory,
     })
   const api = createCompatibleApi({ protocol, current: currentApi, legacy })
+  const capabilities = createLegacyCapabilities({ protocol, current: currentApi, legacy })
 
   return {
     server,
@@ -348,6 +345,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     url: server.http.url,
     client: sdk,
     api,
+    legacy: capabilities,
     currentApi,
     event: {
       on: emitter.on.bind(emitter),
@@ -364,8 +362,25 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   }
 }
 
+type SDKEventMap = {
+  [key in Event["type"]]: Extract<ServerEvent, { type: key }>
+}
+
+export type DirectorySDK = {
+  scope: ServerScope
+  protocol: Promise<ServerProtocol>
+  directory: string
+  client: OpencodeClient
+  currentApi: ServerApi
+  api: CompatibleApi
+  legacy: LegacyCapabilities
+  event: ReturnType<typeof createGlobalEmitter<SDKEventMap>>
+  readonly url: string
+  createClient: ServerSDKBase["createClient"]
+}
+
 export type ServerSDK = ServerSDKBase & {
-  ensureDirSdkContext: (directory: string) => ReturnType<typeof createDirSdkContext>
+  ensureDirSdkContext: (directory: string) => DirectorySDK
 }
 
 export function createServerSdkContext(server: ServerConnection.Any, scope: ServerScope): ServerSDK {
@@ -397,11 +412,7 @@ export function useServerProtocol() {
   return createMemo(() => serverSDK().protocolKind())
 }
 
-type SDKEventMap = {
-  [key in Event["type"]]: Extract<ServerEvent, { type: key }>
-}
-
-function createDirSdkContext(directory: string, serverSDK: ServerSDKBase) {
+function createDirSdkContext(directory: string, serverSDK: ServerSDKBase): DirectorySDK {
   const client = serverSDK.createClient({
     directory,
     throwOnError: true,
@@ -419,7 +430,14 @@ function createDirSdkContext(directory: string, serverSDK: ServerSDKBase) {
     protocol: serverSDK.protocol,
     directory,
     client,
+    currentApi: serverSDK.currentApi,
     api: createCompatibleApi({
+      protocol: serverSDK.protocol,
+      current: serverSDK.currentApi,
+      legacy: (next) => serverSDK.createClient({ directory: next ?? directory, throwOnError: true }),
+      directory,
+    }),
+    legacy: createLegacyCapabilities({
       protocol: serverSDK.protocol,
       current: serverSDK.currentApi,
       legacy: (next) => serverSDK.createClient({ directory: next ?? directory, throwOnError: true }),

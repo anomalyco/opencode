@@ -68,7 +68,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   function pendingPermissions() {
     return new Set(
       (data.session.permission.list(sessionID()) ?? []).flatMap((request) =>
-        request.source?.type === "tool" ? [request.source.callID] : [],
+        request.source?.type === "tool" ? [request.source.id] : [],
       ),
     )
   }
@@ -255,7 +255,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart(
-          { messageID: event.data.assistantMessageID, partID: event.data.callID },
+          { messageID: event.data.assistantMessageID, partID: event.data.id },
           { type: "tool", name: event.data.name },
         )
     }),

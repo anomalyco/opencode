@@ -12,7 +12,7 @@ const context = {
   sessionID: Session.ID.make("ses_execute"),
   agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.make("msg_execute"),
-  callID: Tool.CallID.make("call_execute"),
+  id: Tool.CallID.make("call_execute"),
   progress: () => Effect.void,
 }
 
