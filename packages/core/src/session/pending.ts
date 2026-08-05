@@ -12,10 +12,8 @@ import {
   User,
   UserData,
 } from "@opencode-ai/schema/session-pending"
-import { Event } from "@opencode-ai/schema/event"
 import type { Database } from "../database/database"
 import { Bus } from "../bus"
-import { EventTable } from "../event/sql"
 import { KeyedMutex } from "../effect/keyed-mutex"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
@@ -37,11 +35,7 @@ const decodeUser = Schema.decodeUnknownSync(UserData)
 const encodeUser = Schema.encodeSync(UserData)
 const decodeSynthetic = Schema.decodeUnknownSync(SyntheticData)
 const encodeSynthetic = Schema.encodeSync(SyntheticData)
-const decodeAdmittedEvent = Schema.decodeUnknownOption(SessionEvent.InputAdmitted.data)
-const admittedEventType = Bus.versionedType(
-  SessionEvent.InputAdmitted.type,
-  SessionEvent.InputAdmitted.durable.version,
-)
+const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 
 export class LifecycleConflict extends Schema.TaggedErrorClass<LifecycleConflict>()(
@@ -103,46 +97,35 @@ export const compaction = Effect.fn("SessionPending.compaction")(function* (
   return entry.type === "compaction" ? entry : undefined
 })
 
-/**
- * Reconstruct the admitted record for a pending row that was already consumed
- * by promotion. The projected `session_message` row proves promotion happened;
- * the durable `session.input.admitted` event retains the exact admitted
- * message, including delivery.
- */
-const promotedFromHistory = Effect.fn("SessionPending.promotedFromHistory")(function* (
+const promotedFromMessage = Effect.fn("SessionPending.promotedFromMessage")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   id: SessionMessage.ID,
+  delivery: Delivery,
 ) {
-  const message = yield* db
+  const row = yield* db
     .select()
     .from(SessionMessageTable)
     .where(eq(SessionMessageTable.id, id))
     .get()
     .pipe(Effect.orDie)
-  if (message === undefined) return undefined
-  if (message.session_id !== sessionID || (message.type !== "user" && message.type !== "synthetic"))
+  if (row === undefined) return undefined
+  if (row.session_id !== sessionID || (row.type !== "user" && row.type !== "synthetic"))
     return yield* Effect.die(new LifecycleConflict({ id }))
-  const rows = yield* db
-    .select()
-    .from(EventTable)
-    .where(and(eq(EventTable.aggregate_id, sessionID), eq(EventTable.type, admittedEventType)))
-    .all()
-    .pipe(Effect.orDie)
-  for (const row of rows) {
-    const decoded = decodeAdmittedEvent(row.data)
-    if (decoded._tag !== "Some" || decoded.value.inputID !== id) continue
-    const base = {
-      id,
-      sessionID,
-      timeCreated: DateTime.makeUnsafe(row.created),
-    }
-    return decoded.value.input.type === "user"
-      ? User.make({ ...base, ...decoded.value.input })
-      : Synthetic.make({ ...base, ...decoded.value.input })
-  }
-  // A projected message without an admitted event in this aggregate (for
-  // example fork-copied history) is not a retryable admission.
+  const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
+  const base = { id, sessionID, timeCreated: message.time.created, delivery }
+  if (message.type === "user")
+    return User.make({
+      ...base,
+      type: "user",
+      data: decodeUser(message),
+    })
+  if (message.type === "synthetic")
+    return Synthetic.make({
+      ...base,
+      type: "synthetic",
+      data: decodeSynthetic(message),
+    })
   return yield* Effect.die(new LifecycleConflict({ id }))
 })
 
@@ -160,7 +143,7 @@ export const admit = Effect.fn("SessionPending.admit")(function* (
     if (existing.type === "compaction") return yield* Effect.die(new LifecycleConflict({ id: request.id }))
     return existing
   }
-  const promoted = yield* promotedFromHistory(db, request.sessionID, request.id)
+  const promoted = yield* promotedFromMessage(db, request.sessionID, request.id, request.input.delivery)
   if (promoted !== undefined) return promoted
   return yield* bus
     .publish(SessionEvent.InputAdmitted, {
@@ -426,7 +409,7 @@ const publish = Effect.fn("SessionPending.publish")(function* (
         .pipe(
           Effect.catchDefect((defect) =>
             defect instanceof LifecycleConflict
-              ? promotedFromHistory(db, sessionID, entry.id).pipe(
+              ? promotedFromMessage(db, sessionID, entry.id, entry.delivery).pipe(
                   Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
                 )
               : Effect.die(defect),
