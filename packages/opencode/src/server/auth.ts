@@ -16,7 +16,7 @@ export type DecodedCredentials = {
 
 export class Config extends ConfigService.Service<Config>()("@opencode/ServerAuthConfig", {
   password: EffectConfig.string("LEAKCODE_SERVER_PASSWORD").pipe(EffectConfig.option),
-  username: EffectConfig.string("LEAKCODE_SERVER_USERNAME").pipe(EffectConfig.withDefault("opencode")),
+  username: EffectConfig.string("LEAKCODE_SERVER_USERNAME").pipe(EffectConfig.withDefault("leak-code")),
 }) {}
 
 export type Info = Context.Service.Shape<typeof Config>
@@ -37,7 +37,7 @@ export function header(credentials?: Credentials) {
   const password = credentials?.password ?? Flag.LEAKCODE_SERVER_PASSWORD
   if (!password) return undefined
 
-  const username = credentials?.username ?? Flag.LEAKCODE_SERVER_USERNAME ?? "opencode"
+  const username = credentials?.username ?? Flag.LEAKCODE_SERVER_USERNAME ?? "leak-code"
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
 }
 

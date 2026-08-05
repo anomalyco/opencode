@@ -1,4 +1,4 @@
-This is a plugin to simulate a remote environment locally. Add this to `.opencode/opencode.jsonc`:
+This is a plugin to simulate a remote environment locally. Add this to `.leak-code/leak-code.jsonc`:
 
 ```json
   "plugin": ["../packages/opencode/src/control-plane/dev/debug-workspace-plugin.ts"],

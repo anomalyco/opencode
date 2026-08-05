@@ -351,7 +351,7 @@ const layer = Layer.effect(
         cwd,
         env: {
           ...process.env,
-          ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+          ...(cmd === "leak-code" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },
       })

@@ -24,14 +24,14 @@ const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
 const LEAKCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
 
-// Built-in skill that ships with opencode. The model's intuition for what an
-// leak-code.json should look like is often wrong, and opencode hard-fails on
+// Built-in skill that ships with leak-code. The model's intuition for what an
+// leak-code.json should look like is often wrong, and leak-code hard-fails on
 // invalid config, so users hit cryptic startup errors. Loading this skill
-// when the model is asked to touch opencode's own config files gives it the
+// when the model is asked to touch leak-code's own config files gives it the
 // actual schemas instead of guesses.
-const CUSTOMIZE_LEAKCODE_SKILL_NAME = "customize-opencode"
+const CUSTOMIZE_LEAKCODE_SKILL_NAME = "customize-leak-code"
 const CUSTOMIZE_LEAKCODE_SKILL_DESCRIPTION =
-  "Use ONLY when the user is editing or creating opencode's own configuration: leak-code.json, leak-code.jsonc, files under .opencode/, or files under ~/.config/leak-code/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
+  "Use ONLY when the user is editing or creating leak-code's own configuration: leak-code.json, leak-code.jsonc, files under .leak-code/, or files under ~/.config/leak-code/. Also use when creating or fixing leak-code agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring leak-code itself."
 const CUSTOMIZE_LEAKCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
 
 export const Info = Schema.Struct({

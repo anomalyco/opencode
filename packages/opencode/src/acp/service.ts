@@ -95,16 +95,16 @@ export function make(input: {
     const started = performance.now()
     const authMethod: AuthMethod = {
       description: "Run `leak-code auth login` in the terminal",
-      name: "Login with opencode",
+      name: "Login with leak-code",
       id: AuthMethodID,
     }
 
     if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
       authMethod._meta = {
         "terminal-auth": {
-          command: "opencode",
+          command: "leak-code",
           args: ["auth", "login"],
-          label: "OpenCode Login",
+          label: "Leak Code Login",
         },
       }
     }

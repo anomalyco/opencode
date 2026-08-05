@@ -20,7 +20,7 @@ ts-dist
 /result
 refs
 Session.vim
-/opencode.json
+/leak-code.json
 a.out
 target
 .scripts
