@@ -4,6 +4,7 @@
 // loop and the TUI had no visibility into it at all. This service owns loop
 // state for the life of the server instead, so any client (CLI or TUI) can
 // see and control any loop.
+import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { withStatics } from "@opencode-ai/core/schema"
@@ -593,7 +594,13 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         const cfg = yield* config.get().pipe(Effect.orElseSucceed(() => ({}) as never))
         const fromConfig = (cfg as { experimental?: { queue_gate?: QueueGateConfig } }).experimental?.queue_gate
-        return record?.queue?.options?.cwd ?? fromConfig?.cwd ?? record?.info.directory ?? process.cwd()
+        const base = record?.info.directory ?? process.cwd()
+        const configured = record?.queue?.options?.cwd ?? fromConfig?.cwd
+        if (!configured) return base
+        // A relative cwd is relative to the REPO, not to wherever the server
+        // process happens to have been started — `"packages/opencode"` in a
+        // config file has to mean the obvious thing.
+        return path.isAbsolute(configured) ? configured : path.resolve(base, configured)
       })
 
     // Idle local peers for the brief's fan-out nudge (design D9). Only

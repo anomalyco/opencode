@@ -425,7 +425,9 @@ it.instance(
         ...providerCfg(llm.url),
         experimental: {
           queue_gate: {
-            cwd: dir,
+            // Relative on purpose: a config path must resolve against the repo,
+            // not the server process's cwd. "." is the repo root here.
+            cwd: ".",
             // Records that it ran, then fails — enough to prove which command
             // was used without needing a real test suite.
             test_command: `pwd > ${marker}; exit 1`,
