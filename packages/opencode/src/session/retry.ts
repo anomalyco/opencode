@@ -28,6 +28,13 @@ export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 
+const RETRYABLE_MESSAGE = [
+  /\b(?:server[_\s-]?error|internal[_\s-]?error|service[_\s-]?unavailable|overloaded|too many requests|rate increased too quickly|provider[_\s-]?returned[_\s-]?error)\b|\brate[_\s-]?limit/i,
+  /\b(?:fetch failed|network error|upstream connect|connection (?:error|refused|lost)|socket connection was closed|socket hang up|reset before headers|getaddrinfo|enotfound|eai_again)\b|^timeout$|\b(?:request|response|connection|network|stream|read) (?:timeout|timed? out)\b/i,
+  /\b(?:resource[_\s-]?exhausted|please retry your request|you can retry your request|try your request again)\b/i,
+  /\b(?:429|500|502|503|504|524)\b/,
+]
+
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
 }
@@ -125,16 +132,9 @@ export function retryable(error: Err, provider: string) {
   const message = isRecord(error.data) ? error.data.message : undefined
   if (typeof message !== "string") return undefined
   const lower = message.toLowerCase()
-  if (
-    lower.includes("rate increased too quickly") ||
-    lower.includes("rate limit") ||
-    lower.includes("rate_limit") ||
-    lower.includes("too many requests")
-  ) {
-    return { message }
-  }
   if (lower.includes("too_many_requests")) return { message: "Too Many Requests" }
   if (lower.includes("exhausted") || lower.includes("unavailable")) return { message: "Provider is overloaded" }
+  if (RETRYABLE_MESSAGE.some((pattern) => pattern.test(message))) return { message }
   return undefined
 }
 

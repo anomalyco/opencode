@@ -168,6 +168,19 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: msg })
   })
 
+  test.each([
+    "Internal server error",
+    "Provider returned error",
+    "fetch failed",
+    "connection refused",
+    "EAI_AGAIN",
+    "response timed out",
+    "Please retry your request",
+    "upstream returned status 524",
+  ])("retries matching API error text: %s", (message) => {
+    expect(SessionRetry.retryable(wrap(message), retryProvider)).toEqual({ message })
+  })
+
   test("retries transport timeout errors", () => {
     const request = MessageV2.fromError(new ProviderError.HeaderTimeoutError(10000), { providerID })
     expect(SessionV1.APIError.isInstance(request)).toBe(true)
