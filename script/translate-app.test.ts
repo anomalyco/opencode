@@ -66,12 +66,18 @@ describe("translate app", () => {
       "packages/desktop/src/renderer/i18n/fr.ts",
     ])
     expect(targetFiles("tr")).toEqual(["packages/app/src/i18n/tr.ts", "packages/ui/src/i18n/tr.ts"])
+    expect(targetFiles("sv")).toEqual([
+      "packages/app/src/i18n/sv.ts",
+      "packages/ui/src/i18n/sv.ts",
+      "packages/desktop/src/renderer/i18n/sv.ts",
+    ])
   })
 
   test("maps product locale codes to their glossaries", () => {
     expect(glossaryFile("fr")).toBe(".opencode/glossary/fr.md")
     expect(glossaryFile("zh")).toBe(".opencode/glossary/zh-cn.md")
     expect(glossaryFile("zht")).toBe(".opencode/glossary/zh-tw.md")
+    expect(glossaryFile("sv")).toBe(".opencode/glossary/sv.md")
   })
 
   test("finds key and placeholder drift", () => {
