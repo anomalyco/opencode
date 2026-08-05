@@ -698,7 +698,10 @@ export const RunCommand = effectCmd({
           const toggles = new Map<string, boolean>()
           const sessions = new Set([sessionID])
           // messageID -> model that produced it, so step events can carry the
-          // attribution that only lives on the assistant message.
+          // attribution that only lives on the assistant message. Only filled from
+          // messages seen on this stream, so a step for a message created before
+          // this subscription (attaching to a turn already in flight) emits
+          // without the fields rather than guessing.
           const models = new Map<string, { providerID: string; modelID: string }>()
           let error: string | undefined
 
