@@ -22,7 +22,7 @@ import { Permission } from "@opencode-ai/core/permission"
 import { Tool } from "@opencode-ai/schema/tool"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
-import { systemError } from "effect/PlatformError"
+import { badArgument, systemError } from "effect/PlatformError"
 
 const llm = (reason: AIError["reason"]) => new AIError({ module: "test", method: "stream", reason })
 
@@ -87,7 +87,7 @@ describe("toSessionError", () => {
       ),
     ).toEqual({
       type: "unknown",
-      message: "Unable to execute command: pwd",
+      message: "Unable to execute command: pwd: FileSystem.stat failed: not found: /missing",
     })
   })
 
@@ -105,6 +105,54 @@ describe("toSessionError", () => {
       type: "provider.internal",
       message: "bad gateway",
       status: 502,
+    })
+  })
+
+  test("formats every platform error reason for the model", () => {
+    const reasons = [
+      ["AlreadyExists", "already exists"],
+      ["BadResource", "resource is invalid or closed"],
+      ["Busy", "resource is busy"],
+      ["InvalidData", "invalid data"],
+      ["NotFound", "not found"],
+      ["PermissionDenied", "permission denied"],
+      ["TimedOut", "timed out"],
+      ["UnexpectedEof", "unexpected end of input"],
+      ["Unknown", "system error"],
+      ["WouldBlock", "would block"],
+      ["WriteZero", "wrote zero bytes"],
+    ] as const
+
+    for (const [tag, message] of reasons) {
+      expect(
+        toSessionError(
+          new ToolFailure({
+            message: "Tool failed",
+            error: systemError({
+              _tag: tag,
+              module: "FileSystem",
+              method: "operation",
+              pathOrDescriptor: "/target",
+              description: "OS detail",
+            }),
+          }),
+        ),
+      ).toEqual({
+        type: "unknown",
+        message: `Tool failed: FileSystem.operation failed: ${message}: /target (OS detail)`,
+      })
+    }
+
+    expect(
+      toSessionError(
+        new ToolFailure({
+          message: "Tool failed",
+          error: badArgument({ module: "FileSystem", method: "operation", description: "invalid path" }),
+        }),
+      ),
+    ).toEqual({
+      type: "unknown",
+      message: "Tool failed: FileSystem.operation rejected an invalid argument: invalid path",
     })
   })
 
