@@ -96,6 +96,7 @@ import { findMessageBoundary, messageNavigationSlack } from "./message-navigatio
 import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
+import { installSyntaxHighlightCache } from "../../util/syntax-highlight-cache"
 
 addDefaultParsers(parsers.parsers)
 
@@ -128,6 +129,7 @@ function use() {
 }
 
 export function Session() {
+  installSyntaxHighlightCache()
   const setEpilogue = useEpilogue()
   const clipboard = useClipboard()
   const writeExport = async (file: string, content: string) => {
