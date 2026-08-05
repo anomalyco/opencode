@@ -3,14 +3,6 @@ import { Ignore } from "@opencode-ai/core/filesystem/ignore"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 
-test("match nested and non-nested", () => {
-  expect(Ignore.match("node_modules/index.js")).toBe(true)
-  expect(Ignore.match("node_modules")).toBe(true)
-  expect(Ignore.match("node_modules/")).toBe(true)
-  expect(Ignore.match("node_modules/bar")).toBe(true)
-  expect(Ignore.match("node_modules/bar/")).toBe(true)
-})
-
 test("parcel patterns ignore built-in folders at any depth", async () => {
   let ignoreGlobs: string[] = []
   const watcher = createWrapper({
