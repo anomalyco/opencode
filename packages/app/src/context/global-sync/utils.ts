@@ -153,18 +153,6 @@ export function normalizeProviderList(
   }
 }
 
-export function sanitizeProject(project: Project) {
-  if (!project.icon?.url && !project.icon?.override) return project
-  return {
-    ...project,
-    icon: {
-      ...project.icon,
-      url: undefined,
-      override: undefined,
-    },
-  }
-}
-
 export function normalizeProjectInfo(project: Project | CurrentProject): Project {
   return {
     ...project,

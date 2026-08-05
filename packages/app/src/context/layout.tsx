@@ -753,9 +753,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       mobileSidebar: {
         opened: createMemo(() => store.mobileSidebar?.opened ?? false),
-        show() {
-          setStore("mobileSidebar", "opened", true)
-        },
         hide() {
           setStore("mobileSidebar", "opened", false)
         },
@@ -960,33 +957,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
               if (current.reviewOpen.includes(path)) return
               setStore("sessionView", session, "reviewOpen", current.reviewOpen.length, path)
-            },
-            closePath(path: string) {
-              const session = key()
-              const current = store.sessionView[session]?.reviewOpen
-              if (!current) return
-
-              const index = current.indexOf(path)
-              if (index === -1) return
-              setStore(
-                "sessionView",
-                session,
-                "reviewOpen",
-                produce((draft) => {
-                  if (!draft) return
-                  draft.splice(index, 1)
-                }),
-              )
-            },
-            togglePath(path: string) {
-              const session = key()
-              const current = store.sessionView[session]?.reviewOpen
-              if (!current || !current.includes(path)) {
-                this.openPath(path)
-                return
-              }
-
-              this.closePath(path)
             },
           },
         }
