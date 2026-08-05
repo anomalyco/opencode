@@ -52,9 +52,6 @@ import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { fileURLToPath } from "url"
 
-export const RevertState = Session.Revert
-export type RevertState = Session.Revert
-
 // get project -> project.locations
 //
 // get all sessions
@@ -110,13 +107,6 @@ type ForkInput = {
   boundary: Session.ForkRequestBoundary
 }
 
-export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
-  "Session.OperationUnavailableError",
-  {
-    operation: Schema.Literals(["move", "skill", "switchAgent", "compact"]),
-  },
-) {}
-
 export { MessageDecodeError, NotFoundError }
 
 export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
@@ -159,23 +149,6 @@ export class DestinationNotDirectoryError extends Schema.TaggedErrorClass<Destin
 ) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
-
-export type Error =
-  | NotFoundError
-  | MessageDecodeError
-  | OperationUnavailableError
-  | PromptConflictError
-  | SyntheticConflictError
-  | AttachmentError
-  | CompactionConflictError
-  | BusyError
-  | SkillNotFoundError
-  | DestinationNotFoundError
-  | DestinationNotDirectoryError
-  | Command.NotFoundError
-  | Command.EvaluationError
-  | MessageNotFoundError
-  | SessionGenerate.Error
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<{
