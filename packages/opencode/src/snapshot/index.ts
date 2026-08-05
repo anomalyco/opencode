@@ -428,7 +428,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                   cwd: state.worktree,
                 })
                 if (result.code === 0) return
-                const tree = yield* git([...core, ...args(["ls-tree", op.hash, "--", op.rel])], {
+                const tree = yield* git([...quote, ...args(["ls-tree", op.hash, "--", op.rel])], {
                   cwd: state.worktree,
                 })
                 if (tree.code === 0 && tree.text.trim()) {
@@ -464,7 +464,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 }
 
                 const tree = yield* git(
-                  [...core, ...args(["ls-tree", "--name-only", first.hash, "--", ...run.map((item) => item.rel)])],
+                  [...quote, ...args(["ls-tree", "--name-only", first.hash, "--", ...run.map((item) => item.rel)])],
                   {
                     cwd: state.worktree,
                   },
