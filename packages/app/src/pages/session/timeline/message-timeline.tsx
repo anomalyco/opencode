@@ -54,6 +54,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { showToast } from "@/utils/toast"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { pathKey } from "@/utils/path-key"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { normalize } from "@opencode-ai/session-ui/session-diff"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
@@ -327,6 +328,24 @@ export function MessageTimeline(props: {
     return language.t("command.session.new")
   })
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  // Extra context shown next to the session title: project name, and the git
+  // branch / worktree folder when the session lives in a worktree (not the
+  // project root), mirroring the tab's worktree badge.
+  const projectName = createMemo(() => {
+    const project = sync().project
+    if (!project) return
+    return project.name || getFilename(project.worktree) || project.worktree
+  })
+  const worktreeLabel = createMemo(() => {
+    const directory = info()?.directory
+    const root = sync().project?.worktree
+    if (!directory || !root || pathKey(directory) === pathKey(root)) return
+    return sync().data.vcs?.branch ?? getFilename(directory)
+  })
+  const working = createMemo(() => {
+    const id = sessionID()
+    return id ? sync().data.session_working(id) : false
+  })
   const projection = createTimelineProjection({
     messages: sessionMessages,
     userMessages: () => props.userMessages,
@@ -1483,6 +1502,36 @@ export function MessageTimeline(props: {
                         onBlur={closeTitleEditor}
                       />
                     </Show>
+                  </Show>
+                  <Show when={working()}>
+                    <span
+                      data-slot="session-title-working"
+                      class="ml-1.5 size-1.5 shrink-0 rounded-full bg-v2-icon-icon-accent"
+                      title={language.t("common.loading")}
+                    />
+                  </Show>
+                  <Show when={projectName()}>
+                    {(name) => (
+                      <span
+                        data-slot="session-title-project"
+                        title={name()}
+                        class="ml-2 shrink-0 truncate text-[11px] leading-4 text-v2-text-text-faint max-w-40"
+                      >
+                        {name()}
+                      </span>
+                    )}
+                  </Show>
+                  <Show when={worktreeLabel()}>
+                    {(label) => (
+                      <span
+                        data-slot="session-title-worktree"
+                        title={label()}
+                        class="ml-1.5 flex shrink-0 items-center gap-0.5 max-w-40 rounded-[3px] bg-v2-background-bg-layer px-1 text-[11px] leading-4 text-v2-text-text-faint"
+                      >
+                        <IconV2 name="branch" class="size-3 shrink-0" />
+                        <span class="overflow-hidden text-clip whitespace-nowrap">{label()}</span>
+                      </span>
+                    )}
                   </Show>
                 </div>
               </div>
