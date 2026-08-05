@@ -71,8 +71,11 @@ export function retryable(error: Err, provider: string) {
   if (SessionV1.APIError.isInstance(error)) {
     const status = error.data.statusCode
     // 5xx errors are transient server failures and should always be retried,
-    // even when the provider SDK doesn't explicitly mark them as retryable.
-    if (!error.data.isRetryable && !(status !== undefined && status >= 500)) return undefined
+    // even when the provider SDK doesn't explicitly mark them as retryable. 408 is the one 4xx
+    // that is transient in the same way: the request timed out before completing, so it is safe
+    // to send again.
+    if (!error.data.isRetryable && !(status !== undefined && (status === 408 || status >= 500)))
+      return undefined
     if (error.data.responseBody?.includes("FreeUsageLimitError")) {
       return {
         message: GO_UPSELL_MESSAGE,
