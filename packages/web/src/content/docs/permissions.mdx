@@ -190,7 +190,7 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 - `glob` — file globbing (matches the glob pattern)
 - `grep` — content search (matches the regex pattern)
 - `bash` — running shell commands (matches parsed commands like `git status --porcelain`)
-- `destructive_bash` — one-time confirmation for destructive shell commands in the secure-development profile
+- `destructive_bash` — one-time confirmation for destructive or sensitive shell commands
 - `task` — launching subagents (matches the subagent type)
 - `skill` — loading a skill (matches the skill name)
 - `lsp` — running LSP queries (currently non-granular)
@@ -271,9 +271,33 @@ Then use the secure-development profile:
 }
 ```
 
-Normal project work such as edits, tests, builds, and Git inspection stays autonomous. Destructive shell operations (`rm`, destructive Git operations, in-place rewrites, disk tools, and publishing) use `destructive_bash`, which is one-time only and cannot create an `always` rule. Network access remains disabled in the container; use an explicitly reviewed integration when an operation must reach an external service.
+Normal project work such as edits, tests, builds, and Git inspection stays autonomous. Destructive shell operations (`rm`, `mv`, potentially overwriting `cp`, destructive Git operations, in-place rewrites, disk tools, database writes, and publishing) use `destructive_bash`, which is one-time only and cannot create an `always` rule. Network access remains disabled in the container; use an explicitly reviewed integration when an operation must reach an external service.
 
-The sandbox is not a replacement for project permissions: `external_directory` remains `ask`, and a mounted workspace is intentionally writable so the agent can develop in it. Never set global `bash: "allow"` without a sandbox.
+The sandbox is not a replacement for project permissions: `external_directory` remains `ask`, and a mounted workspace is intentionally writable so the agent can develop in it. Do not set global `bash: "allow"` without either sandbox isolation or the host guardrails below.
+
+## Trusted host developer profile
+
+When a development workflow needs the host toolchain, local Git credentials, or network access, omit `sandbox` and keep the same permission split:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "*": "ask",
+    "read": "allow",
+    "edit": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "bash": "allow",
+    "destructive_bash": "ask",
+    "external_directory": "ask",
+    "webfetch": "ask",
+    "websearch": "ask"
+  }
+}
+```
+
+The shell gate routes direct destructive operations, shell interpreters, database mutations, and known credential paths through a one-time confirmation. Sensitive server environment variables are not inherited by shell commands. This is a guardrail, not host isolation: do not use this profile for untrusted repositories or instructions, and do not approve a command whose effect you cannot justify.
 
 ---
 

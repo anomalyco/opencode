@@ -461,10 +461,10 @@ export const ShellTool = Tool.define(
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
-      return {
+      return ShellSafety.shellEnvironment({
         ...process.env,
         ...extra.env,
-      }
+      })
     })
 
     const run = Effect.fn("ShellTool.run")(function* (

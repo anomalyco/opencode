@@ -134,7 +134,7 @@ As permissões do opencode são indexadas pelo nome da ferramenta, além de algu
 - `glob` — globbing de arquivos (corresponde ao padrão glob)
 - `grep` — busca de conteúdo (corresponde ao padrão regex)
 - `bash` — execução de comandos de shell (corresponde a comandos analisados como `git status --porcelain`)
-- `destructive_bash` — confirmação única para comandos de shell destrutivos no perfil `secure-development`
+- `destructive_bash` — confirmação única para comandos de shell destrutivos ou sensíveis
 - `task` — lançamento de subagentes (corresponde ao tipo de subagente)
 - `skill` — carregamento de uma habilidade (corresponde ao nome da habilidade)
 - `lsp` — execução de consultas LSP (atualmente não granular)
@@ -214,9 +214,33 @@ Depois, use o perfil `secure-development`:
 }
 ```
 
-Edições, testes, builds e inspeção de Git no projeto seguem automáticos. Operações destrutivas de shell (`rm`, operações destrutivas de Git, reescritas in-place, ferramentas de disco e publicação) usam `destructive_bash`, sempre com aprovação única e sem criar regra `always`. A rede permanece desabilitada no container; use uma integração revisada explicitamente quando a operação precisar alcançar um serviço externo.
+Edições, testes, builds e inspeção de Git no projeto seguem automáticos. Operações destrutivas de shell (`rm`, `mv`, `cp` com potencial de sobrescrita, operações destrutivas de Git, reescritas in-place, ferramentas de disco, escrita no banco e publicação) usam `destructive_bash`, sempre com aprovação única e sem criar regra `always`. A rede permanece desabilitada no container; use uma integração revisada explicitamente quando a operação precisar alcançar um serviço externo.
 
-O sandbox não substitui permissões do projeto: `external_directory` continua em `ask`, e o workspace montado é gravável de propósito para que o agente desenvolva nele. Nunca defina `bash: "allow"` global sem sandbox.
+O sandbox não substitui permissões do projeto: `external_directory` continua em `ask`, e o workspace montado é gravável de propósito para que o agente desenvolva nele. Não defina `bash: "allow"` global sem isolamento por sandbox ou as guardrails de host abaixo.
+
+## Perfil de desenvolvimento em host confiável
+
+Quando o fluxo de desenvolvimento precisa do toolchain do host, credenciais locais de Git ou acesso à rede, omita `sandbox` e mantenha a mesma separação de permissões:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "*": "ask",
+    "read": "allow",
+    "edit": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "bash": "allow",
+    "destructive_bash": "ask",
+    "external_directory": "ask",
+    "webfetch": "ask",
+    "websearch": "ask"
+  }
+}
+```
+
+O gate de shell envia operações destrutivas diretas, interpretadores de shell, mutações de banco e caminhos conhecidos de credenciais para uma confirmação única. Variáveis sensíveis do ambiente do servidor não são herdadas pelos comandos de shell. Ele é uma guardrail, não isolamento do host: não use esse perfil para repositórios ou instruções não confiáveis e não aprove um comando cujo efeito você não consiga justificar.
 
 ---
 
