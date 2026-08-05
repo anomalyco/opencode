@@ -36,7 +36,7 @@ import { SessionUsage } from "../usage"
 /** How one model call ended: settled, awaiting a scheduled retry, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean; readonly step: number }
-  Retry: { readonly step: number }
+  Retry: { readonly step: number; readonly mode: SessionRunnerRetry.RetryableFailure["mode"] }
   Restart: { readonly step: number; readonly recoveredOverflow: boolean }
 }>
 const CallOutcome = Data.taggedEnum<CallOutcome>()
@@ -91,6 +91,8 @@ const classifyToolExits = (
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
 const STEP_INTERRUPTED = { type: "aborted", message: "Step interrupted" } as const
 const RESULT_MISSING = { type: "tool.result-missing", message: "Provider did not return a tool result" } as const
+const CONTINUE_AFTER_INCOMPLETE_STREAM =
+  "The previous response was interrupted. Continue from where you left off without repeating completed content."
 
 const layer = Layer.effect(
   Service,
@@ -163,15 +165,17 @@ const layer = Layer.effect(
        */
       const waitForRetry = (failure: SessionRunnerRetry.RetryableFailure) =>
         retry(failure).pipe(
-          Effect.as(CallOutcome.Retry({ step: failure.step })),
+          Effect.as(CallOutcome.Retry({ step: failure.step, mode: failure.mode })),
           Pull.catchDone(() =>
-            bus
-              .publish(SessionEvent.Step.Failed, {
-                sessionID,
-                assistantMessageID,
-                error: failure.error,
-              })
-              .pipe(Effect.andThen(Effect.fail(failure.cause))),
+            failure.mode === "continue"
+              ? Effect.fail(failure.cause)
+              : bus
+                  .publish(SessionEvent.Step.Failed, {
+                    sessionID,
+                    assistantMessageID,
+                    error: failure.error,
+                  })
+                  .pipe(Effect.andThen(Effect.fail(failure.cause))),
           ),
         )
       let currentPromotable: SessionPending.Promotable | undefined = promotable
@@ -187,6 +191,13 @@ const layer = Layer.effect(
           assistantMessageID,
         ).pipe(Effect.catchTag("SessionRunner.RetryableFailure", waitForRetry))
         if (outcome._tag === "Completed") return { needsContinuation: outcome.needsContinuation, step: outcome.step }
+        if (outcome._tag === "Retry" && outcome.mode === "continue") {
+          yield* bus.publish(SessionEvent.Synthetic, {
+            sessionID,
+            text: CONTINUE_AFTER_INCOMPLETE_STREAM,
+          })
+          assistantMessageID = SessionMessage.ID.create()
+        }
         if (outcome._tag === "Restart") {
           if (outcome.recoveredOverflow) recoverOverflow = false
           assistantMessageID = SessionMessage.ID.create()
@@ -382,6 +393,7 @@ const layer = Layer.effect(
               cause: llmFailure,
               error: llmError,
               step: currentStep,
+              mode: "retry",
             })
           }
           if (llmError) yield* publisher.failAssistant(llmError)
@@ -425,6 +437,22 @@ const layer = Layer.effect(
               ...end,
             })
           }
+
+          if (
+            llmFailure &&
+            llmError &&
+            SessionRunnerRetry.isIncompleteStream(llmFailure) &&
+            record.outputStarted &&
+            tools.declines.length === 0 &&
+            !tools.interrupted &&
+            tools.failure === undefined
+          )
+            return yield* new SessionRunnerRetry.RetryableFailure({
+              cause: llmFailure,
+              error: llmError,
+              step: currentStep,
+              mode: "continue",
+            })
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (tools.declines.length > 0) return yield* Effect.interrupt

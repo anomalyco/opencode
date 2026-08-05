@@ -12,7 +12,11 @@ export class RetryableFailure extends Data.TaggedError("SessionRunner.RetryableF
   readonly cause: AIError
   readonly error: SessionError.Error
   readonly step: number
+  readonly mode: "retry" | "continue"
 }> {}
+
+export const isIncompleteStream = (error: AIError) =>
+  error.reason._tag === "InvalidProviderOutput" && error.reason.classification === "incomplete-stream"
 
 export function isRetryable(error: AIError) {
   switch (error.reason._tag) {
@@ -21,7 +25,7 @@ export function isRetryable(error: AIError) {
     case "Transport":
       return true
     case "InvalidProviderOutput":
-      return error.reason.classification === "incomplete-stream"
+      return isIncompleteStream(error)
     case "Authentication":
     case "QuotaExceeded":
     case "ContentPolicy":
