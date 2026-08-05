@@ -196,10 +196,9 @@ For background loops, use `Effect.repeat` or `Effect.schedule` with
 ## Promise And ALS Bridges
 
 [`EffectBridge`](../../src/effect/bridge.ts) is the sanctioned helper for
-Promise/callback interop that needs to preserve instance/workspace context.
-It preserves explicit `InstanceRef` / `WorkspaceRef` context for effects run
-through the bridge. Plain JS callbacks that need instance data should receive
-that data explicitly.
+Promise/callback interop that needs to preserve instance context. It preserves
+the explicit `InstanceRef` context for effects run through the bridge. Plain JS
+callbacks that need instance data should receive that data explicitly.
 
 ## Testing
 

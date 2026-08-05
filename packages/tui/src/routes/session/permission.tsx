@@ -169,7 +169,6 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               reply: "always",
               requestID: props.request.id,
               directory: props.directory,
-              workspace: project.workspace.current(),
             })
           }}
         />
@@ -182,7 +181,6 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               requestID: props.request.id,
               directory: props.directory,
               message: message || undefined,
-              workspace: project.workspace.current(),
             })
           }}
           onCancel={() => {
@@ -419,7 +417,6 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                     reply: "reject",
                     requestID: props.request.id,
                     directory: props.directory,
-                    workspace: project.workspace.current(),
                   })
                   return
                 }
@@ -427,7 +424,6 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                   reply: "once",
                   requestID: props.request.id,
                   directory: props.directory,
-                  workspace: project.workspace.current(),
                 })
               }}
             />

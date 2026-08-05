@@ -1,26 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Queue } from "effect"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Worktree } from "@/worktree"
 import { Server } from "../../src/server/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
-import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const stateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const original = {
-      OPENCODE_EXPERIMENTAL_WORKSPACES: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
-    }
-
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
-
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original.OPENCODE_EXPERIMENTAL_WORKSPACES
         await resetDatabase()
       }),
     )
@@ -246,62 +237,4 @@ describe("worktree endpoint reproduction", () => {
     { git: true },
   )
 
-  worktreeTest(
-    "workspace worktree create does not hang",
-    () =>
-      Effect.gen(function* () {
-        const test = yield* TestInstance
-        const server = yield* serverScoped()
-
-        const response = yield* createWorktreeScoped({
-          server,
-          directory: test.directory,
-          path: `${WorkspacePaths.list}?directory=${encodeURIComponent(test.directory)}`,
-          init: {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ type: "worktree", branch: null }),
-          },
-          timeoutLabel: "workspace worktree create",
-          timeoutMs: 8_000,
-        })
-
-        expect(response).toMatchObject({
-          type: "worktree",
-          directory: expect.any(String),
-        })
-      }),
-    { git: true },
-  )
-
-  worktreeTest(
-    "workspace worktree create returns without waiting for project start command",
-    () =>
-      Effect.gen(function* () {
-        const test = yield* TestInstance
-        const server = yield* serverScoped()
-        yield* setProjectStartCommand({
-          server,
-          directory: test.directory,
-          command: 'bun -e "setTimeout(() => {}, 2000)"',
-        })
-
-        const started = Date.now()
-        yield* createWorktreeScoped({
-          server,
-          directory: test.directory,
-          path: `${WorkspacePaths.list}?directory=${encodeURIComponent(test.directory)}`,
-          init: {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ type: "worktree", branch: null }),
-          },
-          timeoutLabel: "workspace worktree create with project start command",
-          timeoutMs: 6_000,
-        })
-
-        expect(Date.now() - started).toBeLessThan(1_500)
-      }),
-    { git: true },
-  )
 })

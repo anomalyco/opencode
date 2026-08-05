@@ -219,11 +219,11 @@ Next PR candidates:
 
 ## P4: Instance And Bridge
 
-Instance context migration is complete for the legacy sync shim. Promise and callback interop continues through [`effect/bridge.ts`](../../src/effect/bridge.ts).
+Instance context migration is complete. Promise and callback interop continues through [`effect/bridge.ts`](../../src/effect/bridge.ts).
 
 Current rules:
 
-- Effect services read instance data from `InstanceRef`, `WorkspaceRef`, `InstanceState`, or explicit arguments.
+- Effect services read instance data from `InstanceRef`, `InstanceState`, or explicit arguments.
 - Plain JavaScript callback boundaries use `EffectBridge` or explicit context arguments.
 - Runtime entrypoints must provide refs explicitly when they are instance-scoped.
 

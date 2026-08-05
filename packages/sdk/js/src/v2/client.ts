@@ -15,21 +15,14 @@ function pick(value: string | null, fallback?: string, encode?: (value: string) 
   return value
 }
 
-function rewrite(request: Request, values: { directory?: string; workspace?: string }) {
+function rewrite(request: Request, directory?: string) {
   if (request.method !== "GET" && request.method !== "HEAD") return request
 
   const url = new URL(request.url)
   let changed = false
 
-  for (const [name, key] of [
-    ["x-opencode-directory", "directory"],
-    ["x-opencode-workspace", "workspace"],
-  ] as const) {
-    const value = pick(
-      request.headers.get(name),
-      key === "directory" ? values.directory : values.workspace,
-      key === "directory" ? encodeURIComponent : undefined,
-    )
+  for (const [name, key] of [["x-opencode-directory", "directory"]] as const) {
+    const value = pick(request.headers.get(name), directory, encodeURIComponent)
     if (!value) continue
     for (const query of url.pathname.startsWith("/api/") ? [key, `location[${key}]`] : [key]) {
       if (!url.searchParams.has(query)) {
@@ -43,11 +36,10 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
 
   const next = new Request(url, request)
   next.headers.delete("x-opencode-directory")
-  next.headers.delete("x-opencode-workspace")
   return next
 }
 
-export function createOpencodeClient(config?: Config & { directory?: string; experimental_workspaceID?: string }) {
+export function createOpencodeClient(config?: Config & { directory?: string }) {
   if (!config?.fetch) {
     const customFetch: any = (req: any) => {
       // @ts-ignore
@@ -67,20 +59,8 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
     }
   }
 
-  if (config?.experimental_workspaceID) {
-    config.headers = {
-      ...config.headers,
-      "x-opencode-workspace": config.experimental_workspaceID,
-    }
-  }
-
   const client = createClient(config)
-  client.interceptors.request.use((request) =>
-    rewrite(request, {
-      directory: config?.directory,
-      workspace: config?.experimental_workspaceID,
-    }),
-  )
+  client.interceptors.request.use((request) => rewrite(request, config?.directory))
   client.interceptors.response.use((response) => {
     const contentType = response.headers.get("content-type")
     if (contentType === "text/html")

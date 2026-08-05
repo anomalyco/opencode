@@ -8,9 +8,9 @@ import { McpApi, McpPaths } from "../../src/server/routes/instance/httpapi/group
 import { Authorization } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { InstanceContextMiddleware } from "../../src/server/routes/instance/httpapi/middleware/instance-context"
 import {
-  WorkspaceRouteContext,
-  WorkspaceRoutingMiddleware,
-} from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
+  RouteContext,
+  RouteContextMiddleware,
+} from "../../src/server/routes/instance/httpapi/middleware/route-context"
 import { testEffect } from "../lib/effect"
 
 const TestHttpApi = HttpApi.make("opencode-instance").addHttpApi(McpApi)
@@ -41,10 +41,10 @@ const passthroughInstanceContext = Layer.succeed(
   InstanceContextMiddleware.of((effect) => effect),
 )
 
-const testWorkspaceRouting = Layer.succeed(
-  WorkspaceRoutingMiddleware,
-  WorkspaceRoutingMiddleware.of((effect) =>
-    effect.pipe(Effect.provideService(WorkspaceRouteContext, WorkspaceRouteContext.of({ directory: process.cwd() }))),
+const testRouteContext = Layer.succeed(
+  RouteContextMiddleware,
+  RouteContextMiddleware.of((effect) =>
+    effect.pipe(Effect.provideService(RouteContext, RouteContext.of({ directory: process.cwd() }))),
   ),
 )
 
@@ -52,7 +52,7 @@ const it = testEffect(
   HttpRouter.serve(
     HttpApiBuilder.layer(TestHttpApi).pipe(
       Layer.provide(testMcpHandlers),
-      Layer.provide([passthroughAuthorization, passthroughInstanceContext, testWorkspaceRouting, fakeSession]),
+      Layer.provide([passthroughAuthorization, passthroughInstanceContext, testRouteContext, fakeSession]),
     ),
     { disableListenLog: true, disableLogger: true },
   ).pipe(Layer.provideMerge(NodeHttpServer.layerTest)),

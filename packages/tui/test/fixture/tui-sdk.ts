@@ -35,7 +35,7 @@ export function createEventSource() {
       const chunk = new TextEncoder().encode(
         `data: ${JSON.stringify({
           ...event.payload,
-          location: { directory: event.directory, workspaceID: event.workspace },
+          location: { directory: event.directory },
           data: event.payload.properties,
         })}\n\n`,
       )
@@ -74,8 +74,6 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       [
         "/agent",
         "/command",
-        "/experimental/workspace",
-        "/experimental/workspace/status",
         "/formatter",
         "/lsp",
       ].includes(url.pathname)

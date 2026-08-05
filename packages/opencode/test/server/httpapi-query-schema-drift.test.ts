@@ -1,7 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { OpenApi } from "effect/unstable/httpapi"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Server } from "../../src/server/server"
 import { SessionID } from "../../src/session/schema"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
@@ -17,7 +16,6 @@ import {
   ToolListQuery,
 } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { InstancePaths, VcsDiffQuery } from "../../src/server/routes/instance/httpapi/groups/instance"
-import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import {
   ListQuery as SessionListQuery,
   MessagesQuery,
@@ -29,8 +27,6 @@ import { QueryBoolean, QueryBooleanOpenApi } from "../../src/server/routes/insta
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
-
-const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
 type Method = "get" | "post" | "put" | "delete" | "patch"
 type QuerySchema = { readonly fields: Record<string, unknown> }
@@ -91,7 +87,6 @@ const pathParamPatterns = [
   { method: "post", path: "/permission/:requestID/reply", name: "requestID", pattern: "^per" },
   { method: "post", path: "/question/:requestID/reply", name: "requestID", pattern: "^que" },
   { method: "put", path: PtyPaths.update, name: "ptyID", pattern: "^pty" },
-  { method: "delete", path: WorkspacePaths.remove, name: "id", pattern: "^wrk" },
 ] satisfies Array<{ method: Method; path: string; name: string; pattern: string }>
 
 function app() {
@@ -144,17 +139,14 @@ function assertAdvertisedQueryParamsAreRuntimeFields(input: {
 }
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   await disposeAllInstances()
   await resetDatabase()
 })
 
-// Regression for the "OpenAPI advertises ?directory&workspace, runtime
-// rejects them" drift class. Each affected route must accept both params
-// without 400.
+// Regression for the "OpenAPI advertises ?directory, runtime rejects it"
+// drift class. Each affected route must accept the routing param without 400.
 describe("httpapi query schema drift", () => {
-  const routingParams = (dir: string) =>
-    `directory=${encodeURIComponent(dir)}&workspace=${encodeURIComponent("ws_test")}`
+  const routingParams = (dir: string) => `directory=${encodeURIComponent(dir)}`
 
   const expectNotSchemaRejection = (status: number, url: string) => {
     expect(status, `route ${url} 400'd, query schema is missing routing fields`).not.toBe(400)
@@ -241,7 +233,7 @@ describe("httpapi query schema drift", () => {
   )
 
   it.live(
-    "session list accepts directory and workspace",
+    "session list accepts directory",
     withTmp({ config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const url = `/session?${routingParams(tmp.path)}`
@@ -252,7 +244,7 @@ describe("httpapi query schema drift", () => {
   )
 
   it.live(
-    "session messages accepts directory and workspace",
+    "session messages accepts directory",
     withTmp({ config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const url = `/session/${SessionID.descending()}/message?limit=80&${routingParams(tmp.path)}`
@@ -263,7 +255,7 @@ describe("httpapi query schema drift", () => {
   )
 
   it.live(
-    "file find/file accepts directory and workspace",
+    "file find/file accepts directory",
     withTmp({ config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const url = `/find/file?query=foo&${routingParams(tmp.path)}`
@@ -274,7 +266,7 @@ describe("httpapi query schema drift", () => {
   )
 
   it.live(
-    "file find/text accepts directory and workspace",
+    "file find/text accepts directory",
     withTmp({ config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const url = `/find?pattern=foo&${routingParams(tmp.path)}`
@@ -285,7 +277,7 @@ describe("httpapi query schema drift", () => {
   )
 
   it.live(
-    "file read accepts directory and workspace",
+    "file read accepts directory",
     withTmp({ config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const url = `/file?path=foo&${routingParams(tmp.path)}`
@@ -296,7 +288,7 @@ describe("httpapi query schema drift", () => {
   )
 
   it.live(
-    "experimental session list accepts directory and workspace",
+    "experimental session list accepts directory",
     withTmp({ config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const url = `/experimental/session?${routingParams(tmp.path)}`
@@ -307,7 +299,7 @@ describe("httpapi query schema drift", () => {
   )
 
   it.live(
-    "experimental tool list accepts directory and workspace",
+    "experimental tool list accepts directory",
     withTmp({ config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
         const url = `/experimental/tool?provider=anthropic&model=claude&${routingParams(tmp.path)}`
@@ -318,10 +310,10 @@ describe("httpapi query schema drift", () => {
   )
 
   it.live(
-    "vcs diff accepts directory and workspace",
+    "vcs diff accepts directory",
     withTmp({ config: { formatter: false, lsp: false } }, (tmp) =>
       Effect.gen(function* () {
-        const url = `/vcs/diff?mode=working&${routingParams(tmp.path)}`
+        const url = `/vcs/diff?mode=git&${routingParams(tmp.path)}`
         const response = yield* request(url)
         expectNotSchemaRejection(response.status, url)
       }),

@@ -4,7 +4,6 @@ import { Identifier } from "@/id/id"
 export type GlobalEvent = {
   directory?: string
   project?: string
-  workspace?: string
   payload: any
 }
 

@@ -326,7 +326,6 @@ export function Autocomplete(props: {
         limit: "20",
         location: {
           directory: input.location?.directory,
-          workspace: input.location?.workspaceID ?? project.workspace.current(),
         },
       })
 

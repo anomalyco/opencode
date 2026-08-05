@@ -5,7 +5,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "e
 import { ProjectNotFoundError } from "../errors"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
+import { RouteContextMiddleware, RoutingQuery } from "../middleware/route-context"
 import { described } from "./metadata"
 
 const root = "/project"
@@ -20,7 +20,7 @@ export const ProjectApi = HttpApi.make("project")
     HttpApiGroup.make("project")
       .add(
         HttpApiEndpoint.get("list", root, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Array(Project.Info), "List of projects"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -30,7 +30,7 @@ export const ProjectApi = HttpApi.make("project")
           }),
         ),
         HttpApiEndpoint.get("current", `${root}/current`, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Project.Info, "Current project information"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -40,7 +40,7 @@ export const ProjectApi = HttpApi.make("project")
           }),
         ),
         HttpApiEndpoint.post("initGit", `${root}/git/init`, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Project.Info, "Project information after git initialization"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -51,7 +51,7 @@ export const ProjectApi = HttpApi.make("project")
         ),
         HttpApiEndpoint.patch("update", `${root}/:projectID`, {
           params: { projectID: ProjectV2.ID },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: UpdatePayload,
           success: described(Project.Info, "Updated project information"),
           error: [HttpApiError.BadRequest, ProjectNotFoundError],
@@ -64,7 +64,7 @@ export const ProjectApi = HttpApi.make("project")
         ),
         HttpApiEndpoint.get("directories", `${root}/:projectID/directories`, {
           params: { projectID: ProjectV2.ID },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(ProjectV2.Directories, "Project directories"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -81,7 +81,7 @@ export const ProjectApi = HttpApi.make("project")
         }),
       )
       .middleware(InstanceContextMiddleware)
-      .middleware(WorkspaceRoutingMiddleware)
+      .middleware(RouteContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(

@@ -84,23 +84,6 @@ describe("PublicApi OpenAPI v2 errors", () => {
     )
   })
 
-  test("documents nested legacy global sync events", () => {
-    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
-    const schema = spec.components.schemas.SyncEventSessionCreated
-
-    expect(schema?.required).toEqual(["type", "id", "syncEvent"])
-    expect(schema?.properties?.type?.enum).toEqual(["sync"])
-    expect(schema?.properties?.syncEvent).toMatchObject({
-      required: ["type", "id", "seq", "aggregateID", "data"],
-      properties: {
-        type: { enum: ["session.created.1"] },
-        id: { type: "string" },
-        seq: { type: "number" },
-        aggregateID: { type: "string" },
-      },
-    })
-  })
-
   test("names the v2 event union without the SSE string wrapper collision", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
@@ -337,7 +320,7 @@ describe("PublicApi OpenAPI v2 errors", () => {
       spec.paths["/pty/{ptyID}/connect"]?.get?.parameters
         ?.filter((parameter) => parameter.in === "query")
         .map((parameter) => parameter.name),
-    ).toEqual(["directory", "workspace", "cursor", "ticket"])
+    ).toEqual(["directory", "cursor", "ticket"])
   })
 
   test("documents project not-found errors", () => {

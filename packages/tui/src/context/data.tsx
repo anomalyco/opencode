@@ -407,7 +407,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         handleEvent({
           ...event,
           data: event.properties,
-          location: { directory: metadata.directory, workspaceID: metadata.workspace },
+          location: { directory: metadata.directory },
         } as V2Event)
       })
       onCleanup(unsub)

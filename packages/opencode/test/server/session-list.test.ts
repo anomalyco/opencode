@@ -11,14 +11,8 @@ import path from "path"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { eq } from "drizzle-orm"
 import { testEffect } from "../lib/effect"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 
-const layer = (experimentalWorkspaces: boolean) =>
-  AppNodeBuilder.build(LayerNode.group([Database.node, SessionNs.node, SessionProjector.node]), [
-    [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces })],
-  ])
-const it = testEffect(layer(false))
-const itWorkspaces = testEffect(layer(true))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, SessionNs.node, SessionProjector.node])))
 
 const withSession = (input?: Parameters<SessionNs.Interface["create"]>[0]) =>
   Effect.acquireRelease(SessionNs.use.create(input), (created) =>
@@ -82,30 +76,6 @@ describe("session.list", () => {
         )).map((session) => session.id)
         expect(ids).not.toContain(root.id)
         expect(ids).not.toContain(parent.id)
-        expect(ids).toContain(current.id)
-        expect(ids).not.toContain(sibling.id)
-      }),
-    { git: true },
-  )
-
-  itWorkspaces.instance(
-    "filters by directory when experimental workspaces are enabled",
-    () =>
-      Effect.gen(function* () {
-        const test = yield* TestInstance
-        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "opencode"), { recursive: true }))
-        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "app"), { recursive: true }))
-
-        const current = yield* withSession({ title: "current" }).pipe(
-          provideInstance(path.join(test.directory, "packages", "opencode")),
-        )
-        const sibling = yield* withSession({ title: "sibling" }).pipe(
-          provideInstance(path.join(test.directory, "packages", "app")),
-        )
-
-        const ids = (yield* SessionNs.Service.use((session) =>
-          session.list({ directory: path.join(test.directory, "packages", "opencode") }),
-        )).map((session) => session.id)
         expect(ids).toContain(current.id)
         expect(ids).not.toContain(sibling.id)
       }),

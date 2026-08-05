@@ -1,6 +1,5 @@
 import { describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { EventV2 } from "@opencode-ai/core/event"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
@@ -11,7 +10,6 @@ import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { GlobalBus } from "@/bus/global"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceStore } from "@/project/instance-store"
@@ -27,7 +25,7 @@ const it = testEffect(
       InstanceStore.node,
     ]),
     [
-      [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces: false })],
+      [RuntimeFlags.node, RuntimeFlags.layer({})],
       [
         InstanceBootstrap.node,
         Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
@@ -106,30 +104,6 @@ describe("session.created event", () => {
     }),
   )
 
-  it.instance("emits legacy global sync payload", () =>
-    Effect.gen(function* () {
-      const session = yield* SessionNs.Service
-      const received = yield* Deferred.make<{ syncEvent: EventV2.SerializedEvent }>()
-      const listener = (event: { payload: { type?: string; syncEvent?: EventV2.SerializedEvent } }) => {
-        if (event.payload.type === "sync" && event.payload.syncEvent)
-          Deferred.doneUnsafe(received, Effect.succeed({ syncEvent: event.payload.syncEvent }))
-      }
-      GlobalBus.on("event", listener)
-      yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", listener)))
-
-      const info = yield* session.create({})
-      const event = yield* awaitDeferred(received, "timed out waiting for legacy global sync event")
-
-      expect(event.syncEvent).toMatchObject({
-        type: EventV2.versionedType(SessionNs.Event.Created.type, 1),
-        seq: 0,
-        aggregateID: info.id,
-        data: { sessionID: info.id },
-      })
-
-      yield* session.remove(info.id)
-    }),
-  )
 })
 
 describe("step-finish token propagation via event", () => {

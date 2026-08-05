@@ -5,7 +5,7 @@ Instance selection is now Effect-provided context.
 Use these APIs:
 
 - `InstanceRef` for the current project context.
-- `WorkspaceRef` for the current workspace id.
+- `RouteContext` for request-derived directory routing.
 - `InstanceState.context` / `InstanceState.directory` inside Effect services that require an instance.
 - `InstanceStore` at entry boundaries that need to load, reload, or dispose project contexts.
 - `EffectBridge` for native, plugin, or plain JavaScript callback boundaries that need to re-enter Effect with captured refs.

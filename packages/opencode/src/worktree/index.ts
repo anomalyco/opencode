@@ -230,7 +230,6 @@ const layer: Layer.Layer<
 
     const boot = Effect.fnUntraced(function* (info: Info, startCommand?: string) {
       const ctx = yield* InstanceState.context
-      const workspaceID = yield* InstanceState.workspaceID
       const projectID = ctx.project.id
       const extra = startCommand?.trim()
 
@@ -241,7 +240,6 @@ const layer: Layer.Layer<
         GlobalBus.emit("event", {
           directory: info.directory,
           project: ctx.project.id,
-          workspace: workspaceID,
           payload: { type: Event.Failed.type, properties: { message } },
         })
         return
@@ -256,7 +254,6 @@ const layer: Layer.Layer<
             GlobalBus.emit("event", {
               directory: info.directory,
               project: ctx.project.id,
-              workspace: workspaceID,
               payload: { type: Event.Failed.type, properties: { message } },
             })
             return false
@@ -268,7 +265,6 @@ const layer: Layer.Layer<
       GlobalBus.emit("event", {
         directory: info.directory,
         project: ctx.project.id,
-        workspace: workspaceID,
         payload: {
           type: Event.Ready.type,
           properties: { name: info.name, ...(info.branch ? { branch: info.branch } : {}) },

@@ -19,7 +19,7 @@ import { PtyEnvironment } from "../pty-environment"
 
 const ticketScope = Effect.gen(function* () {
   const location = yield* Location.Service
-  return { directory: location.directory as string, workspaceID: location.workspaceID }
+  return { directory: location.directory as string }
 })
 
 export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>

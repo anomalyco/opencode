@@ -1,8 +1,7 @@
 import { Effect, ScopedCache, Scope } from "effect"
 import type { InstanceContext } from "@/project/instance-context"
-import { InstanceRef, WorkspaceRef } from "./instance-ref"
+import { InstanceRef } from "./instance-ref"
 import { registerDisposer } from "./instance-registry"
-import { WorkspaceContext } from "@/control-plane/workspace-context"
 
 const TypeId = "~opencode/InstanceState"
 
@@ -15,10 +14,6 @@ export const context = Effect.gen(function* () {
   const ctx = yield* InstanceRef
   if (!ctx) return yield* Effect.die(new Error("InstanceRef not provided"))
   return ctx
-})
-
-export const workspaceID = Effect.gen(function* () {
-  return (yield* WorkspaceRef) ?? WorkspaceContext.workspaceID
 })
 
 export const directory = Effect.map(context, (ctx) => ctx.directory)

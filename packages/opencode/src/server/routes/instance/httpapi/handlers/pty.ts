@@ -1,6 +1,6 @@
 import * as InstanceState from "@/effect/instance-state"
 import { registerDisposer } from "@/effect/instance-registry"
-import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
+import { InstanceRef } from "@/effect/instance-ref"
 import { Plugin } from "@/plugin"
 import { Pty } from "@opencode-ai/core/pty"
 import { PtyProtocol } from "@opencode-ai/core/pty/protocol"
@@ -31,8 +31,7 @@ function validOrigin(request: HttpServerRequest.HttpServerRequest, opts: CorsOpt
 
 const ticketScope = Effect.gen(function* () {
   const instance = yield* InstanceRef
-  const workspaceID = yield* WorkspaceRef
-  return { directory: instance?.directory, workspaceID }
+  return { directory: instance?.directory }
 })
 
 // Legacy surface compatibility: before exited-session retention, sessions vanished the moment

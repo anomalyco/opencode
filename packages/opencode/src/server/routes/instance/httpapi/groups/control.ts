@@ -11,7 +11,6 @@ const AuthParams = Schema.Struct({
 
 const LogQuery = Schema.Struct({
   directory: Schema.optional(Schema.String),
-  workspace: Schema.optional(Schema.String),
 })
 
 export const LogInput = Schema.Struct({

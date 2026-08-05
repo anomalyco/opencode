@@ -5,7 +5,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "e
 import { PermissionNotFoundError } from "../errors"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
+import { RouteContextMiddleware, RoutingQuery } from "../middleware/route-context"
 import { described } from "./metadata"
 
 const root = "/permission"
@@ -19,7 +19,7 @@ export const PermissionApi = HttpApi.make("permission")
     HttpApiGroup.make("permission")
       .add(
         HttpApiEndpoint.get("list", root, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Array(PermissionV1.Request), "List of pending permissions"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -30,7 +30,7 @@ export const PermissionApi = HttpApi.make("permission")
         ),
         HttpApiEndpoint.post("reply", `${root}/:requestID/reply`, {
           params: { requestID: PermissionV1.ID },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: ReplyPayload,
           success: described(Schema.Boolean, "Permission processed successfully"),
           error: [HttpApiError.BadRequest, PermissionNotFoundError],
@@ -49,7 +49,7 @@ export const PermissionApi = HttpApi.make("permission")
         }),
       )
       .middleware(InstanceContextMiddleware)
-      .middleware(WorkspaceRoutingMiddleware)
+      .middleware(RouteContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(

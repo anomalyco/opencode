@@ -33,14 +33,12 @@ import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { ProjectV2 } from "@opencode-ai/core/project"
-import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
 import { NonNegativeInt, optional } from "@opencode-ai/core/schema"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
@@ -79,7 +77,6 @@ export function fromRow(row: SessionRow): Info {
     id: row.id,
     slug: row.slug,
     projectID: row.project_id,
-    workspaceID: row.workspace_id ?? undefined,
     directory: row.directory,
     path: row.path ?? undefined,
     parentID: row.parent_id ?? undefined,
@@ -121,7 +118,7 @@ export function toRow(info: Info) {
   return {
     id: info.id,
     project_id: info.projectID,
-    workspace_id: info.workspaceID,
+    workspace_id: null,
     parent_id: info.parentID,
     slug: info.slug,
     directory: info.directory,
@@ -225,7 +222,6 @@ export const Info = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
   projectID: ProjectV2.ID,
-  workspaceID: optional(WorkspaceV2.ID),
   directory: Schema.String,
   path: optional(Schema.String),
   parentID: optional(SessionID),
@@ -265,7 +261,6 @@ export const CreateInput = Schema.optional(
     model: Schema.optional(Model),
     metadata: Schema.optional(Metadata),
     permission: Schema.optional(PermissionV1.Ruleset),
-    workspaceID: Schema.optional(WorkspaceV2.ID),
   }),
 )
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
@@ -303,7 +298,6 @@ export type ListInput = {
   directory?: string
   scope?: "project"
   path?: string
-  workspaceID?: WorkspaceV2.ID
   roots?: boolean
   start?: number
   search?: string
@@ -422,7 +416,6 @@ export interface Interface {
     model?: Schema.Schema.Type<typeof Model>
     metadata?: typeof Metadata.Type
     permission?: PermissionV1.Ruleset
-    workspaceID?: WorkspaceV2.ID
   }) => Effect.Effect<Info>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
@@ -445,7 +438,6 @@ export interface Interface {
   readonly clearRevert: (sessionID: SessionID) => Effect.Effect<void>
   readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
   readonly setShare: (input: { sessionID: SessionID; share: Info["share"] }) => Effect.Effect<void>
-  readonly setWorkspace: (input: { sessionID: SessionID; workspaceID: Info["workspaceID"] }) => Effect.Effect<void>
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
@@ -488,7 +480,7 @@ export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" 
 const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | RuntimeFlags.Service | Database.Service | EventV2Bridge.Service
+  BackgroundJob.Service | Database.Service | EventV2Bridge.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -496,7 +488,6 @@ const layer: Layer.Layer<
     const database = yield* Database.Service
     const background = yield* BackgroundJob.Service
     const events = yield* EventV2Bridge.Service
-    const flags = yield* RuntimeFlags.Service
 
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
@@ -504,7 +495,6 @@ const layer: Layer.Layer<
       agent?: string
       model?: Schema.Schema.Type<typeof Model>
       parentID?: SessionID
-      workspaceID?: WorkspaceV2.ID
       directory: string
       path?: string
       metadata?: typeof Metadata.Type
@@ -518,7 +508,6 @@ const layer: Layer.Layer<
         projectID: ctx.project.id,
         directory: input.directory,
         path: input.path,
-        workspaceID: input.workspaceID,
         parentID: input.parentID,
         title: input.title ?? (input.parentID ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString(),
         agent: input.agent,
@@ -549,7 +538,6 @@ const layer: Layer.Layer<
       const ctx = yield* InstanceState.context
       return yield* listByProject(db, {
         projectID: ctx.project.id,
-        experimentalWorkspaces: flags.experimentalWorkspaces,
         ...input,
       })
     })
@@ -673,10 +661,8 @@ const layer: Layer.Layer<
       model?: Schema.Schema.Type<typeof Model>
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
-      workspaceID?: WorkspaceV2.ID
     }) {
       const ctx = yield* InstanceState.context
-      const workspace = yield* InstanceState.workspaceID
       return yield* createNext({
         parentID: input?.parentID,
         directory: ctx.directory,
@@ -686,7 +672,6 @@ const layer: Layer.Layer<
         model: input?.model,
         metadata: input?.metadata,
         permission: input?.permission,
-        workspaceID: input?.workspaceID ?? workspace,
       })
     })
 
@@ -697,7 +682,6 @@ const layer: Layer.Layer<
       const session = yield* createNext({
         directory: ctx.directory,
         path: sessionPath(ctx.worktree, ctx.directory),
-        workspaceID: original.workspaceID,
         title,
         metadata: structuredClone(original.metadata),
       })
@@ -813,15 +797,6 @@ const layer: Layer.Layer<
       yield* patch(input.sessionID, { share: input.share ?? null, time: { updated: Date.now() } }).pipe(Effect.orDie)
     })
 
-    const setWorkspace = Effect.fn("Session.setWorkspace")(function* (input: {
-      sessionID: SessionID
-      workspaceID: Info["workspaceID"]
-    }) {
-      yield* patch(input.sessionID, { workspaceID: input.workspaceID, time: { updated: Date.now() } }).pipe(
-        Effect.orDie,
-      )
-    })
-
     const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
       void sessionID
       return [] as Snapshot.FileDiff[]
@@ -921,7 +896,6 @@ const layer: Layer.Layer<
       clearRevert,
       setSummary,
       setShare,
-      setWorkspace,
       diff,
       messages,
       children,
@@ -958,14 +932,10 @@ function listByProject(
   db: Database.Interface["db"],
   input: ListInput & {
     projectID: ProjectV2.ID
-    experimentalWorkspaces: boolean
   },
 ) {
   const conditions = [eq(SessionTable.project_id, input.projectID)]
 
-  if (input.workspaceID) {
-    conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
-  }
   if (input.path !== undefined) {
     if (input.path) {
       const conds = [
@@ -1012,7 +982,7 @@ function listByProject(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [BackgroundJob.node, RuntimeFlags.node, Database.node, EventV2Bridge.node],
+  deps: [BackgroundJob.node, Database.node, EventV2Bridge.node],
 })
 
 export * as Session from "./session"

@@ -6,24 +6,24 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import {
-  WorkspaceRoutingMiddleware,
-  WorkspaceRoutingQuery,
-  WorkspaceRoutingQueryFields,
-} from "../middleware/workspace-routing"
+  RouteContextMiddleware,
+  RoutingQuery,
+  RoutingQueryFields,
+} from "../middleware/route-context"
 import { described } from "./metadata"
 
 export const FileQuery = Schema.Struct({
-  ...WorkspaceRoutingQueryFields,
+  ...RoutingQueryFields,
   path: Schema.String,
 })
 
 export const FindTextQuery = Schema.Struct({
-  ...WorkspaceRoutingQueryFields,
+  ...RoutingQueryFields,
   pattern: Schema.String,
 })
 
 export const FindFileQuery = Schema.Struct({
-  ...WorkspaceRoutingQueryFields,
+  ...RoutingQueryFields,
   query: Schema.String,
   dirs: Schema.optional(Schema.Literals(["true", "false"])),
   type: Schema.optional(Schema.Literals(["file", "directory"])),
@@ -33,7 +33,7 @@ export const FindFileQuery = Schema.Struct({
 })
 
 export const FindSymbolQuery = Schema.Struct({
-  ...WorkspaceRoutingQueryFields,
+  ...RoutingQueryFields,
   query: Schema.String,
 })
 
@@ -156,7 +156,7 @@ export const FileApi = HttpApi.make("file")
           }),
         ),
         HttpApiEndpoint.get("status", FilePaths.status, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Array(LegacyStatus), "File status"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -173,7 +173,7 @@ export const FileApi = HttpApi.make("file")
         }),
       )
       .middleware(InstanceContextMiddleware)
-      .middleware(WorkspaceRoutingMiddleware)
+      .middleware(RouteContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(

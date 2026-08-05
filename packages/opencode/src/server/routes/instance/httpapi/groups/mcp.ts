@@ -5,7 +5,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "e
 import { McpServerNotFoundError } from "../errors"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
+import { RouteContextMiddleware, RoutingQuery } from "../middleware/route-context"
 import { described } from "./metadata"
 
 export const AddPayload = Schema.Struct({
@@ -43,7 +43,7 @@ export const McpApi = HttpApi.make("mcp")
     HttpApiGroup.make("mcp")
       .add(
         HttpApiEndpoint.get("status", McpPaths.status, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Record(Schema.String, MCP.Status), "MCP server status"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -53,7 +53,7 @@ export const McpApi = HttpApi.make("mcp")
           }),
         ),
         HttpApiEndpoint.post("add", McpPaths.status, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: AddPayload,
           success: described(StatusMap, "MCP server added successfully"),
           error: HttpApiError.BadRequest,
@@ -66,7 +66,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("authStart", McpPaths.auth, {
           params: { name: Schema.String },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(AuthStartResponse, "OAuth flow started"),
           error: [UnsupportedOAuthError, McpServerNotFoundError],
         }).annotateMerge(
@@ -78,7 +78,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("authCallback", McpPaths.authCallback, {
           params: { name: Schema.String },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: AuthCallbackPayload,
           success: described(MCP.Status, "OAuth authentication completed"),
           error: [HttpApiError.BadRequest, McpServerNotFoundError],
@@ -92,7 +92,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("authAuthenticate", McpPaths.authAuthenticate, {
           params: { name: Schema.String },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(MCP.Status, "OAuth authentication completed"),
           error: [UnsupportedOAuthError, McpServerNotFoundError],
         }).annotateMerge(
@@ -104,7 +104,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.delete("authRemove", McpPaths.auth, {
           params: { name: Schema.String },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(AuthRemoveResponse, "OAuth credentials removed"),
           error: McpServerNotFoundError,
         }).annotateMerge(
@@ -116,7 +116,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("connect", McpPaths.connect, {
           params: { name: Schema.String },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Boolean, "MCP server connected successfully"),
           error: McpServerNotFoundError,
         }).annotateMerge(
@@ -127,7 +127,7 @@ export const McpApi = HttpApi.make("mcp")
         ),
         HttpApiEndpoint.post("disconnect", McpPaths.disconnect, {
           params: { name: Schema.String },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Boolean, "MCP server disconnected successfully"),
           error: McpServerNotFoundError,
         }).annotateMerge(
@@ -144,7 +144,7 @@ export const McpApi = HttpApi.make("mcp")
         }),
       )
       .middleware(InstanceContextMiddleware)
-      .middleware(WorkspaceRoutingMiddleware)
+      .middleware(RouteContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(

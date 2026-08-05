@@ -34,7 +34,6 @@ const adaptGroup2 = (raw: RawClient["server.agent"]) => ({ list: Endpoint2_0(raw
 
 type Endpoint3_0Request = Parameters<RawClient["server.session"]["session.list"]>[0]
 type Endpoint3_0Input = {
-  readonly workspace?: Endpoint3_0Request["query"]["workspace"]
   readonly limit?: Endpoint3_0Request["query"]["limit"]
   readonly order?: Endpoint3_0Request["query"]["order"]
   readonly search?: Endpoint3_0Request["query"]["search"]
@@ -46,7 +45,6 @@ type Endpoint3_0Input = {
 const Endpoint3_0 = (raw: RawClient["server.session"]) => (input?: Endpoint3_0Input) =>
   raw["session.list"]({
     query: {
-      workspace: input?.["workspace"],
       limit: input?.["limit"],
       order: input?.["order"],
       search: input?.["search"],

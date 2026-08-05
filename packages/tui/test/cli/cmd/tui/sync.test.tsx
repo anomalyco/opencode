@@ -4,11 +4,10 @@ import { tmpdir } from "../../../fixture/fixture"
 import { mount, wait } from "./sync-fixture"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 
-function branchEvent(branch: string, workspace?: string): GlobalEvent {
+function branchEvent(branch: string): GlobalEvent {
   return {
     directory: "/tmp/other",
     project: "proj_test",
-    workspace,
     payload: {
       id: `evt_vcs_${branch}`,
       type: "vcs.branch.updated",
@@ -40,21 +39,15 @@ describe("tui sync", () => {
     }
   })
 
-  test("vcs branch updates only apply for the active workspace", async () => {
+  test("applies vcs branch updates", async () => {
     await using tmp = await tmpdir()
     await Bun.write(`${tmp.path}/kv.json`, "{}")
-    const { app, emit, project, sync } = await mount(undefined, tmp.path)
+    const { app, emit, sync } = await mount(undefined, tmp.path)
 
     try {
       expect(sync.data.vcs?.branch).toBe("main")
 
-      project.workspace.set("ws_a")
-      emit(branchEvent("other", "ws_b"))
-      await Bun.sleep(30)
-
-      expect(sync.data.vcs?.branch).toBe("main")
-
-      emit(branchEvent("feature", "ws_a"))
+      emit(branchEvent("feature"))
       await wait(() => sync.data.vcs?.branch === "feature")
 
       expect(sync.data.vcs?.branch).toBe("feature")

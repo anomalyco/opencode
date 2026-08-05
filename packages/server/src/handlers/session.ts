@@ -32,7 +32,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               : ctx.query
           const sessions = yield* session.list({
             ...query,
-            workspaceID: query.workspace,
             limit: ctx.query.limit ?? DefaultSessionsLimit,
           })
           const first = sessions[0]

@@ -490,32 +490,6 @@ const scenarios: Scenario[] = [
       body: { accountID: "httpapi-account", orgID: "httpapi-org" },
     }))
     .status(400, undefined, "none"),
-  http.protected.get("/experimental/workspace/adapter", "experimental.workspace.adapter.list").json(200, array),
-  http.protected.get("/experimental/workspace", "experimental.workspace.list").json(200, array),
-  http.protected.get("/experimental/workspace/status", "experimental.workspace.status").json(200, array),
-  http.protected
-    .post("/experimental/workspace", "experimental.workspace.create")
-    .at((ctx) => ({ path: "/experimental/workspace", headers: ctx.headers(), body: {} }))
-    .status(400),
-  http.protected
-    .post("/experimental/workspace/sync-list", "experimental.workspace.syncList")
-    .status(204, undefined, "status"),
-  http.protected
-    .delete("/experimental/workspace/{id}", "experimental.workspace.remove")
-    .mutating()
-    .at((ctx) => ({
-      path: route("/experimental/workspace/{id}", { id: "wrk_httpapi_missing" }),
-      headers: ctx.headers(),
-    }))
-    .status(200),
-  http.protected
-    .post("/experimental/workspace/warp", "experimental.workspace.warp")
-    .at((ctx) => ({
-      path: "/experimental/workspace/warp",
-      headers: ctx.headers(),
-      body: {},
-    }))
-    .status(400),
   http.protected
     .post("/experimental/control-plane/move-session", "experimental.controlPlane.moveSession")
     .global()
@@ -594,25 +568,6 @@ const scenarios: Scenario[] = [
       check(body === false, "background route should be a no-op without running subagents")
     }),
   http.protected.get("/experimental/resource", "experimental.resource.list").json(),
-  http.protected
-    .post("/sync/history", "sync.history.list")
-    .at((ctx) => ({ path: "/sync/history", headers: ctx.headers(), body: {} }))
-    .json(200, array),
-  http.protected
-    .post("/sync/replay", "sync.replay")
-    .at((ctx) => ({ path: "/sync/replay", headers: ctx.headers(), body: { directory: ctx.directory, events: [] } }))
-    .status(400),
-  http.protected
-    .post("/sync/steal", "sync.steal.invalid")
-    .at((ctx) => ({ path: "/sync/steal", headers: ctx.headers(), body: {} }))
-    .status(400, undefined, "status"),
-  http.protected
-    .post("/sync/start", "sync.start")
-    .mutating()
-    .preserveDatabase()
-    .json(200, (body) => {
-      check(body === true, "sync start should return true when no workspace sessions exist")
-    }),
   http.protected
     .post("/instance/dispose", "instance.dispose")
     .mutating()

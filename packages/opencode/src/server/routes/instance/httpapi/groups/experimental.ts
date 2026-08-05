@@ -10,10 +10,10 @@ import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, Op
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import {
-  WorkspaceRoutingMiddleware,
-  WorkspaceRoutingQuery,
-  WorkspaceRoutingQueryFields,
-} from "../middleware/workspace-routing"
+  RouteContextMiddleware,
+  RoutingQuery,
+  RoutingQueryFields,
+} from "../middleware/route-context"
 import { described } from "./metadata"
 import { QueryBoolean } from "./query"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -55,7 +55,7 @@ const ToolListItem = Schema.Struct({
 }).annotate({ identifier: "ToolListItem" })
 const ToolList = Schema.Array(ToolListItem).annotate({ identifier: "ToolList" })
 export const ToolListQuery = Schema.Struct({
-  ...WorkspaceRoutingQueryFields,
+  ...RoutingQueryFields,
   provider: ProviderV2.ID,
   model: ModelV2.ID,
 })
@@ -78,7 +78,7 @@ export class WorktreeApiError extends Schema.ErrorClass<WorktreeApiError>("Workt
   { httpApiStatus: 400 },
 ) {}
 export const SessionListQuery = Schema.Struct({
-  ...WorkspaceRoutingQueryFields,
+  ...RoutingQueryFields,
   roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
   cursor: Schema.optional(Schema.NumberFromString),
@@ -106,7 +106,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
     HttpApiGroup.make("experimental")
       .add(
         HttpApiEndpoint.get("capabilities", ExperimentalPaths.capabilities, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(CapabilitiesResponse, "Experimental capabilities"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -116,7 +116,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.get("console", ExperimentalPaths.console, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(ConsoleStateResponse, "Active Console provider metadata"),
           error: HttpApiError.InternalServerError,
         }).annotateMerge(
@@ -127,7 +127,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.get("consoleOrgs", ExperimentalPaths.consoleOrgs, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(ConsoleOrgList, "Switchable Console orgs"),
           error: HttpApiError.InternalServerError,
         }).annotateMerge(
@@ -138,7 +138,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.post("consoleSwitch", ExperimentalPaths.consoleSwitch, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: ConsoleSwitchPayload,
           success: described(Schema.Boolean, "Switch success"),
           error: HttpApiError.BadRequest,
@@ -162,7 +162,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.get("toolIDs", ExperimentalPaths.toolIDs, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(ToolIDs, "Tool IDs"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
@@ -174,7 +174,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.get("worktree", ExperimentalPaths.worktree, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(WorktreeList, "List of worktree directories"),
           error: WorktreeApiError,
         }).annotateMerge(
@@ -186,7 +186,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
         ),
         HttpApiEndpoint.post("worktreeCreate", ExperimentalPaths.worktree, {
           disableCodecs: true,
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: [HttpApiSchema.NoContent, Worktree.CreateInput],
           success: described(Worktree.Info, "Worktree created"),
           error: WorktreeApiError,
@@ -198,7 +198,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.delete("worktreeRemove", ExperimentalPaths.worktree, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: Worktree.RemoveInput,
           success: described(Schema.Boolean, "Worktree removed"),
           error: WorktreeApiError,
@@ -210,7 +210,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.post("worktreeReset", ExperimentalPaths.worktreeReset, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: Worktree.ResetInput,
           success: described(Schema.Boolean, "Worktree reset"),
           error: WorktreeApiError,
@@ -234,7 +234,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
         ),
         HttpApiEndpoint.post("sessionBackground", ExperimentalPaths.sessionBackground, {
           params: { sessionID: SessionID },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Boolean, "Backgrounded subagents"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
@@ -246,7 +246,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
           }),
         ),
         HttpApiEndpoint.get("resource", ExperimentalPaths.resource, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Record(Schema.String, MCP.Resource), "MCP resources"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -263,7 +263,7 @@ export const ExperimentalApi = HttpApi.make("experimental")
         }),
       )
       .middleware(InstanceContextMiddleware)
-      .middleware(WorkspaceRoutingMiddleware)
+      .middleware(RouteContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(

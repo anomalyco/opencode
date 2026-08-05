@@ -289,7 +289,6 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/session`,
             query: {
-              workspace: input?.["workspace"],
               limit: input?.["limit"],
               order: input?.["order"],
               search: input?.["search"],

@@ -1,4 +1,3 @@
-import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
@@ -7,20 +6,13 @@ import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/inst
 import { usePluginRuntime } from "../../plugin/runtime"
 
 import { getScrollAcceleration } from "../../util/scroll"
-import { WorkspaceLabel } from "../../component/workspace-label"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const pluginRuntime = usePluginRuntime()
-  const project = useProject()
   const sync = useSync()
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
   const session = createMemo(() => sync.session.get(props.sessionID))
-  const workspace = () => {
-    const workspaceID = session()?.workspaceID
-    if (!workspaceID) return
-    return project.workspace.get(workspaceID)
-  }
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   return (
@@ -59,23 +51,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </text>
                 <Show when={InstallationChannel !== "latest"}>
                   <text fg={theme.textMuted}>{props.sessionID}</text>
-                </Show>
-                <Show when={session()!.workspaceID}>
-                  <text fg={theme.textMuted}>
-                    <Show
-                      when={workspace()}
-                      fallback={<WorkspaceLabel type="unknown" name={session()!.workspaceID!} status="error" icon />}
-                    >
-                      {(item) => (
-                        <WorkspaceLabel
-                          type={item().type}
-                          name={item().name}
-                          status={project.workspace.status(item().id) ?? "error"}
-                          icon
-                        />
-                      )}
-                    </Show>
-                  </text>
                 </Show>
                 <Show when={session()!.share?.url}>
                   <text fg={theme.textMuted}>{session()!.share!.url}</text>

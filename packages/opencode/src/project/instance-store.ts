@@ -2,7 +2,6 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { makeGlobalNode, Node } from "@opencode-ai/core/effect/app-node"
 import { GlobalBus } from "@/bus/global"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -81,7 +80,6 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
         GlobalBus.emit("event", {
           directory: input.directory,
           project: input.project,
-          workspace: WorkspaceContext.workspaceID,
           payload: {
             type: "server.instance.disposed",
             properties: {

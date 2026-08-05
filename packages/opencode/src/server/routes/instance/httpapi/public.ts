@@ -113,30 +113,6 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
         if (!isV2Api) delete operation.requestBody.required
         const body = operation.requestBody.content?.["application/json"]
         if (body?.schema) body.schema = stripOptionalNull(structuredClone(body.schema))
-        if (path === "/experimental/workspace" && method === "post") {
-          // Workspace creation fields `branch` and `extra` are Schema.NullOr —
-          // genuinely nullable, not just optional. Re-add the null that the
-          // component-level strip above removed.
-          const ref = operation.requestBody.content?.["application/json"]?.schema?.$ref?.replace(
-            "#/components/schemas/",
-            "",
-          )
-          const properties = ref
-            ? spec.components?.schemas?.[ref]?.properties
-            : operation.requestBody.content?.["application/json"]?.schema?.properties
-          if (properties?.branch) properties.branch = { anyOf: [properties.branch, { type: "null" }] }
-          if (properties?.extra) properties.extra = { anyOf: [properties.extra, { type: "null" }] }
-        }
-        if (path === "/experimental/workspace/warp" && method === "post") {
-          const ref = operation.requestBody.content?.["application/json"]?.schema?.$ref?.replace(
-            "#/components/schemas/",
-            "",
-          )
-          const properties = ref
-            ? spec.components?.schemas?.[ref]?.properties
-            : operation.requestBody.content?.["application/json"]?.schema?.properties
-          if (properties?.id) properties.id = { anyOf: [properties.id, { type: "null" }] }
-        }
       }
       for (const response of Object.values(operation.responses ?? {})) {
         for (const content of Object.values(response.content ?? {})) {
@@ -262,11 +238,6 @@ function applyLegacySchemaOverrides(spec: OpenApiSpec) {
   if (!schemas) return
   if (schemas.AgentConfig) schemas.AgentConfig.additionalProperties = {}
   if (schemas.Command?.properties?.template) schemas.Command.properties.template = { type: "string" }
-  if (schemas.Workspace?.properties) {
-    schemas.Workspace.properties.branch = nullable(schemas.Workspace.properties.branch)
-    schemas.Workspace.properties.directory = nullable(schemas.Workspace.properties.directory)
-    schemas.Workspace.properties.extra = nullable(schemas.Workspace.properties.extra)
-  }
   if (schemas.GlobalSession?.properties?.project)
     schemas.GlobalSession.properties.project = nullable(schemas.GlobalSession.properties.project)
   const providerOptions = schemas.ProviderConfig?.properties?.options

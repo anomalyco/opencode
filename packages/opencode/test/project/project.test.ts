@@ -7,11 +7,9 @@ import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
-import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { eq } from "drizzle-orm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { SessionID } from "@/session/schema"
-import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -195,7 +193,6 @@ describe("Project.fromDirectory", () => {
       const rootProject = rootResult.project
       const remoteID = remoteProjectID("github.com/acme/app")
       const sessionID = crypto.randomUUID() as SessionID
-      const workspaceID = WorkspaceV2.ID.ascending()
 
       yield* db
         .insert(SessionTable)
@@ -211,11 +208,6 @@ describe("Project.fromDirectory", () => {
         })
         .run()
         .pipe(Effect.orDie)
-      yield* db
-        .insert(WorkspaceTable)
-        .values({ id: workspaceID, type: "local", name: "test", project_id: rootProject.id })
-        .run()
-        .pipe(Effect.orDie)
       yield* Effect.promise(() => $`git remote add origin git@github.com:acme/app.git`.cwd(tmp).quiet())
 
       const result = yield* projects.fromDirectory(tmp)
@@ -226,10 +218,6 @@ describe("Project.fromDirectory", () => {
       ).toBeUndefined()
       expect(
         (yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie))
-          ?.project_id,
-      ).toBe(remoteID)
-      expect(
-        (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
           ?.project_id,
       ).toBe(remoteID)
     }),

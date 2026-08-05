@@ -9,10 +9,10 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import {
-  WorkspaceRoutingMiddleware,
-  WorkspaceRoutingQuery,
-  WorkspaceRoutingQueryFields,
-} from "../middleware/workspace-routing"
+  RouteContextMiddleware,
+  RoutingQuery,
+  RoutingQueryFields,
+} from "../middleware/route-context"
 import { described } from "./metadata"
 
 const PathInfo = Schema.Struct({
@@ -24,7 +24,7 @@ const PathInfo = Schema.Struct({
 }).annotate({ identifier: "Path" })
 
 export const VcsDiffQuery = Schema.Struct({
-  ...WorkspaceRoutingQueryFields,
+  ...RoutingQueryFields,
   mode: Vcs.Mode,
   context: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
 })
@@ -60,7 +60,7 @@ export const InstanceApi = HttpApi.make("instance")
     HttpApiGroup.make("instance")
       .add(
         HttpApiEndpoint.post("dispose", InstancePaths.dispose, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Boolean, "Instance disposed"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -70,7 +70,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("path", InstancePaths.path, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: PathInfo,
         }).annotateMerge(
           OpenApi.annotations({
@@ -81,7 +81,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("vcs", InstancePaths.vcs, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Vcs.Info, "VCS info"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -92,7 +92,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("vcsStatus", InstancePaths.vcsStatus, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Array(Vcs.FileStatus), "VCS status"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -112,7 +112,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("vcsDiffRaw", InstancePaths.vcsDiffRaw, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(
             Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/x-diff; charset=utf-8" })),
             "Raw VCS diff",
@@ -125,7 +125,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.post("vcsApply", InstancePaths.vcsApply, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: Vcs.ApplyInput,
           success: described(Vcs.ApplyResult, "VCS patch applied"),
           error: ApiVcsApplyError,
@@ -137,7 +137,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("command", InstancePaths.command, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Array(Command.Info), "List of commands"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -147,7 +147,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("agent", InstancePaths.agent, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Array(Agent.Info), "List of agents"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -157,7 +157,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("skill", InstancePaths.skill, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Array(Skill.Info), "List of skills"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -167,7 +167,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("lsp", InstancePaths.lsp, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Array(LSP.Status), "LSP server status"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -177,7 +177,7 @@ export const InstanceApi = HttpApi.make("instance")
           }),
         ),
         HttpApiEndpoint.get("formatter", InstancePaths.formatter, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Schema.Array(Format.Status), "Formatter status"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -194,7 +194,7 @@ export const InstanceApi = HttpApi.make("instance")
         }),
       )
       .middleware(InstanceContextMiddleware)
-      .middleware(WorkspaceRoutingMiddleware)
+      .middleware(RouteContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(

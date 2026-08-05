@@ -7,7 +7,6 @@ import { Database } from "@opencode-ai/core/database/database"
 
 import { Session } from "@/session/session"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
-import { SyncPaths } from "../../src/server/routes/instance/httpapi/groups/sync"
 import { MessageID, PartID } from "../../src/session/schema"
 import { PartTable } from "@opencode-ai/core/session/sql"
 import { resetDatabase } from "../fixture/db"
@@ -68,30 +67,6 @@ const seedCorruptStepFinishPart = Effect.gen(function* () {
 
 describe("schema-rejection wire shape", () => {
   it.instance(
-    "Payload schema rejection returns NamedError-shaped JSON, not empty",
-    () =>
-      Effect.gen(function* () {
-        const test = yield* TestInstance
-        const res = yield* requestInDirectory(SyncPaths.history, test.directory, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ aggregate: -1 }),
-        })
-        const body = yield* text(res)
-        expect(res.status).toBe(400)
-        expect(res.headers["content-type"] ?? "").toContain("application/json")
-        const parsed = JSON.parse(body)
-        expect(parsed).toMatchObject({
-          name: "BadRequest",
-          data: { kind: expect.stringMatching(/^(Body|Payload)$/) },
-        })
-        expect(parsed.data.message).toEqual(expect.any(String))
-        expect(parsed.data.message.length).toBeGreaterThan(0)
-      }),
-    { git: true, config: { formatter: false, lsp: false } },
-  )
-
-  it.instance(
     "Query schema rejection returns NamedError-shaped JSON",
     () =>
       Effect.gen(function* () {
@@ -117,30 +92,6 @@ describe("schema-rejection wire shape", () => {
         expect(res.status).toBe(400)
         expect(parsed).toMatchObject({ _tag: "InvalidRequestError", kind: "Query" })
         expect(parsed.message).toEqual(expect.any(String))
-      }),
-    { git: true, config: { formatter: false, lsp: false } },
-  )
-
-  it.instance(
-    "rejected request body never echoes back unbounded — message is capped",
-    // Defense against DoS-amplification + secret-echo: Effect's Issue formatter
-    // dumps the rejected `actual` verbatim. A multi-MB invalid array would
-    // become a multi-MB 400 response and log line. Cap kicks in around 1KB.
-    () =>
-      Effect.gen(function* () {
-        const test = yield* TestInstance
-        const huge = "X".repeat(50_000)
-        const res = yield* requestInDirectory(SyncPaths.history, test.directory, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ aggregate: huge }),
-        })
-        const body = yield* text(res)
-        expect(res.status).toBe(400)
-        // 1 KB cap + small JSON envelope ≈ <2 KB — never tens of KB.
-        expect(body.length).toBeLessThan(2 * 1024)
-        const parsed = JSON.parse(body)
-        expect(parsed.data.message).not.toContain(huge)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

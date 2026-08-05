@@ -23,7 +23,6 @@ import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
 import { tmpdir } from "./fixture/tmpdir"
 
@@ -76,7 +75,6 @@ describe("SessionV2.create", () => {
   it.effect("stores supplied immutable create attributes", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
-      const workspaceID = WorkspaceV2.ID.make("wrk_test")
       const model = ModelV2.Ref.make({
         id: ModelV2.ID.make("sonnet"),
         providerID: ProviderV2.ID.anthropic,
@@ -85,11 +83,11 @@ describe("SessionV2.create", () => {
 
       expect(
         yield* session.create({
-          location: Location.Ref.make({ directory: location.directory, workspaceID }),
+          location: Location.Ref.make({ directory: location.directory }),
           agent: AgentV2.ID.make("build"),
           model,
         }),
-      ).toMatchObject({ location: { directory: location.directory, workspaceID }, agent: "build", model })
+      ).toMatchObject({ location: { directory: location.directory }, agent: "build", model })
     }),
   )
 

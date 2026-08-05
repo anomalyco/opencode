@@ -5,7 +5,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
+import { RouteContextMiddleware, RoutingQuery } from "../middleware/route-context"
 import { described } from "./metadata"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
@@ -36,7 +36,7 @@ export const ProviderApi = HttpApi.make("provider")
     HttpApiGroup.make("provider")
       .add(
         HttpApiEndpoint.get("list", root, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Provider.ListResult, "List of providers"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -46,7 +46,7 @@ export const ProviderApi = HttpApi.make("provider")
           }),
         ),
         HttpApiEndpoint.get("auth", `${root}/auth`, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(ProviderAuth.Methods, "Provider auth methods"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -57,7 +57,7 @@ export const ProviderApi = HttpApi.make("provider")
         ),
         HttpApiEndpoint.post("authorize", `${root}/:providerID/oauth/authorize`, {
           params: { providerID: ProviderV2.ID },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: ProviderAuth.AuthorizeInput,
           success: described(Schema.UndefinedOr(ProviderAuth.Authorization), "Authorization URL and method"),
           error: ProviderAuthApiError,
@@ -70,7 +70,7 @@ export const ProviderApi = HttpApi.make("provider")
         ),
         HttpApiEndpoint.post("callback", `${root}/:providerID/oauth/callback`, {
           params: { providerID: ProviderV2.ID },
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: ProviderAuth.CallbackInput,
           success: described(Schema.Boolean, "OAuth callback processed successfully"),
           error: ProviderAuthApiError,
@@ -89,7 +89,7 @@ export const ProviderApi = HttpApi.make("provider")
         }),
       )
       .middleware(InstanceContextMiddleware)
-      .middleware(WorkspaceRoutingMiddleware)
+      .middleware(RouteContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(

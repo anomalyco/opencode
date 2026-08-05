@@ -4,7 +4,7 @@ import { Provider } from "@/provider/provider"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
+import { RouteContextMiddleware, RoutingQuery } from "../middleware/route-context"
 import { described } from "./metadata"
 
 const root = "/config"
@@ -14,7 +14,7 @@ export const ConfigApi = HttpApi.make("config")
     HttpApiGroup.make("config")
       .add(
         HttpApiEndpoint.get("get", root, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(ConfigV1.Info, "Get config info"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -24,7 +24,7 @@ export const ConfigApi = HttpApi.make("config")
           }),
         ),
         HttpApiEndpoint.patch("update", root, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           payload: ConfigV1.Info,
           success: described(ConfigV1.Info, "Successfully updated config"),
           error: HttpApiError.BadRequest,
@@ -36,7 +36,7 @@ export const ConfigApi = HttpApi.make("config")
           }),
         ),
         HttpApiEndpoint.get("providers", `${root}/providers`, {
-          query: WorkspaceRoutingQuery,
+          query: RoutingQuery,
           success: described(Provider.ConfigProvidersResult, "List of providers"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -53,7 +53,7 @@ export const ConfigApi = HttpApi.make("config")
         }),
       )
       .middleware(InstanceContextMiddleware)
-      .middleware(WorkspaceRoutingMiddleware)
+      .middleware(RouteContextMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(

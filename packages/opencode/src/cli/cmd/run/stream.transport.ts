@@ -187,10 +187,6 @@ function globalPayloadEvent(value: unknown): Event | undefined {
   }
 
   const payload = value.payload
-  if (payload.type === "sync") {
-    return undefined
-  }
-
   return isEvent(payload) ? payload : undefined
 }
 

@@ -32,7 +32,7 @@ Avoid `Effect.provide(SomeLayer)` inside request handlers or raw route callbacks
 
 Avoid `HttpRouter.provideRequest(...)` unless the dependency is intentionally request-level. Prefer `HttpRouter.use(...)` for stable app services.
 
-Use `Effect.provideService(...)` in middleware only for request-derived context, such as `WorkspaceRouteContext`, `InstanceRef`, or `WorkspaceRef`. Do not use it to smuggle stable services through request effects when they can be yielded at layer construction.
+Use `Effect.provideService(...)` in middleware only for request-derived context, such as `RouteContext` or `InstanceRef`. Do not use it to smuggle stable services through request effects when they can be yielded at layer construction.
 
 Public JSON errors should be explicit `Schema.ErrorClass` contracts declared on each endpoint. Use built-in `HttpApiError.*` classes only when their empty/tagged body is the intended wire shape; for SDK-visible errors with messages, define an API error schema such as `ApiNotFoundError` and fail with that exact declared error. Keep domain and storage services free of HttpApi types, and translate expected domain errors at the handler boundary.
 

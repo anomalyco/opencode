@@ -2,7 +2,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
+import { RouteContextMiddleware, RoutingQuery } from "../middleware/route-context"
 
 export const EventPaths = {
   event: "/event",
@@ -12,7 +12,7 @@ export const EventApi = HttpApi.make("event").add(
   HttpApiGroup.make("event")
     .add(
       HttpApiEndpoint.get("subscribe", EventPaths.event, {
-        query: WorkspaceRoutingQuery,
+        query: RoutingQuery,
         success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/event-stream" })),
       }).annotateMerge(
         OpenApi.annotations({
@@ -23,7 +23,7 @@ export const EventApi = HttpApi.make("event").add(
       ),
     )
     .middleware(InstanceContextMiddleware)
-    .middleware(WorkspaceRoutingMiddleware)
+    .middleware(RouteContextMiddleware)
     .middleware(Authorization)
     .annotateMerge(OpenApi.annotations({ title: "event", description: "Instance event stream route." })),
 )
