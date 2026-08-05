@@ -253,8 +253,10 @@ Runtime hooks intercept live operations:
 
 HTTP hooks can modify requests and responses. They apply to native models; AI
 SDK models do not currently pass through these hooks. Request and response
-bodies are streams; use `event.request.clone()` or `event.response.clone()`
-when reading a body without replacing it.
+bodies are one-shot streams. Use `clone()` when you intentionally need a
+separate reader, but be aware that its slower branch may buffer data. To inspect
+or modify chunks while preserving streaming, replace the body with one piped
+through a `TransformStream`.
 
 ```ts
 await ctx.session.hook("http.request", (event) => {
