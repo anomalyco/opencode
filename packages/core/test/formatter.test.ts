@@ -56,52 +56,23 @@ function withTemp<A, E, R>(body: (directory: string) => Effect.Effect<A, E, R>) 
 }
 
 describe("Formatter", () => {
-  it.live("status() returns empty list when no formatters are configured", () =>
+  it.live("does not run formatters marked as disabled in config", () =>
     withTemp((directory) =>
-      Formatter.Service.use((formatter) => formatter.status()).pipe(Effect.provide(formatterLayer(directory))),
-    ),
-  )
-
-  it.live("status() returns built-in formatters when formatter is true", () =>
-    withTemp((directory) =>
-      Formatter.Service.use((formatter) =>
-        Effect.gen(function* () {
-          const statuses = yield* formatter.status()
-          const gofmt = statuses.find((item) => item.name === "gofmt")
-          expect(gofmt).toBeDefined()
-          expect(gofmt?.extensions).toContain(".go")
-        }),
-      ).pipe(Effect.provide(formatterLayer(directory, true))),
-    ),
-  )
-
-  it.live("status() keeps built-in formatters when config object is provided", () =>
-    withTemp((directory) =>
-      Formatter.Service.use((formatter) =>
-        Effect.gen(function* () {
-          const statuses = yield* formatter.status()
-          expect(statuses.find((item) => item.name === "gofmt")?.extensions).toContain(".go")
-          expect(statuses.find((item) => item.name === "mix")).toBeDefined()
-        }),
-      ).pipe(Effect.provide(formatterLayer(directory, { gofmt: {} }))),
-    ),
-  )
-
-  it.live("status() excludes formatters marked as disabled in config", () =>
-    withTemp((directory) =>
-      Formatter.Service.use((formatter) =>
-        Effect.gen(function* () {
-          const statuses = yield* formatter.status()
-          expect(statuses.find((item) => item.name === "gofmt")).toBeUndefined()
-          expect(statuses.find((item) => item.name === "mix")).toBeDefined()
-        }),
-      ).pipe(Effect.provide(formatterLayer(directory, { gofmt: { disabled: true } }))),
-    ),
-  )
-
-  it.live("service initializes without error", () =>
-    withTemp((directory) =>
-      Formatter.Service.use((formatter) => formatter.init()).pipe(Effect.provide(formatterLayer(directory))),
+      Effect.gen(function* () {
+        const file = path.join(directory, "test.disabled")
+        yield* Effect.promise(() => fs.writeFile(file, "x"))
+        expect(yield* Formatter.Service.use((formatter) => formatter.file(file))).toBe(false)
+      }).pipe(
+        Effect.provide(
+          formatterLayer(directory, {
+            disabled: {
+              disabled: true,
+              command: [process.execPath, "-e", "process.exit(0)", "$FILE"],
+              extensions: [".disabled"],
+            },
+          }),
+        ),
+      ),
     ),
   )
 
@@ -115,19 +86,29 @@ describe("Formatter", () => {
     ),
   )
 
-  it.live("status() initializes formatter state per directory", () =>
+  it.live("loads formatter state per directory", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
       ([off, on]) =>
         Effect.gen(function* () {
-          const disabled = yield* Formatter.Service.use((formatter) => formatter.status()).pipe(
+          const offFile = path.join(off.path, "test.isolated")
+          const onFile = path.join(on.path, "test.isolated")
+          yield* Effect.promise(() => Promise.all([fs.writeFile(offFile, "x"), fs.writeFile(onFile, "x")]))
+          const disabled = yield* Formatter.Service.use((formatter) => formatter.file(offFile)).pipe(
             Effect.provide(formatterLayer(off.path, false)),
           )
-          const enabled = yield* Formatter.Service.use((formatter) => formatter.status()).pipe(
-            Effect.provide(formatterLayer(on.path, true)),
+          const enabled = yield* Formatter.Service.use((formatter) => formatter.file(onFile)).pipe(
+            Effect.provide(
+              formatterLayer(on.path, {
+                isolated: {
+                  command: [process.execPath, "-e", "process.exit(0)", "$FILE"],
+                  extensions: [".isolated"],
+                },
+              }),
+            ),
           )
-          expect(disabled).toEqual([])
-          expect(enabled.find((item) => item.name === "gofmt")).toBeDefined()
+          expect(disabled).toBe(false)
+          expect(enabled).toBe(true)
         }),
       (directories) =>
         Effect.promise(() => Promise.all(directories.map((tmp) => tmp[Symbol.asyncDispose]())).then(() => undefined)),
