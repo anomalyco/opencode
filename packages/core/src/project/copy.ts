@@ -158,7 +158,7 @@ const layer = Layer.effect(
 
     const source = Effect.fnUntraced(function* (input: AbsolutePath, projectID: Project.ID) {
       const sourceDirectory = yield* canonical(input)
-      if (!(yield* directories.contains({ projectID, directory: sourceDirectory })))
+      if ((yield* directories.get({ projectID, directory: sourceDirectory })) === undefined)
         return yield* new SourceDirectoryNotFoundError({ directory: sourceDirectory })
       return sourceDirectory
     })
