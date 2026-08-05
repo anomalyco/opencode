@@ -257,6 +257,15 @@ const layer = Layer.effect(
       const toolResultOutput = (
         value: Extract<StreamEvent, { type: "tool-result" }>,
       ): { title: string; metadata: Record<string, any>; output: string; attachments?: SessionV1.FilePart[] } => {
+        const structured = value.output?.structured
+        if (isRecord(structured) && typeof structured.output === "string") {
+          return {
+            title: typeof structured.title === "string" ? structured.title : value.name,
+            metadata: isRecord(structured.metadata) ? structured.metadata : {},
+            output: structured.output,
+            attachments: Array.isArray(structured.attachments) ? structured.attachments.filter(isFilePart) : undefined,
+          }
+        }
         if (isRecord(value.result.value) && typeof value.result.value.output === "string") {
           return {
             title: typeof value.result.value.title === "string" ? value.result.value.title : value.name,

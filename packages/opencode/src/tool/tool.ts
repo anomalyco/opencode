@@ -61,6 +61,7 @@ export interface Def<
   parameters: Parameters
   jsonSchema?: JSONSchema7
   execute(args: Schema.Schema.Type<Parameters>, ctx: Context): Effect.Effect<ExecuteResult<M>>
+  toModelOutput?(result: ExecuteResult<M>): string
   formatValidationError?(error: unknown): string
 }
 export type DefWithoutID<

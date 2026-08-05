@@ -10,6 +10,7 @@ import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
+import * as Visualize from "./visualize"
 
 type State = {
   commands: Record<string, Info>
@@ -28,6 +29,7 @@ export const Info = Schema.Struct({
   // Some command templates are lazy promises from MCP prompt resolution.
   template: Schema.Unknown,
   subtask: Schema.optional(Schema.Boolean),
+  visualization: Schema.optional(Schema.Boolean),
   hints: Schema.Array(Schema.String),
 }).annotate({ identifier: "Command" })
 
@@ -46,6 +48,7 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  VISUALIZE: Visualize.name,
 } as const
 
 export interface Interface {
@@ -85,6 +88,14 @@ const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.VISUALIZE] = {
+        name: Default.VISUALIZE,
+        description: Visualize.description,
+        source: "command",
+        template: "$ARGUMENTS",
+        visualization: true,
+        hints: ["$ARGUMENTS"],
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {

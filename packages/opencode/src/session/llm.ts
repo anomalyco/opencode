@@ -231,7 +231,7 @@ const live: Layer.Layer<
           llmClient,
           messages: prepared.messages,
           tools: prepared.tools,
-          toolChoice: input.toolChoice,
+          toolChoice: ProviderTransform.supportsToolChoice(input.model) ? input.toolChoice : undefined,
           temperature: prepared.params.temperature,
           topP: prepared.params.topP,
           topK: prepared.params.topK,
@@ -328,6 +328,7 @@ const live: Layer.Layer<
               {
                 specificationVersion: "v3" as const,
                 async transformParams(args) {
+                  if (!ProviderTransform.supportsToolChoice(input.model)) args.params.toolChoice = undefined
                   if (args.type === "stream") {
                     // @ts-expect-error
                     args.params.prompt = ProviderTransform.message(
