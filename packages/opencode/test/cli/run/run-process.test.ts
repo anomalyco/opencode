@@ -81,11 +81,11 @@ describe("opencode run (non-interactive subprocess)", () => {
     30_000,
   )
 
-  // The test provider's SSE error item is interpreted by the SDK as an unknown
-  // finish, not a fatal provider/session error. Lock that distinction in so it
-  // is not accidentally used as the failure compatibility oracle.
+  // The test provider's SSE error item is interpreted by the SDK as an empty
+  // response with an unknown finish. That attempt should retry while preserving
+  // output from the preceding tool-call step.
   cliIt.concurrent(
-    "unknown stream finish preserves partial output and exits 0",
+    "empty unknown stream finish retries and preserves partial output",
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
@@ -95,9 +95,10 @@ describe("opencode run (non-interactive subprocess)", () => {
           }),
         )
         yield* llm.fail("upstream provider exploded mid-stream")
+        yield* llm.text("recovered response")
         const result = yield* opencode.run("trigger midstream error", { timeoutMs: 30_000 })
         expect(result.exitCode).toBe(0)
-        expect(result.stdout).toBe("partial response\n")
+        expect(result.stdout).toBe("partial response\nrecovered response\n")
         expect(result.stderr).not.toContain("upstream provider exploded mid-stream")
       }),
     60_000,
@@ -213,7 +214,7 @@ describe("opencode run (non-interactive subprocess)", () => {
   )
 
   cliIt.concurrent(
-    "--format json records partial output for an unknown stream finish",
+    "--format json records an empty unknown stream retry",
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.push(
@@ -223,6 +224,7 @@ describe("opencode run (non-interactive subprocess)", () => {
           }),
         )
         yield* llm.fail("provider failed")
+        yield* llm.text("recovered json")
         const result = yield* opencode.run("fail after output", { format: "json" })
 
         const events = opencode.parseJsonEvents(result.stdout)
@@ -234,9 +236,13 @@ describe("opencode run (non-interactive subprocess)", () => {
           "step_finish",
           "step_start",
           "step_finish",
+          "step_start",
+          "text",
+          "step_finish",
         ])
         expect(events[1]?.part).toEqual(expect.objectContaining({ type: "text", text: "partial json" }))
-        expect(events.at(-1)?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "unknown" }))
+        expect(events.at(-2)?.part).toEqual(expect.objectContaining({ type: "text", text: "recovered json" }))
+        expect(events.at(-1)?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "stop" }))
       }),
     60_000,
   )
