@@ -7,7 +7,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "./location"
 import { PositiveInt, RelativePath } from "./schema"
 import { FileSystemSearch } from "./filesystem/search"
-import { Entry, FileSystem, FindInput, Match } from "@opencode-ai/schema/filesystem"
+import { Entry, FileSystem, FindInput } from "@opencode-ai/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
@@ -53,8 +53,6 @@ export interface Interface {
   readonly read: (input: ReadInput) => Effect.Effect<{ readonly content: Uint8Array; readonly mime: string }>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
-  readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[]>
-  readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
@@ -76,8 +74,6 @@ const baseLayer = Layer.effect(
     })
     return Service.of({
       find: search.find,
-      glob: search.glob,
-      grep: search.grep,
       read: Effect.fn("FileSystem.read")(function* (input) {
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(Effect.orDie)

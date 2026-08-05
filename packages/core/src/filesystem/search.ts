@@ -6,7 +6,6 @@ import { Context, Effect, Layer, Schema, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
@@ -14,8 +13,6 @@ import { Protected } from "./protected"
 
 export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
-  readonly glob: (input: FileSystem.GlobInput) => Effect.Effect<readonly FileSystem.Entry[]>
-  readonly grep: (input: FileSystem.GrepInput) => Effect.Effect<readonly FileSystem.Match[]>
 }
 
 export const Options = Schema.Struct({
@@ -28,7 +25,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fi
 export const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const ripgrep = yield* Ripgrep.Service
     const scope = yield* Scope.Scope
@@ -50,57 +46,6 @@ export const ripgrepLayer = Layer.effect(
       })
       .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
     return Service.of({
-      glob: (input) =>
-        Effect.gen(function* () {
-          const target = path.resolve(location.directory, input.path ?? ".")
-          const info = yield* fs.stat(target).pipe(Effect.orDie)
-          const cwd = info.type === "File" ? path.dirname(target) : target
-          return yield* ripgrep
-            .glob({
-              cwd,
-              pattern: input.pattern,
-              limit: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT,
-            })
-            .pipe(
-              Effect.map((result) =>
-                result.map((entry) =>
-                  FileSystem.Entry.make({
-                    ...entry,
-                    path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
-                  }),
-                ),
-              ),
-              Effect.orDie,
-            )
-        }),
-      grep: (input) =>
-        Effect.gen(function* () {
-          const target = path.resolve(location.directory, input.path ?? ".")
-          const info = yield* fs.stat(target).pipe(Effect.orDie)
-          const cwd = info.type === "File" ? path.dirname(target) : target
-          return yield* ripgrep
-            .grep({
-              cwd,
-              pattern: input.pattern,
-              file: info.type === "File" ? path.basename(target) : undefined,
-              include: input.include,
-              limit: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT,
-            })
-            .pipe(
-              Effect.map((result) =>
-                result.map((match) =>
-                  FileSystem.Match.make({
-                    ...match,
-                    entry: FileSystem.Entry.make({
-                      ...match.entry,
-                      path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
-                    }),
-                  }),
-                ),
-              ),
-              Effect.orDie,
-            )
-        }),
       find: (input) =>
         Effect.gen(function* () {
           const items =
@@ -142,55 +87,10 @@ export const fffLayer = Layer.effect(
       if (result) yield* Effect.logWarning("failed to initialize fff", { error: result.error })
       return Service.of({
         find: () => Effect.succeed([]),
-        glob: () => Effect.succeed([]),
-        grep: () => Effect.succeed([]),
       })
     }
     yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
     return Service.of({
-      glob: (input) =>
-        Effect.sync(() => {
-          const prefix = input.path?.replaceAll("\\", "/").replace(/\/$/, "")
-          const found = result.value.glob(prefix ? `${prefix}/${input.pattern}` : input.pattern, {
-            pageIndex: 0,
-            pageSize: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT,
-          })
-          if (!found.ok) throw found.error
-          return found.value.items.map((item) =>
-            FileSystem.Entry.make({
-              path: RelativePath.make(item.relativePath.replaceAll("\\", "/")),
-              type: "file",
-            }),
-          )
-        }),
-      grep: (input) =>
-        Effect.sync(() => {
-          const prefix = input.path?.replaceAll("\\", "/").replace(/\/$/, "")
-          const found = result.value.grep(
-            [prefix ? `${prefix}/**` : undefined, input.include, input.pattern]
-              .filter((value) => value !== undefined)
-              .join(" "),
-            { mode: "regex", pageSize: input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT, timeBudgetMs: 1_500 },
-          )
-          if (!found.ok) throw found.error
-          return found.value.items.map((match) => {
-            const bytes = Buffer.from(match.lineContent)
-            return FileSystem.Match.make({
-              entry: FileSystem.Entry.make({
-                path: RelativePath.make(match.relativePath.replaceAll("\\", "/")),
-                type: "file",
-              }),
-              line: match.lineNumber,
-              offset: match.byteOffset,
-              text: match.lineContent.length > 2_000 ? match.lineContent.slice(0, 2_000) + "..." : match.lineContent,
-              submatches: match.matchRanges.map(([start, end]) => ({
-                text: bytes.subarray(start, end).toString("utf8"),
-                start,
-                end,
-              })),
-            })
-          })
-        }),
       find: (input) =>
         Effect.sync(() => {
           const options = { pageIndex: 0, pageSize: input.limit ?? 50 }
@@ -247,7 +147,7 @@ export const layer = (options?: Options) =>
   )
 
 export function configured(options?: Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [FSUtil.node, Location.node, Ripgrep.node] })
+  return makeLocationNode({ service: Service, layer: layer(options), deps: [Location.node, Ripgrep.node] })
 }
 
 export const node = configured()

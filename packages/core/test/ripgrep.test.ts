@@ -11,6 +11,44 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(LayerNode.compile(Ripgrep.node))
 
 describe("Ripgrep", () => {
+  it.live("globs files as an array", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "src")))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "src", "match.ts"), "needle\n"))
+
+          const result = yield* (yield* Ripgrep.Service).glob({ cwd: tmp.path, pattern: "**/*.ts", limit: 10 })
+          expect(result.map((item) => item.path)).toEqual([RelativePath.make("src/match.ts")])
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("greps files with include filtering", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "src")))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "src", "match.ts"), "needle\n"))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "src", "skip.txt"), "needle\n"))
+
+          const result = yield* (yield* Ripgrep.Service).grep({
+            cwd: tmp.path,
+            pattern: "needle",
+            include: "*.ts",
+            limit: 10,
+          })
+          expect(result).toHaveLength(1)
+          expect(result[0]?.entry.path).toBe(RelativePath.make("src/match.ts"))
+          expect(result[0]?.submatches[0]?.text).toBe("needle")
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("keeps ignored files out of catch-all find results", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
