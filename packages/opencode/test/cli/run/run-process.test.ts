@@ -152,6 +152,29 @@ describe("opencode run (non-interactive subprocess)", () => {
     60_000,
   )
 
+  // The model only exists on the assistant message, so a step event has to pick
+  // it up from there. Running a non-default model proves the attribution follows
+  // the model that produced the step instead of a fixed value.
+  cliIt.concurrent(
+    "--format json attributes step events to the model that produced them",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.text("from the alt model")
+        const result = yield* opencode.run("say hi", { format: "json", model: "test/test-model-alt" })
+        opencode.expectExit(result, 0)
+
+        const steps = opencode
+          .parseJsonEvents(result.stdout)
+          .filter((event) => event.type === "step_start" || event.type === "step_finish")
+        expect(steps.length).toBeGreaterThan(0)
+        for (const step of steps) {
+          expect(step.providerID).toBe("test")
+          expect(step.modelID).toBe("test-model-alt")
+        }
+      }),
+    60_000,
+  )
+
   cliIt.concurrent(
     "--format json emits a pure error record for a rejected prompt request",
     ({ opencode }) =>

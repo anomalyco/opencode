@@ -29,6 +29,20 @@ export function testProviderConfig(llmUrl: string) {
             cost: { input: 0, output: 0 },
             options: {},
           },
+          // Second model so tests can assert output is attributed to the model
+          // that produced it, not to a hardcoded default.
+          "test-model-alt": {
+            id: "test-model-alt",
+            name: "Test Model Alt",
+            attachment: false,
+            reasoning: false,
+            temperature: false,
+            tool_call: true,
+            release_date: "2025-01-01",
+            limit: { context: 100_000, output: 10_000 },
+            cost: { input: 0, output: 0 },
+            options: {},
+          },
         },
         options: { apiKey: "test-key", baseURL: llmUrl },
       },
