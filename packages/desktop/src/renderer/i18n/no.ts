@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Se etter oppdateringer...",
-  "desktop.menu.installCli": "Installer CLI...",
   "desktop.menu.reloadWebview": "Last inn Webview på nytt",
   "desktop.menu.restart": "Start på nytt",
 
@@ -19,10 +18,4 @@ export const dict = {
     "Versjon {{version}} av OpenCode er lastet ned. Vil du installere den og starte på nytt?",
   "desktop.updater.installFailed.title": "Oppdatering mislyktes",
   "desktop.updater.installFailed.message": "Kunne ikke installere oppdateringen",
-
-  "desktop.cli.installed.title": "CLI installert",
-  "desktop.cli.installed.message":
-    "CLI installert til {{path}}\n\nStart terminalen på nytt for å bruke 'opencode'-kommandoen.",
-  "desktop.cli.failed.title": "Installasjon mislyktes",
-  "desktop.cli.failed.message": "Kunne ikke installere CLI: {{error}}",
 }
