@@ -3,7 +3,7 @@ export * as Bus from "./bus"
 import { Cause, Context, DateTime, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { EventLog } from "@opencode-ai/schema/event-log"
-import { and, asc, eq, gt, inArray, lte, sql } from "drizzle-orm"
+import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -134,8 +134,6 @@ export interface Interface {
     readonly after?: number
     readonly follow?: boolean
   }) => Stream.Stream<LogItem>
-  /** Latest committed seq per aggregate. Aggregates without events are absent. */
-  readonly sequences: (aggregateIDs: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, Event.Seq>>
   /** @deprecated Use `subscribe()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
   readonly project: <D extends Event.Definition>(definition: D, projector: Subscriber<D>) => Effect.Effect<void>
@@ -657,19 +655,6 @@ export const layerWith = (options?: LayerOptions) =>
           }),
         )
 
-      const sequences = (aggregateIDs: ReadonlyArray<string>): Effect.Effect<ReadonlyMap<string, Event.Seq>> => {
-        if (aggregateIDs.length === 0) return Effect.succeed(new Map())
-        return db
-          .select({ aggregateID: EventSequenceTable.aggregate_id, seq: EventSequenceTable.seq })
-          .from(EventSequenceTable)
-          .where(inArray(EventSequenceTable.aggregate_id, Array.from(aggregateIDs)))
-          .all()
-          .pipe(
-            Effect.orDie,
-            Effect.map((rows) => new Map(rows.map((row) => [row.aggregateID, Event.Seq.make(row.seq)]))),
-          )
-      }
-
       const listen = (listener: Subscriber): Effect.Effect<Unsubscribe> =>
         Effect.sync(() => {
           listeners.push(listener)
@@ -691,7 +676,6 @@ export const layerWith = (options?: LayerOptions) =>
         publish,
         subscribe,
         log,
-        sequences,
         listen,
         project,
         replay,

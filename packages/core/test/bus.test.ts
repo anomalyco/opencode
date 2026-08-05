@@ -1298,24 +1298,4 @@ describe("Bus", () => {
     }),
   )
 
-  it.effect("sequences returns the latest committed seq per aggregate and omits unknown aggregates", () =>
-    Effect.gen(function* () {
-      const bus = yield* Bus.Service
-      const first = Session.ID.create()
-      const second = Session.ID.create()
-      yield* bus.publish(DurableMessage, durableData(first, "zero"))
-      yield* bus.publish(DurableMessage, durableData(first, "one"))
-      yield* bus.publish(DurableMessage, durableData(second, "zero"))
-
-      const sequences = yield* bus.sequences([first, second, Session.ID.create()])
-
-      expect(sequences).toEqual(
-        new Map([
-          [first, Event.Seq.make(1)],
-          [second, Event.Seq.make(0)],
-        ]),
-      )
-      expect(yield* bus.sequences([])).toEqual(new Map())
-    }),
-  )
 })
