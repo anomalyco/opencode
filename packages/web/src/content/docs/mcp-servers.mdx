@@ -510,3 +510,27 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### OutageDeck
+
+Add the [OutageDeck MCP server](https://github.com/outagedeck/mcp) to check cloud and SaaS provider status and incidents before changing code for an external failure. Public read-only tools require no account or API key.
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "outagedeck": {
+      "type": "remote",
+      "url": "https://outagedeck.com/api/mcp"
+    }
+  }
+}
+```
+
+Use OutageDeck as supporting evidence when a deployment, API, or integration fails. Provider status does not replace local diagnostics.
+
+```txt "use outagedeck"
+Check AWS, GitHub, and Cloudflare for active incidents before changing deployment code. use outagedeck
+```
