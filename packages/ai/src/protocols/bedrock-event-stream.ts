@@ -76,12 +76,12 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
       // before handing the object to the chunk schema. JSON decode goes
       // through the shared Schema-driven codec to satisfy the package rule
       // against ad-hoc `JSON.parse` calls.
-      const parsed = (yield* ProviderShared.parseJson(
+      const parsed = yield* ProviderShared.parseJson(
         route,
         payload,
         "Failed to parse Bedrock Converse event-stream payload",
-      )) as Record<string, unknown>
-      delete parsed.p
+      )
+      if (ProviderShared.isRecord(parsed)) delete parsed.p
       out.push({ [eventType]: parsed })
     }
     return [cursor, out] as const

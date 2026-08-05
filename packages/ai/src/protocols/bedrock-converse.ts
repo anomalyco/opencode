@@ -20,7 +20,7 @@ import {
 } from "../schema"
 import { BedrockEventStream } from "./bedrock-event-stream"
 import { classifyProviderFailure } from "../provider-error"
-import { JsonObject, optionalArray, ProviderShared } from "./shared"
+import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { BedrockAuth } from "./utils/bedrock-auth"
 import { BedrockCache } from "./utils/bedrock-cache"
 import { BedrockMedia } from "./utils/bedrock-media"
@@ -150,8 +150,8 @@ const BedrockUsageSchema = Schema.Struct({
   inputTokens: Schema.optional(Schema.Number),
   outputTokens: Schema.optional(Schema.Number),
   totalTokens: Schema.optional(Schema.Number),
-  cacheReadInputTokens: Schema.optional(Schema.Number),
-  cacheWriteInputTokens: Schema.optional(Schema.Number),
+  cacheReadInputTokens: optionalNull(Schema.Number),
+  cacheWriteInputTokens: optionalNull(Schema.Number),
 })
 type BedrockUsageSchema = Schema.Schema.Type<typeof BedrockUsageSchema>
 
@@ -206,9 +206,9 @@ const BedrockEvent = Schema.Struct({
       additionalModelResponseFields: Schema.optional(Schema.Unknown),
     }),
   ),
-  metadata: Schema.optional(
+  metadata: optionalNull(
     Schema.Struct({
-      usage: Schema.optional(BedrockUsageSchema),
+      usage: optionalNull(BedrockUsageSchema),
       metrics: Schema.optional(Schema.Unknown),
     }),
   ),
@@ -464,19 +464,21 @@ const mapFinishReason = (reason: string): FinishReason => {
 
 // AWS reports inputTokens separately from cache reads and writes.
 // Bedrock does not break reasoning out of outputTokens for current models.
-const mapUsage = (usage: BedrockUsageSchema | undefined): Usage | undefined => {
+const mapUsage = (usage: BedrockUsageSchema | null | undefined): Usage | undefined => {
   if (!usage) return undefined
+  const cacheRead = usage.cacheReadInputTokens ?? undefined
+  const cacheWrite = usage.cacheWriteInputTokens ?? undefined
   const inputTokens = ProviderShared.sumTokens(
     usage.inputTokens,
-    usage.cacheReadInputTokens,
-    usage.cacheWriteInputTokens,
+    cacheRead,
+    cacheWrite,
   )
   return new Usage({
     inputTokens,
     outputTokens: usage.outputTokens,
     nonCachedInputTokens: usage.inputTokens,
-    cacheReadInputTokens: usage.cacheReadInputTokens,
-    cacheWriteInputTokens: usage.cacheWriteInputTokens,
+    cacheReadInputTokens: cacheRead,
+    cacheWriteInputTokens: cacheWrite,
     totalTokens: ProviderShared.totalTokens(inputTokens, usage.outputTokens, usage.totalTokens),
     providerMetadata: { bedrock: usage },
   })

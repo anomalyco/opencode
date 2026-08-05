@@ -146,18 +146,18 @@ export type OpenAIChatBody = Schema.Schema.Type<typeof OpenAIChatBody>
 // byte stream into strings, then `Protocol.jsonEvent` decodes each string into
 // this provider-native event shape.
 const OpenAIChatUsage = Schema.Struct({
-  prompt_tokens: Schema.optional(Schema.Number),
-  completion_tokens: Schema.optional(Schema.Number),
-  total_tokens: Schema.optional(Schema.Number),
+  prompt_tokens: optionalNull(Schema.Number),
+  completion_tokens: optionalNull(Schema.Number),
+  total_tokens: optionalNull(Schema.Number),
   prompt_tokens_details: optionalNull(
     Schema.Struct({
-      cached_tokens: Schema.optional(Schema.Number),
-      cache_write_tokens: Schema.optional(Schema.Number),
+      cached_tokens: optionalNull(Schema.Number),
+      cache_write_tokens: optionalNull(Schema.Number),
     }),
   ),
   completion_tokens_details: optionalNull(
     Schema.Struct({
-      reasoning_tokens: Schema.optional(Schema.Number),
+      reasoning_tokens: optionalNull(Schema.Number),
     }),
   ),
 })
@@ -168,7 +168,7 @@ const OpenAIChatToolCallDeltaFunction = Schema.Struct({
 })
 
 const OpenAIChatToolCallDelta = Schema.Struct({
-  index: Schema.Number,
+  index: optionalNull(Schema.Number),
   id: optionalNull(Schema.String),
   function: optionalNull(OpenAIChatToolCallDeltaFunction),
 })
@@ -559,18 +559,20 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // satisfied on both sides.
 const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   if (!usage) return undefined
-  const cached = usage.prompt_tokens_details?.cached_tokens
-  const cacheWrite = usage.prompt_tokens_details?.cache_write_tokens
-  const reasoning = usage.completion_tokens_details?.reasoning_tokens
-  const nonCached = ProviderShared.subtractTokens(usage.prompt_tokens, ProviderShared.sumTokens(cached, cacheWrite))
+  const input = usage.prompt_tokens ?? undefined
+  const output = usage.completion_tokens ?? undefined
+  const cached = input === undefined ? undefined : (usage.prompt_tokens_details?.cached_tokens ?? undefined)
+  const cacheWrite = input === undefined ? undefined : (usage.prompt_tokens_details?.cache_write_tokens ?? undefined)
+  const reasoning = output === undefined ? undefined : (usage.completion_tokens_details?.reasoning_tokens ?? undefined)
+  const nonCached = ProviderShared.subtractTokens(input, ProviderShared.sumTokens(cached, cacheWrite))
   return new Usage({
-    inputTokens: usage.prompt_tokens,
-    outputTokens: usage.completion_tokens,
+    inputTokens: input,
+    outputTokens: output,
     nonCachedInputTokens: nonCached,
     cacheReadInputTokens: cached,
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
-    totalTokens: ProviderShared.totalTokens(usage.prompt_tokens, usage.completion_tokens, usage.total_tokens),
+    totalTokens: ProviderShared.totalTokens(input, output, usage.total_tokens ?? undefined),
     providerMetadata: { openai: usage },
   })
 }
@@ -694,24 +696,25 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
     }
 
-    for (const tool of toolDeltas) {
-      const current = tools[tool.index]
-      const pending = pendingTools[tool.index]
+    for (const [position, tool] of toolDeltas.entries()) {
+      const index = tool.index ?? position
+      const current = tools[index]
+      const pending = pendingTools[index]
       const id = current?.id ?? pending?.id ?? (tool.id || undefined)
       const name = current?.name ?? pending?.name ?? (tool.function?.name || undefined)
       const text = `${pending?.input ?? ""}${tool.function?.arguments ?? ""}`
       if (!current && (!id || !name)) {
-        pendingTools = { ...pendingTools, [tool.index]: { id: id || undefined, name: name || undefined, input: text } }
+        pendingTools = { ...pendingTools, [index]: { id: id || undefined, name: name || undefined, input: text } }
         continue
       }
       if (pending) {
         pendingTools = { ...pendingTools }
-        delete pendingTools[tool.index]
+        delete pendingTools[index]
       }
       const result = ToolStream.appendOrStart(
         ADAPTER,
         tools,
-        tool.index,
+        index,
         { id: id || undefined, name: name || undefined, text },
         "OpenAI Chat tool call delta is missing id or name",
       )

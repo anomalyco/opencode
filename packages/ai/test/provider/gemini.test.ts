@@ -722,14 +722,37 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("leaves total usage undefined when component counts are missing", () =>
+  it.effect("keeps partial usage only in provider metadata", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
-        Effect.provide(fixedResponse(sseEvents({ usageMetadata: { thoughtsTokenCount: 1 } }))),
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              usageMetadata: {
+                promptTokenCount: null,
+                candidatesTokenCount: null,
+                totalTokenCount: null,
+                thoughtsTokenCount: null,
+                cachedContentTokenCount: 1,
+                promptTokensDetails: [{ modality: "TEXT", tokenCount: 5 }],
+                candidatesTokensDetails: [{ modality: "TEXT", tokenCount: 2 }],
+              },
+            }),
+          ),
+        ),
       )
 
-      expect(response.usage).toMatchObject({ reasoningTokens: 1 })
-      expect(response.usage?.totalTokens).toBeUndefined()
+      expect(response.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        cacheReadInputTokens: undefined,
+        providerMetadata: {
+          google: {
+            promptTokensDetails: [{ modality: "TEXT", tokenCount: 5 }],
+            candidatesTokensDetails: [{ modality: "TEXT", tokenCount: 2 }],
+          },
+        },
+      })
     }),
   )
 

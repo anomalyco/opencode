@@ -18,7 +18,7 @@ import {
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema"
-import { JsonObject, optionalArray, ProviderShared } from "./shared"
+import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolSchemaProjection } from "./utils/tool-schema"
@@ -162,13 +162,16 @@ const GeminiBodyFields = {
 const GeminiBody = Schema.Struct(GeminiBodyFields)
 export type GeminiBody = Schema.Schema.Type<typeof GeminiBody>
 
-const GeminiUsage = Schema.Struct({
-  cachedContentTokenCount: Schema.optional(Schema.Number),
-  thoughtsTokenCount: Schema.optional(Schema.Number),
-  promptTokenCount: Schema.optional(Schema.Number),
-  candidatesTokenCount: Schema.optional(Schema.Number),
-  totalTokenCount: Schema.optional(Schema.Number),
-})
+const GeminiUsage = Schema.StructWithRest(
+  Schema.Struct({
+    cachedContentTokenCount: optionalNull(Schema.Number),
+    thoughtsTokenCount: optionalNull(Schema.Number),
+    promptTokenCount: optionalNull(Schema.Number),
+    candidatesTokenCount: optionalNull(Schema.Number),
+    totalTokenCount: optionalNull(Schema.Number),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 type GeminiUsage = Schema.Schema.Type<typeof GeminiUsage>
 
 const GeminiCandidate = Schema.Struct({
@@ -178,7 +181,7 @@ const GeminiCandidate = Schema.Struct({
 
 const GeminiEvent = Schema.Struct({
   candidates: optionalArray(GeminiCandidate),
-  usageMetadata: Schema.optional(GeminiUsage),
+  usageMetadata: optionalNull(GeminiUsage),
 })
 type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
 
@@ -422,23 +425,25 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
 // `cachedContentTokenCount` subset. `candidatesTokenCount` is *exclusive*
 // of `thoughtsTokenCount` — visible-only, not a total — so we sum the two
 // to produce the inclusive `outputTokens` the rest of the contract expects.
-const mapUsage = (usage: GeminiUsage | undefined) => {
+const mapUsage = (usage: GeminiUsage | null | undefined) => {
   if (!usage) return undefined
-  const cached = usage.cachedContentTokenCount
-  const nonCached = ProviderShared.subtractTokens(usage.promptTokenCount, cached)
+  const input = usage.promptTokenCount ?? undefined
+  const cached = input === undefined ? undefined : (usage.cachedContentTokenCount ?? undefined)
+  const visible = usage.candidatesTokenCount ?? undefined
+  const thoughts = visible === undefined ? undefined : (usage.thoughtsTokenCount ?? undefined)
+  const nonCached = ProviderShared.subtractTokens(input, cached)
   // `candidatesTokenCount` is visible-only; sum with thoughts to produce the
   // inclusive `outputTokens` the contract expects. Only compute the total
   // when the visible component is reported — otherwise we'd fabricate an
   // inclusive number from a partial breakdown.
-  const outputTokens =
-    usage.candidatesTokenCount !== undefined ? usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0) : undefined
+  const outputTokens = visible === undefined ? undefined : visible + (thoughts ?? 0)
   return new Usage({
-    inputTokens: usage.promptTokenCount,
+    inputTokens: input,
     outputTokens,
     nonCachedInputTokens: nonCached,
     cacheReadInputTokens: cached,
-    reasoningTokens: usage.thoughtsTokenCount,
-    totalTokens: ProviderShared.totalTokens(usage.promptTokenCount, outputTokens, usage.totalTokenCount),
+    reasoningTokens: thoughts,
+    totalTokens: ProviderShared.totalTokens(input, outputTokens, usage.totalTokenCount ?? undefined),
     providerMetadata: { google: usage },
   })
 }

@@ -885,6 +885,40 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("accepts nullable token details", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.completed",
+              response: {
+                id: "resp_1",
+                usage: {
+                  input_tokens: 5,
+                  output_tokens: 2,
+                  total_tokens: 7,
+                  input_tokens_details: { cached_tokens: null, cache_write_tokens: null },
+                  output_tokens_details: { reasoning_tokens: null },
+                },
+              },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({
+        inputTokens: 5,
+        outputTokens: 2,
+        nonCachedInputTokens: 5,
+        totalTokens: 7,
+        cacheReadInputTokens: undefined,
+        cacheWriteInputTokens: undefined,
+        reasoningTokens: undefined,
+      })
+    }),
+  )
+
   it.effect("preserves and replays assistant message phases", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

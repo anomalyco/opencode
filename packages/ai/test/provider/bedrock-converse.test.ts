@@ -388,12 +388,30 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       const body = eventStreamBody(
         ["messageStop", { stopReason: "end_turn" }],
-        ["metadata", { usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } }],
-        ["metadata", { metrics: { latencyMs: 100 } }],
+        [
+          "metadata",
+          {
+            usage: {
+              inputTokens: 5,
+              outputTokens: 2,
+              totalTokens: 7,
+              cacheReadInputTokens: null,
+              cacheWriteInputTokens: null,
+            },
+          },
+        ],
+        ["metadata", { usage: null }],
+        ["metadata", null],
       )
       const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
-      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
+      expect(response.usage).toMatchObject({
+        inputTokens: 5,
+        outputTokens: 2,
+        totalTokens: 7,
+        cacheReadInputTokens: undefined,
+        cacheWriteInputTokens: undefined,
+      })
     }),
   )
 

@@ -183,12 +183,12 @@ const OpenResponsesUsage = Schema.Struct({
   input_tokens: Schema.optional(Schema.Number),
   input_tokens_details: optionalNull(
     Schema.Struct({
-      cached_tokens: Schema.optional(Schema.Number),
-      cache_write_tokens: Schema.optional(Schema.Number),
+      cached_tokens: optionalNull(Schema.Number),
+      cache_write_tokens: optionalNull(Schema.Number),
     }),
   ),
   output_tokens: Schema.optional(Schema.Number),
-  output_tokens_details: optionalNull(Schema.Struct({ reasoning_tokens: Schema.optional(Schema.Number) })),
+  output_tokens_details: optionalNull(Schema.Struct({ reasoning_tokens: optionalNull(Schema.Number) })),
   total_tokens: Schema.optional(Schema.Number),
 })
 type OpenResponsesUsage = Schema.Schema.Type<typeof OpenResponsesUsage>
@@ -592,9 +592,11 @@ export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (req
 // non-cached breakdown.
 const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerMetadataKey: string) => {
   if (!usage) return undefined
-  const cached = usage.input_tokens_details?.cached_tokens
-  const cacheWrite = usage.input_tokens_details?.cache_write_tokens
-  const reasoning = usage.output_tokens_details?.reasoning_tokens
+  const cached = usage.input_tokens === undefined ? undefined : (usage.input_tokens_details?.cached_tokens ?? undefined)
+  const cacheWrite =
+    usage.input_tokens === undefined ? undefined : (usage.input_tokens_details?.cache_write_tokens ?? undefined)
+  const reasoning =
+    usage.output_tokens === undefined ? undefined : (usage.output_tokens_details?.reasoning_tokens ?? undefined)
   const nonCached = ProviderShared.subtractTokens(usage.input_tokens, ProviderShared.sumTokens(cached, cacheWrite))
   return new Usage({
     inputTokens: usage.input_tokens,

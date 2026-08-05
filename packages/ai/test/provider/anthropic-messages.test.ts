@@ -488,7 +488,7 @@ describe("Anthropic Messages route", () => {
         {
           type: "message_delta",
           delta: { stop_reason: "end_turn", stop_sequence: "\n\nHuman:" },
-          usage: { output_tokens: 2 },
+          usage: { input_tokens: null, output_tokens: 2 },
         },
         { type: "message_stop" },
       )

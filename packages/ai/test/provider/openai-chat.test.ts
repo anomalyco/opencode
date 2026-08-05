@@ -596,6 +596,37 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("accepts nullable usage counters", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({ role: "assistant", content: "Hello" }),
+        deltaChunk({}, "stop"),
+        usageChunk({
+          prompt_tokens: null,
+          completion_tokens: null,
+          total_tokens: null,
+          prompt_tokens_details: { cached_tokens: 1, cache_write_tokens: null },
+          completion_tokens_details: { reasoning_tokens: null },
+        }),
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.usage).toEqual(
+        new Usage({
+          providerMetadata: {
+            openai: {
+              prompt_tokens: null,
+              completion_tokens: null,
+              total_tokens: null,
+              prompt_tokens_details: { cached_tokens: 1, cache_write_tokens: null },
+              completion_tokens_details: { reasoning_tokens: null },
+            },
+          },
+        }),
+      )
+    }),
+  )
+
   it.effect("parses and replays OpenAI-compatible reasoning fields", () =>
     Effect.gen(function* () {
       const fields = ["reasoning_content", "reasoning", "reasoning_text"] as const
@@ -1044,6 +1075,36 @@ describe("OpenAI Chat route", () => {
           providerMetadata: undefined,
         },
         { type: "finish", reason: { normalized: "tool-calls", raw: "tool_calls" }, usage: undefined },
+      ])
+    }),
+  )
+
+  it.effect("assembles indexless streamed tool calls", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          tool_calls: [
+            { id: "call_1", function: { name: "lookup", arguments: '{"query"' } },
+            { index: null, id: "call_2", function: { name: "lookup", arguments: '{"query"' } },
+          ],
+        }),
+        deltaChunk({
+          tool_calls: [
+            { function: { arguments: ':"weather"}' } },
+            { index: null, function: { arguments: ':"time"}' } },
+          ],
+        }),
+        deltaChunk({}, "tool_calls"),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.toolCalls).toMatchObject([
+        { id: "call_1", name: "lookup", input: { query: "weather" } },
+        { id: "call_2", name: "lookup", input: { query: "time" } },
       ])
     }),
   )
