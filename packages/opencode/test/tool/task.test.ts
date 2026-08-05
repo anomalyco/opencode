@@ -3,7 +3,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -564,6 +564,90 @@ describe("tool.task", () => {
         .pipe(Effect.exit)
 
       expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  )
+
+  it.instance("includes the task id when a foreground task fails", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const exit = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: {
+              promptOps: {
+                ...stubOps(),
+                prompt: () => Effect.die(new Error("provider unavailable")),
+              } satisfies TaskPromptOps,
+            },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+
+      const children = yield* sessions.children(chat.id)
+      expect(children).toHaveLength(1)
+      if (Exit.isSuccess(exit)) throw new Error("expected task failure")
+      const error = Cause.squash(exit.cause)
+      expect(error).toBeInstanceOf(Error)
+      expect(String(error)).toContain(`<task id="${children[0]?.id}" state="error">`)
+      expect(String(error)).toContain("<task_error>\nprovider unavailable\n</task_error>")
+    }),
+  )
+
+  it.instance("includes the task id when a foreground task is cancelled", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const exit = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: {
+              promptOps: {
+                ...stubOps(),
+                prompt: () => Effect.interrupt,
+              } satisfies TaskPromptOps,
+            },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+
+      const children = yield* sessions.children(chat.id)
+      expect(children).toHaveLength(1)
+      if (Exit.isSuccess(exit)) throw new Error("expected task cancellation")
+      const error = Cause.squash(exit.cause)
+      expect(error).toBeInstanceOf(Error)
+      expect(String(error)).toContain(`<task id="${children[0]?.id}" state="error">`)
+      expect(String(error)).toContain("<task_error>\nTask cancelled\n</task_error>")
     }),
   )
 
