@@ -150,7 +150,7 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("hides task background parameter unless experimental background subagents are enabled", () =>
+  it.instance("exposes task background parameter by default", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
       const agent = yield* Agent.Service
@@ -162,8 +162,16 @@ describe("tool.registry", () => {
         agent: build,
       })).find((tool) => tool.id === "task")
 
-      expect(task?.jsonSchema).toBeDefined()
-      expect((task?.jsonSchema?.properties as Record<string, unknown> | undefined)?.background).toBeUndefined()
+      expect(task).toBeDefined()
+      expect(task?.jsonSchema).toBeUndefined()
+      expect(
+        Schema.decodeUnknownSync(task!.parameters)({
+          description: "test task",
+          prompt: "do a thing",
+          subagent_type: "general",
+          background: true,
+        }),
+      ).toMatchObject({ background: true })
     }),
   )
 
