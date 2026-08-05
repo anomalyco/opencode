@@ -3,7 +3,7 @@ title: Troubleshooting
 description: Common issues and how to resolve them.
 ---
 
-To debug issues with OpenCode, start by checking the logs and local data it stores on disk.
+To debug issues with Leak Code, start by checking the logs and local data it stores on disk.
 
 ---
 
@@ -11,21 +11,21 @@ To debug issues with OpenCode, start by checking the logs and local data it stor
 
 Log files are written to:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode\log`
+- **macOS/Linux**: `~/.local/share/leak-code/log/`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\leak-code\log`
 
 Log files are named with timestamps (e.g., `2025-01-09T123456.log`) and the most recent 10 log files are kept.
 
-You can set the log level with the `--log-level` command-line option to get more detailed debug information. For example, `opencode --log-level DEBUG`.
+You can set the log level with the `--log-level` command-line option to get more detailed debug information. For example, `leak-code --log-level DEBUG`.
 
 ---
 
 ## Storage
 
-opencode stores session data and other application data on disk at:
+leak-code stores session data and other application data on disk at:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode`
+- **macOS/Linux**: `~/.local/share/leak-code/`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\leak-code`
 
 This directory contains:
 
@@ -39,27 +39,27 @@ This directory contains:
 
 ## Uninstall
 
-To uninstall the OpenCode CLI and remove its related files, run:
+To uninstall the Leak Code CLI and remove its related files, run:
 
 ```bash
-opencode uninstall
+leak-code uninstall
 ```
 
 The command shows what will be removed and asks for confirmation. See the [CLI reference](/docs/cli#uninstall) for options to keep your configuration or application data.
 
-To remove OpenCode Desktop, uninstall the application through your operating system's app management tools.
+To remove Leak Code Desktop, uninstall the application through your operating system's app management tools.
 
 ---
 
 ## Desktop app
 
-OpenCode Desktop runs a local OpenCode server (the `opencode-cli` sidecar) in the background. Most issues are caused by a misbehaving plugin, a corrupted cache, or a bad server setting.
+Leak Code Desktop runs a local Leak Code server (the `leak-code-cli` sidecar) in the background. Most issues are caused by a misbehaving plugin, a corrupted cache, or a bad server setting.
 
 ### Quick checks
 
 - Fully quit and relaunch the app.
 - If the app shows an error screen, click **Restart** and copy the error details.
-- macOS only: `OpenCode` menu -> **Reload Webview** (helps if the UI is blank/frozen).
+- macOS only: `Leak Code` menu -> **Reload Webview** (helps if the UI is blank/frozen).
 
 ---
 
@@ -71,9 +71,9 @@ If the desktop app is crashing on launch, hanging, or behaving strangely, start 
 
 Open your global config file and look for a `plugin` key.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (or `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (older installs): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/leak-code/leak-code.jsonc` (or `~/.config/leak-code/leak-code.json`)
+- **macOS/Linux** (older installs): `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\leak-code\leak-code.jsonc`
 
 If you have plugins configured, temporarily disable them by removing the key or setting it to an empty array:
 
@@ -86,13 +86,13 @@ If you have plugins configured, temporarily disable them by removing the key or 
 
 #### Check plugin directories
 
-OpenCode can also load local plugins from disk. Temporarily move these out of the way (or rename the folder) and restart the desktop app:
+Leak Code can also load local plugins from disk. Temporarily move these out of the way (or rename the folder) and restart the desktop app:
 
 - **Global plugins**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
-  - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\plugins`
+  - **macOS/Linux**: `~/.config/leak-code/plugins/`
+  - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\leak-code\plugins`
 - **Project plugins** (only if you use per-project config)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 If the app starts working again, re-enable plugins one at a time to find which one is causing the issue.
 
@@ -100,22 +100,22 @@ If the app starts working again, re-enable plugins one at a time to find which o
 
 ### Clear the cache
 
-If disabling plugins doesn't help (or a plugin install is stuck), clear the cache so OpenCode can rebuild it.
+If disabling plugins doesn't help (or a plugin install is stuck), clear the cache so Leak Code can rebuild it.
 
-1. Quit OpenCode Desktop completely.
+1. Quit Leak Code Desktop completely.
 2. Delete the cache directory:
 
-- **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/opencode`
-- **Linux**: delete `~/.cache/opencode` (or run `rm -rf ~/.cache/opencode`)
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.cache\opencode`
+- **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/leak-code`
+- **Linux**: delete `~/.cache/leak-code` (or run `rm -rf ~/.cache/leak-code`)
+- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.cache\leak-code`
 
-3. Restart OpenCode Desktop.
+3. Restart Leak Code Desktop.
 
 ---
 
 ### Fix server connection issues
 
-OpenCode Desktop can either start its own local server (default) or connect to a server URL you configured.
+Leak Code Desktop can either start its own local server (default) or connect to a server URL you configured.
 
 If you see a **"Connection Failed"** dialog (or the app never gets past the splash screen), check for a custom server URL.
 
@@ -125,13 +125,13 @@ From the Home screen, click the server name (with the status dot) to open the Se
 
 #### Remove `server.port` / `server.hostname` from your config
 
-If your `opencode.json(c)` contains a `server` section, temporarily remove it and restart the desktop app.
+If your `leak-code.json(c)` contains a `server` section, temporarily remove it and restart the desktop app.
 
 #### Check environment variables
 
-If you have `OPENCODE_PORT` set in your environment, the desktop app will try to use that port for the local server.
+If you have `LEAKCODE_PORT` set in your environment, the desktop app will try to use that port for the local server.
 
-- Unset `OPENCODE_PORT` (or pick a free port) and restart.
+- Unset `LEAKCODE_PORT` (or pick a free port) and restart.
 
 ---
 
@@ -146,21 +146,21 @@ On Linux, some Wayland setups can cause blank windows or compositor errors.
 
 ### Windows: WebView2 runtime
 
-On Windows, OpenCode Desktop requires the Microsoft Edge **WebView2 Runtime**. If the app opens to a blank window or won't start, install/update WebView2 and try again.
+On Windows, Leak Code Desktop requires the Microsoft Edge **WebView2 Runtime**. If the app opens to a blank window or won't start, install/update WebView2 and try again.
 
 ---
 
 ### Windows: General performance issues
 
-If you're experiencing slow performance, file access issues, or terminal problems on Windows, try using [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL provides a Linux environment that works more seamlessly with OpenCode's features.
+If you're experiencing slow performance, file access issues, or terminal problems on Windows, try using [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL provides a Linux environment that works more seamlessly with Leak Code's features.
 
 ---
 
 ### Notifications not showing
 
-OpenCode Desktop only shows system notifications when:
+Leak Code Desktop only shows system notifications when:
 
-- notifications are enabled for OpenCode in your OS settings, and
+- notifications are enabled for Leak Code in your OS settings, and
 - the app window is not focused.
 
 ---
@@ -169,11 +169,11 @@ OpenCode Desktop only shows system notifications when:
 
 If the app won't start and you can't clear settings from inside the UI, reset the desktop app's saved state.
 
-1. Quit OpenCode Desktop.
-2. Find and delete these files (they live in the OpenCode Desktop app data directory):
+1. Quit Leak Code Desktop.
+2. Find and delete these files (they live in the Leak Code Desktop app data directory):
 
-- `opencode.settings.dat` (desktop default server URL)
-- `opencode.global.dat` and `opencode.workspace.*.dat` (UI state like recent servers/projects)
+- `leak-code.settings.dat` (desktop default server URL)
+- `leak-code.global.dat` and `leak-code.workspace.*.dat` (UI state like recent servers/projects)
 
 To find the directory quickly:
 
@@ -185,7 +185,7 @@ To find the directory quickly:
 
 ## Getting help
 
-If you're experiencing issues with OpenCode:
+If you're experiencing issues with Leak Code:
 
 1. **Report issues on GitHub**
 
@@ -209,11 +209,11 @@ Here are some common issues and how to resolve them.
 
 ---
 
-### OpenCode won't start
+### Leak Code won't start
 
 1. Check the logs for error messages
 2. Try running with `--print-logs` to see output in the terminal
-3. Ensure you have the latest version with `opencode upgrade`
+3. Ensure you have the latest version with `leak-code upgrade`
 
 ---
 
@@ -239,9 +239,9 @@ Examples:
 
 - `openai/gpt-4.1`
 - `openrouter/google/gemini-2.5-flash`
-- `opencode/kimi-k2`
+- `leak-code/kimi-k2`
 
-To figure out what models you have access to, run `opencode models`
+To figure out what models you have access to, run `leak-code models`
 
 ---
 
@@ -255,10 +255,10 @@ To resolve this:
 2. If the issue persists, try clearing your stored configuration:
 
    ```bash
-   rm -rf ~/.local/share/opencode
+   rm -rf ~/.local/share/leak-code
    ```
 
-   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.local\share\opencode`
+   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.local\share\leak-code`
 
 3. Re-authenticate with your provider using the `/connect` command in the TUI.
 
@@ -266,21 +266,21 @@ To resolve this:
 
 ### AI_APICallError and provider package issues
 
-If you encounter API call errors, this may be due to outdated provider packages. opencode dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
+If you encounter API call errors, this may be due to outdated provider packages. leak-code dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
 
 To resolve provider package issues:
 
 1. Clear the provider package cache:
 
    ```bash
-   rm -rf ~/.cache/opencode
+   rm -rf ~/.cache/leak-code
    ```
 
-   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.cache\opencode`
+   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.cache\leak-code`
 
-2. Restart opencode to reinstall the latest provider packages
+2. Restart leak-code to reinstall the latest provider packages
 
-This will force opencode to download the most recent versions of provider packages, which often resolves compatibility issues with model parameters and API changes.
+This will force leak-code to download the most recent versions of provider packages, which often resolves compatibility issues with model parameters and API changes.
 
 ---
 
@@ -311,4 +311,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
+leak-code will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.

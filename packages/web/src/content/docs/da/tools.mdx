@@ -13,7 +13,7 @@ Som standard er alle verktøy **aktivert** og trenger ikke tillatelse for at kj�
 
 Brug feltet `permission` for at kontrollere verktøyets oppførsel. Du kan tillate, avslå eller kreve godkjenning for hvert verktøy.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -26,7 +26,7 @@ Brug feltet `permission` for at kontrollere verktøyets oppførsel. Du kan tilla
 
 Du kan også bruge jokertegn for at kontrollere flere verktøy samtidig. For eksempel, for at kreve godkjenning for alle verktøy fra en MCP-server:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -49,7 +49,7 @@ Her er alle de innebygde verktøyene som er tilgængelige i OpenCode.
 
 Utfør shellkommandoer i prosjektmiljøet ditt.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -66,7 +66,7 @@ Dette verktøyet lar LLM kjøre terminalkommandoer som `npm install`, `git statu
 
 Endre eksisterende filer ved at bruge eksakte strengerstatninger.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -83,7 +83,7 @@ Dette verktøyet utfører nøyaktige redigeringer av filer ved at erstatte eksak
 
 Opret nye filer eller overskriv eksisterende.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -104,7 +104,7 @@ Brug denne for at la LLM lage nye filer. Den vil overskrive eksisterende filer h
 
 Les filinnholdet fra kodebasen din.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -121,7 +121,7 @@ Dette verktøyet leser filer og returnerer innholdet. Den støtter lesing av spe
 
 Søk i filinnhold ved hjelp av regulære uttrykk.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -138,7 +138,7 @@ Rask innholdssøk på tvers av kodebasen din. Støtter full regex-syntaks og fil
 
 Finn filer etter mønstermatching.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -156,10 +156,10 @@ Søk etter filer ved at bruge glob-mønstre som `**/*.js` eller `src/**/*.ts`. R
 Samhandle med dine konfigurerte LSP-servere for at få kodeintelligensfunksjoner som definisjoner, referanser, sveveinformasjon og anropshierarki.
 
 :::note
-Dette verktøyet er bare tilgængelig når `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (eller `OPENCODE_EXPERIMENTAL=true`).
+Dette verktøyet er bare tilgængelig når `LEAKCODE_EXPERIMENTAL_LSP_TOOL=true` (eller `LEAKCODE_EXPERIMENTAL=true`).
 :::
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -178,7 +178,7 @@ For at konfigurere hvilke LSP-servere som er tilgængelige for prosjektet ditt, 
 
 Brug patcher på filer.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -199,7 +199,7 @@ Dette verktøyet bruger opdateringsfiler til kodebasen din. Nyttig for at påfø
 
 Last inn en [ferdighet](/docs/skills) (en `SKILL.md` fil) og returner innholdet i samtalen.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -214,7 +214,7 @@ Last inn en [ferdighet](/docs/skills) (en `SKILL.md` fil) og returner innholdet 
 
 Administrer to-doslister under kodingssessioner.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -235,7 +235,7 @@ Dette verktøyet er deaktivert for subagenter som standard, men du kan aktivere 
 
 Hent nettinnhold.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -253,17 +253,17 @@ Lar LLM hente og lese nettsider. Nyttig for at slå opp dokumentasjon eller fors
 Søk på nettet for informasjon.
 
 :::note
-Dette verktøyet er bare tilgængelig når du bruger OpenCode-leverandøren eller når miljøvariabelen `OPENCODE_ENABLE_EXA` er satt til en sannverdi (f.eks. `true` eller `1`).
+Dette verktøyet er bare tilgængelig når du bruger OpenCode-leverandøren eller når miljøvariabelen `LEAKCODE_ENABLE_EXA` er satt til en sannverdi (f.eks. `true` eller `1`).
 
 Slik aktiverer du når du starter OpenCode:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+LEAKCODE_ENABLE_EXA=1 opencode
 ```
 
 :::
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -286,7 +286,7 @@ Brug `websearch` når du trenger at finne informasjon (oppdagelse), og `webfetch
 
 Still brugeren spørsmål under utførelse.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {

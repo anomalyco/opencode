@@ -12,17 +12,17 @@ description: استخدام OpenCode في متصفحك.
 ابدأ تشغيل واجهة الويب عبر تنفيذ:
 
 ```bash
-opencode web
+leak-code web
 ```
 
 يؤدي ذلك إلى تشغيل خادم محلي على `127.0.0.1` بمنفذ عشوائي متاح، ويفتح OpenCode تلقائيا في المتصفح الافتراضي لديك.
 
 :::caution
-إذا لم يتم تعيين `OPENCODE_SERVER_PASSWORD` فسيكون الخادم دون حماية. هذا مناسب للاستخدام المحلي، لكنه يجب أن يكون مُعينا عند إتاحة الوصول عبر الشبكة.
+إذا لم يتم تعيين `LEAKCODE_SERVER_PASSWORD` فسيكون الخادم دون حماية. هذا مناسب للاستخدام المحلي، لكنه يجب أن يكون مُعينا عند إتاحة الوصول عبر الشبكة.
 :::
 
 :::tip[مستخدمو Windows]
-لأفضل تجربة، شغّل `opencode web` من [WSL](/docs/windows-wsl) بدلا من PowerShell. يضمن ذلك وصولا صحيحا إلى نظام الملفات وتكاملا أفضل مع terminal.
+لأفضل تجربة، شغّل `leak-code web` من [WSL](/docs/windows-wsl) بدلا من PowerShell. يضمن ذلك وصولا صحيحا إلى نظام الملفات وتكاملا أفضل مع terminal.
 :::
 
 ---
@@ -36,7 +36,7 @@ opencode web
 افتراضيا، يختار OpenCode منفذا متاحا. يمكنك تحديد منفذ:
 
 ```bash
-opencode web --port 4096
+leak-code web --port 4096
 ```
 
 ### اسم المضيف
@@ -44,7 +44,7 @@ opencode web --port 4096
 افتراضيا، يرتبط الخادم بـ `127.0.0.1` (للاستخدام المحلي فقط). لجعل OpenCode متاحا على شبكتك:
 
 ```bash
-opencode web --hostname 0.0.0.0
+leak-code web --hostname 0.0.0.0
 ```
 
 عند استخدام `0.0.0.0` سيعرض OpenCode كلا من عناوين الوصول المحلي وعناوين الشبكة:
@@ -59,7 +59,7 @@ opencode web --hostname 0.0.0.0
 فعّل mDNS لجعل خادمك قابلا للاكتشاف على الشبكة المحلية:
 
 ```bash
-opencode web --mdns
+leak-code web --mdns
 ```
 
 يضبط ذلك تلقائيا اسم المضيف إلى `0.0.0.0` ويعلن عن الخادم باسم `opencode.local`.
@@ -67,7 +67,7 @@ opencode web --mdns
 يمكنك تخصيص اسم نطاق mDNS لتشغيل عدة نسخ على الشبكة نفسها:
 
 ```bash
-opencode web --mdns --mdns-domain myproject.local
+leak-code web --mdns --mdns-domain myproject.local
 ```
 
 ### CORS
@@ -75,18 +75,18 @@ opencode web --mdns --mdns-domain myproject.local
 للسماح بنطاقات إضافية عبر CORS (مفيد للواجهات الأمامية المخصصة):
 
 ```bash
-opencode web --cors https://example.com
+leak-code web --cors https://example.com
 ```
 
 ### المصادقة
 
-لحماية الوصول، عيّن كلمة مرور عبر متغير البيئة `OPENCODE_SERVER_PASSWORD`:
+لحماية الوصول، عيّن كلمة مرور عبر متغير البيئة `LEAKCODE_SERVER_PASSWORD`:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+LEAKCODE_SERVER_PASSWORD=secret leak-code web
 ```
 
-اسم المستخدم الافتراضي هو `opencode`، ويمكن تغييره عبر `OPENCODE_SERVER_USERNAME`.
+اسم المستخدم الافتراضي هو `opencode`، ويمكن تغييره عبر `LEAKCODE_SERVER_USERNAME`.
 
 ---
 
@@ -114,10 +114,10 @@ OPENCODE_SERVER_PASSWORD=secret opencode web
 
 ```bash
 # ابدأ خادم الويب
-opencode web --port 4096
+leak-code web --port 4096
 
 # في محطة طرفية أخرى، اربط TUI
-opencode attach http://localhost:4096
+leak-code attach http://localhost:4096
 ```
 
 يتيح لك ذلك استخدام واجهة الويب وterminal في الوقت نفسه، مع مشاركة الجلسات والحالة نفسها.
@@ -126,7 +126,7 @@ opencode attach http://localhost:4096
 
 ## ملف الإعدادات
 
-يمكنك أيضا ضبط إعدادات الخادم داخل ملف الإعدادات `opencode.json`:
+يمكنك أيضا ضبط إعدادات الخادم داخل ملف الإعدادات `leak-code.json`:
 
 ```json
 {

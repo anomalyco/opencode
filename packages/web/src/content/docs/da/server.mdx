@@ -6,14 +6,14 @@ description: Interager med opencode-serveren over HTTP.
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Kommandoen `opencode serve` kører en hovedløs HTTP-server, som afslører et OpenAPI-endpoint, som en opencode-klient kan bruge.
+Kommandoen `leak-code serve` kører en hovedløs HTTP-server, som afslører et OpenAPI-endpoint, som en opencode-klient kan bruge.
 
 ---
 
 ### Brug
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+leak-code serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Indstillinger
@@ -29,17 +29,17 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 `--cors` kan angives flere gange:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+leak-code serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Godkendelse
 
-Indstil `OPENCODE_SERVER_PASSWORD` for at beskytte serveren med HTTP grundlæggende godkendelse. Brugernavnet er som standard `opencode`, eller indstil `OPENCODE_SERVER_USERNAME` for at tilsidesætte det. Dette gælder både `opencode serve` og `opencode web`.
+Indstil `LEAKCODE_SERVER_PASSWORD` for at beskytte serveren med HTTP grundlæggende godkendelse. Brugernavnet er som standard `opencode`, eller indstil `LEAKCODE_SERVER_USERNAME` for at tilsidesætte det. Dette gælder både `leak-code serve` og `leak-code web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve
 ```
 
 ---
@@ -51,13 +51,13 @@ klient som taler med serveren. Serveren viser en OpenAPI 3.1-specifikation
 endpoint. Dette endpoint bruges også til at generere en [SDK](/docs/sdk).
 
 :::tip
-Brug opencode-serveren til at interagere med opencode programmatisk.
+Brug opencode-serveren til at interagere med leak-code programmatisk.
 :::
 
-Denne arkitektur lader opencode understøtte flere klienter og lader dig interagere med opencode programmatisk.
+Denne arkitektur lader opencode understøtte flere klienter og lader dig interagere med leak-code programmatisk.
 
-Du kan køre `opencode serve` for at starte en selvstændig server. Hvis du har
-opencode TUI kørende, vil `opencode serve` starte en ny server.
+Du kan køre `leak-code serve` for at starte en selvstændig server. Hvis du har
+opencode TUI kørende, vil `leak-code serve` starte en ny server.
 
 ---
 

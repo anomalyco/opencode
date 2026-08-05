@@ -23,7 +23,7 @@ OpenCode ใช้การกำหนดค่า `permission` เพื่อ
 
 คุณสามารถตั้งค่าการอนุญาตทั่วโลก (ด้วย `*`) และแทนที่เครื่องมือเฉพาะ
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -36,7 +36,7 @@ OpenCode ใช้การกำหนดค่า `permission` เพื่อ
 
 คุณยังสามารถตั้งค่าการอนุญาตทั้งหมดพร้อมกันได้:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow"
@@ -49,7 +49,7 @@ OpenCode ใช้การกำหนดค่า `permission` เพื่อ
 
 สำหรับการอนุญาตส่วนใหญ่ คุณสามารถใช้ออบเจ็กต์เพื่อปรับใช้การดำเนินการต่างๆ ตามอินพุตของเครื่องมือได้
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -94,7 +94,7 @@ OpenCode ใช้การกำหนดค่า `permission` เพื่อ
 
 ตัวอย่างเช่น อนุญาตให้เข้าถึงทุกสิ่งภายใต้ `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -107,7 +107,7 @@ OpenCode ใช้การกำหนดค่า `permission` เพื่อ
 
 ไดเร็กทอรีใดๆ ที่ได้รับอนุญาตที่นี่จะสืบทอดค่าเริ่มต้นเดียวกันกับพื้นที่ทำงานปัจจุบัน เนื่องจาก [`read` มีค่าเริ่มต้นเป็น `allow`](#defaults) การอ่านจึงได้รับอนุญาตสำหรับรายการภายใต้ `external_directory` เว้นแต่จะถูกแทนที่ เพิ่มกฎที่ชัดเจนเมื่อควรจำกัดเครื่องมือในเส้นทางเหล่านี้ เช่น การบล็อกการแก้ไขในขณะที่ยังคงอ่านอยู่:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -152,7 +152,7 @@ OpenCode ใช้การกำหนดค่า `permission` เพื่อ
 - `doom_loop` และ `external_directory` มีค่าเริ่มต้นเป็น `"ask"`
 - `read` คือ `"allow"` แต่ไฟล์ `.env` ถูกปฏิเสธโดยค่าเริ่มต้น:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "permission": {
     "read": {
@@ -187,7 +187,7 @@ OpenCode ใช้การกำหนดค่า `permission` เพื่อ
 โปรดดูส่วน [กฎแบบละเอียด (ไวยากรณ์ของวัตถุ)](#granular-rules-object-syntax) ด้านบนเพื่อดูตัวอย่างการจับคู่รูปแบบโดยละเอียดเพิ่มเติม
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -217,7 +217,7 @@ OpenCode ใช้การกำหนดค่า `permission` เพื่อ
 
 คุณยังสามารถกำหนดค่าการอนุญาตตัวแทนใน Markdown ได้:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

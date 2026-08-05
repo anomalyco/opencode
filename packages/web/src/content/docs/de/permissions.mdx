@@ -23,7 +23,7 @@ Jede Berechtigungsregel wird zu einem der folgenden aufgelöst:
 
 Sie können Berechtigungen global festlegen (mit `*`) und bestimmte Tools überschreiben.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -36,7 +36,7 @@ Sie können Berechtigungen global festlegen (mit `*`) und bestimmte Tools übers
 
 Sie können auch alle Berechtigungen auf einmal festlegen:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow"
@@ -49,7 +49,7 @@ Sie können auch alle Berechtigungen auf einmal festlegen:
 
 Bei den meisten Berechtigungen können Sie ein Objekt verwenden, um basierend auf der Werkzeugeingabe verschiedene Aktionen anzuwenden.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -94,7 +94,7 @@ Die Home-Erweiterung (wie `~/...`) wirkt sich nur darauf aus, wie ein Muster ges
 
 Dies ermöglicht beispielsweise den Zugriff auf alles unter `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -107,7 +107,7 @@ Dies ermöglicht beispielsweise den Zugriff auf alles unter `~/projects/personal
 
 Jedes hier zulässige Verzeichnis erbt dieselben Standardeinstellungen wie der aktuelle Arbeitsbereich. Seit [`read` defaults to `allow`](#defaults) sind Lesevorgänge auch für Einträge unter `external_directory` zulässig, sofern sie nicht überschrieben werden. Fügen Sie explizite Regeln hinzu, wenn ein Tool in diesen Pfaden eingeschränkt werden soll, z. B. das Blockieren von Bearbeitungen, während Lesevorgänge beibehalten werden:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -152,7 +152,7 @@ Wenn Sie nichts angeben, beginnt OpenCode mit zulässigen Standardeinstellungen:
 - `doom_loop` und `external_directory` sind standardmäßig `"ask"`.
 - `read` ist `"allow"`, aber `.env`-Dateien werden standardmäßig verweigert:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "permission": {
     "read": {
@@ -187,7 +187,7 @@ Sie können Berechtigungen pro Agent überschreiben. Agentenberechtigungen werde
 Ausführlichere Mustervergleichsbeispiele finden Sie oben im Abschnitt [Granular Rules (Object Syntax)](#granular-rules-object-syntax).
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -217,7 +217,7 @@ Ausführlichere Mustervergleichsbeispiele finden Sie oben im Abschnitt [Granular
 
 Sie können Agentenberechtigungen auch in Markdown konfigurieren:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

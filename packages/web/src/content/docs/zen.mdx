@@ -1,17 +1,17 @@
 ---
 title: Zen
-description: Curated list of models provided by OpenCode.
+description: Curated list of models provided by Leak Code.
 ---
 
 import config from "../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen is a list of tested and verified models provided by the OpenCode team.
+OpenCode Zen is a list of tested and verified models provided by the Leak Code team.
 
-Zen works like any other provider in OpenCode. You login to OpenCode Zen and get
+Zen works like any other provider in Leak Code. You login to OpenCode Zen and get
 your API key. It's **completely optional** and you don't need to use it to use
-OpenCode.
+Leak Code.
 
 ---
 
@@ -22,7 +22,7 @@ these models work well as coding agents. Additionally, most providers are
 configured very differently; so you get very different performance and quality.
 
 :::tip
-We tested a select group of models and providers that work well with OpenCode.
+We tested a select group of models and providers that work well with Leak Code.
 :::
 
 So if you are using a model through something like OpenRouter, you can never be
@@ -43,7 +43,7 @@ OpenCode Zen is an AI gateway that gives you access to these models.
 
 ## How it works
 
-OpenCode Zen works like any other provider in OpenCode.
+OpenCode Zen works like any other provider in Leak Code.
 
 1. You sign in to **<a href={console}>OpenCode Zen</a>**, add your billing
    details, and copy your API key.
@@ -122,7 +122,7 @@ You can also access our models through the following API endpoints.
 | Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 
-The [model id](/docs/config/#models) in your OpenCode config
+The [model id](/docs/config/#models) in your Leak Code config
 uses the format `opencode/<model-id>`. For example, for GPT 5.5, you would
 use `opencode/gpt-5.5` in your config.
 
@@ -214,7 +214,7 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | GPT 5 Codex                       | $1.07  | $8.50   | $0.107      | -            |
 | GPT 5 Nano                        | $0.05  | $0.40   | $0.005      | -            |
 
-You may notice [low-cost models](/docs/config/#models), such as Haiku, Nano, or Flash, in your usage history. OpenCode uses these models to generate session titles.
+You may notice [low-cost models](/docs/config/#models), such as Haiku, Nano, or Flash, in your usage history. Leak Code uses these models to generate session titles.
 
 :::note
 Credit card fees are passed along at cost (4.4% + $0.30 per transaction); we don't charge anything beyond that.
@@ -348,4 +348,4 @@ We created OpenCode Zen to:
 1. **Benchmark** the best models/providers for coding agents.
 2. Have access to the **highest quality** options and not downgrade performance or route to cheaper providers.
 3. Pass along any **price drops** by selling at cost; so the only markup is to cover our processing fees.
-4. Have **no lock-in** by allowing you to use it with any other coding agent. And always let you use any other provider with OpenCode as well.
+4. Have **no lock-in** by allowing you to use it with any other coding agent. And always let you use any other provider with Leak Code as well.

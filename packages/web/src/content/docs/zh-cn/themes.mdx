@@ -83,9 +83,9 @@ OpenCode 支持灵活的基于 JSON 的主题系统，让用户可以轻松创�
 主题按以下顺序从多个目录加载，后面的目录会覆盖前面的目录：
 
 1. **内置主题** — 嵌入在二进制文件中
-2. **用户配置目录** — 定义在 `~/.config/opencode/themes/*.json` 或 `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **项目根目录** — 定义在 `<project-root>/.opencode/themes/*.json`
-4. **当前工作目录** — 定义在 `./.opencode/themes/*.json`
+2. **用户配置目录** — 定义在 `~/.config/leak-code/themes/*.json` 或 `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **项目根目录** — 定义在 `<project-root>/.leak-code/themes/*.json`
+4. **当前工作目录** — 定义在 `./.leak-code/themes/*.json`
 
 如果多个目录包含同名主题，将使用优先级较高的目录中的主题。
 
@@ -98,15 +98,15 @@ OpenCode 支持灵活的基于 JSON 的主题系统，让用户可以轻松创�
 创建用户级主题：
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/leak-code/themes
+vim ~/.config/leak-code/themes/my-theme.json
 ```
 
 创建项目级主题：
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .leak-code/themes
+vim .leak-code/themes/my-theme.json
 ```
 
 ---

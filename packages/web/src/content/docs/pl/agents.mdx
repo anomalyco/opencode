@@ -143,9 +143,9 @@ Możesz tworzyć własnych agentów lub dostosowywać istniejących. Agentów mo
 
 ### JSON
 
-Skonfiguruj agenta w pliku `opencode.json`:
+Skonfiguruj agenta w pliku `leak-code.json`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -188,10 +188,10 @@ Skonfiguruj agenta w pliku `opencode.json`:
 
 Możesz także definiować agentów za pomocą plików markdown. Przechowuj je w:
 
-- Globalnie: `~/.config/opencode/agents/`
-- W projekcie: `.opencode/agents/`
+- Globalnie: `~/.config/leak-code/agents/`
+- W projekcie: `.leak-code/agents/`
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -227,7 +227,7 @@ Przyjrzyjmy się szczegółowo opcjom konfiguracji.
 
 Użyj `description`, aby krótko opisać, co robi agent i kiedy go używać.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -247,7 +247,7 @@ Kontroluj losowość i kreatywność odpowiedzi LLM za pomocą konfiguracji `tem
 
 Niższe wartości sprawiają, że odpowiedzi są bardziej skupione i deterministyczne, podczas gdy wyższe wartości wprowadzają więcej różnorodności i kreatywności.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "plan": {
@@ -266,7 +266,7 @@ Wartość temperatury zwykle waha się od 0.0 do 1.0:
 - **0.3-0.5**: Zrównoważone odpowiedzi, dobre do ogólnych zadań programistycznych
 - **0.6-1.0**: Bardziej kreatywne i zróżnicowane odpowiedzi, przydatne podczas burzy mózgów i eksploracji
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "analyze": {
@@ -294,7 +294,7 @@ Kontroluj maksymalną liczbę iteracji, jaką agent może wykonać, zanim popros
 
 Jeśli ta opcja nie zostanie skonfigurowana, agent będzie kontynuował iterację, dopóki model nie zakończy zadania lub użytkownik nie przerwie działania.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "quick-thinker": {
@@ -318,7 +318,7 @@ Starsze pole `maxSteps` jest przestarzałe. Zamiast tego użyj `steps`.
 
 Ustaw na `true`, aby wyłączyć agenta.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -334,7 +334,7 @@ Ustaw na `true`, aby wyłączyć agenta.
 
 Podaj niestandardowy prompt systemowy dla tego agenta za pomocą konfiguracji `prompt`. Prompt powinien zawierać instrukcje dotyczące celu i zachowania agenta.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -356,7 +356,7 @@ Użyj `model`, aby określić model dla tego agenta. Przydatne do używania ró�
 Jeśli model nie zostanie określony, agenci główni używają [modelu skonfigurowanego globalnie](/docs/config#models), a agenci podrzędni używają modelu agenta, który ich wywołał.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "plan": {
@@ -374,7 +374,7 @@ Identyfikator modelu jest taki sam, jak w konfiguracji OpenCode w `provider/mode
 
 Kontroluj, które narzędzia są dostępne dla tego agenta, za pomocą konfiguracji `tools`. Możesz włączyć lub wyłączyć określone narzędzia, ustawiając je na `true` lub `false`.
 
-```json title="opencode.json" {3-6,9-12}
+```json title="leak-code.json" {3-6,9-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -398,7 +398,7 @@ Konfiguracja specyficzna dla agenta nadpisuje konfigurację globalną.
 
 Możesz także używać symboli wieloznacznych (wildcards), aby kontrolować wiele narzędzi jednocześnie. Na przykład, aby wyłączyć wszystkie narzędzia z serwera MCP:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -425,7 +425,7 @@ Możesz skonfigurować uprawnienia dla potencjalnie wrażliwych działań wykony
 - `"allow"` — Zezwalaj na użycie bez zatwierdzenia
 - `"deny"` — Zabroń użycia narzędzia
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -436,7 +436,7 @@ Możesz skonfigurować uprawnienia dla potencjalnie wrażliwych działań wykony
 
 Możesz nadpisać to dla każdego agenta.
 
-```json title="opencode.json" {3-5,8-10}
+```json title="leak-code.json" {3-5,8-10}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -454,7 +454,7 @@ Możesz nadpisać to dla każdego agenta.
 
 Można to również ustawić w agentach Markdown.
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -473,7 +473,7 @@ Only analyze code and suggest changes.
 
 Możesz to skonfigurować szczegółowo dla poleceń bash.
 
-```json title="opencode.json" {7}
+```json title="leak-code.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -491,7 +491,7 @@ Możesz to skonfigurować szczegółowo dla poleceń bash.
 
 Można to połączyć z globalnym symbolem wieloznacznym.
 
-```json title="opencode.json" {7}
+```json title="leak-code.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -509,7 +509,7 @@ Można to połączyć z globalnym symbolem wieloznacznym.
 Możesz także użyć symbolu wieloznacznego `*`, aby zarządzać wszystkimi innymi poleceniami.
 Najbardziej szczegółowa reguła ma pierwszeństwo, symbol wieloznaczny `*` jest sprawdzany na końcu.
 
-```json title="opencode.json" {8}
+```json title="leak-code.json" {8}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -533,7 +533,7 @@ Najbardziej szczegółowa reguła ma pierwszeństwo, symbol wieloznaczny `*` jes
 
 Kontroluj tryb agenta za pomocą konfiguracji `mode`. Opcja `mode` określa, w jaki sposób agent może być używany.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -551,7 +551,7 @@ Opcję `mode` można ustawić na `primary`, `subagent` lub `all`. Jeśli nie pod
 
 Ukryj subagenta w menu autouzupełniania `@` za pomocą `hidden: true`. Przydatne w przypadku subagentów narzędziowych, którzy powinni być wywoływani tylko programowo przez innych agentów, a nie bezpośrednio przez użytkownika.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "internal-helper": {
@@ -574,7 +574,7 @@ Dotyczy tylko agentów z `mode: subagent`.
 
 Kontroluj, których subagentów może wywołać ten agent za pomocą narzędzia zadania, używając `permission.task`. Używa wzorców glob do elastycznego dopasowywania.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "orchestrator": {
@@ -609,7 +609,7 @@ Dostosuj wygląd agenta w interfejsie użytkownika za pomocą opcji `color`. Wp�
 
 Użyj kodu hex (np. `#FF5733`) lub nazwy koloru motywu: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "creative": {
@@ -628,7 +628,7 @@ Użyj kodu hex (np. `#FF5733`) lub nazwy koloru motywu: `primary`, `secondary`, 
 
 Kontroluj różnorodność odpowiedzi za pomocą opcji `top_p`. Alternatywa dla temperatury w celu kontrolowania losowości.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "brainstorm": {
@@ -648,7 +648,7 @@ Wszelkie inne konfiguracje w agentach są **przekazywane bezpośrednio** do dost
 
 Na przykład, używając modelu rozumowania OpenAI, możesz kontrolować wysiłek rozumowania:
 
-```json title="opencode.json" {6,7}
+```json title="leak-code.json" {6,7}
 {
   "agent": {
     "deep-thinker": {
@@ -664,7 +664,7 @@ Na przykład, używając modelu rozumowania OpenAI, możesz kontrolować wysiłe
 Te dodatkowe właściwości zależą od modelu i dostawcy. Sprawdź dokumentację swojego dostawcy pod kątem dostępnych parametrów.
 
 :::tip
-Uruchom `opencode models`, aby zobaczyć dostępne modele.
+Uruchom `leak-code models`, aby zobaczyć dostępne modele.
 :::
 
 ---
@@ -674,7 +674,7 @@ Uruchom `opencode models`, aby zobaczyć dostępne modele.
 Możesz stworzyć nowych agentów interaktywnie za pomocą polecenia:
 
 ```bash
-opencode agent create
+leak-code agent create
 ```
 
 Poprowadzi Cię to przez proces:
@@ -711,7 +711,7 @@ Masz agenta, którym warto się podzielić? [Prześlij PR](https://github.com/an
 
 ### Agent Documentation
 
-```markdown title="~/.config/opencode/agents/docs-writer.md"
+```markdown title="~/.config/leak-code/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -733,7 +733,7 @@ Focus on:
 
 ### Security Auditor
 
-```markdown title="~/.config/opencode/agents/security-auditor.md"
+```markdown title="~/.config/leak-code/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent

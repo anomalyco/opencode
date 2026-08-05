@@ -11,7 +11,7 @@ description: Использование конфигурации opencode JSON.
 
 opencode поддерживает форматы **JSON** и **JSONC** (JSON с комментариями).
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   // Theme configuration
@@ -43,16 +43,16 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 Источники конфигурации загружаются в следующем порядке (более поздние источники переопределяют более ранние):
 
 1. **Удаленная конфигурация** (от `.well-known/opencode`) – организационные настройки по умолчанию.
-2. **Глобальная конфигурация** (`~/.config/opencode/opencode.json`) — настройки пользователя.
-3. **Пользовательская конфигурация** (`OPENCODE_CONFIG` env var) – пользовательские переопределения
-4. **Конфигурация проекта** (`opencode.json` в проекте) — настройки, специфичные для проекта.
-5. **Каталоги `.opencode`** — агенты, команды, плагины
-6. **Встроенная конфигурация** (`OPENCODE_CONFIG_CONTENT` env var) – переопределяет время выполнения
+2. **Глобальная конфигурация** (`~/.config/leak-code/leak-code.json`) — настройки пользователя.
+3. **Пользовательская конфигурация** (`LEAKCODE_CONFIG` env var) – пользовательские переопределения
+4. **Конфигурация проекта** (`leak-code.json` в проекте) — настройки, специфичные для проекта.
+5. **Каталоги `.leak-code`** — агенты, команды, плагины
+6. **Встроенная конфигурация** (`LEAKCODE_CONFIG_CONTENT` env var) – переопределяет время выполнения
 
 Это означает, что конфигурации проекта могут переопределять глобальные настройки по умолчанию, а глобальные конфигурации могут переопределять настройки по умолчанию для удаленной организации.
 
 :::note
-В каталогах `.opencode` и `~/.config/opencode` для подкаталогов используются **множественные имена**: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` и `themes/`. Единственные имена (например, `agent/`) также поддерживаются для обратной совместимости.
+В каталогах `.leak-code` и `~/.config/leak-code` для подкаталогов используются **множественные имена**: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` и `themes/`. Единственные имена (например, `agent/`) также поддерживаются для обратной совместимости.
 :::
 
 ---
@@ -79,7 +79,7 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 
 Вы можете включить определенные серверы в локальной конфигурации:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "mcp": {
     "jira": {
@@ -95,9 +95,9 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 
 ### Глобальная
 
-Поместите глобальную конфигурацию opencode в `~/.config/opencode/opencode.json`. Используйте глобальную конфигурацию для общепользовательских настроек, таких как темы, поставщики или привязки клавиш.
+Поместите глобальную конфигурацию opencode в `~/.config/leak-code/leak-code.json`. Используйте глобальную конфигурацию для общепользовательских настроек, таких как темы, поставщики или привязки клавиш.
 
-Для настроек, специфичных для TUI, используйте `~/.config/opencode/tui.json`.
+Для настроек, специфичных для TUI, используйте `~/.config/leak-code/tui.json`.
 
 Глобальная конфигурация переопределяет настройки по умолчанию для удаленной организации.
 
@@ -105,7 +105,7 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 
 ### Проектная
 
-Добавьте `opencode.json` в корень вашего проекта. Конфигурация проекта имеет наивысший приоритет среди стандартных файлов конфигурации — она переопределяет как глобальные, так и удаленные конфигурации.
+Добавьте `leak-code.json` в корень вашего проекта. Конфигурация проекта имеет наивысший приоритет среди стандартных файлов конфигурации — она переопределяет как глобальные, так и удаленные конфигурации.
 
 Для настроек TUI, специфичных для проекта, добавьте `tui.json` рядом с ним.
 
@@ -121,11 +121,11 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 
 ### Пользовательский путь
 
-Укажите собственный путь к файлу конфигурации, используя переменную среды `OPENCODE_CONFIG`.
+Укажите собственный путь к файлу конфигурации, используя переменную среды `LEAKCODE_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
-opencode run "Hello world"
+export LEAKCODE_CONFIG=/path/to/my/custom-config.json
+leak-code run "Hello world"
 ```
 
 Пользовательская конфигурация загружается между глобальными и проектными конфигурациями в порядке приоритета.
@@ -134,14 +134,14 @@ opencode run "Hello world"
 
 ### Пользовательский каталог
 
-Укажите пользовательский каталог конфигурации, используя переменную среды `OPENCODE_CONFIG_DIR`. В этом каталоге будет выполняться поиск агентов, команд, режимов и плагинов (аналогично стандартному каталогу `.opencode`), и он должен иметь ту же структуру.
+Укажите пользовательский каталог конфигурации, используя переменную среды `LEAKCODE_CONFIG_DIR`. В этом каталоге будет выполняться поиск агентов, команд, режимов и плагинов (аналогично стандартному каталогу `.leak-code`), и он должен иметь ту же структуру.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
-opencode run "Hello world"
+export LEAKCODE_CONFIG_DIR=/path/to/my/config-directory
+leak-code run "Hello world"
 ```
 
-Пользовательский каталог загружается после каталогов global config и `.opencode`, поэтому он **может переопределить** их настройки.
+Пользовательский каталог загружается после каталогов global config и `.leak-code`, поэтому он **может переопределить** их настройки.
 
 ---
 
@@ -170,9 +170,9 @@ opencode run "Hello world"
 }
 ```
 
-Используйте `OPENCODE_TUI_CONFIG`, чтобы указать на пользовательский файл конфигурации TUI.
+Используйте `LEAKCODE_TUI_CONFIG`, чтобы указать на пользовательский файл конфигурации TUI.
 
-Устаревшие ключи `theme`, `keybinds` и `tui` в `opencode.json` устарели и автоматически переносятся, когда это возможно.
+Устаревшие ключи `theme`, `keybinds` и `tui` в `leak-code.json` устарели и автоматически переносятся, когда это возможно.
 
 [Подробнее об использовании TUI можно узнать здесь](/docs/tui#configure).
 
@@ -180,9 +180,9 @@ opencode run "Hello world"
 
 ### Сервер
 
-Вы можете настроить параметры сервера для команд `opencode serve` и `opencode web` с помощью опции `server`.
+Вы можете настроить параметры сервера для команд `leak-code serve` и `leak-code web` с помощью опции `server`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "server": {
@@ -211,7 +211,7 @@ opencode run "Hello world"
 
 Вы можете управлять инструментами, которые LLM может использовать, с помощью опции `tools`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -229,7 +229,7 @@ opencode run "Hello world"
 
 Вы можете настроить поставщиков и модели, которые хотите использовать в своей конфигурации opencode, с помощью параметров `provider`, `model` и `small_model`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
@@ -242,7 +242,7 @@ opencode run "Hello world"
 
 Опции провайдера могут включать `timeout` и `setCacheKey`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -271,7 +271,7 @@ opencode run "Hello world"
 
 Amazon Bedrock поддерживает конфигурацию, специфичную для AWS:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -317,7 +317,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 Вы можете настроить специализированные агенты для конкретных задач с помощью опции `agent`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -335,7 +335,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 }
 ```
 
-Вы также можете определить агентов, используя файлы Markdown в `~/.config/opencode/agents/` или `.opencode/agents/`. [Подробнее здесь](/docs/agents).
+Вы также можете определить агентов, используя файлы Markdown в `~/.config/leak-code/agents/` или `.leak-code/agents/`. [Подробнее здесь](/docs/agents).
 
 ---
 
@@ -343,7 +343,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 Вы можете установить агента по умолчанию, используя опцию `default_agent`. Это определяет, какой агент используется, если ни один из них не указан явно.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "plan"
@@ -352,7 +352,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 Агент по умолчанию должен быть основным агентом (а не субагентом). Это может быть встроенный агент, например `"build"` или `"plan"`, или [пользовательский агент](/docs/agents), который вы определили. Если указанный агент не существует или является субагентом, opencode вернется к `"build"` с предупреждением.
 
-Этот параметр применяется ко всем интерфейсам: TUI, CLI (`opencode run`), настольному приложению и действию GitHub.
+Этот параметр применяется ко всем интерфейсам: TUI, CLI (`leak-code run`), настольному приложению и действию GitHub.
 
 ---
 
@@ -360,7 +360,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 Функцию [share](/docs/share) можно настроить с помощью опции `share`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -381,7 +381,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 Вы можете настроить собственные команды для повторяющихся задач с помощью опции `command`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -399,7 +399,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 }
 ```
 
-Вы также можете определять команды, используя файлы Markdown в `~/.config/opencode/commands/` или `.opencode/commands/`. [Подробнее здесь](/docs/commands).
+Вы также можете определять команды, используя файлы Markdown в `~/.config/leak-code/commands/` или `.leak-code/commands/`. [Подробнее здесь](/docs/commands).
 
 ---
 
@@ -422,7 +422,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 opencode автоматически загрузит все новые обновления при запуске. Вы можете отключить это с помощью опции `autoupdate`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false
@@ -438,7 +438,7 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете настроить форматировщики кода с помощью опции `formatter`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
@@ -466,7 +466,7 @@ opencode автоматически загрузит все новые обно�
 
 Например, чтобы гарантировать, что инструменты `edit` и `bash` требуют одобрения пользователя:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -484,7 +484,7 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете управлять поведением сжатия контекста с помощью опции `compaction`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
@@ -505,7 +505,7 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете настроить шаблоны игнорирования средства отслеживания файлов с помощью опции `watcher`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "watcher": {
@@ -522,7 +522,7 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете настроить серверы MCP, которые хотите использовать, с помощью опции `mcp`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {}
@@ -537,9 +537,9 @@ opencode автоматически загрузит все новые обно�
 
 [Плагины](/docs/plugins) расширяют opencode с помощью пользовательских инструментов, перехватчиков и интеграций.
 
-Поместите файлы плагина в `.opencode/plugins/` или `~/.config/opencode/plugins/`. Вы также можете загружать плагины из npm с помощью опции `plugin`.
+Поместите файлы плагина в `.leak-code/plugins/` или `~/.config/leak-code/plugins/`. Вы также можете загружать плагины из npm с помощью опции `plugin`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
@@ -554,7 +554,7 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете настроить инструкции для используемой вами модели с помощью опции `instructions`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -569,7 +569,7 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете отключить поставщиков, которые загружаются автоматически, с помощью опции `disabled_providers`. Это полезно, если вы хотите запретить загрузку определенных поставщиков, даже если их учетные данные доступны.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
@@ -592,7 +592,7 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете указать белый список поставщиков с помощью опции `enabled_providers`. Если этот параметр установлен, будут включены только указанные поставщики, а все остальные будут игнорироваться.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "enabled_providers": ["anthropic", "openai"]
@@ -613,7 +613,7 @@ opencode автоматически загрузит все новые обно�
 
 Ключ `experimental` содержит параметры, находящиеся в активной разработке.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "experimental": {}
@@ -636,10 +636,10 @@ opencode автоматически загрузит все новые обно�
 
 Используйте `{env:VARIABLE_NAME}` для замены переменных среды:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:LEAKCODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -659,7 +659,7 @@ opencode автоматически загрузит все новые обно�
 
 Используйте `{file:path/to/file}` для замены содержимого файла:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["./custom-instructions.md"],

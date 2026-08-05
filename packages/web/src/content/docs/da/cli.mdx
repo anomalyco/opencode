@@ -8,13 +8,13 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 OpenCode CLI starter som standard [TUI](/docs/tui), når den kører uden nogen argumenter.
 
 ```bash
-opencode
+leak-code
 ```
 
 Men den accepterer også kommandoer som dokumenteret på denne side. Dette giver dig mulighed for at interagere med OpenCode programmatisk.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+leak-code run "Explain how closures work in JavaScript"
 ```
 
 ---
@@ -24,7 +24,7 @@ opencode run "Explain how closures work in JavaScript"
 Start OpenCode terminalbrugergrænsefladen.
 
 ```bash
-opencode [project]
+leak-code [project]
 ```
 
 #### Flag
@@ -53,7 +53,7 @@ OpenCode CLI har også følgende kommandoer.
 Administrer agenter i OpenCode.
 
 ```bash
-opencode agent [command]
+leak-code agent [command]
 ```
 
 ---
@@ -63,17 +63,17 @@ opencode agent [command]
 Tilslut en terminal til en allerede kørende OpenCode backend-server startet via `serve` eller `web` kommandoer.
 
 ```bash
-opencode attach [url]
+leak-code attach [url]
 ```
 
 Dette gør det muligt at bruge TUI med en ekstern OpenCode backend. For eksempel:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+leak-code web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+leak-code attach http://10.20.30.40:4096
 ```
 
 #### Flag
@@ -84,8 +84,8 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsæt den seneste session                                                       |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | Sessions-id for at fortsætte                                                      |
 | <nobr><code>{"--fork"}</code></nobr>     |      | Forgren sessionen ved fortsættelse (brug med `--continue` eller `--session`)      |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `OPENCODE_SERVER_PASSWORD`)                 |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `OPENCODE_SERVER_USERNAME` eller `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `LEAKCODE_SERVER_PASSWORD`)                 |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `LEAKCODE_SERVER_USERNAME` eller `opencode`) |
 
 ---
 
@@ -94,7 +94,7 @@ opencode attach http://10.20.30.40:4096
 Opret en ny agent med brugerdefineret konfiguration.
 
 ```bash
-opencode agent create
+leak-code agent create
 ```
 
 Denne kommando vil guide dig gennem oprettelse af en ny agent med en brugerdefineret systemprompt og værktøjskonfiguration.
@@ -106,7 +106,7 @@ Denne kommando vil guide dig gennem oprettelse af en ny agent med en brugerdefin
 Liste over alle tilgængelige agenter.
 
 ```bash
-opencode agent list
+leak-code agent list
 ```
 
 ---
@@ -116,17 +116,17 @@ opencode agent list
 Kommando til at administrere legitimationsoplysninger og login for udbydere.
 
 ```bash
-opencode auth [command]
+leak-code auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode drives af udbyderlisten på [Models.dev](https://models.dev), så du kan bruge `opencode auth login` til at konfigurere API-nøgler for enhver udbyder, du vil bruge. Dette er gemt i `~/.local/share/opencode/auth.json`.
+OpenCode drives af udbyderlisten på [Models.dev](https://models.dev), så du kan bruge `leak-code auth login` til at konfigurere API-nøgler for enhver udbyder, du vil bruge. Dette er gemt i `~/.local/share/leak-code/auth.json`.
 
 ```bash
-opencode auth login
+leak-code auth login
 ```
 
 Når OpenCode starter op, indlæser den udbyderne fra legitimationsfilen. Og hvis der er nogen nøgler defineret i dine miljøer eller en `.env` fil i dit projekt.
@@ -138,13 +138,13 @@ Når OpenCode starter op, indlæser den udbyderne fra legitimationsfilen. Og hvi
 Viser alle de godkendte udbydere som gemt i legitimationsfilen.
 
 ```bash
-opencode auth list
+leak-code auth list
 ```
 
 Eller den korte version.
 
 ```bash
-opencode auth ls
+leak-code auth ls
 ```
 
 ---
@@ -154,7 +154,7 @@ opencode auth ls
 Logger dig ud af en udbyder ved at rydde den fra legitimationsfilen.
 
 ```bash
-opencode auth logout
+leak-code auth logout
 ```
 
 ---
@@ -164,7 +164,7 @@ opencode auth logout
 Administrator GitHub-agenten til lagerautomatisering.
 
 ```bash
-opencode github [command]
+leak-code github [command]
 ```
 
 ---
@@ -174,7 +174,7 @@ opencode github [command]
 Installatør GitHub-agenten i dit lager.
 
 ```bash
-opencode github install
+leak-code github install
 ```
 
 Dette opsætter det nødvendige GitHub Actions workflow og guider dig gennem konfigurationsprocessen. [Learn more](/docs/github).
@@ -186,7 +186,7 @@ Dette opsætter det nødvendige GitHub Actions workflow og guider dig gennem kon
 Kør GitHub-agenten. Dette bruges typisk i GitHub Actions.
 
 ```bash
-opencode github run
+leak-code github run
 ```
 
 ##### Flag
@@ -203,7 +203,7 @@ opencode github run
 Administrator Model Context Protocol-servere.
 
 ```bash
-opencode mcp [command]
+leak-code mcp [command]
 ```
 
 ---
@@ -213,7 +213,7 @@ opencode mcp [command]
 Tilføj en MCP-server til din konfiguration.
 
 ```bash
-opencode mcp add
+leak-code mcp add
 ```
 
 Denne kommando vil guide dig gennem tilføjelse af enten en lokal eller ekstern MCP-server.
@@ -225,13 +225,13 @@ Denne kommando vil guide dig gennem tilføjelse af enten en lokal eller ekstern 
 Liste over alle konfigurerede MCP-servere og deres forbindelsesstatus.
 
 ```bash
-opencode mcp list
+leak-code mcp list
 ```
 
 Eller brug den korte version.
 
 ```bash
-opencode mcp ls
+leak-code mcp ls
 ```
 
 ---
@@ -241,7 +241,7 @@ opencode mcp ls
 Godkendt med en OAuth-aktiveret MCP-server.
 
 ```bash
-opencode mcp auth [name]
+leak-code mcp auth [name]
 ```
 
 Hvis du ikke angiver et servernavn, bliver du bedt om at vælge blandt tilgængelige OAuth-kompatible servere.
@@ -249,13 +249,13 @@ Hvis du ikke angiver et servernavn, bliver du bedt om at vælge blandt tilgænge
 Du kan også angive OAuth-kompatible servere og deres godkendelsesstatus.
 
 ```bash
-opencode mcp auth list
+leak-code mcp auth list
 ```
 
 Eller brug den korte version.
 
 ```bash
-opencode mcp auth ls
+leak-code mcp auth ls
 ```
 
 ---
@@ -265,7 +265,7 @@ opencode mcp auth ls
 Fjern OAuth-legitimationsoplysninger for en MCP-server.
 
 ```bash
-opencode mcp logout [name]
+leak-code mcp logout [name]
 ```
 
 ---
@@ -275,7 +275,7 @@ opencode mcp logout [name]
 Fejlfinding af OAuth-forbindelsesproblemer for en MCP-server.
 
 ```bash
-opencode mcp debug <name>
+leak-code mcp debug <name>
 ```
 
 ---
@@ -285,7 +285,7 @@ opencode mcp debug <name>
 Liste over alle tilgængelige modeller fra konfigurerede udbydere.
 
 ```bash
-opencode models [provider]
+leak-code models [provider]
 ```
 
 Denne kommando viser alle tilgængelige modeller på tværs af dine konfigurerede udbydere i formatet `provider/model`.
@@ -295,7 +295,7 @@ Dette er nyttigt til at finde ud af det nøjagtige modelnavn, der skal bruges i 
 Du kan eventuelt videregive et udbyder-id for at filtrere modeller efter den udbyder.
 
 ```bash
-opencode models anthropic
+leak-code models anthropic
 ```
 
 #### Flag
@@ -308,7 +308,7 @@ opencode models anthropic
 Brug flaget `--refresh` til at opdatere den cachelagrede modelliste. Dette er nyttigt, når nye modeller er blevet tilføjet til en udbyder, og du vil se dem i OpenCode.
 
 ```bash
-opencode models --refresh
+leak-code models --refresh
 ```
 
 ---
@@ -318,23 +318,23 @@ opencode models --refresh
 Kør opencode i ikke-interaktiv tilstand ved at sende en prompt direkte.
 
 ```bash
-opencode run [message..]
+leak-code run [message..]
 ```
 
 Dette er nyttigt til scripting, automatisering, eller når du vil have et hurtigt svar uden at starte hele TUI. F.eks.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "leak-code run"
+leak-code run Explain the use of context in Go
 ```
 
-Du kan også vedhæfte til en kørende `opencode serve`-instans for at undgå MCP serverens kolde opstartstider ved hver kørsel:
+Du kan også vedhæfte til en kørende `leak-code serve`-instans for at undgå MCP serverens kolde opstartstider ved hver kørsel:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+leak-code serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+leak-code run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Flag
@@ -352,8 +352,8 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--format"}</code></nobr>   |      | Format: standard (formateret) eller json (rå JSON hændelser)                        |
 | <nobr><code>{"--title"}</code></nobr>    |      | Titel for sessionen (bruger trunkeret prompt, hvis der ikke er angivet nogen værdi) |
 | <nobr><code>{"--attach"}</code></nobr>   |      | Tilslut til en kørende opencode-server (f.eks. http://localhost:4096)               |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `OPENCODE_SERVER_PASSWORD`)                   |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `OPENCODE_SERVER_USERNAME` eller `opencode`)   |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `LEAKCODE_SERVER_PASSWORD`)                   |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `LEAKCODE_SERVER_USERNAME` eller `opencode`)   |
 | <nobr><code>{"--dir"}</code></nobr>      |      | Mappe at køre i, eller sti på fjernserveren ved tilkobling                          |
 | <nobr><code>{"--variant"}</code></nobr>  |      | Modelvariant (udbyder-specifik ræsonneringsindsats)                                 |
 | <nobr><code>{"--thinking"}</code></nobr> |      | Vis tænkeblokke                                                                     |
@@ -366,10 +366,10 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 Start en hovedløs OpenCode-server til API-adgang. Tjek [server docs](/docs/server) for den fulde HTTP-grænseflade.
 
 ```bash
-opencode serve
+leak-code serve
 ```
 
-Dette starter en HTTP-server, der giver API-adgang til opencode-funktionalitet uden TUI-grænsefladen. Indstil `OPENCODE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `opencode`).
+Dette starter en HTTP-server, der giver API-adgang til opencode-funktionalitet uden TUI-grænsefladen. Indstil `LEAKCODE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `opencode`).
 
 #### Flag
 
@@ -387,7 +387,7 @@ Dette starter en HTTP-server, der giver API-adgang til opencode-funktionalitet u
 Administrator OpenCode sessionsholder.
 
 ```bash
-opencode session [command]
+leak-code session [command]
 ```
 
 ---
@@ -397,7 +397,7 @@ opencode session [command]
 Liste over alle OpenCode sessioner.
 
 ```bash
-opencode session list
+leak-code session list
 ```
 
 ##### Flag
@@ -414,7 +414,7 @@ opencode session list
 Vis tokenbrug og omkostningsstatistikker for dine OpenCode-sessioner.
 
 ```bash
-opencode stats
+leak-code stats
 ```
 
 #### Flag
@@ -433,7 +433,7 @@ opencode stats
 Eksporter sessionsdata som JSON.
 
 ```bash
-opencode export [sessionID]
+leak-code export [sessionID]
 ```
 
 Hvis du ikke angiver et sessions-id, bliver du bedt om at vælge mellem tilgængelige sessioner.
@@ -445,14 +445,14 @@ Hvis du ikke angiver et sessions-id, bliver du bedt om at vælge mellem tilgæng
 Importer sessionsdata fra en JSON fil eller OpenCode del URL.
 
 ```bash
-opencode import <file>
+leak-code import <file>
 ```
 
 Du kan importere fra en lokal fil eller en OpenCode share URL.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+leak-code import session.json
+leak-code import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -462,10 +462,10 @@ opencode import https://opncd.ai/s/abc123
 Start en hovedløs OpenCode-server med en webgrænseflade.
 
 ```bash
-opencode web
+leak-code web
 ```
 
-Dette starter en HTTP-server og åbner en webbrowser for at få adgang til OpenCode via en webgrænseflade. Indstil `OPENCODE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `opencode`).
+Dette starter en HTTP-server og åbner en webbrowser for at få adgang til OpenCode via en webgrænseflade. Indstil `LEAKCODE_SERVER_PASSWORD` for at aktivere HTTP grundlæggende godkendelse (brugernavn er standard til `opencode`).
 
 #### Flag
 
@@ -483,7 +483,7 @@ Dette starter en HTTP-server og åbner en webbrowser for at få adgang til OpenC
 Start en ACP-server (Agent Client Protocol).
 
 ```bash
-opencode acp
+leak-code acp
 ```
 
 Denne kommando starter en ACP-server, der kommunikerer via stdin/stdout ved hjælp af nd-JSON.
@@ -503,7 +503,7 @@ Denne kommando starter en ACP-server, der kommunikerer via stdin/stdout ved hjæ
 Afinstaller OpenCode og fjern alle relaterede filer.
 
 ```bash
-opencode uninstall
+leak-code uninstall
 ```
 
 #### Flag
@@ -522,19 +522,19 @@ opencode uninstall
 Opdaterer OpenCode til den nyeste version eller en specifik version.
 
 ```bash
-opencode upgrade [target]
+leak-code upgrade [target]
 ```
 
 For at opgradere til den nyeste version.
 
 ```bash
-opencode upgrade
+leak-code upgrade
 ```
 
 For at opgradere til en bestemt version.
 
 ```bash
-opencode upgrade v0.1.48
+leak-code upgrade v0.1.48
 ```
 
 #### upgrade
@@ -564,30 +564,30 @@ OpenCode kan konfigureres ved hjælp af miljøvariabler.
 
 | Variabel                              | Skriv   | Beskrivelse                                                           |
 | ------------------------------------- | ------- | --------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Del automatisk session                                                |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Sti til Git Bash eksekverbar på Windows                               |
-| `OPENCODE_CONFIG`                     | string  | Sti til konfigurationsfil                                             |
-| `OPENCODE_TUI_CONFIG`                 | string  | Sti til TUI-konfigurationsfil                                         |
-| `OPENCODE_CONFIG_DIR`                 | string  | Sti til konfigurationsmappe                                           |
-| `OPENCODE_CONFIG_CONTENT`             | string  | Indbygget json-konfigurationsindhold                                  |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Deaktiver automatisk opdateringskontrol                               |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | Deaktiver beskæring af gamle data                                     |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Deaktiver automatisk opdatering af terminaltitel                      |
-| `OPENCODE_PERMISSION`                 | string  | Indbygget json-tilladelseskonfiguration                               |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Deaktiver standard plugins                                            |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Deaktiver automatisk LSP-serverdownloads                              |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Aktive eksperimentelle modeller                                       |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Deaktiver automatisk kontekstkomprimering                             |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Deaktiver læsning fra `.claude` (prompt + færdigheder)                |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Deaktiver læsning `~/.claude/CLAUDE.md`                               |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Deaktiver indlæsning af `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Deaktivering af modeller fra eksterne kilder                          |
-| `OPENCODE_FAKE_VCS`                   | string  | Falsk VCS-udbyder til testformål                                      |
-| `OPENCODE_CLIENT`                     | string  | Klient-id (standard til `cli`)                                        |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Aktiver Exa-websøgeværktøjer                                          |
-| `OPENCODE_SERVER_PASSWORD`            | string  | Aktiver grundlæggende godkendelse for `serve`/`web`                   |
-| `OPENCODE_SERVER_USERNAME`            | string  | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | Brugerdefineret URL til hentning af modelkonfiguration                |
+| `LEAKCODE_AUTO_SHARE`                 | boolean | Del automatisk session                                                |
+| `LEAKCODE_GIT_BASH_PATH`              | string  | Sti til Git Bash eksekverbar på Windows                               |
+| `LEAKCODE_CONFIG`                     | string  | Sti til konfigurationsfil                                             |
+| `LEAKCODE_TUI_CONFIG`                 | string  | Sti til TUI-konfigurationsfil                                         |
+| `LEAKCODE_CONFIG_DIR`                 | string  | Sti til konfigurationsmappe                                           |
+| `LEAKCODE_CONFIG_CONTENT`             | string  | Indbygget json-konfigurationsindhold                                  |
+| `LEAKCODE_DISABLE_AUTOUPDATE`         | boolean | Deaktiver automatisk opdateringskontrol                               |
+| `LEAKCODE_DISABLE_PRUNE`              | boolean | Deaktiver beskæring af gamle data                                     |
+| `LEAKCODE_DISABLE_TERMINAL_TITLE`     | boolean | Deaktiver automatisk opdatering af terminaltitel                      |
+| `LEAKCODE_PERMISSION`                 | string  | Indbygget json-tilladelseskonfiguration                               |
+| `LEAKCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Deaktiver standard plugins                                            |
+| `LEAKCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Deaktiver automatisk LSP-serverdownloads                              |
+| `LEAKCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Aktive eksperimentelle modeller                                       |
+| `LEAKCODE_DISABLE_AUTOCOMPACT`        | boolean | Deaktiver automatisk kontekstkomprimering                             |
+| `LEAKCODE_DISABLE_CLAUDE_CODE`        | boolean | Deaktiver læsning fra `.claude` (prompt + færdigheder)                |
+| `LEAKCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Deaktiver læsning `~/.claude/CLAUDE.md`                               |
+| `LEAKCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Deaktiver indlæsning af `.claude/skills`                              |
+| `LEAKCODE_DISABLE_MODELS_FETCH`       | boolean | Deaktivering af modeller fra eksterne kilder                          |
+| `LEAKCODE_FAKE_VCS`                   | string  | Falsk VCS-udbyder til testformål                                      |
+| `LEAKCODE_CLIENT`                     | string  | Klient-id (standard til `cli`)                                        |
+| `LEAKCODE_ENABLE_EXA`                 | boolean | Aktiver Exa-websøgeværktøjer                                          |
+| `LEAKCODE_SERVER_PASSWORD`            | string  | Aktiver grundlæggende godkendelse for `serve`/`web`                   |
+| `LEAKCODE_SERVER_USERNAME`            | string  | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `opencode`) |
+| `LEAKCODE_MODELS_URL`                 | string  | Brugerdefineret URL til hentning af modelkonfiguration                |
 
 ---
 
@@ -597,21 +597,21 @@ Disse miljøvariabler muliggør eksperimentelle funktioner, der kan ændres elle
 
 | Variabel                                        | Skriv   | Beskrivelse                                          |
 | ----------------------------------------------- | ------- | ---------------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | Aktiver eksperimentelle funktioner under samleflaget |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Aktiver ikonopdagelse                                |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Deaktiver kopi ved valg i TUI                        |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | nummer  | Standard timeout for bash-kommandoer i ms            |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | nummer  | Maks. output-tokens for LLM-svar                     |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Aktiver filovervågning for hele dir                  |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Aktiver oxfmt formatter                              |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Aktive eksperimenter LSP værktøj                     |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Deaktiver filovervågning                             |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Aktive eksperimenter Exa-funktioner                  |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Aktiver TY LSP for python-filer                      |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Aktiver plantilstand                                 |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | Aktiver baggrundsopgaver for subagenter              |
-| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | Aktiver eksperimentelt hændelsessystem               |
-| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | Aktiver native LLM-anmodningssti                     |
-| `OPENCODE_EXPERIMENTAL_PARALLEL`                | boolean | Aktiver parallel udførelse af websøgning             |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | boolean | Aktiver Scout-subagent                               |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Aktiver workspace-understøttelse                     |
+| `LEAKCODE_EXPERIMENTAL`                         | boolean | Aktiver eksperimentelle funktioner under samleflaget |
+| `LEAKCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Aktiver ikonopdagelse                                |
+| `LEAKCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Deaktiver kopi ved valg i TUI                        |
+| `LEAKCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | nummer  | Standard timeout for bash-kommandoer i ms            |
+| `LEAKCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | nummer  | Maks. output-tokens for LLM-svar                     |
+| `LEAKCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Aktiver filovervågning for hele dir                  |
+| `LEAKCODE_EXPERIMENTAL_OXFMT`                   | boolean | Aktiver oxfmt formatter                              |
+| `LEAKCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Aktive eksperimenter LSP værktøj                     |
+| `LEAKCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Deaktiver filovervågning                             |
+| `LEAKCODE_EXPERIMENTAL_EXA`                     | boolean | Aktive eksperimenter Exa-funktioner                  |
+| `LEAKCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Aktiver TY LSP for python-filer                      |
+| `LEAKCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Aktiver plantilstand                                 |
+| `LEAKCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | boolean | Aktiver baggrundsopgaver for subagenter              |
+| `LEAKCODE_EXPERIMENTAL_EVENT_SYSTEM`            | boolean | Aktiver eksperimentelt hændelsessystem               |
+| `LEAKCODE_EXPERIMENTAL_NATIVE_LLM`              | boolean | Aktiver native LLM-anmodningssti                     |
+| `LEAKCODE_EXPERIMENTAL_PARALLEL`                | boolean | Aktiver parallel udførelse af websøgning             |
+| `LEAKCODE_EXPERIMENTAL_SCOUT`                   | boolean | Aktiver Scout-subagent                               |
+| `LEAKCODE_EXPERIMENTAL_WORKSPACES`              | boolean | Aktiver workspace-understøttelse                     |

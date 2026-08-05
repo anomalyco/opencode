@@ -11,7 +11,7 @@ opencode와 문제를 디버그하려면 로그와 로컬 데이터를 확인하
 
 로그 파일은 다음과 같습니다:
 
--**macOS/리눅스**: `~/.local/share/opencode/log/`
+-**macOS/리눅스**: `~/.local/share/leak-code/log/`
 
 - **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.local\share\opencode\log`
 
@@ -25,7 +25,7 @@ opencode와 문제를 디버그하려면 로그와 로컬 데이터를 확인하
 
 opencode 저장 세션 데이터 및 디스크에 다른 응용 데이터:
 
--**macOS/리눅스**: `~/.local/share/opencode/`
+-**macOS/리눅스**: `~/.local/share/leak-code/`
 
 - **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.local\share\opencode`
 
@@ -59,9 +59,9 @@ opencode 데스크톱은 배경에서 로컬 opencode 서버 (`opencode-cli` sid
 
 글로벌 설정 파일을 열고 `plugin` 키를 찾습니다.
 
--**macOS/리눅스**: `~/.config/opencode/opencode.jsonc` (또는 `~/.config/opencode/opencode.json`) -**macOS/Linux** (외부 설치): `~/.local/share/opencode/opencode.jsonc`
+-**macOS/리눅스**: `~/.config/leak-code/leak-code.jsonc` (또는 `~/.config/leak-code/leak-code.json`) -**macOS/Linux** (외부 설치): `~/.local/share/leak-code/leak-code.jsonc`
 
-- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.config\opencode\leak-code.jsonc`
 
 구성 된 플러그인이있는 경우, 일시적으로 키를 제거하거나 빈 배열로 설정하여 비활성화하십시오.
 
@@ -76,10 +76,10 @@ opencode 데스크톱은 배경에서 로컬 opencode 서버 (`opencode-cli` sid
 
 opencode는 디스크에서 로컬 플러그인을로드 할 수 있습니다. Temporarily 이동 이러한 방법 (또는 폴더 이름을 변경) 및 데스크톱 응용 프로그램을 다시 시작:
 
-- **글로벌 플러그인** -**macOS/리눅스**: `~/.config/opencode/plugins/`
+- **글로벌 플러그인** -**macOS/리눅스**: `~/.config/leak-code/plugins/`
 - **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.config\opencode\plugins`
 - **프로젝트 플러그인** (프로젝트 설정만 사용)
-- `<your-project>/.opencode/plugins/`
+- `<your-project>/.leak-code/plugins/`
 
 앱이 다시 일하는 경우, 재 활성화 플러그인은 한 번에 문제가 발생할 수 있습니다.
 
@@ -113,13 +113,13 @@ Home 화면에서 Server Picker를 열려면 서버 이름(상태 점)을 클릭
 
 #### 설정에서 server.port/server.hostname 제거
 
-`opencode.json(c)`가 `server` 섹션을 포함하면 일시적으로 제거하고 데스크톱 앱을 다시 시작합니다.
+`leak-code.json(c)`가 `server` 섹션을 포함하면 일시적으로 제거하고 데스크톱 앱을 다시 시작합니다.
 
 ### 환경 변수 확인
 
-`OPENCODE_PORT`가 있는 경우, 데스크탑 앱은 로컬 서버의 포트를 사용하려고 합니다.
+`LEAKCODE_PORT`가 있는 경우, 데스크탑 앱은 로컬 서버의 포트를 사용하려고 합니다.
 
-- `OPENCODE_PORT` (또는 무료 포트를 선택) 및 재시작.
+- `LEAKCODE_PORT` (또는 무료 포트를 선택) 및 재시작.
 
 ---
 
@@ -202,7 +202,7 @@ opencode와 문제가 발생하면:
 
 1. 오류 메시지에 대한 로그 확인
 2. terminal에 있는 산출을 보기 위하여 `--print-logs`로 달리기를 시도하십시오
-3. 당신은 `opencode upgrade`를 가진 최신 버전이 있는 것을 지킵니다
+3. 당신은 `leak-code upgrade`를 가진 최신 버전이 있는 것을 지킵니다
 
 ---
 
@@ -230,7 +230,7 @@ opencode와 문제가 발생하면:
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-당신이 액세스 할 수있는 모델을 파악하려면, `opencode models`를 실행
+당신이 액세스 할 수있는 모델을 파악하려면, `leak-code models`를 실행
 
 ---
 

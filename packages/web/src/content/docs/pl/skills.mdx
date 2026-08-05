@@ -11,10 +11,10 @@ Umiejętności są ładowane na żądanie za pośrednictwem natywnego narzędzia
 ## Lokalizacja plików
 
 Utwórz jeden folder na nazwę umiejętności i umieść w nim `SKILL.md`.
-opencode przeszukuje te lokalizacje:
+leak-code przeszukuje te lokalizacje:
 
-- Project config: `.opencode/skills/<name>/SKILL.md`
-- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
+- Project config: `.leak-code/skills/<name>/SKILL.md`
+- Global config: `~/.config/leak-code/skills/<name>/SKILL.md`
 - Project Claude-compatible: `.claude/skills/<name>/SKILL.md`
 - Global Claude-compatible: `~/.claude/skills/<name>/SKILL.md`
 - Project agent-compatible: `.agents/skills/<name>/SKILL.md`
@@ -24,10 +24,10 @@ opencode przeszukuje te lokalizacje:
 
 ## Zrozumienie wykrywania
 
-W przypadku ścieżek lokalnych projektu opencode przechodzi od bieżącego katalogu roboczego, aż dotrze do drzewa roboczego git.
-Ładuje po drodze dowolne pasujące `skills/*/SKILL.md` w `.opencode/` i dowolne pasujące `.claude/skills/*/SKILL.md` lub `.agents/skills/*/SKILL.md`.
+W przypadku ścieżek lokalnych projektu leak-code przechodzi od bieżącego katalogu roboczego, aż dotrze do drzewa roboczego git.
+Ładuje po drodze dowolne pasujące `skills/*/SKILL.md` w `.leak-code/` i dowolne pasujące `.claude/skills/*/SKILL.md` lub `.agents/skills/*/SKILL.md`.
 
-Ładowane są także definicje globalne z `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` i `~/.agents/skills/*/SKILL.md`.
+Ładowane są także definicje globalne z `~/.config/leak-code/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` i `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -73,7 +73,7 @@ Zadbaj o to, aby agent mógł dokonać prawidłowego wyboru.
 
 ## Przykład użycia
 
-Utwórz `.opencode/skills/git-release/SKILL.md` w ten sposób:
+Utwórz `.leak-code/skills/git-release/SKILL.md` w ten sposób:
 
 ```markdown
 ---
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Konfiguracja uprawnień
 
-Kontroluj, do których umiejętności agenci mogą uzyskać dostęp, używając uprawnień opartych na wzorcach w `opencode.json`:
+Kontroluj, do których umiejętności agenci mogą uzyskać dostęp, używając uprawnień opartych na wzorcach w `leak-code.json`:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**Dla agentów wbudowanych** (w `opencode.json`):
+**Dla agentów wbudowanych** (w `leak-code.json`):
 
 ```json
 {

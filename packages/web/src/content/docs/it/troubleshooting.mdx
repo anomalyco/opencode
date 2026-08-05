@@ -11,7 +11,7 @@ Per diagnosticare problemi con OpenCode, inizia controllando i log e i dati loca
 
 I file di log vengono scritti in:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leak-code/log/`
 - **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.local\share\opencode\log`
 
 I file di log hanno nomi con timestamp (ad es. `2025-01-09T123456.log`) e vengono conservati i 10 file di log piu recenti.
@@ -24,7 +24,7 @@ Puoi impostare il livello di log con l'opzione a riga di comando `--log-level` p
 
 opencode salva i dati delle sessioni e altri dati dell'applicazione su disco in:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leak-code/`
 - **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.local\share\opencode`
 
 Questa directory contiene:
@@ -57,9 +57,9 @@ Se l'app desktop va in crash all'avvio, si blocca o si comporta in modo strano, 
 
 Apri il tuo file di configurazione globale e cerca la chiave `plugin`.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (o `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (installazioni vecchie): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/leak-code/leak-code.jsonc` (o `~/.config/leak-code/leak-code.json`)
+- **macOS/Linux** (installazioni vecchie): `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.config\opencode\leak-code.jsonc`
 
 Se hai plugin configurati, disabilitali temporaneamente rimuovendo la chiave o impostandola a un array vuoto:
 
@@ -75,10 +75,10 @@ Se hai plugin configurati, disabilitali temporaneamente rimuovendo la chiave o i
 OpenCode puo anche caricare plugin locali dal disco. Spostali temporaneamente altrove (o rinomina la cartella) e riavvia l'app desktop:
 
 - **Plugin globali**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leak-code/plugins/`
 - **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.config\opencode\plugins`
 - **Plugin del progetto** (solo se usi una configurazione per progetto)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 Se l'app ricomincia a funzionare, riabilita i plugin uno alla volta per capire quale stia causando il problema.
 
@@ -111,13 +111,13 @@ Dalla schermata Home, fai clic sul nome del server (con il pallino di stato) per
 
 #### Rimuovi `server.port` / `server.hostname` dalla tua configurazione
 
-Se il tuo `opencode.json(c)` contiene una sezione `server`, rimuovila temporaneamente e riavvia l'app desktop.
+Se il tuo `leak-code.json(c)` contiene una sezione `server`, rimuovila temporaneamente e riavvia l'app desktop.
 
 #### Controlla le variabili d'ambiente
 
-Se hai `OPENCODE_PORT` impostato nell'ambiente, l'app desktop provera a usare quella porta per il server locale.
+Se hai `LEAKCODE_PORT` impostato nell'ambiente, l'app desktop provera a usare quella porta per il server locale.
 
-- Rimuovi `OPENCODE_PORT` (o scegli una porta libera) e riavvia.
+- Rimuovi `LEAKCODE_PORT` (o scegli una porta libera) e riavvia.
 
 ---
 
@@ -199,7 +199,7 @@ Ecco alcuni problemi comuni e come risolverli.
 
 1. Controlla i log per eventuali messaggi di errore
 2. Prova a eseguire con `--print-logs` per vedere l'output nel terminale
-3. Assicurati di avere l'ultima versione con `opencode upgrade`
+3. Assicurati di avere l'ultima versione con `leak-code upgrade`
 
 ---
 
@@ -226,7 +226,7 @@ Esempi:
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-Per capire a quali modelli hai accesso, esegui `opencode models`
+Per capire a quali modelli hai accesso, esegui `leak-code models`
 
 ---
 

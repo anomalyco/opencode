@@ -8,13 +8,13 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 OpenCode CLI จะเริ่มต้น [TUI](/docs/tui) เป็นค่าเริ่มต้นเมื่อเรียกใช้โดยไม่มีอาร์กิวเมนต์
 
 ```bash
-opencode
+leak-code
 ```
 
 นอกจากนี้ยังรับคำสั่งและแฟล็ก ซึ่งช่วยให้คุณใช้ OpenCode ผ่านโปรแกรมได้
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+leak-code run "Explain how closures work in JavaScript"
 ```
 
 ---
@@ -24,7 +24,7 @@ opencode run "Explain how closures work in JavaScript"
 เริ่ม TUI เพื่อใช้ OpenCode แบบโต้ตอบ
 
 ```bash
-opencode [project]
+leak-code [project]
 ```
 
 #### แฟล็ก
@@ -53,7 +53,7 @@ OpenCode CLI ยังมีคำสั่งย่อยอีกมากม�
 จัดการเอเจนต์สำหรับ OpenCode
 
 ```bash
-opencode agent [command]
+leak-code agent [command]
 ```
 
 ---
@@ -63,17 +63,17 @@ opencode agent [command]
 เชื่อมต่อกับเซิร์ฟเวอร์แบ็กเอนด์ OpenCode ที่กำลังทำงานอยู่ ซึ่งเริ่มต้นผ่านคำสั่ง `serve` หรือ `web`
 
 ```bash
-opencode attach [url]
+leak-code attach [url]
 ```
 
 วิธีนี้ช่วยให้คุณใช้ TUI กับแบ็กเอนด์ OpenCode ระยะไกลได้ ตัวอย่าง:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+leak-code web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+leak-code attach http://10.20.30.40:4096
 ```
 
 #### แฟล็ก
@@ -84,8 +84,8 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--continue"}</code></nobr> | `-c` | ดำเนินการต่อจากเซสชันล่าสุด                                                                 |
 | <nobr><code>{"--session"}</code></nobr>  | `-s` | ID เซสชันเพื่อดำเนินการต่อ                                                                  |
 | <nobr><code>{"--fork"}</code></nobr>     |      | แยกเซสชันเมื่อดำเนินการต่อ (ใช้กับ `--continue` หรือ `--session`)                           |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | รหัสผ่านการยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `OPENCODE_SERVER_PASSWORD`)                   |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | ชื่อผู้ใช้การยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `OPENCODE_SERVER_USERNAME` หรือ `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | รหัสผ่านการยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `LEAKCODE_SERVER_PASSWORD`)                   |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | ชื่อผู้ใช้การยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `LEAKCODE_SERVER_USERNAME` หรือ `opencode`) |
 
 ---
 
@@ -94,7 +94,7 @@ opencode attach http://10.20.30.40:4096
 สร้างเอเจนต์ใหม่
 
 ```bash
-opencode agent create
+leak-code agent create
 ```
 
 คำสั่งนี้จะแนะนำคุณตลอดกระบวนการสร้างเอเจนต์ใหม่ พร้อมพรอมต์ระบบและความสามารถของเครื่องมือ
@@ -106,7 +106,7 @@ opencode agent create
 แสดงรายชื่อเอเจนต์ที่พร้อมใช้งานทั้งหมด
 
 ```bash
-opencode agent list
+leak-code agent list
 ```
 
 ---
@@ -116,17 +116,17 @@ opencode agent list
 จัดการการตรวจสอบสิทธิ์และข้อมูลรับรอง
 
 ```bash
-opencode auth [command]
+leak-code auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode ได้รับการกำหนดค่าไว้ล่วงหน้าด้วยรายชื่อผู้ให้บริการทั่วไปที่ [Models.dev](https://models.dev) ดังนั้นคุณเพียงแค่ต้องใส่คีย์ API สำหรับผู้ให้บริการที่คุณต้องการใช้ ข้อมูลนี้จะถูกเก็บไว้ที่ `~/.local/share/opencode/auth.json`
+OpenCode ได้รับการกำหนดค่าไว้ล่วงหน้าด้วยรายชื่อผู้ให้บริการทั่วไปที่ [Models.dev](https://models.dev) ดังนั้นคุณเพียงแค่ต้องใส่คีย์ API สำหรับผู้ให้บริการที่คุณต้องการใช้ ข้อมูลนี้จะถูกเก็บไว้ที่ `~/.local/share/leak-code/auth.json`
 
 ```bash
-opencode auth login
+leak-code auth login
 ```
 
 เมื่อ OpenCode เริ่มต้น ระบบจะโหลดข้อมูลรับรองจากไฟล์นี้ ดังนั้นคุณจึงไม่ต้องกังวลกับการตั้งค่าตัวแปรสภาพแวดล้อมหรือไฟล์ `.env` ในโปรเจ็กต์ของคุณ
@@ -138,13 +138,13 @@ opencode auth login
 แสดงรายการข้อมูลรับรองการตรวจสอบสิทธิ์ทั้งหมดที่กำหนดค่าไว้
 
 ```bash
-opencode auth list
+leak-code auth list
 ```
 
 หรือใช้นามแฝงสั้น
 
 ```bash
-opencode auth ls
+leak-code auth ls
 ```
 
 ---
@@ -154,7 +154,7 @@ opencode auth ls
 ออกจากระบบของผู้ให้บริการและลบข้อมูลรับรองออกจากไฟล์ auth
 
 ```bash
-opencode auth logout
+leak-code auth logout
 ```
 
 ---
@@ -164,7 +164,7 @@ opencode auth logout
 จัดการเอเจนต์ GitHub สำหรับเวิร์กโฟลว์อัตโนมัติ
 
 ```bash
-opencode github [command]
+leak-code github [command]
 ```
 
 ---
@@ -174,7 +174,7 @@ opencode github [command]
 ติดตั้งเอเจนต์ GitHub ใน repository ของคุณ
 
 ```bash
-opencode github install
+leak-code github install
 ```
 
 คำสั่งนี้จะสร้างเวิร์กโฟลว์ GitHub Actions และแนะนำคุณตลอดกระบวนการตั้งค่า [เรียนรู้เพิ่มเติม](/docs/github)
@@ -186,7 +186,7 @@ opencode github install
 รันเอเจนต์ GitHub ด้วยตนเองหรือใน GitHub Actions
 
 ```bash
-opencode github run
+leak-code github run
 ```
 
 ##### แฟล็ก
@@ -203,7 +203,7 @@ opencode github run
 จัดการเซิร์ฟเวอร์ Model Context Protocol (MCP)
 
 ```bash
-opencode mcp [command]
+leak-code mcp [command]
 ```
 
 ---
@@ -213,7 +213,7 @@ opencode mcp [command]
 เพิ่มเซิร์ฟเวอร์ MCP ลงในการกำหนดค่าของคุณ
 
 ```bash
-opencode mcp add
+leak-code mcp add
 ```
 
 คำสั่งนี้จะแนะนำคุณผ่านวิซาร์ดเพื่อกำหนดค่าเซิร์ฟเวอร์ MCP ใหม่
@@ -225,13 +225,13 @@ opencode mcp add
 แสดงรายชื่อเซิร์ฟเวอร์ MCP ทั้งหมดที่กำหนดค่าไว้และสถานะ
 
 ```bash
-opencode mcp list
+leak-code mcp list
 ```
 
 หรือใช้นามแฝงสั้น
 
 ```bash
-opencode mcp ls
+leak-code mcp ls
 ```
 
 ---
@@ -241,7 +241,7 @@ opencode mcp ls
 ยืนยันตัวตนกับเซิร์ฟเวอร์ MCP ที่ต้องการ OAuth
 
 ```bash
-opencode mcp auth [name]
+leak-code mcp auth [name]
 ```
 
 หากไม่ระบุชื่อเซิร์ฟเวอร์ คุณจะได้รับแจ้งให้เลือกจากเซิร์ฟเวอร์ที่รองรับ OAuth ที่พร้อมใช้งาน
@@ -249,13 +249,13 @@ opencode mcp auth [name]
 คุณยังสามารถแสดงรายการสถานะการตรวจสอบสิทธิ์ OAuth ได้:
 
 ```bash
-opencode mcp auth list
+leak-code mcp auth list
 ```
 
 หรือใช้นามแฝงสั้น
 
 ```bash
-opencode mcp auth ls
+leak-code mcp auth ls
 ```
 
 ---
@@ -265,7 +265,7 @@ opencode mcp auth ls
 ลบข้อมูลรับรอง OAuth สำหรับเซิร์ฟเวอร์ MCP
 
 ```bash
-opencode mcp logout [name]
+leak-code mcp logout [name]
 ```
 
 ---
@@ -275,7 +275,7 @@ opencode mcp logout [name]
 ดีบักการเชื่อมต่อเซิร์ฟเวอร์ MCP
 
 ```bash
-opencode mcp debug <name>
+leak-code mcp debug <name>
 ```
 
 ---
@@ -285,7 +285,7 @@ opencode mcp debug <name>
 แสดงรายการโมเดลที่พร้อมใช้งานทั้งหมดจากผู้ให้บริการที่กำหนดค่าไว้
 
 ```bash
-opencode models [provider]
+leak-code models [provider]
 ```
 
 คำสั่งนี้จะแสดง ID โมเดลทั้งหมดในรูปแบบ `provider/model`
@@ -295,7 +295,7 @@ opencode models [provider]
 คุณยังสามารถส่งผ่านรหัสผู้ให้บริการเพื่อกรองโมเดลตามผู้ให้บริการรายนั้นได้
 
 ```bash
-opencode models anthropic
+leak-code models anthropic
 ```
 
 #### แฟล็ก
@@ -309,7 +309,7 @@ opencode models anthropic
 ใช้แฟล็ก `--refresh` เพื่ออัปเดตรายการโมเดลที่แคชไว้ มีประโยชน์เมื่อมีการเพิ่มโมเดลใหม่ให้กับผู้ให้บริการและคุณต้องการเห็นใน OpenCode
 
 ```bash
-opencode models --refresh
+leak-code models --refresh
 ```
 
 ---
@@ -319,23 +319,23 @@ opencode models --refresh
 รัน OpenCode โดยไม่ต้องใช้ TUI โดยส่งพรอมต์โดยตรง
 
 ```bash
-opencode run [message..]
+leak-code run [message..]
 ```
 
 มีประโยชน์สำหรับการทำงานอัตโนมัติหรือเมื่อต้องการคำตอบอย่างรวดเร็วโดยไม่ต้องเปิด TUI ตัวอย่าง:
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "leak-code run"
+leak-code run Explain the use of context in Go
 ```
 
-คุณยังสามารถแนบไปกับเซิร์ฟเวอร์ `opencode serve` ที่ทำงานอยู่ หรือใช้เซิร์ฟเวอร์ MCP แบบ headless:
+คุณยังสามารถแนบไปกับเซิร์ฟเวอร์ `leak-code serve` ที่ทำงานอยู่ หรือใช้เซิร์ฟเวอร์ MCP แบบ headless:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+leak-code serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+leak-code run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### แฟล็ก
@@ -353,8 +353,8 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--format"}</code></nobr>   |      | รูปแบบเอาต์พุต: text (จัดรูปแบบ) หรือ json (JSON ดิบ)                                       |
 | <nobr><code>{"--title"}</code></nobr>    |      | ชื่อสำหรับเซสชัน (หากไม่ได้ระบุ จะสร้างจากพรอมต์)                                           |
 | <nobr><code>{"--attach"}</code></nobr>   |      | แนบไปกับเซิร์ฟเวอร์ opencode ที่ทำงานอยู่ (เช่น http://localhost:4096)                      |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | รหัสผ่านการยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `OPENCODE_SERVER_PASSWORD`)                   |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | ชื่อผู้ใช้การยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `OPENCODE_SERVER_USERNAME` หรือ `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | รหัสผ่านการยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `LEAKCODE_SERVER_PASSWORD`)                   |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | ชื่อผู้ใช้การยืนยันตัวตนพื้นฐาน (ค่าเริ่มต้นคือ `LEAKCODE_SERVER_USERNAME` หรือ `opencode`) |
 | <nobr><code>{"--dir"}</code></nobr>      |      | ไดเร็กทอรีสำหรับรัน หรือเส้นทางบนเซิร์ฟเวอร์ระยะไกลเมื่อแนบ                                 |
 | <nobr><code>{"--variant"}</code></nobr>  |      | ตัวแปรโมเดล (ระดับการใช้เหตุผลเฉพาะผู้ให้บริการ)                                            |
 | <nobr><code>{"--thinking"}</code></nobr> |      | แสดงบล็อกความคิด                                                                            |
@@ -367,10 +367,10 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 เริ่มต้นเซิร์ฟเวอร์ OpenCode headless ที่ให้บริการ API HTTP ดู [เอกสารเซิร์ฟเวอร์](/docs/server) สำหรับรายละเอียด API เต็มรูปแบบ
 
 ```bash
-opencode serve
+leak-code serve
 ```
 
-คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP ให้ API เข้าถึงฟังก์ชันการทำงานของ OpenCode ได้โดยไม่ต้องมี TUI นอกจากนี้ยังรองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `OPENCODE_SERVER_PASSWORD`)
+คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP ให้ API เข้าถึงฟังก์ชันการทำงานของ OpenCode ได้โดยไม่ต้องมี TUI นอกจากนี้ยังรองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `LEAKCODE_SERVER_PASSWORD`)
 
 #### แฟล็ก
 
@@ -388,7 +388,7 @@ opencode serve
 จัดการเซสชัน OpenCode
 
 ```bash
-opencode session [command]
+leak-code session [command]
 ```
 
 ---
@@ -398,7 +398,7 @@ opencode session [command]
 แสดงรายการเซสชัน OpenCode ทั้งหมด
 
 ```bash
-opencode session list
+leak-code session list
 ```
 
 ##### แฟล็ก
@@ -415,7 +415,7 @@ opencode session list
 แสดงสถิติการใช้งานและค่าใช้จ่ายสำหรับ OpenCode ของคุณ
 
 ```bash
-opencode stats
+leak-code stats
 ```
 
 #### แฟล็ก
@@ -434,7 +434,7 @@ opencode stats
 ส่งออกประวัติเซสชันเป็น JSON
 
 ```bash
-opencode export [sessionID]
+leak-code export [sessionID]
 ```
 
 หากไม่ระบุรหัสเซสชัน คุณจะได้รับแจ้งให้เลือกจากรายการล่าสุด
@@ -446,14 +446,14 @@ opencode export [sessionID]
 นำเข้าเซสชันจากไฟล์ JSON หรือ URL ที่แชร์ของ OpenCode
 
 ```bash
-opencode import <file>
+leak-code import <file>
 ```
 
 คุณสามารถนำเข้าไฟล์ในเครื่องหรือ URL ที่แชร์
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+leak-code import session.json
+leak-code import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -463,10 +463,10 @@ opencode import https://opncd.ai/s/abc123
 เริ่ม OpenCode ในโหมดเซิร์ฟเวอร์พร้อมเว็บอินเตอร์เฟส
 
 ```bash
-opencode web
+leak-code web
 ```
 
-คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP และเปิดเว็บเบราว์เซอร์เพื่อเข้าถึง OpenCode ผ่านทางเว็บอินเตอร์เฟส รองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `OPENCODE_SERVER_PASSWORD`)
+คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP และเปิดเว็บเบราว์เซอร์เพื่อเข้าถึง OpenCode ผ่านทางเว็บอินเตอร์เฟส รองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `LEAKCODE_SERVER_PASSWORD`)
 
 #### แฟล็ก
 
@@ -484,7 +484,7 @@ opencode web
 เริ่มต้นเซิร์ฟเวอร์ ACP (Agent Client Protocol)
 
 ```bash
-opencode acp
+leak-code acp
 ```
 
 คำสั่งนี้เริ่มต้นเซิร์ฟเวอร์ ACP ที่สื่อสารผ่าน stdin/stdout ด้วย nd-JSON
@@ -504,7 +504,7 @@ opencode acp
 ถอนการติดตั้ง OpenCode และลบข้อมูลการกำหนดค่าทั้งหมด
 
 ```bash
-opencode uninstall
+leak-code uninstall
 ```
 
 #### แฟล็ก
@@ -523,19 +523,19 @@ opencode uninstall
 อัปเกรด OpenCode เป็นเวอร์ชันล่าสุดหรือเวอร์ชันที่ระบุ
 
 ```bash
-opencode upgrade [target]
+leak-code upgrade [target]
 ```
 
 อัปเกรดเป็นเวอร์ชันล่าสุด
 
 ```bash
-opencode upgrade
+leak-code upgrade
 ```
 
 อัปเกรดเป็นเวอร์ชันที่ระบุ
 
 ```bash
-opencode upgrade v0.1.48
+leak-code upgrade v0.1.48
 ```
 
 #### แฟล็ก
@@ -565,30 +565,30 @@ OpenCode สามารถกำหนดค่าโดยใช้ตัว�
 
 | ตัวแปร                                | ชนิด    | คำอธิบาย                                                         |
 | ------------------------------------- | ------- | ---------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | Boolean | แชร์เซสชันอัตโนมัติเมื่อสร้าง                                    |
-| `OPENCODE_GIT_BASH_PATH`              | String  | เส้นทางไปยัง Git Bash บน Windows                                 |
-| `OPENCODE_CONFIG`                     | String  | เส้นทางไปยังไฟล์การกำหนดค่า                                      |
-| `OPENCODE_TUI_CONFIG`                 | String  | เส้นทางไปยังไฟล์การกำหนดค่า TUI                                  |
-| `OPENCODE_CONFIG_DIR`                 | String  | เส้นทางไปยังไดเร็กทอรีการกำหนดค่า                                |
-| `OPENCODE_CONFIG_CONTENT`             | String  | เนื้อหาการกำหนดค่าแบบ inline JSON                                |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | Boolean | ปิดใช้งานการอัปเดตอัตโนมัติ                                      |
-| `OPENCODE_DISABLE_PRUNE`              | Boolean | ปิดใช้งานการลบข้อมูลเซสชันเก่า                                   |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | Boolean | ปิดใช้งานการตั้งชื่อหน้าต่าง terminal                            |
-| `OPENCODE_PERMISSION`                 | String  | การกำหนดค่าสิทธิ์แบบ inline JSON                                 |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | Boolean | ปิดใช้งานปลั๊กอินเริ่มต้น                                        |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | Boolean | ปิดใช้งานการดาวน์โหลด LSP อัตโนมัติ                              |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | Boolean | เปิดใช้งานโมเดลทดลอง                                             |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | Boolean | ปิดใช้งานการบีบอัดบริบทอัตโนมัติ                                 |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | Boolean | ปิดใช้งานการนำเข้าจาก `.claude` (prompt + skills)                |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | Boolean | ปิดใช้งานการนำเข้า `~/.claude/CLAUDE.md`                         |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | Boolean | ปิดใช้งานการนำเข้า `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | Boolean | ปิดใช้งานการดึงรายการโมเดลจากระยะไกล                             |
-| `OPENCODE_FAKE_VCS`                   | String  | เปิดใช้งาน VCS จำลองสำหรับการทดสอบ                               |
-| `OPENCODE_CLIENT`                     | String  | ตัวระบุไคลเอนต์ (ค่าเริ่มต้นคือ `cli`)                           |
-| `OPENCODE_ENABLE_EXA`                 | Boolean | เปิดใช้งานการใช้ Exa แทน ls หากมี                                |
-| `OPENCODE_SERVER_PASSWORD`            | String  | รหัสผ่านสำหรับการตรวจสอบสิทธิ์พื้นฐาน `serve`/`web`              |
-| `OPENCODE_SERVER_USERNAME`            | String  | ชื่อผู้ใช้สำหรับการตรวจสอบสิทธิ์พื้นฐาน (ค่าเริ่มต้น `opencode`) |
-| `OPENCODE_MODELS_URL`                 | String  | URL ที่กำหนดเองสำหรับการดึงรายการโมเดล                           |
+| `LEAKCODE_AUTO_SHARE`                 | Boolean | แชร์เซสชันอัตโนมัติเมื่อสร้าง                                    |
+| `LEAKCODE_GIT_BASH_PATH`              | String  | เส้นทางไปยัง Git Bash บน Windows                                 |
+| `LEAKCODE_CONFIG`                     | String  | เส้นทางไปยังไฟล์การกำหนดค่า                                      |
+| `LEAKCODE_TUI_CONFIG`                 | String  | เส้นทางไปยังไฟล์การกำหนดค่า TUI                                  |
+| `LEAKCODE_CONFIG_DIR`                 | String  | เส้นทางไปยังไดเร็กทอรีการกำหนดค่า                                |
+| `LEAKCODE_CONFIG_CONTENT`             | String  | เนื้อหาการกำหนดค่าแบบ inline JSON                                |
+| `LEAKCODE_DISABLE_AUTOUPDATE`         | Boolean | ปิดใช้งานการอัปเดตอัตโนมัติ                                      |
+| `LEAKCODE_DISABLE_PRUNE`              | Boolean | ปิดใช้งานการลบข้อมูลเซสชันเก่า                                   |
+| `LEAKCODE_DISABLE_TERMINAL_TITLE`     | Boolean | ปิดใช้งานการตั้งชื่อหน้าต่าง terminal                            |
+| `LEAKCODE_PERMISSION`                 | String  | การกำหนดค่าสิทธิ์แบบ inline JSON                                 |
+| `LEAKCODE_DISABLE_DEFAULT_PLUGINS`    | Boolean | ปิดใช้งานปลั๊กอินเริ่มต้น                                        |
+| `LEAKCODE_DISABLE_LSP_DOWNLOAD`       | Boolean | ปิดใช้งานการดาวน์โหลด LSP อัตโนมัติ                              |
+| `LEAKCODE_ENABLE_EXPERIMENTAL_MODELS` | Boolean | เปิดใช้งานโมเดลทดลอง                                             |
+| `LEAKCODE_DISABLE_AUTOCOMPACT`        | Boolean | ปิดใช้งานการบีบอัดบริบทอัตโนมัติ                                 |
+| `LEAKCODE_DISABLE_CLAUDE_CODE`        | Boolean | ปิดใช้งานการนำเข้าจาก `.claude` (prompt + skills)                |
+| `LEAKCODE_DISABLE_CLAUDE_CODE_PROMPT` | Boolean | ปิดใช้งานการนำเข้า `~/.claude/CLAUDE.md`                         |
+| `LEAKCODE_DISABLE_CLAUDE_CODE_SKILLS` | Boolean | ปิดใช้งานการนำเข้า `.claude/skills`                              |
+| `LEAKCODE_DISABLE_MODELS_FETCH`       | Boolean | ปิดใช้งานการดึงรายการโมเดลจากระยะไกล                             |
+| `LEAKCODE_FAKE_VCS`                   | String  | เปิดใช้งาน VCS จำลองสำหรับการทดสอบ                               |
+| `LEAKCODE_CLIENT`                     | String  | ตัวระบุไคลเอนต์ (ค่าเริ่มต้นคือ `cli`)                           |
+| `LEAKCODE_ENABLE_EXA`                 | Boolean | เปิดใช้งานการใช้ Exa แทน ls หากมี                                |
+| `LEAKCODE_SERVER_PASSWORD`            | String  | รหัสผ่านสำหรับการตรวจสอบสิทธิ์พื้นฐาน `serve`/`web`              |
+| `LEAKCODE_SERVER_USERNAME`            | String  | ชื่อผู้ใช้สำหรับการตรวจสอบสิทธิ์พื้นฐาน (ค่าเริ่มต้น `opencode`) |
+| `LEAKCODE_MODELS_URL`                 | String  | URL ที่กำหนดเองสำหรับการดึงรายการโมเดล                           |
 
 ---
 
@@ -598,21 +598,21 @@ OpenCode สามารถกำหนดค่าโดยใช้ตัว�
 
 | ตัวแปร                                          | ชนิด    | คำอธิบาย                                       |
 | ----------------------------------------------- | ------- | ---------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | Boolean | เปิดใช้งานฟีเจอร์ทดลองภายใต้แฟล็กรวม           |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | Boolean | การค้นหาไอคอนทดลอง                             |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | Boolean | ปิดใช้งานการคัดลอกเมื่อเลือกใน TUI             |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | Number  | การหมดเวลาเริ่มต้นสำหรับคำสั่ง bash ในหน่วย ms |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | Number  | ขีดจำกัดสูงสุดสำหรับโทเค็นเอาต์พุต LLM         |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | Boolean | เปิดใช้งานตัวเฝ้าดูไฟล์สำหรับไดเร็กทอรีทั้งหมด |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | Boolean | ใช้ oxfmt เป็นตัวจัดรูปแบบ                     |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | Boolean | เปิดใช้งานเครื่องมือ LSP ทดลอง                 |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | Boolean | ปิดใช้งานตัวเฝ้าดูไฟล์                         |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | Boolean | ฟีเจอร์ Exa ทดลอง                              |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | Boolean | เปิดใช้งาน TY LSP สำหรับไฟล์ python            |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | Boolean | เปิดใช้งาน Plan mode                           |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | Boolean | เปิดใช้งานงาน subagent เบื้องหลัง              |
-| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | Boolean | เปิดใช้งานระบบเหตุการณ์ทดลอง                   |
-| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | Boolean | เปิดใช้งานเส้นทางคำขอ LLM แบบ native           |
-| `OPENCODE_EXPERIMENTAL_PARALLEL`                | Boolean | เปิดใช้งานการค้นหาเว็บแบบขนาน                  |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | Boolean | เปิดใช้งาน Scout subagent                      |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | Boolean | เปิดใช้งานการรองรับ workspace                  |
+| `LEAKCODE_EXPERIMENTAL`                         | Boolean | เปิดใช้งานฟีเจอร์ทดลองภายใต้แฟล็กรวม           |
+| `LEAKCODE_EXPERIMENTAL_ICON_DISCOVERY`          | Boolean | การค้นหาไอคอนทดลอง                             |
+| `LEAKCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | Boolean | ปิดใช้งานการคัดลอกเมื่อเลือกใน TUI             |
+| `LEAKCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | Number  | การหมดเวลาเริ่มต้นสำหรับคำสั่ง bash ในหน่วย ms |
+| `LEAKCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | Number  | ขีดจำกัดสูงสุดสำหรับโทเค็นเอาต์พุต LLM         |
+| `LEAKCODE_EXPERIMENTAL_FILEWATCHER`             | Boolean | เปิดใช้งานตัวเฝ้าดูไฟล์สำหรับไดเร็กทอรีทั้งหมด |
+| `LEAKCODE_EXPERIMENTAL_OXFMT`                   | Boolean | ใช้ oxfmt เป็นตัวจัดรูปแบบ                     |
+| `LEAKCODE_EXPERIMENTAL_LSP_TOOL`                | Boolean | เปิดใช้งานเครื่องมือ LSP ทดลอง                 |
+| `LEAKCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | Boolean | ปิดใช้งานตัวเฝ้าดูไฟล์                         |
+| `LEAKCODE_EXPERIMENTAL_EXA`                     | Boolean | ฟีเจอร์ Exa ทดลอง                              |
+| `LEAKCODE_EXPERIMENTAL_LSP_TY`                  | Boolean | เปิดใช้งาน TY LSP สำหรับไฟล์ python            |
+| `LEAKCODE_EXPERIMENTAL_PLAN_MODE`               | Boolean | เปิดใช้งาน Plan mode                           |
+| `LEAKCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | Boolean | เปิดใช้งานงาน subagent เบื้องหลัง              |
+| `LEAKCODE_EXPERIMENTAL_EVENT_SYSTEM`            | Boolean | เปิดใช้งานระบบเหตุการณ์ทดลอง                   |
+| `LEAKCODE_EXPERIMENTAL_NATIVE_LLM`              | Boolean | เปิดใช้งานเส้นทางคำขอ LLM แบบ native           |
+| `LEAKCODE_EXPERIMENTAL_PARALLEL`                | Boolean | เปิดใช้งานการค้นหาเว็บแบบขนาน                  |
+| `LEAKCODE_EXPERIMENTAL_SCOUT`                   | Boolean | เปิดใช้งาน Scout subagent                      |
+| `LEAKCODE_EXPERIMENTAL_WORKSPACES`              | Boolean | เปิดใช้งานการรองรับ workspace                  |

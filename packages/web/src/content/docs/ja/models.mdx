@@ -49,7 +49,7 @@ OpenCode は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models
 
 これらのいずれかをデフォルトのモデルとして設定するには、`model` キーを OpenCode の設定に追加します。
 
-```json title="opencode.json" {3}
+```json title="leak-code.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
@@ -66,7 +66,7 @@ OpenCode は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models
 
 config を通じてモデルのオプションをグローバルに設定できます。
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="leak-code.jsonc" {7-12,19-24}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -105,7 +105,7 @@ config を通じてモデルのオプションをグローバルに設定でき�
 
 組み込みバリアントを拡張するカスタムバリアントを定義することもできます。バリアントを使用すると、重複したエントリを作成せずに、同じモデルに対して異なる設定を構成できます。
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="leak-code.jsonc" {6-21}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -170,7 +170,7 @@ OpenCode には、多くのプロバイダーのデフォルトのバリアン�
 
 既存のバリアントをオーバーライドすることも、独自のバリアントを追加することもできます。
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="leak-code.jsonc" {7-18}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -207,7 +207,7 @@ OpenCode が起動すると、次の優先順位でモデルがチェックさ�
 
 2. OpenCode 構成内のモデルのリスト。
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"

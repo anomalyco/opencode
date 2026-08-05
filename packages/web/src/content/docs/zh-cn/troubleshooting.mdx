@@ -11,7 +11,7 @@ description: 常见问题及其解决方法。
 
 日志文件写入位置：
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leak-code/log/`
 - **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.local\share\opencode\log`
 
 日志文件以时间戳命名（例如 `2025-01-09T123456.log`），并保留最近的 10 个日志文件。
@@ -24,7 +24,7 @@ description: 常见问题及其解决方法。
 
 OpenCode 将会话数据和其他应用数据存储在磁盘上：
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leak-code/`
 - **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.local\share\opencode`
 
 该目录包含：
@@ -57,9 +57,9 @@ OpenCode Desktop 会在后台运行一个本地 OpenCode 服务器（即 `openco
 
 打开你的全局配置文件，查找 `plugin` 键。
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc`（或 `~/.config/opencode/opencode.json`）
-- **macOS/Linux**（旧版安装）: `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/leak-code/leak-code.jsonc`（或 `~/.config/leak-code/leak-code.json`）
+- **macOS/Linux**（旧版安装）: `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.config\opencode\leak-code.jsonc`
 
 如果你配置了插件，请通过移除该键或将其设置为空数组来临时禁用它们：
 
@@ -75,10 +75,10 @@ OpenCode Desktop 会在后台运行一个本地 OpenCode 服务器（即 `openco
 OpenCode 还可以从磁盘加载本地插件。临时将这些插件移走（或重命名文件夹），然后重新启动桌面应用：
 
 - **全局插件**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leak-code/plugins/`
   - **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.config\opencode\plugins`
 - **项目插件**（仅当你使用了项目级配置时）
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 如果应用恢复正常，请逐个重新启用插件，找出导致问题的那个。
 
@@ -111,13 +111,13 @@ OpenCode Desktop 可以启动自己的本地服务器（默认行为），也可
 
 #### 从配置中移除 `server.port` / `server.hostname`
 
-如果你的 `opencode.json(c)` 包含 `server` 部分，请临时移除该部分并重新启动桌面应用。
+如果你的 `leak-code.json(c)` 包含 `server` 部分，请临时移除该部分并重新启动桌面应用。
 
 #### 检查环境变量
 
-如果你在环境中设置了 `OPENCODE_PORT`，桌面应用将尝试使用该端口作为本地服务器端口。
+如果你在环境中设置了 `LEAKCODE_PORT`，桌面应用将尝试使用该端口作为本地服务器端口。
 
-- 取消设置 `OPENCODE_PORT`（或选择一个空闲端口）并重新启动。
+- 取消设置 `LEAKCODE_PORT`（或选择一个空闲端口）并重新启动。
 
 ---
 
@@ -199,7 +199,7 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
 1. 检查日志中的错误消息
 2. 尝试使用 `--print-logs` 运行以在终端中查看输出
-3. 使用 `opencode upgrade` 确保你使用的是最新版本
+3. 使用 `leak-code upgrade` 确保你使用的是最新版本
 
 ---
 
@@ -226,7 +226,7 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-要查看你有权访问哪些模型，请运行 `opencode models`
+要查看你有权访问哪些模型，请运行 `leak-code models`
 
 ---
 

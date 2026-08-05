@@ -83,9 +83,9 @@ OpenCode 支援靈活的基於 JSON 的主題系統，讓使用者可以輕鬆�
 主題按以下順序從多個目錄載入，後面的目錄會覆蓋前面的目錄：
 
 1. **內建主題** — 嵌入在二進位檔案中
-2. **使用者設定目錄** — 定義在 `~/.config/opencode/themes/*.json` 或 `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **專案根目錄** — 定義在 `<project-root>/.opencode/themes/*.json`
-4. **當前工作目錄** — 定義在 `./.opencode/themes/*.json`
+2. **使用者設定目錄** — 定義在 `~/.config/leak-code/themes/*.json` 或 `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **專案根目錄** — 定義在 `<project-root>/.leak-code/themes/*.json`
+4. **當前工作目錄** — 定義在 `./.leak-code/themes/*.json`
 
 如果多個目錄包含同名主題，將使用優先順序較高的目錄中的主題。
 
@@ -98,15 +98,15 @@ OpenCode 支援靈活的基於 JSON 的主題系統，讓使用者可以輕鬆�
 建立使用者級主題：
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/leak-code/themes
+vim ~/.config/leak-code/themes/my-theme.json
 ```
 
 建立專案級主題：
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .leak-code/themes
+vim .leak-code/themes/my-theme.json
 ```
 
 ---

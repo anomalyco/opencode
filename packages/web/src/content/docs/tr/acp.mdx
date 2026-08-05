@@ -15,7 +15,7 @@ ACP, kod editörleri ile AI kodlama ajanları arasındaki iletişimi standartla�
 
 ## Yapılandırma
 
-opencode'u ACP aracılığıyla kullanmak için düzenleyicinizi `opencode acp` komutunu çalıştıracak şekilde yapılandırın.
+opencode'u ACP aracılığıyla kullanmak için düzenleyicinizi `leak-code acp` komutunu çalıştıracak şekilde yapılandırın.
 
 Komut, opencode'u, editörünüzle stdio aracılığıyla JSON-RPC üzerinden iletişim kuran ACP uyumlu bir alt süreç olarak başlatır.
 
@@ -110,7 +110,7 @@ Ortam değişkenlerini iletmeniz gerekiyor:
       command = "opencode",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        LEAKCODE_API_KEY = os.getenv("LEAKCODE_API_KEY")
       }
     }
   }
@@ -138,7 +138,7 @@ require("codecompanion").setup({
 
 Bu yapılandırma, CodeCompanion'ı opencode'u sohbet için ACP ajanı olarak kullanacak şekilde ayarlar.
 
-Ortam değişkenlerini (`OPENCODE_API_KEY` gibi) iletmeniz gerekiyorsa, tüm ayrıntılar için CodeCompanion.nvim belgelerindeki [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)'ye bakın.
+Ortam değişkenlerini (`LEAKCODE_API_KEY` gibi) iletmeniz gerekiyorsa, tüm ayrıntılar için CodeCompanion.nvim belgelerindeki [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)'ye bakın.
 
 ## Destek
 

@@ -10,7 +10,7 @@ OpenCode มีอินเทอร์เฟซ terminal แบบโต้ต�
 การรัน OpenCode จะเริ่มต้น TUI สำหรับไดเร็กทอรีปัจจุบัน
 
 ```bash
-opencode
+leak-code
 ```
 
 หรือคุณสามารถเริ่มต้นสำหรับไดเร็กทอรีการทำงานเฉพาะได้
@@ -385,7 +385,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 }
 ```
 
-สิ่งนี้แยกจาก `opencode.json` ซึ่งกำหนดค่าพฤติกรรมเซิร์ฟเวอร์/รันไทม์
+สิ่งนี้แยกจาก `leak-code.json` ซึ่งกำหนดค่าพฤติกรรมเซิร์ฟเวอร์/รันไทม์
 
 `keybinds` จะถูกรวมกับค่าเริ่มต้นในตัว ดังนั้นคุณต้องกำหนดค่าเฉพาะ shortcut ที่ต้องการเปลี่ยนเท่านั้น
 
@@ -400,7 +400,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 - `mouse` - เปิดหรือปิดการจับเมาส์ใน TUI (ค่าเริ่มต้น: `true`) เมื่อปิดใช้งาน terminal จะยังคงใช้พฤติกรรมการเลือกข้อความและเลื่อนด้วยเมาส์แบบเดิม
 - `attention` - กำหนดค่า desktop notifications และ sounds ของ TUI ปิดใช้งานตามค่าเริ่มต้น
 
-ใช้ `OPENCODE_TUI_CONFIG` เพื่อโหลดเส้นทางการกำหนดค่า TUI แบบกำหนดเอง
+ใช้ `LEAKCODE_TUI_CONFIG` เพื่อโหลดเส้นทางการกำหนดค่า TUI แบบกำหนดเอง
 
 ### Attention
 

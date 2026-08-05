@@ -35,7 +35,7 @@ WSL gir bedre filsystemytelse, full terminalstøtte og kompatibilitet med utvikl
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   leak-code
    ```
 
 </Steps>
@@ -49,7 +49,7 @@ Hvis du foretrekker OpenCode-skrivebordsappen, men vil kjøre serveren i WSL:
 1. **Start serveren i WSL** med `--hostname 0.0.0.0` for å tillate eksterne tilkoblinger:
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   leak-code serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **Koble skrivebordsappen** til `http://localhost:4096`
@@ -59,10 +59,10 @@ Hvis `localhost` ikke fungerer i oppsettet ditt, bruk WSL-IP-adressen i stedet (
 :::
 
 :::caution
-Når du bruker `--hostname 0.0.0.0`, sett `OPENCODE_SERVER_PASSWORD` for å sikre serveren.
+Når du bruker `--hostname 0.0.0.0`, sett `LEAKCODE_SERVER_PASSWORD` for å sikre serveren.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve --hostname 0.0.0.0
 ```
 
 :::
@@ -73,15 +73,15 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 For best web-opplevelse på Windows:
 
-1. **Kjør `opencode web` i WSL-terminalen** i stedet for PowerShell:
+1. **Kjør `leak-code web` i WSL-terminalen** i stedet for PowerShell:
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   leak-code web --hostname 0.0.0.0
    ```
 
 2. **Åpne i Windows-nettleseren** på `http://localhost:<port>` (OpenCode skriver ut URL-en)
 
-Når du kjører `opencode web` fra WSL, får du riktig filsystemtilgang og terminalintegrasjon, samtidig som det er tilgjengelig fra Windows-nettleseren din.
+Når du kjører `leak-code web` fra WSL, får du riktig filsystemtilgang og terminalintegrasjon, samtidig som det er tilgjengelig fra Windows-nettleseren din.
 
 ---
 
@@ -97,7 +97,7 @@ Eksempel:
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+leak-code
 ```
 
 :::tip
@@ -110,4 +110,4 @@ For en jevnere opplevelse kan du klone/kopiere repoet ditt inn i WSL-filsystemet
 
 - Kjør OpenCode i WSL for prosjekter lagret på Windows-stasjoner: filtilgang fungerer smidig
 - Bruk [WSL-utvidelsen i VS Code](https://code.visualstudio.com/docs/remote/wsl) sammen med OpenCode for en integrert utviklingsflyt
-- OpenCode-konfigurasjon og sesjoner lagres i WSL-miljøet på `~/.local/share/opencode/`
+- OpenCode-konfigurasjon og sesjoner lagres i WSL-miljøet på `~/.local/share/leak-code/`

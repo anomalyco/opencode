@@ -47,7 +47,7 @@ OpenCode dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
 
 LSP je podrazumijevano isključen. Kada je omogućen, serveri se pokreću kada se otkrije jedna od gore navedenih ekstenzija datoteke i zahtjevi su ispunjeni.
 :::note
-Možete onemogućiti automatska preuzimanja LSP servera tako što ćete postaviti varijablu okruženja `OPENCODE_DISABLE_LSP_DOWNLOAD` na `true`.
+Možete onemogućiti automatska preuzimanja LSP servera tako što ćete postaviti varijablu okruženja `LEAKCODE_DISABLE_LSP_DOWNLOAD` na `true`.
 :::
 
 ---
@@ -75,7 +75,7 @@ Možete omogućiti i prilagoditi LSP servere kroz `lsp` odjeljak u vašoj openco
 
 Da biste omogućili sve ugrađene LSP servere, postavite `lsp` na `true`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": true
@@ -84,7 +84,7 @@ Da biste omogućili sve ugrađene LSP servere, postavite `lsp` na `true`.
 
 Koristite objekt da zadržite ugrađene servere omogućene dok konfigurirate izmjene ili prilagođene servere.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {}
@@ -109,7 +109,7 @@ Pogledajmo neke primjere.
 
 Koristite svojstvo `env` za postavljanje varijabli okruženja prilikom pokretanja LSP servera:
 
-```json title="opencode.json" {5-7}
+```json title="leak-code.json" {5-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -128,7 +128,7 @@ Koristite svojstvo `env` za postavljanje varijabli okruženja prilikom pokretanj
 
 Koristite svojstvo `initialization` da prosledite opcije inicijalizacije na LSP server. Ovo su postavke specifične za server poslane tokom LSP `initialize` zahtjeva:
 
-```json title="opencode.json" {5-9}
+```json title="leak-code.json" {5-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -153,7 +153,7 @@ Opcije inicijalizacije razlikuju se od LSP servera. Provjerite dokumentaciju va�
 
 Ako je `lsp` izostavljen, svi LSP serveri su onemogućeni. Da biste onemogućili sve LSP servere nakon što ih je druga konfiguracija omogućila, postavite `lsp` na `false`:
 
-```json title="opencode.json" {3}
+```json title="leak-code.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": false
@@ -162,7 +162,7 @@ Ako je `lsp` izostavljen, svi LSP serveri su onemogućeni. Da biste onemogućili
 
 Da onemogućite **specifičan** LSP server, postavite `disabled` na `true`:
 
-```json title="opencode.json" {5}
+```json title="leak-code.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -179,7 +179,7 @@ Da onemogućite **specifičan** LSP server, postavite `disabled` na `true`:
 
 Možete dodati prilagođene LSP servere navodeći ekstenzije naredbe i datoteke:
 
-```json title="opencode.json" {4-7}
+```json title="leak-code.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {

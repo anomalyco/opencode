@@ -50,7 +50,7 @@ OpenCode posiada kilka wbudowanych serwerów LSP dla następujących języków:
 LSP jest domyślnie wyłączone. Gdy jest włączone, serwery uruchamiają się po wykryciu jednego z obsługiwanych rozszerzeń plików i spełnieniu wymagań.
 
 :::note
-Możesz wyłączyć automatyczne pobieranie serwerów LSP, ustawiając zmienną środowiskową `OPENCODE_DISABLE_LSP_DOWNLOAD` na `true`.
+Możesz wyłączyć automatyczne pobieranie serwerów LSP, ustawiając zmienną środowiskową `LEAKCODE_DISABLE_LSP_DOWNLOAD` na `true`.
 :::
 
 ---
@@ -78,7 +78,7 @@ Możesz włączać i dostosowywać serwery LSP poprzez sekcję `lsp` w konfigura
 
 Aby włączyć wszystkie wbudowane serwery LSP, ustaw `lsp` na `true`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": true
@@ -87,7 +87,7 @@ Aby włączyć wszystkie wbudowane serwery LSP, ustaw `lsp` na `true`.
 
 Użyj obiektu, aby pozostawić wbudowane serwery włączone i jednocześnie skonfigurować nadpisania lub serwery niestandardowe.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {}
@@ -112,7 +112,7 @@ Spójrzmy na kilka przykładów.
 
 Użyj `env`, aby ustawić zmienne środowiskowe podczas uruchamiania serwera LSP:
 
-```json title="opencode.json" {5-7}
+```json title="leak-code.json" {5-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -131,7 +131,7 @@ Użyj `env`, aby ustawić zmienne środowiskowe podczas uruchamiania serwera LSP
 
 Użyj właściwości `initialization`, aby przekazać niestandardowe opcje inicjalizacji do serwera LSP. Są one wysyłane w żądaniu `initialize` protokołu LSP:
 
-```json title="opencode.json" {5-9}
+```json title="leak-code.json" {5-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -156,7 +156,7 @@ Opcje inicjalizacji różnią się w zależności od serwera LSP. Sprawdź dokum
 
 Jeśli `lsp` zostanie pominięte, wszystkie serwery LSP są wyłączone. Aby wyłączyć wszystkie serwery LSP po tym, jak inna konfiguracja je włączyła, ustaw `lsp` na `false`:
 
-```json title="opencode.json" {3}
+```json title="leak-code.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": false
@@ -165,7 +165,7 @@ Jeśli `lsp` zostanie pominięte, wszystkie serwery LSP są wyłączone. Aby wy�
 
 Aby wyłączyć **określony** serwer LSP, ustaw `disabled` na `true`:
 
-```json title="opencode.json" {5}
+```json title="leak-code.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -182,7 +182,7 @@ Aby wyłączyć **określony** serwer LSP, ustaw `disabled` na `true`:
 
 Możesz dodać niestandardowe serwery LSP, podając polecenie i rozszerzenia plików:
 
-```json title="opencode.json" {4-7}
+```json title="leak-code.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {

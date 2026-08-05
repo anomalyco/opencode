@@ -19,8 +19,8 @@ Ci sono due modi per caricare i plugin.
 
 Metti file JavaScript o TypeScript nella directory dei plugin.
 
-- `.opencode/plugins/` - plugin a livello progetto
-- `~/.config/opencode/plugins/` - plugin globali
+- `.leak-code/plugins/` - plugin a livello progetto
+- `~/.config/leak-code/plugins/` - plugin globali
 
 I file in queste directory vengono caricati automaticamente all'avvio.
 
@@ -30,7 +30,7 @@ I file in queste directory vengono caricati automaticamente all'avvio.
 
 Specifica i pacchetti npm nel tuo file di configurazione.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -55,10 +55,10 @@ I **plugin locali** vengono caricati direttamente dalla directory dei plugin. Pe
 
 I plugin vengono caricati da tutte le sorgenti e tutti gli hook vengono eseguiti in sequenza. L'ordine di caricamento è:
 
-1. Config globale (`~/.config/opencode/opencode.json`)
-2. Config di progetto (`opencode.json`)
-3. Directory plugin globale (`~/.config/opencode/plugins/`)
-4. Directory plugin di progetto (`.opencode/plugins/`)
+1. Config globale (`~/.config/leak-code/leak-code.json`)
+2. Config di progetto (`leak-code.json`)
+3. Directory plugin globale (`~/.config/leak-code/plugins/`)
+4. Directory plugin di progetto (`.leak-code/plugins/`)
 
 I pacchetti npm duplicati con lo stesso nome e versione vengono caricati una sola volta. Tuttavia, un plugin locale e un plugin npm con nomi simili vengono entrambi caricati separatamente.
 
@@ -74,7 +74,7 @@ Un plugin è un **modulo JavaScript/TypeScript** che esporta una o più funzioni
 
 I plugin locali e gli strumenti personalizzati possono usare pacchetti npm esterni. Aggiungi un `package.json` alla tua directory di configurazione con le dipendenze di cui hai bisogno.
 
-```json title=".opencode/package.json"
+```json title=".leak-code/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -84,7 +84,7 @@ I plugin locali e gli strumenti personalizzati possono usare pacchetti npm ester
 
 OpenCode esegue `bun install` all'avvio per installarle. I tuoi plugin e strumenti potranno poi importarle.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -102,7 +102,7 @@ export const MyPlugin = async (ctx) => {
 
 ### Struttura base
 
-```js title=".opencode/plugins/example.js"
+```js title=".leak-code/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -218,7 +218,7 @@ Ecco alcuni esempi di plugin che puoi usare per estendere opencode.
 
 Invia notifiche quando avvengono certi eventi:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".leak-code/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
@@ -243,7 +243,7 @@ Se usi l'app desktop di OpenCode, può inviare automaticamente notifiche di sist
 
 Impedisci a opencode di leggere i file `.env`:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".leak-code/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -261,7 +261,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Inietta variabili d'ambiente in tutte le esecuzioni di shell (strumenti AI e terminale utente):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".leak-code/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -278,7 +278,7 @@ export const InjectEnvPlugin = async () => {
 
 I plugin possono anche aggiungere strumenti personalizzati a opencode:
 
-```ts title=".opencode/plugins/custom-tools.ts"
+```ts title=".leak-code/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
@@ -317,7 +317,7 @@ Se uno strumento di un plugin usa lo stesso nome di uno strumento integrato, lo 
 
 Usa `client.app.log()` invece di `console.log` per logging strutturato:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -338,7 +338,7 @@ Livelli: `debug`, `info`, `warn`, `error`. Vedi la [documentazione SDK](https://
 
 Personalizza il contesto incluso quando una sessione viene compattata:
 
-```ts title=".opencode/plugins/compaction.ts"
+```ts title=".leak-code/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
@@ -362,7 +362,7 @@ L'hook `experimental.session.compacting` scatta prima che l'LLM generi un riassu
 
 Puoi anche sostituire completamente il prompt di compaction impostando `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
+```ts title=".leak-code/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {

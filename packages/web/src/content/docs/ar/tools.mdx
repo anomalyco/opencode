@@ -13,7 +13,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 استخدم الحقل `permission` للتحكم في سلوك الأدوات. يمكنك السماح أو الرفض أو طلب الموافقة لكل أداة.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -26,7 +26,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 يمكنك أيضا استخدام أحرف البدل للتحكم في عدة أدوات دفعة واحدة. على سبيل المثال، لطلب الموافقة على جميع الأدوات القادمة من خادم MCP:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -49,7 +49,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 نفذ أوامر shell في بيئة مشروعك.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -66,7 +66,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 عدّل الملفات الموجودة باستخدام استبدال نصي مطابق تماما.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -83,7 +83,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 أنشئ ملفات جديدة أو اكتب فوق الملفات الموجودة.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -104,7 +104,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 اقرأ محتويات الملفات من قاعدة الشفرة الخاصة بك.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -121,7 +121,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 ابحث في محتوى الملفات باستخدام التعابير النمطية (Regex).
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -138,7 +138,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 اعثر على الملفات عبر مطابقة الأنماط.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -156,10 +156,10 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 تفاعل مع خوادم LSP التي قمت بتهيئتها للحصول على ميزات ذكاء الشفرة مثل التعاريف والمراجع ومعلومات التحويم وتسلسل الاستدعاءات.
 
 :::note
-هذه الأداة متاحة فقط عند ضبط `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (أو `OPENCODE_EXPERIMENTAL=true`).
+هذه الأداة متاحة فقط عند ضبط `LEAKCODE_EXPERIMENTAL_LSP_TOOL=true` (أو `LEAKCODE_EXPERIMENTAL=true`).
 :::
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -178,7 +178,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 طبّق الرقع (Patches) على الملفات.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -199,7 +199,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 حمّل [مهارة](/docs/skills) (ملف `SKILL.md`) وأعد محتواها ضمن المحادثة.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -214,7 +214,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 أدِر قوائم المهام أثناء جلسات البرمجة.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -235,7 +235,7 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 
 اجلب محتوى الويب.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -253,17 +253,17 @@ description: إدارة الأدوات التي يمكن لـ LLM استخدام
 ابحث في الويب عن معلومات.
 
 :::note
-هذه الأداة متاحة فقط عند استخدام مزود OpenCode أو عند ضبط متغير البيئة `OPENCODE_ENABLE_EXA` على أي قيمة منطقية صحيحة (مثل `true` أو `1`).
+هذه الأداة متاحة فقط عند استخدام مزود OpenCode أو عند ضبط متغير البيئة `LEAKCODE_ENABLE_EXA` على أي قيمة منطقية صحيحة (مثل `true` أو `1`).
 
 للتفعيل عند تشغيل OpenCode:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+LEAKCODE_ENABLE_EXA=1 opencode
 ```
 
 :::
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -286,7 +286,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 اطرح على المستخدم أسئلة أثناء التنفيذ.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {

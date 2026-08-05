@@ -13,8 +13,8 @@ As habilidades são carregadas sob demanda através da ferramenta nativa `skill`
 Crie uma pasta por nome de habilidade e coloque um `SKILL.md` dentro dela.
 O opencode pesquisa nesses locais:
 
-- Configuração do projeto: `.opencode/skills/<name>/SKILL.md`
-- Configuração global: `~/.config/opencode/skills/<name>/SKILL.md`
+- Configuração do projeto: `.leak-code/skills/<name>/SKILL.md`
+- Configuração global: `~/.config/leak-code/skills/<name>/SKILL.md`
 - Projeto compatível com Claude: `.claude/skills/<name>/SKILL.md`
 - Global compatível com Claude: `~/.claude/skills/<name>/SKILL.md`
 - Projeto compatível com agente: `.agents/skills/<name>/SKILL.md`
@@ -25,9 +25,9 @@ O opencode pesquisa nesses locais:
 ## Entender a descoberta
 
 Para caminhos locais do projeto, o opencode sobe a partir do seu diretório de trabalho atual até alcançar a árvore de trabalho do git.
-Ele carrega qualquer `skills/*/SKILL.md` correspondente em `.opencode/` e qualquer `.claude/skills/*/SKILL.md` ou `.agents/skills/*/SKILL.md` ao longo do caminho.
+Ele carrega qualquer `skills/*/SKILL.md` correspondente em `.leak-code/` e qualquer `.claude/skills/*/SKILL.md` ou `.agents/skills/*/SKILL.md` ao longo do caminho.
 
-As definições globais também são carregadas de `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` e `~/.agents/skills/*/SKILL.md`.
+As definições globais também são carregadas de `~/.config/leak-code/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` e `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -73,7 +73,7 @@ Mantenha-a específica o suficiente para que o agente escolha corretamente.
 
 ## Usar um exemplo
 
-Crie `.opencode/skills/git-release/SKILL.md` assim:
+Crie `.leak-code/skills/git-release/SKILL.md` assim:
 
 ```markdown
 ---
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Configurar permissões
 
-Controle quais habilidades os agentes podem acessar usando permissões baseadas em padrões em `opencode.json`:
+Controle quais habilidades os agentes podem acessar usando permissões baseadas em padrões em `leak-code.json`:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**Para agentes embutidos** (em `opencode.json`):
+**Para agentes embutidos** (em `leak-code.json`):
 
 ```json
 {

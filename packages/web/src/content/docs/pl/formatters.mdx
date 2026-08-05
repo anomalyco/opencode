@@ -59,7 +59,7 @@ Ten proces odbywa się w tle, zapewniając spójność stylu kodu bez konieczno�
 
 Możesz dostosować formatery za pomocą sekcji `formatter` w konfiguracji OpenCode.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {}
@@ -83,7 +83,7 @@ Spójrzmy na kilka przykładów.
 
 Aby globalnie wyłączyć **wszystkie** formatery, ustaw `formatter` na `false`:
 
-```json title="opencode.json" {3}
+```json title="leak-code.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": false
@@ -92,7 +92,7 @@ Aby globalnie wyłączyć **wszystkie** formatery, ustaw `formatter` na `false`:
 
 Aby wyłączyć **określony** formater, ustaw `disabled` na `true`:
 
-```json title="opencode.json" {5}
+```json title="leak-code.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
@@ -109,7 +109,7 @@ Aby wyłączyć **określony** formater, ustaw `disabled` na `true`:
 
 Możesz dodać niestandardowe formatery, podając polecenie, zmienne środowiskowe i rozszerzenia plików:
 
-```json title="opencode.json" {4-14}
+```json title="leak-code.json" {4-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {

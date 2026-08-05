@@ -14,16 +14,16 @@ OpenCode はブラウザで Web アプリケーションとして実行でき、
 以下を実行して Web インターフェースを開始します。
 
 ```bash
-opencode web
+leak-code web
 ```
 
 これにより、利用可能なランダムなポートを使用して `127.0.0.1` でローカルサーバーが起動され、デフォルトのブラウザで OpenCode が自動的に開きます。
 
 :::caution
-`OPENCODE_SERVER_PASSWORD` が設定されていない場合、サーバーは保護されません。これはローカルで使用する場合には問題ありませんが、ネットワークアクセス用に設定する必要があります。
+`LEAKCODE_SERVER_PASSWORD` が設定されていない場合、サーバーは保護されません。これはローカルで使用する場合には問題ありませんが、ネットワークアクセス用に設定する必要があります。
 :::
 :::tip[Windows ユーザー]
-最高のエクスペリエンスを得るには、PowerShell ではなく [WSL](/docs/windows-wsl) から `opencode web` を実行します。これにより、ファイルシステムへの適切なアクセスとターミナルの統合が保証されます。
+最高のエクスペリエンスを得るには、PowerShell ではなく [WSL](/docs/windows-wsl) から `leak-code web` を実行します。これにより、ファイルシステムへの適切なアクセスとターミナルの統合が保証されます。
 :::
 
 ---
@@ -37,7 +37,7 @@ opencode web
 デフォルトでは、OpenCode は使用可能なポートを選択します。ポートを指定できます。
 
 ```bash
-opencode web --port 4096
+leak-code web --port 4096
 ```
 
 ### ホスト名
@@ -45,7 +45,7 @@ opencode web --port 4096
 デフォルトでは、サーバーは `127.0.0.1` (localhost のみ) にバインドされます。ネットワーク上で OpenCode にアクセスできるようにするには:
 
 ```bash
-opencode web --hostname 0.0.0.0
+leak-code web --hostname 0.0.0.0
 ```
 
 `0.0.0.0` を使用すると、OpenCode はローカルアドレスとネットワークアドレスの両方を表示します。
@@ -60,7 +60,7 @@ opencode web --hostname 0.0.0.0
 mDNS を有効にして、ローカルネットワーク上でサーバーを検出できるようにします。
 
 ```bash
-opencode web --mdns
+leak-code web --mdns
 ```
 
 これにより、ホスト名が自動的に `0.0.0.0` に設定され、サーバーが `opencode.local` としてアドバタイズされます。
@@ -68,7 +68,7 @@ opencode web --mdns
 mDNS ドメイン名をカスタマイズして、同じネットワーク上で複数のインスタンスを実行できます。
 
 ```bash
-opencode web --mdns --mdns-domain myproject.local
+leak-code web --mdns --mdns-domain myproject.local
 ```
 
 ### CORS
@@ -76,18 +76,18 @@ opencode web --mdns --mdns-domain myproject.local
 CORS の追加ドメインを許可するには (カスタムフロントエンドに便利):
 
 ```bash
-opencode web --cors https://example.com
+leak-code web --cors https://example.com
 ```
 
 ### 認証
 
-アクセスを保護するには、`OPENCODE_SERVER_PASSWORD` 環境変数を使用してパスワードを設定します。
+アクセスを保護するには、`LEAKCODE_SERVER_PASSWORD` 環境変数を使用してパスワードを設定します。
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+LEAKCODE_SERVER_PASSWORD=secret leak-code web
 ```
 
-ユーザー名のデフォルトは `opencode` ですが、`OPENCODE_SERVER_USERNAME` で変更できます。
+ユーザー名のデフォルトは `opencode` ですが、`LEAKCODE_SERVER_USERNAME` で変更できます。
 
 ---
 
@@ -115,10 +115,10 @@ OPENCODE_SERVER_PASSWORD=secret opencode web
 
 ```bash
 # Start the web server
-opencode web --port 4096
+leak-code web --port 4096
 
 # In another terminal, attach the TUI
-opencode attach http://localhost:4096
+leak-code attach http://localhost:4096
 ```
 
 これにより、Web インターフェイスとターミナルの両方を同時に使用し、同じセッションと状態を共有できるようになります。
@@ -127,7 +127,7 @@ opencode attach http://localhost:4096
 
 ## 設定ファイル
 
-`opencode.json` 設定ファイルでサーバー設定を構成することもできます。
+`leak-code.json` 設定ファイルでサーバー設定を構成することもできます。
 
 ```json
 {

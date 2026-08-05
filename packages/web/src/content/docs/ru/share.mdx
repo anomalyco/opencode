@@ -39,7 +39,7 @@ opencode поддерживает три режима общего доступ�
 
 Чтобы явно установить ручной режим в вашем [файле конфигурации](/docs/config):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ opencode поддерживает три режима общего доступ�
 
 Вы можете включить автоматический общий доступ для всех новых разговоров, установив для параметра `share` значение `"auto"` в вашем [файле конфигурации](/docs/config):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ opencode поддерживает три режима общего доступ�
 
 Вы можете полностью отключить общий доступ, установив для параметра `share` значение `"disabled"` в вашем [файле конфигурации](/docs/config):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled"
 }
 ```
 
-Чтобы обеспечить соблюдение этого правила для всей вашей команды в конкретном проекте, добавьте его в `opencode.json` вашего проекта и зарегистрируйтесь в Git.
+Чтобы обеспечить соблюдение этого правила для всей вашей команды в конкретном проекте, добавьте его в `leak-code.json` вашего проекта и зарегистрируйтесь в Git.
 
 ---
 

@@ -18,7 +18,7 @@ Para agregar un proveedor necesita:
 ### Credenciales
 
 Cuando agrega las claves API de un proveedor con el comando `/connect`, se almacenan
-en `~/.local/share/opencode/auth.json`.
+en `~/.local/share/leak-code/auth.json`.
 
 ---
 
@@ -33,7 +33,7 @@ configuración.
 
 Puede personalizar la URL base para cualquier proveedor configurando la opción `baseURL`. Esto resulta útil cuando se utilizan servicios proxy o puntos finales personalizados.
 
-```json title="opencode.json" {6}
+```json title="leak-code.json" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -191,9 +191,9 @@ Para usar Amazon Bedrock con OpenCode:
 
    #### Archivo de configuración (recomendado)
 
-   Para una configuración persistente o específica del proyecto, utilice `opencode.json`:
+   Para una configuración persistente o específica del proyecto, utilice `leak-code.json`:
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -220,7 +220,7 @@ Para usar Amazon Bedrock con OpenCode:
 
    Si utiliza puntos de enlace de VPC para Bedrock:
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -264,7 +264,7 @@ Para usar Amazon Bedrock con OpenCode:
 :::note
 Para perfiles de inferencia personalizados, utilice el modelo y el nombre del proveedor en la clave y establezca la propiedad `id` en arn. Esto garantiza un almacenamiento en caché correcto:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -326,7 +326,7 @@ O si ya tienes una clave API, puedes seleccionar **Ingresar manualmente la clave
 
 Puedes configurar opencode para usar modelos locales mediante [Atomic Chat](https://atomic.chat), una aplicación de escritorio que ejecuta LLMs locales detrás de un servidor API compatible con OpenAI (endpoint por defecto `http://127.0.0.1:1337/v1`).
 
-```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+```json title="leak-code.json" "atomic-chat" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -554,7 +554,7 @@ Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers
 
    También puede agregar modelos a través de su configuración opencode.
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -759,7 +759,7 @@ para almacenar el token en el almacenamiento de autenticación opencode.
 OpenCode utiliza un modelo pequeño para algunas tareas de IA, como generar el título de la sesión.
 Está configurado para usar gpt-5-nano de forma predeterminada, alojado por Zen. Para bloquear OpenCode
 Para usar solo su propia instancia alojada en GitLab, agregue lo siguiente a su
-Archivo `opencode.json`. También se recomienda desactivar el uso compartido de sesiones.
+Archivo `leak-code.json`. También se recomienda desactivar el uso compartido de sesiones.
 
 ```json
 {
@@ -821,9 +821,9 @@ Más documentación en la página de inicio de [opencode-gitlab-auth](https://ww
 
 ##### Configuración
 
-Personalizar a través de `opencode.json`:
+Personalizar a través de `leak-code.json`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -840,7 +840,7 @@ Personalizar a través de `opencode.json`:
 
 Para acceder a herramientas GitLab (solicitudes de fusión, problemas, canalizaciones, CI/CD, etc.):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-gitlab-plugin"]
@@ -1022,7 +1022,7 @@ En caso de que vea una característica o modelo de Helicone que no esté configu
 
 Aquí está el [Directorio de modelos de Helicone](https://helicone.ai/models), lo necesitará para obtener las ID de los modelos que desea agregar.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1050,7 +1050,7 @@ Aquí está el [Directorio de modelos de Helicone](https://helicone.ai/models), 
 
 Helicone admite encabezados personalizados para funciones como almacenamiento en caché, seguimiento de usuarios y gestión de sesiones. Agréguelos a la configuración de su proveedor usando `options.headers`:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1079,7 +1079,7 @@ npm install -g opencode-helicone-session
 
 Agréguelo a su configuración.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "plugin": ["opencode-helicone-session"]
 }
@@ -1104,7 +1104,7 @@ Consulte el [Directorio de encabezados de Helicone](https://docs.helicone.ai/hel
 
 Puede configurar opencode para usar modelos locales a través de la utilidad llama-server de [llama.cpp](https://github.com/ggml-org/llama.cpp)
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="leak-code.json" "llama.cpp" {5, 6, 8, 10-15}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1171,7 +1171,7 @@ IO.NET ofrece 17 modelos optimizados para varios casos de uso:
 
 Puede configurar opencode para usar modelos locales a través de LM Studio.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="leak-code.json" "lmstudio" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1292,7 +1292,7 @@ Puedes configurar opencode para usar modelos locales a través de Ollama.
 Ollama puede configurarse automáticamente para OpenCode. Consulte los [documentos de integración de Ollama](https://docs.ollama.com/integrations/opencode) para obtener más detalles.
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="leak-code.json" "ollama" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1455,7 +1455,7 @@ OpenCode Zen es una lista de modelos probados y verificados proporcionada por el
 
    También puede agregar modelos adicionales a través de su configuración opencode.
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1470,7 +1470,7 @@ OpenCode Zen es una lista de modelos probados y verificados proporcionada por el
 
 5. También puedes personalizarlos a través de tu configuración opencode. A continuación se muestra un ejemplo de cómo especificar un proveedor.
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1719,7 +1719,7 @@ Vercel AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Google, xAI
 
 También puede personalizar modelos a través de su configuración opencode. A continuación se muestra un ejemplo de cómo especificar el orden de enrutamiento del proveedor.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1829,7 +1829,7 @@ Algunas opciones de enrutamiento útiles:
 
    También puede agregar modelos adicionales a través de su configuración opencode.
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1888,16 +1888,16 @@ Puede utilizar cualquier proveedor compatible con OpenAI con opencode. La mayor�
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in leak-code.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. Cree o actualice su archivo `opencode.json` en el directorio de su proyecto:
+4. Cree o actualice su archivo `leak-code.json` en el directorio de su proyecto:
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="leak-code.json" ""myprovider"" {5-15}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1935,7 +1935,7 @@ Puede utilizar cualquier proveedor compatible con OpenAI con opencode. La mayor�
 
 A continuación se muestra un ejemplo de configuración de las opciones `apiKey`, `headers` y modelo `limit`.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="leak-code.json" {9,11,17-20}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1978,7 +1978,7 @@ Los campos `limit` le permiten a OpenCode comprender cuánto contexto le queda. 
 
 Si tiene problemas para configurar un proveedor, verifique lo siguiente:
 
-1. **Verifique la configuración de autenticación**: Ejecute `opencode auth list` para ver si las credenciales
+1. **Verifique la configuración de autenticación**: Ejecute `leak-code auth list` para ver si las credenciales
    para el proveedor se agregan a su configuración.
 
    Esto no se aplica a proveedores como Amazon Bedrock, que dependen de variables de entorno para su autenticación.

@@ -15,7 +15,7 @@ ACP er en åben protokol, der standardiserer kommunikation mellem kodeeditorer o
 
 ## Konfiguration
 
-For at bruge OpenCode via ACP, konfigurer din editor til at køre kommandoen `opencode acp`.
+For at bruge OpenCode via ACP, konfigurer din editor til at køre kommandoen `leak-code acp`.
 
 Kommandoen starter OpenCode som en ACP-kompatibel underproces, der kommunikerer med din editor over JSON-RPC via stdio.
 
@@ -110,7 +110,7 @@ Hvis du har brug for at videregive miljøvariabler:
       command = "opencode",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        LEAKCODE_API_KEY = os.getenv("LEAKCODE_API_KEY")
       }
     }
   }
@@ -138,7 +138,7 @@ require("codecompanion").setup({
 
 Denne konfiguration sætter CodeCompanion til at bruge OpenCode som ACP-agent til chat.
 
-Hvis du har brug for at sende miljøvariabler (som `OPENCODE_API_KEY`), henvises til [Konfiguration af adaptere: Miljøvariabler](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) i CodeCompanion.nvim-dokumentationen for alle detaljer.
+Hvis du har brug for at sende miljøvariabler (som `LEAKCODE_API_KEY`), henvises til [Konfiguration af adaptere: Miljøvariabler](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) i CodeCompanion.nvim-dokumentationen for alle detaljer.
 
 ## Understøttelse
 

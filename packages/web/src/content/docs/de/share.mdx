@@ -41,7 +41,7 @@ Dabei wird eine eindeutige URL erzeugt und in die Zwischenablage kopiert.
 
 Um den manuellen Modus explizit in der [Konfiguration](/docs/config) zu setzen:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -54,7 +54,7 @@ Um den manuellen Modus explizit in der [Konfiguration](/docs/config) zu setzen:
 
 Du kannst automatisches Teilen fuer neue Unterhaltungen aktivieren, indem du in der [Konfiguration](/docs/config) `share` auf `"auto"` setzt:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "auto"
@@ -69,14 +69,14 @@ Mit aktiviertem Auto-Share wird jede neue Unterhaltung automatisch geteilt und e
 
 Du kannst Teilen komplett deaktivieren, indem du in der [Konfiguration](/docs/config) `share` auf `"disabled"` setzt:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled"
 }
 ```
 
-Wenn das fuer ein Projekt teamweit gelten soll, lege es in der Projekt-`opencode.json` fest und committe die Datei.
+Wenn das fuer ein Projekt teamweit gelten soll, lege es in der Projekt-`leak-code.json` fest und committe die Datei.
 
 ---
 

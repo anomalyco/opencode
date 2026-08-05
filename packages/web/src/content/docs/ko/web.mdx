@@ -12,17 +12,17 @@ opencode는 브라우저에서 웹 응용 프로그램을 실행할 수 있으�
 실행하여 웹 인터페이스를 시작:
 
 ```bash
-opencode web
+leak-code web
 ```
 
 `127.0.0.1`의 로컬 서버를 랜덤 사용 가능한 포트로 시작하고 기본 브라우저에서 opencode를 자동으로 엽니다.
 
 :::caution
-`OPENCODE_SERVER_PASSWORD`가 설정되지 않은 경우 서버가 중단되지 않습니다. 이것은 로컬 사용을위한 괜찮지만 네트워크 액세스를 설정해야합니다.
+`LEAKCODE_SERVER_PASSWORD`가 설정되지 않은 경우 서버가 중단되지 않습니다. 이것은 로컬 사용을위한 괜찮지만 네트워크 액세스를 설정해야합니다.
 :::
 
 :::tip[Windows 사용자]
-최고의 경험을 위해서는 PowerShell보다 `opencode web`를 실행하십시오. 적절한 파일 시스템 액세스 및 terminal 통합을 보장합니다.
+최고의 경험을 위해서는 PowerShell보다 `leak-code web`를 실행하십시오. 적절한 파일 시스템 액세스 및 terminal 통합을 보장합니다.
 :::
 
 ---
@@ -36,7 +36,7 @@ opencode web
 기본적으로 opencode는 사용할 수 있는 포트를 선택합니다. 포트를 지정할 수 있습니다:
 
 ```bash
-opencode web --port 4096
+leak-code web --port 4096
 ```
 
 ## 호스트 이름
@@ -44,7 +44,7 @@ opencode web --port 4096
 기본적으로 서버는 `127.0.0.1` (localhost only)에 바인딩합니다. 네트워크에서 opencode를 사용할 수 있도록:
 
 ```bash
-opencode web --hostname 0.0.0.0
+leak-code web --hostname 0.0.0.0
 ```
 
 `0.0.0.0`를 사용할 때, opencode는 로컬 및 네트워크 주소를 모두 표시합니다.
@@ -59,7 +59,7 @@ opencode web --hostname 0.0.0.0
 로컬 네트워크에서 서버를 발견할 수 있는 mDNS:
 
 ```bash
-opencode web --mdns
+leak-code web --mdns
 ```
 
 이 자동으로 `0.0.0.0`에 hostname을 설정하고 `opencode.local`로 서버를 광고합니다.
@@ -67,7 +67,7 @@ opencode web --mdns
 동일한 네트워크에서 여러 인스턴스를 실행하려면 mDNS 도메인 이름을 지정할 수 있습니다.
 
 ```bash
-opencode web --mdns --mdns-domain myproject.local
+leak-code web --mdns --mdns-domain myproject.local
 ```
 
 ###### CORS
@@ -75,18 +75,18 @@ opencode web --mdns --mdns-domain myproject.local
 CORS에 대한 추가 도메인을 허용하려면 (사용자 정의 frontends에 적합) :
 
 ```bash
-opencode web --cors https://example.com
+leak-code web --cors https://example.com
 ```
 
 ### 인증
 
-액세스를 보호하려면 `OPENCODE_SERVER_PASSWORD` 환경 변수를 사용하여 암호를 설정하십시오.
+액세스를 보호하려면 `LEAKCODE_SERVER_PASSWORD` 환경 변수를 사용하여 암호를 설정하십시오.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+LEAKCODE_SERVER_PASSWORD=secret leak-code web
 ```
 
-`opencode`에 대한 사용자의 기본값은 `OPENCODE_SERVER_USERNAME`로 변경할 수 있습니다.
+`opencode`에 대한 사용자의 기본값은 `LEAKCODE_SERVER_USERNAME`로 변경할 수 있습니다.
 
 ---
 
@@ -114,10 +114,10 @@ OPENCODE_SERVER_PASSWORD=secret opencode web
 
 ```bash
 # Start the web server
-opencode web --port 4096
+leak-code web --port 4096
 
 # In another terminal, attach the TUI
-opencode attach http://localhost:4096
+leak-code attach http://localhost:4096
 ```
 
 웹 인터페이스와 terminal을 동시에 사용할 수 있도록, 같은 세션과 상태를 공유합니다.
@@ -126,7 +126,7 @@ opencode attach http://localhost:4096
 
 ## 구성 파일
 
-`opencode.json` config 파일에서 서버 설정을 구성할 수 있습니다:
+`leak-code.json` config 파일에서 서버 설정을 구성할 수 있습니다:
 
 ```json
 {

@@ -1,19 +1,19 @@
 ---
 title: Server
-description: Komunicirajte s opencode serverom preko HTTP-a.
+description: Komunicirajte s leak-code serverom preko HTTP-a.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Komanda `opencode serve` pokrece headless HTTP server koji izlaže OpenAPI endpoint koji opencode klijent moze koristiti.
+Komanda `leak-code serve` pokrece headless HTTP server koji izlaže OpenAPI endpoint koji opencode klijent moze koristiti.
 
 ---
 
 ### Korištenje
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+leak-code serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Opcije
@@ -29,17 +29,17 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 `--cors` mozete navesti vise puta:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+leak-code serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Autentifikacija
 
-Postavite `OPENCODE_SERVER_PASSWORD` da zastitite server HTTP basic auth mehanizmom. Korisnicko ime je po defaultu `opencode`, ili postavite `OPENCODE_SERVER_USERNAME` za nadjacavanje. Ovo vazi i za `opencode serve` i za `opencode web`.
+Postavite `LEAKCODE_SERVER_PASSWORD` da zastitite server HTTP basic auth mehanizmom. Korisnicko ime je po defaultu `opencode`, ili postavite `LEAKCODE_SERVER_USERNAME` za nadjacavanje. Ovo vazi i za `leak-code serve` i za `leak-code web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve
 ```
 
 ---
@@ -49,12 +49,12 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 Kada pokrenete `opencode`, pokrecu se TUI i server. TUI je klijent koji komunicira sa serverom. Server izlaže OpenAPI 3.1 spec endpoint koji se koristi i za generisanje [SDK-a](/docs/sdk).
 
 :::tip
-Koristite opencode server za programsku interakciju sa opencode-om.
+Koristite leak-code server za programsku interakciju sa opencode-om.
 :::
 
 Ova arhitektura omogucava opencode podrsku za vise klijenata i programsku interakciju.
 
-Mozete pokrenuti `opencode serve` da startate standalone server. Ako je opencode TUI vec pokrenut, `opencode serve` ce pokrenuti novi server.
+Mozete pokrenuti `leak-code serve` da startate standalone server. Ako je opencode TUI vec pokrenut, `leak-code serve` ce pokrenuti novi server.
 
 ---
 
@@ -80,7 +80,7 @@ Na primjer, `http://localhost:4096/doc`. Koristite specifikaciju da generisete k
 
 ## API-ji
 
-opencode server izlaže sljedece API-je.
+leak-code server izlaže sljedece API-je.
 
 ---
 

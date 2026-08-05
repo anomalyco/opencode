@@ -6,14 +6,14 @@ description: Interactuar con el servidor opencode a través de HTTP.
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-El comando `opencode serve` ejecuta un servidor HTTP sin cabeza que expone un punto final OpenAPI que un cliente opencode puede usar.
+El comando `leak-code serve` ejecuta un servidor HTTP sin cabeza que expone un punto final OpenAPI que un cliente opencode puede usar.
 
 ---
 
 ### Uso
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+leak-code serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Opciones
@@ -29,17 +29,17 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 `--cors` se puede pasar varias veces:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+leak-code serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Autenticación
 
-Configure `OPENCODE_SERVER_PASSWORD` para proteger el servidor con autenticación básica HTTP. El nombre de usuario predeterminado es `opencode`, o configure `OPENCODE_SERVER_USERNAME` para anularlo. Esto se aplica tanto a `opencode serve` como a `opencode web`.
+Configure `LEAKCODE_SERVER_PASSWORD` para proteger el servidor con autenticación básica HTTP. El nombre de usuario predeterminado es `opencode`, o configure `LEAKCODE_SERVER_USERNAME` para anularlo. Esto se aplica tanto a `leak-code serve` como a `leak-code web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve
 ```
 
 ---
@@ -56,8 +56,8 @@ Utilice el servidor opencode para interactuar con opencode mediante programació
 
 Esta arquitectura permite que opencode admita múltiples clientes y le permite interactuar con opencode mediante programación.
 
-Puede ejecutar `opencode serve` para iniciar un servidor independiente. Si tienes el
-opencode TUI ejecutándose, `opencode serve` iniciará un nuevo servidor.
+Puede ejecutar `leak-code serve` para iniciar un servidor independiente. Si tienes el
+opencode TUI ejecutándose, `leak-code serve` iniciará un nuevo servidor.
 
 ---
 

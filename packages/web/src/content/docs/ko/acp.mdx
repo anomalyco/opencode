@@ -15,7 +15,7 @@ ACP는 코드 편집기와 AI 코딩 에이전트 간의 통신을 표준화하�
 
 ## 구성
 
-ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실행하도록 config를 설정하세요.
+ACP로 OpenCode를 사용하려면, 편집기에서 `leak-code acp` 명령을 실행하도록 config를 설정하세요.
 
 이 명령은 OpenCode를 ACP 호환 subprocess로 시작하며, stdio 기반 JSON-RPC를 통해 편집기와 통신합니다.
 
@@ -110,7 +110,7 @@ ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실
       command = "opencode",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        LEAKCODE_API_KEY = os.getenv("LEAKCODE_API_KEY")
       }
     }
   }
@@ -138,7 +138,7 @@ require("codecompanion").setup({
 
 이 config는 chat에서 OpenCode를 ACP agent로 사용하도록 CodeCompanion을 설정합니다.
 
-환경 변수(`OPENCODE_API_KEY` 등)를 전달해야 한다면 CodeCompanion.nvim documentation의 [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참고하세요.
+환경 변수(`LEAKCODE_API_KEY` 등)를 전달해야 한다면 CodeCompanion.nvim documentation의 [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참고하세요.
 
 ## 지원
 

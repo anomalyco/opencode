@@ -13,8 +13,8 @@ Beceriler, yerel `skill` araci uzerinden ihtiyac aninda yuklenir; ajanlar mevcut
 Her beceri adi icin bir klasor olusturun ve icine bir `SKILL.md` koyun.
 opencode su konumlari tarar:
 
-- Proje konfigurasyonu: `.opencode/skills/<name>/SKILL.md`
-- Genel konfigurasyon: `~/.config/opencode/skills/<name>/SKILL.md`
+- Proje konfigurasyonu: `.leak-code/skills/<name>/SKILL.md`
+- Genel konfigurasyon: `~/.config/leak-code/skills/<name>/SKILL.md`
 - Proje Claude uyumlu: `.claude/skills/<name>/SKILL.md`
 - Genel Claude uyumlu: `~/.claude/skills/<name>/SKILL.md`
 - Proje agent uyumlu: `.agents/skills/<name>/SKILL.md`
@@ -25,9 +25,9 @@ opencode su konumlari tarar:
 ## Kesfi anlayin
 
 Proje yerel yollarinda opencode, mevcut calisma dizininizden baslayip git worktree kokune kadar yukari cikar.
-Bu sirada `skills/*/SKILL.md` altindaki eslesen `.opencode/` dosyalarini ve `.claude/skills/*/SKILL.md` ya da `.agents/skills/*/SKILL.md` dosyalarini yukler.
+Bu sirada `skills/*/SKILL.md` altindaki eslesen `.leak-code/` dosyalarini ve `.claude/skills/*/SKILL.md` ya da `.agents/skills/*/SKILL.md` dosyalarini yukler.
 
-Genel tanimlar da `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` ve `~/.agents/skills/*/SKILL.md` yollarindan yuklenir.
+Genel tanimlar da `~/.config/leak-code/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` ve `~/.agents/skills/*/SKILL.md` yollarindan yuklenir.
 
 ---
 
@@ -73,7 +73,7 @@ Ajanin dogru secim yapmasi icin yeterince acik yazin.
 
 ## Ornek kullanin
 
-`.opencode/skills/git-release/SKILL.md` dosyasini soyle olusturun:
+`.leak-code/skills/git-release/SKILL.md` dosyasini soyle olusturun:
 
 ```markdown
 ---
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Izinleri yapilandirin
 
-`opencode.json` icinde pattern tabanli izinlerle ajanlarin hangi becerilere erisecegini kontrol edin:
+`leak-code.json` icinde pattern tabanli izinlerle ajanlarin hangi becerilere erisecegini kontrol edin:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**Yerlesik ajanlar icin** (`opencode.json` icinde):
+**Yerlesik ajanlar icin** (`leak-code.json` icinde):
 
 ```json
 {

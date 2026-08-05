@@ -15,7 +15,7 @@ ACP je otvoreni protokol koji standardizira komunikaciju između uređivača kod
 
 ## Konfiguracija
 
-Da biste koristili OpenCode putem ACP-a, konfigurirajte svoj uređivač da pokrene naredbu `opencode acp`.
+Da biste koristili OpenCode putem ACP-a, konfigurirajte svoj uređivač da pokrene naredbu `leak-code acp`.
 
 Naredba pokreće OpenCode kao ACP-kompatibilan podproces koji komunicira sa vašim uređivačem preko JSON-RPC-a kroz stdio.
 
@@ -110,7 +110,7 @@ Ako trebate proslijediti varijable okruženja:
       command = "opencode",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        LEAKCODE_API_KEY = os.getenv("LEAKCODE_API_KEY")
       }
     }
   }
@@ -138,7 +138,7 @@ require("codecompanion").setup({
 
 Ova konfiguracija postavlja CodeCompanion da koristi OpenCode kao ACP chat agenta.
 
-Ako trebate proslijediti varijable okruženja (kao što je `OPENCODE_API_KEY`), pogledajte [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) u dokumentaciji CodeCompanion.nvim.
+Ako trebate proslijediti varijable okruženja (kao što je `LEAKCODE_API_KEY`), pogledajte [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) u dokumentaciji CodeCompanion.nvim.
 
 ## Podržane funkcije
 

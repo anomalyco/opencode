@@ -19,8 +19,8 @@ Det er to måter å laste inn plugins.
 
 Plasser JavaScript- eller TypeScript-filer i plugin-katalogen.
 
-- `.opencode/plugins/` - Programtillegg på prosjektnivå
-- `~/.config/opencode/plugins/` - Globale plugins
+- `.leak-code/plugins/` - Programtillegg på prosjektnivå
+- `~/.config/leak-code/plugins/` - Globale plugins
 
 Filer i disse katalogene lastes automatisk ved oppstart.
 
@@ -30,7 +30,7 @@ Filer i disse katalogene lastes automatisk ved oppstart.
 
 Spesifiser npm-pakker i konfigurasjonsfilen.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -55,10 +55,10 @@ Bla gjennom tilgjengelige plugins i [økosystemet](/docs/ecosystem#plugins).
 
 Plugins lastes inn fra alle kilder og alle kroker kjøres i rekkefølge. Lastrekkefølgen er:
 
-1. Global konfigurasjon (`~/.config/opencode/opencode.json`)
-2. Prosjektkonfigurasjon (`opencode.json`)
-3. Global plugin-katalog (`~/.config/opencode/plugins/`)
-4. Prosjektpluginkatalog (`.opencode/plugins/`)
+1. Global konfigurasjon (`~/.config/leak-code/leak-code.json`)
+2. Prosjektkonfigurasjon (`leak-code.json`)
+3. Global plugin-katalog (`~/.config/leak-code/plugins/`)
+4. Prosjektpluginkatalog (`.leak-code/plugins/`)
 
 Dupliserte npm-pakker med samme navn og versjon lastes inn én gang. Imidlertid lastes en lokal plugin og en npm plugin med lignende navn begge separat.
 
@@ -75,7 +75,7 @@ funksjoner. Hver funksjon mottar et kontekstobjekt og returnerer et krokobjekt.
 
 Lokale plugins og tilpassede verktøy kan bruke eksterne npm-pakker. Legg til en `package.json` til konfigurasjonskatalogen med avhengighetene du trenger.
 
-```json title=".opencode/package.json"
+```json title=".leak-code/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -85,7 +85,7 @@ Lokale plugins og tilpassede verktøy kan bruke eksterne npm-pakker. Legg til en
 
 OpenCode kjører `bun install` ved oppstart for å installere disse. Programtilleggene og verktøyene dine kan deretter importere dem.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### Grunnleggende struktur
 
-```js title=".opencode/plugins/example.js"
+```js title=".leak-code/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -219,7 +219,7 @@ Her er noen eksempler på plugins du kan bruke for å utvide OpenCode.
 
 Send varsler når visse hendelser inntreffer:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".leak-code/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
@@ -244,7 +244,7 @@ Hvis du bruker OpenCode-skrivebordsappen, kan den sende systemvarsler automatisk
 
 Hindre OpenCode fra å lese `.env` filer:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".leak-code/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Injiser miljøvariabler i all shell-utførelse (AI-verktøy og brukerterminaler):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".leak-code/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -279,7 +279,7 @@ export const InjectEnvPlugin = async () => {
 
 Plugins kan også legge til egendefinerte verktøy til OpenCode:
 
-```ts title=".opencode/plugins/custom-tools.ts"
+```ts title=".leak-code/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
@@ -318,7 +318,7 @@ Hvis et plugin-verktøy bruker samme navn som et innebygd verktøy, vil plugin-v
 
 Bruk `client.app.log()` i stedet for `console.log` for strukturert logging:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -339,7 +339,7 @@ Nivåer: `debug`, `info`, `warn`, `error`. Se [SDK dokumentasjon](https://openco
 
 Tilpass konteksten inkludert når en økt komprimeres:
 
-```ts title=".opencode/plugins/compaction.ts"
+```ts title=".leak-code/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
@@ -363,7 +363,7 @@ Include any state that should persist across compaction:
 
 Du kan også erstatte komprimeringsprompten helt ved å stille inn `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
+```ts title=".leak-code/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {

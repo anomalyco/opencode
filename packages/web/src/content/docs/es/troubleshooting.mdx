@@ -11,7 +11,7 @@ Para depurar problemas con OpenCode, comience verificando los registros y los da
 
 Los archivos de registro se escriben en:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leak-code/log/`
 - **Windows**: Presione `WIN+R` y pegue `%USERPROFILE%\.local\share\opencode\log`
 
 Los archivos de registro reciben nombres con marcas de tiempo (por ejemplo, `2025-01-09T123456.log`) y se conservan los 10 archivos de registro más recientes.
@@ -24,7 +24,7 @@ Puede configurar el nivel de registro con la opción de línea de comandos `--lo
 
 opencode almacena datos de sesión y otros datos de aplicaciones en el disco en:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leak-code/`
 - **Windows**: Presione `WIN+R` y pegue `%USERPROFILE%\.local\share\opencode`
 
 Este directorio contiene:
@@ -57,9 +57,9 @@ Si la aplicación de escritorio falla al iniciarse, se bloquea o se comporta de 
 
 Abra su archivo de configuración global y busque una clave `plugin`.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (o `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (instalaciones anteriores): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: Presione `WIN+R` y pegue `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/leak-code/leak-code.jsonc` (o `~/.config/leak-code/leak-code.json`)
+- **macOS/Linux** (instalaciones anteriores): `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows**: Presione `WIN+R` y pegue `%USERPROFILE%\.config\opencode\leak-code.jsonc`
 
 Si tiene complementos configurados, desactívelos temporalmente eliminando la clave o configurándola en una matriz vacía:
 
@@ -75,10 +75,10 @@ Si tiene complementos configurados, desactívelos temporalmente eliminando la cl
 OpenCode también puede cargar complementos locales desde el disco. Quítelos temporalmente del camino (o cambie el nombre de la carpeta) y reinicie la aplicación de escritorio:
 
 - **Complementos globales**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leak-code/plugins/`
   - **Windows**: Presione `WIN+R` y pegue `%USERPROFILE%\.config\opencode\plugins`
 - **Complementos de proyecto** (solo si usas la configuración por proyecto)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 Si la aplicación comienza a funcionar nuevamente, vuelva a habilitar los complementos uno a la vez para encontrar cuál está causando el problema.
 
@@ -111,13 +111,13 @@ Desde la pantalla de inicio, haga clic en el nombre del servidor (con el punto d
 
 #### Elimina `server.port` / `server.hostname` de tu configuración
 
-Si su `opencode.json(c)` contiene una sección `server`, elimínela temporalmente y reinicie la aplicación de escritorio.
+Si su `leak-code.json(c)` contiene una sección `server`, elimínela temporalmente y reinicie la aplicación de escritorio.
 
 #### Verificar variables de entorno
 
-Si tiene `OPENCODE_PORT` configurado en su entorno, la aplicación de escritorio intentará usar ese puerto para el servidor local.
+Si tiene `LEAKCODE_PORT` configurado en su entorno, la aplicación de escritorio intentará usar ese puerto para el servidor local.
 
-- Desarme `OPENCODE_PORT` (o elija un puerto libre) y reinicie.
+- Desarme `LEAKCODE_PORT` (o elija un puerto libre) y reinicie.
 
 ---
 
@@ -199,7 +199,7 @@ A continuación se detallan algunos problemas comunes y cómo resolverlos.
 
 1. Verifique los registros en busca de mensajes de error.
 2. Intente ejecutar con `--print-logs` para ver el resultado en la terminal.
-3. Asegúrese de tener la última versión con `opencode upgrade`
+3. Asegúrese de tener la última versión con `leak-code upgrade`
 
 ---
 
@@ -227,7 +227,7 @@ Ejemplos:
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-Para saber a qué modelos tiene acceso, ejecute `opencode models`
+Para saber a qué modelos tiene acceso, ejecute `leak-code models`
 
 ---
 

@@ -6,14 +6,14 @@ description: 通过 HTTP 与 opencode 服务器交互。
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` 命令运行一个无界面的 HTTP 服务器，暴露一个 OpenAPI 端点供 opencode 客户端使用。
+`leak-code serve` 命令运行一个无界面的 HTTP 服务器，暴露一个 OpenAPI 端点供 opencode 客户端使用。
 
 ---
 
 ### 用法
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+leak-code serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### 选项
@@ -29,17 +29,17 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 `--cors` 可以多次传递：
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+leak-code serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### 认证
 
-设置 `OPENCODE_SERVER_PASSWORD` 以使用 HTTP 基本认证保护服务器。用户名默认为 `opencode`，也可以设置 `OPENCODE_SERVER_USERNAME` 来覆盖它。这适用于 `opencode serve` 和 `opencode web`。
+设置 `LEAKCODE_SERVER_PASSWORD` 以使用 HTTP 基本认证保护服务器。用户名默认为 `opencode`，也可以设置 `LEAKCODE_SERVER_USERNAME` 来覆盖它。这适用于 `leak-code serve` 和 `leak-code web`。
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve
 ```
 
 ---
@@ -54,7 +54,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 这种架构让 opencode 支持多个客户端，并允许你以编程方式与 opencode 交互。
 
-你可以运行 `opencode serve` 来启动一个独立的服务器。如果你已经在运行 opencode TUI，`opencode serve` 会启动一个新的服务器。
+你可以运行 `leak-code serve` 来启动一个独立的服务器。如果你已经在运行 opencode TUI，`leak-code serve` 会启动一个新的服务器。
 
 ---
 

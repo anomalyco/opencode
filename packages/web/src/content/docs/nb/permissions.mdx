@@ -23,7 +23,7 @@ Hver tillatelsesregel løses til en av:
 
 Du kan angi tillatelser globalt (med `*`), og overstyre spesifikke verktøy.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -36,7 +36,7 @@ Du kan angi tillatelser globalt (med `*`), og overstyre spesifikke verktøy.
 
 Du kan også angi alle tillatelser samtidig:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow"
@@ -49,7 +49,7 @@ Du kan også angi alle tillatelser samtidig:
 
 For de fleste tillatelser kan du bruke et objekt til å bruke forskjellige handlinger basert på verktøyinndata.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -94,7 +94,7 @@ Hjemmeutvidelse (som `~/...`) påvirker bare hvordan et mønster skrives. Den gj
 
 For eksempel gir dette tilgang til alt under `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -107,7 +107,7 @@ For eksempel gir dette tilgang til alt under `~/projects/personal/`:
 
 Enhver katalog som er tillatt her, arver de samme standardinnstillingene som gjeldende arbeidsområde. Siden [`read` er standard til `allow`](#defaults), er lesing også tillatt for oppføringer under `external_directory` med mindre overstyrt. Legg til eksplisitte regler når et verktøy skal begrenses i disse banene, for eksempel blokkering av redigeringer mens du beholder lesninger:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -152,7 +152,7 @@ Hvis du ikke spesifiserer noe, starter OpenCode fra tillatte standardinnstilling
 - `doom_loop` og `external_directory` er standard til `"ask"`.
 - `read` er `"allow"`, men `.env` filer nektes som standard:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "permission": {
     "read": {
@@ -187,7 +187,7 @@ Du kan overstyre tillatelser per agent. Agenttillatelser slås sammen med den gl
 Se avsnittet [Granular Rules (Object Syntax)](#granular-rules-object-syntax) ovenfor for mer detaljerte eksempler på mønstertilpasning.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -217,7 +217,7 @@ Se avsnittet [Granular Rules (Object Syntax)](#granular-rules-object-syntax) ove
 
 Du kan også konfigurere agenttillatelser i Markdown:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

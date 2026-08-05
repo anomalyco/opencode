@@ -35,7 +35,7 @@ WSL 提供更出色的文件系统性能、完整的终端支持，以及与 Ope
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   leak-code
    ```
 
 </Steps>
@@ -49,7 +49,7 @@ WSL 提供更出色的文件系统性能、完整的终端支持，以及与 Ope
 1. **在 WSL 中启动服务器**，添加 `--hostname 0.0.0.0` 以允许外部连接：
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   leak-code serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **在桌面应用中连接到** `http://localhost:4096`
@@ -59,11 +59,11 @@ WSL 提供更出色的文件系统性能、完整的终端支持，以及与 Ope
 :::
 
 :::caution
-使用 `--hostname 0.0.0.0` 时，请设置 `OPENCODE_SERVER_PASSWORD` 以保护服务器安全。
+使用 `--hostname 0.0.0.0` 时，请设置 `LEAKCODE_SERVER_PASSWORD` 以保护服务器安全。
 :::
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve --hostname 0.0.0.0
 ```
 
 ---
@@ -72,15 +72,15 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 要在 Windows 上获得最佳的 Web 体验：
 
-1. **在 WSL 终端中运行 `opencode web`**，而非在 PowerShell 中运行：
+1. **在 WSL 终端中运行 `leak-code web`**，而非在 PowerShell 中运行：
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   leak-code web --hostname 0.0.0.0
    ```
 
 2. **在 Windows 浏览器中访问** `http://localhost:<port>`（OpenCode 会输出该 URL）
 
-从 WSL 中运行 `opencode web` 可确保正确的文件系统访问和终端集成，同时仍可通过 Windows 浏览器进行访问。
+从 WSL 中运行 `leak-code web` 可确保正确的文件系统访问和终端集成，同时仍可通过 Windows 浏览器进行访问。
 
 ---
 
@@ -96,7 +96,7 @@ WSL 可以通过 `/mnt/` 目录访问你的所有 Windows 文件：
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+leak-code
 ```
 
 :::tip
@@ -109,4 +109,4 @@ opencode
 
 - 对于存储在 Windows 驱动器上的项目，在 WSL 中运行 OpenCode 即可无缝访问文件
 - 搭配 VS Code 的 [WSL 扩展](https://code.visualstudio.com/docs/remote/wsl) 使用 OpenCode，打造一体化的开发工作流
-- OpenCode 的配置和会话数据存储在 WSL 环境中的 `~/.local/share/opencode/`
+- OpenCode 的配置和会话数据存储在 WSL 环境中的 `~/.local/share/leak-code/`

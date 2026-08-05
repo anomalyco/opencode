@@ -35,7 +35,7 @@ WSL offre de meilleures performances du système de fichiers, une prise en charg
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   leak-code
    ```
 
 </Steps>
@@ -49,7 +49,7 @@ Si vous préférez utiliser l'application Desktop OpenCode tout en exécutant le
 1. **Démarrez le serveur dans WSL** avec `--hostname 0.0.0.0` pour autoriser les connexions externes:
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   leak-code serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **Connectez l'application Desktop** à `http://localhost:4096`
@@ -59,10 +59,10 @@ Si `localhost` ne fonctionne pas dans votre configuration, utilisez plutôt l'ad
 :::
 
 :::caution
-Lorsque vous utilisez `--hostname 0.0.0.0`, définissez `OPENCODE_SERVER_PASSWORD` pour sécuriser le serveur.
+Lorsque vous utilisez `--hostname 0.0.0.0`, définissez `LEAKCODE_SERVER_PASSWORD` pour sécuriser le serveur.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve --hostname 0.0.0.0
 ```
 
 :::
@@ -73,15 +73,15 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 Pour la meilleure expérience web sous Windows:
 
-1. **Exécutez `opencode web` dans le terminal WSL** plutôt que dans PowerShell:
+1. **Exécutez `leak-code web` dans le terminal WSL** plutôt que dans PowerShell:
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   leak-code web --hostname 0.0.0.0
    ```
 
 2. **Accédez-y depuis votre navigateur Windows** à `http://localhost:<port>` (OpenCode affiche l'URL)
 
-Lancer `opencode web` depuis WSL garantit un accès correct au système de fichiers et une bonne intégration terminal, tout en restant accessible depuis votre navigateur Windows.
+Lancer `leak-code web` depuis WSL garantit un accès correct au système de fichiers et une bonne intégration terminal, tout en restant accessible depuis votre navigateur Windows.
 
 ---
 
@@ -97,7 +97,7 @@ Exemple:
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+leak-code
 ```
 
 :::tip
@@ -110,4 +110,4 @@ Pour une expérience plus fluide, vous pouvez cloner/copier votre dépôt dans l
 
 - Gardez OpenCode dans WSL pour les projets stockés sur des lecteurs Windows: l'accès aux fichiers est fluide
 - Utilisez l'[extension WSL de VS Code](https://code.visualstudio.com/docs/remote/wsl) avec OpenCode pour un flux de travail intégré
-- Votre configuration OpenCode et vos sessions sont stockées dans l'environnement WSL à `~/.local/share/opencode/`
+- Votre configuration OpenCode et vos sessions sont stockées dans l'environnement WSL à `~/.local/share/leak-code/`

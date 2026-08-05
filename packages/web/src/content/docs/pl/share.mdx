@@ -39,7 +39,7 @@ Spowoduje to wygenerowanie unikalnego adresu URL, który zostanie skopiowany do 
 
 Aby jawnie ustawić tryb ręczny w [pliku konfiguracyjnym] (./config):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ Aby jawnie ustawić tryb ręczny w [pliku konfiguracyjnym] (./config):
 
 Możesz włączyć automatyczne udostępnianie dla wszystkich nowych rozmów, ustawiając opcję `share` na `"auto"` w [pliku konfiguracyjnym] (./config):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ Po włączeniu automatycznego udostępniania każda nowa rozmowa będzie automat
 
 Możesz całkowicie wyłączyć udostępnianie, ustawiając opcję `share` na `"disabled"` w [pliku konfiguracyjnym] (./config):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled"
 }
 ```
 
-Aby wymusić to w całym zespole dla danego projektu, dodaj go do `opencode.json` w swoim projekcie i sprawdź w Git.
+Aby wymusić to w całym zespole dla danego projektu, dodaj go do `leak-code.json` w swoim projekcie i sprawdź w Git.
 
 ---
 

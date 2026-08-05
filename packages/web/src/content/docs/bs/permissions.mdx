@@ -22,7 +22,7 @@ Svako pravilo dozvole rješava jedno od:
 
 Dozvole možete postaviti globalno (sa `*`) i nadjačati određene alate.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -35,7 +35,7 @@ Dozvole možete postaviti globalno (sa `*`) i nadjačati određene alate.
 
 Također možete postaviti sve dozvole odjednom:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow"
@@ -48,7 +48,7 @@ Također možete postaviti sve dozvole odjednom:
 
 Za većinu dozvola, možete koristiti objekt za primjenu različitih radnji na osnovu unosa alata.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -91,7 +91,7 @@ Koristite `external_directory` da dozvolite pozive alata koji dodiruju putanje i
 Proširenje kuće (poput `~/...`) utiče samo na način na koji je obrazac napisan. Ne čini vanjsku stazu dijelom trenutnog radnog prostora, tako da staze izvan radnog direktorija i dalje moraju biti dozvoljene preko `external_directory`.
 Na primjer, ovo omogućava pristup svemu pod `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -104,7 +104,7 @@ Na primjer, ovo omogućava pristup svemu pod `~/projects/personal/`:
 
 Svaki direktorij koji je ovdje dozvoljen nasljeđuje iste zadane postavke kao trenutni radni prostor. Pošto je [`read` zadano na `allow`](#defaults), čitanje je također dozvoljeno za unose pod `external_directory` osim ako se ne poništi. Dodajte eksplicitna pravila kada bi alat trebao biti ograničen na ovim stazama, kao što je blokiranje uređivanja uz zadržavanje čitanja:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -147,7 +147,7 @@ Ako ništa ne navedete, OpenCode počinje od dozvoljenih zadanih vrijednosti:
 - `doom_loop` i `external_directory` zadano na `"ask"`.
 - `read` je `"allow"`, ali `.env` fajlovi su po defaultu odbijeni:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "permission": {
     "read": {
@@ -180,7 +180,7 @@ Možete nadjačati dozvole po agentu. Dozvole agenta su spojene sa globalnom kon
 Pogledajte gornji odjeljak [Granularna pravila (sintaksa objekata)](#granular-rules-object-syntax) za detaljnije primjere podudaranja uzoraka.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -210,7 +210,7 @@ Pogledajte gornji odjeljak [Granularna pravila (sintaksa objekata)](#granular-ru
 
 Također možete konfigurirati dozvole agenta u Markdownu:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

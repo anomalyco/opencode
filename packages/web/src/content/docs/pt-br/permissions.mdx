@@ -23,7 +23,7 @@ Cada regra de permissão se resolve em uma das seguintes opções:
 
 Você pode definir permissões globalmente (com `*`), e substituir ferramentas específicas.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -36,7 +36,7 @@ Você pode definir permissões globalmente (com `*`), e substituir ferramentas e
 
 Você também pode definir todas as permissões de uma vez:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow"
@@ -49,7 +49,7 @@ Você também pode definir todas as permissões de uma vez:
 
 Para a maioria das permissões, você pode usar um objeto para aplicar diferentes ações com base na entrada da ferramenta.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -94,7 +94,7 @@ A expansão do home (como `~/...`) afeta apenas como um padrão é escrito. Não
 
 Por exemplo, isso permite acesso a tudo sob `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -107,7 +107,7 @@ Por exemplo, isso permite acesso a tudo sob `~/projects/personal/`:
 
 Qualquer diretório permitido aqui herda os mesmos padrões do espaço de trabalho atual. Como [`read` padrão é `allow`](#defaults), leituras também são permitidas para entradas sob `external_directory`, a menos que sejam substituídas. Adicione regras explícitas quando uma ferramenta deve ser restrita nesses caminhos, como bloquear edições enquanto mantém leituras:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -152,7 +152,7 @@ Se você não especificar nada, o opencode começa com padrões permissivos:
 - `doom_loop` e `external_directory` padrão é `"ask"`.
 - `read` é `"allow"`, mas arquivos `.env` são negados por padrão:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "permission": {
     "read": {
@@ -187,7 +187,7 @@ Você pode substituir permissões por agente. As permissões do agente são mesc
 Consulte a seção [Regras Granulares (Sintaxe de Objeto)](#granular-rules-object-syntax) acima para exemplos mais detalhados de correspondência de padrões.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -217,7 +217,7 @@ Consulte a seção [Regras Granulares (Sintaxe de Objeto)](#granular-rules-objec
 
 Você também pode configurar permissões de agentes em Markdown:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

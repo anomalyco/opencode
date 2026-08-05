@@ -11,7 +11,7 @@ opencode ile ilgili bir sorunu ayiklamak icin once loglari ve diskte tuttugu yer
 
 Log dosyalari su konuma yazilir:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leak-code/log/`
 - **Windows**: `WIN+R` tuslayip `%USERPROFILE%\.local\share\opencode\log` yapistirin
 
 Log dosyalari zaman damgasiyla adlandirilir (ornegin `2025-01-09T123456.log`) ve en yeni 10 log dosyasi tutulur.
@@ -24,7 +24,7 @@ Daha ayrintili ayiklama bilgisi icin `--log-level` komut satiri secenegini kulla
 
 opencode, oturum verilerini ve diger uygulama verilerini diskte su konumda saklar:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leak-code/`
 - **Windows**: `WIN+R` tuslayip `%USERPROFILE%\.local\share\opencode` yapistirin
 
 Bu dizin sunlari icerir:
@@ -57,9 +57,9 @@ Desktop uygulamasi acilista cokuyorsa, takiliyorsa veya garip davranislar goster
 
 Global config dosyanizi acin ve `plugin` anahtarini arayin.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (veya `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (eski kurulumlar): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: `WIN+R` tuslayip `%USERPROFILE%\.config\opencode\opencode.jsonc` yapistirin
+- **macOS/Linux**: `~/.config/leak-code/leak-code.jsonc` (veya `~/.config/leak-code/leak-code.json`)
+- **macOS/Linux** (eski kurulumlar): `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows**: `WIN+R` tuslayip `%USERPROFILE%\.config\opencode\leak-code.jsonc` yapistirin
 
 Plugin tanimliysa anahtari kaldirarak veya bos bir diziye cekerek gecici olarak devre disi birakin:
 
@@ -75,10 +75,10 @@ Plugin tanimliysa anahtari kaldirarak veya bos bir diziye cekerek gecici olarak 
 opencode diskten yerel plugin de yukleyebilir. Bu dizinleri gecici olarak tasiyin (veya klasoru yeniden adlandirin) ve uygulamayi yeniden baslatin:
 
 - **Global plugins**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leak-code/plugins/`
   - **Windows**: `WIN+R` tuslayip `%USERPROFILE%\.config\opencode\plugins` yapistirin
 - **Project plugins** (sadece proje bazli config kullaniyorsaniz)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 Uygulama duzelirse soruna neden olan plugini bulmak icin pluginleri tek tek yeniden etkinlestirin.
 
@@ -111,13 +111,13 @@ Ana ekranda sunucu adina (durum noktali) tiklayarak Server secicisini acin. **De
 
 #### Config'ten `server.port` / `server.hostname` kaldirin
 
-`opencode.json(c)` dosyanizda `server` bolumu varsa gecici olarak kaldirin ve desktop uygulamasini yeniden baslatin.
+`leak-code.json(c)` dosyanizda `server` bolumu varsa gecici olarak kaldirin ve desktop uygulamasini yeniden baslatin.
 
 #### Ortam degiskenlerini kontrol edin
 
-Ortamda `OPENCODE_PORT` ayarliysa desktop uygulamasi yerel sunucu icin o portu kullanmaya calisir.
+Ortamda `LEAKCODE_PORT` ayarliysa desktop uygulamasi yerel sunucu icin o portu kullanmaya calisir.
 
-- `OPENCODE_PORT` degerini kaldirin (veya bos bir port secin) ve yeniden baslatin
+- `LEAKCODE_PORT` degerini kaldirin (veya bos bir port secin) ve yeniden baslatin
 
 ---
 
@@ -199,7 +199,7 @@ Asagida yaygin sorunlar ve cozumleri yer aliyor.
 
 1. Hata mesaji icin loglari kontrol edin
 2. Terminalde cikti gormek icin `--print-logs` ile calistirin
-3. `opencode upgrade` ile en guncel surumu kullandiginizdan emin olun
+3. `leak-code upgrade` ile en guncel surumu kullandiginizdan emin olun
 
 ---
 
@@ -226,7 +226,7 @@ Ornekler:
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-Erisiminiz olan modelleri gormek icin `opencode models` calistirin.
+Erisiminiz olan modelleri gormek icin `leak-code models` calistirin.
 
 ---
 

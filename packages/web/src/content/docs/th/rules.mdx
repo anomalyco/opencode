@@ -62,7 +62,7 @@ opencode ยังรองรับการอ่านไฟล์ `AGENTS.md
 
 ### ทั่วโลก
 
-คุณยังสามารถมีกฎสากลในไฟล์ `~/.config/opencode/AGENTS.md` สิ่งนี้จะนำไปใช้กับเซสชัน opencode ทั้งหมด
+คุณยังสามารถมีกฎสากลในไฟล์ `~/.config/leak-code/AGENTS.md` สิ่งนี้จะนำไปใช้กับเซสชัน opencode ทั้งหมด
 
 เนื่องจากสิ่งนี้ไม่ได้ผูกมัดกับ Git หรือแชร์กับทีมของคุณ เราขอแนะนำให้ใช้สิ่งนี้เพื่อระบุกฎส่วนบุคคลที่ LLM ควรปฏิบัติตาม
 
@@ -71,15 +71,15 @@ opencode ยังรองรับการอ่านไฟล์ `AGENTS.md
 สำหรับผู้ใช้ที่ย้ายจาก Claude Code นั้น OpenCode รองรับรูปแบบไฟล์ของ Claude Code เป็นทางเลือก:
 
 - **กฎของโครงการ**: `CLAUDE.md` ในไดเรกทอรีโครงการของคุณ (ใช้หากไม่มี `AGENTS.md`)
-- **กฎสากล**: `~/.claude/CLAUDE.md` (ใช้หากไม่มี `~/.config/opencode/AGENTS.md`)
+- **กฎสากล**: `~/.claude/CLAUDE.md` (ใช้หากไม่มี `~/.config/leak-code/AGENTS.md`)
 - **ทักษะ**: `~/.claude/skills/` — ดูรายละเอียด [ทักษะตัวแทน](/docs/skills/)
 
 หากต้องการปิดใช้งานความเข้ากันได้ของ Claude Code ให้ตั้งค่าหนึ่งในตัวแปรสภาพแวดล้อมเหล่านี้:
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export LEAKCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export LEAKCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export LEAKCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
@@ -89,20 +89,20 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 เมื่อ opencode เริ่มต้นขึ้น มันจะค้นหาไฟล์กฎตามลำดับนี้:
 
 1. **ไฟล์ในเครื่อง** โดยการสำรวจจากไดเรกทอรีปัจจุบัน (`AGENTS.md`, `CLAUDE.md`)
-2. **ไฟล์ทั่วโลก** ที่ `~/.config/opencode/AGENTS.md`
+2. **ไฟล์ทั่วโลก** ที่ `~/.config/leak-code/AGENTS.md`
 3. **Claude Code files** ที่ `~/.claude/CLAUDE.md` (ยกเว้นปิดการใช้งาน)
 
-ไฟล์ที่ตรงกันไฟล์แรกจะชนะในแต่ละหมวดหมู่ ตัวอย่างเช่น หากคุณมีทั้ง `AGENTS.md` และ `CLAUDE.md` ระบบจะใช้เฉพาะ `AGENTS.md` ในทำนองเดียวกัน `~/.config/opencode/AGENTS.md` จะมีความสำคัญมากกว่า `~/.claude/CLAUDE.md`
+ไฟล์ที่ตรงกันไฟล์แรกจะชนะในแต่ละหมวดหมู่ ตัวอย่างเช่น หากคุณมีทั้ง `AGENTS.md` และ `CLAUDE.md` ระบบจะใช้เฉพาะ `AGENTS.md` ในทำนองเดียวกัน `~/.config/leak-code/AGENTS.md` จะมีความสำคัญมากกว่า `~/.claude/CLAUDE.md`
 
 ---
 
 ## คำแนะนำที่กำหนดเอง
 
-คุณสามารถระบุไฟล์คำแนะนำที่กำหนดเองได้ใน `opencode.json` หรือ `~/.config/opencode/opencode.json` ทั่วโลก สิ่งนี้ช่วยให้คุณและทีมของคุณสามารถนำกฎที่มีอยู่กลับมาใช้ใหม่ได้ แทนที่จะต้องทำซ้ำกฎเหล่านั้นกับ AGENTS.md
+คุณสามารถระบุไฟล์คำแนะนำที่กำหนดเองได้ใน `leak-code.json` หรือ `~/.config/leak-code/leak-code.json` ทั่วโลก สิ่งนี้ช่วยให้คุณและทีมของคุณสามารถนำกฎที่มีอยู่กลับมาใช้ใหม่ได้ แทนที่จะต้องทำซ้ำกฎเหล่านั้นกับ AGENTS.md
 
 ตัวอย่าง:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -111,7 +111,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 คุณยังสามารถใช้ URL ระยะไกลเพื่อโหลดคำแนะนำจากเว็บได้
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
@@ -128,11 +128,11 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 แม้ว่า opencode จะไม่แยกวิเคราะห์การอ้างอิงไฟล์ใน `AGENTS.md` โดยอัตโนมัติ แต่คุณสามารถใช้ฟังก์ชันที่คล้ายกันได้สองวิธี:
 
-### ใช้ opencode.json
+### ใช้ leak-code.json
 
-แนวทางที่แนะนำคือการใช้ฟิลด์ `instructions` ใน `opencode.json`:
+แนวทางที่แนะนำคือการใช้ฟิลด์ `instructions` ใน `leak-code.json`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
@@ -176,5 +176,5 @@ Read the following file immediately as it's relevant to all workflows: @rules/ge
 - ตรวจสอบให้แน่ใจว่า opencode จะโหลดไฟล์เมื่อจำเป็นสำหรับงานเฉพาะเท่านั้น
 
 :::tip
-สำหรับ monorepos หรือโปรเจ็กต์ที่มีมาตรฐานร่วมกัน การใช้ `opencode.json` ที่มีรูปแบบ glob (เช่น `packages/*/AGENTS.md`) จะสามารถบำรุงรักษาได้ดีกว่าคำสั่งแบบแมนนวล
+สำหรับ monorepos หรือโปรเจ็กต์ที่มีมาตรฐานร่วมกัน การใช้ `leak-code.json` ที่มีรูปแบบ glob (เช่น `packages/*/AGENTS.md`) จะสามารถบำรุงรักษาได้ดีกว่าคำสั่งแบบแมนนวล
 :::

@@ -35,7 +35,7 @@ WSL, daha iyi dosya sistemi performansi, tam terminal destegi ve opencode'un day
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   leak-code
    ```
 
 </Steps>
@@ -49,7 +49,7 @@ opencode Desktop kullanmak isteyip sunucuyu WSL'de calistirmak istiyorsaniz:
 1. **Sunucuyu WSL'de baslatin** ve dis baglantilara izin vermek icin `--hostname 0.0.0.0` kullanin:
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   leak-code serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **Desktop uygulamasini** `http://localhost:4096` adresine baglayin
@@ -59,10 +59,10 @@ Kurulumunuzda `localhost` calismiyorsa bunun yerine WSL IP adresini kullanin (WS
 :::
 
 :::caution
-`--hostname 0.0.0.0` kullaniyorsaniz sunucuyu guvene almak icin `OPENCODE_SERVER_PASSWORD` ayarlayin.
+`--hostname 0.0.0.0` kullaniyorsaniz sunucuyu guvene almak icin `LEAKCODE_SERVER_PASSWORD` ayarlayin.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve --hostname 0.0.0.0
 ```
 
 :::
@@ -73,15 +73,15 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 Windows'ta en iyi web deneyimi icin:
 
-1. **`opencode web` komutunu PowerShell yerine WSL terminalinde calistirin**:
+1. **`leak-code web` komutunu PowerShell yerine WSL terminalinde calistirin**:
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   leak-code web --hostname 0.0.0.0
    ```
 
 2. **Windows tarayicinizdan** `http://localhost:<port>` adresini acin (opencode URL'yi yazdirir)
 
-`opencode web` komutunu WSL'den calistirmak, dosya sistemi erisimi ve terminal entegrasyonunu daha tutarli hale getirirken tarayicidan erisimi korur.
+`leak-code web` komutunu WSL'den calistirmak, dosya sistemi erisimi ve terminal entegrasyonunu daha tutarli hale getirirken tarayicidan erisimi korur.
 
 ---
 
@@ -97,7 +97,7 @@ Ornek:
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+leak-code
 ```
 
 :::tip
@@ -110,4 +110,4 @@ En sorunsuz deneyim icin deponuzu WSL dosya sistemine (ornegin `~/code/` altina)
 
 - Windows suruculerinde duran projelerde opencode'u WSL icinde calistirin - dosya erisimi daha sorunsuz olur
 - Butunlesik bir gelistirme akisi icin opencode ile birlikte VS Code [WSL eklentisini](https://code.visualstudio.com/docs/remote/wsl) kullanin
-- opencode konfigurasyonunuz ve oturumlariniz WSL ortaminda `~/.local/share/opencode/` konumunda saklanir
+- opencode konfigurasyonunuz ve oturumlariniz WSL ortaminda `~/.local/share/leak-code/` konumunda saklanir

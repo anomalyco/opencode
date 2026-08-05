@@ -15,7 +15,7 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 
 ## การกำหนดค่า
 
-ในการใช้ OpenCode ผ่าน ACP ให้กำหนดค่าโปรแกรมแก้ไขของคุณให้รันคำสั่ง `opencode acp`
+ในการใช้ OpenCode ผ่าน ACP ให้กำหนดค่าโปรแกรมแก้ไขของคุณให้รันคำสั่ง `leak-code acp`
 
 คำสั่งนี้จะเริ่ม OpenCode เป็น process ย่อยที่รองรับ ACP ซึ่งสื่อสารกับโปรแกรมแก้ไขของคุณผ่าน JSON-RPC ทาง stdio
 
@@ -101,7 +101,7 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
 }
 ```
 
-หากคุณต้องการส่งผ่าน environment variables (เช่น `OPENCODE_API_KEY`) คุณต้องระบุใน `env`:
+หากคุณต้องการส่งผ่าน environment variables (เช่น `LEAKCODE_API_KEY`) คุณต้องระบุใน `env`:
 
 ```lua {6-8}
 {
@@ -110,7 +110,7 @@ ACP เป็นมาตรฐานเปิดสำหรับการส�
       command = "opencode",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        LEAKCODE_API_KEY = os.getenv("LEAKCODE_API_KEY")
       }
     }
   }
@@ -138,7 +138,7 @@ require("codecompanion").setup({
 
 คุณสามารถใช้ CodeCompanion เพื่อใช้ opencode เป็น ACP agent สำหรับแชท
 
-หากคุณต้องส่ง environment variables (เช่น `OPENCODE_API_KEY`) โปรดดู [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) ในเอกสารของ CodeCompanion.nvim สำหรับรายละเอียดทั้งหมด
+หากคุณต้องส่ง environment variables (เช่น `LEAKCODE_API_KEY`) โปรดดู [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) ในเอกสารของ CodeCompanion.nvim สำหรับรายละเอียดทั้งหมด
 
 ## การรองรับ
 

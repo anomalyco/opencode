@@ -6,14 +6,14 @@ description: HTTP를 통해 OpenCode 서버와 상호 작용합니다.
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` 명령은 opencode 클라이언트가 사용할 수 있는 OpenAPI 엔드포인트를 노출하는 headless HTTP 서버를 실행합니다.
+`leak-code serve` 명령은 opencode 클라이언트가 사용할 수 있는 OpenAPI 엔드포인트를 노출하는 headless HTTP 서버를 실행합니다.
 
 ---
 
 ### 사용법
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+leak-code serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### 옵션
@@ -29,17 +29,17 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 `--cors`는 다수 시간을 통과될 수 있습니다:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+leak-code serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### 인증
 
-`OPENCODE_SERVER_PASSWORD`를 설정하여 서버를 HTTP Basic auth로 보호합니다. `opencode` 또는 `OPENCODE_SERVER_USERNAME`를 오버라이드로 설정하는 사용자의 기본값. 이것은 `opencode serve`와 `opencode web` 둘 다에 적용합니다.
+`LEAKCODE_SERVER_PASSWORD`를 설정하여 서버를 HTTP Basic auth로 보호합니다. `opencode` 또는 `LEAKCODE_SERVER_USERNAME`를 오버라이드로 설정하는 사용자의 기본값. 이것은 `leak-code serve`와 `leak-code web` 둘 다에 적용합니다.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve
 ```
 
 ---
@@ -51,13 +51,13 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 끝점. 이 엔드포인트는 [SDK](/docs/sdk)을 생성하는 데도 사용됩니다.
 
 :::tip
-opencode 서버를 사용하여 opencode programmatically와 상호 작용합니다.
+opencode 서버를 사용하여 leak-code programmatically와 상호 작용합니다.
 :::
 
-이 아키텍처는 opencode 지원 여러 클라이언트를 허용하고 opencode programmatically와 상호 작용 할 수 있습니다.
+이 아키텍처는 opencode 지원 여러 클라이언트를 허용하고 leak-code programmatically와 상호 작용 할 수 있습니다.
 
-독립 서버를 시작하려면 `opencode serve`를 실행할 수 있습니다. 당신이 있는 경우에
-opencode TUI 실행, `opencode serve` 새로운 서버를 시작합니다.
+독립 서버를 시작하려면 `leak-code serve`를 실행할 수 있습니다. 당신이 있는 경우에
+opencode TUI 실행, `leak-code serve` 새로운 서버를 시작합니다.
 
 ---
 

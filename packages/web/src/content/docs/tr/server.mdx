@@ -6,14 +6,14 @@ description: opencode sunucusuyla HTTP uzerinden etkilesin.
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` komutu, opencode istemcisinin kullanabileceği bir OpenAPI endpoint'i açan headless bir HTTP sunucusu çalıştırır.
+`leak-code serve` komutu, opencode istemcisinin kullanabileceği bir OpenAPI endpoint'i açan headless bir HTTP sunucusu çalıştırır.
 
 ---
 
 ### Kullanım
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+leak-code serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Seçenekler
@@ -29,17 +29,17 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 `--cors` birden fazla kez geçilebilir:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+leak-code serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Kimlik Doğrulama
 
-Sunucuyu HTTP temel kimlik doğrulama (basic auth) ile korumak için `OPENCODE_SERVER_PASSWORD` ayarlayın. Kullanıcı adı varsayılan olarak `opencode` değeridir; değiştirmek isterseniz `OPENCODE_SERVER_USERNAME` ayarlayabilirsiniz. Bu ayar hem `opencode serve` hem de `opencode web` için geçerlidir.
+Sunucuyu HTTP temel kimlik doğrulama (basic auth) ile korumak için `LEAKCODE_SERVER_PASSWORD` ayarlayın. Kullanıcı adı varsayılan olarak `opencode` değeridir; değiştirmek isterseniz `LEAKCODE_SERVER_USERNAME` ayarlayabilirsiniz. Bu ayar hem `leak-code serve` hem de `leak-code web` için geçerlidir.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve
 ```
 
 ---
@@ -55,7 +55,7 @@ opencode ile programatik etkileşim için opencode sunucusunu kullanın.
 
 Bu mimari, opencode'un birden fazla istemciyi desteklemesini ve programatik kullanımları mümkün kılmasını sağlar.
 
-`opencode serve` ile bağımsız bir sunucu başlatabilirsiniz. opencode TUI açıksa, `opencode serve` yeni bir sunucu başlatır.
+`leak-code serve` ile bağımsız bir sunucu başlatabilirsiniz. opencode TUI açıksa, `leak-code serve` yeni bir sunucu başlatır.
 
 ---
 

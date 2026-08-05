@@ -13,8 +13,8 @@ description: "透過 SKILL.md 定義可重複使用的行為"
 為每個技能名稱建立一個資料夾，並在其中放入 `SKILL.md`。
 OpenCode 會搜尋以下位置：
 
-- 專案設定：`.opencode/skills/<name>/SKILL.md`
-- 全域設定：`~/.config/opencode/skills/<name>/SKILL.md`
+- 專案設定：`.leak-code/skills/<name>/SKILL.md`
+- 全域設定：`~/.config/leak-code/skills/<name>/SKILL.md`
 - 專案 Claude 相容：`.claude/skills/<name>/SKILL.md`
 - 全域 Claude 相容：`~/.claude/skills/<name>/SKILL.md`
 - 專案代理相容：`.agents/skills/<name>/SKILL.md`
@@ -25,9 +25,9 @@ OpenCode 會搜尋以下位置：
 ## 了解發現機制
 
 對於專案本地路徑，OpenCode 會從當前工作目錄向上遍歷，直到到達 git 工作樹根目錄。
-在此過程中，它會載入 `.opencode/` 中所有匹配的 `skills/*/SKILL.md`，以及匹配的 `.claude/skills/*/SKILL.md` 或 `.agents/skills/*/SKILL.md`。
+在此過程中，它會載入 `.leak-code/` 中所有匹配的 `skills/*/SKILL.md`，以及匹配的 `.claude/skills/*/SKILL.md` 或 `.agents/skills/*/SKILL.md`。
 
-全域定義也會從 `~/.config/opencode/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md` 和 `~/.agents/skills/*/SKILL.md` 中載入。
+全域定義也會從 `~/.config/leak-code/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md` 和 `~/.agents/skills/*/SKILL.md` 中載入。
 
 ---
 
@@ -73,7 +73,7 @@ OpenCode 會搜尋以下位置：
 
 ## 使用範例
 
-建立 `.opencode/skills/git-release/SKILL.md`，內容如下：
+建立 `.leak-code/skills/git-release/SKILL.md`，內容如下：
 
 ```markdown
 ---
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## 設定權限
 
-在 `opencode.json` 中使用基於模式的權限來控制代理可以存取哪些技能：
+在 `leak-code.json` 中使用基於模式的權限來控制代理可以存取哪些技能：
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**內建代理**（在 `opencode.json` 中）：
+**內建代理**（在 `leak-code.json` 中）：
 
 ```json
 {

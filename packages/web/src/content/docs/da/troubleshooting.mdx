@@ -11,7 +11,7 @@ For at fejlfinde problemer med OpenCode, start med at tjekke logfilerne og de lo
 
 Logfiler skrives til:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leak-code/log/`
 - **Windows**: Tryk `WIN+R` og indsæt `%USERPROFILE%\.local\share\opencode\log`
 
 Logfiler navngives med tidsstempler (f.eks. `2025-01-09T123456.log`) og de sidste 10 logfiler beholdes.
@@ -24,7 +24,7 @@ Du kan angive logniveauet med kommandolinjeflaget `--log-level` for at få mere 
 
 opencode gemmer sessionsdata og andre applikationsdata på disken på:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leak-code/`
 - **Windows**: Tryk `WIN+R` og indsæt `%USERPROFILE%\.local\share\opencode`
 
 Denne mappe indeholder:
@@ -57,9 +57,9 @@ Hvis skrivebordsappen går ned ved opstart, hænger eller opfører sig mærkelig
 
 Åbn den globale konfigurationsfil og se efter en `plugin`-nøgle.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (eller `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (ældre installationer): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: Tryk `WIN+R` og indsæt `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/leak-code/leak-code.jsonc` (eller `~/.config/leak-code/leak-code.json`)
+- **macOS/Linux** (ældre installationer): `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows**: Tryk `WIN+R` og indsæt `%USERPROFILE%\.config\opencode\leak-code.jsonc`
 
 Hvis du har konfigureret plugins, deaktiver dem midlertidigt ved at fjerne nøglen eller sætte den til et tomt array:
 
@@ -75,10 +75,10 @@ Hvis du har konfigureret plugins, deaktiver dem midlertidigt ved at fjerne nøgl
 OpenCode kan også indlæse lokale plugins fra disken. Flyt disse midlertidigt væk (eller giv mappen nyt navn) og start skrivebordsappen på ny:
 
 - **Globale plugins**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leak-code/plugins/`
   - **Windows**: Tryk `WIN+R` og indsæt `%USERPROFILE%\.config\opencode\plugins`
 - **Projektplugins** (kun hvis du bruger konfiguration per projekt)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 Hvis appen begynder at fungere igen, aktiverer du plugins én ad gangen for at finde ud af, hvilken som forårsager problemet.
 
@@ -111,13 +111,13 @@ Fra startskærmen klikker du på servernavnet (med statusprikken) for at åbne s
 
 #### Fjern `server.port` / `server.hostname` fra din konfiguration
 
-Hvis `opencode.json(c)` indeholder en `server`-del, fjern den midlertidigt og start skrivebordsappen på ny.
+Hvis `leak-code.json(c)` indeholder en `server`-del, fjern den midlertidigt og start skrivebordsappen på ny.
 
 #### Tjek miljøvariabler
 
-Hvis du har `OPENCODE_PORT` sat i dit miljø, vil skrivebordsappen prøve at bruge den port for den lokale server.
+Hvis du har `LEAKCODE_PORT` sat i dit miljø, vil skrivebordsappen prøve at bruge den port for den lokale server.
 
-- Deaktiver `OPENCODE_PORT` (eller vælg en ledig port) og start på ny.
+- Deaktiver `LEAKCODE_PORT` (eller vælg en ledig port) og start på ny.
 
 ---
 
@@ -199,7 +199,7 @@ Her er nogle almindelige problemer og hvordan du kan løse dem.
 
 1. Tjek logfilerne for fejlmeddelelser
 2. Prøv at køre med `--print-logs` for at se output i terminalen
-3. Sørg for at du har den nyeste version med `opencode upgrade`
+3. Sørg for at du har den nyeste version med `leak-code upgrade`
 
 ---
 
@@ -227,7 +227,7 @@ Eksempler:
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-For at finde ud af hvilke modeller du har adgang til, kør `opencode models`
+For at finde ud af hvilke modeller du har adgang til, kør `leak-code models`
 
 ---
 

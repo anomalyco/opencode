@@ -13,7 +13,7 @@ description: 管理 LLM 可以使用的工具。
 
 使用 `permission` 欄位來控制工具行為。您可以對每個工具設定允許、拒絕或需要審批。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -26,7 +26,7 @@ description: 管理 LLM 可以使用的工具。
 
 您還可以使用萬用字元同時控制多個工具。例如，要求某個 MCP 伺服器的所有工具都需要審批：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -49,7 +49,7 @@ description: 管理 LLM 可以使用的工具。
 
 在專案環境中執行 shell 指令。
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -66,7 +66,7 @@ description: 管理 LLM 可以使用的工具。
 
 透過精確的字串替換來修改現有檔案。
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -83,7 +83,7 @@ description: 管理 LLM 可以使用的工具。
 
 建立新檔案或覆蓋現有檔案。
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -104,7 +104,7 @@ description: 管理 LLM 可以使用的工具。
 
 讀取程式碼庫中的檔案內容。
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -121,7 +121,7 @@ description: 管理 LLM 可以使用的工具。
 
 使用正規表示式搜尋檔案內容。
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -138,7 +138,7 @@ description: 管理 LLM 可以使用的工具。
 
 透過模式匹配查找檔案。
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -156,10 +156,10 @@ description: 管理 LLM 可以使用的工具。
 與已設定的 LSP 伺服器互動，取得程式碼智慧功能，如定義跳轉、參考查找、懸停資訊和呼叫階層結構。
 
 :::note
-該工具僅在設定 `OPENCODE_EXPERIMENTAL_LSP_TOOL=true`（或 `OPENCODE_EXPERIMENTAL=true`）時可用。
+該工具僅在設定 `LEAKCODE_EXPERIMENTAL_LSP_TOOL=true`（或 `LEAKCODE_EXPERIMENTAL=true`）時可用。
 :::
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -178,7 +178,7 @@ description: 管理 LLM 可以使用的工具。
 
 對檔案套用補丁。
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -199,7 +199,7 @@ description: 管理 LLM 可以使用的工具。
 
 載入一個[技能](/docs/skills)（即 `SKILL.md` 檔案）並在對話中回傳其內容。
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -214,7 +214,7 @@ description: 管理 LLM 可以使用的工具。
 
 在編碼工作階段中管理待辦事項清單。
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -235,7 +235,7 @@ description: 管理 LLM 可以使用的工具。
 
 擷取網頁內容。
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -253,17 +253,17 @@ description: 管理 LLM 可以使用的工具。
 在網路上搜尋資訊。
 
 :::note
-該工具僅在使用 OpenCode 供應商時，或當 `OPENCODE_ENABLE_EXA` 環境變數設定為任意真值（例如 `true` 或 `1`）時可用。
+該工具僅在使用 OpenCode 供應商時，或當 `LEAKCODE_ENABLE_EXA` 環境變數設定為任意真值（例如 `true` 或 `1`）時可用。
 
 在啟動 OpenCode 時啟用：
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+LEAKCODE_ENABLE_EXA=1 opencode
 ```
 
 :::
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -286,7 +286,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 在執行過程中向使用者提問。
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {

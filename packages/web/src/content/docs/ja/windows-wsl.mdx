@@ -35,7 +35,7 @@ WSL を使うと、ファイルシステム性能、ターミナルサポート�
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   leak-code
    ```
 
 </Steps>
@@ -51,7 +51,7 @@ OpenCode デスクトップアプリを使いつつ、サーバーは WSL で動
    外部接続を許可するため、`--hostname 0.0.0.0` を付けて起動します。
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   leak-code serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **デスクトップアプリを接続する**
@@ -62,10 +62,10 @@ OpenCode デスクトップアプリを使いつつ、サーバーは WSL で動
 環境によって `localhost` が使えない場合は、WSL 側で `hostname -I` を実行して IP アドレスを確認し、`http://<wsl-ip>:4096` に接続してください。
 :::
 :::caution
-`--hostname 0.0.0.0` を使う場合は、`OPENCODE_SERVER_PASSWORD` を設定してサーバーを保護してください。
+`--hostname 0.0.0.0` を使う場合は、`LEAKCODE_SERVER_PASSWORD` を設定してサーバーを保護してください。
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve --hostname 0.0.0.0
 ```
 
 :::
@@ -74,17 +74,17 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 Windows で Web 利用を快適にするには:
 
-1. **PowerShell ではなく WSL ターミナルで `opencode web` を実行する**
+1. **PowerShell ではなく WSL ターミナルで `leak-code web` を実行する**
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   leak-code web --hostname 0.0.0.0
    ```
 
 2. **Windows のブラウザからアクセスする**
 
    `http://localhost:<port>` にアクセスします（URL は OpenCode が表示します）。
 
-WSL から `opencode web` を実行すると、適切なファイルシステムアクセスとターミナル統合を維持したまま、Windows ブラウザから利用できます。
+WSL から `leak-code web` を実行すると、適切なファイルシステムアクセスとターミナル統合を維持したまま、Windows ブラウザから利用できます。
 
 ---
 
@@ -100,7 +100,7 @@ WSL からは `/mnt/` ディレクトリ経由で Windows ファイルにアク�
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+leak-code
 ```
 
 :::tip
@@ -113,4 +113,4 @@ opencode
 
 - Windows ドライブ上のプロジェクトでも、OpenCode は WSL で実行するとファイルアクセスがスムーズです
 - OpenCode と一緒に VS Code の [WSL 拡張機能](https://code.visualstudio.com/docs/remote/wsl) を使うと統合的な開発フローを構築できます
-- OpenCode の設定とセッションは WSL 環境内の `~/.local/share/opencode/` に保存されます
+- OpenCode の設定とセッションは WSL 環境内の `~/.local/share/leak-code/` に保存されます

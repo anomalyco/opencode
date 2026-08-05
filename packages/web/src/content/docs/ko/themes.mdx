@@ -83,9 +83,9 @@ OpenCode는 사용자가 쉽게 테마를 만들고 사용자 정의할 수 있�
 테마는 다음 순서대로 여러 디렉토리에서 로드되며, 나중 디렉토리가 이전 디렉토리를 덮어씁니다:
 
 1. **내장 테마 (Built-in themes)** - 바이너리에 내장되어 있습니다.
-2. **사용자 설정 디렉토리 (User config directory)** - `~/.config/opencode/themes/*.json` 또는 `$XDG_CONFIG_HOME/opencode/themes/*.json`에 정의됩니다.
-3. **프로젝트 루트 디렉토리 (Project root directory)** - `<project-root>/.opencode/themes/*.json`에 정의됩니다.
-4. **현재 작업 디렉토리 (Current working directory)** - `./.opencode/themes/*.json`에 정의됩니다.
+2. **사용자 설정 디렉토리 (User config directory)** - `~/.config/leak-code/themes/*.json` 또는 `$XDG_CONFIG_HOME/opencode/themes/*.json`에 정의됩니다.
+3. **프로젝트 루트 디렉토리 (Project root directory)** - `<project-root>/.leak-code/themes/*.json`에 정의됩니다.
+4. **현재 작업 디렉토리 (Current working directory)** - `./.leak-code/themes/*.json`에 정의됩니다.
 
 여러 디렉토리에 같은 이름의 테마가 있는 경우, 더 높은 우선 순위를 가진 디렉토리의 테마가 사용됩니다.
 
@@ -98,15 +98,15 @@ OpenCode는 사용자가 쉽게 테마를 만들고 사용자 정의할 수 있�
 사용자 전역 테마:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/leak-code/themes
+vim ~/.config/leak-code/themes/my-theme.json
 ```
 
 프로젝트별 테마:
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .leak-code/themes
+vim .leak-code/themes/my-theme.json
 ```
 
 ---

@@ -23,7 +23,7 @@ Ogni regola di permesso si risolve in uno tra:
 
 Puoi impostare i permessi globalmente (con `*`) e sovrascrivere quelli di strumenti specifici.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -36,7 +36,7 @@ Puoi impostare i permessi globalmente (con `*`) e sovrascrivere quelli di strume
 
 Puoi anche impostare tutti i permessi in una sola volta:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow"
@@ -49,7 +49,7 @@ Puoi anche impostare tutti i permessi in una sola volta:
 
 Per la maggior parte dei permessi, puoi usare un oggetto per applicare azioni diverse in base all'input dello strumento.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -94,7 +94,7 @@ L'espansione della home (come `~/...`) influisce solo su come viene scritto un p
 
 Per esempio, questo consente l'accesso a tutto sotto `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -107,7 +107,7 @@ Per esempio, questo consente l'accesso a tutto sotto `~/projects/personal/`:
 
 Qualsiasi directory consentita qui eredita gli stessi default della workspace corrente. Dato che [`read` di default e' `allow`](#defaults), anche le letture sono consentite per le voci sotto `external_directory` a meno di sovrascritture. Aggiungi regole esplicite quando uno strumento deve essere limitato su questi path, ad esempio bloccando le modifiche ma lasciando consentite le letture:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -152,7 +152,7 @@ Se non specifichi nulla, OpenCode parte da default permissivi:
 - `doom_loop` ed `external_directory` di default sono `"ask"`.
 - `read` e' `"allow"`, ma i file `.env` sono negati di default:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "permission": {
     "read": {
@@ -187,7 +187,7 @@ Puoi sovrascrivere i permessi per agente. I permessi dell'agente vengono uniti a
 Fai riferimento alla sezione [Regole granulari (sintassi a oggetto)](#granular-rules-object-syntax) per esempi piu' dettagliati di pattern matching.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -217,7 +217,7 @@ Fai riferimento alla sezione [Regole granulari (sintassi a oggetto)](#granular-r
 
 Puoi anche configurare i permessi dell'agente in Markdown:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

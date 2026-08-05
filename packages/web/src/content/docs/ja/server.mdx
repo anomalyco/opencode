@@ -6,14 +6,14 @@ description: HTTP 経由で OpenCode サーバーと通信します。
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` コマンドは、OpenCode クライアントが使用できる OpenAPI エンドポイントを公開するヘッドレス HTTP サーバーを実行します。
+`leak-code serve` コマンドは、OpenCode クライアントが使用できる OpenAPI エンドポイントを公開するヘッドレス HTTP サーバーを実行します。
 
 ---
 
 ### 使用法
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+leak-code serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### オプション
@@ -29,17 +29,17 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 `--cors` は複数回渡すことができます。
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+leak-code serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### 認証
 
-HTTP 基本認証でサーバーを保護するには、`OPENCODE_SERVER_PASSWORD` を設定します。ユーザー名はデフォルトで `opencode` になるか、`OPENCODE_SERVER_USERNAME` を設定してオーバーライドします。これは、`opencode serve` と `opencode web` の両方に当てはまります。
+HTTP 基本認証でサーバーを保護するには、`LEAKCODE_SERVER_PASSWORD` を設定します。ユーザー名はデフォルトで `opencode` になるか、`LEAKCODE_SERVER_USERNAME` を設定してオーバーライドします。これは、`leak-code serve` と `leak-code web` の両方に当てはまります。
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve
 ```
 
 ---
@@ -52,7 +52,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 OpenCode サーバーを使用して、プログラムで OpenCode と対話します。
 :::
 
-`opencode serve` を実行してスタンドアロンサーバーを起動できます。すでに OpenCode TUI を実行している場合でも、`opencode serve` は新しいサーバーを起動します。
+`leak-code serve` を実行してスタンドアロンサーバーを起動できます。すでに OpenCode TUI を実行している場合でも、`leak-code serve` は新しいサーバーを起動します。
 
 ---
 

@@ -143,9 +143,9 @@ Du kan tilpasse de innebygde agentene eller lage dine egne gjennom konfigurasjon
 
 ### JSON
 
-Konfigurer agenter i konfigurasjonsfilen `opencode.json`:
+Konfigurer agenter i konfigurasjonsfilen `leak-code.json`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -188,10 +188,10 @@ Konfigurer agenter i konfigurasjonsfilen `opencode.json`:
 
 Du kan også definere agenter ved å bruke markdown-filer. Plasser dem i:
 
-- Globalt: `~/.config/opencode/agents/`
-- Per prosjekt: `.opencode/agents/`
+- Globalt: `~/.config/leak-code/agents/`
+- Per prosjekt: `.leak-code/agents/`
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -227,7 +227,7 @@ La oss se på disse konfigurasjonsalternativene i detalj.
 
 Bruk alternativet `description` for å gi en kort beskrivelse av hva agenten gjør og når den skal brukes.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -247,7 +247,7 @@ Kontroller tilfeldigheten og kreativiteten til LLMs svar med `temperature`-konfi
 
 Lavere verdier gjør svarene mer fokuserte og deterministiske, mens høyere verdier øker kreativiteten og variasjonen.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "plan": {
@@ -266,7 +266,7 @@ Temperaturverdier varierer vanligvis fra 0,0 til 1,0:
 - **0,3-0,5**: Balanserte svar med litt kreativitet, bra for generelle utviklingsoppgaver
 - **0.6-1.0**: Mer kreative og varierte svar, nyttig for idédugnad og utforskning
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "analyze": {
@@ -294,7 +294,7 @@ Kontroller det maksimale antallet agentiske iterasjoner en agent kan utføre fø
 
 Hvis dette ikke er satt, vil agenten fortsette å iterere til modellen velger å stoppe eller brukeren avbryter økten.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "quick-thinker": {
@@ -318,7 +318,7 @@ Det gamle `maxSteps`-feltet er avviklet. Bruk `steps` i stedet.
 
 Sett til `true` for å deaktivere agenten.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -334,7 +334,7 @@ Sett til `true` for å deaktivere agenten.
 
 Spesifiser en tilpasset systemmeldingsfil for denne agenten med `prompt`-konfigurasjonen. Ledetekstfilen skal inneholde instruksjoner som er spesifikke for agentens formål.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -356,7 +356,7 @@ Bruk `model`-konfigurasjonen for å overstyre modellen for denne agenten. Nyttig
 Hvis du ikke spesifiserer en modell, bruker primæragenter [modell globalt konfigurert](/docs/config#models) mens subagenter vil bruke modellen til primæragenten som påkalte subagenten.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "plan": {
@@ -374,7 +374,7 @@ Modellen ID i OpenCode-konfigurasjonen din bruker formatet `provider/model-id`. 
 
 Kontroller hvilke verktøy som er tilgjengelige i denne agenten med `tools`-konfigurasjonen. Du kan aktivere eller deaktivere spesifikke verktøy ved å sette dem til `true` eller `false`.
 
-```json title="opencode.json" {3-6,9-12}
+```json title="leak-code.json" {3-6,9-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -398,7 +398,7 @@ Den agentspesifikke konfigurasjonen overstyrer den globale konfigurasjonen.
 
 Du kan også bruke jokertegn for å kontrollere flere verktøy samtidig. For eksempel, for å deaktivere alle verktøy fra en MCP-server:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -425,7 +425,7 @@ Du kan konfigurere tillatelser for å administrere hvilke handlinger en agent ka
 - `"allow"` — Tillat alle operasjoner uten godkjenning
 - `"deny"` — Deaktiver verktøyet
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -436,7 +436,7 @@ Du kan konfigurere tillatelser for å administrere hvilke handlinger en agent ka
 
 Du kan overstyre disse tillatelsene per agent.
 
-```json title="opencode.json" {3-5,8-10}
+```json title="leak-code.json" {3-5,8-10}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -454,7 +454,7 @@ Du kan overstyre disse tillatelsene per agent.
 
 Du kan også angi tillatelser i Markdown-agenter.
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -473,7 +473,7 @@ Only analyze code and suggest changes.
 
 Du kan angi tillatelser for spesifikke bash-kommandoer.
 
-```json title="opencode.json" {7}
+```json title="leak-code.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -491,7 +491,7 @@ Du kan angi tillatelser for spesifikke bash-kommandoer.
 
 Dette kan ta et globmønster.
 
-```json title="opencode.json" {7}
+```json title="leak-code.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -509,7 +509,7 @@ Dette kan ta et globmønster.
 Og du kan også bruke jokertegnet `*` for å administrere tillatelser for alle kommandoer.
 Siden den siste samsvarsregelen har forrang, setter du jokertegnet `*` først og spesifikke regler etter.
 
-```json title="opencode.json" {8}
+```json title="leak-code.json" {8}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -533,7 +533,7 @@ Siden den siste samsvarsregelen har forrang, setter du jokertegnet `*` først og
 
 Kontroller agentens modus med `mode`-konfigurasjonen. Alternativet `mode` brukes til å bestemme hvordan agenten kan brukes.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -551,7 +551,7 @@ Alternativet `mode` kan settes til `primary`, `subagent` eller `all`. Hvis ingen
 
 Skjul en underagent fra `@` autofullføringsmenyen med `hidden: true`. Nyttig for interne underagenter som bare skal påkalles programmatisk av andre agenter via oppgaveverktøyet.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "internal-helper": {
@@ -574,7 +574,7 @@ Gjelder kun `mode: subagent`-agenter.
 
 Kontroller hvilke subagenter en agent kan påkalle via oppgaveverktøyet med `permission.task`. Bruker glob-mønstre for fleksibel matching.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "orchestrator": {
@@ -609,7 +609,7 @@ Tilpass agentens visuelle utseende i UI med alternativet `color`. Dette påvirke
 
 Bruk en gyldig sekskantfarge (f.eks. `#FF5733`) eller temafarge: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "creative": {
@@ -628,7 +628,7 @@ Bruk en gyldig sekskantfarge (f.eks. `#FF5733`) eller temafarge: `primary`, `sec
 
 Kontroller responsmangfoldet med alternativet `top_p`. Alternativ til temperatur for å kontrollere tilfeldighet.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "brainstorm": {
@@ -648,7 +648,7 @@ Eventuelle andre alternativer du spesifiserer i agentkonfigurasjonen vil bli **o
 
 For eksempel, med OpenAIs resonneringsmodeller kan du kontrollere resonnementinnsatsen:
 
-```json title="opencode.json" {6,7}
+```json title="leak-code.json" {6,7}
 {
   "agent": {
     "deep-thinker": {
@@ -664,7 +664,7 @@ For eksempel, med OpenAIs resonneringsmodeller kan du kontrollere resonnementinn
 Disse tilleggsalternativene er modell- og leverandørspesifikke. Sjekk leverandørens dokumentasjon for tilgjengelige parametere.
 
 :::tip
-Kjør `opencode models` for å se en liste over tilgjengelige modeller.
+Kjør `leak-code models` for å se en liste over tilgjengelige modeller.
 :::
 
 ---
@@ -674,7 +674,7 @@ Kjør `opencode models` for å se en liste over tilgjengelige modeller.
 Du kan opprette nye agenter ved å bruke følgende kommando:
 
 ```bash
-opencode agent create
+leak-code agent create
 ```
 
 Denne interaktive kommandoen vil:
@@ -711,7 +711,7 @@ Har du en agent du vil dele? [Send inn en PR](https://github.com/anomalyco/openc
 
 ### Dokumentasjonsagent
 
-```markdown title="~/.config/opencode/agents/docs-writer.md"
+```markdown title="~/.config/leak-code/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -733,7 +733,7 @@ Focus on:
 
 ### Sikkerhetsrevisor
 
-```markdown title="~/.config/opencode/agents/security-auditor.md"
+```markdown title="~/.config/leak-code/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent

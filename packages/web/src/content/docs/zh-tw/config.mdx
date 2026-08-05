@@ -11,7 +11,7 @@ description: 使用 OpenCode JSON 設定。
 
 OpenCode 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "anthropic/claude-sonnet-4-5",
@@ -43,16 +43,16 @@ OpenCode 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
 設定來源按以下順序載入（後面的來源覆寫前面的來源）：
 
 1. **遠端設定**（來自 `.well-known/opencode`）- 組織預設值
-2. **全域設定**（`~/.config/opencode/opencode.json`）- 使用者偏好
-3. **自訂設定**（`OPENCODE_CONFIG` 環境變數）- 自訂覆寫
-4. **專案設定**（專案中的 `opencode.json`）- 專案特定設定
-5. **`.opencode` 目錄** - 代理、指令、外掛程式
-6. **內嵌設定**（`OPENCODE_CONFIG_CONTENT` 環境變數）- 執行時覆寫
+2. **全域設定**（`~/.config/leak-code/leak-code.json`）- 使用者偏好
+3. **自訂設定**（`LEAKCODE_CONFIG` 環境變數）- 自訂覆寫
+4. **專案設定**（專案中的 `leak-code.json`）- 專案特定設定
+5. **`.leak-code` 目錄** - 代理、指令、外掛程式
+6. **內嵌設定**（`LEAKCODE_CONFIG_CONTENT` 環境變數）- 執行時覆寫
 
 這意味著專案設定可以覆寫全域預設值，全域設定可以覆寫遠端組織預設值。
 
 :::note
-`.opencode` 和 `~/.config/opencode` 目錄的子目錄使用**複數名稱**：`agents/`、`commands/`、`modes/`、`plugins/`、`skills/`、`tools/` 和 `themes/`。為了向後相容，也支援單數名稱（例如 `agent/`）。
+`.leak-code` 和 `~/.config/leak-code` 目錄的子目錄使用**複數名稱**：`agents/`、`commands/`、`modes/`、`plugins/`、`skills/`、`tools/` 和 `themes/`。為了向後相容，也支援單數名稱（例如 `agent/`）。
 :::
 
 ---
@@ -79,7 +79,7 @@ OpenCode 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
 
 您可以在本地設定中啟用特定伺服器：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "mcp": {
     "jira": {
@@ -95,7 +95,7 @@ OpenCode 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
 
 ### 全域
 
-將全域 OpenCode 設定放在 `~/.config/opencode/opencode.json` 中。使用全域設定來設定使用者層級的偏好，例如主題、供應商或快捷鍵。
+將全域 OpenCode 設定放在 `~/.config/leak-code/leak-code.json` 中。使用全域設定來設定使用者層級的偏好，例如主題、供應商或快捷鍵。
 
 全域設定覆寫遠端組織預設值。
 
@@ -103,7 +103,7 @@ OpenCode 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
 
 ### 專案層級
 
-在專案根目錄中新增 `opencode.json`。專案設定在標準設定檔中具有最高優先級——它會覆寫全域設定和遠端設定。
+在專案根目錄中新增 `leak-code.json`。專案設定在標準設定檔中具有最高優先級——它會覆寫全域設定和遠端設定。
 
 :::tip
 將專案特定設定放在專案的根目錄中。
@@ -117,11 +117,11 @@ OpenCode 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
 
 ### 自訂路徑
 
-使用 `OPENCODE_CONFIG` 環境變數指定自訂設定檔路徑。
+使用 `LEAKCODE_CONFIG` 環境變數指定自訂設定檔路徑。
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
-opencode run "Hello world"
+export LEAKCODE_CONFIG=/path/to/my/custom-config.json
+leak-code run "Hello world"
 ```
 
 自訂設定在優先順序中位於全域設定和專案設定之間載入。
@@ -130,14 +130,14 @@ opencode run "Hello world"
 
 ### 自訂目錄
 
-使用 `OPENCODE_CONFIG_DIR` 環境變數指定自訂設定目錄。該目錄會像標準 `.opencode` 目錄一樣被搜尋代理、指令、模式和外掛程式，並且應遵循相同的結構。
+使用 `LEAKCODE_CONFIG_DIR` 環境變數指定自訂設定目錄。該目錄會像標準 `.leak-code` 目錄一樣被搜尋代理、指令、模式和外掛程式，並且應遵循相同的結構。
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
-opencode run "Hello world"
+export LEAKCODE_CONFIG_DIR=/path/to/my/config-directory
+leak-code run "Hello world"
 ```
 
-自訂目錄在全域設定和 `.opencode` 目錄之後載入，因此**可以覆寫**它們的設定。
+自訂目錄在全域設定和 `.leak-code` 目錄之後載入，因此**可以覆寫**它們的設定。
 
 ---
 
@@ -153,7 +153,7 @@ opencode run "Hello world"
 
 您可以透過 `tui` 選項設定 TUI 相關設定。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tui": {
@@ -172,9 +172,9 @@ opencode run "Hello world"
 - `scroll_speed` - 自訂捲動速度倍率（預設值：`3`，最小值：`1`）。如果 `scroll_acceleration.enabled` 為 `true`，則忽略此選項。
 - `diff_style` - 控制差異呈現方式。`"auto"` 根據終端機寬度自適應，`"stacked"` 始終顯示單列。
 
-使用 `OPENCODE_TUI_CONFIG` 指向自訂 TUI 設定檔。
+使用 `LEAKCODE_TUI_CONFIG` 指向自訂 TUI 設定檔。
 
-`opencode.json` 中的舊版 `theme`、`keybinds` 和 `tui` 鍵已被棄用，並將在可能的情況下自動遷移。
+`leak-code.json` 中的舊版 `theme`、`keybinds` 和 `tui` 鍵已被棄用，並將在可能的情況下自動遷移。
 
 [在此了解更多關於 TUI 的資訊](/docs/tui)。
 
@@ -182,9 +182,9 @@ opencode run "Hello world"
 
 ### 伺服器
 
-您可以透過 `server` 選項為 `opencode serve` 和 `opencode web` 指令設定伺服器設定。
+您可以透過 `server` 選項為 `leak-code serve` 和 `leak-code web` 指令設定伺服器設定。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "server": {
@@ -213,7 +213,7 @@ opencode run "Hello world"
 
 您可以透過 `tools` 選項管理 LLM 可以使用的工具。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -231,7 +231,7 @@ opencode run "Hello world"
 
 您可以透過 `provider`、`model` 和 `small_model` 選項在 OpenCode 設定中設定要使用的供應商和模型。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
@@ -244,7 +244,7 @@ opencode run "Hello world"
 
 供應商選項可以包括 `timeout` 和 `setCacheKey`：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -273,7 +273,7 @@ opencode run "Hello world"
 
 Amazon Bedrock 支援 AWS 特定設定：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -319,7 +319,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 您可以透過 `agent` 選項為特定任務設定專用代理。
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -337,7 +337,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 }
 ```
 
-您還可以使用 `~/.config/opencode/agents/` 或 `.opencode/agents/` 中的 Markdown 檔案定義代理。[在此了解更多](/docs/agents)。
+您還可以使用 `~/.config/leak-code/agents/` 或 `.leak-code/agents/` 中的 Markdown 檔案定義代理。[在此了解更多](/docs/agents)。
 
 ---
 
@@ -345,7 +345,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 您可以使用 `default_agent` 選項設定預設代理。當未明確指定代理時，將使用該預設代理。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "plan"
@@ -354,7 +354,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 預設代理必須是主代理（不能是子代理）。可以是內建代理（如 `"build"` 或 `"plan"`），也可以是您定義的[自訂代理](/docs/agents)。如果指定的代理不存在或是子代理，OpenCode 將回退到 `"build"` 並發出警告。
 
-此設定適用於所有介面：TUI、CLI（`opencode run`）、桌面應用程式和 GitHub Action。
+此設定適用於所有介面：TUI、CLI（`leak-code run`）、桌面應用程式和 GitHub Action。
 
 ---
 
@@ -362,7 +362,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 您可以透過 `share` 選項設定[分享](/docs/share)功能。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -383,7 +383,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 您可以透過 `command` 選項為重複任務設定自訂指令。
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -401,7 +401,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 }
 ```
 
-您還可以使用 `~/.config/opencode/commands/` 或 `.opencode/commands/` 中的 Markdown 檔案定義指令。[在此了解更多](/docs/commands)。
+您還可以使用 `~/.config/leak-code/commands/` 或 `.leak-code/commands/` 中的 Markdown 檔案定義指令。[在此了解更多](/docs/commands)。
 
 ---
 
@@ -424,7 +424,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項停用此功能。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false
@@ -440,7 +440,7 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 您可以透過 `formatter` 選項設定程式碼格式化器。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
@@ -468,7 +468,7 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 例如，要讓 `edit` 和 `bash` 工具需要使用者確認：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -486,7 +486,7 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 您可以透過 `compaction` 選項控制上下文壓縮行為。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
@@ -507,7 +507,7 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 您可以透過 `watcher` 選項設定檔案監看器的忽略模式。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "watcher": {
@@ -524,7 +524,7 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 您可以透過 `mcp` 選項設定要使用的 MCP 伺服器。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {}
@@ -539,9 +539,9 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 [外掛程式](/docs/plugins)透過自訂工具、掛鉤和整合來擴展 OpenCode。
 
-將外掛程式檔案放置在 `.opencode/plugins/` 或 `~/.config/opencode/plugins/` 中。您還可以透過 `plugin` 選項從 npm 載入外掛程式。
+將外掛程式檔案放置在 `.leak-code/plugins/` 或 `~/.config/leak-code/plugins/` 中。您還可以透過 `plugin` 選項從 npm 載入外掛程式。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
@@ -556,7 +556,7 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 您可以透過 `instructions` 選項為所使用的模型設定指示。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -571,7 +571,7 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 您可以透過 `disabled_providers` 選項停用自動載入的供應商。當您希望阻止某些供應商被載入（即使其憑證可用）時，此選項非常有用。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
@@ -594,7 +594,7 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 您可以透過 `enabled_providers` 選項指定允許使用的供應商白名單。設定後，僅啟用指定的供應商，所有其他供應商將被忽略。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "enabled_providers": ["anthropic", "openai"]
@@ -615,7 +615,7 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 `experimental` 鍵包含正在積極開發中的選項。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "experimental": {}
@@ -638,10 +638,10 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 使用 `{env:VARIABLE_NAME}` 來替換環境變數：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:LEAKCODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -661,7 +661,7 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 
 使用 `{file:path/to/file}` 來替換檔案內容：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["./custom-instructions.md"],

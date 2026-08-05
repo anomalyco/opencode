@@ -67,7 +67,7 @@ Diese gelten nur in diesem Verzeichnis und seinen Unterordnern.
 
 ### Global
 
-Du kannst auch globale Regeln in `~/.config/opencode/AGENTS.md` speichern.
+Du kannst auch globale Regeln in `~/.config/leak-code/AGENTS.md` speichern.
 Diese gelten in allen opencode-Sitzungen.
 
 Da diese Datei nicht in Git landet und nicht mit dem Team geteilt wird, eignet sie sich fuer persoenliche Regeln.
@@ -77,15 +77,15 @@ Da diese Datei nicht in Git landet und nicht mit dem Team geteilt wird, eignet s
 Wenn du von Claude Code kommst, unterstuetzt OpenCode dessen Dateikonventionen als Fallback:
 
 - **Projektregeln**: `CLAUDE.md` im Projekt (wenn keine `AGENTS.md` existiert)
-- **Globale Regeln**: `~/.claude/CLAUDE.md` (wenn keine `~/.config/opencode/AGENTS.md` existiert)
+- **Globale Regeln**: `~/.claude/CLAUDE.md` (wenn keine `~/.config/leak-code/AGENTS.md` existiert)
 - **Skills**: `~/.claude/skills/` - siehe [Agent Skills](/docs/skills/) fuer Details
 
 Um die Claude-Code-Kompatibilitaet zu deaktivieren, setze eine dieser Umgebungsvariablen:
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export LEAKCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export LEAKCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export LEAKCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
@@ -95,7 +95,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 Beim Start sucht opencode in dieser Reihenfolge nach Regeldateien:
 
 1. **Lokale Dateien** beim Hochlaufen ab dem aktuellen Verzeichnis (`AGENTS.md`, `CLAUDE.md`)
-2. **Globale Datei** unter `~/.config/opencode/AGENTS.md`
+2. **Globale Datei** unter `~/.config/leak-code/AGENTS.md`
 3. **Claude-Code-Datei** unter `~/.claude/CLAUDE.md` (falls nicht deaktiviert)
 
 Pro Kategorie gewinnt die zuerst passende Datei.
@@ -105,12 +105,12 @@ Wenn sowohl `AGENTS.md` als auch `CLAUDE.md` existieren, wird nur `AGENTS.md` ve
 
 ## Eigene Anweisungen
 
-Du kannst zusaetzliche Anweisungsdateien in deiner `opencode.json` oder in `~/.config/opencode/opencode.json` angeben.
+Du kannst zusaetzliche Anweisungsdateien in deiner `leak-code.json` oder in `~/.config/leak-code/leak-code.json` angeben.
 So kann dein Team bestehende Regeln wiederverwenden, statt Inhalte in `AGENTS.md` zu duplizieren.
 
 Beispiel:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -119,7 +119,7 @@ Beispiel:
 
 Du kannst auch Remote-URLs nutzen, um Regeln aus dem Web zu laden.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
@@ -137,11 +137,11 @@ Alle Anweisungsdateien werden mit deinen `AGENTS.md`-Dateien kombiniert.
 opencode parst Datei-Referenzen in `AGENTS.md` nicht automatisch.
 Du erreichst aehnliches Verhalten auf zwei Wegen.
 
-### Mit opencode.json
+### Mit leak-code.json
 
-Empfohlen ist das `instructions`-Feld in der `opencode.json`:
+Empfohlen ist das `instructions`-Feld in der `leak-code.json`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
@@ -186,5 +186,5 @@ Damit kannst du:
 - Sicherstellen, dass Dateien nur bei Bedarf geladen werden
 
 :::tip
-Fuer Monorepos oder gemeinsame Standards ist `opencode.json` mit Glob-Mustern (z. B. `packages/*/AGENTS.md`) oft wartbarer als manuelle Anweisungen.
+Fuer Monorepos oder gemeinsame Standards ist `leak-code.json` mit Glob-Mustern (z. B. `packages/*/AGENTS.md`) oft wartbarer als manuelle Anweisungen.
 :::

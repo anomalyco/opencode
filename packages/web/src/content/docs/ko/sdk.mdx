@@ -7,7 +7,7 @@ import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
 opencode JS/TS SDK는 서버와 상호 작용을 위한 유형 안전한 클라이언트를 제공합니다.
-통합 및 제어 opencode programmatically를 구축하는 데 사용됩니다.
+통합 및 제어 leak-code programmatically를 구축하는 데 사용됩니다.
 
 [Learn more](/docs/server) 서버가 어떻게 작동하나요? 예를 들어, 커뮤니티에 의해 구축 된 [projects](/docs/ecosystem#projects)를 확인하십시오.
 
@@ -49,7 +49,7 @@ const { client } = await createOpencode()
 
 ## 구성
 
-구성 객체를 전달할 수 있습니다. 인스턴스는 여전히 `opencode.json`를 선택하지만 구성 인라인을 추가 할 수 있습니다.
+구성 객체를 전달할 수 있습니다. 인스턴스는 여전히 `leak-code.json`를 선택하지만 구성 인라인을 추가 할 수 있습니다.
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"

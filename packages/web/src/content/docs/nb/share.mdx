@@ -39,7 +39,7 @@ Dette vil generere en unik URL som vil bli kopiert til utklippstavlen din.
 
 For å eksplisitt angi manuell modus i [konfigurasjonsfilen](/docs/config):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ For å eksplisitt angi manuell modus i [konfigurasjonsfilen](/docs/config):
 
 Du kan aktivere automatisk deling for alle nye samtaler ved å sette alternativet `share` til `"auto"` i [konfigurasjonsfilen](/docs/config):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ Med automatisk deling aktivert, vil hver nye samtale automatisk bli delt og en k
 
 Du kan deaktivere deling helt ved å sette alternativet `share` til `"disabled"` i [konfigurasjonsfilen](/docs/config):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled"
 }
 ```
 
-For å håndheve dette på tvers av teamet ditt for et gitt prosjekt, legg det til `opencode.json` i prosjektet ditt og sjekk det inn i Git.
+For å håndheve dette på tvers av teamet ditt for et gitt prosjekt, legg det til `leak-code.json` i prosjektet ditt og sjekk det inn i Git.
 
 ---
 

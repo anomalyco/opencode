@@ -39,7 +39,7 @@ Bu komut benzersiz bir URL uretir ve panoya kopyalar.
 
 Manuel modu acikca ayarlamak icin [config dosyaniza](/docs/config) sunu ekleyin:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ Manuel modu acikca ayarlamak icin [config dosyaniza](/docs/config) sunu ekleyin:
 
 Tum yeni konusmalar icin otomatik paylasimi acmak isterseniz, [config dosyanizda](/docs/config) `share` degerini `"auto"` yapin:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ Otomatik paylasim acikken her yeni konusma otomatik olarak paylasilir ve bir bag
 
 Paylasimi tamamen kapatmak icin [config dosyanizda](/docs/config) `share` degerini `"disabled"` yapin:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled"
 }
 ```
 
-Bunu belirli bir projede tum ekip icin zorunlu kilmak icin proje icindeki `opencode.json` dosyasina ekleyip Git'e commit edin.
+Bunu belirli bir projede tum ekip icin zorunlu kilmak icin proje icindeki `leak-code.json` dosyasina ekleyip Git'e commit edin.
 
 ---
 

@@ -6,14 +6,14 @@ description: Взаимодействуйте с сервером opencode че�
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Команда `opencode serve` запускает автономный HTTP-сервер, который предоставляет конечную точку OpenAPI, которую может использовать клиент с открытым кодом.
+Команда `leak-code serve` запускает автономный HTTP-сервер, который предоставляет конечную точку OpenAPI, которую может использовать клиент с открытым кодом.
 
 ---
 
 ### Использование
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+leak-code serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Параметры
@@ -29,17 +29,17 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 `--cors` можно передать несколько раз:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+leak-code serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Аутентификация
 
-Установите `OPENCODE_SERVER_PASSWORD`, чтобы защитить сервер с помощью базовой аутентификации HTTP. Имя пользователя по умолчанию — `opencode` или установите `OPENCODE_SERVER_USERNAME`, чтобы переопределить его. Это относится как к `opencode serve`, так и к `opencode web`.
+Установите `LEAKCODE_SERVER_PASSWORD`, чтобы защитить сервер с помощью базовой аутентификации HTTP. Имя пользователя по умолчанию — `opencode` или установите `LEAKCODE_SERVER_USERNAME`, чтобы переопределить его. Это относится как к `leak-code serve`, так и к `leak-code web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve
 ```
 
 ---
@@ -56,8 +56,8 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 Эта архитектура позволяет открытому коду поддерживать несколько клиентов и позволяет программно взаимодействовать с открытым кодом.
 
-Вы можете запустить `opencode serve`, чтобы запустить автономный сервер. Если у вас есть
-TUI с открытым кодом запущен, `opencode serve` запустит новый сервер.
+Вы можете запустить `leak-code serve`, чтобы запустить автономный сервер. Если у вас есть
+TUI с открытым кодом запущен, `leak-code serve` запустит новый сервер.
 
 ---
 

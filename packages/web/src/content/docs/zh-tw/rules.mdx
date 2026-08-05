@@ -62,7 +62,7 @@ opencode 還支援從多個位置讀取 `AGENTS.md` 檔案，不同的位置有�
 
 ### 全域級
 
-您還可以在 `~/.config/opencode/AGENTS.md` 檔案中設定全域規則。這些規則會套用於所有 opencode 工作階段。
+您還可以在 `~/.config/leak-code/AGENTS.md` 檔案中設定全域規則。這些規則會套用於所有 opencode 工作階段。
 
 由於該檔案不會被提交到 Git 或與團隊共享，我們建議用它來指定 LLM 應遵循的個人規則。
 
@@ -71,15 +71,15 @@ opencode 還支援從多個位置讀取 `AGENTS.md` 檔案，不同的位置有�
 對於從 Claude Code 遷移過來的使用者，OpenCode 支援 Claude Code 的檔案慣例作為備援方案：
 
 - **專案規則**：專案目錄中的 `CLAUDE.md`（在沒有 `AGENTS.md` 的情況下使用）
-- **全域規則**：`~/.claude/CLAUDE.md`（在沒有 `~/.config/opencode/AGENTS.md` 的情況下使用）
+- **全域規則**：`~/.claude/CLAUDE.md`（在沒有 `~/.config/leak-code/AGENTS.md` 的情況下使用）
 - **技能**：`~/.claude/skills/` — 詳情請參閱[代理技能](/docs/skills/)
 
 要停用 Claude Code 相容性，請設定以下環境變數之一：
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export LEAKCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export LEAKCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export LEAKCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
@@ -89,20 +89,20 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 當 opencode 啟動時，它會按以下順序尋找規則檔案：
 
 1. **本機檔案**，從當前目錄向上遍歷（`AGENTS.md`、`CLAUDE.md`）
-2. **全域檔案**，位於 `~/.config/opencode/AGENTS.md`
+2. **全域檔案**，位於 `~/.config/leak-code/AGENTS.md`
 3. **Claude Code 檔案**，位於 `~/.claude/CLAUDE.md`（除非已停用）
 
-在每個類別中，第一個符合的檔案優先。例如，如果您同時擁有 `AGENTS.md` 和 `CLAUDE.md`，則只會使用 `AGENTS.md`。同樣，`~/.config/opencode/AGENTS.md` 優先於 `~/.claude/CLAUDE.md`。
+在每個類別中，第一個符合的檔案優先。例如，如果您同時擁有 `AGENTS.md` 和 `CLAUDE.md`，則只會使用 `AGENTS.md`。同樣，`~/.config/leak-code/AGENTS.md` 優先於 `~/.claude/CLAUDE.md`。
 
 ---
 
 ## 自訂指令
 
-您可以在 `opencode.json` 或全域設定檔 `~/.config/opencode/opencode.json` 中指定自訂指令檔案。這允許您和團隊複用現有規則，而無需將它們複製到 AGENTS.md 中。
+您可以在 `leak-code.json` 或全域設定檔 `~/.config/leak-code/leak-code.json` 中指定自訂指令檔案。這允許您和團隊複用現有規則，而無需將它們複製到 AGENTS.md 中。
 
 範例：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -111,7 +111,7 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 您還可以使用遠端 URL 從網路載入指令。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
@@ -128,11 +128,11 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 雖然 opencode 不會自動解析 `AGENTS.md` 中的檔案參照，但您可以透過以下兩種方式實現類似的功能：
 
-### 使用 opencode.json
+### 使用 leak-code.json
 
-建議的方式是使用 `opencode.json` 中的 `instructions` 欄位：
+建議的方式是使用 `leak-code.json` 中的 `instructions` 欄位：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
@@ -176,5 +176,5 @@ Read the following file immediately as it's relevant to all workflows: @rules/ge
 - 確保 opencode 僅在特定任務需要時才載入檔案
 
 :::tip
-對於 monorepo 或具有共享標準的專案，使用 `opencode.json` 搭配 glob 模式（如 `packages/*/AGENTS.md`）比手動指定指令更易於維護。
+對於 monorepo 或具有共享標準的專案，使用 `leak-code.json` 搭配 glob 模式（如 `packages/*/AGENTS.md`）比手動指定指令更易於維護。
 :::

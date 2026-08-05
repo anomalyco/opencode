@@ -6,7 +6,7 @@ description: Nutze den opencode-Server ueber HTTP.
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Der Befehl `opencode serve` startet einen headless HTTP-Server.
+Der Befehl `leak-code serve` startet einen headless HTTP-Server.
 Er stellt einen OpenAPI-Endpunkt bereit, den ein opencode-Client nutzen kann.
 
 ---
@@ -14,7 +14,7 @@ Er stellt einen OpenAPI-Endpunkt bereit, den ein opencode-Client nutzen kann.
 ### Nutzung
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+leak-code serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Optionen
@@ -30,18 +30,18 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 `--cors` kann mehrfach angegeben werden:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+leak-code serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Authentifizierung
 
-Setze `OPENCODE_SERVER_PASSWORD`, um den Server mit HTTP Basic Auth zu schuetzen.
-Der Benutzername ist standardmaessig `opencode`, kann aber mit `OPENCODE_SERVER_USERNAME` ueberschrieben werden. Das gilt fuer `opencode serve` und `opencode web`.
+Setze `LEAKCODE_SERVER_PASSWORD`, um den Server mit HTTP Basic Auth zu schuetzen.
+Der Benutzername ist standardmaessig `opencode`, kann aber mit `LEAKCODE_SERVER_USERNAME` ueberschrieben werden. Das gilt fuer `leak-code serve` und `leak-code web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve
 ```
 
 ---
@@ -52,13 +52,13 @@ Wenn du `opencode` startest, werden TUI und Server gestartet.
 Die TUI ist dabei der Client, der mit dem Server spricht; dessen OpenAPI-3.1-Endpunkt dient auch zur Generierung des [SDK](/docs/sdk).
 
 :::tip
-Nutze den opencode-Server, um opencode programmatisch anzusteuern.
+Nutze den opencode-Server, um leak-code programmatisch anzusteuern.
 :::
 
 Diese Architektur erlaubt mehrere Clients und programmatische Nutzung.
 
-Mit `opencode serve` startest du einen eigenstaendigen Server.
-Laeuft bereits eine TUI, startet `opencode serve` trotzdem eine neue Serverinstanz.
+Mit `leak-code serve` startest du einen eigenstaendigen Server.
+Laeuft bereits eine TUI, startet `leak-code serve` trotzdem eine neue Serverinstanz.
 
 ---
 

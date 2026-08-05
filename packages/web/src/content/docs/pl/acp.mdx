@@ -17,7 +17,7 @@ ACP to otwarty standard, który ujednolica komunikację między edytorami kodu a
 
 ## Konfiguracja
 
-Aby używać OpenCode przez ACP, skonfiguruj swój edytor tak, aby uruchamiał polecenie `opencode acp`.
+Aby używać OpenCode przez ACP, skonfiguruj swój edytor tak, aby uruchamiał polecenie `leak-code acp`.
 
 Uruchamia to OpenCode jako podproces zgodny z ACP, który komunikuje się z edytorem za pomocą JSON-RPC przez stdio.
 
@@ -112,7 +112,7 @@ Jeśli potrzebujesz przekazać klucz API:
       command = "opencode",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        LEAKCODE_API_KEY = os.getenv("LEAKCODE_API_KEY")
       }
     }
   }
@@ -140,7 +140,7 @@ require("codecompanion").setup({
 
 Ta konfiguracja sprawia, że CodeCompanion używa OpenCode jako agenta ACP do czatu.
 
-Jeśli wymagany jest `OPENCODE_API_KEY`, zapoznaj się z sekcją [Konfigurowanie adapterów: Zmienne środowiskowe](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) w dokumentacji CodeCompanion.nvim, aby uzyskać szczegółowe informacje.
+Jeśli wymagany jest `LEAKCODE_API_KEY`, zapoznaj się z sekcją [Konfigurowanie adapterów: Zmienne środowiskowe](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) w dokumentacji CodeCompanion.nvim, aby uzyskać szczegółowe informacje.
 
 ## Wsparcie
 

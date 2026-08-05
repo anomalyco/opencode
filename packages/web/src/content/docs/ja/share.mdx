@@ -39,7 +39,7 @@ OpenCode は、会話の共有方法を制御する 3 つの共有モードを�
 
 [設定ファイル](/docs/config): で手動モードを明示的に設定するには:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ OpenCode は、会話の共有方法を制御する 3 つの共有モードを�
 
 [設定ファイル](/docs/config): で `share` オプションを `"auto"` に設定することで、すべての新しい会話の自動共有を有効にできます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ OpenCode は、会話の共有方法を制御する 3 つの共有モードを�
 
 [設定ファイル](/docs/config): で `share` オプションを `"disabled"` に設定することで、共有を完全に無効にすることができます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled"
 }
 ```
 
-これを特定のプロジェクトのチーム全体に強制するには、それをプロジェクトの `opencode.json` に追加し、Git にチェックインします。
+これを特定のプロジェクトのチーム全体に強制するには、それをプロジェクトの `leak-code.json` に追加し、Git にチェックインします。
 
 ---
 

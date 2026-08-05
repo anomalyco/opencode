@@ -83,9 +83,9 @@ OpenCode admite un sistema de temas flexible basado en JSON que permite a los us
 Los temas se cargan desde varios directorios en el siguiente orden, donde los directorios posteriores anulan los anteriores:
 
 1. **Temas integrados**: están integrados en el binario
-2. **Directorio de configuración de usuario**: definido en `~/.config/opencode/themes/*.json` o `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Directorio raíz del proyecto**: definido en `<project-root>/.opencode/themes/*.json`
-4. **Directorio de trabajo actual** - Definido en `./.opencode/themes/*.json`
+2. **Directorio de configuración de usuario**: definido en `~/.config/leak-code/themes/*.json` o `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **Directorio raíz del proyecto**: definido en `<project-root>/.leak-code/themes/*.json`
+4. **Directorio de trabajo actual** - Definido en `./.leak-code/themes/*.json`
 
 Si varios directorios contienen un tema con el mismo nombre, se utilizará el tema del directorio con mayor prioridad.
 
@@ -98,15 +98,15 @@ Para crear un tema personalizado, cree un archivo JSON en uno de los directorios
 Para temas para todo el usuario:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/leak-code/themes
+vim ~/.config/leak-code/themes/my-theme.json
 ```
 
 Y para temas específicos del proyecto.
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .leak-code/themes
+vim .leak-code/themes/my-theme.json
 ```
 
 ---

@@ -51,7 +51,7 @@ Hier sind mehrere Modelle, die gut mit OpenCode funktionieren, in keiner bestimm
 Um eines davon als Standardmodell festzulegen, können Sie den Schlüssel `model` in Ihrem festlegen
 OpenCode config.
 
-```json title="opencode.json" {3}
+```json title="leak-code.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
@@ -68,7 +68,7 @@ Wenn Sie einen [custom provider](/docs/providers#custom) konfiguriert haben, ist
 
 Sie können die Optionen eines Modells global über die Konfiguration konfigurieren.
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="leak-code.jsonc" {7-12,19-24}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -107,7 +107,7 @@ Sie können diese Optionen auch für alle von Ihnen verwendeten Agenten konfigur
 
 Sie können auch benutzerdefinierte Varianten definieren, die integrierte Varianten erweitern. Mit Varianten können Sie unterschiedliche Einstellungen für dasselbe Modell konfigurieren, ohne doppelte Einträge zu erstellen:
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="leak-code.jsonc" {6-21}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -172,7 +172,7 @@ Diese Liste ist nicht vollständig. Viele andere Anbieter verfügen ebenfalls ü
 
 Sie können vorhandene Varianten überschreiben oder eigene hinzufügen:
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="leak-code.jsonc" {7-18}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -209,7 +209,7 @@ Wenn OpenCode startet, sucht es nach Modellen in der folgenden Prioritätsreihen
 
 2. Die Modellliste in der OpenCode-Konfiguration.
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"

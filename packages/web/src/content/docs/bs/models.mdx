@@ -46,7 +46,7 @@ Evo nekoliko modela koji dobro rade sa OpenCode, bez posebnog redosleda. (Ovo ni
 Da postavite jedan od ovih kao zadani model, možete postaviti ključ `model` u svom
 OpenCode config.
 
-```json title="opencode.json" {3}
+```json title="leak-code.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
@@ -62,7 +62,7 @@ Ako ste konfigurirali [prilagođenog provajdera](/docs/providers#custom), `provi
 
 Možete globalno konfigurirati opcije modela kroz config.
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="leak-code.jsonc" {7-12,19-24}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -99,7 +99,7 @@ Ugrađeni dobavljač i nazivi modela mogu se naći na [Models.dev](https://model
 Također možete konfigurirati ove opcije za sve agente koje koristite. Konfiguracija agenta poništava sve globalne opcije ovdje. [Saznajte više](/docs/agents/#additional).
 Također možete definirati prilagođene varijante koje proširuju ugrađene. Varijante vam omogućavaju da konfigurirate različite postavke za isti model bez stvaranja duplih unosa:
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="leak-code.jsonc" {6-21}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -157,7 +157,7 @@ OpenCode se isporučuje sa zadanim varijantama za mnoge provajdere:
 
 Možete nadjačati postojeće varijante ili dodati svoje:
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="leak-code.jsonc" {7-18}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -191,7 +191,7 @@ Kada se OpenCode pokrene, on provjerava modele u sljedećem prioritetnom redosli
 1. Oznaka komandne linije `--model` ili `-m`. Format je isti kao u konfiguracijskoj datoteci: `provider_id/model_id`.
 2. Lista modela u OpenCode konfiguraciji.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "anthropic/claude-sonnet-4-20250514"

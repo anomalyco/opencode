@@ -83,9 +83,9 @@ opencode, kullanıcıların kolayca tema oluşturup özelleştirebilmesi için e
 Temalar birden fazla dizinden şu sırayla yüklenir; daha sonra gelen dizin öncekini ezer:
 
 1. **Yerleşik temalar** - Binary içine gömülüdür
-2. **Kullanıcı yapılandırma dizini** - `~/.config/opencode/themes/*.json` veya `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Proje kök dizini** - `<project-root>/.opencode/themes/*.json`
-4. **Geçerli çalışma dizini** - `./.opencode/themes/*.json`
+2. **Kullanıcı yapılandırma dizini** - `~/.config/leak-code/themes/*.json` veya `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **Proje kök dizini** - `<project-root>/.leak-code/themes/*.json`
+4. **Geçerli çalışma dizini** - `./.leak-code/themes/*.json`
 
 Birden fazla dizinde aynı adlı tema varsa, önceliği daha yüksek dizindeki tema kullanılır.
 
@@ -98,15 +98,15 @@ Birden fazla dizinde aynı adlı tema varsa, önceliği daha yüksek dizindeki t
 Kullanıcı geneli temalar için:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/leak-code/themes
+vim ~/.config/leak-code/themes/my-theme.json
 ```
 
 Proje özel temalar için:
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .leak-code/themes
+vim .leak-code/themes/my-theme.json
 ```
 
 ---

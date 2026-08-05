@@ -12,7 +12,7 @@ OpenCode kan kjøres som en nettapplikasjon i nettleseren din, og gir den samme 
 Start web-grensesnittet ved å kjøre:
 
 ```bash
-opencode web
+leak-code web
 ```
 
 Dette starter en lokal server på `127.0.0.1` med en tilfeldig tilgjengelig port og åpner automatisk OpenCode i standard nettleser.
@@ -28,7 +28,7 @@ Du kan konfigurere webserveren ved å bruke kommandolinjeflagg eller i [konfigur
 Som standard velger OpenCode en tilgjengelig port. Du kan spesifisere en port:
 
 ```bash
-opencode web --port 4096
+leak-code web --port 4096
 ```
 
 ### Vertsnavn
@@ -36,20 +36,20 @@ opencode web --port 4096
 Som standard binder serveren seg til `127.0.0.1` (kun localhost). Slik gjør du OpenCode tilgjengelig på nettverket ditt:
 
 ```bash
-opencode web --hostname 0.0.0.0
+leak-code web --hostname 0.0.0.0
 ```
 
 ---
 
 ### Autentisering
 
-For å beskytte tilgang, angi et passord ved hjelp av miljøvariabelen `OPENCODE_SERVER_PASSWORD`:
+For å beskytte tilgang, angi et passord ved hjelp av miljøvariabelen `LEAKCODE_SERVER_PASSWORD`:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+LEAKCODE_SERVER_PASSWORD=secret leak-code web
 ```
 
-Brukernavnet er satt til `opencode` som standard, men kan endres med `OPENCODE_SERVER_USERNAME`.
+Brukernavnet er satt til `opencode` som standard, men kan endres med `LEAKCODE_SERVER_USERNAME`.
 
 ---
 
@@ -77,10 +77,10 @@ Du kan koble en terminal TUI til en kjørende webserver:
 
 ```bash
 # Start the web server
-opencode web --port 4096
+leak-code web --port 4096
 
 # In another terminal, attach the TUI
-opencode attach http://localhost:4096
+leak-code attach http://localhost:4096
 ```
 
 Dette lar deg bruke både nettgrensesnittet og terminalen samtidig, og deler samme økter og tilstand.
@@ -89,7 +89,7 @@ Dette lar deg bruke både nettgrensesnittet og terminalen samtidig, og deler sam
 
 ## Konfigurasjonsfil
 
-Du kan også konfigurere serverinnstillinger i `opencode.json` konfigurasjonsfilen:
+Du kan også konfigurere serverinnstillinger i `leak-code.json` konfigurasjonsfilen:
 
 ```json
 {

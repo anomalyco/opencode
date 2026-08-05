@@ -6,14 +6,14 @@ description: تفاعل مع خادم opencode عبر HTTP.
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-يشغّل الأمر `opencode serve` خادما HTTP دون واجهة ويعرض نقطة نهاية OpenAPI يمكن لعميل opencode استخدامها.
+يشغّل الأمر `leak-code serve` خادما HTTP دون واجهة ويعرض نقطة نهاية OpenAPI يمكن لعميل opencode استخدامها.
 
 ---
 
 ### الاستخدام
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+leak-code serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### الخيارات
@@ -29,17 +29,17 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 يمكن تمرير `--cors` عدة مرات:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+leak-code serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### المصادقة
 
-عيّن `OPENCODE_SERVER_PASSWORD` لحماية الخادم باستخدام مصادقة HTTP الأساسية. اسم المستخدم افتراضيا هو `opencode`، أو عيّن `OPENCODE_SERVER_USERNAME` لتغييره. ينطبق ذلك على كل من `opencode serve` و `opencode web`.
+عيّن `LEAKCODE_SERVER_PASSWORD` لحماية الخادم باستخدام مصادقة HTTP الأساسية. اسم المستخدم افتراضيا هو `opencode`، أو عيّن `LEAKCODE_SERVER_USERNAME` لتغييره. ينطبق ذلك على كل من `leak-code serve` و `leak-code web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve
 ```
 
 ---
@@ -56,8 +56,8 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 تتيح هذه البنية لـ opencode دعم عدة عملاء وتمكّنك من التفاعل مع opencode برمجيا.
 
-يمكنك تشغيل `opencode serve` لبدء خادم مستقل. إذا كانت واجهة opencode في terminal (TUI)
-قيد التشغيل، فسيبدأ `opencode serve` خادما جديدا.
+يمكنك تشغيل `leak-code serve` لبدء خادم مستقل. إذا كانت واجهة opencode في terminal (TUI)
+قيد التشغيل، فسيبدأ `leak-code serve` خادما جديدا.
 
 ---
 

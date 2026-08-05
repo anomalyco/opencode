@@ -23,7 +23,7 @@ OpenCode 使用 `permission` 配置来决定某个操作是否应自动运行、
 
 你可以全局设置权限（使用 `*`），并覆盖特定工具的权限。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -36,7 +36,7 @@ OpenCode 使用 `permission` 配置来决定某个操作是否应自动运行、
 
 你还可以一次性设置所有权限：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow"
@@ -49,7 +49,7 @@ OpenCode 使用 `permission` 配置来决定某个操作是否应自动运行、
 
 对于大多数权限，你可以使用对象来根据工具输入应用不同的操作。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -94,7 +94,7 @@ OpenCode 使用 `permission` 配置来决定某个操作是否应自动运行、
 
 例如，以下配置允许访问 `~/projects/personal/` 下的所有内容：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -107,7 +107,7 @@ OpenCode 使用 `permission` 配置来决定某个操作是否应自动运行、
 
 此处允许的任何目录都会继承与当前工作空间相同的默认值。由于 [`read` 默认为 `allow`](#默认值)，`external_directory` 下的条目也允许读取，除非另行覆盖。当需要在这些路径中限制某个工具时，请添加显式规则，例如在保留读取的同时阻止编辑：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -152,7 +152,7 @@ OpenCode 的权限以工具名称为键，外加几个安全防护项：
 - `doom_loop` 和 `external_directory` 默认为 `"ask"`。
 - `read` 为 `"allow"`，但 `.env` 文件默认被拒绝：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "permission": {
     "read": {
@@ -187,7 +187,7 @@ OpenCode 的权限以工具名称为键，外加几个安全防护项：
 有关更详细的模式匹配示例，请参阅上方的[细粒度规则（对象语法）](#细粒度规则对象语法)部分。
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -217,7 +217,7 @@ OpenCode 的权限以工具名称为键，外加几个安全防护项：
 
 你还可以在 Markdown 中配置代理权限：
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

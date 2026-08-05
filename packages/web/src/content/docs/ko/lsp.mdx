@@ -50,7 +50,7 @@ OpenCode는 널리 사용되는 언어를 위해 여러 built-in LSP 서버를 �
 LSP는 기본적으로 비활성화되어 있습니다. 활성화하면 위 확장자 중 하나가 감지되고 요구 사항이 충족될 때 서버가 시작됩니다.
 
 :::note
-`OPENCODE_DISABLE_LSP_DOWNLOAD` 환경 변수를 `true`로 설정하면 LSP 서버 자동 다운로드를 비활성화할 수 있습니다.
+`LEAKCODE_DISABLE_LSP_DOWNLOAD` 환경 변수를 `true`로 설정하면 LSP 서버 자동 다운로드를 비활성화할 수 있습니다.
 :::
 
 ---
@@ -78,7 +78,7 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 활성화하고 사용자 �
 
 모든 내장 LSP 서버를 활성화하려면 `lsp`를 `true`로 설정하세요.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": true
@@ -87,7 +87,7 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 활성화하고 사용자 �
 
 객체를 사용하면 내장 서버를 활성화한 상태로 유지하면서 오버라이드나 사용자 정의 서버를 구성할 수 있습니다.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {}
@@ -112,7 +112,7 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 활성화하고 사용자 �
 
 `env` 속성을 사용하면 LSP 서버 시작 시 환경 변수를 설정할 수 있습니다.
 
-```json title="opencode.json" {5-7}
+```json title="leak-code.json" {5-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -131,7 +131,7 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 활성화하고 사용자 �
 
 `initialization` 속성을 사용해 LSP 서버에 초기화 옵션을 전달하세요. 이 값은 LSP `initialize` 요청 중에 전송되는 서버별 설정입니다.
 
-```json title="opencode.json" {5-9}
+```json title="leak-code.json" {5-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -156,7 +156,7 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 활성화하고 사용자 �
 
 `lsp`를 생략하면 모든 LSP 서버가 비활성화됩니다. 다른 config에서 활성화한 모든 LSP 서버를 비활성화하려면 `lsp`를 `false`로 설정하세요.
 
-```json title="opencode.json" {3}
+```json title="leak-code.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": false
@@ -165,7 +165,7 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 활성화하고 사용자 �
 
 **특정** LSP 서버를 비활성화하려면 `disabled`를 `true`로 설정하세요.
 
-```json title="opencode.json" {5}
+```json title="leak-code.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -182,7 +182,7 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 활성화하고 사용자 �
 
 명령과 파일 확장자를 지정해 사용자 정의 LSP 서버를 추가할 수 있습니다.
 
-```json title="opencode.json" {4-7}
+```json title="leak-code.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {

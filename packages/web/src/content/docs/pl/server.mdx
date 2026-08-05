@@ -6,14 +6,14 @@ description: Interakcja z serwerem opencode za pośrednictwem protokołu HTTP.
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Komenda `opencode serve` uruchamia bezgłowy serwer HTTP, który udostępnia punkt końcowy OpenAPI, z którego może korzystać klient opencode.
+Komenda `leak-code serve` uruchamia bezgłowy serwer HTTP, który udostępnia punkt końcowy OpenAPI, z którego może korzystać klient opencode.
 
 ---
 
 ### Użycie
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+leak-code serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Opcje
@@ -29,17 +29,17 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 `--cors` można przekazać wiele razy:
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+leak-code serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### Uwierzytelnianie
 
-Ustaw `OPENCODE_SERVER_PASSWORD`, aby chronić serwer za pomocą podstawowego uwierzytelniania HTTP. Domyślną nazwą użytkownika jest `opencode` lub ustaw `OPENCODE_SERVER_USERNAME`, aby ją zastąpić. Dotyczy to zarówno `opencode serve`, jak i `opencode web`.
+Ustaw `LEAKCODE_SERVER_PASSWORD`, aby chronić serwer za pomocą podstawowego uwierzytelniania HTTP. Domyślną nazwą użytkownika jest `opencode` lub ustaw `LEAKCODE_SERVER_USERNAME`, aby ją zastąpić. Dotyczy to zarówno `leak-code serve`, jak i `leak-code web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve
 ```
 
 ---
@@ -56,8 +56,8 @@ Użyj serwera opencode do programowej interakcji z opencode.
 
 Ta architektura umożliwia obsługę wielu klientów przez opencode i programową interakcję z kodem otwartym.
 
-Możesz uruchomić `opencode serve`, aby uruchomić samodzielny serwer. Jeśli masz
-opencode TUI działa, `opencode serve` uruchomi nowy serwer.
+Możesz uruchomić `leak-code serve`, aby uruchomić samodzielny serwer. Jeśli masz
+opencode TUI działa, `leak-code serve` uruchomi nowy serwer.
 
 ---
 

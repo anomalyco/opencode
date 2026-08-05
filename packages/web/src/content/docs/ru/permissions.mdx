@@ -23,7 +23,7 @@ opencode использует конфигурацию `permission`, чтобы 
 
 Вы можете устанавливать разрешения глобально (с помощью `*`) и переопределять определенные инструменты.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -36,7 +36,7 @@ opencode использует конфигурацию `permission`, чтобы 
 
 Вы также можете установить все разрешения одновременно:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow"
@@ -49,7 +49,7 @@ opencode использует конфигурацию `permission`, чтобы 
 
 Для большинства разрешений вы можете использовать объект для применения различных действий на основе входных данных инструмента.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -94,7 +94,7 @@ opencode использует конфигурацию `permission`, чтобы 
 
 Например, это позволяет получить доступ ко всему, что находится под `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -107,7 +107,7 @@ opencode использует конфигурацию `permission`, чтобы 
 
 Любой каталог, разрешенный здесь, наследует те же настройки по умолчанию, что и текущая рабочая область. Поскольку для [`read` по умолчанию установлено значение `allow`](#defaults), чтение также разрешено для записей под `external_directory`, если оно не переопределено. Добавьте явные правила, когда инструмент должен быть ограничен в этих путях, например, блокировать редактирование при сохранении чтения:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -152,7 +152,7 @@ opencode использует конфигурацию `permission`, чтобы 
 - `doom_loop` и `external_directory` по умолчанию равны `"ask"`.
 - `read` — это `"allow"`, но файлы `.env` по умолчанию запрещены:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "permission": {
     "read": {
@@ -187,7 +187,7 @@ opencode использует конфигурацию `permission`, чтобы 
 Более подробные примеры сопоставления с образцом см. в разделе [Детальные правила (синтаксис объекта)](#granular-rules-object-syntax) выше.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -217,7 +217,7 @@ opencode использует конфигурацию `permission`, чтобы 
 
 Вы также можете настроить разрешения агента в Markdown:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

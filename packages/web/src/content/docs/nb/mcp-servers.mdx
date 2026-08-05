@@ -25,7 +25,7 @@ Enkelte MCP-servere, som GitHub MCP-serveren, har en tendens til å legge til ma
 
 Du kan definere MCP-servere i [OpenCode Config](https://opencode.ai/docs/config/) under `mcp`. Legg til hver MCP med et unikt navn. Du kan referere til den MCP ved navn når du spør LLM-en.
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="leak-code.jsonc" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -50,7 +50,7 @@ Organisasjoner kan tilby standard MCP-servere via deres `.well-known/opencode`-e
 
 For å aktivere en spesifikk server fra organisasjonens eksterne konfigurasjon, legg den til i din lokale konfigurasjon med `enabled: true`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -71,7 +71,7 @@ Dine lokale konfigurasjonsverdier overstyrer de eksterne standardinnstillingene.
 
 Legg til lokale MCP-servere ved å bruke `type` til `"local"` i MCP-objektet.
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="leak-code.jsonc" {15}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -92,7 +92,7 @@ Kommandoen er hvordan den lokale MCP-serveren startes. Du kan også sende inn en
 
 For eksempel, her er hvordan du kan legge til test [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP serveren.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -130,7 +130,7 @@ Her er alle alternativene for å konfigurere en lokal MCP-server.
 
 Legg til eksterne MCP-servere ved å sette `type` til `"remote"`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -177,7 +177,7 @@ OpenCode håndterer automatisk OAuth-autentisering for eksterne MCP-servere. Nå
 
 For de fleste OAuth-aktiverte MCP-servere er ingen spesiell konfigurasjon nødvendig. Bare konfigurer den eksterne serveren:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -189,7 +189,7 @@ For de fleste OAuth-aktiverte MCP-servere er ingen spesiell konfigurasjon nødve
 }
 ```
 
-Hvis serveren krever autentisering, vil OpenCode be deg om å autentisere når du prøver å bruke den for første gang. Hvis ikke, kan du [utløse flyten manuelt](#authenticating) med `opencode mcp auth <server-name>`.
+Hvis serveren krever autentisering, vil OpenCode be deg om å autentisere når du prøver å bruke den for første gang. Hvis ikke, kan du [utløse flyten manuelt](#authenticating) med `leak-code mcp auth <server-name>`.
 
 ---
 
@@ -197,7 +197,7 @@ Hvis serveren krever autentisering, vil OpenCode be deg om å autentisere når d
 
 Hvis du har klientlegitimasjon fra MCP-serverleverandøren, kan du konfigurere dem:
 
-```json title="opencode.json" {7-11}
+```json title="leak-code.json" {7-11}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -223,22 +223,22 @@ Du kan utløse autentisering manuelt eller administrere legitimasjon.
 Autentiser med en spesifikk MCP-server:
 
 ```bash
-opencode mcp auth my-oauth-server
+leak-code mcp auth my-oauth-server
 ```
 
 Liste alle MCP-servere og deres autentiseringsstatus:
 
 ```bash
-opencode mcp list
+leak-code mcp list
 ```
 
 Fjern lagret legitimasjon:
 
 ```bash
-opencode mcp logout my-oauth-server
+leak-code mcp logout my-oauth-server
 ```
 
-Kommandoen `mcp auth` åpner nettleseren din for autorisasjon. Etter at du har godkjent, vil OpenCode lagre tokens sikkert i `~/.local/share/opencode/mcp-auth.json`.
+Kommandoen `mcp auth` åpner nettleseren din for autorisasjon. Etter at du har godkjent, vil OpenCode lagre tokens sikkert i `~/.local/share/leak-code/mcp-auth.json`.
 
 ---
 
@@ -246,7 +246,7 @@ Kommandoen `mcp auth` åpner nettleseren din for autorisasjon. Etter at du har g
 
 Hvis du vil deaktivere automatisk OAuth for en server (f.eks. for servere som bruker API-nøkler i stedet), setter du `oauth` til `false`:
 
-```json title="opencode.json" {7}
+```json title="leak-code.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -279,10 +279,10 @@ Hvis en ekstern MCP-server ikke klarer å autentisere, kan du diagnostisere prob
 
 ```bash
 # View auth status for all OAuth-capable servers
-opencode mcp auth list
+leak-code mcp auth list
 
 # Debug connection and OAuth flow for a specific server
-opencode mcp debug my-oauth-server
+leak-code mcp debug my-oauth-server
 ```
 
 Kommandoen `mcp debug` viser gjeldende autentiseringsstatus, tester HTTP-tilkoblingen og forsøker OAuth-oppdagelsesflyten.
@@ -299,7 +299,7 @@ MCP-ene dine er tilgjengelige som verktøy i OpenCode, sammen med innebygde verk
 
 Dette betyr at du kan aktivere eller deaktivere dem globalt.
 
-```json title="opencode.json" {14}
+```json title="leak-code.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -320,7 +320,7 @@ Dette betyr at du kan aktivere eller deaktivere dem globalt.
 
 Vi kan også bruke et globmønster for å deaktivere alle matchende MCP-er.
 
-```json title="opencode.json" {14}
+```json title="leak-code.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -350,7 +350,7 @@ Hvis du har et stort antall MCP-servere, vil du kanskje bare aktivere dem per ag
 1. Deaktiver det som et verktøy globalt.
 2. Aktiver MCP-serveren som et verktøy i [agent config](/docs/agents#tools).
 
-```json title="opencode.json" {11, 14-18}
+```json title="leak-code.json" {11, 14-18}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -404,7 +404,7 @@ Nedenfor er eksempler på noen vanlige MCP-servere. Du kan sende inn en PR hvis 
 
 Legg til [Sentry MCP-serveren](https://mcp.sentry.dev) for å samhandle med Sentry-prosjektene og problemene dine.
 
-```json title="opencode.json" {4-8}
+```json title="leak-code.json" {4-8}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -420,7 +420,7 @@ Legg til [Sentry MCP-serveren](https://mcp.sentry.dev) for å samhandle med Sent
 Etter å ha lagt til konfigurasjonen, autentiser med Sentry:
 
 ```bash
-opencode mcp auth sentry
+leak-code mcp auth sentry
 ```
 
 Dette åpner et nettleservindu for å fullføre OAuth-flyten og koble OpenCode til Sentry-kontoen din.
@@ -437,7 +437,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 Legg til [Context7 MCP-serveren](https://github.com/upstash/context7) for å søke gjennom dokumenter.
 
-```json title="opencode.json" {4-7}
+```json title="leak-code.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -451,7 +451,7 @@ Legg til [Context7 MCP-serveren](https://github.com/upstash/context7) for å sø
 
 Hvis du har registrert deg for en gratis konto, kan du bruke API-nøkkelen din og få høyere satsgrenser.
 
-```json title="opencode.json" {7-9}
+```json title="leak-code.json" {7-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -486,7 +486,7 @@ When you need to search docs, use `context7` tools.
 
 Legg til [Grep by Vercel](https://grep.app) MCP-serveren for å søke gjennom kodebiter på GitHub.
 
-```json title="opencode.json" {4-7}
+```json title="leak-code.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -547,7 +547,7 @@ I tilfelle du ser en funksjon eller modell fra Helicone som ikke konfigureres au
 
 Her er [Helicone's Model Directory](https://helicone.ai/models), du trenger denne for å hente ID-ene til modellene du vil legge til.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -575,7 +575,7 @@ Her er [Helicone's Model Directory](https://helicone.ai/models), du trenger denn
 
 Helicone støtter tilpassede headere for funksjoner som bufring, brukersporing og øktadministrasjon. Legg dem til leverandørkonfigurasjonen din ved å bruke `options.headers`:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -604,7 +604,7 @@ npm install -g opencode-helicone-session
 
 Legg den til i konfigurasjonen din.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "plugin": ["opencode-helicone-session"]
 }

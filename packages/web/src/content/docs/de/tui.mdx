@@ -10,7 +10,7 @@ OpenCode bietet eine interaktive Terminaloberflaeche (TUI), um mit einem LLM an 
 Ohne weitere Argumente startet OpenCode die TUI im aktuellen Verzeichnis.
 
 ```bash
-opencode
+leak-code
 ```
 
 Oder du startest sie fuer ein bestimmtes Arbeitsverzeichnis.
@@ -385,7 +385,7 @@ Du kannst das Verhalten der TUI ueber die Datei `tui.json` (oder `tui.jsonc`) an
 }
 ```
 
-Dies ist getrennt von `opencode.json`, welche das Server-/Runtime-Verhalten konfiguriert.
+Dies ist getrennt von `leak-code.json`, welche das Server-/Runtime-Verhalten konfiguriert.
 
 `keybinds` wird mit den integrierten Standardwerten zusammengeführt, daher musst du nur die Tastenkombinationen konfigurieren, die du ändern möchtest.
 
@@ -400,7 +400,7 @@ Dies ist getrennt von `opencode.json`, welche das Server-/Runtime-Verhalten konf
 - `mouse` - Aktiviert oder deaktiviert die Mauserfassung im TUI (Standard: `true`). Wenn deaktiviert, bleibt das native Mausauswahl- und Scrollverhalten des Terminals erhalten.
 - `attention` - Konfiguriert Desktop-Benachrichtigungen und Sounds des TUI. Standardmäßig deaktiviert.
 
-Verwende `OPENCODE_TUI_CONFIG`, um einen benutzerdefinierten TUI-Konfigurationspfad zu laden.
+Verwende `LEAKCODE_TUI_CONFIG`, um einen benutzerdefinierten TUI-Konfigurationspfad zu laden.
 
 ### Attention
 

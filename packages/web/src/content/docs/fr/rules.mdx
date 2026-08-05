@@ -54,7 +54,7 @@ Nous ajoutons ici des instructions spécifiques au projet et celles-ci seront pa
 
 ## Types
 
-opencode prend également en charge la lecture du fichier `AGENTS.md` à partir de plusieurs emplacements. Et cela répond à des objectifs différents.
+leak-code prend également en charge la lecture du fichier `AGENTS.md` à partir de plusieurs emplacements. Et cela répond à des objectifs différents.
 
 ### Projet
 
@@ -62,7 +62,7 @@ Placez un `AGENTS.md` à la racine de votre projet pour les règles spécifiques
 
 ### Mondial
 
-Vous pouvez également avoir des règles globales dans un fichier `~/.config/opencode/AGENTS.md`. Ceci est appliqué à toutes les sessions opencode.
+Vous pouvez également avoir des règles globales dans un fichier `~/.config/leak-code/AGENTS.md`. Ceci est appliqué à toutes les sessions opencode.
 
 Étant donné que cela n'est pas validé par Git ni partagé avec votre équipe, nous vous recommandons de l'utiliser pour spécifier les règles personnelles que le LLM doit suivre.
 
@@ -71,15 +71,15 @@ Vous pouvez également avoir des règles globales dans un fichier `~/.config/ope
 Pour les utilisateurs migrant depuis Claude Code, OpenCode prend en charge les conventions de fichiers de Claude Code comme solutions de secours :
 
 - **Règles du projet** : `CLAUDE.md` dans le répertoire de votre projet (utilisé si aucun `AGENTS.md` n'existe)
-- **Règles globales** : `~/.claude/CLAUDE.md` (utilisé si aucun `~/.config/opencode/AGENTS.md` n'existe)
+- **Règles globales** : `~/.claude/CLAUDE.md` (utilisé si aucun `~/.config/leak-code/AGENTS.md` n'existe)
 - **Compétences** : `~/.claude/skills/` — voir [Compétences de l'agent](/docs/skills/) pour plus de détails
 
 Pour désactiver la compatibilité Claude Code, définissez l'une de ces variables d'environnement :
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export LEAKCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export LEAKCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export LEAKCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
@@ -89,20 +89,20 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 Lorsque opencode démarre, il recherche les fichiers de règles dans cet ordre :
 
 1. **Fichiers locaux** en parcourant le répertoire actuel (`AGENTS.md`, `CLAUDE.md`)
-2. **Fichier global** à `~/.config/opencode/AGENTS.md`
+2. **Fichier global** à `~/.config/leak-code/AGENTS.md`
 3. **Fichier Claude Code** à `~/.claude/CLAUDE.md` (sauf si désactivé)
 
-Le premier fichier correspondant gagne dans chaque catégorie. Par exemple, si vous possédez à la fois `AGENTS.md` et `CLAUDE.md`, seul `AGENTS.md` est utilisé. De même, `~/.config/opencode/AGENTS.md` a priorité sur `~/.claude/CLAUDE.md`.
+Le premier fichier correspondant gagne dans chaque catégorie. Par exemple, si vous possédez à la fois `AGENTS.md` et `CLAUDE.md`, seul `AGENTS.md` est utilisé. De même, `~/.config/leak-code/AGENTS.md` a priorité sur `~/.claude/CLAUDE.md`.
 
 ---
 
 ## Instructions personnalisées
 
-Vous pouvez spécifier des fichiers d'instructions personnalisés dans votre `opencode.json` ou dans le `~/.config/opencode/opencode.json` global. Cela vous permet, à vous et à votre équipe, de réutiliser les règles existantes plutôt que d'avoir à les dupliquer dans AGENTS.md.
+Vous pouvez spécifier des fichiers d'instructions personnalisés dans votre `leak-code.json` ou dans le `~/.config/leak-code/leak-code.json` global. Cela vous permet, à vous et à votre équipe, de réutiliser les règles existantes plutôt que d'avoir à les dupliquer dans AGENTS.md.
 
 Exemple:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -111,7 +111,7 @@ Exemple:
 
 Vous pouvez également utiliser des URL distantes pour charger des instructions à partir du Web.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
@@ -128,11 +128,11 @@ Tous les fichiers d'instructions sont combinés avec vos fichiers `AGENTS.md`.
 
 Bien que opencode n'analyse pas automatiquement les références de fichiers dans `AGENTS.md`, vous pouvez obtenir des fonctionnalités similaires de deux manières :
 
-### Utilisation de opencode.json
+### Utilisation de leak-code.json
 
-L'approche recommandée consiste à utiliser le champ `instructions` dans `opencode.json` :
+L'approche recommandée consiste à utiliser le champ `instructions` dans `leak-code.json` :
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
@@ -176,5 +176,5 @@ Cette approche vous permet de :
 - Assurez-vous que opencode charge les fichiers uniquement lorsque cela est nécessaire pour une tâche spécifique.
 
 :::tip
-Pour les monorepos ou les projets avec des normes partagées, l'utilisation de `opencode.json` avec des modèles globaux (comme `packages/*/AGENTS.md`) est plus maintenable que les instructions manuelles.
+Pour les monorepos ou les projets avec des normes partagées, l'utilisation de `leak-code.json` avec des modèles globaux (comme `packages/*/AGENTS.md`) est plus maintenable que les instructions manuelles.
 :::

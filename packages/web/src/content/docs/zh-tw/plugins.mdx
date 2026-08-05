@@ -19,8 +19,8 @@ description: 編寫自己的外掛來擴展 OpenCode。
 
 將 JavaScript 或 TypeScript 檔案放置在外掛目錄中。
 
-- `.opencode/plugins/` - 專案級外掛
-- `~/.config/opencode/plugins/` - 全域外掛
+- `.leak-code/plugins/` - 專案級外掛
+- `~/.config/leak-code/plugins/` - 全域外掛
 
 這些目錄中的檔案會在啟動時自動載入。
 
@@ -30,7 +30,7 @@ description: 編寫自己的外掛來擴展 OpenCode。
 
 在設定檔中指定 npm 套件。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -55,10 +55,10 @@ description: 編寫自己的外掛來擴展 OpenCode。
 
 外掛從所有來源載入，所有鉤子按順序執行。載入順序為：
 
-1. 全域設定 (`~/.config/opencode/opencode.json`)
-2. 專案設定 (`opencode.json`)
-3. 全域外掛目錄 (`~/.config/opencode/plugins/`)
-4. 專案外掛目錄 (`.opencode/plugins/`)
+1. 全域設定 (`~/.config/leak-code/leak-code.json`)
+2. 專案設定 (`leak-code.json`)
+3. 全域外掛目錄 (`~/.config/leak-code/plugins/`)
+4. 專案外掛目錄 (`.leak-code/plugins/`)
 
 名稱和版本相同的重複 npm 套件只會載入一次。但本地外掛和名稱相似的 npm 外掛會分別獨立載入。
 
@@ -74,7 +74,7 @@ description: 編寫自己的外掛來擴展 OpenCode。
 
 本地外掛和自訂工具可以使用外部 npm 套件。在設定目錄中新增一個 `package.json`，列出所需的相依套件。
 
-```json title=".opencode/package.json"
+```json title=".leak-code/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -84,7 +84,7 @@ description: 編寫自己的外掛來擴展 OpenCode。
 
 OpenCode 會在啟動時執行 `bun install` 來安裝這些相依套件。之後您的外掛和工具就可以匯入它們了。
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -102,7 +102,7 @@ export const MyPlugin = async (ctx) => {
 
 ### 基本結構
 
-```js title=".opencode/plugins/example.js"
+```js title=".leak-code/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -218,7 +218,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 在特定事件發生時傳送通知：
 
-```js title=".opencode/plugins/notification.js"
+```js title=".leak-code/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
@@ -243,7 +243,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 
 阻止 OpenCode 讀取 `.env` 檔案：
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".leak-code/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -261,7 +261,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 將環境變數注入所有 Shell 執行（AI 工具和使用者終端機）：
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".leak-code/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -278,7 +278,7 @@ export const InjectEnvPlugin = async () => {
 
 外掛還可以為 OpenCode 新增自訂工具：
 
-```ts title=".opencode/plugins/custom-tools.ts"
+```ts title=".leak-code/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
@@ -317,7 +317,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 使用 `client.app.log()` 代替 `console.log` 進行結構化日誌記錄：
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -338,7 +338,7 @@ export const MyPlugin = async ({ client }) => {
 
 自訂工作階段壓縮時包含的上下文：
 
-```ts title=".opencode/plugins/compaction.ts"
+```ts title=".leak-code/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
@@ -362,7 +362,7 @@ Include any state that should persist across compaction:
 
 您還可以透過設定 `output.prompt` 來完全替換壓縮提示詞：
 
-```ts title=".opencode/plugins/custom-compaction.ts"
+```ts title=".leak-code/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {

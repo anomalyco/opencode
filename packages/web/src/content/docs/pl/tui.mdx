@@ -10,7 +10,7 @@ opencode zapewnia interaktywny interfejs terminala lub TUI do pracy nad projekta
 Uruchomienie opencode uruchamia TUI dla bieżącego katalogu.
 
 ```bash
-opencode
+leak-code
 ```
 
 Możesz też uruchomić go dla określonego katalogu roboczego.
@@ -385,7 +385,7 @@ Możesz dostosować zachowanie TUI za pomocą pliku `tui.json` (lub `tui.jsonc`)
 }
 ```
 
-Jest to oddzielny plik od `opencode.json`, który konfiguruje zachowanie serwera/runtime.
+Jest to oddzielny plik od `leak-code.json`, który konfiguruje zachowanie serwera/runtime.
 
 `keybinds` jest łączone z wbudowanymi wartościami domyślnymi, więc wystarczy skonfigurować tylko te skróty, które chcesz zmienić.
 
@@ -400,7 +400,7 @@ Jest to oddzielny plik od `opencode.json`, który konfiguruje zachowanie serwera
 - `mouse` - Włącza lub wyłącza przechwytywanie myszy w TUI (domyślnie `true`). Po wyłączeniu zachowane zostaje natywne zachowanie terminala przy zaznaczaniu i przewijaniu myszą.
 - `attention` - Konfiguruje powiadomienia pulpitu i dźwięki TUI. Domyślnie wyłączone.
 
-Użyj `OPENCODE_TUI_CONFIG`, aby załadować niestandardową ścieżkę konfiguracji TUI.
+Użyj `LEAKCODE_TUI_CONFIG`, aby załadować niestandardową ścieżkę konfiguracji TUI.
 
 ### Attention
 

@@ -23,7 +23,7 @@ opencode는 주어진 동작이 자동으로 실행되는지 결정하기 위해
 
 글로벌 권한(`*` 포함) 및 특정 도구를 부여할 수 있습니다.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -36,7 +36,7 @@ opencode는 주어진 동작이 자동으로 실행되는지 결정하기 위해
 
 한 번에 모든 권한을 설정할 수 있습니다.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow"
@@ -49,7 +49,7 @@ opencode는 주어진 동작이 자동으로 실행되는지 결정하기 위해
 
 대부분의 권한을 위해 도구 입력을 기반으로 다른 작업을 적용 할 수 있습니다.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -94,7 +94,7 @@ Permission 본 사용 간단한 wildcard 일치:
 
 예를 들어, 이것은 `~/projects/personal/`의 모든 것에 액세스 할 수 있습니다.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -107,7 +107,7 @@ Permission 본 사용 간단한 wildcard 일치:
 
 여기에 허용되는 모든 디렉토리는 현재 작업 공간과 동일한 기본값을 상속합니다. [`read` defaults to `allow`](#defaults)는 `external_directory`에서 `external_directory`의 항목에 대해 읽을 수 있습니다. 도구가 이러한 경로에 제한 될 때 명시적 규칙을 추가하십시오.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -152,7 +152,7 @@ opencode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 �
 - `doom_loop` 및 `external_directory` 기본적으로 `"ask"`.
 - `read`는 `"allow"`이고, 그러나 `.env` 파일은 기본적으로 denied:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "permission": {
     "read": {
@@ -187,7 +187,7 @@ opencode가 승인되면 UI는 세 가지 결과를 제공합니다.
 [Granular Rules (Object Syntax)](#granular-rules-object-syntax))에 대한 자세한 패턴 매칭 예제를 참조하십시오.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -217,7 +217,7 @@ opencode가 승인되면 UI는 세 가지 결과를 제공합니다.
 
 Markdown의 에이전트 권한을 구성할 수 있습니다.
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

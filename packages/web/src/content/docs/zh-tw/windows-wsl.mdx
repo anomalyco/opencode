@@ -35,7 +35,7 @@ WSL 提供更出色的檔案系統效能、完整的終端機支援，以及與 
 
    ```bash
    cd /mnt/c/Users/YourName/project
-   opencode
+   leak-code
    ```
 
 </Steps>
@@ -49,7 +49,7 @@ WSL 提供更出色的檔案系統效能、完整的終端機支援，以及與 
 1. **在 WSL 中啟動伺服器**，新增 `--hostname 0.0.0.0` 以允許外部連線：
 
    ```bash
-   opencode serve --hostname 0.0.0.0 --port 4096
+   leak-code serve --hostname 0.0.0.0 --port 4096
    ```
 
 2. **在桌面應用程式中連線到** `http://localhost:4096`
@@ -59,11 +59,11 @@ WSL 提供更出色的檔案系統效能、完整的終端機支援，以及與 
 :::
 
 :::caution
-使用 `--hostname 0.0.0.0` 時，請設定 `OPENCODE_SERVER_PASSWORD` 以保護伺服器安全。
+使用 `--hostname 0.0.0.0` 時，請設定 `LEAKCODE_SERVER_PASSWORD` 以保護伺服器安全。
 :::
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+LEAKCODE_SERVER_PASSWORD=your-password leak-code serve --hostname 0.0.0.0
 ```
 
 ---
@@ -72,15 +72,15 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 要在 Windows 上獲得最佳的 Web 體驗：
 
-1. **在 WSL 終端機中執行 `opencode web`**，而非在 PowerShell 中執行：
+1. **在 WSL 終端機中執行 `leak-code web`**，而非在 PowerShell 中執行：
 
    ```bash
-   opencode web --hostname 0.0.0.0
+   leak-code web --hostname 0.0.0.0
    ```
 
 2. **在 Windows 瀏覽器中存取** `http://localhost:<port>`（OpenCode 會輸出該 URL）
 
-從 WSL 中執行 `opencode web` 可確保正確的檔案系統存取和終端機整合，同時仍可透過 Windows 瀏覽器進行存取。
+從 WSL 中執行 `leak-code web` 可確保正確的檔案系統存取和終端機整合，同時仍可透過 Windows 瀏覽器進行存取。
 
 ---
 
@@ -96,7 +96,7 @@ WSL 可以透過 `/mnt/` 目錄存取你的所有 Windows 檔案：
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
-opencode
+leak-code
 ```
 
 :::tip
@@ -109,4 +109,4 @@ opencode
 
 - 對於儲存在 Windows 磁碟上的專案，在 WSL 中執行 OpenCode 即可無縫存取檔案
 - 搭配 VS Code 的 [WSL 擴充套件](https://code.visualstudio.com/docs/remote/wsl) 使用 OpenCode，打造一體化的開發工作流程
-- OpenCode 的設定和工作階段資料儲存在 WSL 環境中的 `~/.local/share/opencode/`
+- OpenCode 的設定和工作階段資料儲存在 WSL 環境中的 `~/.local/share/leak-code/`

@@ -19,8 +19,8 @@ Istnieją dwa sposoby ładowania wtyczek.
 
 Miejsce plików JavaScript lub TypeScript w katalogu wtyczki.
 
-- `.opencode/plugins/` - Wtyczki na poziomie projektu
-- `~/.config/opencode/plugins/` - Wtyczki globalne
+- `.leak-code/plugins/` - Wtyczki na poziomie projektu
+- `~/.config/leak-code/plugins/` - Wtyczki globalne
 
 Pliki w tych katalogach są automatycznie ładowane podczas uruchamiania.
 
@@ -30,7 +30,7 @@ Pliki w tych katalogach są automatycznie ładowane podczas uruchamiania.
 
 szczegółowy pakiet npm w pliku konfiguracyjnym.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -55,10 +55,10 @@ Przeglądaj dostępną wtyczkę w [ekosystemie](/docs/ecosystem#plugins).
 
 Wtyczki są ładowane ze wszystkich źródeł, a wszystkie hooki napisane po kolei. Kolejność ładowania do:
 
-1. Konfiguracja globalna (`~/.config/opencode/opencode.json`)
-2. Konfiguracja projektu (`opencode.json`)
-3. Globalny katalog wtyczek (`~/.config/opencode/plugins/`)
-4. Katalog wtyczek projektu (`.opencode/plugins/`)
+1. Konfiguracja globalna (`~/.config/leak-code/leak-code.json`)
+2. Konfiguracja projektu (`leak-code.json`)
+3. Globalny katalog wtyczek (`~/.config/leak-code/plugins/`)
+4. Katalog wtyczek projektu (`.leak-code/plugins/`)
 
 Zduplikowane pakiety npm o tej samej nazwie i wersji są ładowane raz. Równie ważny jest dostęp lokalny i zewnętrzny npm o dodatkowych nazwach, które są zewnętrzne.
 
@@ -75,7 +75,7 @@ funkcje. dostępna funkcja korzystania z obiektu kontekstu i głównego obiektu 
 
 Lokalne narzędzie i narzędzie, które można wykorzystać z zewnętrznych pakietów npm. Dodaj `package.json` do swojego katalogu konfiguracyjnego z zależnościami.
 
-```json title=".opencode/package.json"
+```json title=".leak-code/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -85,7 +85,7 @@ Lokalne narzędzie i narzędzie, które można wykorzystać z zewnętrznych paki
 
 opencode uruchomienie `bun install` przy uruchomieniu, aby je uruchomić. Twoje dodatkowe funkcje będą dostępne po zaimportowaniu.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### Podstawowa struktura
 
-```js title=".opencode/plugins/example.js"
+```js title=".leak-code/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -219,7 +219,7 @@ Oto kilka dostępnych wtyczek, które można udostępnić do opencode.
 
 Wysyłaj powiadomienia, gdy wystąpią określone zdarzenia:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".leak-code/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
@@ -244,7 +244,7 @@ Jeśli korzystasz z aplikacji komputerowej opencode, może ona automatycznie wys
 
 Zablokuj opencode czytanie plików `.env`:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".leak-code/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Wstrzyknij zmienne konsekwencje dla wszystkich wykonań (narzędzia AI i terminale użytkownika):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".leak-code/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -279,7 +279,7 @@ export const InjectEnvPlugin = async () => {
 
 Wtyczki mogą również dodawać niestandardowe narzędzia do opencode:
 
-```ts title=".opencode/plugins/custom-tools.ts"
+```ts title=".leak-code/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
@@ -314,7 +314,7 @@ Twoje narzędzie będzie dostępne dla otwartego kodu wraz z narzędziami użytk
 
 użyj `client.app.log()` zamiast `console.log` do rejestracji strukturalnego:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -335,7 +335,7 @@ Poziomy: `debug`, `info`, `warn`, `error`. Aby uzyskać szczegółowe informacje
 
 Dostosuj kontekst dołączony podczas kompaktowania sesji:
 
-```ts title=".opencode/plugins/compaction.ts"
+```ts title=".leak-code/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
@@ -359,7 +359,7 @@ Hak `experimental.session.compacting` jest uruchamiany, zanim LLM wygeneruje pod
 
 Można także umieścić kompletny monit o zagęszczenie, ustawiając `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
+```ts title=".leak-code/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {

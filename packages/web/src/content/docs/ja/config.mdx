@@ -11,7 +11,7 @@ JSON 設定ファイルを使用して OpenCode を構成できます。
 
 OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両方をサポートしています。
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "anthropic/claude-sonnet-4-5",
@@ -43,16 +43,16 @@ OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両�
 設定ソースは次の順序でロードされます (後のソースは前のソースをオーバーライドします)。
 
 1. **リモート設定** (`.well-known/opencode` から) - 組織のデフォルト
-2. **グローバル設定** (`~/.config/opencode/opencode.json`) - ユーザー設定
-3. **カスタム設定** (`OPENCODE_CONFIG` 環境変数) - カスタムオーバーライド
-4. **プロジェクト設定** (プロジェクト内の `opencode.json`) - プロジェクト固有の設定
-5. **`.opencode` ディレクトリ** - エージェント、コマンド、プラグイン
-6. **インライン設定** (`OPENCODE_CONFIG_CONTENT` 環境変数) - ランタイムオーバーライド
+2. **グローバル設定** (`~/.config/leak-code/leak-code.json`) - ユーザー設定
+3. **カスタム設定** (`LEAKCODE_CONFIG` 環境変数) - カスタムオーバーライド
+4. **プロジェクト設定** (プロジェクト内の `leak-code.json`) - プロジェクト固有の設定
+5. **`.leak-code` ディレクトリ** - エージェント、コマンド、プラグイン
+6. **インライン設定** (`LEAKCODE_CONFIG_CONTENT` 環境変数) - ランタイムオーバーライド
 
 つまり、プロジェクト設定はグローバルのデフォルトをオーバーライドでき、グローバル設定はリモート組織のデフォルトをオーバーライドできます。
 
 :::note
-`.opencode` および `~/.config/opencode` ディレクトリでは、サブディレクトリに **複数名** が使用されています: `agents/`、`commands/`、`modes/`、`plugins/`、`skills/`、`tools/`、および `themes/`。下位互換性のために、単数形の名前 (`agent/` など) もサポートされています。
+`.leak-code` および `~/.config/leak-code` ディレクトリでは、サブディレクトリに **複数名** が使用されています: `agents/`、`commands/`、`modes/`、`plugins/`、`skills/`、`tools/`、および `themes/`。下位互換性のために、単数形の名前 (`agent/` など) もサポートされています。
 :::
 
 ---
@@ -79,7 +79,7 @@ OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両�
 
 ローカル設定で特定のサーバーを有効にすることができます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "mcp": {
     "jira": {
@@ -95,9 +95,9 @@ OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両�
 
 ### グローバル
 
-グローバル OpenCode 設定を `~/.config/opencode/opencode.json` に配置します。プロバイダー、モデル、権限などのユーザー全体の設定にはグローバル設定を使用します。
+グローバル OpenCode 設定を `~/.config/leak-code/leak-code.json` に配置します。プロバイダー、モデル、権限などのユーザー全体の設定にはグローバル設定を使用します。
 
-TUI 固有の設定には、`~/.config/opencode/tui.json` を使用します。
+TUI 固有の設定には、`~/.config/leak-code/tui.json` を使用します。
 
 グローバル設定はリモート組織のデフォルトをオーバーライドします。
 
@@ -105,7 +105,7 @@ TUI 固有の設定には、`~/.config/opencode/tui.json` を使用します。
 
 ### プロジェクトごと
 
-プロジェクトのルートに `opencode.json` を追加します。プロジェクト設定は、標準設定ファイルの中で最も高い優先順位を持ち、グローバル設定とリモート設定の両方をオーバーライドします。
+プロジェクトのルートに `leak-code.json` を追加します。プロジェクト設定は、標準設定ファイルの中で最も高い優先順位を持ち、グローバル設定とリモート設定の両方をオーバーライドします。
 
 プロジェクト固有の TUI 設定については、その横に `tui.json` を追加します。
 
@@ -121,11 +121,11 @@ OpenCode が起動すると、現在のディレクトリで設定ファイル�
 
 ### カスタムパス
 
-`OPENCODE_CONFIG` 環境変数を使用してカスタム設定ファイルのパスを指定します。
+`LEAKCODE_CONFIG` 環境変数を使用してカスタム設定ファイルのパスを指定します。
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
-opencode run "Hello world"
+export LEAKCODE_CONFIG=/path/to/my/custom-config.json
+leak-code run "Hello world"
 ```
 
 カスタム設定は、優先順位でグローバル設定とプロジェクト設定の間にロードされます。
@@ -134,17 +134,17 @@ opencode run "Hello world"
 
 ### カスタムディレクトリ
 
-`OPENCODE_CONFIG_DIR` を使用してカスタム設定ディレクトリを指定します。
+`LEAKCODE_CONFIG_DIR` を使用してカスタム設定ディレクトリを指定します。
 環境変数。このディレクトリでは、エージェント、コマンド、
-モードとプラグインは標準の `.opencode` ディレクトリと同様であり、次のようにする必要があります。
+モードとプラグインは標準の `.leak-code` ディレクトリと同様であり、次のようにする必要があります。
 同じ構造に従います。
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
-opencode run "Hello world"
+export LEAKCODE_CONFIG_DIR=/path/to/my/config-directory
+leak-code run "Hello world"
 ```
 
-カスタムディレクトリはグローバル config ディレクトリと `.opencode` ディレクトリの後にロードされるため、それらの設定を**オーバーライド**できます。
+カスタムディレクトリはグローバル config ディレクトリと `.leak-code` ディレクトリの後にロードされるため、それらの設定を**オーバーライド**できます。
 
 ---
 
@@ -173,9 +173,9 @@ TUI 固有の設定には、専用の `tui.json` (または `tui.jsonc`) ファ�
 }
 ```
 
-カスタム TUI 設定ファイルを指定するには、`OPENCODE_TUI_CONFIG` を使用します。
+カスタム TUI 設定ファイルを指定するには、`LEAKCODE_TUI_CONFIG` を使用します。
 
-`opencode.json` 内の従来の `theme`、`keybinds`、および `tui` キーは非推奨となり、可能であれば自動的に移行されます。
+`leak-code.json` 内の従来の `theme`、`keybinds`、および `tui` キーは非推奨となり、可能であれば自動的に移行されます。
 
 [TUI の設定の詳細については、こちら](/docs/tui#configure) をご覧ください。
 
@@ -183,9 +183,9 @@ TUI 固有の設定には、専用の `tui.json` (または `tui.jsonc`) ファ�
 
 ### サーバー
 
-`opencode serve` オプションを使用して、`opencode web` および `server` コマンドのサーバー設定を構成できます。
+`leak-code serve` オプションを使用して、`leak-code web` および `server` コマンドのサーバー設定を構成できます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "server": {
@@ -214,7 +214,7 @@ TUI 固有の設定には、専用の `tui.json` (または `tui.jsonc`) ファ�
 
 LLM が使用できるツールは、`tools` オプションを通じて管理できます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -232,7 +232,7 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 
 `provider`、`model`、および `small_model` オプションを使用して、OpenCode 設定で使用するプロバイダーとモデルを構成できます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
@@ -245,7 +245,7 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 
 プロバイダーオプションには、`timeout` および `setCacheKey` を含めることができます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -274,7 +274,7 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 
 Amazon Bedrock は、AWS 固有の設定をサポートしています。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -320,7 +320,7 @@ UI テーマを `tui.json` で設定します。
 
 `agent` オプションを使用して、特定のタスクに特化したエージェントを構成できます。
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -338,7 +338,7 @@ UI テーマを `tui.json` で設定します。
 }
 ```
 
-`~/.config/opencode/agents/` または `.opencode/agents/` の Markdown ファイルを使用してエージェントを定義することもできます。 [詳細はこちら](/docs/agents)。
+`~/.config/leak-code/agents/` または `.leak-code/agents/` の Markdown ファイルを使用してエージェントを定義することもできます。 [詳細はこちら](/docs/agents)。
 
 ---
 
@@ -346,7 +346,7 @@ UI テーマを `tui.json` で設定します。
 
 `default_agent` オプションを使用してデフォルトのエージェントを設定できます。これにより、明示的に何も指定されていない場合にどのエージェントが使用されるかが決まります。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "plan"
@@ -355,7 +355,7 @@ UI テーマを `tui.json` で設定します。
 
 デフォルトのエージェントはプライマリエージェントである必要があります (サブエージェントではありません)。これは、`"build"` や `"plan"` のような組み込みエージェント、または定義した[カスタムエージェント](/docs/agents) にすることができます。指定されたエージェントが存在しないか、サブエージェントである場合、OpenCode は警告とともに `"build"` にフォールバックします。
 
-この設定は、TUI、CLI (`opencode run`)、デスクトップアプリ、および GitHub Action のすべてのインターフェイスに適用されます。
+この設定は、TUI、CLI (`leak-code run`)、デスクトップアプリ、および GitHub Action のすべてのインターフェイスに適用されます。
 
 ---
 
@@ -363,7 +363,7 @@ UI テーマを `tui.json` で設定します。
 
 `share` オプションを使用して [share](/docs/share) 機能を設定できます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -384,7 +384,7 @@ UI テーマを `tui.json` で設定します。
 
 `command` オプションを使用して、反復タスク用のカスタムコマンドを構成できます。
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -402,7 +402,7 @@ UI テーマを `tui.json` で設定します。
 }
 ```
 
-`~/.config/opencode/commands/` または `.opencode/commands/` の Markdown ファイルを使用してコマンドを定義することもできます。 [詳細はこちら](/docs/commands)。
+`~/.config/leak-code/commands/` または `.leak-code/commands/` の Markdown ファイルを使用してコマンドを定義することもできます。 [詳細はこちら](/docs/commands)。
 
 ---
 
@@ -425,7 +425,7 @@ UI テーマを `tui.json` で設定します。
 
 OpenCode は起動時に新しいアップデートを自動的にダウンロードします。 `autoupdate` オプションを使用してこれを無効にできます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false
@@ -441,7 +441,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 `formatter` オプションを使用してコードフォーマッタを設定できます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
@@ -469,7 +469,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 たとえば、`edit` ツールと `bash` ツールにユーザーの承認が必要であることを確認するには、次のようにします。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -487,7 +487,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 `compaction` オプションを使用してコンテキストの圧縮動作を制御できます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
@@ -506,7 +506,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 `watcher` オプションを使用して、ファイルウォッチャーの無視パターンを構成できます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "watcher": {
@@ -523,7 +523,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 `mcp` オプションを使用して、使用する MCP サーバーを構成できます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {}
@@ -538,9 +538,9 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 [Plugins](/docs/plugins) は、カスタムツール、フック、統合を使用して OpenCode を拡張します。
 
-プラグインファイルを `.opencode/plugins/` または `~/.config/opencode/plugins/` に配置します。 `plugin` オプションを使用して npm からプラグインをロードすることもできます。
+プラグインファイルを `.leak-code/plugins/` または `~/.config/leak-code/plugins/` に配置します。 `plugin` オプションを使用して npm からプラグインをロードすることもできます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
@@ -555,7 +555,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 `instructions` オプションを使用して、使用しているモデルの指示を構成できます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -570,7 +570,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 `disabled_providers` オプションを使用して、自動的にロードされるプロバイダーを無効にすることができます。これは、認証情報が利用可能な場合でも、特定のプロバイダーが読み込まれないようにしたい場合に便利です。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
@@ -592,7 +592,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 `enabled_providers` オプションを使用してプロバイダーの許可リストを指定できます。設定すると、指定されたプロバイダーのみが有効になり、その他はすべて無視されます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "enabled_providers": ["anthropic", "openai"]
@@ -612,7 +612,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 `experimental` キーには、現在開発中のオプションが含まれています。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "experimental": {}
@@ -635,10 +635,10 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 `{env:VARIABLE_NAME}` を使用して環境変数を置き換えます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:LEAKCODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -658,7 +658,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 
 `{file:path/to/file}` を使用してファイルの内容を置き換えます。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["./custom-instructions.md"],

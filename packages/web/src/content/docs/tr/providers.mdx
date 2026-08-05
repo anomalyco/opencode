@@ -18,7 +18,7 @@ Bir sağlayıcı eklemek için şunları yapmanız gerekir:
 ### Kimlik Bilgileri
 
 Bir sağlayıcının API anahtarlarını `/connect` komutuyla eklediğinizde, bunlar saklanır
-`~/.local/share/opencode/auth.json` içinde.
+`~/.local/share/leak-code/auth.json` içinde.
 
 ---
 
@@ -33,7 +33,7 @@ config.
 
 `baseURL` seçeneğini ayarlayarak URL tabanını herhangi bir sağlayıcı için özelleştirebilirsiniz. Bu, proxy hizmetlerini veya özel uç noktaları kullanırken kullanışlıdır.
 
-```json title="opencode.json" {6}
+```json title="leak-code.json" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -190,9 +190,9 @@ Amazon Bedrock'u opencode ile kullanmak için:
 
    #### Yapılandırma Dosyası (Önerilen)
 
-   Projeye özel veya kalıcı yapılandırma için `opencode.json` kullanın:
+   Projeye özel veya kalıcı yapılandırma için `leak-code.json` kullanın:
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -219,7 +219,7 @@ Amazon Bedrock'u opencode ile kullanmak için:
 
 Bedrock için VPC uç noktaları kullanıyorsanız:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -265,7 +265,7 @@ Bir taşıyıcı belirteç ayarlandığında (`/connect` veya `AWS_BEARER_TOKEN_
 :::note
 Özel çıkarım profilleri için anahtardaki modeli ve sağlayıcı adını kullanın ve `id` özelliğini arn olarak ayarlayın. Bu, doğru önbelleğe almayı sağlar:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -327,7 +327,7 @@ Veya zaten bir API anahtarınız varsa **API Anahtarını Manuel Olarak Girin** 
 
 opencode'u, yerel LLM'leri OpenAI uyumlu bir API sunucusunun arkasında çalıştıran bir masaüstü uygulaması olan [Atomic Chat](https://atomic.chat) aracılığıyla yerel modelleri kullanacak şekilde yapılandırabilirsiniz (varsayılan uç nokta `http://127.0.0.1:1337/v1`).
 
-```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+```json title="leak-code.json" "atomic-chat" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -555,7 +555,7 @@ Cloudflare AI Gateway, OpenAI, Anthropic, Workers AI ve daha fazlasındaki model
 
    Opencode yapılandırmanız aracılığıyla da modeller ekleyebilirsiniz.
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -750,7 +750,7 @@ GitLab Duo, GitLab'ın Anthropic proxy'si aracılığıyla yerel araç çağırm
 
 :::note
 İstemiyorsanız 'GITLAB_TOKEN' ortam değişkenini de belirtebilirsiniz.
-to store token in opencode auth storage.
+to store token in leak-code auth storage.
 :::
 
 ##### Kendi Kendine Barındırılan GitLab
@@ -759,7 +759,7 @@ to store token in opencode auth storage.
 opencode, oturum başlığını oluşturmak gibi bazı AI görevleri için küçük bir model kullanır.
 Varsayılan olarak Zen tarafından barındırılan gpt-5-nano'yu kullanacak şekilde yapılandırılmıştır. opencode'u kilitlemek için
 yalnızca kendi GitLab tarafından barındırılan örneğinizi kullanmak için aşağıdakileri ekleyin:
-`opencode.json` dosyası. Ayrıca oturum paylaşımını devre dışı bırakmanız da önerilir.
+`leak-code.json` dosyası. Ayrıca oturum paylaşımını devre dışı bırakmanız da önerilir.
 
 ```json
 {
@@ -821,9 +821,9 @@ Daha fazla belge [opencode-gitlab-auth](https://www.npmjs.com/package/opencode-g
 
 ##### Yapılandırma
 
-`opencode.json` üzerinden özelleştirin:
+`leak-code.json` üzerinden özelleştirin:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -840,7 +840,7 @@ Daha fazla belge [opencode-gitlab-auth](https://www.npmjs.com/package/opencode-g
 
 GitLab araçlarına (birleştirme istekleri, sorunlar, işlem hatları, CI/CD vb.) erişmek için:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-gitlab-plugin"]
@@ -1022,7 +1022,7 @@ Helicone'un opencode aracılığıyla otomatik olarak yapılandırılmayan bir �
 
 İşte [Helicone's Model Directory](https://helicone.ai/models), eklemek istediğiniz modellerin kimliklerini almak için buna ihtiyacınız olacak.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1050,7 +1050,7 @@ Helicone'un opencode aracılığıyla otomatik olarak yapılandırılmayan bir �
 
 Helicone, önbelleğe alma, kullanıcı izleme ve oturum yönetimi gibi özellikler için özel başlıkları destekler. `options.headers` kullanarak bunları sağlayıcınızın yapılandırmasına ekleyin:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1079,7 +1079,7 @@ npm install -g opencode-helicone-session
 
 Yapılandırmanıza ekleyin.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "plugin": ["opencode-helicone-session"]
 }
@@ -1104,7 +1104,7 @@ Mevcut tüm başlıklar için [Helicone Header Directory](https://docs.helicone.
 
 opencode'u yerel modelleri kullanacak şekilde [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server yardımcı programını kullanarak yapılandırabilirsiniz.
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="leak-code.json" "llama.cpp" {5, 6, 8, 10-15}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1171,7 +1171,7 @@ IO.NET, çeşitli kullanım durumları için optimize edilmiş 17 model sunar:
 
 LM Studio aracılığıyla opencode'u yerel modelleri kullanacak şekilde yapılandırabilirsiniz.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="leak-code.json" "lmstudio" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1292,7 +1292,7 @@ Ollama aracılığıyla opencode'u yerel modelleri kullanacak şekilde yapıland
 Ollama kendisini opencode için otomatik olarak yapılandırabilir. Ayrıntılar için [Ollama integration docs](https://docs.ollama.com/integrations/opencode)'a bakın.
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="leak-code.json" "ollama" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1454,7 +1454,7 @@ OpenCode Zen, opencode ekibinin test edip doğruladığı modellerin bir listesi
 
    opencode yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1469,7 +1469,7 @@ OpenCode Zen, opencode ekibinin test edip doğruladığı modellerin bir listesi
 
 5. Bunları ayrıca opencode yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Burada bir sağlayıcı belirtmeye ilişkin bir örnek verilmiştir
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1718,7 +1718,7 @@ Vercel AI Gateway, OpenAI, Anthropic, Google, xAI ve daha fazlasındaki modeller
 
 Modelleri opencode yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Sağlayıcı yönlendirme sırasını belirtmeye ilişkin bir örneği burada bulabilirsiniz.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1828,7 +1828,7 @@ Bazı yararlı yönlendirme seçenekleri:
 
    opencode yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1887,16 +1887,16 @@ OpenAI uyumlu herhangi bir sağlayıcıyı opencode ile kullanabilirsiniz. Çoğ
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in leak-code.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. Proje dizininizde `opencode.json` dosyanızı oluşturun veya güncelleyin:
+4. Proje dizininizde `leak-code.json` dosyanızı oluşturun veya güncelleyin:
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="leak-code.json" ""myprovider"" {5-15}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1934,7 +1934,7 @@ OpenAI uyumlu herhangi bir sağlayıcıyı opencode ile kullanabilirsiniz. Çoğ
 
 Burada `apiKey`, `headers` ve model `limit` seçeneklerini ayarlayan bir örnek verilmiştir.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="leak-code.json" {9,11,17-20}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1977,7 +1977,7 @@ Yapılandırma ayrıntıları:
 
 Sağlayıcıyı yapılandırma konusunda sorun yaşıyorsanız aşağıdakileri kontrol edin:
 
-1. **Kimlik doğrulama kurulumunu kontrol edin**: Kimlik bilgilerinin geçerli olup olmadığını görmek için `opencode auth list` komutunu çalıştırın.
+1. **Kimlik doğrulama kurulumunu kontrol edin**: Kimlik bilgilerinin geçerli olup olmadığını görmek için `leak-code auth list` komutunu çalıştırın.
    sağlayıcı için yapılandırmanıza eklenir.
 
    Bu, kimlik doğrulaması için ortam değişkenlerine güvenen Amazon Bedrock gibi sağlayıcılar için geçerli değildir.

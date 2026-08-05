@@ -11,7 +11,7 @@ description: Распространенные проблемы и способы
 
 Лог-файлы записываются в:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leak-code/log/`
 - **Windows**: нажмите `WIN+R` и вставьте `%USERPROFILE%\.local\share\opencode\log`.
 
 Файлам журналов присваиваются имена с метками времени (например, `2025-01-09T123456.log`), и сохраняются 10 последних файлов журналов.
@@ -24,7 +24,7 @@ description: Распространенные проблемы и способы
 
 opencode хранит данные сеанса и другие данные приложения на диске по адресу:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leak-code/`
 - **Windows**: нажмите `WIN+R` и вставьте `%USERPROFILE%\.local\share\opencode`.
 
 Этот каталог содержит:
@@ -57,9 +57,9 @@ opencode Desktop запускает локальный сервер opencode (с
 
 Откройте файл глобальной конфигурации и найдите ключ `plugin`.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (или `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (более ранние версии): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: нажмите `WIN+R` и вставьте `%USERPROFILE%\.config\opencode\opencode.jsonc`.
+- **macOS/Linux**: `~/.config/leak-code/leak-code.jsonc` (или `~/.config/leak-code/leak-code.json`)
+- **macOS/Linux** (более ранние версии): `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows**: нажмите `WIN+R` и вставьте `%USERPROFILE%\.config\opencode\leak-code.jsonc`.
 
 Если у вас настроены плагины, временно отключите их, удалив ключ или установив для него пустой массив:
 
@@ -75,10 +75,10 @@ opencode Desktop запускает локальный сервер opencode (с
 opencode также может загружать локальные плагины с диска. Временно переместите их в сторону (или переименуйте папку) и перезапустите настольное приложение:
 
 - **Глобальные плагины**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leak-code/plugins/`
   - **Windows**: нажмите `WIN+R` и вставьте `%USERPROFILE%\.config\opencode\plugins`.
 - **Плагины проекта** (только если вы используете конфигурацию для каждого проекта)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 Если приложение снова начнет работать, повторно включите плагины по одному, чтобы определить, какой из них вызывает проблему.
 
@@ -111,13 +111,13 @@ opencode Desktop может либо запустить собственный �
 
 #### Удалите `server.port`/`server.hostname` из вашей конфигурации.
 
-Если ваш `opencode.json(c)` содержит раздел `server`, временно удалите его и перезапустите настольное приложение.
+Если ваш `leak-code.json(c)` содержит раздел `server`, временно удалите его и перезапустите настольное приложение.
 
 #### Проверьте переменные среды
 
-Если в вашей среде установлен `OPENCODE_PORT`, настольное приложение попытается использовать этот порт для локального сервера.
+Если в вашей среде установлен `LEAKCODE_PORT`, настольное приложение попытается использовать этот порт для локального сервера.
 
-- Отмените настройку `OPENCODE_PORT` (или выберите свободный порт) и перезапустите.
+- Отмените настройку `LEAKCODE_PORT` (или выберите свободный порт) и перезапустите.
 
 ---
 
@@ -199,7 +199,7 @@ opencode Desktop отображает системные уведомления 
 
 1. Проверьте журналы на наличие сообщений об ошибках
 2. Попробуйте запустить `--print-logs`, чтобы увидеть вывод в terminal.
-3. Убедитесь, что у вас установлена ​​последняя версия `opencode upgrade`.
+3. Убедитесь, что у вас установлена ​​последняя версия `leak-code upgrade`.
 
 ---
 
@@ -227,7 +227,7 @@ opencode Desktop отображает системные уведомления 
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-Чтобы выяснить, к каким моделям у вас есть доступ, запустите `opencode models`.
+Чтобы выяснить, к каким моделям у вас есть доступ, запустите `leak-code models`.
 
 ---
 

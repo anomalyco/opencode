@@ -83,9 +83,9 @@ opencode поддерживает гибкую систему тем на осн
 Темы загружаются из нескольких каталогов в следующем порядке: более поздние каталоги переопределяют предыдущие:
 
 1. **Встроенные темы** – они встроены в двоичный файл.
-2. **Каталог конфигурации пользователя** – определяется в `~/.config/opencode/themes/*.json` или `$XDG_CONFIG_HOME/opencode/themes/*.json`.
-3. **Корневой каталог проекта** – определено в `<project-root>/.opencode/themes/*.json`.
-4. **Текущий рабочий каталог** – определено в `./.opencode/themes/*.json`.
+2. **Каталог конфигурации пользователя** – определяется в `~/.config/leak-code/themes/*.json` или `$XDG_CONFIG_HOME/opencode/themes/*.json`.
+3. **Корневой каталог проекта** – определено в `<project-root>/.leak-code/themes/*.json`.
+4. **Текущий рабочий каталог** – определено в `./.leak-code/themes/*.json`.
 
 Если несколько каталогов содержат тему с одинаковым именем, будет использоваться тема из каталога с более высоким приоритетом.
 
@@ -98,15 +98,15 @@ opencode поддерживает гибкую систему тем на осн
 Для глобальных тем:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/leak-code/themes
+vim ~/.config/leak-code/themes/my-theme.json
 ```
 
 Для тем проекта:
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .leak-code/themes
+vim .leak-code/themes/my-theme.json
 ```
 
 ---

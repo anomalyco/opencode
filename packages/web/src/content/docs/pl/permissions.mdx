@@ -23,7 +23,7 @@ Każda reguła uprawnień skutkuje jedną z:
 
 Możesz zainstalować uprawnienia globalnie (za pomocą `*`) i znajdującego się w nim narzędzia.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -36,7 +36,7 @@ Możesz zainstalować uprawnienia globalnie (za pomocą `*`) i znajdującego si�
 
 Możesz także zainstalować wszystkie uprawnienia na raz:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow"
@@ -49,7 +49,7 @@ Możesz także zainstalować wszystkie uprawnienia na raz:
 
 Można skorzystać z różnych działań, które zależą od danych użytkowych.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -94,7 +94,7 @@ Rozszerzenie domu (jak `~/...`) wpływa tylko na sposób za zwyczajowy wzorca. N
 
 Na przykład umożliwia dostęp do wszystkiego pod `~/projects/personal/`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -107,7 +107,7 @@ Na przykład umożliwia dostęp do wszystkiego pod `~/projects/personal/`:
 
 Każdy dopuszczony tutaj katalog jest dziedziczy tych samych ustawień, co dostęp do obszaru roboczego. Ponieważ [`read` ma wartość domyślną `allow`](#defaults), odczyty są również dostępne dla wpisów poniżej `external_directory`, chyba że zagłębione. Dodaj dodatkowe rozwiązanie, kiedy narzędzie powinno być rozwiązaniem w tych ścieżkach, np. blokowanie edycji przy zachowaniu odczytów:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -152,7 +152,7 @@ Jeżeli nic nie jest określone, opencode zostanie uruchomione od dopuszczalnych
 - `doom_loop` i `external_directory` zamek ma wartość `"ask"`.
 - `read` do `"allow"`, ale pliki `.env` są odrzucane:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "permission": {
     "read": {
@@ -187,7 +187,7 @@ Można uzyskać dostęp do poszczególnych agentów. Uprawnienia agenta są skal
 Bardziej szczegółowe przykłady dopasowywania wzorców można znaleźć w sekcji [Reguły szczegółowe (składnia obiektu) (#granular-rules-object-syntax) powyżej.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -217,7 +217,7 @@ Bardziej szczegółowe przykłady dopasowywania wzorców można znaleźć w sekc
 
 Możesz także mieć pozwolenie na agenta w Markdown:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

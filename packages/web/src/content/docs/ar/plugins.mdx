@@ -19,8 +19,8 @@ description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
 
 ضع ملفات JavaScript أو TypeScript في دليل الإضافات.
 
-- `.opencode/plugins/` - إضافات على مستوى المشروع
-- `~/.config/opencode/plugins/` - إضافات عامة
+- `.leak-code/plugins/` - إضافات على مستوى المشروع
+- `~/.config/leak-code/plugins/` - إضافات عامة
 
 تُحمَّل الملفات في هذه الأدلة تلقائيا عند بدء التشغيل.
 
@@ -30,7 +30,7 @@ description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
 
 حدّد حزم npm في ملف الإعدادات.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -55,10 +55,10 @@ description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
 
 تُحمَّل الإضافات من جميع المصادر وتعمل جميع الخطافات بالتتابع. ترتيب التحميل هو:
 
-1. إعدادات عامة (`~/.config/opencode/opencode.json`)
-2. إعدادات المشروع (`opencode.json`)
-3. دليل الإضافات العام (`~/.config/opencode/plugins/`)
-4. دليل إضافات المشروع (`.opencode/plugins/`)
+1. إعدادات عامة (`~/.config/leak-code/leak-code.json`)
+2. إعدادات المشروع (`leak-code.json`)
+3. دليل الإضافات العام (`~/.config/leak-code/plugins/`)
+4. دليل إضافات المشروع (`.leak-code/plugins/`)
 
 تُحمَّل حزم npm المكررة ذات الاسم والإصدار نفسيهما مرة واحدة. ومع ذلك، تُحمَّل الإضافة المحلية وإضافة npm ذات الاسم المشابه كلتاهما بشكل مستقل.
 
@@ -75,7 +75,7 @@ description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
 
 يمكن للإضافات المحلية والأدوات المخصصة استخدام حزم npm خارجية. أضف `package.json` إلى دليل الإعدادات لديك متضمنا الاعتماديات التي تحتاجها.
 
-```json title=".opencode/package.json"
+```json title=".leak-code/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -85,7 +85,7 @@ description: اكتب إضافاتك الخاصة لتوسيع OpenCode.
 
 يشغّل OpenCode الأمر `bun install` عند بدء التشغيل لتثبيتها. بعد ذلك يمكن لإضافاتك وأدواتك استيرادها.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### البنية الأساسية
 
-```js title=".opencode/plugins/example.js"
+```js title=".leak-code/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -219,7 +219,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 أرسل إشعارات عند وقوع أحداث معينة:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".leak-code/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
@@ -244,7 +244,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 
 امنع opencode من قراءة ملفات `.env`:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".leak-code/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 احقن متغيرات البيئة في جميع عمليات تنفيذ shell (أدوات الذكاء الاصطناعي وterminal المستخدم):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".leak-code/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -279,7 +279,7 @@ export const InjectEnvPlugin = async () => {
 
 يمكن للإضافات أيضا إضافة أدوات مخصصة إلى opencode:
 
-```ts title=".opencode/plugins/custom-tools.ts"
+```ts title=".leak-code/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
@@ -314,7 +314,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 استخدم `client.app.log()` بدلا من `console.log` للتسجيل البنيوي:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -335,7 +335,7 @@ export const MyPlugin = async ({ client }) => {
 
 خصّص السياق الذي يتم تضمينه عند ضغط جلسة:
 
-```ts title=".opencode/plugins/compaction.ts"
+```ts title=".leak-code/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
@@ -359,7 +359,7 @@ Include any state that should persist across compaction:
 
 يمكنك أيضا استبدال موجّه الضغط بالكامل عبر ضبط `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
+```ts title=".leak-code/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {

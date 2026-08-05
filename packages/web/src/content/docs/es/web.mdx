@@ -12,17 +12,17 @@ OpenCode puede ejecutarse como una aplicación web en su navegador, brindando la
 Inicie la interfaz web ejecutando:
 
 ```bash
-opencode web
+leak-code web
 ```
 
 Esto inicia un servidor local en `127.0.0.1` con un puerto disponible aleatorio y abre automáticamente OpenCode en su navegador predeterminado.
 
 :::caution
-Si no se establece `OPENCODE_SERVER_PASSWORD`, el servidor no será seguro. Esto está bien para uso local, pero debe configurarse para acceso a la red.
+Si no se establece `LEAKCODE_SERVER_PASSWORD`, el servidor no será seguro. Esto está bien para uso local, pero debe configurarse para acceso a la red.
 :::
 
 :::tip[Windows Usuarios]
-Para obtener la mejor experiencia, ejecute `opencode web` desde [WSL](/docs/windows-wsl) en lugar de PowerShell. Esto garantiza el acceso adecuado al sistema de archivos y la integración del terminal.
+Para obtener la mejor experiencia, ejecute `leak-code web` desde [WSL](/docs/windows-wsl) en lugar de PowerShell. Esto garantiza el acceso adecuado al sistema de archivos y la integración del terminal.
 :::
 
 ---
@@ -36,7 +36,7 @@ Puede configurar el servidor web usando indicadores de línea de comando o en su
 De forma predeterminada, OpenCode elige un puerto disponible. Puede especificar un puerto:
 
 ```bash
-opencode web --port 4096
+leak-code web --port 4096
 ```
 
 ### Nombre de host
@@ -44,7 +44,7 @@ opencode web --port 4096
 De forma predeterminada, el servidor se vincula a `127.0.0.1` (solo localhost). Para hacer que OpenCode sea accesible en su red:
 
 ```bash
-opencode web --hostname 0.0.0.0
+leak-code web --hostname 0.0.0.0
 ```
 
 Al usar `0.0.0.0`, OpenCode mostrará direcciones locales y de red:
@@ -59,7 +59,7 @@ Al usar `0.0.0.0`, OpenCode mostrará direcciones locales y de red:
 Habilite mDNS para que su servidor sea reconocible en la red local:
 
 ```bash
-opencode web --mdns
+leak-code web --mdns
 ```
 
 Esto establece automáticamente el nombre de host en `0.0.0.0` y anuncia el servidor como `opencode.local`.
@@ -67,7 +67,7 @@ Esto establece automáticamente el nombre de host en `0.0.0.0` y anuncia el serv
 Puede personalizar el nombre de dominio mDNS para ejecutar varias instancias en la misma red:
 
 ```bash
-opencode web --mdns --mdns-domain myproject.local
+leak-code web --mdns --mdns-domain myproject.local
 ```
 
 ### CORS
@@ -75,18 +75,18 @@ opencode web --mdns --mdns-domain myproject.local
 Para permitir dominios adicionales para CORS (útil para interfaces personalizadas):
 
 ```bash
-opencode web --cors https://example.com
+leak-code web --cors https://example.com
 ```
 
 ### Autenticación
 
-Para proteger el acceso, establezca una contraseña utilizando la variable de entorno `OPENCODE_SERVER_PASSWORD`:
+Para proteger el acceso, establezca una contraseña utilizando la variable de entorno `LEAKCODE_SERVER_PASSWORD`:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+LEAKCODE_SERVER_PASSWORD=secret leak-code web
 ```
 
-El nombre de usuario predeterminado es `opencode` pero se puede cambiar con `OPENCODE_SERVER_USERNAME`.
+El nombre de usuario predeterminado es `opencode` pero se puede cambiar con `LEAKCODE_SERVER_USERNAME`.
 
 ---
 
@@ -114,10 +114,10 @@ Puede conectar un terminal TUI a un servidor web en ejecución:
 
 ```bash
 # Start the web server
-opencode web --port 4096
+leak-code web --port 4096
 
 # In another terminal, attach the TUI
-opencode attach http://localhost:4096
+leak-code attach http://localhost:4096
 ```
 
 Esto le permite utilizar la interfaz web y el terminal simultáneamente, compartiendo las mismas sesiones y estados.
@@ -126,7 +126,7 @@ Esto le permite utilizar la interfaz web y el terminal simultáneamente, compart
 
 ## Archivo de configuración
 
-También puede configurar los ajustes del servidor en su archivo de configuración `opencode.json`:
+También puede configurar los ajustes del servidor en su archivo de configuración `leak-code.json`:
 
 ```json
 {

@@ -16,8 +16,8 @@ Postoje dva načina za učitavanje dodataka.
 
 Postavite JavaScript ili TypeScript datoteke u direktorij dodataka.
 
-- `.opencode/plugins/` - Dodaci na nivou projekta
-- `~/.config/opencode/plugins/` - Globalni dodaci
+- `.leak-code/plugins/` - Dodaci na nivou projekta
+- `~/.config/leak-code/plugins/` - Globalni dodaci
   Datoteke u ovim direktorijumima se automatski učitavaju pri pokretanju.
 
 ---
@@ -26,7 +26,7 @@ Postavite JavaScript ili TypeScript datoteke u direktorij dodataka.
 
 Navedite npm pakete u vašoj konfiguracijskoj datoteci.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -49,10 +49,10 @@ Pregledajte dostupne dodatke u [ecosystem](/docs/ecosystem#plugins).
 
 Dodaci se učitavaju iz svih izvora i svi zakačnjaci rade u nizu. Redoslijed učitavanja je:
 
-1. Globalna konfiguracija (`~/.config/opencode/opencode.json`)
-2. Konfiguracija projekta (`opencode.json`)
-3. Globalni direktorij dodataka (`~/.config/opencode/plugins/`)
-4. Direktorij dodataka projekta (`.opencode/plugins/`)
+1. Globalna konfiguracija (`~/.config/leak-code/leak-code.json`)
+2. Konfiguracija projekta (`leak-code.json`)
+3. Globalni direktorij dodataka (`~/.config/leak-code/plugins/`)
+4. Direktorij dodataka projekta (`.leak-code/plugins/`)
    Duplicirani npm paketi sa istim imenom i verzijom se učitavaju jednom. Međutim, lokalni dodatak i npm dodatak sa sličnim nazivima se učitavaju odvojeno.
 
 ---
@@ -68,7 +68,7 @@ funkcije. Svaka funkcija prima objekt konteksta i vraća hooks objekt.
 
 Lokalni dodaci i prilagođeni alati mogu koristiti vanjske npm pakete. Dodajte `package.json` u svoj konfiguracijski direktorij sa zavisnostima koje su vam potrebne.
 
-```json title=".opencode/package.json"
+```json title=".leak-code/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -78,7 +78,7 @@ Lokalni dodaci i prilagođeni alati mogu koristiti vanjske npm pakete. Dodajte `
 
 OpenCode pokreće `bun install` pri pokretanju da ih instalira. Vaši dodaci i alati ih zatim mogu uvesti.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -96,7 +96,7 @@ export const MyPlugin = async (ctx) => {
 
 ### Osnovna struktura
 
-```js title=".opencode/plugins/example.js"
+```js title=".leak-code/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -210,7 +210,7 @@ Evo nekoliko primjera dodataka koje možete koristiti za proširenje OpenCode.
 
 Pošaljite obavještenja kada se dogode određeni događaji:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".leak-code/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
@@ -234,7 +234,7 @@ Ako alat dodatka koristi isto ime kao ugrađeni alat, alat dodatka ima prednost.
 
 Spriječite opencode da čita `.env` fajlove:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".leak-code/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -252,7 +252,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Ubacite varijable okruženja u sva izvršavanja ljuske (AI alati i korisnički terminali):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".leak-code/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -269,7 +269,7 @@ export const InjectEnvPlugin = async () => {
 
 Dodaci također mogu dodati prilagođene alate u opencode:
 
-```ts title=".opencode/plugins/custom-tools.ts"
+```ts title=".leak-code/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
@@ -303,7 +303,7 @@ Pomoćnik `tool` kreira prilagođeni alat koji opencode može pozvati. Uzima fun
 
 Koristite `client.app.log()` umjesto `console.log` za strukturirano bilježenje:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -322,7 +322,7 @@ Nivoi su: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](https
 
 Prilagodite kontekst uključen kada se sesija zbije:
 
-```ts title=".opencode/plugins/compaction.ts"
+```ts title=".leak-code/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
@@ -345,7 +345,7 @@ Include any state that should persist across compaction:
 `experimental.session.compacting` kuka se aktivira prije nego što LLM generira sažetak nastavka. Koristite ga za ubacivanje konteksta specifičnog za domenu koji bi zadani prompt za sažimanje propustio.
 Također možete u potpunosti zamijeniti prompt za sabijanje postavljanjem `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
+```ts title=".leak-code/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {

@@ -18,7 +18,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 ### 憑證
 
 使用 `/connect` 指令新增提供商的 API 金鑰後，憑證會儲存在
-`~/.local/share/opencode/auth.json` 中。
+`~/.local/share/leak-code/auth.json` 中。
 
 ---
 
@@ -32,7 +32,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 您可以透過設定 `baseURL` 選項來自訂任何提供商的 Base URL。這在使用代理服務或自訂端點時非常有用。
 
-```json title="opencode.json" {6}
+```json title="leak-code.json" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -186,9 +186,9 @@ OpenCode Go 是一個低成本的訂閱計畫，提供對 OpenCode 團隊提供�
 
    #### 設定檔（推薦）
 
-   如需專案級別或持久化的設定，請使用 `opencode.json`：
+   如需專案級別或持久化的設定，請使用 `leak-code.json`：
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -215,7 +215,7 @@ OpenCode Go 是一個低成本的訂閱計畫，提供對 OpenCode 團隊提供�
 
    如果您使用 Bedrock 的 VPC 端點：
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -259,7 +259,7 @@ OpenCode Go 是一個低成本的訂閱計畫，提供對 OpenCode 團隊提供�
 :::note
 對於自訂推理設定檔，請在 key 中使用模型名稱和提供商名稱，並將 `id` 屬性設定為 ARN。這可以確保正確的快取行為：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -320,7 +320,7 @@ OpenCode Go 是一個低成本的訂閱計畫，提供對 OpenCode 團隊提供�
 
 你可以透過 [Atomic Chat](https://atomic.chat) 設定 opencode 以使用本地模型。Atomic Chat 是一款桌面應用程式，它在 OpenAI 相容的 API 伺服器後方執行本地 LLM（預設端點 `http://127.0.0.1:1337/v1`）。
 
-```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+```json title="leak-code.json" "atomic-chat" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -548,7 +548,7 @@ Cloudflare AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic
 
    您也可以透過 OpenCode 設定新增模型。
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -748,7 +748,7 @@ GitLab Duo 透過 GitLab 的 Anthropic 代理提供具有原生工具呼叫能�
 ##### 自架 GitLab
 
 :::note[合規說明]
-OpenCode 會使用一個小模型來執行部分 AI 任務，例如產生工作階段標題。預設情況下使用由 Zen 託管的 gpt-5-nano。如果您需要讓 OpenCode 僅使用您自己的 GitLab 託管實例，請在 `opencode.json` 檔案中新增以下內容。同時建議停用工作階段分享。
+OpenCode 會使用一個小模型來執行部分 AI 任務，例如產生工作階段標題。預設情況下使用由 Zen 託管的 gpt-5-nano。如果您需要讓 OpenCode 僅使用您自己的 GitLab 託管實例，請在 `leak-code.json` 檔案中新增以下內容。同時建議停用工作階段分享。
 
 ```json
 {
@@ -808,9 +808,9 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ##### 設定
 
-透過 `opencode.json` 進行自訂設定：
+透過 `leak-code.json` 進行自訂設定：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -827,7 +827,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 要存取 GitLab 工具（合併請求、Issue、流水線、CI/CD 等）：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-gitlab-plugin"]
@@ -1006,7 +1006,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 [Helicone 模型目錄](https://helicone.ai/models)中可以找到您需要新增的模型 ID。
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1034,7 +1034,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 Helicone 支援用於快取、使用者追蹤和工作階段管理等功能的自訂請求標頭。使用 `options.headers` 將它們新增到提供商設定中：
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1063,7 +1063,7 @@ npm install -g opencode-helicone-session
 
 將其新增到設定中。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "plugin": ["opencode-helicone-session"]
 }
@@ -1088,7 +1088,7 @@ npm install -g opencode-helicone-session
 
 您可以透過 [llama.cpp](https://github.com/ggml-org/llama.cpp) 的 llama-server 工具設定 OpenCode 使用本地模型。
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="leak-code.json" "llama.cpp" {5, 6, 8, 10-15}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1155,7 +1155,7 @@ IO.NET 提供 17 個針對不同使用情境最佳化的模型：
 
 您可以透過 LM Studio 設定 OpenCode 使用本地模型。
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="leak-code.json" "lmstudio" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1276,7 +1276,7 @@ IO.NET 提供 17 個針對不同使用情境最佳化的模型：
 Ollama 可以自動為 OpenCode 進行設定。詳見 [Ollama 整合文件](https://docs.ollama.com/integrations/opencode)。
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="leak-code.json" "ollama" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1437,7 +1437,7 @@ OpenCode Zen 是由 OpenCode 團隊提供的經過測試和驗證的模型列表
 
    您也可以透過 OpenCode 設定新增更多模型。
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1452,7 +1452,7 @@ OpenCode Zen 是由 OpenCode 團隊提供的經過測試和驗證的模型列表
 
 5. 您還可以透過 OpenCode 設定自訂模型。以下是指定提供商的範例：
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1701,7 +1701,7 @@ Vercel AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic、G
 
 您也可以透過 OpenCode 設定自訂模型。以下是指定提供商路由順序的範例。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1811,7 +1811,7 @@ Vercel AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic、G
 
    您也可以透過 OpenCode 設定新增更多模型。
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1870,16 +1870,16 @@ Vercel AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic、G
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in leak-code.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. 在專案目錄中建立或更新 `opencode.json` 檔案：
+4. 在專案目錄中建立或更新 `leak-code.json` 檔案：
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="leak-code.json" ""myprovider"" {5-15}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1917,7 +1917,7 @@ Vercel AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic、G
 
 以下是設定 `apiKey`、`headers` 和模型 `limit` 選項的範例。
 
-```json title="opencode.json" {9,11,17-20}
+```json title="leak-code.json" {9,11,17-20}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1960,7 +1960,7 @@ Vercel AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic、G
 
 如果您在設定提供商時遇到問題，請檢查以下幾點：
 
-1. **檢查認證設定**：執行 `opencode auth list` 查看該提供商的憑證是否已新增到設定中。
+1. **檢查認證設定**：執行 `leak-code auth list` 查看該提供商的憑證是否已新增到設定中。
 
    這不適用於 Amazon Bedrock 等依賴環境變數進行認證的提供商。
 

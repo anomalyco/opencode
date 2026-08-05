@@ -23,7 +23,7 @@ Her izin kuralı şunlardan birine çözümlenir:
 
 İzinleri genel olarak (`*` ile) ayarlayabilir ve belirli araçları geçersiz kılabilirsiniz.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -36,7 +36,7 @@ Her izin kuralı şunlardan birine çözümlenir:
 
 Ayrıca tüm izinleri aynı anda ayarlayabilirsiniz:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": "allow"
@@ -49,7 +49,7 @@ Ayrıca tüm izinleri aynı anda ayarlayabilirsiniz:
 
 Çoğu izin için, araç girişine bağlı olarak farklı eylemleri uygulamak için bir nesneyi kullanabilirsiniz.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -94,7 +94,7 @@ Ana sayfa genişletmesi (`~/...` gibi) yalnızca bir kalıbın nasıl yazıldı�
 
 Örneğin bu, `~/projects/personal/` altındaki her şeye erişime izin verir:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -107,7 +107,7 @@ Ana sayfa genişletmesi (`~/...` gibi) yalnızca bir kalıbın nasıl yazıldı�
 
 Burada izin verilen herhangi bir dizin, geçerli çalışma alanıyla aynı varsayılanları devralır. [`read` defaults to `allow`](#defaults)'dan bu yana, geçersiz kılınmadığı sürece `external_directory` altındaki girişler için okumalara da izin verilir. Bir aracın bu yollarda kısıtlanması gerektiğinde (okumaları tutarken düzenlemeleri engellemek gibi) açık kurallar ekleyin:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -152,7 +152,7 @@ Hiçbir şey belirtmezseniz opencode izin verilen varsayılanlardan başlar:
 - `doom_loop` ve `external_directory` varsayılan olarak `"ask"`'dir.
 - `read`, `"allow"`'dır, ancak `.env` dosyaları varsayılan olarak reddedilir:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "permission": {
     "read": {
@@ -187,7 +187,7 @@ Agent bazında izinleri geçersiz kılabilirsiniz. Agent izinleri global yapıla
 Daha ayrıntılı desen eşleştirme örnekleri için yukarıdaki [Ayrıntılı kurallar (nesne söz dizimi)](#granular-rules-object-syntax) bölümüne bakın.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -217,7 +217,7 @@ Daha ayrıntılı desen eşleştirme örnekleri için yukarıdaki [Ayrıntılı 
 
 Agent izinlerini Markdown'da da yapılandırabilirsiniz:
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent

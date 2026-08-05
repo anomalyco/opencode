@@ -13,8 +13,8 @@ Les compétences sont chargées à la demande via l'outil natif `skill` : les a
 Créez un dossier par nom de compétence et insérez-y un `SKILL.md`.
 OpenCode recherche ces emplacements :
 
-- Configuration du projet : `.opencode/skills/<name>/SKILL.md`
-- Configuration globale : `~/.config/opencode/skills/<name>/SKILL.md`
+- Configuration du projet : `.leak-code/skills/<name>/SKILL.md`
+- Configuration globale : `~/.config/leak-code/skills/<name>/SKILL.md`
 - Compatible Projet Claude : `.claude/skills/<name>/SKILL.md`
 - Compatible Global Claude : `~/.claude/skills/<name>/SKILL.md`
 - Compatible avec l'agent de projet : `.agents/skills/<name>/SKILL.md`
@@ -25,9 +25,9 @@ OpenCode recherche ces emplacements :
 ## Comprendre la découverte
 
 Pour les chemins locaux du projet, OpenCode remonte de votre répertoire de travail actuel jusqu'à ce qu'il atteigne l'arbre de travail git.
-Il charge tout `skills/*/SKILL.md` correspondant dans `.opencode/` et tout `.claude/skills/*/SKILL.md` ou `.agents/skills/*/SKILL.md` correspondant en cours de route.
+Il charge tout `skills/*/SKILL.md` correspondant dans `.leak-code/` et tout `.claude/skills/*/SKILL.md` ou `.agents/skills/*/SKILL.md` correspondant en cours de route.
 
-Les définitions globales sont également chargées à partir de `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` et `~/.agents/skills/*/SKILL.md`.
+Les définitions globales sont également chargées à partir de `~/.config/leak-code/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` et `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -73,7 +73,7 @@ Gardez-le suffisamment précis pour que l'agent puisse choisir correctement.
 
 ## Utiliser un exemple
 
-Créez `.opencode/skills/git-release/SKILL.md` comme ceci :
+Créez `.leak-code/skills/git-release/SKILL.md` comme ceci :
 
 ```markdown
 ---
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Configurer les autorisations
 
-Contrôlez les compétences auxquelles les agents peuvent accéder à l'aide d'autorisations basées sur des modèles dans `opencode.json` :
+Contrôlez les compétences auxquelles les agents peuvent accéder à l'aide d'autorisations basées sur des modèles dans `leak-code.json` :
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**Pour les agents intégrés** (dans `opencode.json`) :
+**Pour les agents intégrés** (dans `leak-code.json`) :
 
 ```json
 {

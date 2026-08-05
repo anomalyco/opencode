@@ -59,7 +59,7 @@ Bu işlem arka planda gerçekleşir ve kod stillerinizin herhangi bir manuel ad�
 
 Biçimlendiricileri opencode yapılandırmanızdaki `formatter` bölümü aracılığıyla özelleştirebilirsiniz.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {}
@@ -83,7 +83,7 @@ Bazı örneklere bakalım.
 
 **tüm** biçimlendiricileri genel olarak devre dışı bırakmak için `formatter` değerini `false` olarak ayarlayın:
 
-```json title="opencode.json" {3}
+```json title="leak-code.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": false
@@ -92,7 +92,7 @@ Bazı örneklere bakalım.
 
 **Belirli** bir biçimlendiriciyi devre dışı bırakmak için `disabled` değerini `true` olarak ayarlayın:
 
-```json title="opencode.json" {5}
+```json title="leak-code.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
@@ -109,7 +109,7 @@ Bazı örneklere bakalım.
 
 Komutu, ortam değişkenlerini ve dosya uzantılarını belirterek yerleşik biçimlendiricileri geçersiz kılabilir veya yenilerini ekleyebilirsiniz:
 
-```json title="opencode.json" {4-14}
+```json title="leak-code.json" {4-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {

@@ -25,7 +25,7 @@ GitHub MCP 서버와 같은 특정 MCP 서버는 많은 토큰을 추가하고 �
 
 `mcp`에서 MCP 서버를 정의할 수 있습니다. 각 MCP를 고유 이름으로 추가합니다. LLM을 프롬프트할 때 MCP를 참조할 수 있습니다.
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="leak-code.jsonc" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -50,7 +50,7 @@ GitHub MCP 서버와 같은 특정 MCP 서버는 많은 토큰을 추가하고 �
 
 조직의 원격 설정에서 특정 서버를 활성화하려면 `enabled: true`로 로컬 구성에 추가하십시오.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -71,7 +71,7 @@ GitHub MCP 서버와 같은 특정 MCP 서버는 많은 토큰을 추가하고 �
 
 MCP 객체 내에서 `type`를 `"local"`로 사용하는 로컬 MCP 서버를 추가하십시오.
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="leak-code.jsonc" {15}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -92,7 +92,7 @@ MCP 객체 내에서 `type`를 `"local"`로 사용하는 로컬 MCP 서버를 �
 
 예를 들어, 테스트 [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP 서버를 추가할 수 있는 방법입니다.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -130,7 +130,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 `type`를 `"remote"`로 설정하여 원격 MCP 서버를 추가하십시오.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -177,7 +177,7 @@ opencode는 원격 MCP 서버에 대한 OAuth 인증을 자동으로 처리합�
 
 대부분의 OAuth-enabled MCP 서버를 위해, 특별한 구성은 필요하지 않습니다. 원격 서버를 구성:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -189,7 +189,7 @@ opencode는 원격 MCP 서버에 대한 OAuth 인증을 자동으로 처리합�
 }
 ```
 
-서버가 인증이 필요한 경우, opencode는 먼저 사용하려고 할 때 인증됩니다. 그렇지 않다면, `opencode mcp auth <server-name>`를 사용하여 [수동으로 트리거](#authenticating)할 수 있습니다.
+서버가 인증이 필요한 경우, opencode는 먼저 사용하려고 할 때 인증됩니다. 그렇지 않다면, `leak-code mcp auth <server-name>`를 사용하여 [수동으로 트리거](#authenticating)할 수 있습니다.
 
 ---
 
@@ -197,7 +197,7 @@ opencode는 원격 MCP 서버에 대한 OAuth 인증을 자동으로 처리합�
 
 MCP 서버 공급자의 클라이언트 자격이있는 경우, 구성 할 수 있습니다.
 
-```json title="opencode.json" {7-11}
+```json title="leak-code.json" {7-11}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -223,22 +223,22 @@ MCP 서버 공급자의 클라이언트 자격이있는 경우, 구성 할 수 �
 특정 MCP 서버와 인증:
 
 ```bash
-opencode mcp auth my-oauth-server
+leak-code mcp auth my-oauth-server
 ```
 
 모든 MCP 서버를 나열하고 auth 상태:
 
 ```bash
-opencode mcp list
+leak-code mcp list
 ```
 
 저장된 자격 제거:
 
 ```bash
-opencode mcp logout my-oauth-server
+leak-code mcp logout my-oauth-server
 ```
 
-`mcp auth` 명령은 사용자의 브라우저를 엽니다. `~/.local/share/opencode/mcp-auth.json`에서 토큰을 안전하게 저장합니다.
+`mcp auth` 명령은 사용자의 브라우저를 엽니다. `~/.local/share/leak-code/mcp-auth.json`에서 토큰을 안전하게 저장합니다.
 
 ---
 
@@ -246,7 +246,7 @@ opencode mcp logout my-oauth-server
 
 서버의 자동 OAuth를 비활성화하려는 경우 (예를 들어, 대신 API 키를 사용하는 서버), `oauth`를 `false`로 설정:
 
-```json title="opencode.json" {7}
+```json title="leak-code.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -279,10 +279,10 @@ opencode mcp logout my-oauth-server
 
 ```bash
 # View auth status for all OAuth-capable servers
-opencode mcp auth list
+leak-code mcp auth list
 
 # Debug connection and OAuth flow for a specific server
-opencode mcp debug my-oauth-server
+leak-code mcp debug my-oauth-server
 ```
 
 `mcp debug` 명령은 현재 auth 상태를 보여 주며 HTTP 연결을 테스트하고 OAuth 발견 흐름을 시도합니다.
@@ -299,7 +299,7 @@ MCP는 opencode의 도구로 사용할 수 있으며 내장 도구와 함께 사
 
 이는 전역적으로 활성화하거나 비활성화할 수 있음을 의미합니다.
 
-```json title="opencode.json" {14}
+```json title="leak-code.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -320,7 +320,7 @@ MCP는 opencode의 도구로 사용할 수 있으며 내장 도구와 함께 사
 
 또한 glob 패턴을 사용하여 일치하는 모든 MCP를 비활성화할 수 있습니다.
 
-```json title="opencode.json" {14}
+```json title="leak-code.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -350,7 +350,7 @@ MCP는 opencode의 도구로 사용할 수 있으며 내장 도구와 함께 사
 1. 글로벌 도구로 사용 가능.
 2. [agent config](/docs/agents#tools)에서 MCP 서버를 도구로 사용할 수 있습니다.
 
-```json title="opencode.json" {11, 14-18}
+```json title="leak-code.json" {11, 14-18}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -404,7 +404,7 @@ MCP 서버 도구는 서버 이름으로 prefix로 등록되므로 서버의 모
 
 [Sentry MCP 서버](https://mcp.sentry.dev)를 추가하여 Sentry 프로젝트와 문제와 상호 작용합니다.
 
-```json title="opencode.json" {4-8}
+```json title="leak-code.json" {4-8}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -420,7 +420,7 @@ MCP 서버 도구는 서버 이름으로 prefix로 등록되므로 서버의 모
 구성을 추가 한 후, Sentry로 인증:
 
 ```bash
-opencode mcp auth sentry
+leak-code mcp auth sentry
 ```
 
 브라우저 창을 열어 OAuth 흐름을 완료하고 opencode를 Sentry 계정에 연결하십시오.
@@ -437,7 +437,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 [Context7 MCP 서버](https://github.com/upstash/context7)을 추가하여 문서를 검색합니다.
 
-```json title="opencode.json" {4-7}
+```json title="leak-code.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -451,7 +451,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 무료 계정으로 가입한 경우 API 키를 사용하여 더 높은 속도 제한을 얻을 수 있습니다.
 
-```json title="opencode.json" {7-9}
+```json title="leak-code.json" {7-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -486,7 +486,7 @@ When you need to search docs, use `context7` tools.
 
 [Grep by Vercel](https://grep.app) MCP 서버를 추가하여 GitHub에서 코드 스니펫을 검색합니다.
 
-```json title="opencode.json" {4-7}
+```json title="leak-code.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {

@@ -10,7 +10,7 @@ OpenCode 提供了一个交互式终端界面（TUI），用于配合 LLM 处理
 运行 OpenCode 即可启动当前目录的 TUI。
 
 ```bash
-opencode
+leak-code
 ```
 
 或者您可以为指定的工作目录启动它。
@@ -382,7 +382,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 }
 ```
 
-这与 `opencode.json` 是分开的；`opencode.json` 用于配置服务器和运行时行为。
+这与 `leak-code.json` 是分开的；`leak-code.json` 用于配置服务器和运行时行为。
 
 `keybinds` 会与内置默认值合并，因此你只需要配置想要修改的快捷键。
 
@@ -397,7 +397,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 - `mouse` - 在 TUI 中启用或禁用鼠标捕获（默认：`true`）。禁用后，终端原生的鼠标选择和滚动行为会保留下来。
 - `attention` - 配置 TUI 桌面通知和声音。默认禁用。
 
-使用 `OPENCODE_TUI_CONFIG` 可以加载自定义的 TUI 配置文件路径。
+使用 `LEAKCODE_TUI_CONFIG` 可以加载自定义的 TUI 配置文件路径。
 
 ### Attention
 

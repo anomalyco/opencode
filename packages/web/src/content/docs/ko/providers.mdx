@@ -18,7 +18,7 @@ OpenCode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)�
 ### 자격 증명
 
 `/connect` 명령으로 공급자의 API 키를 추가하면 다음 위치에 저장됩니다:
-`~/.local/share/opencode/auth.json`
+`~/.local/share/leak-code/auth.json`
 
 ---
 
@@ -32,7 +32,7 @@ OpenCode 설정의 `provider` 섹션을 통해 공급자를 사용자 정의할 
 
 `baseURL` 옵션을 설정하여 모든 공급자를 위한 기본 URL을 사용자 정의할 수 있습니다. 프록시 서비스 또는 사용자 정의 엔드포인트를 사용할 때 유용합니다.
 
-```json title="opencode.json" {6}
+```json title="leak-code.json" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -190,9 +190,9 @@ OpenCode로 Amazon Bedrock을 사용하려면:
 
    #### 구성 파일 (권장)
 
-   프로젝트별 또는 영구 구성을 위해 `opencode.json`을 사용하십시오:
+   프로젝트별 또는 영구 구성을 위해 `leak-code.json`을 사용하십시오:
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -221,7 +221,7 @@ OpenCode로 Amazon Bedrock을 사용하려면:
 
    Bedrock의 VPC 엔드포인트를 사용하는 경우:
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -270,7 +270,7 @@ OpenCode로 Amazon Bedrock을 사용하려면:
 사용자 정의 추론 프로필(custom inference profiles)의 경우, 키에 모델과 공급자 이름을 사용하고 `id` 속성에 ARN을 설정하십시오. 이렇게 하면 올바른 캐싱이 보장됩니다.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -329,7 +329,7 @@ Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니
 
 OpenAI 호환 API 서버 뒤에서 로컬 LLM을 실행하는 데스크톱 애플리케이션인 [Atomic Chat](https://atomic.chat)을 통해 로컬 모델을 사용하도록 opencode를 구성할 수 있습니다(기본 엔드포인트 `http://127.0.0.1:1337/v1`).
 
-```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+```json title="leak-code.json" "atomic-chat" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -557,7 +557,7 @@ Cloudflare AI Gateway는 OpenAI, Anthropic, Workers AI 등의 모델에 액세�
 
    OpenCode 구성을 통해 모델을 추가할 수 있습니다.
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -759,7 +759,7 @@ GitLab Duo는 GitLab의 Anthropic 프록시를 통해 기본 도구 호출 기�
 :::note[규정 준수 참고 사항]
 OpenCode는 세션 제목 생성과 같은 일부 AI 작업을 위해 작은 모델을 사용합니다.
 기본적으로 Zen에서 호스팅되는 gpt-5-nano를 사용하도록 구성됩니다.
-OpenCode를 자체 호스팅 GitLab 인스턴스만 사용하도록 제한하려면 `opencode.json` 파일에 다음을 추가하십시오.
+OpenCode를 자체 호스팅 GitLab 인스턴스만 사용하도록 제한하려면 `leak-code.json` 파일에 다음을 추가하십시오.
 세션 공유를 비활성화하는 것도 권장합니다.
 
 ```json
@@ -821,9 +821,9 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 #### 구성
 
-`opencode.json`을 통해 사용자 정의:
+`leak-code.json`을 통해 사용자 정의:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -840,7 +840,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 GitLab 도구(병합 요청, 이슈, 파이프라인, CI/CD 등)에 액세스하려면:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-gitlab-plugin"]
@@ -1020,7 +1020,7 @@ OpenCode를 통해 자동으로 구성되지 않는 Helicone의 기능이나 모
 
 [Helicone의 모델 디렉토리](https://helicone.ai/models)에서 추가하려는 모델의 ID를 확인하십시오.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1048,7 +1048,7 @@ OpenCode를 통해 자동으로 구성되지 않는 Helicone의 기능이나 모
 
 Helicone는 캐싱, 사용자 추적 및 세션 관리와 같은 기능을 위한 사용자 정의 헤더를 지원합니다. `options.headers`를 사용하여 공급자 구성에 추가하십시오:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1077,7 +1077,7 @@ npm install -g opencode-helicone-session
 
 설정에 추가하십시오.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "plugin": ["opencode-helicone-session"]
 }
@@ -1102,7 +1102,7 @@ npm install -g opencode-helicone-session
 
 [llama.cpp](https://github.com/ggml-org/llama.cpp)의 llama-server 유틸리티를 통해 로컬 모델을 사용하도록 구성할 수 있습니다.
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="leak-code.json" "llama.cpp" {5, 6, 8, 10-15}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1169,7 +1169,7 @@ IO.NET은 다양한 사용 사례에 최적화된 17개의 모델을 제공합�
 
 LM Studio를 통해 로컬 모델을 사용하도록 구성할 수 있습니다.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="leak-code.json" "lmstudio" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1290,7 +1290,7 @@ Ollama를 통해 로컬 모델을 사용하도록 구성할 수 있습니다.
 Ollama는 OpenCode에 대해 자동으로 구성될 수 있습니다. 자세한 내용은 [Ollama 통합 문서](https://docs.ollama.com/integrations/opencode)를 참조하십시오.
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="leak-code.json" "ollama" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1451,7 +1451,7 @@ OpenCode Zen은 OpenCode 팀에서 제공하는 테스트 및 검증된 모델 �
 
    OpenCode 구성을 통해 모델을 추가할 수도 있습니다.
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1466,7 +1466,7 @@ OpenCode Zen은 OpenCode 팀에서 제공하는 테스트 및 검증된 모델 �
 
 5. 또한 OpenCode 구성을 통해 사용자 정의할 수도 있습니다. 다음은 공급자 순서를 지정하는 예입니다.
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1715,7 +1715,7 @@ Vercel AI Gateway는 OpenAI, Anthropic, Google, xAI 등의 모델에 액세스�
 
 OpenCode 구성을 통해 모델을 사용자 정의할 수도 있습니다. 다음은 공급자 라우팅 순서를 지정하는 예입니다.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1825,7 +1825,7 @@ OpenCode 구성을 통해 모델을 사용자 정의할 수도 있습니다. 다
 
    OpenCode 구성을 통해 모델을 추가할 수도 있습니다.
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1884,16 +1884,16 @@ OpenCode에서 모든 OpenAI 호환 공급자를 사용할 수 있습니다. 대
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in leak-code.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. 프로젝트 디렉토리에 `opencode.json` 파일을 만들거나 업데이트하십시오.
+4. 프로젝트 디렉토리에 `leak-code.json` 파일을 만들거나 업데이트하십시오.
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="leak-code.json" ""myprovider"" {5-15}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1931,7 +1931,7 @@ OpenCode에서 모든 OpenAI 호환 공급자를 사용할 수 있습니다. 대
 
 다음은 `apiKey`, `headers` 및 모델 `limit` 옵션을 설정하는 예입니다.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="leak-code.json" {9,11,17-20}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1974,7 +1974,7 @@ OpenCode에서 모든 OpenAI 호환 공급자를 사용할 수 있습니다. 대
 
 공급자 구성에 문제가 있는 경우 다음을 확인하십시오.
 
-1. **인증 설정 확인**: `opencode auth list`를 실행하여 공급자의 자격 증명이 구성에 추가되었는지 확인하십시오.
+1. **인증 설정 확인**: `leak-code auth list`를 실행하여 공급자의 자격 증명이 구성에 추가되었는지 확인하십시오.
 
    Amazon Bedrock과 같이 인증을 위해 환경 변수에 의존하는 공급자에는 적용되지 않습니다.
 

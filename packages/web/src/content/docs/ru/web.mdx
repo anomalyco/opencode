@@ -12,17 +12,17 @@ opencode может работать как веб-приложение в ва�
 Запустите веб-интерфейс, выполнив:
 
 ```bash
-opencode web
+leak-code web
 ```
 
 Это запустит локальный сервер `127.0.0.1` со случайным доступным портом и автоматически откроет opencode в браузере по умолчанию.
 
 :::caution
-Если `OPENCODE_SERVER_PASSWORD` не установлен, сервер будет незащищен. Это подходит для локального использования, но его следует настроить для доступа к сети.
+Если `LEAKCODE_SERVER_PASSWORD` не установлен, сервер будет незащищен. Это подходит для локального использования, но его следует настроить для доступа к сети.
 :::
 
 :::tip[Пользователи Windows]
-Для получения наилучших результатов запустите `opencode web` из [WSL](/docs/windows-wsl), а не из PowerShell. Это обеспечивает правильный доступ к файловой системе и интеграцию терминала.
+Для получения наилучших результатов запустите `leak-code web` из [WSL](/docs/windows-wsl), а не из PowerShell. Это обеспечивает правильный доступ к файловой системе и интеграцию терминала.
 :::
 
 ---
@@ -36,7 +36,7 @@ opencode web
 По умолчанию opencode выбирает доступный порт. Вы можете указать порт:
 
 ```bash
-opencode web --port 4096
+leak-code web --port 4096
 ```
 
 ### Имя хоста
@@ -44,7 +44,7 @@ opencode web --port 4096
 По умолчанию сервер привязывается к `127.0.0.1` (только локальный хост). Чтобы сделать opencode доступным в вашей сети:
 
 ```bash
-opencode web --hostname 0.0.0.0
+leak-code web --hostname 0.0.0.0
 ```
 
 При использовании `0.0.0.0` opencode будет отображать как локальные, так и сетевые адреса:
@@ -59,7 +59,7 @@ opencode web --hostname 0.0.0.0
 Включите mDNS, чтобы ваш сервер был доступен для обнаружения в локальной сети:
 
 ```bash
-opencode web --mdns
+leak-code web --mdns
 ```
 
 Это автоматически устанавливает имя хоста `0.0.0.0` и объявляет сервер как `opencode.local`.
@@ -67,7 +67,7 @@ opencode web --mdns
 Вы можете настроить доменное имя mDNS для запуска нескольких экземпляров в одной сети:
 
 ```bash
-opencode web --mdns --mdns-domain myproject.local
+leak-code web --mdns --mdns-domain myproject.local
 ```
 
 ### CORS
@@ -75,18 +75,18 @@ opencode web --mdns --mdns-domain myproject.local
 Чтобы разрешить дополнительные домены для CORS (полезно для пользовательских интерфейсов):
 
 ```bash
-opencode web --cors https://example.com
+leak-code web --cors https://example.com
 ```
 
 ### Аутентификация
 
-Чтобы защитить доступ, установите пароль, используя переменную среды `OPENCODE_SERVER_PASSWORD`:
+Чтобы защитить доступ, установите пароль, используя переменную среды `LEAKCODE_SERVER_PASSWORD`:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+LEAKCODE_SERVER_PASSWORD=secret leak-code web
 ```
 
-Имя пользователя по умолчанию — `opencode`, но его можно изменить с помощью `OPENCODE_SERVER_USERNAME`.
+Имя пользователя по умолчанию — `opencode`, но его можно изменить с помощью `LEAKCODE_SERVER_USERNAME`.
 
 ---
 
@@ -114,10 +114,10 @@ OPENCODE_SERVER_PASSWORD=secret opencode web
 
 ```bash
 # Start the web server
-opencode web --port 4096
+leak-code web --port 4096
 
 # In another terminal, attach the TUI
-opencode attach http://localhost:4096
+leak-code attach http://localhost:4096
 ```
 
 Это позволяет вам одновременно использовать веб-интерфейс и терминал, используя одни и те же сеансы и состояние.
@@ -126,7 +126,7 @@ opencode attach http://localhost:4096
 
 ## Конфигурационный файл
 
-Вы также можете настроить параметры сервера в файле конфигурации `opencode.json`:
+Вы также можете настроить параметры сервера в файле конфигурации `leak-code.json`:
 
 ```json
 {

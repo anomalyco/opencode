@@ -11,7 +11,7 @@ description: การใช้การกำหนดค่า OpenCode JSON
 
 OpenCode รองรับทั้งรูปแบบ **JSON** และ **JSONC** (JSON พร้อมความคิดเห็น)
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "anthropic/claude-sonnet-4-5",
@@ -44,16 +44,16 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 แหล่งที่มาของการกำหนดค่าถูกโหลดตามลำดับนี้ (แหล่งที่มาภายหลังจะแทนที่แหล่งที่มาก่อนหน้า):
 
 1. **การกำหนดค่าระยะไกล** (จาก `.well-known/opencode`) - ค่าเริ่มต้นขององค์กร
-2. **การกำหนดค่าสากล** (`~/.config/opencode/opencode.json`) - การตั้งค่าของผู้ใช้
-3. **การกำหนดค่าแบบกำหนดเอง** (`OPENCODE_CONFIG` env var) - การแทนที่แบบกำหนดเอง
-4. **การกำหนดค่าโครงการ** (`opencode.json` ในโครงการ) - การตั้งค่าเฉพาะโครงการ
-5. **`.opencode` ไดเรกทอรี** - ตัวแทน คำสั่ง ปลั๊กอิน
-6. **การกำหนดค่าแบบอินไลน์** (`OPENCODE_CONFIG_CONTENT` env var) - การแทนที่รันไทม์
+2. **การกำหนดค่าสากล** (`~/.config/leak-code/leak-code.json`) - การตั้งค่าของผู้ใช้
+3. **การกำหนดค่าแบบกำหนดเอง** (`LEAKCODE_CONFIG` env var) - การแทนที่แบบกำหนดเอง
+4. **การกำหนดค่าโครงการ** (`leak-code.json` ในโครงการ) - การตั้งค่าเฉพาะโครงการ
+5. **`.leak-code` ไดเรกทอรี** - ตัวแทน คำสั่ง ปลั๊กอิน
+6. **การกำหนดค่าแบบอินไลน์** (`LEAKCODE_CONFIG_CONTENT` env var) - การแทนที่รันไทม์
 
 ซึ่งหมายความว่าการกำหนดค่าโปรเจ็กต์สามารถแทนที่ค่าเริ่มต้นส่วนกลางได้ และการกำหนดค่าส่วนกลางสามารถแทนที่ค่าเริ่มต้นขององค์กรระยะไกลได้
 
 :::note
-ไดเรกทอรี `.opencode` และ `~/.config/opencode` ใช้ **ชื่อพหูพจน์** สำหรับไดเรกทอรีย่อย: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` และ `themes/` ชื่อเอกพจน์ (เช่น `agent/`) ยังรองรับความเข้ากันได้แบบย้อนหลังด้วย
+ไดเรกทอรี `.leak-code` และ `~/.config/leak-code` ใช้ **ชื่อพหูพจน์** สำหรับไดเรกทอรีย่อย: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` และ `themes/` ชื่อเอกพจน์ (เช่น `agent/`) ยังรองรับความเข้ากันได้แบบย้อนหลังด้วย
 :::
 
 ---
@@ -80,7 +80,7 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 คุณสามารถเปิดใช้งานเซิร์ฟเวอร์เฉพาะในการกำหนดค่าภายในเครื่องของคุณได้:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "mcp": {
     "jira": {
@@ -96,9 +96,9 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ### ทั่วโลก
 
-วางการกำหนดค่า OpenCode ส่วนกลางของคุณใน `~/.config/opencode/opencode.json` ใช้การกำหนดค่าส่วนกลางสำหรับการตั้งค่าทั้งผู้ใช้ เช่น ผู้ให้บริการ รุ่น และสิทธิ์
+วางการกำหนดค่า OpenCode ส่วนกลางของคุณใน `~/.config/leak-code/leak-code.json` ใช้การกำหนดค่าส่วนกลางสำหรับการตั้งค่าทั้งผู้ใช้ เช่น ผู้ให้บริการ รุ่น และสิทธิ์
 
-สำหรับการตั้งค่าเฉพาะ TUI ให้ใช้ `~/.config/opencode/tui.json`
+สำหรับการตั้งค่าเฉพาะ TUI ให้ใช้ `~/.config/leak-code/tui.json`
 
 การกำหนดค่าส่วนกลางจะแทนที่ค่าเริ่มต้นขององค์กรระยะไกล
 
@@ -106,7 +106,7 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ### ต่อโครงการ
 
-เพิ่ม `opencode.json` ในรูทโปรเจ็กต์ของคุณ การกำหนดค่าโปรเจ็กต์มีความสำคัญสูงสุดในบรรดาไฟล์กำหนดค่ามาตรฐาน โดยจะแทนที่การกำหนดค่าทั้งส่วนกลางและระยะไกล
+เพิ่ม `leak-code.json` ในรูทโปรเจ็กต์ของคุณ การกำหนดค่าโปรเจ็กต์มีความสำคัญสูงสุดในบรรดาไฟล์กำหนดค่ามาตรฐาน โดยจะแทนที่การกำหนดค่าทั้งส่วนกลางและระยะไกล
 
 สำหรับการตั้งค่า TUI เฉพาะโครงการ ให้เพิ่ม `tui.json` ควบคู่ไปกับมัน
 
@@ -122,11 +122,11 @@ OpenCode รองรับทั้งรูปแบบ **JSON** และ **J
 
 ### เส้นทางที่กำหนดเอง
 
-ระบุเส้นทางไฟล์กำหนดค่าที่กำหนดเองโดยใช้ตัวแปรสภาพแวดล้อม `OPENCODE_CONFIG`
+ระบุเส้นทางไฟล์กำหนดค่าที่กำหนดเองโดยใช้ตัวแปรสภาพแวดล้อม `LEAKCODE_CONFIG`
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
-opencode run "Hello world"
+export LEAKCODE_CONFIG=/path/to/my/custom-config.json
+leak-code run "Hello world"
 ```
 
 มีการโหลดการกำหนดค่าแบบกำหนดเองระหว่างการกำหนดค่าส่วนกลางและโครงการตามลำดับความสำคัญ
@@ -135,17 +135,17 @@ opencode run "Hello world"
 
 ### ไดเรกทอรีที่กำหนดเอง
 
-ระบุไดเร็กทอรีการกำหนดค่าที่กำหนดเองโดยใช้ `OPENCODE_CONFIG_DIR`
+ระบุไดเร็กทอรีการกำหนดค่าที่กำหนดเองโดยใช้ `LEAKCODE_CONFIG_DIR`
 ตัวแปรสภาพแวดล้อม ไดเร็กทอรีนี้จะถูกค้นหาตัวแทน, คำสั่ง,
-โหมดและปลั๊กอินเหมือนกับไดเร็กทอรี `.opencode` มาตรฐานและควร
+โหมดและปลั๊กอินเหมือนกับไดเร็กทอรี `.leak-code` มาตรฐานและควร
 เป็นไปตามโครงสร้างเดียวกัน
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
-opencode run "Hello world"
+export LEAKCODE_CONFIG_DIR=/path/to/my/config-directory
+leak-code run "Hello world"
 ```
 
-ไดเร็กทอรีที่กำหนดเองถูกโหลดหลังจากไดเร็กทอรี config ส่วนกลางและ `.opencode` ดังนั้นจึง **สามารถแทนที่** การตั้งค่าได้
+ไดเร็กทอรีที่กำหนดเองถูกโหลดหลังจากไดเร็กทอรี config ส่วนกลางและ `.leak-code` ดังนั้นจึง **สามารถแทนที่** การตั้งค่าได้
 
 ---
 
@@ -174,9 +174,9 @@ opencode run "Hello world"
 }
 ```
 
-ใช้ `OPENCODE_TUI_CONFIG` เพื่อชี้ไปยังไฟล์กำหนดค่า TUI ที่กำหนดเอง
+ใช้ `LEAKCODE_TUI_CONFIG` เพื่อชี้ไปยังไฟล์กำหนดค่า TUI ที่กำหนดเอง
 
-คีย์ `theme`, `keybinds` และ `tui` แบบเดิมใน `opencode.json` เลิกใช้แล้วและจะถูกย้ายโดยอัตโนมัติเมื่อเป็นไปได้
+คีย์ `theme`, `keybinds` และ `tui` แบบเดิมใน `leak-code.json` เลิกใช้แล้วและจะถูกย้ายโดยอัตโนมัติเมื่อเป็นไปได้
 
 [เรียนรู้เพิ่มเติมเกี่ยวกับการใช้ TUI ที่นี่](/docs/tui#configure)
 
@@ -184,9 +184,9 @@ opencode run "Hello world"
 
 ### เซิร์ฟเวอร์
 
-คุณสามารถกำหนดการตั้งค่าเซิร์ฟเวอร์สำหรับคำสั่ง `opencode serve` และ `opencode web` ผ่านตัวเลือก `server`
+คุณสามารถกำหนดการตั้งค่าเซิร์ฟเวอร์สำหรับคำสั่ง `leak-code serve` และ `leak-code web` ผ่านตัวเลือก `server`
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "server": {
@@ -215,7 +215,7 @@ opencode run "Hello world"
 
 คุณสามารถจัดการเครื่องมือที่ LLM สามารถใช้ได้ผ่านตัวเลือก `tools`
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -233,7 +233,7 @@ opencode run "Hello world"
 
 คุณสามารถกำหนดค่าผู้ให้บริการและรุ่นที่คุณต้องการใช้ในการกำหนดค่า OpenCode ของคุณได้ผ่านตัวเลือก `provider`, `model` และ `small_model`
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
@@ -246,7 +246,7 @@ opencode run "Hello world"
 
 ตัวเลือกผู้ให้บริการอาจรวมถึง `timeout` และ `setCacheKey`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -275,7 +275,7 @@ opencode run "Hello world"
 
 Amazon Bedrock รองรับ AWS-การกำหนดค่าเฉพาะ:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -321,7 +321,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 คุณสามารถกำหนดค่าตัวแทนเฉพาะสำหรับงานเฉพาะผ่านตัวเลือก `agent`
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -339,7 +339,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 }
 ```
 
-คุณยังสามารถกำหนดตัวแทนโดยใช้ไฟล์ Markdown ใน `~/.config/opencode/agents/` หรือ `.opencode/agents/` [เรียนรู้เพิ่มเติมที่นี่](/docs/agents)
+คุณยังสามารถกำหนดตัวแทนโดยใช้ไฟล์ Markdown ใน `~/.config/leak-code/agents/` หรือ `.leak-code/agents/` [เรียนรู้เพิ่มเติมที่นี่](/docs/agents)
 
 ---
 
@@ -347,7 +347,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 คุณสามารถตั้งค่าตัวแทนเริ่มต้นได้โดยใช้ตัวเลือก `default_agent` ซึ่งจะกำหนดว่าเอเจนต์ใดที่จะใช้เมื่อไม่มีการระบุอย่างชัดเจน
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "plan"
@@ -356,7 +356,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ตัวแทนเริ่มต้นจะต้องเป็นตัวแทนหลัก (ไม่ใช่ตัวแทนย่อย) ซึ่งอาจเป็นตัวแทนในตัว เช่น `"build"` หรือ `"plan"` หรือ [ตัวแทนที่กำหนดเอง](/docs/agents) ที่คุณกำหนดไว้ หากไม่มีตัวแทนที่ระบุหรือเป็นตัวแทนย่อย OpenCode จะถอยกลับไปที่ `"build"` พร้อมคำเตือน
 
-การตั้งค่านี้ใช้กับอินเทอร์เฟซทั้งหมด: TUI, CLI (`opencode run`) แอปเดสก์ท็อป และ GitHub Action
+การตั้งค่านี้ใช้กับอินเทอร์เฟซทั้งหมด: TUI, CLI (`leak-code run`) แอปเดสก์ท็อป และ GitHub Action
 
 ---
 
@@ -364,7 +364,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 คุณสามารถกำหนดค่าคุณสมบัติ [แบ่งปัน](/docs/share) ได้ผ่านทางตัวเลือก `share`
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -385,7 +385,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 คุณสามารถกำหนดค่าคำสั่งที่กำหนดเองสำหรับงานซ้ำๆ ได้ผ่านตัวเลือก `command`
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -403,7 +403,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 }
 ```
 
-คุณยังสามารถกำหนดคำสั่งโดยใช้ไฟล์ Markdown ใน `~/.config/opencode/commands/` หรือ `.opencode/commands/` [เรียนรู้เพิ่มเติมที่นี่](/docs/commands)
+คุณยังสามารถกำหนดคำสั่งโดยใช้ไฟล์ Markdown ใน `~/.config/leak-code/commands/` หรือ `.leak-code/commands/` [เรียนรู้เพิ่มเติมที่นี่](/docs/commands)
 
 ---
 
@@ -426,7 +426,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 OpenCode จะดาวน์โหลดการอัปเดตใหม่โดยอัตโนมัติเมื่อเริ่มต้นระบบ คุณสามารถปิดการใช้งานนี้ได้โดยใช้ตัวเลือก `autoupdate`
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false
@@ -442,7 +442,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถกำหนดค่าตัวจัดรูปแบบโค้ดผ่านตัวเลือก `formatter`
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
@@ -470,7 +470,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ตัวอย่างเช่น เพื่อให้แน่ใจว่าเครื่องมือ `edit` และ `bash` ต้องได้รับการอนุมัติจากผู้ใช้:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -488,7 +488,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถควบคุมลักษณะการทำงานของการบีบอัดบริบทได้โดยใช้ตัวเลือก `compaction`
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
@@ -509,7 +509,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถกำหนดค่ารูปแบบการละเว้นตัวเฝ้าดูไฟล์ได้ผ่านตัวเลือก `watcher`
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "watcher": {
@@ -526,7 +526,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถกำหนดค่าเซิร์ฟเวอร์ MCP ที่คุณต้องการใช้ผ่านตัวเลือก `mcp`
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {}
@@ -541,9 +541,9 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 [ปลั๊กอิน](/docs/plugins) ขยาย OpenCode ด้วยเครื่องมือที่กำหนดเอง hooks และการผสานรวม
 
-วางไฟล์ปลั๊กอินใน `.opencode/plugins/` หรือ `~/.config/opencode/plugins/` คุณยังสามารถโหลดปลั๊กอินจาก npm ผ่านตัวเลือก `plugin`
+วางไฟล์ปลั๊กอินใน `.leak-code/plugins/` หรือ `~/.config/leak-code/plugins/` คุณยังสามารถโหลดปลั๊กอินจาก npm ผ่านตัวเลือก `plugin`
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
@@ -558,7 +558,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถกำหนดค่าคำแนะนำสำหรับรุ่นที่คุณใช้ผ่านตัวเลือก `instructions`
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -574,7 +574,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถปิดการใช้งานผู้ให้บริการที่โหลดโดยอัตโนมัติผ่านตัวเลือก `disabled_providers` สิ่งนี้มีประโยชน์เมื่อคุณต้องการป้องกันไม่ให้โหลดผู้ให้บริการบางรายแม้ว่าจะมีข้อมูลประจำตัวอยู่ก็ตาม
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
@@ -597,7 +597,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 คุณสามารถระบุรายชื่อผู้ให้บริการที่อนุญาตได้ผ่านตัวเลือก `enabled_providers` เมื่อตั้งค่าแล้ว เฉพาะผู้ให้บริการที่ระบุเท่านั้นที่จะเปิดใช้งาน และผู้ให้บริการอื่นๆ ทั้งหมดจะถูกละเว้น
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "enabled_providers": ["anthropic", "openai"]
@@ -618,7 +618,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ปุ่ม `experimental` มีตัวเลือกที่อยู่ระหว่างการพัฒนา
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "experimental": {}
@@ -641,10 +641,10 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ใช้ `{env:VARIABLE_NAME}` เพื่อทดแทนตัวแปรสภาพแวดล้อม:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:LEAKCODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -664,7 +664,7 @@ OpenCode จะดาวน์โหลดการอัปเดตใหม�
 
 ใช้ `{file:path/to/file}` เพื่อทดแทนเนื้อหาของไฟล์:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["./custom-instructions.md"],

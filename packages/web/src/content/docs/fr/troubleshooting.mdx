@@ -11,7 +11,7 @@ Pour déboguer les problèmes avec OpenCode, commencez par vérifier les journau
 
 Les fichiers journaux sont écrits dans :
 
-- **macOS/Linux** : `~/.local/share/opencode/log/`
+- **macOS/Linux** : `~/.local/share/leak-code/log/`
 - **Windows** : appuyez sur `WIN+R` et collez `%USERPROFILE%\.local\share\opencode\log`
 
 Les fichiers journaux sont nommés avec des horodatages (par exemple, `2025-01-09T123456.log`) et les 10 fichiers journaux les plus récents sont conservés.
@@ -24,7 +24,7 @@ Vous pouvez définir le niveau de journalisation avec l'option de ligne de comma
 
 opencode stocke les données de session et autres données d'application sur le disque à l'emplacement :
 
-- **macOS/Linux** : `~/.local/share/opencode/`
+- **macOS/Linux** : `~/.local/share/leak-code/`
 - **Windows** : appuyez sur `WIN+R` et collez `%USERPROFILE%\.local\share\opencode`
 
 Ce répertoire contient :
@@ -57,9 +57,9 @@ Si l'application de bureau plante au lancement, se bloque ou se comporte étrang
 
 Ouvrez votre fichier de configuration global et recherchez une clé `plugin`.
 
-- **macOS/Linux** : `~/.config/opencode/opencode.jsonc` (ou `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (anciennes installations) : `~/.local/share/opencode/opencode.jsonc`
-- **Windows** : appuyez sur `WIN+R` et collez `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux** : `~/.config/leak-code/leak-code.jsonc` (ou `~/.config/leak-code/leak-code.json`)
+- **macOS/Linux** (anciennes installations) : `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows** : appuyez sur `WIN+R` et collez `%USERPROFILE%\.config\opencode\leak-code.jsonc`
 
 Si vous avez configuré des plugins, désactivez-les temporairement en supprimant la clé ou en la définissant sur un tableau vide :
 
@@ -75,10 +75,10 @@ Si vous avez configuré des plugins, désactivez-les temporairement en suppriman
 OpenCode peut également charger des plugins locaux à partir du disque. Écartez-les temporairement (ou renommez le dossier) et redémarrez l'application de bureau :
 
 - **Plugins mondiaux**
-  - **macOS/Linux** : `~/.config/opencode/plugins/`
+  - **macOS/Linux** : `~/.config/leak-code/plugins/`
   - **Windows** : appuyez sur `WIN+R` et collez `%USERPROFILE%\.config\opencode\plugins`
 - **Plugins de projet** (uniquement si vous utilisez une configuration par projet)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 Si l'application recommence à fonctionner, réactivez les plugins un par un pour trouver celui à l'origine du problème.
 
@@ -111,13 +111,13 @@ Depuis l'écran d'accueil, cliquez sur le nom du serveur (avec le point d'état)
 
 #### Supprimez `server.port` / `server.hostname` de votre configuration
 
-Si votre `opencode.json(c)` contient une section `server`, supprimez-la temporairement et redémarrez l'application de bureau.
+Si votre `leak-code.json(c)` contient une section `server`, supprimez-la temporairement et redémarrez l'application de bureau.
 
 #### Vérifier les variables d'environnement
 
-Si `OPENCODE_PORT` est défini dans votre environnement, l'application de bureau tentera d'utiliser ce port pour le serveur local.
+Si `LEAKCODE_PORT` est défini dans votre environnement, l'application de bureau tentera d'utiliser ce port pour le serveur local.
 
-- Désactivez `OPENCODE_PORT` (ou choisissez un port libre) et redémarrez.
+- Désactivez `LEAKCODE_PORT` (ou choisissez un port libre) et redémarrez.
 
 ---
 
@@ -199,7 +199,7 @@ Voici quelques problèmes courants et comment les résoudre.
 
 1. Vérifiez les journaux pour les messages d'erreur
 2. Essayez d'exécuter avec `--print-logs` pour voir la sortie dans le terminal
-3. Assurez-vous d'avoir la dernière version avec `opencode upgrade`
+3. Assurez-vous d'avoir la dernière version avec `leak-code upgrade`
 
 ---
 
@@ -227,7 +227,7 @@ Exemples :
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-Pour déterminer à quels modèles vous avez accès, exécutez `opencode models`
+Pour déterminer à quels modèles vous avez accès, exécutez `leak-code models`
 
 ---
 

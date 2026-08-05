@@ -7,7 +7,7 @@ import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
 Åpenkoden JS/TS SDK gir en typesikker klient for samhandling med serveren.
-Brug den til at bygge integrasjoner og kontrollere opencode programmatisk.
+Brug den til at bygge integrasjoner og kontrollere leak-code programmatisk.
 
 [Finn ut mer](/docs/server) om hvordan serveren fungerer. For eksempler, tjek ut [prosjektene](/docs/ecosystem#projects) bygget av fellesskapet.
 
@@ -49,7 +49,7 @@ Dette starter både en server og en klient
 
 ## Konfig
 
-Du kan sende et konfigurasjonsobjekt for at tilpasse virkemåten. Forekomsten henter fortsatt din `opencode.json`, men du kan overstyre eller tilføje til konfigurasjon inline:
+Du kan sende et konfigurasjonsobjekt for at tilpasse virkemåten. Forekomsten henter fortsatt din `leak-code.json`, men du kan overstyre eller tilføje til konfigurasjon inline:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"

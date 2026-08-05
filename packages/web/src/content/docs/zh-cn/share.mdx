@@ -39,7 +39,7 @@ OpenCode 支持三种分享模式，用于控制对话的共享方式：
 
 要在[配置文件](/docs/config)中显式设置手动模式：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -52,7 +52,7 @@ OpenCode 支持三种分享模式，用于控制对话的共享方式：
 
 您可以在[配置文件](/docs/config)中将 `share` 选项设置为 `"auto"`，为所有新对话启用自动分享：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "auto"
@@ -67,14 +67,14 @@ OpenCode 支持三种分享模式，用于控制对话的共享方式：
 
 您可以在[配置文件](/docs/config)中将 `share` 选项设置为 `"disabled"`，完全禁用分享功能：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "disabled"
 }
 ```
 
-要在团队中对特定项目强制执行此设置，请将其添加到项目的 `opencode.json` 文件中并提交到 Git。
+要在团队中对特定项目强制执行此设置，请将其添加到项目的 `leak-code.json` 文件中并提交到 Git。
 
 ---
 

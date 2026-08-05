@@ -18,7 +18,7 @@ export const console = config.console
 ### بيانات الاعتماد
 
 عند إضافة مفاتيح API الخاصة بمزوّد عبر الأمر `/connect`، يتم تخزينها
-في `~/.local/share/opencode/auth.json`.
+في `~/.local/share/leak-code/auth.json`.
 
 ---
 
@@ -32,7 +32,7 @@ export const console = config.console
 
 يمكنك تخصيص عنوان URL الأساسي لأي مزوّد عبر خيار `baseURL`. يفيد ذلك عند استخدام خدمات وسيطة (proxy) أو نقاط نهاية مخصّصة.
 
-```json title="opencode.json" {6}
+```json title="leak-code.json" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -189,9 +189,9 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
 
    #### ملف الإعدادات (موصى به)
 
-   للإعداد الخاص بالمشروع أو الإعداد الدائم، استخدم `opencode.json`:
+   للإعداد الخاص بالمشروع أو الإعداد الدائم، استخدم `leak-code.json`:
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -218,7 +218,7 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
 
    إذا كنت تستخدم نقاط نهاية VPC لـ Bedrock:
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -261,7 +261,7 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
 :::note
 بالنسبة إلى ملفات تعريف الاستدلال المخصّصة، استخدم اسم النموذج واسم المزوّد في المفتاح وعيّن الخاصية `id` إلى arn. يضمن ذلك التخزين المؤقت الصحيح:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -323,7 +323,7 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
 
 يمكنك تكوين opencode لاستخدام النماذج المحلية عبر [Atomic Chat](https://atomic.chat)، وهو تطبيق سطح مكتب يقوم بتشغيل LLMs المحلية خلف خادم API متوافق مع OpenAI (نقطة النهاية الافتراضية `http://127.0.0.1:1337/v1`).
 
-```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+```json title="leak-code.json" "atomic-chat" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -551,7 +551,7 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
 
    يمكنك أيضا إضافة نماذج عبر إعدادات opencode.
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -754,7 +754,7 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
 يستخدم OpenCode نموذجا صغيرا لبعض مهام الذكاء الاصطناعي مثل إنشاء عنوان الجلسة.
 تم ضبطه لاستخدام gpt-5-nano افتراضيا، مستضافا عبر Zen. لحصر OpenCode
 على استخدام مثيل GitLab المستضاف لديك فقط، أضف ما يلي إلى ملف
-`opencode.json` لديك. يوصى أيضا بتعطيل مشاركة الجلسات.
+`leak-code.json` لديك. يوصى أيضا بتعطيل مشاركة الجلسات.
 
 ```json
 {
@@ -816,9 +816,9 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ##### التهيئة
 
-خصّص عبر `opencode.json`:
+خصّص عبر `leak-code.json`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -835,7 +835,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 للوصول إلى أدوات GitLab (merge requests وissues وpipelines وCI/CD وغيرها):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-gitlab-plugin"]
@@ -1017,7 +1017,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 هذه هي [Helicone's Model Directory](https://helicone.ai/models)، وستحتاجها للحصول على IDs الخاصة بالنماذج التي تريد إضافتها.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1045,7 +1045,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 تدعم Helicone ترويسات مخصّصة لميزات مثل التخزين المؤقت وتتبع المستخدم وإدارة الجلسات. أضفها إلى إعداد المزوّد عبر `options.headers`:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1074,7 +1074,7 @@ npm install -g opencode-helicone-session
 
 أضفه إلى إعداداتك.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "plugin": ["opencode-helicone-session"]
 }
@@ -1099,7 +1099,7 @@ npm install -g opencode-helicone-session
 
 يمكنك ضبط opencode لاستخدام نماذج محلية عبر أداة llama-server ضمن [llama.cpp](https://github.com/ggml-org/llama.cpp)
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="leak-code.json" "llama.cpp" {5, 6, 8, 10-15}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1166,7 +1166,7 @@ npm install -g opencode-helicone-session
 
 يمكنك ضبط opencode لاستخدام نماذج محلية عبر LM Studio.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="leak-code.json" "lmstudio" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1287,7 +1287,7 @@ npm install -g opencode-helicone-session
 يمكن لـ Ollama ضبط نفسه تلقائيا للعمل مع OpenCode. راجع [توثيق تكامل Ollama](https://docs.ollama.com/integrations/opencode) للتفاصيل.
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="leak-code.json" "ollama" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1449,7 +1449,7 @@ OpenCode Zen هي قائمة من النماذج التي تم اختبارها 
 
    يمكنك أيضا إضافة نماذج إضافية عبر إعدادات opencode.
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1464,7 +1464,7 @@ OpenCode Zen هي قائمة من النماذج التي تم اختبارها 
 
 5. يمكنك أيضا تخصيصها عبر إعدادات opencode. إليك مثالا على تحديد مزوّد
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1713,7 +1713,7 @@ OpenCode Zen هي قائمة من النماذج التي تم اختبارها 
 
 يمكنك أيضا تخصيص النماذج عبر إعدادات opencode. إليك مثالا على تحديد ترتيب توجيه المزوّدات.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1823,7 +1823,7 @@ OpenCode Zen هي قائمة من النماذج التي تم اختبارها 
 
    يمكنك أيضا إضافة نماذج إضافية عبر إعدادات opencode.
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1882,16 +1882,16 @@ OpenCode Zen هي قائمة من النماذج التي تم اختبارها 
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in leak-code.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. أنشئ أو حدّث ملف `opencode.json` في دليل مشروعك:
+4. أنشئ أو حدّث ملف `leak-code.json` في دليل مشروعك:
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="leak-code.json" ""myprovider"" {5-15}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1929,7 +1929,7 @@ OpenCode Zen هي قائمة من النماذج التي تم اختبارها 
 
 إليك مثالا يضبط خيارات `apiKey` و`headers` وخيارات `limit` الخاصة بالنموذج.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="leak-code.json" {9,11,17-20}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1972,7 +1972,7 @@ OpenCode Zen هي قائمة من النماذج التي تم اختبارها 
 
 إذا كنت تواجه مشكلة في تهيئة مزوّد، فتحقق مما يلي:
 
-1. **تحقق من إعداد auth**: شغّل `opencode auth list` لمعرفة ما إذا كانت بيانات الاعتماد
+1. **تحقق من إعداد auth**: شغّل `leak-code auth list` لمعرفة ما إذا كانت بيانات الاعتماد
    الخاصة بالمزوّد قد أضيفت إلى إعداداتك.
 
    لا ينطبق هذا على مزوّدات مثل Amazon Bedrock التي تعتمد على متغيرات البيئة لـ auth.

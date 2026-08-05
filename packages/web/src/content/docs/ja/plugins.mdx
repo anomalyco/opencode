@@ -19,8 +19,8 @@ description: OpenCode を拡張する独自のプラグインを作成します�
 
 JavaScript または TypeScript ファイルをプラグインディレクトリに配置します。
 
-- `.opencode/plugins/` - プロジェクトレベルのプラグイン
-- `~/.config/opencode/plugins/` - グローバルプラグイン
+- `.leak-code/plugins/` - プロジェクトレベルのプラグイン
+- `~/.config/leak-code/plugins/` - グローバルプラグイン
 
 これらのディレクトリ内のファイルは起動時に自動的にロードされます。
 
@@ -30,7 +30,7 @@ JavaScript または TypeScript ファイルをプラグインディレクトリ
 
 設定ファイルで npm パッケージを指定します。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -55,10 +55,10 @@ JavaScript または TypeScript ファイルをプラグインディレクトリ
 
 プラグインはすべてのソースからロードされ、すべてのフックが順番に実行されます。ロード順序は次のとおりです。
 
-1. グローバル設定 (`~/.config/opencode/opencode.json`)
-2. プロジェクト設定 (`opencode.json`)
-3. グローバルプラグインディレクトリ (`~/.config/opencode/plugins/`)
-4. プロジェクトプラグインディレクトリ (`.opencode/plugins/`)
+1. グローバル設定 (`~/.config/leak-code/leak-code.json`)
+2. プロジェクト設定 (`leak-code.json`)
+3. グローバルプラグインディレクトリ (`~/.config/leak-code/plugins/`)
+4. プロジェクトプラグインディレクトリ (`.leak-code/plugins/`)
 
 同じ名前とバージョンを持つ重複した npm パッケージは 1 回ロードされます。ただし、似た名前のローカルプラグインと npm プラグインは両方とも別々にロードされます。
 
@@ -75,7 +75,7 @@ JavaScript または TypeScript ファイルをプラグインディレクトリ
 
 ローカルプラグインとカスタムツールは外部の npm パッケージを使用できます。必要な依存関係を含む `package.json` を config ディレクトリに追加します。
 
-```json title=".opencode/package.json"
+```json title=".leak-code/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -85,7 +85,7 @@ JavaScript または TypeScript ファイルをプラグインディレクトリ
 
 OpenCode は起動時に `bun install` を実行してこれらをインストールします。プラグインとツールはそれらをインポートできるようになります。
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### 基本構造
 
-```js title=".opencode/plugins/example.js"
+```js title=".leak-code/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -219,7 +219,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 特定のイベントが発生したときに通知を送信します。
 
-```js title=".opencode/plugins/notification.js"
+```js title=".leak-code/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
@@ -244,7 +244,7 @@ macOS 上で AppleScript を実行するために `osascript` を使用してい
 
 構造化ログには `console.log` の代わりに `client.app.log()` を使用します。
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -265,7 +265,7 @@ export const MyPlugin = async ({ client }) => {
 
 セッションが圧縮されたときに含まれるコンテキストをカスタマイズします。
 
-```ts title=".opencode/plugins/compaction.ts"
+```ts title=".leak-code/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
@@ -289,7 +289,7 @@ Include any state that should persist across compaction:
 
 `output.prompt` を設定することで、圧縮プロンプトを完全に置き換えることもできます。
 
-```ts title=".opencode/plugins/custom-compaction.ts"
+```ts title=".leak-code/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
@@ -320,7 +320,7 @@ Format as a structured prompt that a new agent can use to resume work.
 
 OpenCode が `.env` ファイルを読み取らないようにします。
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".leak-code/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -338,7 +338,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 すべてのシェル実行 (AI ツールとユーザーターミナル) に環境変数を挿入します。
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".leak-code/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -355,7 +355,7 @@ export const InjectEnvPlugin = async () => {
 
 プラグインは OpenCode にカスタムツールを追加することもできます。
 
-```ts title=".opencode/plugins/custom-tools.ts"
+```ts title=".leak-code/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
@@ -390,7 +390,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 構造化ログには `client.app.log()` の代わりに `console.log` を使用します。
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -411,7 +411,7 @@ export const MyPlugin = async ({ client }) => {
 
 セッションが圧縮されたときに含まれるコンテキストをカスタマイズします。
 
-```ts title=".opencode/plugins/compaction.ts"
+```ts title=".leak-code/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
@@ -435,7 +435,7 @@ Include any state that should persist across compaction:
 
 `output.prompt` を設定することで、圧縮プロンプトを完全に置き換えることもできます。
 
-```ts title=".opencode/plugins/custom-compaction.ts"
+```ts title=".leak-code/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {

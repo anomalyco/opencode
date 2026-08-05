@@ -11,7 +11,7 @@ Da biste otklonili probleme s OpenCode, počnite provjeravanjem dnevnika i lokal
 
 Log fajlovi se pišu na:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leak-code/log/`
 - **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.local\share\opencode\log`
 
 Datoteke evidencije se imenuju vremenskim oznakama (npr. `2025-01-09T123456.log`) i čuvaju se najnovijih 10 datoteka dnevnika.
@@ -24,7 +24,7 @@ Možete postaviti nivo dnevnika pomoću opcije komandne linije `--log-level` da 
 
 OpenCode pohranjuje podatke o sesiji i druge podatke aplikacije na disku na:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leak-code/`
 - **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.local\share\opencode`
 
 Ovaj direktorij sadrži:
@@ -57,9 +57,9 @@ Ako se desktop aplikacija ruši pri pokretanju, visi ili se čudno ponaša, poč
 
 Otvorite svoju globalnu konfiguracijsku datoteku i potražite ključ `plugin`.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (ili `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (starije instalacije): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/leak-code/leak-code.jsonc` (ili `~/.config/leak-code/leak-code.json`)
+- **macOS/Linux** (starije instalacije): `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.config\opencode\leak-code.jsonc`
 
 Ako imate konfigurirane dodatke, privremeno ih onemogućite uklanjanjem ključa ili postavljanjem na prazan niz:
 
@@ -75,10 +75,10 @@ Ako imate konfigurirane dodatke, privremeno ih onemogućite uklanjanjem ključa 
 OpenCode također može učitati lokalne dodatke s diska. Privremeno ih maknite s puta (ili preimenujte folder) i ponovo pokrenite desktop aplikaciju:
 
 - **Globalni dodaci**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leak-code/plugins/`
   - **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.config\opencode\plugins`
 - **Projektni dodaci** (samo ako koristite konfiguraciju po projektu)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 Ako aplikacija ponovo počne raditi, ponovo omogućite dodatke jedan po jedan kako biste otkrili koji od njih uzrokuje problem.
 
@@ -111,13 +111,13 @@ Na početnom ekranu kliknite na ime servera (sa tačkom statusa) da otvorite bir
 
 #### Uklonite `server.port` / `server.hostname` iz vaše konfiguracije
 
-Ako vaš `opencode.json(c)` sadrži odjeljak `server`, privremeno ga uklonite i ponovo pokrenite desktop aplikaciju.
+Ako vaš `leak-code.json(c)` sadrži odjeljak `server`, privremeno ga uklonite i ponovo pokrenite desktop aplikaciju.
 
 #### Provjerite varijable okruženja
 
-Ako ste postavili `OPENCODE_PORT` u svom okruženju, desktop aplikacija će pokušati da koristi taj port za lokalni server.
+Ako ste postavili `LEAKCODE_PORT` u svom okruženju, desktop aplikacija će pokušati da koristi taj port za lokalni server.
 
-- Poništite `OPENCODE_PORT` (ili odaberite slobodan port) i ponovo pokrenite.
+- Poništite `LEAKCODE_PORT` (ili odaberite slobodan port) i ponovo pokrenite.
 
 ---
 
@@ -199,7 +199,7 @@ Evo nekih uobičajenih problema i kako ih riješiti.
 
 1. Provjerite dnevnike za poruke o greškama
 2. Pokušajte pokrenuti sa `--print-logs` da vidite izlaz u terminalu
-3. Uvjerite se da imate najnoviju verziju sa `opencode upgrade`
+3. Uvjerite se da imate najnoviju verziju sa `leak-code upgrade`
 
 ---
 
@@ -227,7 +227,7 @@ primjeri:
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-Da saznate kojim modelima imate pristup, pokrenite `opencode models`
+Da saznate kojim modelima imate pristup, pokrenite `leak-code models`
 
 ---
 

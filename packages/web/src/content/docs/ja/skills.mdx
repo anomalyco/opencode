@@ -13,8 +13,8 @@ description: SKILL.md 定義による再利用可能な動作の定義
 スキル名ごとにフォルダーを 1 つ作成し、その中に `SKILL.md` を置きます。
 OpenCode は次の場所を検索します。
 
-- プロジェクト設定: `.opencode/skills/<name>/SKILL.md`
-- グローバル設定: `~/.config/opencode/skills/<name>/SKILL.md`
+- プロジェクト設定: `.leak-code/skills/<name>/SKILL.md`
+- グローバル設定: `~/.config/leak-code/skills/<name>/SKILL.md`
 - プロジェクト Claude 互換: `.claude/skills/<name>/SKILL.md`
 - グローバル Claude 互換: `~/.claude/skills/<name>/SKILL.md`
 - プロジェクトエージェント互換: `.agents/skills/<name>/SKILL.md`
@@ -25,9 +25,9 @@ OpenCode は次の場所を検索します。
 ## 検出の仕組み
 
 プロジェクトのローカルパスの場合、OpenCode は現在の作業ディレクトリから git ワークツリーに到達するまで進みます。
-途中で、一致する `skills/*/SKILL.md` を `.opencode/` に読み込み、一致する `.claude/skills/*/SKILL.md` または `.agents/skills/*/SKILL.md` を読み込みます。
+途中で、一致する `skills/*/SKILL.md` を `.leak-code/` に読み込み、一致する `.claude/skills/*/SKILL.md` または `.agents/skills/*/SKILL.md` を読み込みます。
 
-グローバル定義は、`~/.config/opencode/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md`、および `~/.agents/skills/*/SKILL.md` からもロードされます。
+グローバル定義は、`~/.config/leak-code/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md`、および `~/.agents/skills/*/SKILL.md` からもロードされます。
 
 ---
 
@@ -73,7 +73,7 @@ OpenCode は次の場所を検索します。
 
 ## 使用例
 
-次のように `.opencode/skills/git-release/SKILL.md` を作成します。
+次のように `.leak-code/skills/git-release/SKILL.md` を作成します。
 
 ```markdown
 ---
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## 権限の設定
 
-`opencode.json` のパターンベースの権限を使用して、エージェントがアクセスできるスキルを制御します。
+`leak-code.json` のパターンベースの権限を使用して、エージェントがアクセスできるスキルを制御します。
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**組み込みエージェントの場合** (`opencode.json` 内):
+**組み込みエージェントの場合** (`leak-code.json` 内):
 
 ```json
 {

@@ -10,7 +10,7 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 يؤدي تشغيل OpenCode إلى بدء واجهة TUI للدليل الحالي.
 
 ```bash
-opencode
+leak-code
 ```
 
 أو يمكنك تشغيلها لدليل عمل محدد.
@@ -382,7 +382,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 }
 ```
 
-هذا منفصل عن `opencode.json`، الذي يضبط سلوك الخادم ووقت التشغيل.
+هذا منفصل عن `leak-code.json`، الذي يضبط سلوك الخادم ووقت التشغيل.
 
 يتم دمج `keybinds` مع الاختصارات الافتراضية المدمجة، لذلك لا تحتاج إلا إلى ضبط الاختصارات التي تريد تغييرها.
 
@@ -397,7 +397,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 - `mouse` - يفعّل أو يعطّل التقاط الماوس في TUI (القيمة الافتراضية: `true`). عند تعطيله، يتم الحفاظ على سلوك terminal الأصلي لتحديد النص والتمرير بالماوس.
 - `attention` - يضبط desktop notifications والأصوات في TUI. معطل افتراضيًا.
 
-استخدم `OPENCODE_TUI_CONFIG` لتحميل مسار إعدادات TUI مخصص.
+استخدم `LEAKCODE_TUI_CONFIG` لتحميل مسار إعدادات TUI مخصص.
 
 ### Attention
 

@@ -8,13 +8,13 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 La CLI de OpenCode de forma predeterminada inicia el [TUI](/docs/tui) cuando se ejecuta sin ningún argumento.
 
 ```bash
-opencode
+leak-code
 ```
 
 Pero también acepta comandos como se documenta en esta página. Esto le permite interactuar con OpenCode mediante programación.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+leak-code run "Explain how closures work in JavaScript"
 ```
 
 ---
@@ -24,7 +24,7 @@ opencode run "Explain how closures work in JavaScript"
 Inicie la interfaz de usuario del terminal OpenCode.
 
 ```bash
-opencode [project]
+leak-code [project]
 ```
 
 #### Opciones
@@ -53,7 +53,7 @@ La CLI de OpenCode también tiene los siguientes comandos.
 Administrar agentes para OpenCode.
 
 ```bash
-opencode agent [command]
+leak-code agent [command]
 ```
 
 ---
@@ -63,17 +63,17 @@ opencode agent [command]
 Conecte una terminal a un servidor backend OpenCode que ya se esté ejecutando y iniciado mediante los comandos `serve` o `web`.
 
 ```bash
-opencode attach [url]
+leak-code attach [url]
 ```
 
 Esto permite usar TUI con un backend remoto OpenCode. Por ejemplo:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+leak-code web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+leak-code attach http://10.20.30.40:4096
 ```
 
 #### Opciones
@@ -84,8 +84,8 @@ opencode attach http://10.20.30.40:4096
 | <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuar la última sesión                                                                |
 | <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID de sesión para continuar                                                               |
 | <nobr><code>{"--fork"}</code></nobr>     |       | Bifurcar la sesión al continuar (usar con `--continue` o `--session`)                     |
-| <nobr><code>{"--password"}</code></nobr> | `-p`  | Contraseña de autenticación básica (predeterminada: `OPENCODE_SERVER_PASSWORD`)           |
-| <nobr><code>{"--username"}</code></nobr> | `-u`  | Usuario de autenticación básica (predeterminado: `OPENCODE_SERVER_USERNAME` u `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | Contraseña de autenticación básica (predeterminada: `LEAKCODE_SERVER_PASSWORD`)           |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | Usuario de autenticación básica (predeterminado: `LEAKCODE_SERVER_USERNAME` u `opencode`) |
 
 ---
 
@@ -94,7 +94,7 @@ opencode attach http://10.20.30.40:4096
 Cree un nuevo agente con configuración personalizada.
 
 ```bash
-opencode agent create
+leak-code agent create
 ```
 
 Este comando lo guiará en la creación de un nuevo agente con un mensaje del sistema personalizado y una configuración de herramientas.
@@ -106,7 +106,7 @@ Este comando lo guiará en la creación de un nuevo agente con un mensaje del si
 Enumere todos los agentes disponibles.
 
 ```bash
-opencode agent list
+leak-code agent list
 ```
 
 ---
@@ -116,17 +116,17 @@ opencode agent list
 Comando para administrar credenciales e iniciar sesión para proveedores.
 
 ```bash
-opencode auth [command]
+leak-code auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode funciona con la lista de proveedores en [Models.dev](https://models.dev), por lo que puede usar `opencode auth login` para configurar las claves API para cualquier proveedor que desee utilizar. Esto se almacena en `~/.local/share/opencode/auth.json`.
+OpenCode funciona con la lista de proveedores en [Models.dev](https://models.dev), por lo que puede usar `leak-code auth login` para configurar las claves API para cualquier proveedor que desee utilizar. Esto se almacena en `~/.local/share/leak-code/auth.json`.
 
 ```bash
-opencode auth login
+leak-code auth login
 ```
 
 Cuando se inicia OpenCode, carga los proveedores desde el archivo de credenciales. Y si hay claves definidas en sus entornos o un archivo `.env` en su proyecto.
@@ -138,13 +138,13 @@ Cuando se inicia OpenCode, carga los proveedores desde el archivo de credenciale
 Enumera todos los proveedores autenticados tal como están almacenados en el archivo de credenciales.
 
 ```bash
-opencode auth list
+leak-code auth list
 ```
 
 O la versión corta.
 
 ```bash
-opencode auth ls
+leak-code auth ls
 ```
 
 ---
@@ -154,7 +154,7 @@ opencode auth ls
 Cierra tu sesión de un proveedor eliminándolo del archivo de credenciales.
 
 ```bash
-opencode auth logout
+leak-code auth logout
 ```
 
 ---
@@ -164,7 +164,7 @@ opencode auth logout
 Administre el agente GitHub para la automatización del repositorio.
 
 ```bash
-opencode github [command]
+leak-code github [command]
 ```
 
 ---
@@ -174,7 +174,7 @@ opencode github [command]
 Instale el agente GitHub en su repositorio.
 
 ```bash
-opencode github install
+leak-code github install
 ```
 
 Esto configura el flujo de trabajo de acciones GitHub necesario y lo guía a través del proceso de configuración. [Más información](/docs/github).
@@ -186,7 +186,7 @@ Esto configura el flujo de trabajo de acciones GitHub necesario y lo guía a tra
 Ejecute el agente GitHub. Esto se usa normalmente en acciones GitHub.
 
 ```bash
-opencode github run
+leak-code github run
 ```
 
 ##### Opciones
@@ -203,7 +203,7 @@ opencode github run
 Administrar servidores de protocolo de contexto modelo.
 
 ```bash
-opencode mcp [command]
+leak-code mcp [command]
 ```
 
 ---
@@ -213,7 +213,7 @@ opencode mcp [command]
 Agregue un servidor MCP a su configuración.
 
 ```bash
-opencode mcp add
+leak-code mcp add
 ```
 
 Este comando lo guiará para agregar un servidor MCP local o remoto.
@@ -225,13 +225,13 @@ Este comando lo guiará para agregar un servidor MCP local o remoto.
 Enumere todos los servidores MCP configurados y su estado de conexión.
 
 ```bash
-opencode mcp list
+leak-code mcp list
 ```
 
 O utilice la versión corta.
 
 ```bash
-opencode mcp ls
+leak-code mcp ls
 ```
 
 ---
@@ -241,7 +241,7 @@ opencode mcp ls
 Autentíquese con un servidor MCP habilitado para OAuth.
 
 ```bash
-opencode mcp auth [name]
+leak-code mcp auth [name]
 ```
 
 Si no proporciona un nombre de servidor, se le pedirá que seleccione entre los servidores compatibles con OAuth disponibles.
@@ -249,13 +249,13 @@ Si no proporciona un nombre de servidor, se le pedirá que seleccione entre los 
 También puede enumerar los servidores compatibles con OAuth y su estado de autenticación.
 
 ```bash
-opencode mcp auth list
+leak-code mcp auth list
 ```
 
 O utilice la versión corta.
 
 ```bash
-opencode mcp auth ls
+leak-code mcp auth ls
 ```
 
 ---
@@ -265,7 +265,7 @@ opencode mcp auth ls
 Elimine las credenciales OAuth para un servidor MCP.
 
 ```bash
-opencode mcp logout [name]
+leak-code mcp logout [name]
 ```
 
 ---
@@ -275,7 +275,7 @@ opencode mcp logout [name]
 Depurar problemas de conexión OAuth para un servidor MCP.
 
 ```bash
-opencode mcp debug <name>
+leak-code mcp debug <name>
 ```
 
 ---
@@ -285,7 +285,7 @@ opencode mcp debug <name>
 Enumere todos los modelos disponibles de los proveedores configurados.
 
 ```bash
-opencode models [provider]
+leak-code models [provider]
 ```
 
 Este comando muestra todos los modelos disponibles en sus proveedores configurados en el formato `provider/model`.
@@ -295,7 +295,7 @@ Esto es útil para determinar el nombre exacto del modelo que se usará en [su c
 Opcionalmente, puede pasar un ID de proveedor para filtrar modelos por ese proveedor.
 
 ```bash
-opencode models anthropic
+leak-code models anthropic
 ```
 
 #### Opciones
@@ -308,7 +308,7 @@ opencode models anthropic
 Utilice el indicador `--refresh` para actualizar la lista de modelos almacenados en caché. Esto es útil cuando se han agregado nuevos modelos a un proveedor y desea verlos en OpenCode.
 
 ```bash
-opencode models --refresh
+leak-code models --refresh
 ```
 
 ---
@@ -318,23 +318,23 @@ opencode models --refresh
 Ejecute opencode en modo no interactivo pasando un mensaje directamente.
 
 ```bash
-opencode run [message..]
+leak-code run [message..]
 ```
 
 Esto es útil para secuencias de comandos, automatización o cuando desea una respuesta rápida sin iniciar el TUI completo. Por ejemplo.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "leak-code run"
+leak-code run Explain the use of context in Go
 ```
 
-También puede conectarse a una instancia `opencode serve` en ejecución para evitar tiempos de arranque en frío del servidor MCP en cada ejecución:
+También puede conectarse a una instancia `leak-code serve` en ejecución para evitar tiempos de arranque en frío del servidor MCP en cada ejecución:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+leak-code serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+leak-code run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Opciones
@@ -352,8 +352,8 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--format"}</code></nobr>   |       | Formato: predeterminado (formateado) o json (eventos JSON sin formato)                    |
 | <nobr><code>{"--title"}</code></nobr>    |       | Título de la sesión (utiliza un mensaje truncado si no se proporciona ningún valor)       |
 | <nobr><code>{"--attach"}</code></nobr>   |       | Adjuntar a un servidor opencode en ejecución (por ejemplo, http://localhost:4096)         |
-| <nobr><code>{"--password"}</code></nobr> | `-p`  | Contraseña de autenticación básica (predeterminada: `OPENCODE_SERVER_PASSWORD`)           |
-| <nobr><code>{"--username"}</code></nobr> | `-u`  | Usuario de autenticación básica (predeterminado: `OPENCODE_SERVER_USERNAME` u `opencode`) |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | Contraseña de autenticación básica (predeterminada: `LEAKCODE_SERVER_PASSWORD`)           |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | Usuario de autenticación básica (predeterminado: `LEAKCODE_SERVER_USERNAME` u `opencode`) |
 | <nobr><code>{"--dir"}</code></nobr>      |       | Directorio de ejecución, o ruta en el servidor remoto al adjuntar                         |
 | <nobr><code>{"--variant"}</code></nobr>  |       | Variante del modelo (esfuerzo de razonamiento específico del proveedor)                   |
 | <nobr><code>{"--thinking"}</code></nobr> |       | Mostrar bloques de pensamiento                                                            |
@@ -366,10 +366,10 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 Inicie un servidor OpenCode sin cabeza para acceso API. Consulte los [documentos del servidor](/docs/server) para conocer la interfaz HTTP completa.
 
 ```bash
-opencode serve
+leak-code serve
 ```
 
-Esto inicia un servidor HTTP que proporciona acceso API a la funcionalidad opencode sin la interfaz TUI. Configure `OPENCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
+Esto inicia un servidor HTTP que proporciona acceso API a la funcionalidad opencode sin la interfaz TUI. Configure `LEAKCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
 
 #### Opciones
 
@@ -387,7 +387,7 @@ Esto inicia un servidor HTTP que proporciona acceso API a la funcionalidad openc
 Administrar OpenCode sesiones.
 
 ```bash
-opencode session [command]
+leak-code session [command]
 ```
 
 ---
@@ -397,7 +397,7 @@ opencode session [command]
 Enumere todas las sesiones OpenCode.
 
 ```bash
-opencode session list
+leak-code session list
 ```
 
 ##### Opciones
@@ -414,7 +414,7 @@ opencode session list
 Muestre el uso de tokens y las estadísticas de costos para sus sesiones OpenCode.
 
 ```bash
-opencode stats
+leak-code stats
 ```
 
 #### Opciones
@@ -433,7 +433,7 @@ opencode stats
 Exportar datos de la sesión como JSON.
 
 ```bash
-opencode export [sessionID]
+leak-code export [sessionID]
 ```
 
 Si no proporciona una ID de sesión, se le pedirá que seleccione entre las sesiones disponibles.
@@ -445,14 +445,14 @@ Si no proporciona una ID de sesión, se le pedirá que seleccione entre las sesi
 Importe datos de sesión desde un archivo JSON o una URL compartida OpenCode.
 
 ```bash
-opencode import <file>
+leak-code import <file>
 ```
 
 Puede importar desde un archivo local o una URL compartida OpenCode.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+leak-code import session.json
+leak-code import https://opncd.ai/s/abc123
 ```
 
 ---
@@ -462,10 +462,10 @@ opencode import https://opncd.ai/s/abc123
 Inicie un servidor OpenCode sin cabeza con una interfaz web.
 
 ```bash
-opencode web
+leak-code web
 ```
 
-Esto inicia un servidor HTTP y abre un navegador web para acceder a OpenCode a través de una interfaz web. Configure `OPENCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
+Esto inicia un servidor HTTP y abre un navegador web para acceder a OpenCode a través de una interfaz web. Configure `LEAKCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
 
 #### Opciones
 
@@ -483,7 +483,7 @@ Esto inicia un servidor HTTP y abre un navegador web para acceder a OpenCode a t
 Inicie un servidor ACP (Agent Client Protocol).
 
 ```bash
-opencode acp
+leak-code acp
 ```
 
 Este comando inicia un servidor ACP que se comunica a través de stdin/stdout usando nd-JSON.
@@ -503,7 +503,7 @@ Este comando inicia un servidor ACP que se comunica a través de stdin/stdout us
 Desinstale OpenCode y elimine todos los archivos relacionados.
 
 ```bash
-opencode uninstall
+leak-code uninstall
 ```
 
 #### Opciones
@@ -522,19 +522,19 @@ opencode uninstall
 Actualiza opencode a la última versión o a una versión específica.
 
 ```bash
-opencode upgrade [target]
+leak-code upgrade [target]
 ```
 
 Para actualizar a la última versión.
 
 ```bash
-opencode upgrade
+leak-code upgrade
 ```
 
 Para actualizar a una versión específica.
 
 ```bash
-opencode upgrade v0.1.48
+leak-code upgrade v0.1.48
 ```
 
 #### Opciones
@@ -564,29 +564,29 @@ OpenCode se puede configurar mediante variables de entorno.
 
 | Variable                              | Type     | Description                                                                     |
 | ------------------------------------- | -------- | ------------------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | booleano | Compartir sesiones automáticamente                                              |
-| `OPENCODE_GIT_BASH_PATH`              | cadena   | Ruta al ejecutable de Git Bash en Windows                                       |
-| `OPENCODE_CONFIG`                     | cadena   | Ruta al archivo de configuración                                                |
-| `OPENCODE_CONFIG_DIR`                 | cadena   | Ruta al directorio de configuración                                             |
-| `OPENCODE_CONFIG_CONTENT`             | cadena   | Contenido de configuración json en línea                                        |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | booleano | Deshabilitar las comprobaciones automáticas de actualizaciones                  |
-| `OPENCODE_DISABLE_PRUNE`              | booleano | Deshabilitar la poda de datos antiguos                                          |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | booleano | Deshabilitar las actualizaciones automáticas de títulos de terminal             |
-| `OPENCODE_PERMISSION`                 | cadena   | Configuración de permisos json incorporados                                     |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | booleano | Deshabilitar complementos predeterminados                                       |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | booleano | Deshabilitar las descargas automáticas del servidor LSP                         |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | booleano | Habilitar modelos experimentales                                                |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | booleano | Deshabilitar la compactación automática de contexto                             |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | booleano | Deshabilitar la lectura desde `.claude` (mensaje + habilidades)                 |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | booleano | Desactivar lectura `~/.claude/CLAUDE.md`                                        |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | booleano | Deshabilitar la carga `.claude/skills`                                          |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | booleano | Deshabilitar la recuperación de modelos desde fuentes remotas                   |
-| `OPENCODE_FAKE_VCS`                   | cadena   | Proveedor de VCS falso para fines de prueba                                     |
-| `OPENCODE_CLIENT`                     | cadena   | Identificador de cliente (por defecto `cli`)                                    |
-| `OPENCODE_ENABLE_EXA`                 | booleano | Habilitar las herramientas de búsqueda web de Exa                               |
-| `OPENCODE_SERVER_PASSWORD`            | cadena   | Habilite la autenticación básica para `serve`/`web`                             |
-| `OPENCODE_SERVER_USERNAME`            | cadena   | Anular el nombre de usuario de autenticación básica (predeterminado `opencode`) |
-| `OPENCODE_MODELS_URL`                 | cadena   | URL personalizada para buscar la configuración de modelos                       |
+| `LEAKCODE_AUTO_SHARE`                 | booleano | Compartir sesiones automáticamente                                              |
+| `LEAKCODE_GIT_BASH_PATH`              | cadena   | Ruta al ejecutable de Git Bash en Windows                                       |
+| `LEAKCODE_CONFIG`                     | cadena   | Ruta al archivo de configuración                                                |
+| `LEAKCODE_CONFIG_DIR`                 | cadena   | Ruta al directorio de configuración                                             |
+| `LEAKCODE_CONFIG_CONTENT`             | cadena   | Contenido de configuración json en línea                                        |
+| `LEAKCODE_DISABLE_AUTOUPDATE`         | booleano | Deshabilitar las comprobaciones automáticas de actualizaciones                  |
+| `LEAKCODE_DISABLE_PRUNE`              | booleano | Deshabilitar la poda de datos antiguos                                          |
+| `LEAKCODE_DISABLE_TERMINAL_TITLE`     | booleano | Deshabilitar las actualizaciones automáticas de títulos de terminal             |
+| `LEAKCODE_PERMISSION`                 | cadena   | Configuración de permisos json incorporados                                     |
+| `LEAKCODE_DISABLE_DEFAULT_PLUGINS`    | booleano | Deshabilitar complementos predeterminados                                       |
+| `LEAKCODE_DISABLE_LSP_DOWNLOAD`       | booleano | Deshabilitar las descargas automáticas del servidor LSP                         |
+| `LEAKCODE_ENABLE_EXPERIMENTAL_MODELS` | booleano | Habilitar modelos experimentales                                                |
+| `LEAKCODE_DISABLE_AUTOCOMPACT`        | booleano | Deshabilitar la compactación automática de contexto                             |
+| `LEAKCODE_DISABLE_CLAUDE_CODE`        | booleano | Deshabilitar la lectura desde `.claude` (mensaje + habilidades)                 |
+| `LEAKCODE_DISABLE_CLAUDE_CODE_PROMPT` | booleano | Desactivar lectura `~/.claude/CLAUDE.md`                                        |
+| `LEAKCODE_DISABLE_CLAUDE_CODE_SKILLS` | booleano | Deshabilitar la carga `.claude/skills`                                          |
+| `LEAKCODE_DISABLE_MODELS_FETCH`       | booleano | Deshabilitar la recuperación de modelos desde fuentes remotas                   |
+| `LEAKCODE_FAKE_VCS`                   | cadena   | Proveedor de VCS falso para fines de prueba                                     |
+| `LEAKCODE_CLIENT`                     | cadena   | Identificador de cliente (por defecto `cli`)                                    |
+| `LEAKCODE_ENABLE_EXA`                 | booleano | Habilitar las herramientas de búsqueda web de Exa                               |
+| `LEAKCODE_SERVER_PASSWORD`            | cadena   | Habilite la autenticación básica para `serve`/`web`                             |
+| `LEAKCODE_SERVER_USERNAME`            | cadena   | Anular el nombre de usuario de autenticación básica (predeterminado `opencode`) |
+| `LEAKCODE_MODELS_URL`                 | cadena   | URL personalizada para buscar la configuración de modelos                       |
 
 ---
 
@@ -596,21 +596,21 @@ Estas variables de entorno habilitan funciones experimentales que pueden cambiar
 
 | Variable                                        | Type     | Description                                                |
 | ----------------------------------------------- | -------- | ---------------------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | booleano | Habilitar funciones experimentales de la bandera global    |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | booleano | Habilitar descubrimiento de íconos                         |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | booleano | Deshabilitar copia al seleccionar en TUI                   |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | número   | Tiempo de espera predeterminado para comandos bash en ms   |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | número   | Tokens de salida máximos para respuestas LLM               |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | booleano | Habilite el observador de archivos para todo el directorio |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | booleano | Habilitar el formateador oxfmt                             |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | booleano | Habilitar herramienta experimental LSP                     |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | booleano | Deshabilitar el observador de archivos                     |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | booleano | Habilitar funciones experimentales de Exa                  |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | booleano | Habilitar Habilitar TY LSP para archivos python            |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | booleano | Habilitar modo de plan                                     |
-| `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | booleano | Habilitar tareas de subagentes en segundo plano            |
-| `OPENCODE_EXPERIMENTAL_EVENT_SYSTEM`            | booleano | Habilitar sistema de eventos experimental                  |
-| `OPENCODE_EXPERIMENTAL_NATIVE_LLM`              | booleano | Habilitar ruta nativa de solicitud LLM                     |
-| `OPENCODE_EXPERIMENTAL_PARALLEL`                | booleano | Habilitar ejecución paralela de búsqueda web               |
-| `OPENCODE_EXPERIMENTAL_SCOUT`                   | booleano | Habilitar subagente Scout                                  |
-| `OPENCODE_EXPERIMENTAL_WORKSPACES`              | booleano | Habilitar soporte de espacios de trabajo                   |
+| `LEAKCODE_EXPERIMENTAL`                         | booleano | Habilitar funciones experimentales de la bandera global    |
+| `LEAKCODE_EXPERIMENTAL_ICON_DISCOVERY`          | booleano | Habilitar descubrimiento de íconos                         |
+| `LEAKCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | booleano | Deshabilitar copia al seleccionar en TUI                   |
+| `LEAKCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | número   | Tiempo de espera predeterminado para comandos bash en ms   |
+| `LEAKCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | número   | Tokens de salida máximos para respuestas LLM               |
+| `LEAKCODE_EXPERIMENTAL_FILEWATCHER`             | booleano | Habilite el observador de archivos para todo el directorio |
+| `LEAKCODE_EXPERIMENTAL_OXFMT`                   | booleano | Habilitar el formateador oxfmt                             |
+| `LEAKCODE_EXPERIMENTAL_LSP_TOOL`                | booleano | Habilitar herramienta experimental LSP                     |
+| `LEAKCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | booleano | Deshabilitar el observador de archivos                     |
+| `LEAKCODE_EXPERIMENTAL_EXA`                     | booleano | Habilitar funciones experimentales de Exa                  |
+| `LEAKCODE_EXPERIMENTAL_LSP_TY`                  | booleano | Habilitar Habilitar TY LSP para archivos python            |
+| `LEAKCODE_EXPERIMENTAL_PLAN_MODE`               | booleano | Habilitar modo de plan                                     |
+| `LEAKCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS`    | booleano | Habilitar tareas de subagentes en segundo plano            |
+| `LEAKCODE_EXPERIMENTAL_EVENT_SYSTEM`            | booleano | Habilitar sistema de eventos experimental                  |
+| `LEAKCODE_EXPERIMENTAL_NATIVE_LLM`              | booleano | Habilitar ruta nativa de solicitud LLM                     |
+| `LEAKCODE_EXPERIMENTAL_PARALLEL`                | booleano | Habilitar ejecución paralela de búsqueda web               |
+| `LEAKCODE_EXPERIMENTAL_SCOUT`                   | booleano | Habilitar subagente Scout                                  |
+| `LEAKCODE_EXPERIMENTAL_WORKSPACES`              | booleano | Habilitar soporte de espacios de trabajo                   |

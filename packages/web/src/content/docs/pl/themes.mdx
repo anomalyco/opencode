@@ -83,9 +83,9 @@ opencode obsługuje elastyczny system motywów oparty na JSON, który pozwala u�
 Motywy są ładowane z wielu katalogów w następującej kolejności, przy czym późniejsze katalogi zastępują wcześniejsze:
 
 1. **Wbudowane motywy** – są osadzone w formacie binarnym
-2. **Katalog konfiguracji użytkownika** - Zdefiniowany w `~/.config/opencode/themes/*.json` lub `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Katalog główny projektu** - Zdefiniowany w `<project-root>/.opencode/themes/*.json`
-4. **Bieżący katalog roboczy** - Zdefiniowany w `./.opencode/themes/*.json`
+2. **Katalog konfiguracji użytkownika** - Zdefiniowany w `~/.config/leak-code/themes/*.json` lub `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **Katalog główny projektu** - Zdefiniowany w `<project-root>/.leak-code/themes/*.json`
+4. **Bieżący katalog roboczy** - Zdefiniowany w `./.leak-code/themes/*.json`
 
 Jeśli wiele katalogów zawiera motyw o tej samej nazwie, zostanie użyty motyw z katalogu o wyższym priorytecie.
 
@@ -98,15 +98,15 @@ Aby utworzyć niestandardowy motyw, utwórz plik JSON w jednym z katalogów moty
 W przypadku motywów dla całego użytkownika:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/leak-code/themes
+vim ~/.config/leak-code/themes/my-theme.json
 ```
 
 Oraz dla tematów specyficznych dla projektu.
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .leak-code/themes
+vim .leak-code/themes/my-theme.json
 ```
 
 ---

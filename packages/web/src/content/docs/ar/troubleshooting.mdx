@@ -11,7 +11,7 @@ description: المشكلات الشائعة وكيفية حلها.
 
 يتم حفظ ملفات السجل في:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leak-code/log/`
 - **Windows**: اضغط `WIN+R` والصق `%USERPROFILE%\.local\share\opencode\log`
 
 تتم تسمية ملفات السجل بطوابع زمنية (مثل `2025-01-09T123456.log`) ويتم الاحتفاظ بأحدث 10 ملفات سجل.
@@ -24,7 +24,7 @@ description: المشكلات الشائعة وكيفية حلها.
 
 يخزن opencode بيانات الجلسات وبيانات التطبيق الأخرى على القرص في:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leak-code/`
 - **Windows**: اضغط `WIN+R` والصق `%USERPROFILE%\.local\share\opencode`
 
 يحتوي هذا الدليل على:
@@ -57,9 +57,9 @@ description: المشكلات الشائعة وكيفية حلها.
 
 افتح ملف الإعدادات العام وابحث عن المفتاح `plugin`.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (أو `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (عمليات تثبيت أقدم): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: اضغط `WIN+R` والصق `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/leak-code/leak-code.jsonc` (أو `~/.config/leak-code/leak-code.json`)
+- **macOS/Linux** (عمليات تثبيت أقدم): `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows**: اضغط `WIN+R` والصق `%USERPROFILE%\.config\opencode\leak-code.jsonc`
 
 إذا كانت لديك إضافات مضبوطة، فقم بتعطيلها مؤقتا بإزالة المفتاح أو ضبطه على مصفوفة فارغة:
 
@@ -75,10 +75,10 @@ description: المشكلات الشائعة وكيفية حلها.
 يمكن لـ OpenCode أيضا تحميل إضافات محلية من القرص. انقلها مؤقتا إلى مكان آخر (أو أعد تسمية المجلد) ثم أعد تشغيل تطبيق سطح المكتب:
 
 - **إضافات عامة**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leak-code/plugins/`
   - **Windows**: اضغط `WIN+R` والصق `%USERPROFILE%\.config\opencode\plugins`
 - **إضافات المشروع** (فقط إذا كنت تستخدم إعدادات لكل مشروع)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 إذا عاد التطبيق للعمل، فأعد تفعيل الإضافات واحدة تلو الأخرى لمعرفة أيها يسبب المشكلة.
 
@@ -111,13 +111,13 @@ description: المشكلات الشائعة وكيفية حلها.
 
 #### إزالة `server.port` / `server.hostname` من الإعدادات
 
-إذا كان `opencode.json(c)` يحتوي على قسم `server`، فأزله مؤقتا ثم أعد تشغيل تطبيق سطح المكتب.
+إذا كان `leak-code.json(c)` يحتوي على قسم `server`، فأزله مؤقتا ثم أعد تشغيل تطبيق سطح المكتب.
 
 #### تحقق من متغيرات البيئة
 
-إذا كان `OPENCODE_PORT` مضبوطا في بيئتك، فسيحاول تطبيق سطح المكتب استخدام ذلك المنفذ للخادم المحلي.
+إذا كان `LEAKCODE_PORT` مضبوطا في بيئتك، فسيحاول تطبيق سطح المكتب استخدام ذلك المنفذ للخادم المحلي.
 
-- أزل ضبط `OPENCODE_PORT` (أو اختر منفذا متاحا) ثم أعد التشغيل.
+- أزل ضبط `LEAKCODE_PORT` (أو اختر منفذا متاحا) ثم أعد التشغيل.
 
 ---
 
@@ -199,7 +199,7 @@ description: المشكلات الشائعة وكيفية حلها.
 
 1. تحقق من السجلات بحثا عن رسائل الخطأ
 2. جرّب التشغيل مع `--print-logs` لرؤية المخرجات في terminal
-3. تأكد من أنك تستخدم أحدث إصدار عبر `opencode upgrade`
+3. تأكد من أنك تستخدم أحدث إصدار عبر `leak-code upgrade`
 
 ---
 
@@ -226,7 +226,7 @@ description: المشكلات الشائعة وكيفية حلها.
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-لمعرفة النماذج التي لديك صلاحية الوصول إليها، شغّل `opencode models`
+لمعرفة النماذج التي لديك صلاحية الوصول إليها، شغّل `leak-code models`
 
 ---
 

@@ -15,7 +15,7 @@ You can switch between agents during a session or invoke them with the `@` menti
 
 ## Types
 
-There are two types of agents in OpenCode; primary agents and subagents.
+There are two types of agents in Leak Code; primary agents and subagents.
 
 ---
 
@@ -27,7 +27,7 @@ Primary agents are the main assistants you interact with directly. You can cycle
 You can use the **Tab** key to switch between primary agents during a session.
 :::
 
-OpenCode comes with two built-in primary agents, **Build** and **Plan**. We'll
+Leak Code comes with two built-in primary agents, **Build** and **Plan**. We'll
 look at these below.
 
 ---
@@ -36,13 +36,13 @@ look at these below.
 
 Subagents are specialized assistants that primary agents can invoke for specific tasks. You can also manually invoke them by **@ mentioning** them in your messages.
 
-OpenCode comes with three built-in subagents, **General**, **Explore**, and **Scout**. We'll look at this below.
+Leak Code comes with three built-in subagents, **General**, **Explore**, and **Scout**. We'll look at this below.
 
 ---
 
 ## Built-in
 
-OpenCode comes with two built-in primary agents and three built-in subagents.
+Leak Code comes with two built-in primary agents and three built-in subagents.
 
 ---
 
@@ -88,7 +88,7 @@ A fast, read-only agent for exploring codebases. Cannot modify files. Use this w
 
 _Mode_: `subagent`
 
-A read-only agent for external docs and dependency research. Use this when you need to clone a dependency repository into OpenCode's managed cache, inspect library source, or cross-reference local code against upstream implementations without modifying your workspace.
+A read-only agent for external docs and dependency research. Use this when you need to clone a dependency repository into Leak Code's managed cache, inspect library source, or cross-reference local code against upstream implementations without modifying your workspace.
 
 ---
 
@@ -147,9 +147,9 @@ You can customize the built-in agents or create your own through configuration. 
 
 ### JSON
 
-Configure agents in your `opencode.json` config file:
+Configure agents in your `leak-code.json` config file:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -189,10 +189,10 @@ Configure agents in your `opencode.json` config file:
 
 You can also define agents using markdown files. Place them in:
 
-- Global: `~/.config/opencode/agents/`
-- Per-project: `.opencode/agents/`
+- Global: `~/.config/leak-code/agents/`
+- Per-project: `.leak-code/agents/`
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -227,7 +227,7 @@ Let's look at these configuration options in detail.
 
 Use the `description` option to provide a brief description of what the agent does and when to use it.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -247,7 +247,7 @@ Control the randomness and creativity of the LLM's responses with the `temperatu
 
 Lower values make responses more focused and deterministic, while higher values increase creativity and variability.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "plan": {
@@ -266,7 +266,7 @@ Temperature values typically range from 0.0 to 1.0:
 - **0.3-0.5**: Balanced responses with some creativity, good for general development tasks
 - **0.6-1.0**: More creative and varied responses, useful for brainstorming and exploration
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "analyze": {
@@ -284,7 +284,7 @@ Temperature values typically range from 0.0 to 1.0:
 }
 ```
 
-If no temperature is specified, OpenCode uses model-specific defaults; typically 0 for most models, 0.55 for Qwen models.
+If no temperature is specified, Leak Code uses model-specific defaults; typically 0 for most models, 0.55 for Qwen models.
 
 ---
 
@@ -294,7 +294,7 @@ Control the maximum number of agentic iterations an agent can perform before bei
 
 If this is not set, the agent will continue to iterate until the model chooses to stop or the user interrupts the session.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "quick-thinker": {
@@ -318,7 +318,7 @@ The legacy `maxSteps` field is deprecated. Use `steps` instead.
 
 Set to `true` to disable the agent.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -334,7 +334,7 @@ Set to `true` to disable the agent.
 
 Specify a custom system prompt file for this agent with the `prompt` config. The prompt file should contain instructions specific to the agent's purpose.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -344,7 +344,7 @@ Specify a custom system prompt file for this agent with the `prompt` config. The
 }
 ```
 
-This path is relative to where the config file is located. So this works for both the global OpenCode config and the project specific config.
+This path is relative to where the config file is located. So this works for both the global Leak Code config and the project specific config.
 
 ---
 
@@ -356,7 +356,7 @@ Use the `model` config to override the model for this agent. Useful for using di
 If you don’t specify a model, primary agents use the [model globally configured](/docs/config#models) while subagents will use the model of the primary agent that invoked the subagent.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "plan": {
@@ -366,7 +366,7 @@ If you don’t specify a model, primary agents use the [model globally configure
 }
 ```
 
-The model ID in your OpenCode config uses the format `provider/model-id`. For example, if you're using [OpenCode Zen](/docs/zen), you would use `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
+The model ID in your Leak Code config uses the format `provider/model-id`. For example, if you're using [OpenCode Zen](/docs/zen), you would use `leak-code/gpt-5.1-codex` for GPT 5.1 Codex.
 
 ---
 
@@ -376,7 +376,7 @@ The model ID in your OpenCode config uses the format `provider/model-id`. For ex
 
 Allows you to control which tools are available in this agent. You can enable or disable specific tools by setting them to `true` or `false`. In an agent's `tools` config, `true` is equivalent to `{"*": "allow"}` permission and `false` is equivalent to `{"*": "deny"}` permission.
 
-```json title="opencode.json" {3-6,9-12}
+```json title="leak-code.json" {3-6,9-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -400,7 +400,7 @@ The agent-specific config overrides the global config.
 
 You can also use wildcards in legacy `tools` entries to control multiple tools at once. For example, to disable all tools from an MCP server:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -453,7 +453,7 @@ The available permission keys are:
 Permission keys are matched as wildcard patterns against the underlying tool name, so the same syntax works for built-ins, custom tools, and MCP tools — for example `"mymcp_*": "deny"` denies every tool from an MCP server, and `"mymcp_search": "ask"` targets a single one.
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -464,7 +464,7 @@ Permission keys are matched as wildcard patterns against the underlying tool nam
 
 You can override these permissions per agent.
 
-```json title="opencode.json" {3-5,8-10}
+```json title="leak-code.json" {3-5,8-10}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -482,7 +482,7 @@ You can override these permissions per agent.
 
 You can also set permissions in Markdown agents.
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -501,7 +501,7 @@ Only analyze code and suggest changes.
 
 You can set permissions for specific bash commands.
 
-```json title="opencode.json" {7}
+```json title="leak-code.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -519,7 +519,7 @@ You can set permissions for specific bash commands.
 
 This can take a glob pattern.
 
-```json title="opencode.json" {7}
+```json title="leak-code.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -537,7 +537,7 @@ This can take a glob pattern.
 And you can also use the `*` wildcard to manage permissions for all commands.
 Since the last matching rule takes precedence, put the `*` wildcard first and specific rules after.
 
-```json title="opencode.json" {8}
+```json title="leak-code.json" {8}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -561,7 +561,7 @@ Since the last matching rule takes precedence, put the `*` wildcard first and sp
 
 Control the agent's mode with the `mode` config. The `mode` option is used to determine how the agent can be used.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -579,7 +579,7 @@ The `mode` option can be set to `primary`, `subagent`, or `all`. If no `mode` is
 
 Hide a subagent from the `@` autocomplete menu with `hidden: true`. Useful for internal subagents that should only be invoked programmatically by other agents via the Task tool.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "internal-helper": {
@@ -602,7 +602,7 @@ Only applies to `mode: subagent` agents.
 
 Control which subagents an agent can invoke via the Task tool with `permission.task`. Uses glob patterns for flexible matching.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "orchestrator": {
@@ -637,7 +637,7 @@ Customize the agent's visual appearance in the UI with the `color` option. This 
 
 Use a valid hex color (e.g., `#FF5733`) or theme color: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "creative": {
@@ -656,7 +656,7 @@ Use a valid hex color (e.g., `#FF5733`) or theme color: `primary`, `secondary`, 
 
 Control response diversity with the `top_p` option. Alternative to temperature for controlling randomness.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "brainstorm": {
@@ -676,7 +676,7 @@ Any other options you specify in your agent configuration will be **passed throu
 
 For example, with OpenAI's reasoning models, you can control the reasoning effort:
 
-```json title="opencode.json" {6,7}
+```json title="leak-code.json" {6,7}
 {
   "agent": {
     "deep-thinker": {
@@ -692,7 +692,7 @@ For example, with OpenAI's reasoning models, you can control the reasoning effor
 These additional options are model and provider-specific. Check your provider's documentation for available parameters.
 
 :::tip
-Run `opencode models` to see a list of the available models.
+Run `leak-code models` to see a list of the available models.
 :::
 
 ---
@@ -702,7 +702,7 @@ Run `opencode models` to see a list of the available models.
 You can create new agents using the following command:
 
 ```bash
-opencode agent create
+leak-code agent create
 ```
 
 This interactive command will:
@@ -739,7 +739,7 @@ Do you have an agent you'd like to share? [Submit a PR](https://github.com/anoma
 
 ### Documentation agent
 
-```markdown title="~/.config/opencode/agents/docs-writer.md"
+```markdown title="~/.config/leak-code/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -761,7 +761,7 @@ Focus on:
 
 ### Security auditor
 
-```markdown title="~/.config/opencode/agents/security-auditor.md"
+```markdown title="~/.config/leak-code/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent

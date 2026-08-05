@@ -13,7 +13,7 @@ De forma predeterminada, todas las herramientas están **habilitadas** y no nece
 
 Utilice el campo `permission` para controlar el comportamiento de la herramienta. Puede permitir, denegar o exigir aprobación para cada herramienta.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -26,7 +26,7 @@ Utilice el campo `permission` para controlar el comportamiento de la herramienta
 
 También puedes utilizar comodines para controlar varias herramientas a la vez. Por ejemplo, para solicitar aprobación para todas las herramientas de un servidor MCP:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -49,7 +49,7 @@ Aquí están todas las herramientas integradas disponibles en OpenCode.
 
 Ejecute comandos de shell en el entorno de su proyecto.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -66,7 +66,7 @@ Esta herramienta permite que LLM ejecute comandos de terminal como `npm install`
 
 Modifique archivos existentes utilizando reemplazos de cadenas exactas.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -83,7 +83,7 @@ Esta herramienta realiza ediciones precisas de archivos reemplazando coincidenci
 
 Cree nuevos archivos o sobrescriba los existentes.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -104,7 +104,7 @@ La herramienta `write` está controlada por el permiso `edit`, que cubre todas l
 
 Lea el contenido del archivo desde su base de código.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -121,7 +121,7 @@ Esta herramienta lee archivos y devuelve su contenido. Admite la lectura de rang
 
 Busque contenidos de archivos utilizando expresiones regulares.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -138,7 +138,7 @@ Búsqueda rápida de contenido en su base de código. Admite sintaxis de expresi
 
 Encuentre archivos por coincidencia de patrones.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -156,10 +156,10 @@ Busque archivos usando patrones globales como `**/*.js` o `src/**/*.ts`. Devuelv
 Interactúe con sus servidores LSP configurados para obtener funciones de inteligencia de código como definiciones, referencias, información de desplazamiento y jerarquía de llamadas.
 
 :::note
-Esta herramienta solo está disponible cuando `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (o `OPENCODE_EXPERIMENTAL=true`).
+Esta herramienta solo está disponible cuando `LEAKCODE_EXPERIMENTAL_LSP_TOOL=true` (o `LEAKCODE_EXPERIMENTAL=true`).
 :::
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -178,7 +178,7 @@ Para configurar qué servidores LSP están disponibles para su proyecto, consult
 
 Aplicar parches a los archivos.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -199,7 +199,7 @@ La herramienta `patch` está controlada por el permiso `edit`, que cubre todas l
 
 Cargue una [habilidad](/docs/skills) (un archivo `SKILL.md`) y devuelva su contenido en la conversación.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -214,7 +214,7 @@ Cargue una [habilidad](/docs/skills) (un archivo `SKILL.md`) y devuelva su conte
 
 Administre listas de tareas pendientes durante las sesiones de codificación.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -235,7 +235,7 @@ Esta herramienta está deshabilitada para los subagentes de forma predeterminada
 
 Obtener contenido web.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -253,17 +253,17 @@ Permite que LLM busque y lea páginas web. Útil para buscar documentación o in
 Busque información en la web.
 
 :::note
-Esta herramienta solo está disponible cuando se utiliza el proveedor OpenCode o cuando la variable de entorno `OPENCODE_ENABLE_EXA` está configurada en cualquier valor verdadero (por ejemplo, `true` o `1`).
+Esta herramienta solo está disponible cuando se utiliza el proveedor OpenCode o cuando la variable de entorno `LEAKCODE_ENABLE_EXA` está configurada en cualquier valor verdadero (por ejemplo, `true` o `1`).
 
 Para habilitar al iniciar OpenCode:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+LEAKCODE_ENABLE_EXA=1 opencode
 ```
 
 :::
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -286,7 +286,7 @@ Utilice `websearch` cuando necesite encontrar información (descubrimiento) y `w
 
 Haga preguntas al usuario durante la ejecución.
 
-```json title="opencode.json" {4}
+```json title="leak-code.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {

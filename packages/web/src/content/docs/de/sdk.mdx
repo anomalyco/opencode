@@ -7,7 +7,7 @@ import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
 Das opencode JS/TS SDK bietet einen typsicheren Client fuer die Server-API.
-Damit kannst du Integrationen bauen und opencode programmatisch steuern.
+Damit kannst du Integrationen bauen und leak-code programmatisch steuern.
 
 [Mehr zum Server](/docs/server). Beispiele findest du in den [Community-Projekten](/docs/ecosystem#projects).
 
@@ -50,7 +50,7 @@ Das startet Server und Client.
 ## Config
 
 Du kannst ein Konfigurationsobjekt uebergeben, um das Verhalten anzupassen.
-`opencode.json` wird weiterhin geladen, kann aber inline ueberschrieben oder erweitert werden:
+`leak-code.json` wird weiterhin geladen, kann aber inline ueberschrieben oder erweitert werden:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"

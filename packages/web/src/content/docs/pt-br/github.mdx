@@ -20,7 +20,7 @@ O opencode integra-se ao seu fluxo de trabalho do GitHub. Mencione `/opencode` o
 Execute o seguinte comando em um projeto que está em um repositório do GitHub:
 
 ```bash
-opencode github install
+leak-code github install
 ```
 
 Isso o guiará pela instalação do aplicativo GitHub, criação do fluxo de trabalho e configuração de segredos.
@@ -84,7 +84,7 @@ Ou você pode configurá-lo manualmente.
 - `model`: O modelo a ser usado com o opencode. Tem o formato de `provider/model`. Isso é **obrigatório**.
 - `agent`: O agente a ser usado. Deve ser um agente primário. Retorna ao `default_agent` da configuração ou `"build"` se não encontrado.
 - `share`: Se deve compartilhar a sessão do opencode. O padrão é **true** para repositórios públicos.
-- `prompt`: Prompt personalizado opcional para substituir o comportamento padrão. Use isso para personalizar como o opencode processa solicitações.
+- `prompt`: Prompt personalizado opcional para substituir o comportamento padrão. Use isso para personalizar como o leak-code processa solicitações.
 - `token`: Token de acesso do GitHub opcional para realizar operações como criar comentários, confirmar alterações e abrir pull requests. Por padrão, o opencode usa o token de acesso da instalação do aplicativo GitHub opencode, então commits, comentários e pull requests aparecem como se fossem da aplicação.
 
   Alternativamente, você pode usar o [`GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) embutido do runner do GitHub Action sem instalar o aplicativo GitHub opencode. Apenas certifique-se de conceder as permissões necessárias em seu fluxo de trabalho:

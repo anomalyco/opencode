@@ -18,7 +18,7 @@ OpenCode ใช้ [AI SDK](https://ai-sdk.dev/) และ [Models.dev](https://
 ### ข้อมูลรับรอง
 
 เมื่อคุณเพิ่มคีย์ API ของผู้ให้บริการด้วยคำสั่ง `/connect` คีย์เหล่านั้นจะถูกเก็บไว้
-ใน `~/.local/share/opencode/auth.json`.
+ใน `~/.local/share/leak-code/auth.json`.
 
 ---
 
@@ -33,7 +33,7 @@ OpenCode ใช้ [AI SDK](https://ai-sdk.dev/) และ [Models.dev](https://
 
 คุณสามารถปรับแต่งฐาน URL สำหรับผู้ให้บริการรายใดก็ได้โดยตั้งค่าตัวเลือก `baseURL` สิ่งนี้มีประโยชน์เมื่อใช้บริการพร็อกซีหรือจุดสิ้นสุดแบบกำหนดเอง
 
-```json title="opencode.json" {6}
+```json title="leak-code.json" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -190,9 +190,9 @@ OpenCode Go คือแผนการสมัครสมาชิกรา�
 
    #### ไฟล์การกำหนดค่า (แนะนำ)
 
-   สำหรับการกำหนดค่าเฉพาะโครงการหรือแบบถาวร ให้ใช้ `opencode.json`:
+   สำหรับการกำหนดค่าเฉพาะโครงการหรือแบบถาวร ให้ใช้ `leak-code.json`:
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -219,7 +219,7 @@ OpenCode Go คือแผนการสมัครสมาชิกรา�
 
    หากคุณใช้จุดสิ้นสุด VPC สำหรับ Bedrock:
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -263,7 +263,7 @@ OpenCode Go คือแผนการสมัครสมาชิกรา�
 :::note
 สำหรับโปรไฟล์การอนุมานแบบกำหนดเอง ให้ใช้ชื่อรุ่นและผู้ให้บริการในคีย์และตั้งค่าคุณสมบัติ `id` เป็น arn สิ่งนี้ทำให้มั่นใจได้ว่าแคชถูกต้อง:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -325,7 +325,7 @@ OpenCode Go คือแผนการสมัครสมาชิกรา�
 
 คุณสามารถกำหนดค่า opencode ให้ใช้โมเดลท้องถิ่นผ่าน [Atomic Chat](https://atomic.chat) ซึ่งเป็นแอปพลิเคชันเดสก์ท็อปที่เรียกใช้ LLM ในเครื่องภายใต้เซิร์ฟเวอร์ API ที่เข้ากันได้กับ OpenAI (ปลายทางเริ่มต้น `http://127.0.0.1:1337/v1`)
 
-```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+```json title="leak-code.json" "atomic-chat" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -553,7 +553,7 @@ Cloudflare AI Gateway ช่วยให้คุณเข้าถึงโม�
 
    คุณยังสามารถเพิ่มโมเดลผ่านการกำหนดค่า opencode ของคุณได้
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -758,7 +758,7 @@ GitLab Duo ให้การแชทแบบเอเจนต์ที่ข
 OpenCode ใช้โมเดลขนาดเล็กสำหรับงาน AI บางอย่าง เช่น การสร้างชื่อเซสชัน
 มีการกำหนดค่าให้ใช้ gpt-5-nano ตามค่าเริ่มต้น ซึ่งโฮสต์โดย Zen เพื่อล็อค OpenCode
 หากต้องการใช้เฉพาะอินสแตนซ์ที่โฮสต์บน GitLab ของคุณเอง ให้เพิ่มสิ่งต่อไปนี้ในของคุณ
-`opencode.json` ไฟล์. ขอแนะนำให้ปิดใช้งานการแชร์เซสชันด้วย
+`leak-code.json` ไฟล์. ขอแนะนำให้ปิดใช้งานการแชร์เซสชันด้วย
 
 ```json
 {
@@ -820,9 +820,9 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ##### การกำหนดค่า
 
-ปรับแต่งผ่าน `opencode.json`:
+ปรับแต่งผ่าน `leak-code.json`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -839,7 +839,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 วิธีเข้าถึงเครื่องมือ GitLab (รวมคำขอ ปัญหา ไปป์ไลน์ CI/CD ฯลฯ):
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-gitlab-plugin"]
@@ -1022,7 +1022,7 @@ subscription](https://github.com/features/copilot/plans) เพื่อใช�
 
 นี่คือ [Helicone's Model Directory](https://helicone.ai/models) คุณจะต้องใช้สิ่งนี้เพื่อรับ ID ของโมเดลที่คุณต้องการเพิ่ม
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1050,7 +1050,7 @@ subscription](https://github.com/features/copilot/plans) เพื่อใช�
 
 Helicone รองรับส่วนหัวแบบกำหนดเองสำหรับฟีเจอร์ต่างๆ เช่น การแคช การติดตามผู้ใช้ และการจัดการเซสชัน เพิ่มลงในการกำหนดค่าผู้ให้บริการของคุณโดยใช้ `options.headers`:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/leak-code/leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1079,7 +1079,7 @@ npm install -g opencode-helicone-session
 
 เพิ่มลงในการกำหนดค่าของคุณ
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "plugin": ["opencode-helicone-session"]
 }
@@ -1104,7 +1104,7 @@ npm install -g opencode-helicone-session
 
 คุณสามารถกำหนดค่า opencode เพื่อใช้โมเดลท้องถิ่นผ่านยูทิลิตี้ [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="leak-code.json" "llama.cpp" {5, 6, 8, 10-15}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1171,7 +1171,7 @@ IO.NET มี 17 โมเดลที่ได้รับการปรับ
 
 คุณสามารถกำหนดค่า opencode เพื่อใช้โมเดลท้องถิ่นผ่าน LM Studio
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="leak-code.json" "lmstudio" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1292,7 +1292,7 @@ IO.NET มี 17 โมเดลที่ได้รับการปรับ
 Ollama สามารถกำหนดค่าตัวเองสำหรับ OpenCode ได้โดยอัตโนมัติ ดู [เอกสารการบูรณาการ Ollama](https://docs.ollama.com/integrations/opencode) เพื่อดูรายละเอียด
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="leak-code.json" "ollama" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1454,7 +1454,7 @@ OpenCode Zen คือรายการโมเดลที่ได้รั�
 
    คุณยังสามารถเพิ่มโมเดลเพิ่มเติมผ่านการกำหนดค่า opencode ของคุณได้
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1469,7 +1469,7 @@ OpenCode Zen คือรายการโมเดลที่ได้รั�
 
 5. คุณยังสามารถปรับแต่งได้ผ่านการกำหนดค่า opencode ของคุณ นี่คือตัวอย่างการระบุผู้ให้บริการ
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1718,7 +1718,7 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
 คุณยังสามารถปรับแต่งโมเดลผ่านการกำหนดค่า opencode ของคุณได้ นี่คือตัวอย่างการระบุลำดับการกำหนดเส้นทางผู้ให้บริการ
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1828,7 +1828,7 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
    คุณยังสามารถเพิ่มโมเดลเพิ่มเติมผ่านการกำหนดค่า opencode ของคุณได้
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1887,16 +1887,16 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in leak-code.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. สร้างหรืออัปเดตไฟล์ `opencode.json` ของคุณในไดเร็กทอรีโครงการของคุณ:
+4. สร้างหรืออัปเดตไฟล์ `leak-code.json` ของคุณในไดเร็กทอรีโครงการของคุณ:
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="leak-code.json" ""myprovider"" {5-15}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1934,7 +1934,7 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
 นี่คือตัวอย่างการตั้งค่าตัวเลือก `apiKey`, `headers` และรุ่น `limit`
 
-```json title="opencode.json" {9,11,17-20}
+```json title="leak-code.json" {9,11,17-20}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1977,7 +1977,7 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
 หากคุณประสบปัญหาในการกำหนดค่าผู้ให้บริการ ให้ตรวจสอบสิ่งต่อไปนี้:
 
-1. **ตรวจสอบการตั้งค่าการรับรองความถูกต้อง**: รัน `opencode auth list` เพื่อดูว่ามีการเพิ่มข้อมูลรับรอง
+1. **ตรวจสอบการตั้งค่าการรับรองความถูกต้อง**: รัน `leak-code auth list` เพื่อดูว่ามีการเพิ่มข้อมูลรับรอง
    สำหรับผู้ให้บริการในการกำหนดค่าของคุณหรือไม่
 
    สิ่งนี้ใช้ไม่ได้กับผู้ให้บริการเช่น Amazon Bedrock ซึ่งอาศัยตัวแปรสภาพแวดล้อมสำหรับการตรวจสอบสิทธิ์
@@ -2031,7 +2031,7 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
    คุณยังสามารถเพิ่มโมเดลเพิ่มเติมผ่านการกำหนดค่า opencode ของคุณ
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -2046,7 +2046,7 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
 5. คุณยังสามารถปรับแต่งได้ผ่านการกำหนดค่า opencode ของคุณ นี่คือตัวอย่างการระบุผู้ให้บริการ
 
-   ```json title="opencode.json"
+   ```json title="leak-code.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -2262,7 +2262,7 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
 คุณยังสามารถปรับแต่งโมเดลผ่านการกำหนดค่า opencode ของคุณได้อีกด้วย นี่คือตัวอย่างการระบุลำดับการกำหนดเส้นทางของผู้ให้บริการ
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -2372,7 +2372,7 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
    คุณยังสามารถเพิ่มโมเดลเพิ่มเติมผ่านการกำหนดค่า opencode ของคุณ
 
-   ```json title="opencode.json" {6}
+   ```json title="leak-code.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -2431,16 +2431,16 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in leak-code.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. สร้างหรืออัปเดตไฟล์ `opencode.json` ในไดเรกทอรีโครงการของคุณ:
+4. สร้างหรืออัปเดตไฟล์ `leak-code.json` ในไดเรกทอรีโครงการของคุณ:
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="leak-code.json" ""myprovider"" {5-15}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -2478,7 +2478,7 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
 นี่คือตัวอย่างการตั้งค่าตัวเลือก `apiKey`, `headers` และโมเดล `limit`
 
-```json title="opencode.json" {9,11,17-20}
+```json title="leak-code.json" {9,11,17-20}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -2521,7 +2521,7 @@ Vercel AI Gateway ช่วยให้คุณเข้าถึงโมเ�
 
 หากคุณประสบปัญหาในการกำหนดค่าผู้ให้บริการ ให้ตรวจสอบสิ่งต่อไปนี้:
 
-1. **ตรวจสอบการตั้งค่าการรับรองความถูกต้อง**: เรียกใช้ `opencode auth list` เพื่อดูว่ามีข้อมูลรับรองหรือไม่
+1. **ตรวจสอบการตั้งค่าการรับรองความถูกต้อง**: เรียกใช้ `leak-code auth list` เพื่อดูว่ามีข้อมูลรับรองหรือไม่
    สำหรับผู้ให้บริการจะถูกเพิ่มในการกำหนดค่าของคุณ
 
    สิ่งนี้ใช้ไม่ได้กับผู้ให้บริการอย่าง Amazon Bedrock ที่ต้องอาศัยตัวแปรสภาพแวดล้อมสำหรับการตรวจสอบสิทธิ์

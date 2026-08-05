@@ -62,7 +62,7 @@ opencode는 또한 다수 위치에서 `AGENTS.md` 파일을 읽습니다. 그�
 
 ## 전역
 
-또한 `~/.config/opencode/AGENTS.md` 파일에서 글로벌 규칙을 가질 수 있습니다. 이 모든 opencode 세션에서 적용됩니다.
+또한 `~/.config/leak-code/AGENTS.md` 파일에서 글로벌 규칙을 가질 수 있습니다. 이 모든 opencode 세션에서 적용됩니다.
 
 이것은 Git에 전념하지 않거나 팀과 공유하지 않기 때문에 LLM이 따르는 모든 개인 규칙을 지정하는 것이 좋습니다.
 
@@ -71,14 +71,14 @@ opencode는 또한 다수 위치에서 `AGENTS.md` 파일을 읽습니다. 그�
 Claude Code에서 마이그레이션하는 경우, opencode는 Claude Code의 파일 컨벤션을 fallbacks로 지원합니다.
 
 - ** 규칙 ** : 프로젝트 디렉토리에 `CLAUDE.md` (`AGENTS.md`가 존재하지 않는 경우 사용)
-- ** 글로벌 규칙**: `~/.claude/CLAUDE.md` (`~/.config/opencode/AGENTS.md`가 존재하지 않는 경우 사용) -**Skills**: `~/.claude/skills/` — [Agent Skills](/docs/skills/)를 참조하십시오.
+- ** 글로벌 규칙**: `~/.claude/CLAUDE.md` (`~/.config/leak-code/AGENTS.md`가 존재하지 않는 경우 사용) -**Skills**: `~/.claude/skills/` — [Agent Skills](/docs/skills/)를 참조하십시오.
 
 Claude Code 호환성을 비활성화하려면 이러한 환경 변수 중 하나를 설정하십시오.
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+export LEAKCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export LEAKCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export LEAKCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
@@ -88,20 +88,20 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 opencode가 시작될 때, 이 순서에 있는 규칙 파일을 찾습니다:
 
 1. **Local 파일 ** 현재 디렉토리에서 추적 (`AGENTS.md`, `CLAUDE.md`)
-2. ** 글로벌 파일 ** `~/.config/opencode/AGENTS.md`
+2. ** 글로벌 파일 ** `~/.config/leak-code/AGENTS.md`
 3. **Claude 코드 파일 ** `~/.claude/CLAUDE.md`에서 (무효한)
 
-첫 번째 일치 파일은 각 범주에서 승리합니다. 예를 들어, `AGENTS.md`와 `CLAUDE.md` 모두가있는 경우 `AGENTS.md` 만 사용됩니다. 유사하게, `~/.config/opencode/AGENTS.md`는 `~/.claude/CLAUDE.md`에 전진합니다.
+첫 번째 일치 파일은 각 범주에서 승리합니다. 예를 들어, `AGENTS.md`와 `CLAUDE.md` 모두가있는 경우 `AGENTS.md` 만 사용됩니다. 유사하게, `~/.config/leak-code/AGENTS.md`는 `~/.claude/CLAUDE.md`에 전진합니다.
 
 ---
 
 ## 사용자 정의 지침
 
-`opencode.json` 또는 글로벌 `~/.config/opencode/opencode.json`에서 사용자 지정 명령 파일을 지정할 수 있습니다. AGENTS.md에 복제하지 않고 기존 규칙을 재사용 할 수 있습니다.
+`leak-code.json` 또는 글로벌 `~/.config/leak-code/leak-code.json`에서 사용자 지정 명령 파일을 지정할 수 있습니다. AGENTS.md에 복제하지 않고 기존 규칙을 재사용 할 수 있습니다.
 
 예:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -110,7 +110,7 @@ opencode가 시작될 때, 이 순서에 있는 규칙 파일을 찾습니다:
 
 웹에서 지침을로드하는 원격 URL도 사용할 수 있습니다.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
@@ -127,11 +127,11 @@ opencode가 시작될 때, 이 순서에 있는 규칙 파일을 찾습니다:
 
 opencode가 `AGENTS.md`에 있는 자동적으로 파스 파일 참조를 하지 않는 동안, 당신은 두 가지 방법으로 유사한 기능을 달성할 수 있습니다:
 
-## opencode.json 사용
+## leak-code.json 사용
 
-`instructions`의 `opencode.json` 필드를 사용하는 것이 좋습니다.
+`instructions`의 `leak-code.json` 필드를 사용하는 것이 좋습니다.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
@@ -175,5 +175,5 @@ Read the following file immediately as it's relevant to all workflows: @rules/ge
 - 특정 작업에 필요한 경우에만 opencode 로드 파일 유지
 
 :::tip
-공유 표준을 가진 monorepos 또는 프로젝트를 위해, glob 본을 가진 `opencode.json`를 사용하여 (`packages/*/AGENTS.md` 같이)는 수동 지시 보다는 더 유지가능합니다.
+공유 표준을 가진 monorepos 또는 프로젝트를 위해, glob 본을 가진 `leak-code.json`를 사용하여 (`packages/*/AGENTS.md` 같이)는 수동 지시 보다는 더 유지가능합니다.
 :::

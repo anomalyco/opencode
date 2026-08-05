@@ -11,7 +11,7 @@ OpenCode の問題をデバッグするには、まず、ディスク上に保�
 
 ログファイルは次の場所に書き込まれます。
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leak-code/log/`
 - **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\opencode\log` を貼り付けます
 
 ログファイルにはタイムスタンプ付きの名前が付けられ (例: `2025-01-09T123456.log`)、最新の 10 個のログファイルが保存されます。
@@ -24,7 +24,7 @@ OpenCode の問題をデバッグするには、まず、ディスク上に保�
 
 OpenCode は、セッションデータとその他のアプリケーションデータをディスク上の次の場所に保存します。
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leak-code/`
 - **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\opencode` を貼り付けます
 
 このディレクトリには次のものが含まれます。
@@ -57,9 +57,9 @@ OpenCode Desktop は、ローカル OpenCode サーバー (`opencode-cli` サイ
 
 グローバル設定ファイルを開き、`plugin` キーを探します。
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (または `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (古いインストール): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: `WIN+R` を押して `%USERPROFILE%\.config\opencode\opencode.jsonc` を貼り付けます
+- **macOS/Linux**: `~/.config/leak-code/leak-code.jsonc` (または `~/.config/leak-code/leak-code.json`)
+- **macOS/Linux** (古いインストール): `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows**: `WIN+R` を押して `%USERPROFILE%\.config\opencode\leak-code.jsonc` を貼り付けます
 
 プラグインを構成している場合は、キーを削除するか空の配列に設定して、プラグインを一時的に無効にします。
 
@@ -75,10 +75,10 @@ OpenCode Desktop は、ローカル OpenCode サーバー (`opencode-cli` サイ
 OpenCode はディスクからローカルプラグインをロードすることもできます。これらを一時的に邪魔にならない場所に移動し (またはフォルダーの名前を変更し)、デスクトップアプリを再起動します。
 
 - **グローバルプラグイン**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leak-code/plugins/`
   - **Windows**: `WIN+R` を押して `%USERPROFILE%\.config\opencode\plugins` を貼り付けます
 - **プロジェクトプラグイン** (プロジェクトごとの構成を使用する場合のみ)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 アプリが再び動作し始めた場合は、プラグインを 1 つずつ再度有効にして、問題の原因となっているプラ​​グインを特定します。
 
@@ -111,13 +111,13 @@ OpenCode Desktop は、独自のローカルサーバー (デフォルト) を�
 
 #### 設定から `server.port` / `server.hostname` を削除します
 
-`opencode.json(c)` に `server` セクションが含まれている場合は、それを一時的に削除し、デスクトップアプリを再起動します。
+`leak-code.json(c)` に `server` セクションが含まれている場合は、それを一時的に削除し、デスクトップアプリを再起動します。
 
 #### 環境変数を確認する
 
-環境に `OPENCODE_PORT` が設定されている場合、デスクトップアプリはローカルサーバーにそのポートを使用しようとします。
+環境に `LEAKCODE_PORT` が設定されている場合、デスクトップアプリはローカルサーバーにそのポートを使用しようとします。
 
-- `OPENCODE_PORT` の設定を解除して (または空きポートを選択して)、再起動します。
+- `LEAKCODE_PORT` の設定を解除して (または空きポートを選択して)、再起動します。
 
 ---
 
@@ -199,7 +199,7 @@ OpenCode で問題が発生している場合:
 
 1. ログでエラーメッセージを確認する
 2. `--print-logs` で実行して、ターミナルに出力を確認してください。
-3. `opencode upgrade` を含む最新バージョンを使用していることを確認してください
+3. `leak-code upgrade` を含む最新バージョンを使用していることを確認してください
 
 ---
 
@@ -227,7 +227,7 @@ OpenCode で問題が発生している場合:
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-どのモデルにアクセスできるかを確認するには、`opencode models` を実行します。
+どのモデルにアクセスできるかを確認するには、`leak-code models` を実行します。
 
 ---
 

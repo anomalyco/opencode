@@ -11,7 +11,7 @@ description: ปัญหาทั่วไปและวิธีแก้ป�
 
 ไฟล์บันทึกถูกเขียนไปที่:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/leak-code/log/`
 - **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.local\share\opencode\log`
 
 ไฟล์บันทึกจะถูกตั้งชื่อด้วยการประทับเวลา (เช่น `2025-01-09T123456.log`) และไฟล์บันทึกล่าสุด 10 ไฟล์จะถูกเก็บไว้
@@ -24,7 +24,7 @@ description: ปัญหาทั่วไปและวิธีแก้ป�
 
 opencode เก็บข้อมูลเซสชันและข้อมูลแอปพลิเคชันอื่น ๆ ไว้บนดิสก์ที่:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/leak-code/`
 - **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.local\share\opencode`
 
 ไดเรกทอรีนี้ประกอบด้วย:
@@ -57,9 +57,9 @@ OpenCode Desktop รันเซิร์ฟเวอร์ OpenCode ในเ�
 
 เปิดไฟล์กำหนดค่าส่วนกลางของคุณแล้วมองหาคีย์ `plugin`
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (หรือ `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (การติดตั้งเก่ากว่า): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/leak-code/leak-code.jsonc` (หรือ `~/.config/leak-code/leak-code.json`)
+- **macOS/Linux** (การติดตั้งเก่ากว่า): `~/.local/share/leak-code/leak-code.jsonc`
+- **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.config\opencode\leak-code.jsonc`
 
 หากคุณได้กำหนดค่าปลั๊กอินไว้ ให้ปิดการใช้งานชั่วคราวโดยลบคีย์ออกหรือตั้งค่าเป็นอาร์เรย์ว่าง:
 
@@ -75,10 +75,10 @@ OpenCode Desktop รันเซิร์ฟเวอร์ OpenCode ในเ�
 OpenCode ยังสามารถโหลดปลั๊กอินในเครื่องจากดิสก์ได้ ย้ายสิ่งเหล่านี้ออกไปชั่วคราว (หรือเปลี่ยนชื่อโฟลเดอร์) และรีสตาร์ทแอปเดสก์ท็อป:
 
 - **ปลั๊กอินสากล**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/leak-code/plugins/`
   - **Windows**: กด `WIN+R` แล้ววาง `%USERPROFILE%\.config\opencode\plugins`
 - **ปลั๊กอินโครงการ** (เฉพาะในกรณีที่คุณใช้การกำหนดค่าต่อโครงการ)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.leak-code/plugins/`
 
 หากแอปเริ่มทำงานอีกครั้ง ให้เปิดใช้งานปลั๊กอินอีกครั้งทีละรายการเพื่อดูว่าปลั๊กอินใดเป็นสาเหตุของปัญหา
 
@@ -111,13 +111,13 @@ OpenCode Desktop สามารถเริ่มต้นเซิร์ฟเ
 
 #### ลบ `server.port` / `server.hostname` ออกจากการกำหนดค่าของคุณ
 
-หาก `opencode.json(c)` ของคุณมีส่วน `server` ให้ลบออกชั่วคราวแล้วรีสตาร์ทแอปเดสก์ท็อป
+หาก `leak-code.json(c)` ของคุณมีส่วน `server` ให้ลบออกชั่วคราวแล้วรีสตาร์ทแอปเดสก์ท็อป
 
 #### ตรวจสอบตัวแปรสภาพแวดล้อม
 
-หากคุณตั้งค่า `OPENCODE_PORT` ในสภาพแวดล้อมของคุณ แอปเดสก์ท็อปจะพยายามใช้พอร์ตนั้นสำหรับเซิร์ฟเวอร์ภายในเครื่อง
+หากคุณตั้งค่า `LEAKCODE_PORT` ในสภาพแวดล้อมของคุณ แอปเดสก์ท็อปจะพยายามใช้พอร์ตนั้นสำหรับเซิร์ฟเวอร์ภายในเครื่อง
 
-- ยกเลิกการตั้งค่า `OPENCODE_PORT` (หรือเลือกพอร์ตว่าง) แล้วรีสตาร์ท
+- ยกเลิกการตั้งค่า `LEAKCODE_PORT` (หรือเลือกพอร์ตว่าง) แล้วรีสตาร์ท
 
 ---
 
@@ -199,7 +199,7 @@ OpenCode Desktop จะแสดงการแจ้งเตือนของ
 
 1. ตรวจสอบบันทึกเพื่อดูข้อความแสดงข้อผิดพลาด
 2. ลองรันด้วย `--print-logs` เพื่อดูเอาต์พุตใน terminal
-3. ตรวจสอบให้แน่ใจว่าคุณมีเวอร์ชันล่าสุดด้วย `opencode upgrade`
+3. ตรวจสอบให้แน่ใจว่าคุณมีเวอร์ชันล่าสุดด้วย `leak-code upgrade`
 
 ---
 
@@ -227,7 +227,7 @@ OpenCode Desktop จะแสดงการแจ้งเตือนของ
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-หากต้องการทราบว่าคุณมีสิทธิ์เข้าถึงรุ่นใด ให้เรียกใช้ `opencode models`
+หากต้องการทราบว่าคุณมีสิทธิ์เข้าถึงรุ่นใด ให้เรียกใช้ `leak-code models`
 
 ---
 

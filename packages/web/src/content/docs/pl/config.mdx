@@ -11,7 +11,7 @@ Możesz dostosować OpenCode za pomocą pliku konfiguracyjnego JSON.
 
 OpenCode obsługuje formaty **JSON** i **JSONC** (JSON z komentarzami).
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   // Theme configuration
@@ -42,16 +42,16 @@ Na przykład, jeśli konfiguracja globalna ustawi `theme: "opencode"` i `autoupd
 Źródła konfiguracji są ładowane w następującej kolejności (źródła występujące później mają pierwszeństwo):
 
 1. **Konfiguracja zdalna** (z `.well-known/opencode`) – ustawienia wymuszane przez organizację
-2. **Konfiguracja globalna** (`~/.config/opencode/opencode.json`) – preferencje użytkownika
-3. **Konfiguracja niestandardowa** (zmienna `OPENCODE_CONFIG`) — jawne nadpisanie
-4. **Konfiguracja projektu** (`opencode.json` w projekcie) - ustawienia specyficzne dla projektu
-5. **Katalogi `.opencode`** - agenci, polecenia, umiejętności
-6. **Konfiguracja wbudowana** (zmienna `OPENCODE_CONFIG_CONTENT`) — nadpisanie środowiska uruchomieniowego
+2. **Konfiguracja globalna** (`~/.config/leak-code/leak-code.json`) – preferencje użytkownika
+3. **Konfiguracja niestandardowa** (zmienna `LEAKCODE_CONFIG`) — jawne nadpisanie
+4. **Konfiguracja projektu** (`leak-code.json` w projekcie) - ustawienia specyficzne dla projektu
+5. **Katalogi `.leak-code`** - agenci, polecenia, umiejętności
+6. **Konfiguracja wbudowana** (zmienna `LEAKCODE_CONFIG_CONTENT`) — nadpisanie środowiska uruchomieniowego
 
 Oznacza to, że konfiguracje projektu mogą nadpisywać konfiguracje globalne, a konfiguracje globalne mogą nadpisywać konfiguracje zdalne.
 
 :::note
-W katalogach `.opencode` i `~/.config/opencode` używane są **nazwy w liczbie mnogiej** dla podkatalogów: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` i `themes/`. Nazwy w liczbie pojedynczej (np. `agent/`) są również obsługiwane dla kompatybilności wstecznej.
+W katalogach `.leak-code` i `~/.config/leak-code` używane są **nazwy w liczbie mnogiej** dla podkatalogów: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` i `themes/`. Nazwy w liczbie pojedynczej (np. `agent/`) są również obsługiwane dla kompatybilności wstecznej.
 :::
 
 ---
@@ -78,7 +78,7 @@ Na przykład, jeśli Twoja organizacja udostępnia serwery MCP, które są domy�
 
 Możesz włączyć serwer w konfiguracji projektu:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "mcp": {
     "jira": {
@@ -94,9 +94,9 @@ Możesz włączyć serwer w konfiguracji projektu:
 
 ### Globalna
 
-Umieść swoją globalną konfigurację OpenCode w `~/.config/opencode/opencode.json`. Użyj jej do ustawień ogólnych dla użytkownika, takich jak dostawcy, modele i uprawnienia.
+Umieść swoją globalną konfigurację OpenCode w `~/.config/leak-code/leak-code.json`. Użyj jej do ustawień ogólnych dla użytkownika, takich jak dostawcy, modele i uprawnienia.
 
-Dla ustawień specyficznych dla TUI, użyj `~/.config/opencode/tui.json`.
+Dla ustawień specyficznych dla TUI, użyj `~/.config/leak-code/tui.json`.
 
 Konfiguracja globalna ma pierwszeństwo przed konfiguracją zdalną.
 
@@ -104,7 +104,7 @@ Konfiguracja globalna ma pierwszeństwo przed konfiguracją zdalną.
 
 ### Projekt
 
-Dodaj `opencode.json` w katalogu głównym projektu. Konfiguracja projektu ma najwyższy priorytet wśród plików konfiguracyjnych — nadpisuje konfiguracje globalne i zdalne.
+Dodaj `leak-code.json` w katalogu głównym projektu. Konfiguracja projektu ma najwyższy priorytet wśród plików konfiguracyjnych — nadpisuje konfiguracje globalne i zdalne.
 
 Dla ustawień TUI specyficznych dla projektu, dodaj plik `tui.json` obok niego.
 
@@ -120,11 +120,11 @@ Może on być przechowywany w Git i mieć ten sam schemat, co konfiguracja globa
 
 ### Niestandardowa ścieżka
 
-Możesz załadować niestandardowy plik konfiguracyjny, ustawiając zmienną środowiskową `OPENCODE_CONFIG`.
+Możesz załadować niestandardowy plik konfiguracyjny, ustawiając zmienną środowiskową `LEAKCODE_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
-opencode run "Hello world"
+export LEAKCODE_CONFIG=/path/to/my/custom-config.json
+leak-code run "Hello world"
 ```
 
 Konfiguracja niestandardowa jest ładowana po konfiguracji globalnej i przed konfiguracją projektu w kolejności priorytetów.
@@ -133,14 +133,14 @@ Konfiguracja niestandardowa jest ładowana po konfiguracji globalnej i przed kon
 
 ### Niestandardowy katalog
 
-Możesz ustawić niestandardowy katalog konfiguracyjny za pomocą zmiennej środowiskowej `OPENCODE_CONFIG_DIR`. Katalog ten będzie przeszukiwany pod kątem agentów, poleceń, trybów i wtyczek, tak jak standardowy katalog `.opencode` i powinien zachować tę samą strukturę.
+Możesz ustawić niestandardowy katalog konfiguracyjny za pomocą zmiennej środowiskowej `LEAKCODE_CONFIG_DIR`. Katalog ten będzie przeszukiwany pod kątem agentów, poleceń, trybów i wtyczek, tak jak standardowy katalog `.leak-code` i powinien zachować tę samą strukturę.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
-opencode run "Hello world"
+export LEAKCODE_CONFIG_DIR=/path/to/my/config-directory
+leak-code run "Hello world"
 ```
 
-Katalog niestandardowy jest ładowany po globalnej konfiguracji i katalogach `.opencode`, więc **może być łączony** z ich zawartością.
+Katalog niestandardowy jest ładowany po globalnej konfiguracji i katalogach `.leak-code`, więc **może być łączony** z ich zawartością.
 
 ---
 
@@ -167,9 +167,9 @@ Użyj dedykowanego pliku `tui.json` (lub `tui.jsonc`) dla ustawień specyficznyc
 }
 ```
 
-Użyj `OPENCODE_TUI_CONFIG`, aby wskazać niestandardowy plik konfiguracyjny TUI.
+Użyj `LEAKCODE_TUI_CONFIG`, aby wskazać niestandardowy plik konfiguracyjny TUI.
 
-Przestarzałe klucze `theme`, `keybinds` i `tui` w `opencode.json` są wycofywane i automatycznie migrowane, gdy to możliwe.
+Przestarzałe klucze `theme`, `keybinds` i `tui` w `leak-code.json` są wycofywane i automatycznie migrowane, gdy to możliwe.
 
 [Dowiedz się więcej o konfiguracji TUI tutaj](/docs/tui#configure).
 
@@ -177,9 +177,9 @@ Przestarzałe klucze `theme`, `keybinds` i `tui` w `opencode.json` są wycofywan
 
 ### Server (Serwer)
 
-Możesz skonfigurować serwer dla `opencode serve` i `opencode web` za pomocą opcji `server`.
+Możesz skonfigurować serwer dla `leak-code serve` i `leak-code web` za pomocą opcji `server`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "server": {
@@ -208,7 +208,7 @@ Dostępne opcje:
 
 Kontroluj, które narzędzia są dostępne dla LLM, za pomocą opcji `tools`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -226,7 +226,7 @@ Kontroluj, które narzędzia są dostępne dla LLM, za pomocą opcji `tools`.
 
 Możesz skonfigurować dostawców i modele, których chcesz używać, za pomocą opcji `provider`, `model` i `small_model`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
@@ -239,7 +239,7 @@ Opcja `small_model` konfiguruje oddzielny model do lżejszych zadań, takich jak
 
 Opcje dostawcy mogą zawierać `timeout` i `setCacheKey`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -268,7 +268,7 @@ Niektórzy dostawcy obsługują dodatkowe opcje konfiguracji poza `timeout` i `a
 
 Amazon Bedrock umożliwia konfigurację połączenia z AWS:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -314,7 +314,7 @@ Ustaw motyw interfejsu użytkownika w `tui.json`.
 
 Możesz zdefiniować i skonfigurować agentów za pomocą opcji `agent`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -332,7 +332,7 @@ Możesz zdefiniować i skonfigurować agentów za pomocą opcji `agent`.
 }
 ```
 
-Możesz także definiować agentów przy użyciu plików markdown w `~/.config/opencode/agents/` lub `.opencode/agents/`. [Dowiedz się więcej o agentach](/docs/agents).
+Możesz także definiować agentów przy użyciu plików markdown w `~/.config/leak-code/agents/` lub `.leak-code/agents/`. [Dowiedz się więcej o agentach](/docs/agents).
 
 ---
 
@@ -340,7 +340,7 @@ Możesz także definiować agentów przy użyciu plików markdown w `~/.config/o
 
 Domyślnego agenta można ustawić za pomocą opcji `default_agent`. Określa to agenta, który jest używany, jeśli nie wybrano żadnego innego.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "plan"
@@ -349,7 +349,7 @@ Domyślnego agenta można ustawić za pomocą opcji `default_agent`. Określa to
 
 Agent domyślny musi być agentem typu `primary` (nie `subagent`). Może to być agent wbudowany, taki jak `"build"` lub `"plan"`, albo zdefiniowany przez Ciebie [agent niestandardowy](/docs/agents). Jeśli agent nie istnieje lub jest subagentem, OpenCode powróci do `"build"` z ostrzeżeniem.
 
-Dotyczy to wszystkich interfejsów: TUI, CLI (`opencode run`), aplikacji desktopowej i GitHub Actions.
+Dotyczy to wszystkich interfejsów: TUI, CLI (`leak-code run`), aplikacji desktopowej i GitHub Actions.
 
 ---
 
@@ -357,7 +357,7 @@ Dotyczy to wszystkich interfejsów: TUI, CLI (`opencode run`), aplikacji desktop
 
 Możesz skonfigurować [udostępnianie](/docs/share) za pomocą opcji `share`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -378,7 +378,7 @@ Domyślnie ustawiony jest tryb ręczny, w którym należy jawnie udostępniać r
 
 Możesz zdefiniować niestandardowe polecenia dla powtarzalnych zadań za pomocą opcji `command`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -396,7 +396,7 @@ Możesz zdefiniować niestandardowe polecenia dla powtarzalnych zadań za pomoc�
 }
 ```
 
-Możesz także definiować polecenia przy użyciu plików Markdown w `~/.config/opencode/commands/` lub `.opencode/commands/`. [Dowiedz się więcej o poleceniach](/docs/commands).
+Możesz także definiować polecenia przy użyciu plików Markdown w `~/.config/leak-code/commands/` lub `.leak-code/commands/`. [Dowiedz się więcej o poleceniach](/docs/commands).
 
 ---
 
@@ -419,7 +419,7 @@ Dostosuj skróty klawiszowe w `tui.json`.
 
 OpenCode może automatycznie pobierać nowe wersje. Możesz to kontrolować za pomocą opcji `autoupdate`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false
@@ -435,7 +435,7 @@ Działa to tylko wtedy, gdy OpenCode nie został zainstalowany przez menedżera 
 
 Możesz skonfigurować formatery kodu za pomocą opcji `formatter`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
@@ -463,7 +463,7 @@ Domyślnie OpenCode **zezwala na wszystkie działania** bez konieczności zatwie
 
 Na przykład, aby wymagać zatwierdzenia dla narzędzi `edit` i `bash`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -481,7 +481,7 @@ Na przykład, aby wymagać zatwierdzenia dla narzędzi `edit` i `bash`:
 
 Możesz kontrolować zachowanie kompaktowania kontekstu za pomocą opcji `compaction`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
@@ -500,7 +500,7 @@ Możesz kontrolować zachowanie kompaktowania kontekstu za pomocą opcji `compac
 
 Skonfiguruj ignorowane wzorce plików dla obserwatora plików za pomocą `watcher`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "watcher": {
@@ -517,7 +517,7 @@ Wzorce są zgodne ze składnią glob. Użyj tej opcji, aby wykluczyć często zm
 
 Skonfiguruj serwery MCP, których chcesz używać, za pomocą opcji `mcp`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {}
@@ -532,9 +532,9 @@ Skonfiguruj serwery MCP, których chcesz używać, za pomocą opcji `mcp`.
 
 [Wtyczki](/docs/plugins) rozszerzają OpenCode o niestandardowe narzędzia, hooki i integracje.
 
-Umieść pliki wtyczek w `.opencode/plugins/` lub `~/.config/opencode/plugins/`. Możesz także załadować wtyczkę z npm za pomocą opcji `plugin`.
+Umieść pliki wtyczek w `.leak-code/plugins/` lub `~/.config/leak-code/plugins/`. Możesz także załadować wtyczkę z npm za pomocą opcji `plugin`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
@@ -549,7 +549,7 @@ Umieść pliki wtyczek w `.opencode/plugins/` lub `~/.config/opencode/plugins/`.
 
 Określ pliki instrukcji dla modelu, używając opcji `instructions`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -564,7 +564,7 @@ Załadowane pliki są dołączane do promptu systemowego. Obsługuje wzorce glob
 
 Zapobiegaj automatycznemu ładowaniu dostawców za pomocą opcji `disabled_providers`. Jest to przydatne, gdy chcesz wyłączyć niektórych dostawców, nawet jeśli masz dla nich dane uwierzytelniające.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
@@ -587,7 +587,7 @@ Opcja `disabled_providers` przyjmuje tablicę identyfikatorów dostawców. Gdy d
 
 Możesz określić listę dozwolonych dostawców za pomocą `enabled_providers`. Po ustawieniu, tylko wymienieni dostawcy będą ładowani.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "enabled_providers": ["anthropic", "openai"]
@@ -608,7 +608,7 @@ Jeśli dostawca jest wymieniony zarówno w `enabled_providers`, jak i `disabled_
 
 Klucz `experimental` zawiera opcje, które są we wczesnej fazie rozwoju.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "experimental": {}
@@ -631,10 +631,10 @@ Możesz używać specjalnej składni w plikach konfiguracyjnych, aby odwoływać
 
 Użyj `{env:VARIABLE_NAME}`, aby wstawić wartość zmiennej środowiskowej:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:LEAKCODE_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -654,7 +654,7 @@ Jeśli zmienna środowiskowa nie jest ustawiona, zostanie zastąpiona pustym ci�
 
 Użyj `{file:path/to/file}`, aby wstawić zawartość pliku:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["./custom-instructions.md"],

@@ -143,9 +143,9 @@ _模式_：`primary`
 
 ### JSON
 
-在 `opencode.json` 配置文件中配置代理：
+在 `leak-code.json` 配置文件中配置代理：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -188,10 +188,10 @@ _模式_：`primary`
 
 您还可以使用 Markdown 文件定义代理。将它们放在：
 
-- 全局：`~/.config/opencode/agents/`
-- 项目级：`.opencode/agents/`
+- 全局：`~/.config/leak-code/agents/`
+- 项目级：`.leak-code/agents/`
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -227,7 +227,7 @@ Markdown 文件名即为代理名称。例如，`review.md` 会创建一个名�
 
 使用 `description` 选项提供代理的功能及使用场景的简要描述。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -247,7 +247,7 @@ Markdown 文件名即为代理名称。例如，`review.md` 会创建一个名�
 
 较低的值使响应更加集中和确定，而较高的值则增加创造力和多样性。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "plan": {
@@ -266,7 +266,7 @@ Markdown 文件名即为代理名称。例如，`review.md` 会创建一个名�
 - **0.3-0.5**：平衡的响应，兼顾一定创造力，适合一般开发任务
 - **0.6-1.0**：更有创造力和多样性的响应，适合头脑风暴和探索
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "analyze": {
@@ -294,7 +294,7 @@ Markdown 文件名即为代理名称。例如，`review.md` 会创建一个名�
 
 如果未设置此选项，代理将持续迭代，直到模型选择停止或用户中断会话。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "quick-thinker": {
@@ -318,7 +318,7 @@ Markdown 文件名即为代理名称。例如，`review.md` 会创建一个名�
 
 设置为 `true` 以禁用代理。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -334,7 +334,7 @@ Markdown 文件名即为代理名称。例如，`review.md` 会创建一个名�
 
 使用 `prompt` 配置为代理指定自定义系统提示词文件。提示词文件应包含针对代理用途的具体指令。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -356,7 +356,7 @@ Markdown 文件名即为代理名称。例如，`review.md` 会创建一个名�
 如果您不指定模型，主代理将使用[全局配置的模型](/docs/config#models)，而子代理将使用调用它的主代理所使用的模型。
 :::
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "plan": {
@@ -374,7 +374,7 @@ OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 
 使用 `tools` 配置控制代理中可用的工具。您可以通过将特定工具设置为 `true` 或 `false` 来启用或禁用它们。
 
-```json title="opencode.json" {3-6,9-12}
+```json title="leak-code.json" {3-6,9-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -398,7 +398,7 @@ OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 
 您还可以使用通配符同时控制多个工具。例如，要禁用 MCP 服务器中的所有工具：
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -425,7 +425,7 @@ OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 - `"allow"` — 允许所有操作，无需审批
 - `"deny"` — 禁用该工具
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -436,7 +436,7 @@ OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 
 您可以按代理覆盖这些权限。
 
-```json title="opencode.json" {3-5,8-10}
+```json title="leak-code.json" {3-5,8-10}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -454,7 +454,7 @@ OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 
 您还可以在 Markdown 代理中设置权限。
 
-```markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/leak-code/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -473,7 +473,7 @@ Only analyze code and suggest changes.
 
 您可以为特定的 bash 命令设置权限。
 
-```json title="opencode.json" {7}
+```json title="leak-code.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -491,7 +491,7 @@ Only analyze code and suggest changes.
 
 这可以使用 glob 模式。
 
-```json title="opencode.json" {7}
+```json title="leak-code.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -509,7 +509,7 @@ Only analyze code and suggest changes.
 您还可以使用 `*` 通配符来管理所有命令的权限。
 由于最后匹配的规则优先，请将 `*` 通配符放在前面，将具体规则放在后面。
 
-```json title="opencode.json" {8}
+```json title="leak-code.json" {8}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -533,7 +533,7 @@ Only analyze code and suggest changes.
 
 使用 `mode` 配置控制代理的模式。`mode` 选项用于确定代理的使用方式。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "review": {
@@ -551,7 +551,7 @@ Only analyze code and suggest changes.
 
 使用 `hidden: true` 将子代理从 `@` 自动补全菜单中隐藏。适用于只应由其他代理通过 Task 工具以编程方式调用的内部子代理。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "internal-helper": {
@@ -574,7 +574,7 @@ Only analyze code and suggest changes.
 
 使用 `permission.task` 控制代理可以通过 Task 工具调用哪些子代理。使用 glob 模式进行灵活匹配。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "orchestrator": {
@@ -609,7 +609,7 @@ Only analyze code and suggest changes.
 
 使用有效的十六进制颜色（例如 `#FF5733`）或主题颜色：`primary`、`secondary`、`accent`、`success`、`warning`、`error`、`info`。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "creative": {
@@ -628,7 +628,7 @@ Only analyze code and suggest changes.
 
 使用 `top_p` 选项控制响应多样性。这是控制随机性的温度替代方案。
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "agent": {
     "brainstorm": {
@@ -648,7 +648,7 @@ Only analyze code and suggest changes.
 
 例如，使用 OpenAI 的推理模型时，您可以控制推理力度：
 
-```json title="opencode.json" {6,7}
+```json title="leak-code.json" {6,7}
 {
   "agent": {
     "deep-thinker": {
@@ -664,7 +664,7 @@ Only analyze code and suggest changes.
 这些附加选项是模型和提供商特定的。请查阅您的提供商文档以获取可用参数。
 
 :::tip
-运行 `opencode models` 查看可用模型列表。
+运行 `leak-code models` 查看可用模型列表。
 :::
 
 ---
@@ -674,7 +674,7 @@ Only analyze code and suggest changes.
 您可以使用以下命令创建新代理：
 
 ```bash
-opencode agent create
+leak-code agent create
 ```
 
 此交互式命令将：
@@ -711,7 +711,7 @@ opencode agent create
 
 ### 文档代理
 
-```markdown title="~/.config/opencode/agents/docs-writer.md"
+```markdown title="~/.config/leak-code/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -733,7 +733,7 @@ Focus on:
 
 ### 安全审计代理
 
-```markdown title="~/.config/opencode/agents/security-auditor.md"
+```markdown title="~/.config/leak-code/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent

@@ -25,7 +25,7 @@ Certos servidores MCP, como o servidor MCP do GitHub, tendem a adicionar muitos 
 
 Você pode definir servidores MCP em sua [Configuração do opencode](https://opencode.ai/docs/config/) sob `mcp`. Adicione cada MCP com um nome único. Você pode se referir a esse MCP pelo nome ao solicitar ao LLM.
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="leak-code.jsonc" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -50,7 +50,7 @@ As organizações podem fornecer servidores MCP padrão através de seu endpoint
 
 Para habilitar um servidor específico da configuração remota da sua organização, adicione-o à sua configuração local com `enabled: true`:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -71,7 +71,7 @@ Os valores da sua configuração local substituem os padrões remotos. Veja [pre
 
 Adicione servidores MCP locais usando `type` como `"local"` dentro do objeto MCP.
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="leak-code.jsonc" {15}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -92,7 +92,7 @@ O comando é como o servidor MCP local é iniciado. Você também pode passar um
 
 Por exemplo, aqui está como você pode adicionar o servidor MCP de teste [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything).
 
-```jsonc title="opencode.jsonc"
+```jsonc title="leak-code.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -130,7 +130,7 @@ Aqui estão todas as opções para configurar um servidor MCP local.
 
 Adicione servidores MCP remotos definindo `type` como `"remote"`.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -177,7 +177,7 @@ O opencode lida automaticamente com a autenticação OAuth para servidores MCP r
 
 Para a maioria dos servidores MCP habilitados para OAuth, nenhuma configuração especial é necessária. Basta configurar o servidor remoto:
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -189,7 +189,7 @@ Para a maioria dos servidores MCP habilitados para OAuth, nenhuma configuração
 }
 ```
 
-Se o servidor requer autenticação, o opencode solicitará que você se autentique quando tentar usá-lo pela primeira vez. Se não, você pode [iniciar manualmente o fluxo](#authenticating) com `opencode mcp auth <server-name>`.
+Se o servidor requer autenticação, o opencode solicitará que você se autentique quando tentar usá-lo pela primeira vez. Se não, você pode [iniciar manualmente o fluxo](#authenticating) com `leak-code mcp auth <server-name>`.
 
 ---
 
@@ -197,7 +197,7 @@ Se o servidor requer autenticação, o opencode solicitará que você se autenti
 
 Se você tiver credenciais de cliente do provedor do servidor MCP, pode configurá-las:
 
-```json title="opencode.json" {7-11}
+```json title="leak-code.json" {7-11}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -223,22 +223,22 @@ Você pode iniciar manualmente a autenticação ou gerenciar credenciais.
 Autentique-se com um servidor MCP específico:
 
 ```bash
-opencode mcp auth my-oauth-server
+leak-code mcp auth my-oauth-server
 ```
 
 Liste todos os servidores MCP e seu status de autenticação:
 
 ```bash
-opencode mcp list
+leak-code mcp list
 ```
 
 Remova credenciais armazenadas:
 
 ```bash
-opencode mcp logout my-oauth-server
+leak-code mcp logout my-oauth-server
 ```
 
-O comando `mcp auth` abrirá seu navegador para autorização. Após você autorizar, o opencode armazenará os tokens de forma segura em `~/.local/share/opencode/mcp-auth.json`.
+O comando `mcp auth` abrirá seu navegador para autorização. Após você autorizar, o opencode armazenará os tokens de forma segura em `~/.local/share/leak-code/mcp-auth.json`.
 
 ---
 
@@ -246,7 +246,7 @@ O comando `mcp auth` abrirá seu navegador para autorização. Após você autor
 
 Se você quiser desabilitar o OAuth automático para um servidor (por exemplo, para servidores que usam chaves de API em vez disso), defina `oauth` como `false`:
 
-```json title="opencode.json" {7}
+```json title="leak-code.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -279,10 +279,10 @@ Se um servidor MCP remoto estiver falhando na autenticação, você pode diagnos
 
 ```bash
 # View auth status for all OAuth-capable servers
-opencode mcp auth list
+leak-code mcp auth list
 
 # Debug connection and OAuth flow for a specific server
-opencode mcp debug my-oauth-server
+leak-code mcp debug my-oauth-server
 ```
 
 O comando `mcp debug` mostra o status de autenticação atual, testa a conectividade HTTP e tenta o fluxo de descoberta OAuth.
@@ -299,7 +299,7 @@ Seus MCPs estão disponíveis como ferramentas no opencode, juntamente com ferra
 
 Isso significa que você pode habilitá-los ou desabilitá-los globalmente.
 
-```json title="opencode.json" {14}
+```json title="leak-code.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -320,7 +320,7 @@ Isso significa que você pode habilitá-los ou desabilitá-los globalmente.
 
 Também podemos usar um padrão glob para desabilitar todos os MCPs correspondentes.
 
-```json title="opencode.json" {14}
+```json title="leak-code.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -350,7 +350,7 @@ Se você tiver um grande número de servidores MCP, pode querer habilitá-los ap
 1. Desabilite-o como uma ferramenta globalmente.
 2. Em sua [configuração de agente](/docs/agents#tools), habilite o servidor MCP como uma ferramenta.
 
-```json title="opencode.json" {11, 14-18}
+```json title="leak-code.json" {11, 14-18}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -404,7 +404,7 @@ Abaixo estão exemplos de alguns servidores MCP comuns. Você pode enviar um PR 
 
 Adicione o [servidor MCP Sentry](https://mcp.sentry.dev) para interagir com seus projetos e problemas do Sentry.
 
-```json title="opencode.json" {4-8}
+```json title="leak-code.json" {4-8}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -420,7 +420,7 @@ Adicione o [servidor MCP Sentry](https://mcp.sentry.dev) para interagir com seus
 Após adicionar a configuração, autentique-se com o Sentry:
 
 ```bash
-opencode mcp auth sentry
+leak-code mcp auth sentry
 ```
 
 Isso abrirá uma janela do navegador para completar o fluxo OAuth e conectar o opencode à sua conta do Sentry.
@@ -437,7 +437,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 Adicione o [servidor MCP Context7](https://github.com/upstash/context7) para pesquisar através de documentos.
 
-```json title="opencode.json" {4-7}
+```json title="leak-code.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -451,7 +451,7 @@ Adicione o [servidor MCP Context7](https://github.com/upstash/context7) para pes
 
 Se você se inscreveu para uma conta gratuita, pode usar sua chave de API e obter limites de taxa mais altos.
 
-```json title="opencode.json" {7-9}
+```json title="leak-code.json" {7-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -486,7 +486,7 @@ When you need to search docs, use `context7` tools.
 
 Adicione o [Grep by Vercel](https://grep.app) servidor MCP para pesquisar através de trechos de código no GitHub.
 
-```json title="opencode.json" {4-7}
+```json title="leak-code.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {

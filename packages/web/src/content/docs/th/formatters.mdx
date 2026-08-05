@@ -59,7 +59,7 @@ OpenCode มาพร้อมกับฟอร์แมตเตอร์ใ�
 
 คุณสามารถปรับแต่งฟอร์แมตเตอร์ได้ผ่านทางส่วน `formatter` ในการกำหนดค่า OpenCode ของคุณ
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {}
@@ -83,7 +83,7 @@ OpenCode มาพร้อมกับฟอร์แมตเตอร์ใ�
 
 หากต้องการปิดการใช้งาน **ทั้งหมด** ฟอร์แมตเตอร์ทั่วโลก ให้ตั้งค่า `formatter` เป็น `false`:
 
-```json title="opencode.json" {3}
+```json title="leak-code.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": false
@@ -92,7 +92,7 @@ OpenCode มาพร้อมกับฟอร์แมตเตอร์ใ�
 
 หากต้องการปิดใช้งานฟอร์แมตเตอร์ **เฉพาะ** ให้ตั้งค่า `disabled` เป็น `true`:
 
-```json title="opencode.json" {5}
+```json title="leak-code.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
@@ -109,7 +109,7 @@ OpenCode มาพร้อมกับฟอร์แมตเตอร์ใ�
 
 คุณสามารถแทนที่ฟอร์แมตเตอร์ที่มีอยู่แล้วภายในหรือเพิ่มฟอร์แมตใหม่ได้โดยการระบุคำสั่ง ตัวแปรสภาพแวดล้อม และนามสกุลไฟล์:
 
-```json title="opencode.json" {4-14}
+```json title="leak-code.json" {4-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {

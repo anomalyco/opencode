@@ -19,8 +19,8 @@ description: Напишите свои собственные плагины д�
 
 Поместите файлы JavaScript или TypeScript в каталог плагина.
 
-- `.opencode/plugins/` – плагины уровня проекта.
-- `~/.config/opencode/plugins/` — глобальные плагины
+- `.leak-code/plugins/` – плагины уровня проекта.
+- `~/.config/leak-code/plugins/` — глобальные плагины
 
 Файлы в этих каталогах автоматически загружаются при запуске.
 
@@ -30,7 +30,7 @@ description: Напишите свои собственные плагины д�
 
 Укажите пакеты npm в файле конфигурации.
 
-```json title="opencode.json"
+```json title="leak-code.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
@@ -55,10 +55,10 @@ description: Напишите свои собственные плагины д�
 
 Плагины загружаются из всех источников, и все хуки запускаются последовательно. Порядок загрузки следующий:
 
-1. Глобальная конфигурация (`~/.config/opencode/opencode.json`)
-2. Конфигурация проекта (`opencode.json`)
-3. Глобальный каталог плагинов (`~/.config/opencode/plugins/`)
-4. Каталог плагинов проекта (`.opencode/plugins/`)
+1. Глобальная конфигурация (`~/.config/leak-code/leak-code.json`)
+2. Конфигурация проекта (`leak-code.json`)
+3. Глобальный каталог плагинов (`~/.config/leak-code/plugins/`)
+4. Каталог плагинов проекта (`.leak-code/plugins/`)
 
 Дубликаты пакетов npm с тем же именем и версией загружаются один раз. Однако локальный плагин и плагин npm со схожими именами загружаются отдельно.
 
@@ -75,7 +75,7 @@ description: Напишите свои собственные плагины д�
 
 Локальные плагины и специальные инструменты могут использовать внешние пакеты npm. Добавьте `package.json` в каталог конфигурации с необходимыми вам зависимостями.
 
-```json title=".opencode/package.json"
+```json title=".leak-code/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -85,7 +85,7 @@ description: Напишите свои собственные плагины д�
 
 opencode запускает `bun install` при запуске для их установки. Затем ваши плагины и инструменты смогут импортировать их.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -103,7 +103,7 @@ export const MyPlugin = async (ctx) => {
 
 ### Базовая структура
 
-```js title=".opencode/plugins/example.js"
+```js title=".leak-code/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -219,7 +219,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 Отправляйте уведомления при возникновении определенных событий:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".leak-code/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
@@ -244,7 +244,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 
 Запретите открытому коду читать файлы `.env`:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".leak-code/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -262,7 +262,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Внедряйте переменные среды во все shell-процессы выполнения (инструменты искусственного интеллекта и пользовательские terminal):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".leak-code/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -279,7 +279,7 @@ export const InjectEnvPlugin = async () => {
 
 Плагины также могут добавлять в opencode собственные инструменты:
 
-```ts title=".opencode/plugins/custom-tools.ts"
+```ts title=".leak-code/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
@@ -314,7 +314,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 Используйте `client.app.log()` вместо `console.log` для структурированного ведения журнала:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".leak-code/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -335,7 +335,7 @@ export const MyPlugin = async ({ client }) => {
 
 Настройте контекст, включаемый при сжатии сеанса:
 
-```ts title=".opencode/plugins/compaction.ts"
+```ts title=".leak-code/plugins/compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
@@ -359,7 +359,7 @@ Include any state that should persist across compaction:
 
 Вы также можете полностью заменить запрос на уплотнение, установив `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
+```ts title=".leak-code/plugins/custom-compaction.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
