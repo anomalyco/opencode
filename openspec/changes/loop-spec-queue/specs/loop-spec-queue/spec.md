@@ -5,12 +5,28 @@
 A loop SHALL support a queue mode whose unit of work is an openspec change. With no
 changes named, the queue SHALL be every active change under `openspec/changes/`,
 excluding `archive/`, `_repo/`, and any change holding `.skein/blocker.md`. The resolved
-order SHALL be printed when the run starts.
+order SHALL be reported when the run starts.
+
+Discovered changes SHALL be ordered by an explicit `priority` from the change's
+`.openspec.yaml` (lower first), then by its `created` date (oldest first), then by slug —
+a total, stable order a large backlog can actually steer. An explicitly named change list
+SHALL be honoured in the caller's order, since naming the changes is itself the priority
+statement.
 
 #### Scenario: queue order is explicit
 
 - **WHEN** a queue loop starts with no changes named
 - **THEN** the run reports the ordered list of changes it will attempt before the first iteration
+
+#### Scenario: priority overrides date
+
+- **WHEN** one eligible change declares `priority: 1` and the others declare none
+- **THEN** that change is attempted first regardless of its creation date or slug
+
+#### Scenario: undeclared priority falls back to oldest-first
+
+- **WHEN** no eligible change declares a priority
+- **THEN** they are attempted oldest `created` date first, not in alphabetical slug order
 
 #### Scenario: blocked changes are skipped
 
@@ -100,9 +116,9 @@ denied operation indirectly.
 
 ### Requirement: a stuck change is quarantined, not allowed to halt the queue
 
-When a change is stuck — three consecutive failures of the same gate, a stall,
-`max_reached`, or a deliberate blocked signal — the loop SHALL write
-`.skein/blocker.md` into that change (naming the gate or reason, the verbatim failure
+The loop SHALL quarantine a stuck change rather than halt the queue. When a change is
+stuck — three consecutive failures of the same gate, a stall, `max_reached`, or a
+deliberate blocked signal — the loop SHALL write `.skein/blocker.md` into that change (naming the gate or reason, the verbatim failure
 output, and a timestamp), leave the working tree otherwise unmodified from the failure
 point, and advance to the next eligible change. A quarantined change SHALL be excluded
 from the remainder of the run and from future runs until the blocker is removed.
@@ -135,9 +151,12 @@ change with unchecked tasks — every change is then either complete or quaranti
 
 ### Requirement: a systemic failure halts instead of quarantining the backlog
 
-Quarantine is for sick changes, not a sick environment. If three consecutive changes are
-quarantined without any gate having passed anywhere in the run, the loop SHALL halt and
-report a suspected systemic cause rather than continue quarantining.
+The loop SHALL halt with a suspected systemic cause, rather than continue quarantining, if
+three consecutive changes are quarantined without any gate having passed anywhere in the
+run — quarantine is for sick changes, not a sick environment. A command-backed gate
+(`test`, `verify`) that has never passed once in a run SHALL likewise halt the run, and
+SHALL NOT leave the change quarantined: an unrunnable gate is evidence about the command,
+not about the change.
 
 #### Scenario: broken test runner does not consume the backlog
 
@@ -146,10 +165,10 @@ report a suspected systemic cause rather than continue quarantining.
 
 ### Requirement: the iteration brief surfaces idle fleet capacity
 
-When local subagent placement is enabled and at least one idle local peer provider is
-available, the per-iteration brief SHALL say so and remind the model that the task tool
-can place subagents on idle peers. The brief SHALL NOT overstate capacity — no idle
-peers, no nudge.
+The per-iteration brief SHALL surface idle fleet capacity when local subagent placement is
+enabled and at least one idle local peer provider is available, reminding the model that
+the task tool can place subagents on those peers. The brief SHALL NOT overstate capacity —
+no idle peers, no nudge.
 
 #### Scenario: idle peers produce a fan-out nudge
 

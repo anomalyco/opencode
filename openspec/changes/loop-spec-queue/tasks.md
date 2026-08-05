@@ -242,7 +242,7 @@ display, report printing done (`--sync` remains). Remaining: 4.2 adversarial rev
 
 ## Follow-ups found by the real runs
 
-- [ ] 8.1 `IterationInfo.toolCalls` undercounts multi-step turns
+- [x] 8.1 `IterationInfo.toolCalls` undercounts multi-step turns
   - Run 1's single iteration reported `toolCalls: 0` while the agent had demonstrably
     deleted four files and edited three more. `runIteration` counts tool parts on the
     message `promptSvc.prompt` returns (the last assistant message), so tool calls made
@@ -251,11 +251,33 @@ display, report printing done (`--sync` remains). Remaining: 4.2 adversarial rev
     no-progress guard, so a productive multi-step turn can be scored as a stall.
   - Validation: a multi-step turn reports its true tool-call count, and the
     no-progress guard does not fire on it.
+  - Fixed 2026-08-05: `runIteration` now counts tool parts across every assistant
+    message of the turn instead of only the one `promptSvc.prompt` resolves to.
+    Each iteration owns a fresh child session so all of its messages belong to the
+    turn; the degraded no-child path bounds by the iteration's start time. The
+    count never goes below what the returned message alone shows, so a failed
+    `messages()` read cannot manufacture a stall.
+    Regression test "a multi-step turn reports its real tool-call count and is not
+    scored as a stall" drives a tool call in step 1 and prose in step 2 with
+    `noProgressLimit: 1`. Confirmed it catches the bug: with the fix the loop ends
+    `completed`, and reverting the fix makes the same loop end `stalled` — i.e. the
+    old behaviour really did kill productive work.
 
-- [ ] 8.2 Queue order is alphabetical by slug, not priority-aware
+- [x] 8.2 Queue order is alphabetical by slug, not priority-aware
   - Deterministic as specified, but `change-three` sorts before `change-two`, and the
     backlog has no way to say "this one first".
   - Validation: an explicit ordering signal (or documented convention) decides order.
+  - Fixed 2026-08-05: discovered changes are ordered by `priority` from the change's
+    `.openspec.yaml` (lower first, `DefaultPriority = 100` so labelling one change
+    does not require renumbering the rest), then `created` (oldest first — a backlog
+    is a queue, not a dictionary), then slug for a total stable order. An explicit
+    `--queue a b c` list is honoured verbatim, since naming the changes IS the
+    priority statement. Read with a small line scanner rather than a new YAML
+    dependency, keeping `queue.ts` import-free apart from fs/path.
+    Also closed a spec gap noticed while doing this: the requirement said the
+    resolved order "SHALL be printed when the run starts" and nothing printed it —
+    `runQueue` now logs the resolved order, quarantined set, and complete set before
+    the first iteration.
 
 - [x] 7.5 Full typecheck, test, build
   - Validation: `bun typecheck` zero errors; `bun test packages/opencode --timeout 60000` green; single-target build smoke-passes

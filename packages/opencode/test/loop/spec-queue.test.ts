@@ -3,7 +3,7 @@ import fs from "fs"
 import os from "os"
 import path from "path"
 import { parseTasksMd, allChecked, uncheckedTasks } from "@/loop/spec-queue/tasks-md"
-import { resolveQueue, cursor, quarantine, type QueueChange } from "@/loop/spec-queue/queue"
+import { resolveQueue, cursor, quarantine, compareOrder, DefaultPriority, type QueueChange } from "@/loop/spec-queue/queue"
 import { buildBrief } from "@/loop/spec-queue/brief"
 import {
   evaluateImplement,
@@ -128,7 +128,12 @@ describe("resolveQueue", () => {
 function fixtureChange(tasks: string = OPEN): QueueChange {
   const root = fixtureTree({ demo: { tasks } })
   const directory = path.join(root, "openspec", "changes", "demo")
-  return { slug: "demo", directory, tasks: parseTasksMd(tasks) }
+  return {
+    slug: "demo",
+    directory,
+    tasks: parseTasksMd(tasks),
+    order: { priority: DefaultPriority, created: "2026-01-01", slug: "demo" },
+  }
 }
 
 describe("buildBrief", () => {
@@ -278,5 +283,55 @@ describe("restart resume (design D1: the cursor is derived, not stored)", () => 
     fs.mkdirSync(late, { recursive: true })
     fs.writeFileSync(path.join(late, "tasks.md"), OPEN)
     expect(resolveQueue(root).eligible.map((c) => c.slug)).toEqual(["live-a", "live-b"])
+  })
+})
+
+describe("queue ordering (priority, then creation date, then slug)", () => {
+  function writeMeta(root: string, slug: string, body: string) {
+    fs.writeFileSync(path.join(root, "openspec", "changes", slug, ".openspec.yaml"), body)
+  }
+
+  test("explicit priority wins, lower first", () => {
+    const root = fixtureTree({ alpha: { tasks: OPEN }, beta: { tasks: OPEN }, gamma: { tasks: OPEN } })
+    writeMeta(root, "gamma", "schema: spec-driven\npriority: 1\ncreated: 2026-08-01\n")
+    writeMeta(root, "alpha", "schema: spec-driven\ncreated: 2026-08-01\n")
+    writeMeta(root, "beta", "schema: spec-driven\npriority: 50\ncreated: 2026-08-01\n")
+    expect(resolveQueue(root).eligible.map((c) => c.slug)).toEqual(["gamma", "beta", "alpha"])
+  })
+
+  test("without priority, oldest planned change goes first — not alphabetical", () => {
+    const root = fixtureTree({ "aaa-newest": { tasks: OPEN }, "zzz-oldest": { tasks: OPEN } })
+    writeMeta(root, "aaa-newest", "created: 2026-08-04\n")
+    writeMeta(root, "zzz-oldest", "created: 2026-07-01\n")
+    expect(resolveQueue(root).eligible.map((c) => c.slug)).toEqual(["zzz-oldest", "aaa-newest"])
+  })
+
+  test("the old alphabetical trap is gone: three sorts before two only if dated so", () => {
+    const root = fixtureTree({ "change-two": { tasks: OPEN }, "change-three": { tasks: OPEN } })
+    writeMeta(root, "change-two", "created: 2026-07-01\n")
+    writeMeta(root, "change-three", "created: 2026-07-02\n")
+    expect(resolveQueue(root).eligible.map((c) => c.slug)).toEqual(["change-two", "change-three"])
+  })
+
+  test("a change with no metadata sorts last but stays deterministic", () => {
+    const root = fixtureTree({ dated: { tasks: OPEN }, undated: { tasks: OPEN } })
+    writeMeta(root, "dated", "created: 2026-07-01\n")
+    expect(resolveQueue(root).eligible.map((c) => c.slug)).toEqual(["dated", "undated"])
+  })
+
+  test("an explicit queue list is itself the priority statement and is honoured verbatim", () => {
+    const root = fixtureTree({ first: { tasks: OPEN }, second: { tasks: OPEN } })
+    writeMeta(root, "first", "priority: 99\ncreated: 2026-08-04\n")
+    writeMeta(root, "second", "priority: 1\ncreated: 2026-07-01\n")
+    // Discovery would put `second` first; the caller's order overrides it.
+    expect(resolveQueue(root, ["first", "second"]).eligible.map((c) => c.slug)).toEqual(["first", "second"])
+  })
+
+  test("compareOrder is a total, stable order", () => {
+    const a = { priority: 1, created: "2026-01-01", slug: "a" }
+    const b = { priority: 1, created: "2026-01-01", slug: "b" }
+    expect(compareOrder(a, b)).toBeLessThan(0)
+    expect(compareOrder(b, a)).toBeGreaterThan(0)
+    expect(compareOrder(a, a)).toBe(0)
   })
 })

@@ -18,7 +18,28 @@ export interface QueueChange {
   /** absolute path to the change directory */
   directory: string
   tasks: TaskItem[]
+  /** ordering key resolved from `.openspec.yaml` — see `changeOrder` */
+  order: ChangeOrder
 }
+
+/**
+ * How a change earns its place in the queue. Alphabetical-by-slug was
+ * deterministic but arbitrary: with a large backlog there was no way to say
+ * "this one first", and `change-three` sorted before `change-two`.
+ *
+ * `priority` (lower first) is an explicit opt-in from the change's
+ * `.openspec.yaml`; unlabelled changes share DefaultPriority so labelling one
+ * change moves it without renumbering the rest. Ties fall back to `created`
+ * (oldest planned first — a backlog is a queue, not a dictionary) and finally
+ * the slug, so the order is always total and stable.
+ */
+export interface ChangeOrder {
+  priority: number
+  created: string
+  slug: string
+}
+
+export const DefaultPriority = 100
 
 export interface ResolvedQueue {
   /** eligible changes with at least one unchecked task, in queue order */
@@ -33,6 +54,40 @@ function hasBlocker(changeDir: string): boolean {
   return fs.existsSync(path.join(changeDir, ".skein", "blocker.md"))
 }
 
+/**
+ * Reads the two scalar keys the queue cares about out of `.openspec.yaml`.
+ * Deliberately a line scanner rather than a YAML dependency: the file is a
+ * flat `key: value` header, and this module stays import-free apart from
+ * fs/path so gate evaluators and tests can use it without a layer graph.
+ */
+function readOrder(changeDir: string, slug: string): ChangeOrder {
+  const file = path.join(changeDir, ".openspec.yaml")
+  let priority = DefaultPriority
+  let created = ""
+  if (fs.existsSync(file)) {
+    for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+      const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*?)\s*$/)
+      if (!match) continue
+      const [, key, raw] = match
+      const value = raw.replace(/^["']|["']$/g, "")
+      if (key === "priority") {
+        const parsed = Number(value)
+        if (!Number.isNaN(parsed)) priority = parsed
+      }
+      if (key === "created") created = value
+    }
+  }
+  // A change with no `created` sorts after dated ones rather than jumping the
+  // queue on an empty string.
+  return { priority, created: created || "9999-12-31", slug }
+}
+
+export function compareOrder(a: ChangeOrder, b: ChangeOrder): number {
+  if (a.priority !== b.priority) return a.priority - b.priority
+  if (a.created !== b.created) return a.created < b.created ? -1 : 1
+  return a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0
+}
+
 function readTasks(changeDir: string): TaskItem[] | undefined {
   const file = path.join(changeDir, "tasks.md")
   if (!fs.existsSync(file)) return undefined
@@ -42,9 +97,10 @@ function readTasks(changeDir: string): TaskItem[] | undefined {
 /**
  * Resolves the queue from disk.
  *
- * With `only` given, restricts (and orders) the queue to those slugs — an
- * unknown slug is simply absent from the result. Without it, every change
- * directory under `openspec/changes/` is considered, alphabetically.
+ * With `only` given, the caller's order is honoured verbatim — an explicit list
+ * is an explicit priority statement — and an unknown slug is simply absent.
+ * Without it, every change directory under `openspec/changes/` is considered
+ * and ordered by `compareOrder` (priority, then creation date, then slug).
  * Directories without a `tasks.md` are not changes and are ignored.
  */
 export function resolveQueue(root: string, only?: readonly string[]): ResolvedQueue {
@@ -71,8 +127,11 @@ export function resolveQueue(root: string, only?: readonly string[]): ResolvedQu
       result.complete.push(slug)
       continue
     }
-    result.eligible.push({ slug, directory, tasks })
+    result.eligible.push({ slug, directory, tasks, order: readOrder(directory, slug) })
   }
+  // An explicit `only` list is itself the priority statement, so only the
+  // discovered queue gets sorted.
+  if (!only) result.eligible.sort((a, b) => compareOrder(a.order, b.order))
   return result
 }
 

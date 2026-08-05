@@ -219,7 +219,7 @@ const writeConfig = Effect.fn("test.writeConfig")(function* (dir: string, config
   )
 })
 
-const waitForTerminal = (id: Loop.LoopID) =>
+const waitForTerminal = (id: Loop.LoopID, seconds = 5) =>
   pollWithTimeout(
     Effect.gen(function* () {
       const loop = yield* Loop.Service
@@ -228,7 +228,7 @@ const waitForTerminal = (id: Loop.LoopID) =>
       return info.status !== "running" && info.status !== "paused" ? info : undefined
     }),
     `loop ${id} never reached a terminal status`,
-    "5 seconds",
+    `${seconds} seconds`,
   )
 
 it.instance(
@@ -475,6 +475,43 @@ it.instance(
         "5 seconds",
       )
       expect(afterCancel.status).toBe("cancelled")
+    }),
+  { config: {} },
+)
+
+it.instance(
+  "a multi-step turn reports its real tool-call count and is not scored as a stall",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      // auto_mode so the glob tool's permission ask does not block an
+      // unattended iteration — the way a real loop runs.
+      yield* writeConfig(dir, { ...providerCfg(llm.url), auto_mode: true })
+      const loop = yield* Loop.Service
+
+      // Iteration 1 is a MULTI-STEP turn: a tool call in the first step, then
+      // prose in the second. `promptSvc.prompt` resolves to that last, tool-less
+      // message — which is exactly how the count used to come back as 0.
+      yield* llm.tool("glob", { pattern: "*.ts" })
+      yield* llm.text("I searched the tree and will keep going")
+      // Iteration 2 finishes, so the loop has a clean terminal state.
+      yield* llm.text("all done <promise>COMPLETE</promise>")
+
+      const info = yield* loop.create({
+        prompt: "look around then finish",
+        maxIterations: 4,
+        interval: 0,
+        // A stall verdict after a single no-tool iteration: if the multi-step
+        // turn were still counted as 0 tool calls, this loop would end `stalled`
+        // instead of reaching iteration 2.
+        noProgressLimit: 1,
+      })
+      const final = yield* waitForTerminal(info.id, 20)
+
+      expect(final.status).toBe("completed")
+      expect(final.iterations[0]?.toolCalls).toBeGreaterThanOrEqual(1)
+      expect(final.iterations.length).toBeGreaterThanOrEqual(2)
     }),
   { config: {} },
 )

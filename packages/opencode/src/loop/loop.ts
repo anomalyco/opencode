@@ -7,7 +7,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { withStatics } from "@opencode-ai/core/schema"
-import { AbortedError } from "@opencode-ai/core/v1/session"
+import { AbortedError, SessionV1 } from "@opencode-ai/core/v1/session"
 import { Cause, Context, Deferred, Effect, Layer, Ref, Result, Schema, Scope } from "effect"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Identifier } from "@/id/id"
@@ -345,7 +345,27 @@ export const layer = Layer.effect(
         }
 
         const message = outcome.success
-        const toolCalls = message.parts.filter((part) => part.type === "tool").length
+        // Count tool calls across the WHOLE turn, not just the message the
+        // prompt returns. `promptSvc.prompt` resolves to the LAST assistant
+        // message, so a multi-step turn (tools in step 1, prose in step 4)
+        // reported 0 tool calls — observed on a real run that had just deleted
+        // four files. That number feeds the no-progress guard, so undercounting
+        // it scores productive work as a stall.
+        //
+        // Each iteration owns a fresh child session, so every assistant message
+        // there belongs to this turn. On the degraded no-child path the loop
+        // session is shared across iterations, so bound by this turn's start.
+        const turnMessages = yield* session
+          .messages({ sessionID: targetSessionID })
+          .pipe(Effect.orElseSucceed(() => [] as SessionV1.WithParts[]))
+        const boundary = child ? 0 : startedAt
+        const countedTools = turnMessages
+          .filter((item) => item.info.role === "assistant" && (item.info.time?.created ?? 0) >= boundary)
+          .reduce((total, item) => total + item.parts.filter((part) => part.type === "tool").length, 0)
+        // Never report fewer than the returned message alone shows (defensive:
+        // a messages() failure must not turn a real tool call into a stall).
+        const lastMessageTools = message.parts.filter((part) => part.type === "tool").length
+        const toolCalls = Math.max(countedTools, lastMessageTools)
         const output = message.parts
           .filter((part) => part.type === "text")
           .map((part) => part.text)
@@ -650,6 +670,17 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         const initial = (yield* Ref.get(state)).get(id)
         const exec = execIn(initial?.queue?.options?.cwd ?? initial?.info.directory ?? process.cwd())
+        // The spec requires the resolved order be reported before the first
+        // iteration: an unattended run is only auditable if you can see what it
+        // decided to work, and in what order, up front.
+        if (initial) {
+          const first = resolveQueue(initial.info.directory, initial.queue?.only)
+          yield* Effect.logInfo("queue resolved", {
+            "queue.order": first.eligible.map((c) => c.slug).join(", ") || "(nothing eligible)",
+            "queue.quarantined": first.quarantined.join(", ") || "(none)",
+            "queue.complete": first.complete.join(", ") || "(none)",
+          })
+        }
         const options = yield* gateOptions(exec, initial?.queue?.options)
 
         const running = () =>
