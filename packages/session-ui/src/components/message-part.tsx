@@ -61,6 +61,7 @@ import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
+import { partDefaultOpen } from "./part-default-open"
 import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
@@ -718,15 +719,7 @@ export function renderable(part: PartType, showReasoningSummaries = true) {
   return !!PART_MAPPING[part.type]
 }
 
-function toolDefaultOpen(tool: string, shell = false, edit = false) {
-  if (tool === "bash" || tool === "shell") return shell
-  if (tool === "edit" || tool === "write" || tool === "patch" || tool === "apply_patch") return edit
-}
-
-export function partDefaultOpen(part: PartType, shell = false, edit = false) {
-  if (part.type !== "tool") return
-  return toolDefaultOpen(part.tool, shell, edit)
-}
+export { partDefaultOpen } from "./part-default-open"
 
 export function AssistantParts(props: {
   messages: AssistantMessage[]
