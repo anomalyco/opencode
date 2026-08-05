@@ -696,20 +696,36 @@ export const RunCommand = effectCmd({
         // created, and replies issued from inside the loop must use that client.
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
+          // Assistant messages carry the model, the parts they produce do not, so
+          // remember it per message to attribute each emitted part to a model.
+          const models = new Map<string, { providerID: string; modelID: string; agent: string }>()
           let error: string | undefined
+
+          // Same as emit(), plus the model that produced the part. Sessions can
+          // switch models mid-run, so this is resolved per message, not per run.
+          function emitPart(type: string, part: { messageID: string }) {
+            return emit(type, { part, ...models.get(part.messageID) })
+          }
 
           for await (const event of events.stream) {
             if (
               event.type === "message.updated" &&
               event.properties.sessionID === sessionID &&
-              event.properties.info.role === "assistant" &&
-              args.format !== "json" &&
-              toggles.get("start") !== true
+              event.properties.info.role === "assistant"
             ) {
-              UI.empty()
-              UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
-              UI.empty()
-              toggles.set("start", true)
+              const info = event.properties.info
+              models.set(info.id, {
+                providerID: info.providerID,
+                modelID: info.modelID,
+                agent: info.agent,
+              })
+
+              if (args.format !== "json" && toggles.get("start") !== true) {
+                UI.empty()
+                UI.println(`> ${info.agent} · ${info.modelID}`)
+                UI.empty()
+                toggles.set("start", true)
+              }
             }
 
             if (event.type === "message.part.updated") {
@@ -717,7 +733,7 @@ export const RunCommand = effectCmd({
               if (part.sessionID !== sessionID) continue
 
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
-                if (emit("tool_use", { part })) continue
+                if (emitPart("tool_use", part)) continue
                 if (part.state.status === "completed") {
                   await tool(part)
                   continue
@@ -738,15 +754,15 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "step-start") {
-                if (emit("step_start", { part })) continue
+                if (emitPart("step_start", part)) continue
               }
 
               if (part.type === "step-finish") {
-                if (emit("step_finish", { part })) continue
+                if (emitPart("step_finish", part)) continue
               }
 
               if (part.type === "text" && part.time?.end) {
-                if (emit("text", { part })) continue
+                if (emitPart("text", part)) continue
                 const text = part.text.trim()
                 if (!text) continue
                 if (!process.stdout.isTTY) {
@@ -759,7 +775,7 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "reasoning" && part.time?.end && thinking) {
-                if (emit("reasoning", { part })) continue
+                if (emitPart("reasoning", part)) continue
                 const text = part.text.trim()
                 if (!text) continue
                 const line = `Thinking: ${text}`

@@ -121,13 +121,17 @@ describe("opencode run (non-interactive subprocess)", () => {
           expect(typeof evt.sessionID).toBe("string")
         }
         expect(events.map((event) => event.type)).toEqual(["step_start", "text", "step_finish"])
+        // Every part-bearing event names the model that produced it, otherwise a
+        // headless consumer cannot attribute tokens or cost (#40544).
+        const model = { providerID: "test", modelID: "test-model", agent: "build" }
         expect(events.map(({ timestamp: _, sessionID: __, ...event }) => event)).toEqual([
-          { type: "step_start", part: expect.objectContaining({ type: "step-start" }) },
+          { type: "step_start", ...model, part: expect.objectContaining({ type: "step-start" }) },
           {
             type: "text",
+            ...model,
             part: expect.objectContaining({ type: "text", text: "structured output" }),
           },
-          { type: "step_finish", part: expect.objectContaining({ type: "step-finish" }) },
+          { type: "step_finish", ...model, part: expect.objectContaining({ type: "step-finish" }) },
         ])
         expect(result.stdout.endsWith("\n")).toBe(true)
         expect(
@@ -138,6 +142,35 @@ describe("opencode run (non-interactive subprocess)", () => {
         ).toBe(true)
       }),
     60_000,
+  )
+
+  // Regression for #40544: the model reported for a part comes from the message
+  // that produced it, so a second run on a different model reports that model.
+  cliIt.concurrent(
+    "--format json reports the model that produced each event",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.text("first")
+        const first = yield* opencode.run("say first", { format: "json" })
+        opencode.expectExit(first, 0)
+
+        const firstEvents = opencode.parseJsonEvents(first.stdout)
+        expect(firstEvents.length).toBeGreaterThan(0)
+        expect(new Set(firstEvents.map((event) => event.modelID))).toEqual(new Set(["test-model"]))
+
+        yield* llm.text("second")
+        const second = yield* opencode.run("say second", {
+          format: "json",
+          model: "test/test-model-alt",
+        })
+        opencode.expectExit(second, 0)
+
+        const secondEvents = opencode.parseJsonEvents(second.stdout)
+        expect(secondEvents.length).toBeGreaterThan(0)
+        expect(new Set(secondEvents.map((event) => event.modelID))).toEqual(new Set(["test-model-alt"]))
+        expect(new Set(secondEvents.map((event) => event.providerID))).toEqual(new Set(["test"]))
+      }),
+    120_000,
   )
 
   cliIt.concurrent(
