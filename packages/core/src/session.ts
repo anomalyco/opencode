@@ -410,7 +410,7 @@ const layer = Layer.effect(
       fork: Effect.fn("Session.fork")(function* (input) {
         const parent = yield* result.get(input.sessionID)
         const boundary = yield* db
-          .select({ id: SessionMessageTable.id, seq: SessionMessageTable.seq })
+          .select({ id: SessionMessageTable.id })
           .from(SessionMessageTable)
           .where(
             and(
@@ -429,13 +429,14 @@ const layer = Layer.effect(
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
         const sessionID = SessionSchema.ID.create()
-        const instructionThrough =
-          input.boundary.type === "before" ? boundary.seq - 1 : yield* Bus.latestSequence(db, parent.id)
+        // The fork adopts the parent's newest instruction values rather than the
+        // values in effect at the boundary; copied history may contain frozen
+        // instruction-update text the initial baseline already reflects.
         yield* bus.publish(SessionEvent.Forked, {
           sessionID,
           parentID: parent.id,
           boundary: { ...input.boundary, messageID: boundary.id },
-          instructions: yield* InstructionState.valuesAt(db, parent.id, instructionThrough),
+          instructions: yield* InstructionState.current(db, parent.id),
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),

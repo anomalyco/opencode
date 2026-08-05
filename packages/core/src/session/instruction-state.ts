@@ -1,25 +1,20 @@
 export * as InstructionState from "./instruction-state"
 
-import { and, asc, desc, eq, gt, inArray, lte, sql } from "drizzle-orm"
-import { DateTime, Effect, Option, Schema } from "effect"
+import { eq, inArray, sql } from "drizzle-orm"
+import { Effect, Option, Schema } from "effect"
 import type { Database } from "../database/database"
-import { Bus } from "../bus"
-import { EventTable } from "../event/sql"
+import type { Bus } from "../bus"
 import { Instructions } from "../instructions/index"
 import { SessionEvent } from "./event"
-import { SessionMessage } from "./message"
-import { Event } from "@opencode-ai/schema/event"
 import { SessionSchema } from "./schema"
 import { InstructionBlobTable, InstructionStateTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
 
-const decodeInstructionsUpdated = Schema.decodeUnknownSync(SessionEvent.InstructionsUpdated.data)
-const decodeForked = Schema.decodeUnknownSync(SessionEvent.Forked.data)
-
 export interface Observation extends Instructions.Admission {
   readonly sessionID: SessionSchema.ID
   readonly initial: boolean
+  readonly previous: Instructions.Values
   readonly current: Instructions.Values
 }
 
@@ -28,13 +23,14 @@ export const observe = Effect.fn("InstructionState.observe")(function* (
   instructions: Instructions.Instructions,
   sessionID: SessionSchema.ID,
 ): Effect.fn.Return<Observation, Instructions.InitializationBlocked> {
-  const [observed, stored] = yield* Effect.all([Instructions.read(instructions), ensure(db, sessionID)], {
+  const [observed, stored] = yield* Effect.all([Instructions.read(instructions), find(db, sessionID)], {
     concurrency: "unbounded",
   })
   const result = yield* observeAgainst(observed, stored?.current_values)
   return {
     sessionID,
     initial: !stored,
+    previous: stored?.current_values ?? {},
     ...result,
   }
 })
@@ -42,12 +38,20 @@ export const observe = Effect.fn("InstructionState.observe")(function* (
 export const commit = Effect.fn("InstructionState.commit")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
+  instructions: Instructions.Instructions,
   observation: Observation,
 ) {
   if (!observation.initial && Object.keys(observation.delta).length === 0) return
+  // The rendered text is frozen into the durable event: replaying it later would
+  // require the Location-scoped registry that produced it.
+  const text = observation.initial ? "" : yield* renderUpdateText(db, instructions, observation)
   yield* bus.publish(
     SessionEvent.InstructionsUpdated,
-    { sessionID: observation.sessionID, delta: observation.delta },
+    {
+      sessionID: observation.sessionID,
+      delta: observation.delta,
+      ...(text.length > 0 ? { text } : {}),
+    },
     {
       // Initial sync establishes the baseline; unlike later deltas it is not chronological history.
       ...(observation.initial ? { metadata: { instructions: { initial: true } } } : {}),
@@ -56,13 +60,27 @@ export const commit = Effect.fn("InstructionState.commit")(function* (
   )
 })
 
+const renderUpdateText = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  instructions: Instructions.Instructions,
+  observation: Observation,
+) {
+  const replaced = Object.entries(observation.previous).filter(([key]) => Object.hasOwn(observation.delta, key))
+  const blobs = yield* loadBlobs(db, replaced.map(([, hash]) => hash))
+  const previous = Object.fromEntries(replaced.map(([key, hash]) => [key, requireBlob(blobs, hash)]))
+  const admitted = new Map(
+    Object.entries(observation.blobs).map(([hash, value]) => [Instructions.Hash.make(hash), value]),
+  )
+  return Instructions.renderUpdate(instructions, previous, dereferenceDelta(observation.delta, admitted))
+})
+
 export const prepare = Effect.fn("InstructionState.prepare")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
   instructions: Instructions.Instructions,
   sessionID: SessionSchema.ID,
 ) {
-  yield* commit(db, bus, yield* observe(db, instructions, sessionID))
+  yield* commit(db, bus, instructions, yield* observe(db, instructions, sessionID))
 })
 
 export const apply = Effect.fn("InstructionState.apply")(function* (
@@ -140,79 +158,24 @@ export const reset = Effect.fn("InstructionState.reset")(function* (db: Database
     .pipe(Effect.orDie)
 })
 
-export const rebuild = Effect.fn("InstructionState.rebuild")(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-) {
-  const state = yield* stateFromEvents(db, sessionID)
-  if (!state) {
-    yield* reset(db, sessionID)
-    return undefined
-  }
-  yield* db
-    .insert(InstructionStateTable)
-    .values(state)
-    .onConflictDoUpdate({
-      target: InstructionStateTable.session_id,
-      set: {
-        epoch_start: state.epoch_start,
-        through_seq: state.through_seq,
-        initial_values: state.initial_values,
-        current_values: state.current_values,
-      },
-    })
-    .run()
-    .pipe(Effect.orDie)
-  return state
-})
-
-const assembleState = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  instructions: Instructions.Instructions,
-  state: typeof InstructionStateTable.$inferSelect,
-) {
-  const rows = yield* instructionUpdatesAfter(db, sessionID, state.epoch_start)
-  const updates = rows.map((row) => ({
-    row,
-    delta: decodeInstructionsUpdated(row.data).delta,
-  }))
-  const blobs = yield* loadBlobs(db, [
-    ...Object.values(state.initial_values),
-    ...updates.flatMap((update) =>
-      Object.values(update.delta).filter((hash): hash is Instructions.Hash => hash !== "removed"),
-    ),
-  ])
-  const valuesAtStart = dereference(state.initial_values, blobs)
-  let values = valuesAtStart
-  const result: Array<{ readonly seq: number; readonly message: SessionMessage.System }> = []
-  for (const update of updates) {
-    const delta = dereferenceDelta(update.delta, blobs)
-    const text = Instructions.renderUpdate(instructions, values, delta)
-    if (text.length > 0)
-      result.push({
-        seq: update.row.seq,
-        message: SessionMessage.System.make({
-          id: SessionMessage.ID.fromEvent(Event.ID.make(update.row.id)),
-          type: "system",
-          text,
-          time: { created: DateTime.makeUnsafe(update.row.created) },
-        }),
-      })
-    values = Instructions.applyDelta(values, delta)
-  }
-  return { initial: Instructions.renderInitial(instructions, valuesAtStart), updates: result, current: values }
-})
-
-export const assemble = Effect.fn("InstructionState.assemble")(function* (
+/** Renders the epoch baseline shown at the start of every model request. */
+export const initial = Effect.fn("InstructionState.initial")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   instructions: Instructions.Instructions,
 ) {
   const state = yield* find(db, sessionID)
   if (!state) return yield* Effect.die(new Error(`Instruction state not found during assembly: ${sessionID}`))
-  const assembled = yield* assembleState(db, sessionID, instructions, state)
-  return { initial: assembled.initial, updates: assembled.updates }
+  const blobs = yield* loadBlobs(db, Object.values(state.initial_values))
+  return Instructions.renderInitial(instructions, dereference(state.initial_values, blobs))
+})
+
+/** The current instruction values, used to seed a fork's baseline. */
+export const current = Effect.fn("InstructionState.current")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  return (yield* find(db, sessionID))?.current_values
 })
 
 export const preview = Effect.fn("InstructionState.preview")(function* (
@@ -221,20 +184,26 @@ export const preview = Effect.fn("InstructionState.preview")(function* (
   instructions: Instructions.Instructions,
   observed: Instructions.ReadResult,
 ) {
-  const state = yield* readState(db, sessionID)
+  const state = yield* find(db, sessionID)
   const result = yield* observeAgainst(observed, state?.current_values)
-  const blobs = new Map<Instructions.Hash, Schema.Json>(
+  const observedBlobs = new Map<Instructions.Hash, Schema.Json>(
     Object.entries(result.blobs).map(([hash, value]) => [Instructions.Hash.make(hash), value]),
   )
   if (!state) {
-    const values = dereference(result.current, blobs)
-    return { initial: Instructions.renderInitial(instructions, values), updates: [], update: "" }
+    const values = dereference(result.current, observedBlobs)
+    return { initial: Instructions.renderInitial(instructions, values), update: "" }
   }
-  const assembled = yield* assembleState(db, sessionID, instructions, state)
+  const stored = yield* loadBlobs(db, [
+    ...Object.values(state.initial_values),
+    ...Object.values(state.current_values),
+  ])
   return {
-    initial: assembled.initial,
-    updates: assembled.updates,
-    update: Instructions.renderUpdate(instructions, assembled.current, dereferenceDelta(result.delta, blobs)),
+    initial: Instructions.renderInitial(instructions, dereference(state.initial_values, stored)),
+    update: Instructions.renderUpdate(
+      instructions,
+      dereference(state.current_values, stored),
+      dereferenceDelta(result.delta, new Map([...stored, ...observedBlobs])),
+    ),
   }
 })
 
@@ -251,46 +220,6 @@ const find = Effect.fnUntraced(function* (db: DatabaseService, sessionID: Sessio
     .select()
     .from(InstructionStateTable)
     .where(eq(InstructionStateTable.session_id, sessionID))
-    .get()
-    .pipe(Effect.orDie)
-})
-
-const ensure = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  const stored = yield* find(db, sessionID)
-  if (!stored) return yield* rebuild(db, sessionID)
-  const latest = yield* latestRelevantSequence(db, sessionID)
-  if (!latest || latest.seq <= stored.through_seq) return stored
-  return yield* rebuild(db, sessionID)
-})
-
-const readState = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  const stored = yield* find(db, sessionID)
-  if (!stored) return yield* stateFromEvents(db, sessionID)
-  const latest = yield* latestRelevantSequence(db, sessionID)
-  if (!latest || latest.seq <= stored.through_seq) return stored
-  return yield* stateFromEvents(db, sessionID)
-})
-
-const stateFromEvents = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  const folded = fold(yield* instructionEvents(db, sessionID))
-  return folded ? foldedState(sessionID, folded) : undefined
-})
-
-export const valuesAt = Effect.fn("InstructionState.valuesAt")(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  through: number,
-) {
-  return fold(yield* instructionEvents(db, sessionID, through))?.current
-})
-
-const latestRelevantSequence = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
-  return yield* db
-    .select({ seq: EventTable.seq })
-    .from(EventTable)
-    .where(and(eq(EventTable.aggregate_id, sessionID), inArray(EventTable.type, relevantEventTypes)))
-    .orderBy(desc(EventTable.seq))
-    .limit(1)
     .get()
     .pipe(Effect.orDie)
 })
@@ -338,107 +267,4 @@ function requireBlob(blobs: ReadonlyMap<Instructions.Hash, Schema.Json>, hash: I
   const value = blobs.get(hash)
   if (value === undefined) throw new Error(`Instruction blob not found: ${hash}`)
   return value
-}
-
-const instructionEventType = Bus.versionedType(
-  SessionEvent.InstructionsUpdated.type,
-  SessionEvent.InstructionsUpdated.durable.version,
-)
-const compactionEventType = Bus.versionedType(
-  SessionEvent.Compaction.Ended.type,
-  SessionEvent.Compaction.Ended.durable.version,
-)
-const movedEventType = Bus.versionedType(SessionEvent.Moved.type, SessionEvent.Moved.durable.version)
-const revertedEventType = Bus.versionedType(
-  SessionEvent.RevertEvent.Committed.type,
-  SessionEvent.RevertEvent.Committed.durable.version,
-)
-const forkedEventType = Bus.versionedType(SessionEvent.Forked.type, SessionEvent.Forked.durable.version)
-const relevantEventTypes = [
-  forkedEventType,
-  instructionEventType,
-  compactionEventType,
-  movedEventType,
-  revertedEventType,
-]
-
-type InstructionEventRow = typeof EventTable.$inferSelect
-
-const instructionEvents = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  through?: number,
-): Effect.fn.Return<ReadonlyArray<InstructionEventRow>> {
-  return yield* eventRows(db, sessionID, relevantEventTypes, undefined, through)
-})
-
-const instructionUpdatesAfter = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  after: number,
-) {
-  return yield* eventRows(db, sessionID, [instructionEventType], after)
-})
-
-const eventRows = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-  types: ReadonlyArray<string>,
-  after?: number,
-  through?: number,
-): Effect.fn.Return<ReadonlyArray<InstructionEventRow>> {
-  return yield* db
-    .select()
-    .from(EventTable)
-    .where(
-      and(
-        eq(EventTable.aggregate_id, sessionID),
-        inArray(EventTable.type, types),
-        after === undefined ? undefined : gt(EventTable.seq, after),
-        through === undefined ? undefined : lte(EventTable.seq, through),
-      ),
-    )
-    .orderBy(asc(EventTable.seq))
-    .all()
-    .pipe(Effect.orDie)
-})
-
-function fold(rows: ReadonlyArray<InstructionEventRow>) {
-  return rows.reduce<
-    | {
-        readonly epochStart: number
-        readonly throughSeq: number
-        readonly initial: Instructions.Values
-        readonly current: Instructions.Values
-      }
-    | undefined
-  >((state, row) => {
-    if (row.type === forkedEventType) {
-      const instructions = decodeForked(row.data).instructions
-      return instructions
-        ? { epochStart: row.seq, throughSeq: row.seq, initial: instructions, current: instructions }
-        : undefined
-    }
-    if (row.type === movedEventType || row.type === revertedEventType) return undefined
-    if (row.type === compactionEventType)
-      return state
-        ? { epochStart: row.seq, throughSeq: row.seq, initial: state.current, current: state.current }
-        : undefined
-    if (row.type !== instructionEventType) return state
-    const delta = decodeInstructionsUpdated(row.data).delta
-    const current = Instructions.applyHashDelta(state?.current ?? {}, delta)
-    return state
-      ? { ...state, throughSeq: row.seq, current }
-      : { epochStart: row.seq, throughSeq: row.seq, initial: current, current }
-  }, undefined)
-}
-
-function foldedState(sessionID: SessionSchema.ID, folded: NonNullable<ReturnType<typeof fold>>) {
-  return {
-    session_id: sessionID,
-    epoch_start: folded.epochStart,
-    through_seq: folded.throughSeq,
-    initial_values: folded.initial,
-    current_values: folded.current,
-  }
 }

@@ -1180,7 +1180,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("forks instruction values at the selected message instead of the parent's latest state", () =>
+  it.effect("seeds a fork with the parent's newest instruction values", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* runPrompt(session, "First")
@@ -1197,14 +1197,16 @@ describe("SessionRunnerLLM", () => {
           .where(eq(InstructionStateTable.session_id, forked.id))
           .get(),
       ).toMatchObject({
-        initial_values: { "test/context": Instructions.hash("Changed context") },
-        current_values: { "test/context": Instructions.hash("Changed context") },
+        initial_values: { "test/context": Instructions.hash("Latest context") },
+        current_values: { "test/context": Instructions.hash("Latest context") },
       })
       yield* session.prompt({ sessionID: forked.id, text: "Forked", resume: false })
       yield* session.resume(forked.id)
 
-      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, "Changed context"])
-      expect(systemTexts(requests.at(-1)!)).toContain("Latest context")
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([defaultSystem, "Latest context"])
+      // Copied history keeps the frozen chronological update; no new update is emitted.
+      expect(systemTexts(requests.at(-1)!)).toContain("Changed context")
+      expect(systemTexts(requests.at(-1)!)).not.toContain("Latest context")
 
       const { db } = yield* Database.Service
       const bus = yield* Bus.Service
@@ -1263,7 +1265,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("rebuilds a missing instruction cache without admitting another delta", () =>
+  it.effect("re-establishes a fresh baseline when instruction state is missing", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const { db } = yield* Database.Service
@@ -1277,13 +1279,15 @@ describe("SessionRunnerLLM", () => {
       expect(requests).toHaveLength(1)
       expect(requests[0]?.system.map((part) => part.text)).toEqual([defaultSystem, "Initial context"])
       expect(messageRoles(requests[0])).toEqual(["user", "user"])
+      // The projected row is authoritative: a missing row admits a fresh baseline
+      // instead of rebuilding from durable events.
       expect(
         yield* db
-          .select({ id: EventTable.id })
+          .select({ data: EventTable.data })
           .from(EventTable)
           .where(eq(EventTable.type, "session.instructions.updated.2"))
           .all(),
-      ).toHaveLength(1)
+      ).toHaveLength(2)
       expect(yield* db.select().from(InstructionStateTable).get()).toMatchObject({
         initial_values: { "test/context": Instructions.hash("Initial context") },
         current_values: { "test/context": Instructions.hash("Initial context") },
@@ -1310,7 +1314,10 @@ describe("SessionRunnerLLM", () => {
       ])
       expect(messageRoles(requests[1])).toEqual(["user", "system", "user"])
       expect(requests[1]?.messages.at(1)?.content).toEqual([{ type: "text", text: "Changed context" }])
-      expect(yield* session.messages({ sessionID })).toHaveLength(2)
+      // The chronological update is a durable client-visible system message.
+      const messages = yield* session.messages({ sessionID })
+      expect(messages).toHaveLength(3)
+      expect(messages[1]).toMatchObject({ type: "system", text: "Changed context" })
       const { db } = yield* Database.Service
       const updates = yield* db
         .select({ data: EventTable.data })
@@ -1327,9 +1334,10 @@ describe("SessionRunnerLLM", () => {
       expect(updates[1]?.data).toEqual({
         sessionID,
         delta: { "test/context": Instructions.hash("Changed context") },
+        text: "Changed context",
       })
       yield* replaySessionProjection(sessionID)
-      expect(yield* session.messages({ sessionID })).toHaveLength(2)
+      expect(yield* session.messages({ sessionID })).toHaveLength(3)
     }),
   )
 
@@ -1596,7 +1604,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests[1]?.messages.at(1)?.content).toEqual([
         { type: "text", text: "System context source removed: test/context" },
       ])
-      expect(yield* session.messages({ sessionID })).toHaveLength(2)
+      expect(yield* session.messages({ sessionID })).toHaveLength(3)
     }),
   )
 
@@ -1708,12 +1716,14 @@ describe("SessionRunnerLLM", () => {
       expect(requests[2]?.messages.filter((message) => message.role === "system")).toHaveLength(2)
       expect((yield* session.context(sessionID)).map((message) => message.type)).toEqual([
         "user",
+        "system",
         "user",
         "model-switched",
+        "system",
         "user",
       ])
       yield* replaySessionProjection(sessionID)
-      expect(yield* session.messages({ sessionID })).toHaveLength(4)
+      expect(yield* session.messages({ sessionID })).toHaveLength(6)
       yield* runPrompt(session, "Fourth")
     }),
   )

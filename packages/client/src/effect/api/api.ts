@@ -420,6 +420,7 @@ export type Endpoint5_26Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly delta: { readonly [x: string]: (string & Brand.Brand<"Instruction.Hash">) | "removed" }
+            readonly text?: string | undefined
           }
         }
       | {

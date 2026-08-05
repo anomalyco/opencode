@@ -676,7 +676,7 @@ export type SessionInstructionsUpdated = {
   type: "session.instructions.updated"
   durable: { aggregateID: string; seq: number; version: 2 }
   location?: LocationRef
-  data: { sessionID: string; delta: { [x: string]: string | "removed" } }
+  data: { sessionID: string; delta: { [x: string]: string | "removed" }; text?: string }
 }
 
 export type SessionSynthetic = {

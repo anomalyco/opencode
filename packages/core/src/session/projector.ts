@@ -21,10 +21,7 @@ import { Money } from "@opencode-ai/schema/money"
 
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
-type MessageEvent = Exclude<
-  CurrentDurableEvent,
-  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type | typeof SessionEvent.InstructionsUpdated.Type
->
+type MessageEvent = Exclude<CurrentDurableEvent, typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type>
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
@@ -682,7 +679,10 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Execution.Failed, (event) => run(db, event))
     yield* bus.project(SessionEvent.Execution.Interrupted, (event) => run(db, event))
     yield* bus.project(SessionEvent.InstructionsUpdated, (event) =>
-      InstructionState.apply(db, event.data.sessionID, event.durable.seq, event.data.delta),
+      Effect.gen(function* () {
+        yield* run(db, event)
+        yield* InstructionState.apply(db, event.data.sessionID, event.durable.seq, event.data.delta)
+      }),
     )
     yield* bus.project(SessionEvent.Synthetic, (event) => run(db, event))
     yield* bus.project(SessionEvent.Skill.Activated, (event) => run(db, event))

@@ -186,6 +186,11 @@ export const InstructionsUpdated = Event.durable({
   schema: {
     ...Base,
     delta: Instruction.Delta,
+    /**
+     * The rendered chronological update shown to the model, frozen at emit time.
+     * Absent for the initial baseline observation and for deltas that render empty.
+     */
+    text: Schema.String.pipe(optional),
   },
 })
 export type InstructionsUpdated = typeof InstructionsUpdated.Type
