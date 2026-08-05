@@ -14,8 +14,8 @@ const projectID = "proj_context_resize_regression"
 const sessionID = "ses_context_resize_regression"
 const title = "Context resize regression"
 const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
-const contextIDs = ["prt_0100_read", "prt_0101_glob", "prt_0102_grep", "prt_0103_list"]
-const followingTextID = "prt_0104_text"
+const contextIDs = ["ctx_0100_read", "ctx_0101_glob", "ctx_0102_grep", "ctx_0103_list"]
+const followingTextID = `${id("msg_assistant", 10)}:text:0`
 
 type Message = {
   info: Record<string, unknown> & { id: string; role: "user" | "assistant" }
@@ -295,7 +295,7 @@ function contextTool(
     sessionID,
     messageID,
     type: "tool",
-    callID: `call_${partID}`,
+    callID: partID,
     tool,
     state: {
       status,
