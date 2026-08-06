@@ -509,7 +509,12 @@ function ProviderConnection(props: {
     const hint = suffix?.[1]
     return {
       label: suffix ? label.slice(0, -suffix[0].length) : label,
-      hint: hint ? hint[0].toUpperCase() + hint.slice(1) : value?.type === "key" ? "Browser" : undefined,
+      hint:
+        hint?.toLowerCase() === "headless"
+          ? language.t("provider.connect.method.headless")
+          : hint?.toLowerCase() === "browser" || (!hint && value?.type === "key")
+            ? language.t("provider.connect.method.browser")
+            : undefined,
     }
   }
 

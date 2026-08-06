@@ -88,6 +88,8 @@ export function make(input: {
     ? ACPEvent.start({ sdk: input.sdk, connection: input.connection, session })
     : undefined
   if (events) input.eventSubscription?.(events)
+  const runUntilIdle = <A>(sessionId: string, fn: () => Promise<A>) =>
+    events ? events.runUntilIdle(sessionId, fn) : fn()
 
   const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
@@ -504,19 +506,21 @@ export function make(input: {
       if (!command) {
         const response = yield* request(
           () =>
-            input.sdk.session.prompt(
-              {
-                sessionID: current.id,
-                model: {
-                  providerID: selected.providerID,
-                  modelID: selected.modelID,
+            runUntilIdle(current.id, () =>
+              input.sdk.session.prompt(
+                {
+                  sessionID: current.id,
+                  model: {
+                    providerID: selected.providerID,
+                    modelID: selected.modelID,
+                  },
+                  ...(variant ? { variant } : {}),
+                  parts,
+                  ...(modeId ? { agent: modeId } : {}),
+                  directory: current.cwd,
                 },
-                ...(variant ? { variant } : {}),
-                parts,
-                ...(modeId ? { agent: modeId } : {}),
-                directory: current.cwd,
-              },
-              { throwOnError: true },
+                { throwOnError: true },
+              ),
             ),
           "session",
         )
@@ -528,17 +532,19 @@ export function make(input: {
       if (known) {
         const response = yield* request(
           () =>
-            input.sdk.session.command(
-              {
-                sessionID: current.id,
-                command: known.name,
-                arguments: command.args,
-                model: `${selected.providerID}/${selected.modelID}`,
-                ...(variant ? { variant } : {}),
-                ...(modeId ? { agent: modeId } : {}),
-                directory: current.cwd,
-              },
-              { throwOnError: true },
+            runUntilIdle(current.id, () =>
+              input.sdk.session.command(
+                {
+                  sessionID: current.id,
+                  command: known.name,
+                  arguments: command.args,
+                  model: `${selected.providerID}/${selected.modelID}`,
+                  ...(variant ? { variant } : {}),
+                  ...(modeId ? { agent: modeId } : {}),
+                  directory: current.cwd,
+                },
+                { throwOnError: true },
+              ),
             ),
           "session",
         )
@@ -549,14 +555,16 @@ export function make(input: {
       if (command.name === "compact") {
         yield* request(
           () =>
-            input.sdk.session.summarize(
-              {
-                sessionID: current.id,
-                directory: current.cwd,
-                providerID: selected.providerID,
-                modelID: selected.modelID,
-              },
-              { throwOnError: true },
+            runUntilIdle(current.id, () =>
+              input.sdk.session.summarize(
+                {
+                  sessionID: current.id,
+                  directory: current.cwd,
+                  providerID: selected.providerID,
+                  modelID: selected.modelID,
+                },
+                { throwOnError: true },
+              ),
             ),
           "session",
         )
@@ -648,7 +656,7 @@ function makeUsageService(sdk: OpencodeClient) {
           sessionId: params.sessionID,
           update: {
             sessionUpdate: "usage_update",
-            used: message.tokens.input + message.tokens.cache.read,
+            used: UsageService.contextTokens(message),
             size,
             cost: { amount: UsageService.totalSessionCost(messages), currency: "USD" },
           },

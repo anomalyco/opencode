@@ -255,7 +255,7 @@ export const dict = {
   "go.title": "OpenCode Go | Low cost coding models for everyone",
   "go.banner.text": "GPT 5.6 Luna gets 2× usage limits for a limited time",
   "go.meta.description":
-    "Go starts at $5 for your first month, then $10/month, with generous 5-hour request limits for Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash, and Hy3.",
+    "Go starts at $5 for your first month, then $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
   "go.hero.body":
     "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable open-source models, so you can build with powerful agents without worrying about cost or availability.",
@@ -302,8 +302,7 @@ export const dict = {
   "go.problem.item1": "Low cost subscription pricing",
   "go.problem.item2": "Generous limits and reliable access",
   "go.problem.item3": "Built for as many programmers as possible",
-  "go.problem.item4":
-    "Includes Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash, and Hy3",
+  "go.problem.item4": "A curated model lineup tested for agentic coding",
   "go.how.title": "How Go works",
   "go.how.body": "Go starts at $5 for your first month, then $10/month. You can use it with OpenCode or any agent.",
   "go.how.step1.title": "Create an account",
@@ -328,7 +327,7 @@ export const dict = {
   "go.faq.a2": "Go includes the models listed below, with generous limits and reliable access.",
   "go.faq.q3": "Is Go the same as Zen?",
   "go.faq.a3":
-    "No. Zen is pay-as-you-go, while Go starts at $5 for your first month, then $10/month, with generous limits and reliable access to open-source models Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash, and Hy3.",
+    "No. Zen is pay-as-you-go, while Go starts at $5 for your first month, then $10/month, with generous limits and reliable access to a curated model lineup.",
   "go.faq.q4": "How much does Go cost?",
   "go.faq.a4.p1.beforePricing": "Go costs",
   "go.faq.a4.p1.pricingLink": "$5 first month",
@@ -337,8 +336,21 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "account",
   "go.faq.a4.p3": "Cancel any time.",
   "go.faq.q5": "What about data and privacy?",
-  "go.faq.a5.body":
-    "The plan is designed primarily for international users and provides stable global access. Your data will not be used for model training.",
+  "go.faq.a5.model": "Model",
+  "go.faq.a5.training": "Model training",
+  "go.faq.a5.retention": "Data retention",
+  "go.faq.a5.retention30": "30 days",
+  "go.faq.a5.retention0": "0 days",
+  "go.faq.a5.used": "Used",
+  "go.faq.a5.notUsed": "Not used",
+  "go.faq.a5.noAgreement": "No agreement",
+  "go.faq.a5.grokRetention":
+    "ZDR disables important API features that depend on stored data, including the stateful Responses API, Files and Collections, and the Batch API.",
+  "go.faq.a5.gptRetention":
+    "Abuse monitoring logs are generated for all API feature usage and retained for up to 30 days.",
+  "go.faq.a5.deepseekRetention":
+    "ZDR agreement is renewed monthly. The current agreement is valid through August 31, 2026.",
+  "go.faq.a5.learnMore": "Learn more",
 
   "go.faq.a5.beforeExceptions":
     "Go models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
@@ -352,7 +364,7 @@ export const dict = {
 
   "go.faq.q9": "What is the difference between free models and Go?",
   "go.faq.a9":
-    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go includes Grok 4.5, GLM-5.2, GLM-5.1, GPT 5.6 Luna, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash, and Hy3 with higher request quotas enforced across rolling windows (5-hour, weekly, and monthly), roughly equivalent to $12 per 5 hours, $30 per week, and $60 per month (actual request counts vary by model and usage).",
+    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go offers a curated model lineup with higher request quotas enforced across rolling windows (5-hour, weekly, and monthly), roughly equivalent to $12 per 5 hours, $30 per week, and $60 per month (actual request counts vary by model and usage).",
 
   "zen.api.error.rateLimitExceeded": "Rate limit exceeded. Please try again later.",
   "zen.api.error.modelNotSupported": "Model {{model}} is not supported",

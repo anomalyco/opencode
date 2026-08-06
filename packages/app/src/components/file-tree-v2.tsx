@@ -32,14 +32,14 @@ export type { Kind } from "@/components/file-tree"
 
 const INDENT_STEP = 16
 
-function rowPaddingLeft(level: number, type: FileNode["type"]) {
+function rowPaddingStart(level: number, type: FileNode["type"]) {
   if (type === "directory") return 8 + level * INDENT_STEP
   if (level === 0) return 8
   return 8 + level * INDENT_STEP - INDENT_STEP
 }
 
-function guideLineLeft(level: number) {
-  return rowPaddingLeft(level, "directory") + 8
+function guideLineStart(level: number) {
+  return rowPaddingStart(level, "directory") + 8
 }
 
 export const kindLabel = (kind: Kind) => {
@@ -99,7 +99,7 @@ const FileTreeNodeV2 = (
         ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
-      style={`padding-left: ${rowPaddingLeft(local.level, local.node.type)}px`}
+      style={`padding-inline-start: ${rowPaddingStart(local.level, local.node.type)}px`}
       draggable={local.draggable}
       onDragStart={(event: DragEvent) => {
         if (!local.draggable) return
@@ -111,7 +111,9 @@ const FileTreeNodeV2 = (
       {...rest}
     >
       {local.children}
-      <span class="flex-1 min-w-0 text-12-medium whitespace-nowrap truncate">{local.node.name}</span>
+      <span class="flex-1 min-w-0 text-start text-12-medium whitespace-nowrap truncate">
+        <bdi dir="auto">{local.node.name}</bdi>
+      </span>
       <Show when={local.node.type === "file"}>
         <span
           role="button"
@@ -166,7 +168,7 @@ const FileTreeNodeV2 = (
 function GuideLines(props: { level: number }) {
   return (
     <For each={Array.from({ length: props.level })}>
-      {(_, index) => <div data-slot="file-tree-v2-guide" style={`left: ${guideLineLeft(index())}px`} />}
+      {(_, index) => <div data-slot="file-tree-v2-guide" style={`inset-inline-start: ${guideLineStart(index())}px`} />}
     </For>
   )
 }
@@ -282,7 +284,7 @@ export default function FileTreeV2(props: {
                 style={{
                   position: "absolute",
                   top: "0",
-                  left: "0",
+                  "inset-inline-start": "0",
                   width: "100%",
                   height: `${item().size}px`,
                   transform: `translateY(${item().start}px)`,

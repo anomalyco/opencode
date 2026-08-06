@@ -254,7 +254,7 @@ export const dict = {
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
   "go.banner.text": "يحصل GPT 5.6 Luna على حدود استخدام مضاعفة لفترة محدودة",
   "go.meta.description":
-    "يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود طلب سخية لمدة 5 ساعات لـ Grok 4.5 وGLM-5.2 وGLM-5.1 وGPT 5.6 Luna وKimi K3 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash وHy3.",
+    "يبدأ Go بسعر $5 للشهر الأول، ثم $10/شهر، مع حدود استخدام سخية ووصول موثوق إلى نماذج البرمجة الرائدة.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
   "go.hero.body":
     "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
@@ -301,8 +301,7 @@ export const dict = {
   "go.problem.item1": "أسعار اشتراك منخفضة التكلفة",
   "go.problem.item2": "حدود سخية ووصول موثوق",
   "go.problem.item3": "مصمم لأكبر عدد ممكن من المبرمجين",
-  "go.problem.item4":
-    "يتضمن Grok 4.5 وGLM-5.2 وGLM-5.1 وGPT 5.6 Luna وKimi K3 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash وHy3",
+  "go.problem.item4": "مجموعة منسقة من النماذج المختبرة للبرمجة الوكيلة",
   "go.how.title": "كيف يعمل Go",
   "go.how.body": "يبدأ Go من $5 للشهر الأول، ثم $10/شهر. يمكنك استخدامه مع OpenCode أو أي وكيل.",
   "go.how.step1.title": "أنشئ حسابًا",
@@ -326,7 +325,7 @@ export const dict = {
   "go.faq.a2": "يتضمن Go النماذج المدرجة أدناه، مع حدود سخية وإتاحة موثوقة.",
   "go.faq.q3": "هل Go هو نفسه Zen؟",
   "go.faq.a3":
-    "لا. Zen هو الدفع حسب الاستخدام، بينما يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى نماذج المصدر المفتوح Grok 4.5 وGLM-5.2 وGLM-5.1 وGPT 5.6 Luna وKimi K3 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash وHy3.",
+    "لا. يعتمد Zen على الدفع حسب الاستخدام، بينما يبدأ Go بسعر $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى مجموعة منسقة من النماذج.",
   "go.faq.q4": "كم تكلفة Go؟",
   "go.faq.a4.p1.beforePricing": "تكلفة Go",
   "go.faq.a4.p1.pricingLink": "$5 للشهر الأول",
@@ -335,8 +334,20 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "حسابك",
   "go.faq.a4.p3": "ألغِ في أي وقت.",
   "go.faq.q5": "ماذا عن البيانات والخصوصية؟",
-  "go.faq.a5.body":
-    "صُممت الخطة أساسًا للمستخدمين الدوليين وتوفر وصولًا عالميًا مستقرًا. لن تُستخدم بياناتك لتدريب النماذج.",
+  "go.faq.a5.model": "النموذج",
+  "go.faq.a5.training": "تدريب النموذج",
+  "go.faq.a5.retention": "الاحتفاظ بالبيانات",
+  "go.faq.a5.retention30": "30 يومًا",
+  "go.faq.a5.retention0": "0 أيام",
+  "go.faq.a5.used": "مستخدَمة",
+  "go.faq.a5.notUsed": "غير مستخدَمة",
+  "go.faq.a5.noAgreement": "لا توجد اتفاقية",
+  "go.faq.a5.grokRetention":
+    "تعطّل ZDR ميزات API مهمة تعتمد على البيانات المخزنة، بما في ذلك Responses API ذات الحالة، وFiles and Collections، وBatch API.",
+  "go.faq.a5.gptRetention":
+    "تُنشأ سجلات مراقبة إساءة الاستخدام لكل استخدام لميزات API، ويُحتفظ بها لمدة تصل إلى 30 يومًا.",
+  "go.faq.a5.learnMore": "اعرف المزيد",
+  "go.faq.a5.deepseekRetention": "تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 31 أغسطس 2026.",
   "go.faq.a5.beforeExceptions":
     "تتم استضافة نماذج Go في الولايات المتحدة. يتبع المزودون سياسة عدم الاحتفاظ بالبيانات ولا يستخدمون بياناتك لتدريب النماذج، مع",
   "go.faq.a5.exceptionsLink": "الاستثناءات التالية",
@@ -349,7 +360,7 @@ export const dict = {
 
   "go.faq.q9": "ما الفرق بين النماذج المجانية وGo؟",
   "go.faq.a9":
-    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة 200 طلب/يوم. يتضمن Go نماذج Grok 4.5 وGLM-5.2 وGLM-5.1 وGPT 5.6 Luna وKimi K3 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash وHy3 مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، أسبوعيًا، وشهريًا)، تعادل تقريبًا 12 دولارًا كل 5 ساعات، و30 دولارًا في الأسبوع، و60 دولارًا في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
+    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة قدرها 200 طلب/يوم. يقدّم Go مجموعة منسقة من النماذج مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، وأسبوعية، وشهرية)، تعادل تقريبًا $12 لكل 5 ساعات، و$30 في الأسبوع، و$60 في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
 
   "zen.api.error.rateLimitExceeded": "تم تجاوز حد الطلبات. يرجى المحاولة مرة أخرى لاحقًا.",
   "zen.api.error.modelNotSupported": "النموذج {{model}} غير مدعوم",
