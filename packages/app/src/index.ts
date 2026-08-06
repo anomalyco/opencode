@@ -10,6 +10,7 @@ export { ACCEPTED_FILE_EXTENSIONS, ACCEPTED_FILE_TYPES, filePickerFilters } from
 export { useCommand } from "./context/command"
 export { loadLocaleDict, normalizeLocale, type Locale, useLanguage } from "./context/language"
 export { useWslServers } from "./wsl/context"
+export { useSshServers } from "./ssh/context"
 export { type DisplayBackend, type FatalRendererErrorLog, type Platform, PlatformProvider } from "./context/platform"
 export { type UpdaterPlatform, type UpdaterState } from "./updater"
 export {
@@ -26,5 +27,15 @@ export {
   type WslServersPlatform,
   type WslServersState,
 } from "./wsl/types"
+export {
+  type SshHostProbe,
+  type SshJob,
+  type SshServerConfig,
+  type SshServerItem,
+  type SshServerRuntime,
+  type SshServersEvent,
+  type SshServersPlatform,
+  type SshServersState,
+} from "./ssh/types"
 export { ServerConnection } from "./context/server"
 export { createDraftStore, type DraftStore } from "./utils/draft-store"

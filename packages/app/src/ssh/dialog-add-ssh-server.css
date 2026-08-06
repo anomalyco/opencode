@@ -1,0 +1,96 @@
+[data-component="dialog-v2"].settings-v2-ssh-dialog [data-slot="dialog-container"] {
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  height: auto;
+  align-items: stretch;
+}
+
+[data-component="dialog-v2"].settings-v2-ssh-dialog [data-slot="dialog-content"] {
+  align-items: stretch;
+  width: 100%;
+  overflow: hidden;
+}
+
+[data-component="dialog-v2"].settings-v2-ssh-dialog [data-slot="dialog-header"] {
+  align-items: center;
+  padding: 24px 16px 0;
+}
+
+[data-component="dialog-v2"].settings-v2-ssh-dialog [data-slot="dialog-body"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.settings-v2-ssh-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--v2-text-text-muted);
+}
+
+.settings-v2-ssh-config-hosts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.settings-v2-ssh-config-hosts-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--v2-text-text-muted);
+  margin-top: 4px;
+}
+
+.settings-v2-ssh-config-host {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--v2-text-text-base);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.settings-v2-ssh-config-host:hover {
+  background: var(--v2-fill-fill-muted);
+}
+
+.settings-v2-ssh-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-v2-ssh-status[data-tone="success"] {
+  color: var(--v2-state-fg-success);
+}
+
+.settings-v2-ssh-status[data-tone="warning"] {
+  color: var(--v2-state-fg-warning);
+}
+
+.settings-v2-ssh-status[data-tone="error"] {
+  color: var(--v2-state-fg-danger);
+}
+
+.settings-v2-ssh-status[data-tone="info"] {
+  color: var(--v2-text-text-muted);
+}
+
+.settings-v2-ssh-status-detail {
+  color: var(--v2-text-text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 96px;
+  overflow-y: auto;
+}
