@@ -53,6 +53,7 @@ describe("config plugin reloads", () => {
       expect(yield* catalog.provider.get(Provider.ID.make("first"))).toBeDefined()
 
       yield* test.setEntries([config("second")])
+      yield* Effect.yieldNow
       yield* bus.publish(ConfigSchema.Event.Updated, {})
       yield* waitUntil(
         Effect.gen(function* () {

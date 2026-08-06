@@ -117,7 +117,7 @@ describe("SessionProjector", () => {
         diff: "legacy patch",
         files: [{ path: "src/old.ts", status: "modified", additions: 1, deletions: 0, patch: "@@" }],
       })
-      yield* db.run(sql`update session set revert = ${legacy} where id = ${sessionID}`)
+      yield* db.run(sql`update session_v2 set revert = ${legacy} where id = ${sessionID}`)
       const stored = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()
       if (!stored) return yield* Effect.die("Session row missing")
       const storedRevert = fromRow(stored).revert

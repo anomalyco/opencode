@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { type Virtualizer } from "@tanstack/solid-virtual"
+import { Window } from "happy-dom"
 import { mutationNodesContainElement, observeElementOffsetReconnectAware } from "./observe-element-offset"
 
 test("matches only the scroll element or an ancestor containing it", () => {
@@ -16,14 +17,15 @@ test("matches only the scroll element or an ancestor containing it", () => {
 })
 
 test("reports a divergent native offset once and ignores equal offsets and unrelated mutations", async () => {
-  const route = document.createElement("section")
-  const viewport = document.createElement("div")
-  const unrelated = document.createElement("div")
+  const targetWindow = new Window()
+  const route = targetWindow.document.createElement("section")
+  const viewport = targetWindow.document.createElement("div")
+  const unrelated = targetWindow.document.createElement("div")
   route.append(viewport)
-  document.body.append(route)
+  targetWindow.document.body.append(route)
   const instance = {
     scrollElement: viewport,
-    targetWindow: window,
+    targetWindow,
     scrollOffset: 79_400,
     options: {
       horizontal: false,
@@ -38,24 +40,24 @@ test("reports a divergent native offset once and ignores equal offsets and unrel
     instance.scrollOffset = offset
   })
 
-  document.body.append(unrelated)
+  targetWindow.document.body.append(unrelated)
   unrelated.remove()
-  await frames(2)
+  await frames(2, targetWindow)
   expect(calls).toEqual([])
 
   route.remove()
-  document.body.append(route)
-  await waitFor(() => calls.length === 1)
+  targetWindow.document.body.append(route)
+  await waitFor(() => calls.length === 1, targetWindow)
   expect(calls).toEqual([[0, false]])
 
   route.remove()
-  document.body.append(route)
+  targetWindow.document.body.append(route)
   await new Promise((resolve) => setTimeout(resolve, 0))
-  await frames(3)
+  await frames(3, targetWindow)
   expect(calls).toEqual([[0, false]])
 
   cleanup?.()
-  route.remove()
+  await targetWindow.happyDOM.close()
 })
 
 test("keeps checking until stale reset-delay callbacks can no longer win", async () => {
@@ -191,13 +193,18 @@ test("cleanup cancels reconnect checks and delegated offset observation", async 
   route.remove()
 })
 
-async function frames(count: number) {
+type FrameWindow = {
+  requestAnimationFrame(callback: () => void): unknown
+  performance: { now(): number }
+}
+
+async function frames(count: number, targetWindow: FrameWindow = window) {
   for (let index = 0; index < count; index++) {
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    await new Promise<void>((resolve) => targetWindow.requestAnimationFrame(() => resolve()))
   }
 }
 
-async function waitFor(condition: () => boolean) {
-  const deadline = performance.now() + 1_000
-  while (!condition() && performance.now() < deadline) await frames(1)
+async function waitFor(condition: () => boolean, targetWindow: FrameWindow = window) {
+  const deadline = targetWindow.performance.now() + 1_000
+  while (!condition() && targetWindow.performance.now() < deadline) await frames(1, targetWindow)
 }

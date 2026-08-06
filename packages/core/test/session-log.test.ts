@@ -46,9 +46,7 @@ describe("Session.log", () => {
 
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID: created.id })))
 
-      // Session creation commits a non-public durable event, so the marker's
-      // seq covers more of the aggregate than the public events emitted.
-      expect(items.map((item) => item.type)).toEqual(["session.renamed", "log.synced"])
+      expect(items.map((item) => item.type)).toEqual(["session.created", "session.renamed", "log.synced"])
       expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(1) })
     }),
   )
