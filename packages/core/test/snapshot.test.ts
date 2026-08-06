@@ -53,6 +53,9 @@ describe("Snapshot", () => {
               RelativePath.make("scope/added.txt"),
               RelativePath.make("scope/tracked.txt"),
             ])
+            expect(yield* snapshot.files({ from: before, to: after, paths: ["added.txt"] })).toEqual([
+              RelativePath.make("scope/added.txt"),
+            ])
             const plan = new Map([[RelativePath.make("scope/tracked.txt"), before]])
             const preview = yield* snapshot.preview({ files: plan, context: 1 })
             expect(preview).toHaveLength(1)
