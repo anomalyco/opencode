@@ -99,6 +99,24 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   return part.state.status === "error" && part.state.metadata?.interrupted === true
 }
 
+function nextUnansweredUser(messages: SessionV1.WithParts[], after: MessageID) {
+  // Find the next user message after `after` that has no terminal assistant
+  // parented to it. Used to drain queued prompts within the same loop invocation
+  // without rebinding the active turn's user (#28202).
+  return messages.find((message): message is SessionV1.WithParts & { info: SessionV1.User } => {
+    if (message.info.role !== "user" || message.info.id <= after) {
+      return false
+    }
+    return !messages.some(
+      (candidate) =>
+        candidate.info.role === "assistant" &&
+        candidate.info.parentID === message.info.id &&
+        candidate.info.finish &&
+        !["tool-calls"].includes(candidate.info.finish),
+    )
+  })
+}
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
@@ -1083,7 +1101,18 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let initialUser: SessionV1.User
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
+
+        // Pin the turn's user once, before the loop. Iterations that used to re-resolve
+        // `lastUser` from MessageV2.latest(msgs) now reference `initialUser` so a prompt
+        // arriving mid tool-round-trip cannot rebind the continuation to the newer user
+        // and emit assistants under the wrong parentID (#28202).
+        const initialMsgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+          Effect.provideService(Database.Service, database),
+        )
+        initialUser = MessageV2.latest(initialMsgs).user!
+        if (!initialUser) throw new Error("No user message found in stream. This should never happen.")
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
@@ -1093,9 +1122,7 @@ const layer = Layer.effect(
             Effect.provideService(Database.Service, database),
           )
 
-          const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
-
-          if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+          const { assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
@@ -1112,7 +1139,7 @@ const layer = Layer.effect(
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            lastUser.id < lastAssistant.id
+            lastAssistant.parentID === initialUser.id
           ) {
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
@@ -1125,6 +1152,19 @@ const layer = Layer.effect(
                 callID: orphan.callID,
               })
             }
+
+            // Drain queued user messages within the same loop invocation. dev relied
+            // on `lastUser` being re-resolved each iteration to serve U(n+1) after
+            // U(n)'s turn completes. Pinning `initialUser` removed that re-resolution,
+            // so we explicitly check for the next unanswered user and re-pin here.
+            const queuedUser = nextUnansweredUser(msgs, initialUser.id)?.info
+            if (queuedUser) {
+              yield* Effect.logInfo("draining queued user", { "session.id": sessionID, nextUserID: queuedUser.id })
+              initialUser = queuedUser
+              structured = undefined
+              step = 0
+              continue
+            }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
             break
           }
@@ -1133,23 +1173,23 @@ const layer = Layer.effect(
           if (step === 1)
             yield* title({
               session,
-              modelID: lastUser.model.modelID,
-              providerID: lastUser.model.providerID,
+              modelID: initialUser.model.modelID,
+              providerID: initialUser.model.providerID,
               history: msgs,
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
-          const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+          const model = yield* getModel(initialUser.model.providerID, initialUser.model.modelID, sessionID)
           const task = tasks.pop()
 
           if (task?.type === "subtask") {
-            yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
+            yield* handleSubtask({ task, model, lastUser: initialUser, sessionID, session, msgs })
             continue
           }
 
           if (task?.type === "compaction") {
             const result = yield* compaction.process({
               messages: msgs,
-              parentID: lastUser.id,
+              parentID: initialUser.id,
               sessionID,
               auto: task.auto,
               overflow: task.overflow,
@@ -1163,15 +1203,15 @@ const layer = Layer.effect(
             lastFinished.summary !== true &&
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
-            yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+            yield* compaction.create({ sessionID, agent: initialUser.agent, model: initialUser.model, auto: true })
             continue
           }
 
-          const agent = yield* agents.get(lastUser.agent)
+          const agent = yield* agents.get(initialUser.agent)
           if (!agent) {
             const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
             const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-            const error = new NamedError.Unknown({ message: `Agent not found: "${lastUser.agent}".${hint}` })
+            const error = new NamedError.Unknown({ message: `Agent not found: "${initialUser.agent}".${hint}` })
             yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
             throw error
           }
@@ -1185,11 +1225,11 @@ const layer = Layer.effect(
 
           const msg: SessionV1.Assistant = {
             id: MessageID.ascending(),
-            parentID: lastUser.id,
+            parentID: initialUser.id,
             role: "assistant",
             mode: agent.name,
             agent: agent.name,
-            variant: lastUser.model.variant,
+            variant: initialUser.model.variant,
             path: { cwd: ctx.directory, root: ctx.worktree },
             cost: 0,
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -1240,9 +1280,9 @@ const layer = Layer.effect(
               Effect.provideService(RuntimeFlags.Service, flags),
             )
 
-            if (lastUser.format?.type === "json_schema") {
+            if (initialUser.format?.type === "json_schema") {
               tools["StructuredOutput"] = createStructuredOutputTool({
-                schema: lastUser.format.schema,
+                schema: initialUser.format.schema,
                 onSuccess(output) {
                   structured = output
                 },
@@ -1250,7 +1290,7 @@ const layer = Layer.effect(
             }
 
             if (step === 1)
-              yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
+              yield* summary.summarize({ sessionID, messageID: initialUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
@@ -1267,10 +1307,10 @@ const layer = Layer.effect(
               ...(mcpInstructions ? [mcpInstructions] : []),
               ...(skills ? [skills] : []),
             ]
-            const format = lastUser.format ?? { type: "text" as const }
+            const format = initialUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
-              user: lastUser,
+              user: initialUser,
               agent,
               permission: session.permission,
               sessionID,
@@ -1320,8 +1360,8 @@ const layer = Layer.effect(
             if (result === "compact") {
               yield* compaction.create({
                 sessionID,
-                agent: lastUser.agent,
-                model: lastUser.model,
+                agent: initialUser.agent,
+                model: initialUser.model,
                 auto: true,
                 overflow: !handle.message.finish,
               })
