@@ -34,7 +34,7 @@ export const Plugin = define({
     yield* ctx.catalog.transform((catalog) => {
       const configuredDefault = Config.latest(loaded.entries, "model")
       if (configuredDefault !== undefined)
-        catalog.model.default.set(configuredDefault.providerID, configuredDefault.model)
+        catalog.model.default.set(configuredDefault.providerID, configuredDefault.model, configuredDefault.variant)
       for (const [id, item] of configuredProviders(loaded.entries)) {
         const providerID = id
         catalog.provider.update(providerID, (provider) => {

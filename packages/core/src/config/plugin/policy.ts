@@ -1,10 +1,31 @@
 export * as ConfigPolicyPlugin from "./policy"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Document } from "@opencode-ai/schema/config"
+import { Document, type Entry } from "@opencode-ai/schema/config"
+import { ConfigPolicy } from "@opencode-ai/schema/config/policy"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config"
 import { Wildcard } from "../../util/wildcard"
+
+export function effective(entries: readonly Entry[]) {
+  // User-global policy takes priority over policy authored by a repository.
+  return entries
+    .filter((entry): entry is Document => entry.type === "document")
+    .toReversed()
+    .flatMap((entry) => entry.info.experimental?.policies ?? [])
+}
+
+export function evaluate(policies: readonly ConfigPolicy.Info[], resource: string) {
+  return policies.findLast((policy) => Wildcard.match(resource, policy.resource))
+}
+
+export function compatibility(policies: readonly ConfigPolicy.Info[], source: string, target: string) {
+  const targetPolicy = evaluate(policies, target)
+  if (targetPolicy?.effect === "deny") return "target-denied" as const
+  const sourcePolicy = evaluate(policies, source)
+  if (sourcePolicy?.effect === "deny" && !Wildcard.match(target, sourcePolicy.resource)) return "source-denied" as const
+  return "allowed" as const
+}
 
 export const Plugin = define({
   id: "opencode.config.policy",
@@ -12,13 +33,9 @@ export const Plugin = define({
     const config = yield* Config.Service
     const loaded = { entries: yield* config.entries() }
     yield* ctx.catalog.transform((catalog) => {
-      // User-global policy takes priority over policy authored by a repository.
-      const policies = loaded.entries
-        .filter((entry): entry is Document => entry.type === "document")
-        .toReversed()
-        .flatMap((entry) => entry.info.experimental?.policies ?? [])
+      const policies = effective(loaded.entries)
       for (const record of catalog.provider.list()) {
-        const policy = policies.findLast((policy) => Wildcard.match(record.provider.id, policy.resource))
+        const policy = evaluate(policies, record.provider.id)
         if (policy?.effect === "deny") catalog.provider.remove(record.provider.id)
       }
     })

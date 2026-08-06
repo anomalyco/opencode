@@ -355,6 +355,7 @@ const pluginSupervisor = Layer.succeed(
 const promptCatalog = Layer.mock(Catalog.Service, {
   provider: {
     get: () => Effect.succeed(undefined),
+    claimed: () => Effect.succeed(false),
     all: () => Effect.succeed([]),
     available: () => Effect.succeed([]),
   },
@@ -363,6 +364,7 @@ const promptCatalog = Layer.mock(Catalog.Service, {
     all: () => Effect.succeed([]),
     available: () => Effect.succeed([]),
     default: () => Effect.succeed(undefined),
+    configured: () => Effect.succeed(undefined),
     small: () => Effect.succeed(undefined),
   },
 })

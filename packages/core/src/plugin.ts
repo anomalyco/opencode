@@ -14,6 +14,7 @@ import { Integration } from "./integration"
 import { Location } from "./location"
 import { PluginHost } from "./plugin/host"
 import { PluginRuntime } from "./plugin/runtime"
+import { ProviderCompatibility } from "./provider/compatibility"
 import { WebSearch } from "./websearch"
 import { Reference } from "./reference"
 import { Skill } from "./skill"
@@ -147,6 +148,7 @@ export const node = makeLocationNode({
     Agent.node,
     AISDK.node,
     Catalog.node,
+    ProviderCompatibility.node,
     Command.node,
     Integration.node,
     Location.node,

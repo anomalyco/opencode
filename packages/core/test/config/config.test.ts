@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, PubSub, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Logger, PubSub, Schema, Stream } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
 import { AgentsDirectory, Directory, Document, Event, Info } from "@opencode-ai/schema/config"
@@ -387,27 +387,96 @@ describe("Config", () => {
     ),
   )
 
-  it.effect("detects v1 configuration from any v1-only top-level key", () =>
-    Effect.sync(() => {
-      expect(ConfigMigrateV1.isV1({ snapshot: false })).toBe(true)
-      expect(ConfigMigrateV1.isV1({ snapshot: false, agents: {} })).toBe(true)
-      expect(ConfigMigrateV1.isV1({ reference: {} })).toBe(true)
-      expect(ConfigMigrateV1.isV1({ shell: "/bin/zsh", model: "anthropic/claude" })).toBe(false)
-      expect(ConfigMigrateV1.isV1({ references: {} })).toBe(false)
-    }),
-  )
+  it.live("logs redacted source-aware diagnostics for every config source", () => {
+    const output: Array<Record<string, unknown>> = []
+    const logger = Logger.map(Logger.formatStructured, (entry) => {
+      if (!Array.isArray(entry.message) || entry.message[0] !== "configuration normalization diagnostic") return
+      const details = entry.message[1]
+      if (typeof details === "object" && details !== null) output.push(details as Record<string, unknown>)
+    })
+    return Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const malformed = path.join(tmp.path, "malformed.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(path.join(global, "opencode.json"), "null")
+            await fs.writeFile(path.join(project, "opencode.json"), "")
+            await fs.writeFile(malformed, '{ "credential": "file-secret"')
+          })
+          const integrationID = Integration.ID.make("https://invalid.example.com")
+          const entry: WellKnown.Entry = {
+            origin: "https://invalid.example.com",
+            integrationID,
+            manifest: { auth: { command: ["login"], env: "TOKEN" } },
+          }
+          const credentialNode = makeGlobalNode({
+            service: Credential.Service,
+            layer: Layer.succeed(
+              Credential.Service,
+              Credential.Service.of({
+                all: () => Effect.die("unused Credential.all"),
+                list: () =>
+                  Effect.succeed([
+                    new Credential.Info({
+                      id: Credential.ID.create(),
+                      integrationID,
+                      label: "default",
+                      value: Credential.Key.make({ type: "key", key: "wellknown-secret" }),
+                    }),
+                  ]),
+                get: () => Effect.die("unused Credential.get"),
+                create: () => Effect.die("unused Credential.create"),
+                update: () => Effect.die("unused Credential.update"),
+                remove: () => Effect.die("unused Credential.remove"),
+              }),
+            ),
+            deps: [],
+          })
+          const wellknownNode = makeGlobalNode({
+            service: WellKnown.Service,
+            layer: Layer.succeed(
+              WellKnown.Service,
+              WellKnown.Service.of({
+                entries: () => Effect.succeed([entry]),
+                snapshot: () => [entry],
+                refresh: () => Effect.succeed(false),
+                add: () => Effect.die("unused Wellknown.add"),
+                remove: () => Effect.die("unused Wellknown.remove"),
+                // Exercise the loader boundary against a malformed implementation response.
+                resolve: () => Effect.succeed([null as unknown as WellKnown.Config]),
+              }),
+            ),
+            deps: [],
+          })
 
-  it.effect("detects a bare v1-shaped mcp block while leaving v2 mcp config alone", () =>
-    Effect.sync(() => {
-      // V1 lists servers directly under `mcp`, so a file with only `$schema` + `mcp` still migrates.
-      expect(ConfigMigrateV1.isV1({ mcp: { context7: { type: "local", command: ["npx"] } } })).toBe(true)
-      expect(ConfigMigrateV1.isV1({ $schema: "x", mcp: { executor: { type: "remote", url: "https://x" } } })).toBe(true)
-      // Current config nests under `mcp.servers`, so it must not be misdetected and re-migrated.
-      expect(ConfigMigrateV1.isV1({ mcp: { servers: { context7: { type: "local", command: ["npx"] } } } })).toBe(false)
-      expect(ConfigMigrateV1.isV1({ mcp: {} })).toBe(false)
-      expect(ConfigMigrateV1.isV1({ mcp: { timeout: { execution: 1000 } } })).toBe(false)
-    }),
-  )
+          yield* Config.Service.use((config) => config.entries()).pipe(
+            Effect.provide(
+              testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode, {
+                file: malformed,
+                content: "",
+              }),
+            ),
+          )
+
+          expect(output.map((item) => `${item.source}:${item.path}:${item.kind}`).toSorted()).toEqual(
+            [
+              `${path.join(global, "opencode.json")}:$:invalid`,
+              `${path.join(project, "opencode.json")}:$:invalid`,
+              `${malformed}:$:invalid`,
+              "https://invalid.example.com:$:invalid",
+              "OPENCODE_CONFIG_CONTENT:$:invalid",
+            ].toSorted(),
+          )
+          expect(JSON.stringify(output)).not.toContain("secret")
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(Effect.provide(Logger.layer([logger])))
+  })
 
   it.effect("migrates arbitrary v1 configuration into valid v2 configuration", () =>
     Effect.sync(() => {

@@ -14,12 +14,13 @@ export type ProviderRecord = {
   models: Map<Model.ID, Model.MutableInfo>
 }
 
-export type DefaultModel = { providerID: Provider.ID; modelID: Model.ID }
+export type DefaultModel = { providerID: Provider.ID; modelID: Model.ID; variant?: Model.VariantID }
 
 export { Event } from "@opencode-ai/schema/catalog"
 
 type Data = {
   providers: Map<Provider.ID, ProviderRecord>
+  claims: Set<Provider.ID>
   defaultModel?: DefaultModel
 }
 
@@ -27,6 +28,7 @@ export type Draft = {
   provider: {
     list: () => readonly ProviderRecord[]
     get: (providerID: Provider.ID) => ProviderRecord | undefined
+    claimed: (providerID: Provider.ID) => boolean
     update: (providerID: Provider.ID, fn: (provider: Provider.MutableInfo) => void) => void
     remove: (providerID: Provider.ID) => void
   }
@@ -36,7 +38,7 @@ export type Draft = {
     remove: (providerID: Provider.ID, modelID: Model.ID) => void
     default: {
       get: () => DefaultModel | undefined
-      set: (providerID: Provider.ID, modelID: Model.ID) => void
+      set: (providerID: Provider.ID, modelID: Model.ID, variant?: Model.VariantID) => void
     }
   }
 }
@@ -44,6 +46,7 @@ export type Draft = {
 export interface Interface extends State.Transformable<Draft> {
   readonly provider: {
     readonly get: (providerID: Provider.ID) => Effect.Effect<Provider.Info | undefined>
+    readonly claimed: (providerID: Provider.ID) => Effect.Effect<boolean>
     readonly all: () => Effect.Effect<Provider.Info[]>
     readonly available: () => Effect.Effect<Provider.Info[]>
   }
@@ -52,6 +55,7 @@ export interface Interface extends State.Transformable<Draft> {
     readonly all: () => Effect.Effect<Model.Info[]>
     readonly available: () => Effect.Effect<Model.Info[]>
     readonly default: () => Effect.Effect<Model.Info | undefined>
+    readonly configured: () => Effect.Effect<DefaultModel | undefined>
     readonly small: (providerID: Provider.ID) => Effect.Effect<Model.Info | undefined>
   }
 }
@@ -83,13 +87,15 @@ const layer = Layer.effect(
 
     const state = State.create<Data, Draft>({
       name: "catalog",
-      initial: () => ({ providers: new Map() }),
+      initial: () => ({ providers: new Map(), claims: new Set() }),
       draft: (draft) => {
         const result: Draft = {
           provider: {
             list: () => Array.fromIterable(draft.providers.values()) as ProviderRecord[],
             get: (providerID) => draft.providers.get(providerID),
+            claimed: (providerID) => draft.claims.has(providerID),
             update: (providerID, fn) => {
+              draft.claims.add(providerID)
               let current = draft.providers.get(providerID)
               if (!current) {
                 current = {
@@ -107,6 +113,7 @@ const layer = Layer.effect(
           model: {
             get: (providerID, modelID) => draft.providers.get(providerID)?.models.get(modelID),
             update: (providerID, modelID, fn) => {
+              draft.claims.add(providerID)
               let record = draft.providers.get(providerID)
               if (!record) {
                 record = {
@@ -127,8 +134,8 @@ const layer = Layer.effect(
             },
             default: {
               get: () => draft.defaultModel,
-              set: (providerID, modelID) => {
-                draft.defaultModel = { providerID, modelID }
+              set: (providerID, modelID, variant) => {
+                draft.defaultModel = { providerID, modelID, variant }
               },
             },
           },
@@ -146,6 +153,10 @@ const layer = Layer.effect(
       provider: {
         get: Effect.fn("Catalog.provider.get")(function* (providerID) {
           return state.get().providers.get(providerID)?.provider
+        }),
+
+        claimed: Effect.fn("Catalog.provider.claimed")(function* (providerID) {
+          return state.get().claims.has(providerID)
         }),
 
         all: Effect.fn("Catalog.provider.all")(function* () {
@@ -205,6 +216,10 @@ const layer = Layer.effect(
           }
 
           return (yield* result.model.available())[0]
+        }),
+
+        configured: Effect.fn("Catalog.model.configured")(function* () {
+          return state.get().defaultModel
         }),
 
         small: Effect.fn("Catalog.model.small")(function* (providerID) {

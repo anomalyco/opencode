@@ -1,5 +1,6 @@
 import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { ProviderCompatibility } from "@opencode-ai/core/provider/compatibility"
 import { ServiceUnavailableError } from "@opencode-ai/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -32,8 +33,8 @@ export const ModelHandler = HttpApiBuilder.group(Api, "server.model", (handlers)
                 ),
             }),
           )
-          const catalog = yield* Catalog.Service
-          return yield* response(catalog.model.default())
+          const compatibility = yield* ProviderCompatibility.Service
+          return yield* response(compatibility.default().pipe(Effect.map((selection) => selection?.model)))
         }),
       )
   }),

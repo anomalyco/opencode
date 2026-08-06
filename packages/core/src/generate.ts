@@ -6,6 +6,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { llmClient } from "./effect/app-node-platform"
 import { ModelResolver } from "./model-resolver"
 import { Model } from "./model"
+import { PluginSupervisor } from "./plugin/supervisor"
 
 export interface TextInput {
   readonly prompt: string
@@ -35,8 +36,21 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const llm = yield* LLMClient.Service
     const resolver = yield* ModelResolver.Service
+    const plugins = yield* PluginSupervisor.Service
 
     const runText = Effect.fn("Generate.text")(function* (input: TextInput) {
+      yield* plugins.flush.pipe(
+        Effect.timeoutOrElse({
+          duration: "5 seconds",
+          orElse: () =>
+            Effect.fail(
+              new UnavailableError({
+                message: "Model catalog initialization timed out",
+                service: "model.catalog",
+              }),
+            ),
+        }),
+      )
       const resolved = yield* resolver.resolve(input.model).pipe(
         Effect.catchTags({
           "SessionRunnerModel.VariantUnavailableError": (error) =>
@@ -85,5 +99,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ModelResolver.node, llmClient],
+  deps: [ModelResolver.node, PluginSupervisor.node, llmClient],
 })

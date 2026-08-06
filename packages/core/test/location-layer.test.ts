@@ -710,6 +710,56 @@ describe("LocationServiceMap", () => {
     ),
   )
 
+  it.live("resolves persisted legacy provider selections to canonical Session identities", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const variant = Model.VariantID.make("high")
+          const requested = Model.Ref.make({
+            providerID: Provider.ID.make("azure-cognitive-services"),
+            id: Model.ID.make("chat"),
+            variant,
+          })
+          const resolved = yield* Effect.gen(function* () {
+            const catalog = yield* Catalog.Service
+            yield* catalog.transform((editor) => {
+              editor.provider.update(Provider.ID.azure, (provider) => {
+                provider.package = Provider.aisdk("@ai-sdk/openai")
+                provider.settings = { apiKey: "configured" }
+              })
+              editor.model.update(Provider.ID.azure, requested.id, (model) => {
+                model.variants = [{ id: variant }]
+              })
+            })
+            const models = yield* SessionRunnerModel.Service
+            return yield* models.resolve(
+              Session.Info.make({
+                id: Session.ID.make("ses_legacy_provider_alias"),
+                projectID: Project.ID.global,
+                title: "test",
+                model: requested,
+                cost: Money.USD.zero,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                location,
+              }),
+            )
+          }).pipe(Effect.provide(LocationServiceMap.Service.get(location)))
+
+          expect(resolved.ref).toEqual(
+            Model.Ref.make({ providerID: Provider.ID.azure, id: requested.id, variant }),
+          )
+          expect(resolved.requested).toEqual(requested)
+          expect(resolved.via).toBe("legacy-provider")
+        }),
+      ),
+    ),
+  )
+
   it.live("preserves the selected catalog identity when the package model id differs", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

@@ -19,6 +19,7 @@ import { Integration } from "./integration"
 import { Capabilities, ID, Info, Ref, VariantID } from "./model"
 import { Npm } from "@opencode-ai/util/npm"
 import { Provider } from "./provider"
+import { ProviderCompatibility } from "./provider/compatibility"
 
 export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
@@ -57,10 +58,13 @@ export interface Resolved {
   readonly capabilities: Capabilities
   /** Catalog pricing in dollars per million tokens. */
   readonly cost: Info["cost"]
+  /** Transient lookup identity and selection path; durable records continue to use ref. */
+  readonly requested?: Ref
+  readonly via?: ProviderCompatibility.Via
 }
 
 export interface Interface {
-  readonly resolve: (requested?: Ref) => Effect.Effect<Resolved | undefined, Error>
+  readonly resolve: (requested?: Ref, mode?: ProviderCompatibility.Mode) => Effect.Effect<Resolved | undefined, Error>
   readonly resolveModel: (model: Info, variant?: VariantID) => Effect.Effect<Resolved, Error>
 }
 
@@ -267,9 +271,14 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const catalog = yield* Catalog.Service
     const integrations = yield* Integration.Service
+    const compatibility = yield* ProviderCompatibility.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
-    const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
+    const load = Effect.fn("ModelResolver.resolveModel")(function* (
+      selected: Info,
+      variant?: VariantID,
+      context?: { readonly requested: Ref; readonly via: ProviderCompatibility.Via },
+    ) {
       const provider = yield* catalog.provider.get(selected.providerID)
       const connection = yield* integrations.connection.active(
         provider?.integrationID ?? Integration.ID.make(selected.providerID),
@@ -292,23 +301,30 @@ export const layer = Layer.effect(
         }),
         capabilities: selected.capabilities,
         cost: selected.cost,
+        requested: context?.requested,
+        via: context?.via,
       }
     })
     return Service.of({
-      resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
-        const selected = requested
-          ? yield* catalog.model.get(requested.providerID, requested.id)
-          : yield* catalog.model
-              .default()
-              .pipe(
-                Effect.flatMap((model) =>
-                  model && supported(model)
-                    ? Effect.succeed(model)
-                    : Effect.map(catalog.model.available(), (models) => models.find(supported)),
-                ),
-              )
-        if (!selected) return undefined
-        return yield* load(selected, requested?.variant)
+      resolve: Effect.fn("ModelResolver.resolve")(function* (requested, mode) {
+        if (requested) {
+          const selection = yield* compatibility.select(requested, mode ?? "configured")
+          if (selection.type !== "exact" && selection.type !== "legacy-provider") return undefined
+          return yield* load(selection.model, requested.variant, {
+            requested: selection.requested,
+            via: selection.type,
+          })
+        }
+
+        const selection = yield* compatibility.default()
+        if (!selection) return undefined
+        return yield* load(
+          selection.model,
+          selection.requested?.variant,
+          selection.requested && selection.via
+            ? { requested: selection.requested, via: selection.via }
+            : undefined,
+        )
       }),
       resolveModel: load,
     })
@@ -318,5 +334,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Catalog.node, Integration.node, Npm.node, AISDK.node],
+  deps: [Catalog.node, Integration.node, Npm.node, AISDK.node, ProviderCompatibility.node],
 })

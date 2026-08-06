@@ -17,6 +17,7 @@ import { Npm } from "@opencode-ai/util/npm"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { ProviderCompatibility } from "@opencode-ai/core/provider/compatibility"
 import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
 import { Tool } from "@opencode-ai/core/tool"
@@ -44,6 +45,7 @@ export const PluginTestLayer = AppNodeBuilder.build(
     Form.node,
     LayerNodePlatform.httpClient,
     Plugin.node,
+    ProviderCompatibility.node,
     Agent.node,
     AISDK.node,
     Catalog.node,

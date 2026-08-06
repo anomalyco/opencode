@@ -4,8 +4,11 @@ import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
 import { Config as ConfigSchema } from "@opencode-ai/schema/config"
 import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
+import { Catalog } from "@opencode-ai/core/catalog"
+import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
+import { Provider } from "@opencode-ai/core/provider"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Tool } from "@opencode-ai/core/tool"
@@ -19,6 +22,65 @@ class Secret extends Context.Service<Secret, string>()("@opencode/test/PluginSec
 const versioned = <R>(plugin: EffectPlugin.Plugin<R>, version = "1") => ({ ...plugin, version })
 
 describe("Plugin", () => {
+  it.effect("reports canonical provider aliases from the plugin default surface", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const read: Array<() => Effect.Effect<string | undefined, unknown>> = []
+      const plugin = EffectPlugin.define({
+        id: "catalog-default-alias",
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            yield* ctx.catalog.transform((draft) => {
+              draft.provider.update("azure", (provider) => {
+                provider.package = "aisdk:@ai-sdk/openai"
+              })
+              draft.model.update("azure", "chat", () => {})
+              draft.model.default.set("azure-cognitive-services", "chat")
+            })
+            read.push(() => ctx.catalog.model.default().pipe(Effect.map((result) => result.data?.providerID)))
+          }),
+      })
+
+      yield* plugins.activate([versioned(plugin)])
+
+      expect(yield* Effect.forEach(read, (get) => get().pipe(Effect.orDie))).toEqual(["azure"])
+    }),
+  )
+
+  it.effect("forwards and clears catalog default variants", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const catalog = yield* Catalog.Service
+      const seen: Array<{ providerID: string; modelID: string; variant?: string } | undefined> = []
+      const plugin = EffectPlugin.define({
+        id: "catalog-default-variant",
+        effect: (ctx) =>
+          ctx.catalog
+            .transform((draft) => {
+              draft.model.default.set("test", "model", "fast")
+              seen.push(draft.model.default.get())
+              draft.model.default.set("test", "model")
+              seen.push(draft.model.default.get())
+            })
+            .pipe(Effect.asVoid),
+      })
+
+      yield* plugins.activate([versioned(plugin)])
+
+      expect(seen).toEqual([
+        { providerID: "test", modelID: "model", variant: "fast" },
+        { providerID: "test", modelID: "model", variant: undefined },
+      ])
+      yield* catalog.transform((draft) => {
+        expect(draft.model.default.get()).toEqual({
+          providerID: Provider.ID.make("test"),
+          modelID: Model.ID.make("model"),
+          variant: undefined,
+        })
+      })
+    }),
+  )
+
   it.live("exposes public events through the plugin context", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service

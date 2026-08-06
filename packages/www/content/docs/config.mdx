@@ -104,12 +104,14 @@ Set the shell used by the terminal and shell tools.
 
 ### Model
 
-Set the default model in `provider/model` format. The root default currently
-does not retain a `#variant`; select variants in the TUI or on an agent or command.
+Set the default model in `provider/model` format, optionally followed by a
+`#variant`. Execution retains the configured variant. Surfaces that report the
+default model return the canonical base provider and model because their
+`Model.Info` response does not include variant selection.
 
 ```jsonc
 {
-  "model": "anthropic/claude-sonnet-4-5"
+  "model": "anthropic/claude-sonnet-4-5#high"
 }
 ```
 

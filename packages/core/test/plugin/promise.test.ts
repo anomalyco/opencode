@@ -23,6 +23,41 @@ import { host as testHost } from "./host"
 const it = testEffect(PluginTestLayer)
 
 describe("fromPromise", () => {
+  it.effect("forwards and clears catalog default variants", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin)
+      const seen: Array<{ providerID: string; modelID: string; variant?: string } | undefined> = []
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-catalog-default-variant",
+          setup: async (ctx) => {
+            await ctx.catalog.transform((draft) => {
+              draft.model.default.set("test", "model", "fast")
+              seen.push(draft.model.default.get())
+              draft.model.default.set("test", "model")
+              seen.push(draft.model.default.get())
+            })
+          },
+        }),
+      ).effect(host)
+
+      expect(seen).toEqual([
+        { providerID: "test", modelID: "model", variant: "fast" },
+        { providerID: "test", modelID: "model", variant: undefined },
+      ])
+      yield* catalog.transform((draft) => {
+        expect(draft.model.default.get()).toEqual({
+          providerID: Provider.ID.make("test"),
+          modelID: Model.ID.make("model"),
+          variant: undefined,
+        })
+      })
+    }),
+  )
+
   it.effect("forwards transient session generation", () =>
     Effect.gen(function* () {
       const host = testHost({

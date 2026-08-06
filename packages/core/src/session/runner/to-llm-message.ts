@@ -108,8 +108,16 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
-const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
-  const sameProvider = String(message.model.providerID) === String(model.providerID)
+const assistant = (
+  message: SessionMessage.Assistant,
+  model: Model.Ref,
+  providerMetadataKey: string,
+  compatibility?: { readonly requested?: Model.Ref; readonly via?: "legacy-provider" },
+) => {
+  const sameProvider =
+    String(message.model.providerID) === String(model.providerID) ||
+    (compatibility?.via === "legacy-provider" &&
+      String(message.model.providerID) === String(compatibility.requested?.providerID))
   const sameModel = sameProvider && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
@@ -177,7 +185,12 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
+function toLLMMessage(
+  message: SessionMessage.Info,
+  model: Model.Ref,
+  providerMetadataKey: string,
+  compatibility?: { readonly requested?: Model.Ref; readonly via?: "legacy-provider" },
+): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -215,7 +228,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         }),
       ]
     case "assistant":
-      return assistant(message, model, providerMetadataKey)
+      return assistant(message, model, providerMetadataKey, compatibility)
     case "compaction":
       if (message.status !== "completed") return []
       return [
@@ -244,4 +257,5 @@ export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+  compatibility?: { readonly requested?: Model.Ref; readonly via?: "legacy-provider" },
+) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey, compatibility))

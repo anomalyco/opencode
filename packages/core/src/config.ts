@@ -24,8 +24,7 @@ import { Global } from "@opencode-ai/util/global"
 import { Location } from "./location"
 import { AbsolutePath } from "./schema"
 import { ConfigVariable } from "./config/variable"
-import { ConfigV1 } from "./v1/config/config"
-import { ConfigMigrateV1 } from "./v1/config/migrate"
+import { ConfigNormalize } from "./config/normalize"
 import { WellKnown } from "./wellknown"
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
@@ -93,24 +92,43 @@ export const layer = (options?: Options) => Layer.effect(
     const reloadLock = Semaphore.makeUnsafe(1)
     const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
     const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
-    const decodeV1Info = Schema.decodeUnknownOption(ConfigV1.Info, decodeOptions)
-
-    const parseInfo = (text: string) => {
+    const parseInfo = Effect.fn("Config.parseInfo")(function* (text: string, source: string) {
       const errors: ParseError[] = []
       const input: unknown = parse(text, errors, { allowTrailingComma: true })
-      if (errors.length) return
-      return Option.getOrUndefined(
-        ConfigMigrateV1.isV1(input)
-          ? decodeV1Info(input).pipe(Option.map(ConfigMigrateV1.migrate), Option.flatMap(decodeInfo))
-          : decodeInfo(input),
+      if (errors.length) {
+        yield* Effect.logWarning("configuration normalization diagnostic", {
+          source,
+          path: "$",
+          kind: "invalid",
+          action: "rejected malformed JSON or JSONC document",
+        })
+        return
+      }
+      const result = ConfigNormalize.normalize(input)
+      yield* Effect.forEach(result.diagnostics, (diagnostic) =>
+        Effect.logWarning("configuration normalization diagnostic", {
+          source,
+          path: diagnostic.path[0] === "$" ? "$" : `$.${diagnostic.path.join(".")}`,
+          kind: diagnostic.kind,
+          action: diagnostic.message,
+        }),
       )
-    }
+      if (result.type === "rejected") return
+      const info = Option.getOrUndefined(decodeInfo(result.encoded))
+      if (info) return info
+      yield* Effect.logWarning("configuration normalization diagnostic", {
+        source,
+        path: "$",
+        kind: "invalid",
+        action: "rejected canonical configuration after final validation",
+      })
+    })
 
     const loadFile = Effect.fnUntraced(function* (filepath: string) {
       const text = yield* fs.readFileStringSafe(filepath)
-      if (!text) return
+      if (text === undefined) return
       const substituted = yield* ConfigVariable.substitute({ type: "path", path: filepath, text })
-      const info = parseInfo(substituted)
+      const info = yield* parseInfo(substituted, filepath)
       if (!info) return
       return new Document({ type: "document", path: filepath, info })
     })
@@ -141,7 +159,7 @@ export const layer = (options?: Options) => Layer.effect(
               text: JSON.stringify(config),
               env: variables,
             }).pipe(
-              Effect.map(parseInfo),
+              Effect.flatMap((text) => parseInfo(text, entry.origin)),
               Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
             ),
           ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
@@ -218,14 +236,14 @@ export const layer = (options?: Options) => Layer.effect(
             Effect.orDie,
           )
         : []
-      const content = options?.content
+      const content = options?.content !== undefined
         ? yield* ConfigVariable.substitute({
             type: "virtual",
             source: "OPENCODE_CONFIG_CONTENT",
             dir: location.directory,
             text: options.content,
           }).pipe(
-            Effect.map(parseInfo),
+            Effect.flatMap((text) => parseInfo(text, "OPENCODE_CONFIG_CONTENT")),
             Effect.map((info) => (info ? [new Document({ type: "document", info })] : [])),
             Effect.orDie,
           )

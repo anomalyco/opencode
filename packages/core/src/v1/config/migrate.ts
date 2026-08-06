@@ -18,44 +18,6 @@ const decodeInfo = Schema.decodeUnknownSync(Schema.fromJsonString(Info), decodeO
 const encodeInfo = Schema.encodeSync(Info)
 const decodeAgent = Schema.decodeUnknownSync(Schema.fromJsonString(ConfigAgent.Info), decodeOptions)
 const encodeAgent = Schema.encodeSync(ConfigAgent.Info)
-
-const keys = new Set([
-  "logLevel",
-  "server",
-  "command",
-  "reference",
-  "snapshot",
-  "plugin",
-  "autoshare",
-  "disabled_providers",
-  "enabled_providers",
-  "small_model",
-  "mode",
-  "agent",
-  "provider",
-  "permission",
-  "tools",
-  "attachment",
-  "layout",
-])
-
-export function isV1(input: unknown) {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) return false
-  const record = input as Record<string, unknown>
-  if (Object.keys(record).some((key) => keys.has(key))) return true
-  // `mcp` exists in both versions, so presence alone is ambiguous: v1 lists servers directly under
-  // `mcp`, while v2 nests them under `mcp.servers`. Only the v1 shape (a server entry with `type`)
-  // counts, so a bare `mcp`-only file still migrates instead of silently parsing to zero servers.
-  const mcp = record.mcp
-  return (
-    typeof mcp === "object" &&
-    mcp !== null &&
-    !Array.isArray(mcp) &&
-    !("servers" in mcp) &&
-    Object.values(mcp).some((server) => typeof server === "object" && server !== null && "type" in server)
-  )
-}
-
 export function migrate(info: typeof ConfigV1.Info.Type) {
   return encodeInfo(
     decodeInfo(
@@ -145,7 +107,7 @@ function permissions(info?: ConfigPermissionV1.Info, tools?: Readonly<Record<str
 }
 
 // Map v1 permission/tool keys onto their renamed v2 tool actions so migrated rules keep matching.
-function normalizeAction(action: string) {
+export function normalizeAction(action: string) {
   if (action === "write" || action === "patch") return "edit"
   if (action === "task") return "subagent"
   if (action === "bash") return "shell"
@@ -185,7 +147,7 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
   )
 }
 
-function commands(info?: Readonly<Record<string, ConfigCommandV1.Info>>) {
+export function commands(info?: Readonly<Record<string, ConfigCommandV1.Info>>) {
   if (!info) return undefined
   return Object.fromEntries(
     Object.entries(info).map(([id, command]) => [
@@ -222,7 +184,7 @@ function mcp(info: typeof ConfigV1.Info.Type) {
   return { timeout: timeout === undefined ? undefined : { catalog: timeout, execution: timeout }, servers }
 }
 
-function migrateMcp(info: ConfigMCPV1.Info) {
+export function migrateMcp(info: ConfigMCPV1.Info) {
   const disabled = info.enabled === undefined ? undefined : !info.enabled
   if (info.type === "local")
     return {
@@ -261,7 +223,7 @@ function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
   )
 }
 
-function migrateProvider(sourceID: string, info: ConfigProviderV1.Info) {
+export function migrateProvider(sourceID: string, info: ConfigProviderV1.Info) {
   if (sourceID === "azure-cognitive-services") return migrateAzureCognitiveServicesProvider(info)
   if (sourceID === "google-vertex-anthropic") return migrateGoogleVertexAnthropicProvider(info)
   return migrateStandardProvider(info)
@@ -273,7 +235,7 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
     name: info.name,
     env: info.env,
     package: info.npm ? Provider.aisdk(info.npm) : undefined,
-    settings: info.api ? { ...options.settings, baseURL: info.api } : options.settings,
+    settings: info.api ? { ...options.settings, baseURL: info.api } : info.options ? options.settings : undefined,
     headers: info.options && options.headers,
     body: info.options && options.body,
     models:
@@ -317,8 +279,8 @@ function migrateGoogleVertexAnthropicProvider(info: ConfigProviderV1.Info) {
   }
 }
 
-// Rename these only in files detected as V1 by a field that exists only in the old config format.
-function providerID(input: string) {
+// Rename these only while migrating unambiguous V1 fields.
+export function providerID(input: string) {
   if (input === "azure-cognitive-services") return "azure"
   if (input === "google-vertex-anthropic") return "google-vertex"
   return input

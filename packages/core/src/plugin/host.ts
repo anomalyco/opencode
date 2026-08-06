@@ -17,6 +17,7 @@ import { Location } from "../location"
 import { Model } from "../model"
 import { PluginRuntime } from "./runtime"
 import { Provider } from "../provider"
+import { ProviderCompatibility } from "../provider/compatibility"
 import { Reference } from "../reference"
 import { AbsolutePath, type DeepMutable } from "../schema"
 import { Skill } from "../skill"
@@ -31,6 +32,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
   const agents = yield* Agent.Service
   const aisdk = yield* AISDK.Service
   const catalog = yield* Catalog.Service
+  const providerCompatibility = yield* ProviderCompatibility.Service
   const commands = yield* Command.Service
   const bus = yield* Bus.Service
   const integration = yield* Integration.Service
@@ -145,7 +147,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
       },
       model: {
         list: () => response(catalog.model.available()),
-        default: () => response(catalog.model.default()),
+        default: () => response(providerCompatibility.default().pipe(Effect.map((selection) => selection?.model))),
       },
       reload: catalog.reload,
       transform: (callback) =>
@@ -166,8 +168,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
                 draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
               default: {
                 get: draft.model.default.get,
-                set: (providerID, modelID) =>
-                  draft.model.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
+                set: (providerID, modelID, variant) =>
+                  draft.model.default.set(
+                    Provider.ID.make(providerID),
+                    Model.ID.make(modelID),
+                    variant === undefined ? undefined : Model.VariantID.make(variant),
+                  ),
               },
             },
           })

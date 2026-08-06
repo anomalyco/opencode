@@ -269,6 +269,48 @@ describe("Catalog", () => {
     }),
   )
 
+  it.effect("retains configured default variants and lets later transforms clear them", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("test")
+      const modelID = Model.ID.make("model")
+      const variant = Model.VariantID.make("high")
+      yield* catalog.transform((catalog) =>
+        catalog.model.default.set(providerID, modelID, variant),
+      )
+      expect(yield* catalog.model.configured()).toEqual({ providerID, modelID, variant })
+
+      yield* catalog.transform((catalog) => catalog.model.default.set(providerID, modelID))
+      expect(yield* catalog.model.configured()).toEqual({ providerID, modelID, variant: undefined })
+    }),
+  )
+
+  it.effect("retains namespace claims through removal for one rebuild", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("claimed")
+      yield* catalog.transform((catalog) => {
+        catalog.model.update(providerID, Model.ID.make("model"), () => {})
+        catalog.provider.remove(providerID)
+      })
+
+      expect(yield* catalog.provider.get(providerID)).toBeUndefined()
+      expect(yield* catalog.provider.claimed(providerID)).toBe(true)
+    }),
+  )
+
+  it.effect("clears claims when a later rebuild no longer makes them", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("temporary")
+      const registration = yield* catalog.transform((catalog) => catalog.provider.update(providerID, () => {}))
+      expect(yield* catalog.provider.claimed(providerID)).toBe(true)
+
+      yield* registration.dispose
+      expect(yield* catalog.provider.claimed(providerID)).toBe(false)
+    }),
+  )
+
   it.effect("ignores a configured default on a disabled provider", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
