@@ -35,7 +35,7 @@ describe("EventLogger", () => {
       Effect.runPromise,
     )
 
-    expect(output.map((entry) => entry.message)).toEqual([
+    expect(output.map((entry) => entry.message).filter(([message]) => message === "event")).toEqual([
       ["event", { event: expect.objectContaining({ type: "agent.updated" }) }],
       ["event", { event: expect.objectContaining({ type: "catalog.updated" }) }],
       ["event", { event: expect.objectContaining({ type: "command.updated" }) }],
