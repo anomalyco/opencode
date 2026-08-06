@@ -361,7 +361,7 @@ export function Session() {
 
   createEffect(() => {
     const current = prompt()
-    if (sent || !current || !synced() || !local.model.ready) return
+    if (sent || !current || !synced() || !local.model.ready || !local.model.catalogReady) return
     if (!local.agent.current() || !local.model.current()) return
     if (!args.prompt || route.prompt?.text !== args.prompt || current.current.text !== args.prompt) return
     sent = true

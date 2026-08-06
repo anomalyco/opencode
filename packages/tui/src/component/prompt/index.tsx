@@ -327,10 +327,6 @@ export function Prompt(props: PromptProps) {
     if (!session) return
     const agent = session.agent && local.agent.list().find((agent) => agent.id === session.agent)
     if (agent && !args.agent) local.agent.set(agent.id)
-    if (session.model) {
-      local.model.set({ providerID: session.model.providerID, modelID: session.model.id })
-      local.model.variant.set(session.model.variant)
-    }
     syncedSessionID = sessionID
   })
 
@@ -943,11 +939,36 @@ export function Prompt(props: PromptProps) {
       await slash.command.run(slash.input)
       return true
     }
+    const inputText = expandTrackedPastedText(
+      store.prompt.text,
+      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
+        const ref = store.extmarkToPart.get(extmark.id)
+        if (ref?.type !== "pasted") return []
+        const part = store.prompt.pasted[ref.index]
+        if (!part) return []
+        return [{ start: extmark.start, end: extmark.end, text: part.text }]
+      }),
+    )
+    const skillID = inputText.split("\n")[0].split(" ")[0].slice(1)
+    const isSkill =
+      inputText.startsWith("/") &&
+      (data.location.skill.list(currentLocation.ref) ?? []).some(
+        (skill) => skill.slash === true && skill.id === skillID,
+      )
     const agent = local.agent.current()
     if (!agent) return false
     const selectedModel = local.model.current()
     if (!selectedModel) {
       void promptModelWarning()
+      return false
+    }
+    const usesModel = !props.sessionID || (store.mode !== "shell" && !isSkill)
+    if (usesModel && !local.model.available(selectedModel)) {
+      toast.show({
+        title: "Model unavailable",
+        message: `${selectedModel.providerID}/${selectedModel.modelID} is not available in this session's location`,
+        variant: "warning",
+      })
       return false
     }
 
@@ -990,17 +1011,6 @@ export function Prompt(props: PromptProps) {
       session = created
     }
 
-    const inputText = expandTrackedPastedText(
-      store.prompt.text,
-      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
-        const ref = store.extmarkToPart.get(extmark.id)
-        if (ref?.type !== "pasted") return []
-        const part = store.prompt.pasted[ref.index]
-        if (!part) return []
-        return [{ start: extmark.start, end: extmark.end, text: part.text }]
-      }),
-    )
-
     // Capture mode before it gets reset
     const currentMode = store.mode
     const editorSelection = editorContext()
@@ -1015,7 +1025,7 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
-      (data.location.command.list(currentLocation.current) ?? []).some(
+      (data.location.command.list(currentLocation.ref) ?? []).some(
         (command) => command.name === inputText.split("\n")[0].split(" ")[0].slice(1),
       )
     ) {
@@ -1026,6 +1036,12 @@ export function Prompt(props: PromptProps) {
       const [command, ...firstLineArgs] = firstLine.split(" ")
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
+      const model = { providerID: selectedModel.providerID, id: selectedModel.modelID, variant }
+      const cancelCommit = local.model.expectCommit(sessionID, {
+        providerID: model.providerID,
+        modelID: model.id,
+        variant: model.variant,
+      })
 
       void client.api.session
         .command({
@@ -1033,23 +1049,19 @@ export function Prompt(props: PromptProps) {
           command: command.slice(1),
           arguments: args,
           agent: agent.id,
-          model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
+          model,
           files: store.prompt.files,
           agents: store.prompt.agents,
         })
         .catch((error) => {
+          cancelCommit()
           toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
         })
-    } else if (
-      inputText.startsWith("/") &&
-      (data.location.skill.list(currentLocation.current) ?? []).some(
-        (skill) => skill.slash === true && skill.id === inputText.split("\n")[0].split(" ")[0].slice(1),
-      )
-    ) {
+    } else if (isSkill) {
       move.startSubmit()
       void client.api.session.skill({
         sessionID,
-        skill: inputText.split("\n")[0].split(" ")[0].slice(1),
+        skill: skillID,
       })
     } else {
       move.startSubmit()
@@ -1065,9 +1077,15 @@ export function Prompt(props: PromptProps) {
         session.model.id !== selectedModel.modelID ||
         (session.model.variant ?? "default") !== (variant ?? "default")
       ) {
-        await client.api.session.switchModel({
-          sessionID,
-          model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
+        const model = { providerID: selectedModel.providerID, id: selectedModel.modelID, variant }
+        const cancelCommit = local.model.expectCommit(sessionID, {
+          providerID: model.providerID,
+          modelID: model.id,
+          variant: model.variant,
+        })
+        await client.api.session.switchModel({ sessionID, model }).catch((error) => {
+          cancelCommit()
+          throw error
         })
       }
       if (session?.revert) {
@@ -1320,10 +1338,7 @@ export function Prompt(props: PromptProps) {
       return `Ask anything... "${list()[store.placeholder % list().length]}"`
     })()
     if (!value) return undefined
-    const width =
-      dimensions().width < 44
-        ? dimensions().width - 5
-        : Math.min(75, dimensions().width - 4) - 5
+    const width = dimensions().width < 44 ? dimensions().width - 5 : Math.min(75, dimensions().width - 4) - 5
     return Locale.takeWidth(value, Math.max(1, width)).trimEnd()
   })
   const locationLabel = createMemo(() => {

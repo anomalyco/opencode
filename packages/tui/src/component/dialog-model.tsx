@@ -20,12 +20,9 @@ export function DialogModel(props: { providerID?: string }) {
 
   const connected = useConnected()
   const providers = createMemo(
-    () =>
-      new Map(
-        (data.location.provider.list(location.ref ?? data.location.default()) ?? []).map((item) => [item.id, item]),
-      ),
+    () => new Map((data.location.provider.list(location.ref) ?? []).map((item) => [item.id, item])),
   )
-  const models = createMemo(() => data.location.model.list(location.ref ?? data.location.default()) ?? [])
+  const models = createMemo(() => data.location.model.list(location.ref) ?? [])
 
   const showExtra = createMemo(() => connected() && !props.providerID)
 

@@ -45,14 +45,14 @@ export function recentModels(model: ModelPreferenceModel, recent: ModelPreferenc
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
 }
 
-export function firstValidModel(
-  available: { providerID: string; id: string }[] | undefined,
-  candidates: (ModelPreferenceModel | undefined)[],
+export function sessionModelSelection(
+  sessionID: string | undefined,
+  drafts: Record<string, ModelPreferenceModel | undefined>,
+  durable: ModelPreferenceModel | undefined,
+  fallback: ModelPreferenceModel | undefined,
 ) {
-  return candidates.find(
-    (candidate) =>
-      candidate && available?.some((model) => model.providerID === candidate.providerID && model.id === candidate.modelID),
-  )
+  if (!sessionID) return fallback
+  return drafts[`session:${sessionID}`] ?? durable
 }
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
@@ -70,25 +70,27 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const permission = usePermission()
     const location = useLocation()
 
-    const models = () => data.location.model.list(location.ref ?? data.location.default())
-    const providers = () => data.location.provider.list(location.ref ?? data.location.default())
+    const models = () => data.location.model.list(location.ref)
+    const providers = () => data.location.provider.list(location.ref)
 
     function isModelValid(model: ModelPreferenceModel) {
       return !!models()?.some((item) => item.providerID === model.providerID && item.id === model.modelID)
     }
 
     function getFirstValidModel(...modelFns: (() => ModelPreferenceModel | undefined)[]) {
-      return firstValidModel(
-        models(),
-        modelFns.map((model) => model()),
-      )
+      for (const modelFn of modelFns) {
+        const model = modelFn()
+        if (model && isModelValid(model)) return model
+      }
     }
 
     function createAgent() {
       const agents = createMemo(() =>
-        (data.location.agent.list() ?? []).filter((agent) => agent.mode !== "subagent" && !agent.hidden),
+        (data.location.agent.list(location.ref) ?? []).filter((agent) => agent.mode !== "subagent" && !agent.hidden),
       )
-      const visibleAgents = createMemo(() => (data.location.agent.list() ?? []).filter((agent) => !agent.hidden))
+      const visibleAgents = createMemo(() =>
+        (data.location.agent.list(location.ref) ?? []).filter((agent) => !agent.hidden),
+      )
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
       })
@@ -143,17 +145,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [modelStore, setModelStore] = createStore<
         ModelPreference & {
           ready: boolean
-          model: Record<string, ModelPreferenceModel>
+          model: Record<string, ModelPreferenceModel | undefined>
+          sessionVariant: Record<string, string | null | undefined>
         }
       >({
         ready: false,
         model: {},
+        sessionVariant: {},
         recent: [],
         favorite: [],
         variant: {},
       })
 
       const repository = createModelPreferenceRepository(path.join(paths.state, "model.json"))
+      const pendingCommits = new Map<string, string>()
+      const commitKey = (value: ModelPreferenceModel & { variant?: string }) =>
+        `${modelPreferenceKey(value)}:${normalizeModelVariant(value.variant) ?? "default"}`
       const state = {
         pending: false,
       }
@@ -212,20 +219,103 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const currentModel = createMemo(() => {
+        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+        if (sessionID) {
+          const session = data.session.get(sessionID)
+          const durable = session?.model
+            ? { providerID: session.model.providerID, modelID: session.model.id }
+            : undefined
+          return sessionModelSelection(sessionID, modelStore.model, durable, undefined)
+        }
         const a = agent.current()
-        return (
-          getFirstValidModel(
-            () => a && modelStore.model[a.id],
-            () => a?.model && { providerID: a.model.providerID, modelID: a.model.id },
-            fallbackModel,
-          ) ?? undefined
+        const fallback = getFirstValidModel(
+          () => a && modelStore.model[agentModelKey(a.id)],
+          () => a?.model && { providerID: a.model.providerID, modelID: a.model.id },
+          fallbackModel,
         )
+        return fallback
+      })
+
+      function scopeKey() {
+        if (route.data.type === "session") return `session:${route.data.sessionID}`
+        const current = agent.current()
+        return current ? agentModelKey(current.id) : undefined
+      }
+
+      function agentModelKey(agentID: string) {
+        const ref = location.ref ?? data.location.default()
+        return `agent:${JSON.stringify([ref.directory, ref.workspaceID])}:${agentID}`
+      }
+
+      function select(model: ModelPreferenceModel) {
+        const key = scopeKey()
+        if (!key) return false
+        if (key.startsWith("session:")) {
+          const current = currentModel()
+          const session = route.data.type === "session" ? data.session.get(route.data.sessionID) : undefined
+          const selected = modelStore.sessionVariant[key]
+          const preferred = normalizeModelVariant(
+            current?.providerID === model.providerID && current.modelID === model.modelID
+              ? selected !== undefined
+                ? (selected ?? undefined)
+                : session?.model?.variant
+              : modelStore.variant[modelPreferenceKey(model)],
+          )
+          const info = models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
+          const variant = preferred && info?.variants?.some((item) => item.id === preferred) ? preferred : null
+          setModelStore("sessionVariant", key, variant)
+        }
+        setModelStore("model", key, model)
+        return true
+      }
+
+      event.on("session.model.selected", (evt) => {
+        const committed = commitKey({
+          providerID: evt.data.model.providerID,
+          modelID: evt.data.model.id,
+          variant: normalizeModelVariant(evt.data.model.variant),
+        })
+        if (pendingCommits.get(evt.data.sessionID) !== committed) return
+        pendingCommits.delete(evt.data.sessionID)
+        const key = `session:${evt.data.sessionID}`
+        const draft = modelStore.model[key]
+        if (!draft) return
+        if (draft.providerID !== evt.data.model.providerID || draft.modelID !== evt.data.model.id) return
+        const variant = normalizeModelVariant(modelStore.sessionVariant[key] ?? undefined)
+        if (variant !== normalizeModelVariant(evt.data.model.variant)) return
+        setModelStore("model", key, undefined)
+        setModelStore("sessionVariant", key, undefined)
+      })
+
+      event.on("session.deleted", (evt) => {
+        pendingCommits.delete(evt.data.sessionID)
+        const key = `session:${evt.data.sessionID}`
+        setModelStore("model", key, undefined)
+        setModelStore("sessionVariant", key, undefined)
       })
 
       return {
         current: currentModel,
+        available(model = currentModel()) {
+          return model ? isModelValid(model) : false
+        },
+        expectCommit(
+          sessionID: string,
+          value: ModelPreferenceModel & {
+            variant?: string
+          },
+        ) {
+          const committed = commitKey(value)
+          pendingCommits.set(sessionID, committed)
+          return () => {
+            if (pendingCommits.get(sessionID) === committed) pendingCommits.delete(sessionID)
+          }
+        },
         get ready() {
           return modelStore.ready
+        },
+        get catalogReady() {
+          return models() !== undefined
         },
         recent() {
           return modelStore.recent
@@ -240,30 +330,29 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               provider: "Connect a provider",
               model: "No provider selected",
               reasoning: false,
+              available: false,
             }
           }
           const provider = providers()?.find((item) => item.id === value.providerID)
           const info = models()?.find((item) => item.providerID === value.providerID && item.id === value.modelID)
           return {
             provider: provider?.name ?? value.providerID,
-            model: info?.name ?? value.modelID,
+            model: info?.name ?? `${value.modelID} (unavailable)`,
             reasoning: (info?.variants?.length ?? 0) !== 0,
+            available: info !== undefined,
           }
         }),
         cycle(direction: 1 | -1) {
           const current = currentModel()
           if (!current) return
-          const recent = modelStore.recent
+          const recent = recentModels(current, modelStore.recent).filter(isModelValid)
           const index = recent.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
-          if (index === -1) return
-          let next = index + direction
+          let next = index === -1 ? (direction === 1 ? 0 : recent.length - 1) : index + direction
           if (next < 0) next = recent.length - 1
           if (next >= recent.length) next = 0
           const val = recent[next]
           if (!val) return
-          const a = agent.current()
-          if (!a) return
-          setModelStore("model", a.id, { ...val })
+          select({ ...val })
         },
         cycleFavorite(direction: 1 | -1) {
           const favorites = modelStore.favorite.filter((item) => isModelValid(item))
@@ -289,18 +378,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const next = favorites[index]
           if (!next) return
-          const a = agent.current()
-          if (!a) return
-          setModelStore("model", a.id, { ...next })
+          if (!select({ ...next })) return
           setModelStore("recent", recentModels(next, modelStore.recent))
           save()
         },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
             if (!isModelValid(model)) return
-            const a = agent.current()
-            if (!a) return
-            setModelStore("model", a.id, model)
+            if (!select(model)) return
             if (options?.recent) {
               setModelStore("recent", recentModels(model, modelStore.recent))
               save()
@@ -327,6 +412,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           selected() {
             const m = currentModel()
             if (!m) return undefined
+            const key = scopeKey()
+            if (key?.startsWith("session:") && modelStore.sessionVariant[key] !== undefined)
+              return normalizeModelVariant(modelStore.sessionVariant[key] ?? undefined)
+            if (route.data.type === "session") {
+              const durable = data.session.get(route.data.sessionID)?.model
+              if (durable?.providerID === m.providerID && durable.id === m.modelID)
+                return normalizeModelVariant(durable.variant)
+            }
             return normalizeModelVariant(modelStore.variant[modelPreferenceKey(m)])
           },
           current() {
@@ -343,6 +436,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           set(value: string | undefined) {
             const m = currentModel()
             if (!m) return
+            const key = scopeKey()
+            if (key?.startsWith("session:")) {
+              setModelStore("model", key, { ...m })
+              setModelStore("sessionVariant", key, normalizeModelVariant(value) ?? null)
+              return
+            }
             setModelStore("variant", modelPreferenceKey(m), normalizeModelVariant(value))
             save()
           },

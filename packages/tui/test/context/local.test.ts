@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { firstValidModel, parseModel, recentModels } from "../../src/context/local"
+import { parseModel, recentModels, sessionModelSelection } from "../../src/context/local"
 
 test("parses model IDs containing slashes", () => {
   expect(parseModel("provider/family/model")).toEqual({
@@ -21,10 +21,14 @@ test("moves a model to the front, deduplicates, and limits recents", () => {
   ])
 })
 
-test("falls back when another location's selected model is unavailable", () => {
+test("keeps model drafts scoped to their session", () => {
   const fable = { providerID: "opencode", modelID: "claude-fable-5" }
   const gpt = { providerID: "openai", modelID: "gpt-5.6-sol" }
-  const lifeHubModels = [{ providerID: "openai", id: "gpt-5.6-sol" }]
+  const drafts = { "session:opencode": fable }
 
-  expect(firstValidModel(lifeHubModels, [fable, gpt])).toEqual(gpt)
+  expect(sessionModelSelection("opencode", drafts, gpt, gpt)).toEqual(fable)
+  expect(sessionModelSelection("life-hub", drafts, gpt, fable)).toEqual(gpt)
+  expect(sessionModelSelection("life-hub", drafts, fable, gpt)).toEqual(fable)
+  expect(sessionModelSelection("life-hub", drafts, undefined, gpt)).toBeUndefined()
+  expect(sessionModelSelection(undefined, drafts, fable, gpt)).toEqual(gpt)
 })
