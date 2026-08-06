@@ -59,7 +59,7 @@
     "diff": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
-    "latex-to-unicode": "file:C:/Users/Lenovo/Desktop/opencode-latex",
+    "latex2unicode": "https://registry.npmjs.org/latex2unicode/-/latex2unicode-0.1.0.tgz",
     "marked": "17.0.1",
     "open": "10.1.2",
     "opentui-spinner": "catalog:",

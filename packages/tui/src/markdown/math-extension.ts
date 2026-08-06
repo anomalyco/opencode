@@ -1,10 +1,10 @@
 import type { MarkedExtension } from "marked"
-import { latexToUnicode } from "latex-to-unicode"
+import { latexToUnicode } from "latex2unicode"
 
 const inlineRegex = /^\$((?:\\\$|[^$\n])+)\$/
 const blockRegex = /^\$\$\n?([\s\S]+?)\n?\$\$/
 
-/** $ 后跟数字或空白时视为货币/占位符,不做公式解析 */
+/** $ 后跟数字或空白时视为货币/占位�?不做公式解析 */
 function isCurrencyAhead(src: string): boolean {
   const rest = src.slice(1)
   if (rest.length === 0) return true
