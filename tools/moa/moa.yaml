@@ -1,0 +1,29 @@
+# moa-run — MoA (Mixture of Agents) wrapper config.
+# Optional: bin/moa-run picks it up via --config <path> or MOA_CONFIG.
+# Everything below has a working default (Hermes captain-test preset), so
+# this file is only needed for customization.
+
+# Aperture base URL (Ollama Cloud route). Env: MOA_BASE_URL / OLLAMA_API_BASE.
+base_url: http://ai.tail492ce8.ts.net/v1
+# API key env var to read. Default "not-required" (Aperture needs no client
+# auth). Env: MOA_API_KEY / OLLAMA_API_KEY.
+api_key_env: MOA_API_KEY
+
+# Advisor roles — fan out in parallel. Keep at least two for real diversity.
+advisors:
+  - model: ollama-cloud/glm-5.2
+    label: glm-5.2
+    max_tokens: 2048
+  - model: ollama-cloud/minimax-m3
+    label: minimax-m3
+    max_tokens: 2048
+
+# Aggregator role — combines all analyses + the original task into the verdict.
+aggregator:
+  model: ollama-cloud/deepseek-v4-flash:0731
+  label: deepseek-v4-flash:0731
+  reasoning_effort: max
+  max_tokens: 8192
+
+# Per-call network timeout in seconds.
+timeout: 300
