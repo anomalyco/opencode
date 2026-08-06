@@ -52,6 +52,7 @@ import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
 import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
+import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
@@ -374,6 +375,17 @@ export function Session() {
   })
   const dialog = useDialog()
   const renderer = useRenderer()
+  const openQueuedPrompts = () =>
+    dialog.replace(() => (
+      <DialogSelect
+        title="Queued prompts"
+        options={queuedPrompts().map((prompt, index) => ({
+          title: prompt.text,
+          value: prompt.id,
+          footer: `${index + 1} of ${queuedPrompts().length}`,
+        }))}
+      />
+    ))
   const unavailable = (feature: string) => {
     toast.show({ message: `${feature} is not implemented for V2 sessions yet`, variant: "error", duration: 5000 })
     dialog.clear()
@@ -877,6 +889,13 @@ export function Session() {
       },
     },
     {
+      title: "View queued prompts",
+      id: "session.queue.list",
+      group: "Session",
+      enabled: queuedPrompts().length > 0,
+      run: openQueuedPrompts,
+    },
+    {
       title: "Go to parent session",
       id: "session.parent",
       group: "Session",
@@ -1003,7 +1022,7 @@ export function Session() {
             </scrollbox>
             <box flexShrink={0}>
               <Show when={!composer.open && !disabled() && queuedPrompts().length > 0}>
-                <QueuedPromptDock prompts={queuedPrompts()} />
+                <QueuedPromptDock prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
               </Show>
               <PluginSlot name="session.composer.top" input={{ sessionID: route.sessionID }} mode="all" />
               <Composer
@@ -1922,9 +1941,8 @@ function UserMessage(props: { message: SessionMessageUser }) {
   )
 }
 
-function QueuedPromptDock(props: { prompts: { id: string; text: string }[] }) {
+function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOpen: () => void }) {
   const theme = useTheme("elevated")
-  const shortcut = Keymap.useShortcut("command.palette.show")
   const next = createMemo(() => props.prompts[0]?.text)
 
   return (
@@ -1932,24 +1950,18 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[] }) {
       border={["left"]}
       borderColor={theme.border.default}
       customBorderChars={SplitBorder.customBorderChars}
+      paddingTop={1}
+      paddingBottom={1}
       paddingLeft={2}
       paddingRight={1}
       backgroundColor={theme.background.default}
       flexDirection="row"
-      justifyContent="space-between"
-      gap={2}
+      onMouseUp={props.onOpen}
     >
       <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
         <span style={{ fg: theme.text.default }}>{props.prompts.length} queued</span>
-        <Show when={next()}>{(text) => <> · Next · {text()}</>}</Show>
+        <Show when={next()}>{(text) => <> · {text()}</>}</Show>
       </text>
-      <Show when={shortcut()}>
-        {(key) => (
-          <text fg={theme.text.subdued} wrapMode="none" flexShrink={0}>
-            <span style={{ fg: theme.text.default }}>{key()}</span> view all
-          </text>
-        )}
-      </Show>
     </box>
   )
 }
