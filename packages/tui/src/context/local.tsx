@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
-import { batch, createMemo } from "solid-js"
+import { batch, createMemo, onCleanup } from "solid-js"
 import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
@@ -43,16 +43,6 @@ export function recentModels(model: ModelPreferenceModel, recent: ModelPreferenc
     })
     .slice(0, 10)
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
-}
-
-export function sessionModelSelection(
-  sessionID: string | undefined,
-  drafts: Record<string, ModelPreferenceModel | undefined>,
-  durable: ModelPreferenceModel | undefined,
-  fallback: ModelPreferenceModel | undefined,
-) {
-  if (!sessionID) return fallback
-  return drafts[`session:${sessionID}`] ?? durable
 }
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
@@ -142,16 +132,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const agent = createAgent()
 
     function createModel() {
+      type Selection = ModelPreferenceModel & { variant?: string }
       const [modelStore, setModelStore] = createStore<
         ModelPreference & {
           ready: boolean
-          model: Record<string, ModelPreferenceModel | undefined>
-          sessionVariant: Record<string, string | null | undefined>
+          defaults: Record<string, ModelPreferenceModel | undefined>
+          drafts: Record<string, Selection | undefined>
         }
       >({
         ready: false,
-        model: {},
-        sessionVariant: {},
+        defaults: {},
+        drafts: {},
         recent: [],
         favorite: [],
         variant: {},
@@ -220,79 +211,82 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const currentModel = createMemo(() => {
         const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
-        if (sessionID) {
-          const session = data.session.get(sessionID)
-          const durable = session?.model
-            ? { providerID: session.model.providerID, modelID: session.model.id }
-            : undefined
-          return sessionModelSelection(sessionID, modelStore.model, durable, undefined)
-        }
+        if (sessionID) return modelStore.drafts[sessionID] ?? durableSelection(sessionID)
         const a = agent.current()
         const fallback = getFirstValidModel(
-          () => a && modelStore.model[agentModelKey(a.id)],
+          () => a && modelStore.defaults[agentModelKey(a.id)],
           () => a?.model && { providerID: a.model.providerID, modelID: a.model.id },
           fallbackModel,
         )
         return fallback
       })
 
-      function scopeKey() {
-        if (route.data.type === "session") return `session:${route.data.sessionID}`
-        const current = agent.current()
-        return current ? agentModelKey(current.id) : undefined
-      }
-
       function agentModelKey(agentID: string) {
         const ref = location.ref ?? data.location.default()
         return `agent:${JSON.stringify([ref.directory, ref.workspaceID])}:${agentID}`
       }
 
+      function durableSelection(sessionID: string): Selection | undefined {
+        const model = data.session.get(sessionID)?.model
+        if (!model) return
+        return {
+          providerID: model.providerID,
+          modelID: model.id,
+          variant: normalizeModelVariant(model.variant),
+        }
+      }
+
+      function setDraft(sessionID: string, selection: Selection) {
+        const durable = durableSelection(sessionID)
+        setModelStore(
+          "drafts",
+          sessionID,
+          durable && commitKey(durable) === commitKey(selection) ? undefined : selection,
+        )
+      }
+
       function select(model: ModelPreferenceModel) {
-        const key = scopeKey()
-        if (!key) return false
-        if (key.startsWith("session:")) {
-          const current = currentModel()
-          const session = route.data.type === "session" ? data.session.get(route.data.sessionID) : undefined
-          const selected = modelStore.sessionVariant[key]
+        if (route.data.type === "session") {
+          const sessionID = route.data.sessionID
+          const current = modelStore.drafts[sessionID] ?? durableSelection(sessionID)
           const preferred = normalizeModelVariant(
             current?.providerID === model.providerID && current.modelID === model.modelID
-              ? selected !== undefined
-                ? (selected ?? undefined)
-                : session?.model?.variant
+              ? current.variant
               : modelStore.variant[modelPreferenceKey(model)],
           )
           const info = models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
-          const variant = preferred && info?.variants?.some((item) => item.id === preferred) ? preferred : null
-          setModelStore("sessionVariant", key, variant)
+          const variant = preferred && info?.variants?.some((item) => item.id === preferred) ? preferred : undefined
+          setDraft(sessionID, { ...model, variant })
+          return true
         }
-        setModelStore("model", key, model)
+        const current = agent.current()
+        if (!current) return false
+        setModelStore("defaults", agentModelKey(current.id), model)
         return true
       }
 
-      event.on("session.model.selected", (evt) => {
-        const committed = commitKey({
-          providerID: evt.data.model.providerID,
-          modelID: evt.data.model.id,
-          variant: normalizeModelVariant(evt.data.model.variant),
-        })
-        if (pendingCommits.get(evt.data.sessionID) !== committed) return
-        pendingCommits.delete(evt.data.sessionID)
-        const key = `session:${evt.data.sessionID}`
-        const draft = modelStore.model[key]
-        if (!draft) return
-        if (draft.providerID !== evt.data.model.providerID || draft.modelID !== evt.data.model.id) return
-        const variant = normalizeModelVariant(modelStore.sessionVariant[key] ?? undefined)
-        if (variant !== normalizeModelVariant(evt.data.model.variant)) return
-        setModelStore("model", key, undefined)
-        setModelStore("sessionVariant", key, undefined)
-      })
+      onCleanup(
+        event.on("session.model.selected", (evt) => {
+          const expected = pendingCommits.get(evt.data.sessionID)
+          if (!expected) return
+          pendingCommits.delete(evt.data.sessionID)
+          const committed = commitKey({
+            providerID: evt.data.model.providerID,
+            modelID: evt.data.model.id,
+            variant: evt.data.model.variant,
+          })
+          if (committed !== expected) return
+          const draft = modelStore.drafts[evt.data.sessionID]
+          if (draft && commitKey(draft) === committed) setModelStore("drafts", evt.data.sessionID, undefined)
+        }),
+      )
 
-      event.on("session.deleted", (evt) => {
-        pendingCommits.delete(evt.data.sessionID)
-        const key = `session:${evt.data.sessionID}`
-        setModelStore("model", key, undefined)
-        setModelStore("sessionVariant", key, undefined)
-      })
+      onCleanup(
+        event.on("session.deleted", (evt) => {
+          pendingCommits.delete(evt.data.sessionID)
+          setModelStore("drafts", evt.data.sessionID, undefined)
+        }),
+      )
 
       return {
         current: currentModel,
@@ -301,11 +295,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         expectCommit(
           sessionID: string,
-          value: ModelPreferenceModel & {
+          value: {
+            providerID: string
+            id: string
             variant?: string
           },
         ) {
-          const committed = commitKey(value)
+          const committed = commitKey({ providerID: value.providerID, modelID: value.id, variant: value.variant })
           pendingCommits.set(sessionID, committed)
           return () => {
             if (pendingCommits.get(sessionID) === committed) pendingCommits.delete(sessionID)
@@ -330,7 +326,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               provider: "Connect a provider",
               model: "No provider selected",
               reasoning: false,
-              available: false,
             }
           }
           const provider = providers()?.find((item) => item.id === value.providerID)
@@ -339,7 +334,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             provider: provider?.name ?? value.providerID,
             model: info?.name ?? `${value.modelID} (unavailable)`,
             reasoning: (info?.variants?.length ?? 0) !== 0,
-            available: info !== undefined,
           }
         }),
         cycle(direction: 1 | -1) {
@@ -412,13 +406,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           selected() {
             const m = currentModel()
             if (!m) return undefined
-            const key = scopeKey()
-            if (key?.startsWith("session:") && modelStore.sessionVariant[key] !== undefined)
-              return normalizeModelVariant(modelStore.sessionVariant[key] ?? undefined)
             if (route.data.type === "session") {
-              const durable = data.session.get(route.data.sessionID)?.model
-              if (durable?.providerID === m.providerID && durable.id === m.modelID)
-                return normalizeModelVariant(durable.variant)
+              const selection = modelStore.drafts[route.data.sessionID] ?? durableSelection(route.data.sessionID)
+              if (selection?.providerID === m.providerID && selection.modelID === m.modelID) return selection.variant
             }
             return normalizeModelVariant(modelStore.variant[modelPreferenceKey(m)])
           },
@@ -436,10 +426,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           set(value: string | undefined) {
             const m = currentModel()
             if (!m) return
-            const key = scopeKey()
-            if (key?.startsWith("session:")) {
-              setModelStore("model", key, { ...m })
-              setModelStore("sessionVariant", key, normalizeModelVariant(value) ?? null)
+            if (route.data.type === "session") {
+              setDraft(route.data.sessionID, { ...m, variant: normalizeModelVariant(value) })
               return
             }
             setModelStore("variant", modelPreferenceKey(m), normalizeModelVariant(value))

@@ -949,12 +949,15 @@ export function Prompt(props: PromptProps) {
         return [{ start: extmark.start, end: extmark.end, text: part.text }]
       }),
     )
-    const skillID = inputText.split("\n")[0].split(" ")[0].slice(1)
+    const slashHead = parseSlashHead(inputText, /\s/)
     const isSkill =
-      inputText.startsWith("/") &&
+      slashHead !== undefined &&
       (data.location.skill.list(currentLocation.ref) ?? []).some(
-        (skill) => skill.slash === true && skill.id === skillID,
+        (skill) => skill.slash === true && skill.id === slashHead.name,
       )
+    const isCommand =
+      slashHead !== undefined &&
+      (data.location.command.list(currentLocation.ref) ?? []).some((command) => command.name === slashHead.name)
     const agent = local.agent.current()
     if (!agent) return false
     const selectedModel = local.model.current()
@@ -1023,31 +1026,16 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
-    } else if (
-      inputText.startsWith("/") &&
-      (data.location.command.list(currentLocation.ref) ?? []).some(
-        (command) => command.name === inputText.split("\n")[0].split(" ")[0].slice(1),
-      )
-    ) {
+    } else if (slashHead && isCommand) {
       move.startSubmit()
-      // Parse command from first line, preserve multi-line content in arguments
-      const firstLineEnd = inputText.indexOf("\n")
-      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
-      const [command, ...firstLineArgs] = firstLine.split(" ")
-      const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
-      const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
       const model = { providerID: selectedModel.providerID, id: selectedModel.modelID, variant }
-      const cancelCommit = local.model.expectCommit(sessionID, {
-        providerID: model.providerID,
-        modelID: model.id,
-        variant: model.variant,
-      })
+      const cancelCommit = local.model.expectCommit(sessionID, model)
 
       void client.api.session
         .command({
           sessionID,
-          command: command.slice(1),
-          arguments: args,
+          command: slashHead.name,
+          arguments: slashHead.arguments,
           agent: agent.id,
           model,
           files: store.prompt.files,
@@ -1061,7 +1049,7 @@ export function Prompt(props: PromptProps) {
       move.startSubmit()
       void client.api.session.skill({
         sessionID,
-        skill: skillID,
+        skill: slashHead!.name,
       })
     } else {
       move.startSubmit()
@@ -1078,11 +1066,7 @@ export function Prompt(props: PromptProps) {
         (session.model.variant ?? "default") !== (variant ?? "default")
       ) {
         const model = { providerID: selectedModel.providerID, id: selectedModel.modelID, variant }
-        const cancelCommit = local.model.expectCommit(sessionID, {
-          providerID: model.providerID,
-          modelID: model.id,
-          variant: model.variant,
-        })
+        const cancelCommit = local.model.expectCommit(sessionID, model)
         await client.api.session.switchModel({ sessionID, model }).catch((error) => {
           cancelCommit()
           throw error
