@@ -133,6 +133,14 @@ function cachedReaddir() {
 let lastOpenedSessionID: string | undefined
 const SESSION_DIRECTORY_COLLATOR = new Intl.Collator("en", { numeric: true, sensitivity: "base" })
 
+export function compareSessionDirectories(a: string, b: string) {
+  const result = SESSION_DIRECTORY_COLLATOR.compare(a, b)
+  if (result !== 0) return result
+  if (a < b) return -1
+  if (a > b) return 1
+  return 0
+}
+
 export function Sessions() {
   const route = useRoute()
   const sdk = useSDK()
@@ -493,7 +501,7 @@ export function Sessions() {
         title="All Sessions"
         placeholder="Search sessions across all projects"
         options={options()}
-        categorySort={SESSION_DIRECTORY_COLLATOR.compare}
+        categorySort={compareSessionDirectories}
         skipFilter={true}
         preserveSelection={true}
         fullHeight={true}

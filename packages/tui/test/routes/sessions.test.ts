@@ -1,8 +1,19 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { createSessionsListQuery, directorySuggestions, parseNewSessionInput } from "../../src/routes/sessions"
+import {
+  compareSessionDirectories,
+  createSessionsListQuery,
+  directorySuggestions,
+  parseNewSessionInput,
+} from "../../src/routes/sessions"
 
 describe("sessions list", () => {
+  test("compares directory groups deterministically", () => {
+    expect(compareSessionDirectories("/workspace/project2", "/workspace/project10")).toBeLessThan(0)
+    expect(compareSessionDirectories("/workspace/API", "/workspace/api")).toBeLessThan(0)
+    expect(compareSessionDirectories("/workspace/api", "/workspace/API")).toBeGreaterThan(0)
+  })
+
   test("requests root sessions for the default browse list", () => {
     expect(createSessionsListQuery({})).toEqual({
       roots: true,
