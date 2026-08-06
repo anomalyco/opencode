@@ -1,9 +1,9 @@
-export * as ToolTruncation from "./tool-truncation"
+export * as ToolOutput from "./tool-output"
 
 import path from "path"
 import type { Tool } from "@opencode-ai/schema/tool"
-import { Context, Duration, Effect, Layer, Option, Schedule } from "effect"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { Context, Duration, Effect, Layer, Schedule } from "effect"
+import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Config } from "./config"
@@ -17,11 +17,25 @@ export const DIRECTORY = "tool-output"
 type Result = Tool.Result
 
 export interface Interface {
-  readonly apply: (result: Result) => Effect.Effect<Result>
+  readonly truncate: (result: Result) => Effect.Effect<Result>
   readonly cleanup: () => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ToolTruncation") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/ToolOutput") {}
+
+const timestamp = (id: string) => Number(BigInt(`0x${id.slice(0, 12)}`) / 0x1000n)
+
+const cleanup = Effect.fn("ToolOutput.cleanup")(function* (fs: FSUtil.Interface, directory: string) {
+  const cutoff = timestamp(Identifier.create(false, Date.now() - Duration.toMillis(RETENTION)))
+  const entries = yield* fs.readDirectory(directory).pipe(
+    Effect.map((entries) => entries.filter((entry) => /^tool_[0-9a-f]{12}/.test(entry))),
+    Effect.catch(() => Effect.succeed([])),
+  )
+  for (const entry of entries) {
+    if (timestamp(entry.slice("tool_".length)) >= cutoff) continue
+    yield* fs.remove(path.join(directory, entry)).pipe(Effect.catch(() => Effect.void))
+  }
+})
 
 const layer = Layer.effect(
   Service,
@@ -31,25 +45,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const directory = path.join(global.data, DIRECTORY)
 
-    const cleanup = Effect.fn("ToolTruncation.cleanup")(function* () {
-      const entries = yield* fs.readDirectory(directory).pipe(Effect.catch(() => Effect.succeed([])))
-      const cutoff = Date.now() - Duration.toMillis(RETENTION)
-      yield* Effect.forEach(
-        entries.filter((entry) => entry.startsWith("tool_")),
-        (entry) => {
-          const file = path.join(directory, entry)
-          return fs.stat(file).pipe(
-            Effect.flatMap((info) =>
-              Option.getOrElse(info.mtime, () => new Date(0)).getTime() < cutoff ? fs.remove(file) : Effect.void,
-            ),
-            Effect.catch(() => Effect.void),
-          )
-        },
-        { discard: true },
-      )
-    })
-
-    const apply = Effect.fn("ToolTruncation.apply")(function* (result: Result) {
+    const truncate = Effect.fn("ToolOutput.truncate")(function* (result: Result) {
       if (result.metadata?.truncated === true) return result
       const content =
         typeof result.content === "string" ? [{ type: "text" as const, text: result.content }] : (result.content ?? [])
@@ -85,9 +81,25 @@ const layer = Layer.effect(
       }
     })
 
-    yield* cleanup().pipe(Effect.repeat(Schedule.spaced(Duration.hours(1))), Effect.forkScoped)
-    return Service.of({ apply, cleanup })
+    return Service.of({ truncate, cleanup: () => cleanup(fs, directory) })
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Config.node, FSUtil.node, Global.node] })
+const cleanupLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const fs = yield* FSUtil.Service
+    const global = yield* Global.Service
+    yield* cleanup(fs, path.join(global.data, DIRECTORY)).pipe(
+      Effect.repeat(Schedule.spaced(Duration.hours(1))),
+      Effect.forkScoped,
+    )
+  }),
+)
+
+const cleanupNode = makeGlobalNode({ name: "tool-output-cleanup", layer: cleanupLayer, deps: [FSUtil.node, Global.node] })
+
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Config.node, FSUtil.node, Global.node, cleanupNode],
+})

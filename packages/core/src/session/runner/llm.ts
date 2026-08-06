@@ -32,7 +32,7 @@ import { StepFailedError } from "../error"
 import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
 import { SessionUsage } from "../usage"
-import { ToolTruncation } from "../../tool-truncation"
+import { ToolOutput } from "../../tool-output"
 
 /** How one model call ended: settled, awaiting a scheduled retry, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
@@ -108,7 +108,7 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const title = yield* SessionTitle.Service
-    const toolTruncation = yield* ToolTruncation.Service
+    const toolOutput = yield* ToolOutput.Service
     // Title generation is a side effect of a successful step; it must not delay continuation.
     // The in-flight set coalesces overlapping steps while title presence records success durably.
     const titlesRunning = new Set<SessionSchema.ID>()
@@ -336,7 +336,7 @@ const layer = Layer.effect(
                 ).pipe(
                   // The fiber owns its call: it publishes its own completion, masked so a
                   // finished execution always reaches its durable settlement.
-                  Effect.flatMap(toolTruncation.apply),
+                  Effect.flatMap(toolOutput.truncate),
                   Effect.flatMap((outcome) => publisher.toolExecution(event.id, event.name, outcome)),
                   Effect.catchTag("Tool.Error", (error) =>
                     publisher.failTool(event.id, toSessionError(error)).pipe(Effect.asVoid),
@@ -565,7 +565,7 @@ export const node = makeLocationNode({
     SessionCompaction.node,
     SessionTitle.node,
     Snapshot.node,
-    ToolTruncation.node,
+    ToolOutput.node,
     Database.node,
   ],
 })

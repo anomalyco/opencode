@@ -6,14 +6,15 @@ import { Document, Info } from "@opencode-ai/schema/config"
 import { ConfigToolOutput } from "@opencode-ai/schema/config/tool-output"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { ToolTruncation } from "@opencode-ai/core/tool-truncation"
+import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
+import { Identifier } from "@opencode-ai/core/util/identifier"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
 const withStore = <A, E, R>(
-  body: (truncation: ToolTruncation.Interface, fs: FSUtil.Interface, root: string) => Effect.Effect<A, E, R>,
+  body: (output: ToolOutput.Interface, fs: FSUtil.Interface, root: string) => Effect.Effect<A, E, R>,
   info = new Info(),
 ) =>
   Effect.acquireUseRelease(
@@ -26,24 +27,24 @@ const withStore = <A, E, R>(
           changes: () => Stream.empty,
         }),
       )
-      const layer = AppNodeBuilder.build(LayerNode.group([ToolTruncation.node, FSUtil.node]), [
+      const layer = AppNodeBuilder.build(LayerNode.group([ToolOutput.node, FSUtil.node]), [
         [Config.node, config],
         [Global.node, Global.layerWith({ data: tmp.path })],
       ])
       return Effect.gen(function* () {
-        return yield* body(yield* ToolTruncation.Service, yield* FSUtil.Service, tmp.path)
+        return yield* body(yield* ToolOutput.Service, yield* FSUtil.Service, tmp.path)
       }).pipe(Effect.provide(layer))
     },
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   )
 
-describe("ToolTruncation", () => {
+describe("ToolOutput", () => {
   it.live("writes oversized text and returns a bounded preview", () =>
     withStore(
-      (truncation, fs) =>
+      (service, fs) =>
         Effect.gen(function* () {
           const output = { items: [1, 2, 3] }
-          const result = yield* truncation.apply({ output, content: "one\ntwo\nthree" })
+          const result = yield* service.truncate({ output, content: "one\ntwo\nthree" })
           expect(result.output).toBe(output)
           expect(result.metadata).toMatchObject({ truncated: true })
           const outputPath = result.metadata?.outputPath
@@ -59,35 +60,33 @@ describe("ToolTruncation", () => {
   )
 
   it.live("skips results already marked truncated", () =>
-    withStore((truncation) =>
+    withStore((output) =>
       Effect.gen(function* () {
         const result = { content: "one\ntwo", metadata: { truncated: true, source: "tool" } }
-        expect(yield* truncation.apply(result)).toBe(result)
+        expect(yield* output.truncate(result)).toBe(result)
       }),
     ),
   )
 
   it.live("marks results that fit without changing their content", () =>
-    withStore((truncation) =>
+    withStore((output) =>
       Effect.gen(function* () {
         const content = [{ type: "text" as const, text: "small" }]
-        expect(yield* truncation.apply({ content })).toEqual({ content, metadata: { truncated: false } })
+        expect(yield* output.truncate({ content })).toEqual({ content, metadata: { truncated: false } })
       }),
     ),
   )
 
   it.live("removes expired managed files", () =>
-    withStore((truncation, fs, root) =>
+    withStore((output, fs, root) =>
       Effect.gen(function* () {
-        const directory = path.join(root, ToolTruncation.DIRECTORY)
-        const old = path.join(directory, "tool_old")
-        const recent = path.join(directory, "tool_recent")
+        const directory = path.join(root, ToolOutput.DIRECTORY)
+        const old = path.join(directory, `tool_${Identifier.create(false, Date.now() - 8 * 24 * 60 * 60 * 1_000)}`)
+        const recent = path.join(directory, `tool_${Identifier.ascending()}`)
         yield* fs.ensureDir(directory)
         yield* fs.writeFileString(old, "old")
         yield* fs.writeFileString(recent, "recent")
-        const expired = new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000)
-        yield* fs.utimes(old, expired, expired)
-        yield* truncation.cleanup()
+        yield* output.cleanup()
         expect(yield* fs.exists(old)).toBe(false)
         expect(yield* fs.exists(recent)).toBe(true)
       }),
