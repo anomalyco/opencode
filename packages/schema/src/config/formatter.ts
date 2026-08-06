@@ -1,4 +1,4 @@
-export * as ConfigFormatter from "./formatter"
+export * as ConfigFormatter from "./formatter.js"
 
 import { Schema } from "effect"
 

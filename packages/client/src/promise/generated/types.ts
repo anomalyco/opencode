@@ -1698,6 +1698,180 @@ export type AgentInfo = {
   permissions: PermissionRuleset
 }
 
+export type ConfigEntry =
+  | {
+      type: "document"
+      path?: string | null
+      info: {
+        $schema?: string | null
+        shell?: string | null
+        model?: string | { providerID: string; model: string; variant?: string | null } | null
+        default_agent?: string | null
+        autoupdate?: boolean | "notify" | null
+        share?: "manual" | "auto" | "disabled" | null
+        enterprise?: { url?: string | null } | null
+        username?: string | null
+        permissions?: PermissionRuleset | null
+        agents?: {
+          [x: string]: {
+            model?: string | { providerID: string; model: string; variant?: string | null } | null
+            request?: { headers?: { [x: string]: string } | null; body?: { [x: string]: JsonValue } | null } | null
+            system?: string | null
+            description?: string | null
+            mode?: "subagent" | "primary" | "all" | null
+            hidden?: boolean | null
+            color?: string | null
+            steps?: number | null
+            disabled?: boolean | null
+            permissions?: PermissionRuleset | null
+          }
+        } | null
+        snapshots?: boolean | null
+        watcher?: { ignore?: Array<string> | null } | null
+        formatter?:
+          | boolean
+          | {
+              [x: string]: {
+                disabled?: boolean | null
+                command?: Array<string> | null
+                environment?: { [x: string]: string } | null
+                extensions?: Array<string> | null
+              }
+            }
+          | null
+        lsp?:
+          | boolean
+          | {
+              [x: string]:
+                | { disabled: true }
+                | {
+                    command: Array<string>
+                    extensions?: Array<string> | null
+                    disabled?: boolean | null
+                    env?: { [x: string]: string } | null
+                    initialization?: { [x: string]: JsonValue } | null
+                  }
+            }
+          | null
+        media?: {
+          image?: {
+            auto_resize?: boolean | null
+            max_width?: number | null
+            max_height?: number | null
+            max_base64_bytes?: number | null
+          } | null
+        } | null
+        tool_output?: { max_lines?: number | null; max_bytes?: number | null } | null
+        mcp?: {
+          timeout?: { startup?: number | null; catalog?: number | null; execution?: number | null } | null
+          servers?: {
+            [x: string]:
+              | {
+                  type: "local"
+                  command: Array<string>
+                  cwd?: string | null
+                  environment?: { [x: string]: string } | null
+                  disabled?: boolean | null
+                  codemode?: boolean | null
+                  timeout?: { startup?: number | null; catalog?: number | null; execution?: number | null } | null
+                }
+              | {
+                  type: "remote"
+                  url: string
+                  headers?: { [x: string]: string } | null
+                  oauth?:
+                    | {
+                        client_id?: string | null
+                        client_secret?: string | null
+                        scope?: string | null
+                        callback_port?: number | null
+                        redirect_uri?: string | null
+                      }
+                    | false
+                    | null
+                  disabled?: boolean | null
+                  codemode?: boolean | null
+                  timeout?: { startup?: number | null; catalog?: number | null; execution?: number | null } | null
+                }
+          } | null
+        } | null
+        compaction?: { auto?: boolean | null; keep?: { tokens?: number | null } | null; buffer?: number | null } | null
+        skills?: Array<string> | null
+        commands?: {
+          [x: string]: {
+            template: string
+            description?: string | null
+            agent?: string | null
+            model?: string | { providerID: string; model: string; variant?: string | null } | null
+            subtask?: boolean | null
+          }
+        } | null
+        instructions?: Array<string> | null
+        references?: {
+          [x: string]:
+            | string
+            | { repository: string; branch?: string | null; description?: string | null; hidden?: boolean | null }
+            | { path: string; description?: string | null; hidden?: boolean | null }
+        } | null
+        websearch?: { provider: string } | null
+        plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } | null }> | null
+        warming?: boolean | { prompt?: string | null; interval?: string | null; duration?: string | null } | null
+        providers?: {
+          [x: string]: {
+            name?: string | null
+            env?: Array<string> | null
+            package?: string | null
+            settings?: { [x: string]: JsonValue } | null
+            headers?: { [x: string]: string } | null
+            body?: { [x: string]: JsonValue } | null
+            models?: {
+              [x: string]: {
+                modelID?: string | null
+                family?: string | null
+                name?: string | null
+                compatibility?: ModelCompatibility | null
+                package?: string | null
+                settings?: { [x: string]: JsonValue } | null
+                headers?: { [x: string]: string } | null
+                body?: { [x: string]: JsonValue } | null
+                capabilities?: ModelCapabilities | null
+                variants?: Array<{
+                  id: string
+                  settings?: { [x: string]: JsonValue } | null
+                  headers?: { [x: string]: string } | null
+                  body?: { [x: string]: JsonValue } | null
+                }> | null
+                cost?:
+                  | {
+                      tier?: { type: "context"; size: number } | null
+                      input: MoneyUSDPerMillionTokens
+                      output: MoneyUSDPerMillionTokens
+                      cache?: { read?: MoneyUSDPerMillionTokens | null; write?: MoneyUSDPerMillionTokens | null } | null
+                    }
+                  | Array<{
+                      tier?: { type: "context"; size: number } | null
+                      input: MoneyUSDPerMillionTokens
+                      output: MoneyUSDPerMillionTokens
+                      cache?: { read?: MoneyUSDPerMillionTokens | null; write?: MoneyUSDPerMillionTokens | null } | null
+                    }>
+                  | null
+                disabled?: boolean | null
+                limit?: { context?: number | null; input?: number | null; output?: number | null } | null
+              }
+            } | null
+          }
+        } | null
+        experimental?: {
+          subagent_depth?: number | null
+          policies?: Array<{ action: "provider.use"; resource: string; effect: "allow" | "deny" }> | null
+        } | null
+      }
+    }
+  | { type: "directory"; path: string }
+  | { type: "file"; path: string }
+  | { type: "agents"; path: string }
+  | { type: "claude"; path: string }
+
 export type SessionsResponse = { data: Array<SessionInfo>; cursor: { previous?: string | null; next?: string | null } }
 
 export type SessionPendingUser = {
@@ -4593,3 +4767,11 @@ export type WebsearchQueryOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: { providerID: string; results: Array<WebSearchResult> }
 }
+
+export type ConfigGetInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  }["location"]
+}
+
+export type ConfigGetOutput = Array<ConfigEntry>

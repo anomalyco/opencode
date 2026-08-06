@@ -1,10 +1,8 @@
-export * as ConfigMCP from "./mcp"
+export * as ConfigMCP from "./mcp.js"
 
 import { Schema } from "effect"
-import { Mcp } from "@opencode-ai/schema/mcp"
+import { Mcp } from "../mcp.js"
 
-// The MCP server config is a public wire contract (used by the mcp.add route), so it lives in
-// @opencode-ai/schema and is re-exported here.
 export const Timeout = Mcp.TimeoutConfig
 export type Timeout = Mcp.TimeoutConfig
 export const Local = Mcp.LocalConfig

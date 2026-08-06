@@ -1025,14 +1025,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundError"
                 }
               }
             }
@@ -1540,14 +1533,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundError"
                 }
               }
             }
@@ -2912,14 +2898,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundError"
                 }
               }
             }
@@ -3009,14 +2988,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundError"
                 }
               }
             }
@@ -3586,14 +3558,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundError"
                 }
               }
             }
@@ -3821,13 +3786,10 @@
                 "schema": {
                   "anyOf": [
                     {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
                       "$ref": "#/components/schemas/MessageNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
                     }
                   ]
                 }
@@ -3956,14 +3918,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundError"
                 }
               }
             }
@@ -11771,39 +11726,101 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "required",
-                        "running",
-                        "completed"
-                      ]
-                    },
-                    "completed": {
-                      "type": "integer",
-                      "allOf": [
-                        {
-                          "minimum": 0
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "required",
+                            "completed"
+                          ]
                         }
-                      ]
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "additionalProperties": false
                     },
-                    "total": {
-                      "type": "integer",
-                      "allOf": [
-                        {
-                          "minimum": 0
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "running"
+                          ]
+                        },
+                        "progress": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string"
+                            },
+                            "numerator": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "allOf": [
+                                    {
+                                      "minimum": 0
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "denominator": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "allOf": [
+                                    {
+                                      "minimum": 0
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "label"
+                          ],
+                          "additionalProperties": false
                         }
-                      ]
+                      },
+                      "required": [
+                        "status",
+                        "progress"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "error"
+                          ]
+                        },
+                        "error": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "error"
+                      ],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": [
-                    "status",
-                    "completed",
-                    "total"
-                  ],
-                  "additionalProperties": false
+                  ]
                 }
               }
             }
@@ -11831,60 +11848,6 @@
         },
         "description": "Return the progress of the V1 to V2 session history migration.",
         "summary": "Get V1 migration status"
-      },
-      "post": {
-        "tags": [
-          "migration"
-        ],
-        "operationId": "v2.experimental.migration.v1.run",
-        "parameters": [],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "completed"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "status"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Run or resume the V1 to V2 session history migration and wait for completion.",
-        "summary": "Run V1 migration"
       }
     },
     "/api/websearch/provider": {
@@ -12133,6 +12096,94 @@
           },
           "required": true
         }
+      }
+    },
+    "/api/config": {
+      "get": {
+        "tags": [
+          "config"
+        ],
+        "operationId": "v2.config.get",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Config.Entry"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return configuration documents and discovery sources for the requested location, from lowest to highest priority.",
+        "summary": "Get configuration"
       }
     }
   },
@@ -16014,6 +16065,9 @@
                     }
                   ]
                 }
+              },
+              "text": {
+                "type": "string"
               }
             },
             "required": [
@@ -26457,6 +26511,1744 @@
           "results"
         ],
         "additionalProperties": false
+      },
+      "Config.ModelSelection": {
+        "anyOf": [
+          {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^[^/#]+$"
+                  }
+                ]
+              },
+              "model": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^[^#]+$"
+                  }
+                ]
+              },
+              "variant": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "pattern": "^[^#]+$"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "providerID",
+              "model"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Config.Provider.Request": {
+        "type": "object",
+        "properties": {
+          "headers": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Agent": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.ModelSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.Provider.Request"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "subagent",
+                  "primary",
+                  "all"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hidden": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "steps": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permissions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Permission.Ruleset"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Watcher": {
+        "type": "object",
+        "properties": {
+          "ignore": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Formatter.Entry": {
+        "type": "object",
+        "properties": {
+          "disabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "environment": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extensions": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.LSP.Server": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "extensions": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "env": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "initialization": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "additionalProperties": false
+      },
+      "Config.Media.Image": {
+        "type": "object",
+        "properties": {
+          "auto_resize": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_width": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_height": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_base64_bytes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Media": {
+        "type": "object",
+        "properties": {
+          "image": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.Media.Image"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.ToolOutput": {
+        "type": "object",
+        "properties": {
+          "max_lines": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_bytes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.MCP": {
+        "type": "object",
+        "properties": {
+          "timeout": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Mcp.TimeoutConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "servers": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Mcp.LocalConfig"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Mcp.RemoteConfig"
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Compaction.Keep": {
+        "type": "object",
+        "properties": {
+          "tokens": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Compaction": {
+        "type": "object",
+        "properties": {
+          "auto": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "keep": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.Compaction.Keep"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "buffer": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Command": {
+        "type": "object",
+        "properties": {
+          "template": {
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.ModelSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subtask": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "template"
+        ],
+        "additionalProperties": false
+      },
+      "Config.Reference.Git": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hidden": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "repository"
+        ],
+        "additionalProperties": false
+      },
+      "Config.Reference.Local": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hidden": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigWebSearch.Info": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "additionalProperties": false
+      },
+      "Config.Plugin.Entry": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "package"
+        ],
+        "additionalProperties": false
+      },
+      "Config.Warming": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Prompt sent for keep-alive requests"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Idle time between keep-alive requests (default: \"4 minutes\")"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Time after the last active request to keep a session warm (default: \"30 minutes\")"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Model.Cost.Cache": {
+        "type": "object",
+        "properties": {
+          "read": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money.USDPerMillionTokens"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "write": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money.USDPerMillionTokens"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Model.Cost": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "context"
+                    ]
+                  },
+                  "size": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "type",
+                  "size"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "input": {
+            "$ref": "#/components/schemas/Money.USDPerMillionTokens"
+          },
+          "output": {
+            "$ref": "#/components/schemas/Money.USDPerMillionTokens"
+          },
+          "cache": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.Model.Cost.Cache"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "input",
+          "output"
+        ],
+        "additionalProperties": false
+      },
+      "Config.Model.Limit": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "input": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Model": {
+        "type": "object",
+        "properties": {
+          "modelID": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Model.Compatibility"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "package": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "headers": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Model.Capabilities"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "variants": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "settings": {
+                      "anyOf": [
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "headers": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "body": {
+                      "anyOf": [
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Config.Model.Cost"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Config.Model.Cost"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.Model.Limit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Provider": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "env": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "package": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "headers": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "models": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/Config.Model"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfigExperimental.Info": {
+        "type": "object",
+        "properties": {
+          "subagent_depth": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Maximum subagent nesting depth. Defaults to 1."
+          },
+          "policies": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "provider.use"
+                      ]
+                    },
+                    "resource": {
+                      "type": "string"
+                    },
+                    "effect": {
+                      "type": "string",
+                      "enum": [
+                        "allow",
+                        "deny"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "resource",
+                    "effect"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ordered policies controlling access to configured resources"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Info": {
+        "type": "object",
+        "properties": {
+          "$schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "JSON schema reference for configuration validation"
+          },
+          "shell": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Default shell to use for terminal and shell tool execution"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.ModelSelection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Default model to use when no session or agent model is selected"
+          },
+          "default_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Default primary agent to use when no session agent is selected"
+          },
+          "autoupdate": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "notify"
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Automatically update or notify when a new version is available"
+          },
+          "share": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "manual",
+                  "auto",
+                  "disabled"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Control whether sessions may be shared manually, automatically, or not at all"
+          },
+          "enterprise": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Enterprise sharing service configuration"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Username displayed in conversations and used for telemetry identity"
+          },
+          "permissions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Permission.Ruleset"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ordered tool permission rules applied to agent tool use"
+          },
+          "agents": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/Config.Agent"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Named built-in agent overrides and custom agent definitions"
+          },
+          "snapshots": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Enable snapshots used for undo and revert behavior"
+          },
+          "watcher": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.Watcher"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Filesystem watcher configuration"
+          },
+          "formatter": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {
+                      "$ref": "#/components/schemas/Config.Formatter.Entry"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Enable built-in formatters or configure formatter overrides"
+          },
+          "lsp": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "disabled": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            }
+                          },
+                          "required": [
+                            "disabled"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "$ref": "#/components/schemas/Config.LSP.Server"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Enable built-in language servers or configure server overrides"
+          },
+          "media": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.Media"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Media processing configuration"
+          },
+          "tool_output": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.ToolOutput"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tool output truncation thresholds"
+          },
+          "mcp": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.MCP"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "MCP server configuration"
+          },
+          "compaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Config.Compaction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Conversation compaction behavior"
+          },
+          "skills": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Additional paths or URLs to discover skills from"
+          },
+          "commands": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/Config.Command"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Named slash command definitions"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Additional paths or URLs supplying ambient instructions"
+          },
+          "references": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Config.Reference.Git"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Config.Reference.Local"
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Named local directories or Git repositories available as external context"
+          },
+          "websearch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfigWebSearch.Info"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Web search provider selection"
+          },
+          "plugins": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Config.Plugin.Entry"
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ordered plugin enablement directives and external package declarations"
+          },
+          "warming": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Config.Warming"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Keep recently active sessions warm with transient model requests (default: false)"
+          },
+          "providers": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/Config.Provider"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "experimental": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfigExperimental.Info"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Config.Document": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "document"
+            ]
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "info": {
+            "$ref": "#/components/schemas/Config.Info"
+          }
+        },
+        "required": [
+          "type",
+          "info"
+        ],
+        "additionalProperties": false
+      },
+      "Config.Directory": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "directory"
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "Config.File": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "file"
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "Config.AgentsDirectory": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "agents"
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "Config.ClaudeDirectory": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "claude"
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "Config.Entry": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Config.Document"
+          },
+          {
+            "$ref": "#/components/schemas/Config.Directory"
+          },
+          {
+            "$ref": "#/components/schemas/Config.File"
+          },
+          {
+            "$ref": "#/components/schemas/Config.AgentsDirectory"
+          },
+          {
+            "$ref": "#/components/schemas/Config.ClaudeDirectory"
+          }
+        ]
       }
     },
     "securitySchemes": {}
@@ -26571,6 +28363,10 @@
     {
       "name": "websearch",
       "description": "Location-scoped web search routes."
+    },
+    {
+      "name": "config",
+      "description": "Location-scoped configuration routes."
     }
   ]
 }

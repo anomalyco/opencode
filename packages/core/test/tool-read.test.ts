@@ -2,7 +2,8 @@ import { beforeEach, describe, expect } from "bun:test"
 import path from "path"
 import { Effect, Exit, Layer, PlatformError, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
-import { ConfigMedia } from "@opencode-ai/core/config/media"
+import { Document, Info } from "@opencode-ai/schema/config"
+import { ConfigMedia } from "@opencode-ai/schema/config/media"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -429,9 +430,9 @@ describe("ReadTool", () => {
       }
       const configTest = yield* Config.Test
       yield* configTest.setEntries([
-        new Config.Document({
+        new Document({
           type: "document",
-          info: new Config.Info({
+          info: new Info({
             media: new ConfigMedia.Info({
               image: new ConfigMedia.Image({ auto_resize: false, max_width: 4 }),
             }),
@@ -472,9 +473,9 @@ describe("ReadTool", () => {
       }
       const configTest = yield* Config.Test
       yield* configTest.setEntries([
-        new Config.Document({
+        new Document({
           type: "document",
-          info: new Config.Info({
+          info: new Info({
             media: new ConfigMedia.Info({ image: new ConfigMedia.Image({ max_width: 4 }) }),
           }),
         }),
@@ -511,9 +512,9 @@ describe("ReadTool", () => {
       }
       const configTest = yield* Config.Test
       yield* configTest.setEntries([
-        new Config.Document({
+        new Document({
           type: "document",
-          info: new Config.Info({
+          info: new Info({
             media: new ConfigMedia.Info({
               image: new ConfigMedia.Image({ max_base64_bytes: 1 }),
             }),

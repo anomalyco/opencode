@@ -1,8 +1,8 @@
-export * as ConfigProvider from "./provider"
+export * as ConfigProvider from "./provider.js"
 
 import { Schema } from "effect"
-import { Money } from "@opencode-ai/schema/money"
-import { Capabilities, Compatibility, Family, ID, VariantID } from "../model"
+import { Money } from "../money.js"
+import { Capabilities, Compatibility, Family, ID, VariantID } from "../model.js"
 
 const JsonRecord = Schema.Record(Schema.String, Schema.Json)
 

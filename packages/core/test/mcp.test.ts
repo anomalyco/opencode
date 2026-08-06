@@ -12,7 +12,8 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js"
-import { ConfigMCP } from "@opencode-ai/core/config/mcp"
+import { Document, Info } from "@opencode-ai/schema/config"
+import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { Config } from "@opencode-ai/core/config"
 import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -162,9 +163,9 @@ function resourceMcpLayer(
     Layer.provide(
       Layer.mergeAll(
         Config.testLayer([
-          new Config.Document({
+          new Document({
             type: "document",
-            info: new Config.Info({
+            info: new Info({
               mcp: new ConfigMCP.Info({
                 servers: {
                   resources:

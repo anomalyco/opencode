@@ -49,9 +49,10 @@ import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { QuestionTool } from "@opencode-ai/core/tool/plugin/question"
 import { Agent } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
-import { ConfigCompaction } from "@opencode-ai/core/config/compaction"
+import { Document, Info } from "@opencode-ai/schema/config"
+import { ConfigCompaction } from "@opencode-ai/schema/config/compaction"
 import { Tool } from "@opencode-ai/core/tool"
-import type { Info } from "@opencode-ai/schema/tool"
+import type { Info as ToolInfo } from "@opencode-ai/schema/tool"
 import {
   InstructionStateTable,
   SessionPendingTable,
@@ -228,7 +229,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string, Info>>, options?: Tool.Options) =>
+const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string, ToolInfo>>, options?: Tool.Options) =>
   registry.transform((draft) =>
     Object.entries(tools).forEach(([name, tool]) => draft.add({ ...tool, name, options: options ?? tool.options })),
   )
@@ -334,9 +335,9 @@ const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
 })
 const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const config = Config.testLayer([
-  new Config.Document({
+  new Document({
     type: "document",
-    info: new Config.Info({
+    info: new Info({
       compaction: new ConfigCompaction.Info({
         buffer: 3_000,
         keep: new ConfigCompaction.Keep({ tokens: 1_000 }),

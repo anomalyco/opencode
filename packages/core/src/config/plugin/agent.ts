@@ -1,11 +1,12 @@
 export * as ConfigAgentPlugin from "./agent"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Document, Info, type Entry } from "@opencode-ai/schema/config"
+import { ConfigAgent } from "@opencode-ai/schema/config/agent"
 import path from "path"
 import { Effect, Option, Schema, Stream } from "effect"
 import { Agent } from "../../agent"
 import { Config } from "../../config"
-import { ConfigAgent } from "../agent"
 import { ConfigMarkdown } from "../markdown"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { ConfigAgentV1 } from "../../v1/config/agent"
@@ -24,7 +25,7 @@ const legacySources = [
 const sourceDirectories = ["agent", "agents", "mode", "modes"] as const
 const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info)
 const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info)
-const decodeConfig = Schema.decodeUnknownOption(Config.Info)
+const decodeConfig = Schema.decodeUnknownOption(Info)
 type PathAction =
   | LocationMutation.ExternalDirectoryAuthorization["action"]
   | typeof ReadTool.name
@@ -63,13 +64,13 @@ export const Plugin = define({
             ),
           ).pipe(
             Effect.map((documents) =>
-              documents.filter((document): document is Config.Document => document !== undefined),
+              documents.filter((document): document is Document => document !== undefined),
             ),
           )
         })
       }).pipe(Effect.map((documents) => documents.flat()))
     })
-    const loaded = { documents: [] as Config.Document[] }
+    const loaded = { documents: [] as Document[] }
     const reload = load().pipe(
       Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
       Effect.andThen(ctx.agent.reload()),
@@ -139,7 +140,7 @@ export const Plugin = define({
 
 // Matches anything at or under <root>/{agent,agents,mode,modes}. No file-suffix
 // check: directory-level events such as renames carry no per-file paths.
-function isAgentSource(entries: Config.Entry[], file: string) {
+function isAgentSource(entries: Entry[], file: string) {
   return entries.some(
     (entry) =>
       entry.type === "directory" &&
@@ -208,5 +209,5 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     }),
   )
   if (!info) return
-  return new Config.Document({ type: "document", path: file.filepath, info })
+  return new Document({ type: "document", path: file.filepath, info })
 }

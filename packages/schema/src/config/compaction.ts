@@ -1,7 +1,7 @@
-export * as ConfigCompaction from "./compaction"
+export * as ConfigCompaction from "./compaction.js"
 
 import { Schema } from "effect"
-import { NonNegativeInt } from "../schema"
+import { NonNegativeInt } from "../schema.js"
 
 export class Keep extends Schema.Class<Keep>("Config.Compaction.Keep")({
   tokens: NonNegativeInt.pipe(Schema.optional),

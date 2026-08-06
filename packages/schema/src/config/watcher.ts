@@ -1,4 +1,4 @@
-export * as ConfigWatcher from "./watcher"
+export * as ConfigWatcher from "./watcher.js"
 
 import { Schema } from "effect"
 

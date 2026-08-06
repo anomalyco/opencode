@@ -38,6 +38,7 @@ import type { ProjectCopy } from "@opencode-ai/schema/project-copy"
 import type { Vcs } from "@opencode-ai/schema/vcs"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
 import type { WebSearch } from "@opencode-ai/schema/websearch"
+import type { Config } from "@opencode-ai/schema/config"
 
 export type Endpoint0_0Output = { readonly healthy: true; readonly version: string; readonly pid: number }
 export type HealthGetOperation<E = never> = () => Effect.Effect<Endpoint0_0Output, E>
@@ -1595,6 +1596,16 @@ export interface WebsearchApi<E = never> {
   readonly query: WebsearchQueryOperation<E>
 }
 
+export type Endpoint29_0Input = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type Endpoint29_0Output = ReadonlyArray<Config.Entry>
+export type ConfigGetOperation<E = never> = (input?: Endpoint29_0Input) => Effect.Effect<Endpoint29_0Output, E>
+
+export interface ConfigApi<E = never> {
+  readonly get: ConfigGetOperation<E>
+}
+
 export interface AppApi<E = never> {
   readonly health: HealthApi<E>
   readonly server: ServerApi<E>
@@ -1625,4 +1636,5 @@ export interface AppApi<E = never> {
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>
   readonly websearch: WebsearchApi<E>
+  readonly config: ConfigApi<E>
 }

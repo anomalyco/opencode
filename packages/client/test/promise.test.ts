@@ -33,6 +33,7 @@ test("exposes every standard HTTP API group", () => {
     "vcs",
     "debug",
     "websearch",
+    "config",
   ])
   expect(Object.keys(client.debug)).toEqual(["location"])
   expect(Object.keys(client.debug.location)).toEqual(["list", "evict"])
@@ -48,6 +49,34 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "current", "directories"])
+})
+
+test("config.get returns ordered config entries for a location", async () => {
+  let request: Request | undefined
+  const entries = [
+    {
+      type: "document" as const,
+      path: "/tmp/project/opencode.json",
+      info: {
+        permissions: [
+          { action: "shell", resource: "*", effect: "ask" as const },
+          { action: "shell", resource: "git status", effect: "allow" as const },
+        ],
+      },
+    },
+    { type: "file" as const, path: "/tmp/project/opencode.json" },
+  ]
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input) => {
+      request = input instanceof Request ? input : new Request(input)
+      return Response.json(entries)
+    },
+  })
+
+  expect(await client.config.get({ location: { directory: "/tmp/project" } })).toEqual(entries)
+  expect(request?.method).toBe("GET")
+  expect(request?.url).toBe("http://localhost:3000/api/config?location%5Bdirectory%5D=%2Ftmp%2Fproject")
 })
 
 test("websearch.query uses the public HTTP contract", async () => {

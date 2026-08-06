@@ -1,7 +1,8 @@
 export * as PluginSupervisor from "./supervisor"
 
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
-import { Event } from "@opencode-ai/schema/config"
+import { Directory, Document, Event, type Entry } from "@opencode-ai/schema/config"
+import { ConfigPlugin } from "@opencode-ai/schema/config/plugin"
 import { Context, Deferred, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
@@ -9,7 +10,6 @@ import { Agent } from "../agent"
 import { Catalog } from "../catalog"
 import { Command } from "../command"
 import { Config } from "../config"
-import { ConfigPlugin } from "../config/plugin"
 import { Credential } from "../credential"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
@@ -83,15 +83,15 @@ function parse(input: ConfigPlugin.Plugin): Operation {
   return { type: "remove", target: input.slice(1) }
 }
 
-const scan = Effect.fn("PluginSupervisor.scan")(function* (entries: readonly Config.Entry[]) {
+const scan = Effect.fn("PluginSupervisor.scan")(function* (entries: readonly Entry[]) {
   const fs = yield* FSUtil.Service
   const location = yield* Location.Service
   const discovered = yield* Effect.forEach(
-    entries.filter((entry): entry is Config.Directory => entry.type === "directory"),
+    entries.filter((entry): entry is Directory => entry.type === "directory"),
     (entry) => discoverDirectory(fs, entry.path),
   ).pipe(Effect.map((items) => items.flat()))
   const configured = entries
-    .filter((entry): entry is Config.Document => entry.type === "document")
+    .filter((entry): entry is Document => entry.type === "document")
     .flatMap((entry) =>
       (entry.info.plugins ?? []).map(parse).map((operation) => {
         if (operation.type === "remove") return operation
@@ -208,7 +208,7 @@ function discoverDirectory(fs: FSUtil.Interface, directory: string) {
 
 const sourceDirectories = ["plugin", "plugins"] as const
 
-function isPluginSource(entries: readonly Config.Entry[], file: string) {
+function isPluginSource(entries: readonly Entry[], file: string) {
   return entries.some(
     (entry) =>
       entry.type === "directory" &&
@@ -243,7 +243,7 @@ const layer = Layer.effect(
     const configuredChanges = yield* PubSub.unbounded<void>()
     const watched = new Set<string>()
     const watchConfiguredSources = Effect.fn("PluginSupervisor.watchConfiguredSources")(function* (
-      entries: readonly Config.Entry[],
+      entries: readonly Entry[],
       operations: readonly Operation[],
     ) {
       for (const operation of operations) {

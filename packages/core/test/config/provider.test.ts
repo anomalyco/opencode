@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Money } from "@opencode-ai/schema/money"
+import { Document, Info, type Entry } from "@opencode-ai/schema/config"
 import { Effect, Schema, Stream } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Config } from "@opencode-ai/core/config"
@@ -14,7 +15,7 @@ import { PluginTestLayer } from "../plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
 
-const addPlugin = Effect.fn(function* (entries: Config.Entry[]) {
+const addPlugin = Effect.fn(function* (entries: Entry[]) {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
   yield* ConfigProviderPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
@@ -46,7 +47,7 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
   )
 }
 
-const decode = Schema.decodeUnknownSync(Config.Info)
+const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
   it.effect("defaults custom models to agent capabilities", () =>
@@ -55,7 +56,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("custom")
       const modelID = Model.ID.make("chat")
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             providers: {
@@ -90,7 +91,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         })
       })
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             providers: {
@@ -129,7 +130,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.opencode
       const modelID = Model.ID.make("alpha-gpt-next")
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             providers: {
@@ -178,7 +179,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.opencode
       const modelID = Model.ID.make("alpha-gpt-next")
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             providers: {
@@ -189,7 +190,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
             },
           }),
         }),
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             providers: {
@@ -223,7 +224,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         const providerID = Provider.ID.make("custom")
         const modelID = Model.ID.make("chat")
         const entries = [
-          new Config.Document({
+          new Document({
             type: "document",
             info: decode({
               model: "custom/first",
@@ -255,7 +256,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
               },
             }),
           }),
-          new Config.Document({
+          new Document({
             type: "document",
             info: decode({
               model: "custom/default",
@@ -289,7 +290,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
               },
             }),
           }),
-          new Config.Document({
+          new Document({
             type: "document",
             info: decode({
               providers: {

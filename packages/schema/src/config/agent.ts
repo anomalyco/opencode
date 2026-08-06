@@ -1,10 +1,10 @@
-export * as ConfigAgent from "./agent"
+export * as ConfigAgent from "./agent.js"
 
 import { Schema } from "effect"
-import { Permission } from "@opencode-ai/schema/permission"
-import { ConfigProvider } from "./provider"
-import { ConfigModel } from "./model"
-import { PositiveInt } from "../schema"
+import { Permission } from "../permission.js"
+import { PositiveInt } from "../schema.js"
+import { ConfigModel } from "./model.js"
+import { ConfigProvider } from "./provider.js"
 
 export const Color = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/))
 

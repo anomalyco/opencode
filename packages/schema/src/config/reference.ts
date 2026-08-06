@@ -1,4 +1,4 @@
-export * as ConfigReference from "./reference"
+export * as ConfigReference from "./reference.js"
 
 import { Schema } from "effect"
 

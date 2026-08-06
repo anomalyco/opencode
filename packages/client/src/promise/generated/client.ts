@@ -216,6 +216,8 @@ import type {
   WebsearchProvidersOutput,
   WebsearchQueryInput,
   WebsearchQueryOutput,
+  ConfigGetInput,
+  ConfigGetOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -1806,6 +1808,20 @@ export function make(options: ClientOptions) {
             body: { query: input["query"], providerID: input["providerID"] },
             successStatus: 200,
             declaredStatuses: [400, 503, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    config: {
+      get: (input?: ConfigGetInput, requestOptions?: RequestOptions) =>
+        request<ConfigGetOutput>(
+          {
+            method: "GET",
+            path: `/api/config`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
             empty: false,
           },
           requestOptions,

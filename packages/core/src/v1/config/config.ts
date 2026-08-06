@@ -1,8 +1,8 @@
 export * as ConfigV1 from "./config"
 
 import { Schema } from "effect"
+import { ConfigReference } from "@opencode-ai/schema/config/reference"
 import { NonNegativeInt, PositiveInt, type DeepMutable } from "../../schema"
-import { ConfigReference } from "../../config/reference"
 import { ConfigAgentV1 } from "./agent"
 import { ConfigAttachmentV1 } from "./attachment"
 import { ConfigCommandV1 } from "./command"

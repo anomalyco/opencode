@@ -1,4 +1,4 @@
-export * as ConfigWarming from "./warming"
+export * as ConfigWarming from "./warming.js"
 
 import { Schema } from "effect"
 

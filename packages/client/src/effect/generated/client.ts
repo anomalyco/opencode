@@ -220,6 +220,8 @@ import type {
   Endpoint28_0Output,
   Endpoint28_1Input,
   Endpoint28_1Output,
+  Endpoint29_0Input,
+  Endpoint29_0Output,
 } from "../api/api.js"
 import { ClientError } from "./client-error"
 
@@ -1241,6 +1243,13 @@ const adaptGroup28 = (raw: RawClient["server.websearch"]) => ({
   query: Endpoint28_1(raw),
 })
 
+const Endpoint29_0 = (raw: RawClient["server.config"]) => (input?: Endpoint29_0Input) =>
+  preserveEffect<Endpoint29_0Output>()(
+    raw["config.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroup29 = (raw: RawClient["server.config"]) => ({ get: Endpoint29_0(raw) })
+
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroup0(raw["server.health"]),
   server: adaptGroup1(raw["server.server"]),
@@ -1271,6 +1280,7 @@ const adaptClient = (raw: RawClient) => ({
   debug: adaptGroup26(raw["server.debug"]),
   migration: adaptGroup27(raw["server.migration"]),
   websearch: adaptGroup28(raw["server.websearch"]),
+  config: adaptGroup29(raw["server.config"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

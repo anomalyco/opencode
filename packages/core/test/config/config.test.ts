@@ -4,9 +4,9 @@ import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, PubSub, Schema, Stream } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
-import { ConfigModel } from "@opencode-ai/core/config/model"
-import { Config as ConfigSchema } from "@opencode-ai/schema/config"
-import { ConfigProvider } from "@opencode-ai/core/config/provider"
+import { AgentsDirectory, Directory, Document, Event, Info } from "@opencode-ai/schema/config"
+import { ConfigModel } from "@opencode-ai/schema/config/model"
+import { ConfigProvider } from "@opencode-ai/schema/config/provider"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -161,7 +161,7 @@ describe("Config", () => {
             const bus = yield* Bus.Service
             const watcher = yield* Watcher.Test
             const changed = yield* bus
-              .subscribe(ConfigSchema.Event.Updated)
+              .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
             yield* Effect.sleep("10 millis")
 
@@ -234,14 +234,14 @@ describe("Config", () => {
             yield* Effect.sleep("10 millis")
 
             const removed = yield* bus
-              .subscribe(ConfigSchema.Event.Updated)
+              .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
             yield* Effect.promise(() => fs.rm(file))
             yield* Fiber.join(removed).pipe(Effect.timeout("5 seconds"))
             expect(Config.latest(yield* config.entries(), "shell")).toBeUndefined()
 
             const recreated = yield* bus
-              .subscribe(ConfigSchema.Event.Updated)
+              .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
             yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "two" })))
             yield* Fiber.join(recreated).pipe(Effect.timeout("5 seconds"))
@@ -273,7 +273,7 @@ describe("Config", () => {
       const test = yield* Config.Test
       expect(yield* config.entries()).toEqual([])
 
-      const entry = new Config.Document({ type: "document", info: new Config.Info({}) })
+      const entry = new Document({ type: "document", info: new Info({}) })
       yield* test.setEntries([entry])
       expect(yield* config.entries()).toEqual([entry])
 
@@ -289,16 +289,16 @@ describe("Config", () => {
   it.effect("returns the latest defined scalar from priority-ordered documents", () =>
     Effect.sync(() => {
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
-          info: new Config.Info({ model: selection("openrouter/openai/gpt-5") }),
+          info: new Info({ model: selection("openrouter/openai/gpt-5") }),
         }),
-        new Config.Directory({ type: "directory", path: AbsolutePath.make("/skills") }),
-        new Config.AgentsDirectory({ type: "agents", path: AbsolutePath.make("/agents") }),
-        new Config.Document({ type: "document", info: new Config.Info({}) }),
-        new Config.Document({
+        new Directory({ type: "directory", path: AbsolutePath.make("/skills") }),
+        new AgentsDirectory({ type: "agents", path: AbsolutePath.make("/agents") }),
+        new Document({ type: "document", info: new Info({}) }),
+        new Document({
           type: "document",
-          info: new Config.Info({ model: selection("openrouter/openai/gpt-5.5") }),
+          info: new Info({ model: selection("openrouter/openai/gpt-5.5") }),
         }),
       ]
 
@@ -372,7 +372,7 @@ describe("Config", () => {
             const bus = yield* Bus.Service
             expect(Config.latest(yield* config.entries(), "shell")).toBe("secret")
             const updated = yield* bus
-              .subscribe(ConfigSchema.Event.Updated)
+              .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
             yield* Effect.yieldNow
             key = "next"
@@ -418,7 +418,7 @@ describe("Config", () => {
               Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(info),
             ),
           )
-          Schema.decodeUnknownSync(Config.Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
+          Schema.decodeUnknownSync(Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
         }),
         { numRuns: 100 },
       )
@@ -661,9 +661,41 @@ describe("Config", () => {
           const entries = yield* config.entries()
 
           expect(entries).toEqual([
-            new Config.Directory({ type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) }),
+            new Directory({ type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) }),
           ])
         }).pipe(Effect.provide(testLayer(tmp.path))),
+      ),
+    ),
+  )
+
+  it.live("deduplicates global ecosystem directories found during upward discovery", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const home = path.join(global, "home")
+          const project = path.join(home, "project")
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.mkdir(path.join(home, ".claude"), { recursive: true }),
+              fs.mkdir(path.join(home, ".agents"), { recursive: true }),
+              fs.mkdir(project, { recursive: true }),
+            ]),
+          )
+          const entries = yield* Config.Service.use((config) => config.entries()).pipe(
+            Effect.provide(testLayer(project, global)),
+          )
+
+          expect(entries.filter((entry) => entry.type === "claude").map((entry) => entry.path)).toEqual([
+            AbsolutePath.make(path.join(home, ".claude")),
+          ])
+          expect(entries.filter((entry) => entry.type === "agents").map((entry) => entry.path)).toEqual([
+            AbsolutePath.make(path.join(home, ".agents")),
+          ])
+        }),
       ),
     ),
   )
@@ -729,7 +761,7 @@ describe("Config", () => {
             expect(documents).toHaveLength(2)
             expect(documents.map((document) => document.type)).toEqual(["document", "document"])
             expect(documents.map((document) => document.info.$schema)).toEqual(["base", "last"])
-            expect(documents[0]).toBeInstanceOf(Config.Document)
+            expect(documents[0]).toBeInstanceOf(Document)
             expect(documents[0]?.path).toBe(path.join(tmp.path, "opencode.json"))
             expect(documents[1]?.info.providers?.last).toBeInstanceOf(ConfigProvider.Info)
 
@@ -1177,7 +1209,7 @@ describe("Config", () => {
             const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
 
             expect(documents).toHaveLength(1)
-            expect(documents[0]?.info).toBeInstanceOf(Config.Info)
+            expect(documents[0]?.info).toBeInstanceOf(Info)
             expect(documents[0]?.info.shell).toBe("/bin/zsh")
             expect(documents[0]?.info.default_agent).toBe("reviewer")
             expect(documents[0]?.info.snapshots).toBe(false)

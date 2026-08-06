@@ -68,7 +68,10 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     }),
     Spec.make("debug", {
       description: "Debugging and troubleshooting tools",
-      commands: [Spec.make("agents", { description: "List all agents" })],
+      commands: [
+        Spec.make("agents", { description: "List all agents" }),
+        Spec.make("config", { description: "Show resolved configuration" }),
+      ],
     }),
     Spec.make("console", {
       description: "Manage OpenCode Console access",

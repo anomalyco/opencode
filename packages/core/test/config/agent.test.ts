@@ -5,6 +5,7 @@ import { Effect, Fiber, Schema, Stream } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
 import { Config } from "@opencode-ai/core/config"
+import { Directory, Document, Info } from "@opencode-ai/schema/config"
 import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -19,7 +20,7 @@ import { testEffect } from "../lib/effect"
 import { agentHost, host } from "../plugin/host"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Agent.node, Bus.node, FSUtil.node, Global.node])))
-const decode = Schema.decodeUnknownSync(Config.Info)
+const decode = Schema.decodeUnknownSync(Info)
 const defaultPermissions = (global: Global.Interface): Permission.Ruleset => [
   ...Agent.Info.default(Agent.ID.make("test")).permissions,
   { action: "external_directory", resource: path.join(global.data, "shell", "*", "*"), effect: "allow" },
@@ -71,7 +72,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       )
 
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             permissions: [{ action: "bash", resource: "*", effect: "ask" }],
@@ -92,7 +93,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
             },
           }),
         }),
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             permissions: [{ action: "read", resource: "*", effect: "allow" }],
@@ -153,7 +154,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
     Effect.gen(function* () {
       const agents = yield* Agent.Service
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             agents: {
@@ -173,7 +174,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
             },
           }),
         }),
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             agents: {
@@ -218,7 +219,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       yield* agents.transform((editor) => editor.update(build, () => {}))
 
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({ agents: { build: { disabled: true } } }),
         }),
@@ -276,7 +277,7 @@ Use native v2 fields.`,
           const agents = yield* Agent.Service
           const global = yield* Global.Service
           const entries = [
-            new Config.Document({
+            new Document({
               type: "document",
               info: decode({ agents: { reviewer: { description: "JSON description" } } }),
             }),
@@ -425,7 +426,7 @@ Use native v2 fields.`,
 })
 
 function directoryEntry(directory: string) {
-  return new Config.Directory({ type: "directory", path: AbsolutePath.make(directory) })
+  return new Directory({ type: "directory", path: AbsolutePath.make(directory) })
 }
 
 function sourceCases() {
@@ -522,7 +523,7 @@ function loadHomePermissions(home: string) {
     const build = Agent.ID.make("build")
     yield* agents.transform((editor) => editor.update(build, () => {}))
     const entries = [
-      new Config.Document({
+      new Document({
         type: "document",
         info: decode(
           ConfigMigrateV1.migrate({

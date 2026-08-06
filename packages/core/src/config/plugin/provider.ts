@@ -1,6 +1,7 @@
 export * as ConfigProviderPlugin from "./provider"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Document, type Entry } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config"
@@ -107,8 +108,8 @@ export const Plugin = define({
   }),
 })
 
-function configuredProviders(entries: readonly Config.Entry[]) {
+function configuredProviders(entries: readonly Entry[]) {
   return entries
-    .filter((entry): entry is Config.Document => entry.type === "document")
+    .filter((entry): entry is Document => entry.type === "document")
     .flatMap((file) => Object.entries(file.info.providers ?? {}))
 }

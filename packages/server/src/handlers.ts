@@ -29,6 +29,7 @@ import { ProjectCopyHandler } from "./handlers/project-copy"
 import { VcsHandler } from "./handlers/vcs"
 import { EventFeed } from "./event-feed"
 import { MigrationHandler } from "./handlers/migration"
+import { ConfigHandler } from "./handlers/config"
 
 export const handlers = Layer.mergeAll(
   HealthHandler,
@@ -60,4 +61,5 @@ export const handlers = Layer.mergeAll(
   ReferenceHandler,
   ProjectCopyHandler,
   VcsHandler,
+  ConfigHandler,
 )

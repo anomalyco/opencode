@@ -2,6 +2,7 @@ export * as SessionCompaction from "./compaction"
 
 import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest, type LanguageModel } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
+import { Document, type Entry } from "@opencode-ai/schema/config"
 import { Context, Effect, Layer, Stream } from "effect"
 import { Config } from "../config"
 import { Bus } from "../bus"
@@ -148,9 +149,9 @@ const serialize = (message: SessionMessage.Info) => {
   return ""
 }
 
-const settings = (documents: readonly Config.Entry[]) => {
+const settings = (documents: readonly Entry[]) => {
   const configured = documents
-    .filter((entry): entry is Config.Document => entry.type === "document")
+    .filter((entry): entry is Document => entry.type === "document")
     .flatMap((entry) => (entry.info.compaction ? [entry.info.compaction] : []))
   return {
     auto: configured.findLast((value) => value.auto !== undefined)?.auto ?? true,

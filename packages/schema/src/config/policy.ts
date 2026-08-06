@@ -1,4 +1,4 @@
-export * as ConfigPolicy from "./policy"
+export * as ConfigPolicy from "./policy.js"
 
 import { Schema } from "effect"
 

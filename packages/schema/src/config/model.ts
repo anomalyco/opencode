@@ -1,8 +1,8 @@
-export * as ConfigModel from "./model"
+export * as ConfigModel from "./model.js"
 
 import { Schema, SchemaGetter } from "effect"
-import { Model } from "@opencode-ai/schema/model"
-import { Provider } from "@opencode-ai/schema/provider"
+import { Model } from "../model.js"
+import { Provider } from "../provider.js"
 
 const ProviderID = Provider.ID.check(Schema.isPattern(/^[^/#]+$/))
 const ModelID = Model.ID.check(Schema.isPattern(/^[^#]+$/))

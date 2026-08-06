@@ -1,8 +1,8 @@
-export * as ConfigExperimental from "./experimental"
+export * as ConfigExperimental from "./experimental.js"
 
 import { Schema } from "effect"
-import { NonNegativeInt } from "../schema"
-import { ConfigPolicy } from "./policy"
+import { NonNegativeInt } from "../schema.js"
+import { ConfigPolicy } from "./policy.js"
 
 export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   subagent_depth: NonNegativeInt.pipe(Schema.optional).annotate({
