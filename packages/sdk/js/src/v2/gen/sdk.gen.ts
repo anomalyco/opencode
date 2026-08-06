@@ -76,6 +76,11 @@ import type {
   FindTextResponses,
   FormatterStatusErrors,
   FormatterStatusResponses,
+  GalleryEvaluateErrors,
+  GalleryEvaluatePayload,
+  GalleryEvaluateResponses,
+  GalleryHostsErrors,
+  GalleryHostsResponses,
   GlobalConfigGetErrors,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
@@ -2511,6 +2516,75 @@ export class Local extends HeyApiClient {
   private _model?: Model
   get model(): Model {
     return (this._model ??= new Model({ client: this.client }))
+  }
+}
+
+export class Gallery extends HeyApiClient {
+  /**
+   * List gallery hosts
+   *
+   * Project opencode's existing llama-skein discovery into gallery hosts. Offline hosts are included so the UI can distinguish 'that host is down' from 'you have no such host'.
+   */
+  public hosts<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GalleryHostsResponses, GalleryHostsErrors, ThrowOnError>({
+      url: "/gallery/hosts",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Evaluate candidates across hosts
+   *
+   * Batch each candidate's variants through bounded concurrent hypothetical-fit calls to every compatible host, then filter, classify and rank. Entries carry an explained score breakdown rather than a bare number.
+   */
+  public evaluate<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      galleryEvaluatePayload?: GalleryEvaluatePayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "galleryEvaluatePayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GalleryEvaluateResponses, GalleryEvaluateErrors, ThrowOnError>({
+      url: "/gallery/evaluate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
   }
 }
 
@@ -7381,6 +7455,11 @@ export class OpencodeClient extends HeyApiClient {
   private _local?: Local
   get local(): Local {
     return (this._local ??= new Local({ client: this.client }))
+  }
+
+  private _gallery?: Gallery
+  get gallery(): Gallery {
+    return (this._gallery ??= new Gallery({ client: this.client }))
   }
 
   private _loop?: Loop

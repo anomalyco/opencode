@@ -2115,6 +2115,9 @@ export type Config = {
       verify_command?: string
       default_branch?: string
     }
+    queue_personas?: {
+      [key: string]: string | false
+    }
     stream_inactivity_seconds?: number
     policies?: Array<ConfigV2ExperimentalPolicy>
   }
@@ -2542,6 +2545,62 @@ export type LocalCapacitySnapshot = {
   probedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   ageMs: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   stale: boolean
+}
+
+export type GalleryHostInfo = {
+  id: string
+  name: string
+  baseURL: string
+  source: "mdns" | "localhost" | "lan"
+  online: boolean
+  installedModelIDs: Array<string>
+  defaultModel: string
+}
+
+export type GalleryEvaluatePayload = {
+  candidateIds: Array<string>
+  hostIds?: Array<string>
+  desiredContext?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  requiredCapabilities?: Array<string>
+  includeIncompatible?: boolean
+}
+
+export type GalleryScoreComponent = {
+  kind: string
+  points: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  detail: string
+  measured: boolean
+}
+
+export type GalleryVariantFit = {
+  variantName: string
+  fitLevel: string
+  maxFitCtx: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  vramRequiredMB: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  modelMB: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  reason: string
+}
+
+export type GalleryEntry = {
+  candidateId: string
+  hostId: string
+  hostName: string
+  online: boolean
+  installed: boolean
+  busy?: boolean
+  fitKnown: boolean
+  state: string
+  stateDetail: string
+  replaces?: string
+  compatible: boolean
+  incompatibleReasons: Array<string>
+  score: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  components: Array<GalleryScoreComponent>
+  bestVariant: GalleryVariantFit
+  recommendedVariant: string
+  variants: Array<GalleryVariantFit>
+  vramFreeMB: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  vramTotalMB: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
 }
 
 export type NotFoundError = {
@@ -6866,6 +6925,62 @@ export type LocalCapacityResponses = {
 }
 
 export type LocalCapacityResponse = LocalCapacityResponses[keyof LocalCapacityResponses]
+
+export type GalleryHostsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/gallery/hosts"
+}
+
+export type GalleryHostsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GalleryHostsError = GalleryHostsErrors[keyof GalleryHostsErrors]
+
+export type GalleryHostsResponses = {
+  /**
+   * llama-skein hosts the gallery can offer
+   */
+  200: Array<GalleryHostInfo>
+}
+
+export type GalleryHostsResponse = GalleryHostsResponses[keyof GalleryHostsResponses]
+
+export type GalleryEvaluateData = {
+  body?: GalleryEvaluatePayload
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/gallery/evaluate"
+}
+
+export type GalleryEvaluateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GalleryEvaluateError = GalleryEvaluateErrors[keyof GalleryEvaluateErrors]
+
+export type GalleryEvaluateResponses = {
+  /**
+   * One ranked, classified entry per candidate/host pair
+   */
+  200: Array<GalleryEntry>
+}
+
+export type GalleryEvaluateResponse = GalleryEvaluateResponses[keyof GalleryEvaluateResponses]
 
 export type LoopListData = {
   body?: never
