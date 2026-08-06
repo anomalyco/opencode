@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { PermissionRequest, QuestionRequest, Session } from "@/types"
+import type { Session } from "@/types"
+import type { PermissionRequest, QuestionRequest } from "@opencode-ai/client/promise"
 import { todoDockAtBoundary, todoState } from "./session-composer-state"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 

@@ -1,5 +1,5 @@
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import type { Event, PermissionRequest } from "@/types"
+import type { Event } from "@/types"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -24,25 +24,6 @@ type CurrentDelta = Extract<
 >
 
 export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
-  if (event.type === "permission.asked") {
-    return {
-      id: event.id,
-      type: "permission.asked",
-      properties: {
-        id: event.data.id,
-        sessionID: event.data.sessionID,
-        permission: event.data.action,
-        patterns: event.data.resources,
-        always: event.data.save ?? [],
-        metadata: event.data.metadata ?? {},
-        tool:
-          event.data.source?.type === "tool"
-            ? { messageID: event.data.source.messageID, callID: event.data.source.id }
-            : undefined,
-      } satisfies PermissionRequest,
-      current: event,
-    }
-  }
   return { id: event.id, type: event.type, properties: event.data, current: event } as ServerEvent
 }
 

@@ -1,5 +1,4 @@
 import { createMemo, createResource, createSignal, Show, type JSX } from "solid-js"
-import type { SnapshotFileDiff, VcsFileDiff } from "@/types"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX,
@@ -31,7 +30,7 @@ import {
 import type { ReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
 import { applyFileListKeyDown, SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 
-type ReviewDiff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
+type ReviewDiff = FileDiffInfo
 
 export type ReviewPanelV2Props = {
   title?: JSX.Element

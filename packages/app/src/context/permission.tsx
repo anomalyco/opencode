@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { PermissionRequest } from "@/types"
+import type { PermissionRequest } from "@opencode-ai/client/promise"
 import { Persist, persisted } from "@/utils/persist"
 import type { ServerSDK } from "@/context/server-sdk"
 import type { ServerSync } from "./server-sync"
@@ -13,7 +13,6 @@ import { type DraftTab, useTabs } from "./tabs"
 import { useSettings } from "./settings"
 import { requireServerKey } from "@/utils/session-route"
 import type { ServerScope } from "@/utils/server-scope"
-import { normalizePermissionRequest } from "./global-sync/utils"
 import {
   acceptKey,
   directoryAcceptKey,
@@ -256,9 +255,7 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
   }
 
   const list = async (directory: string) => {
-    return input.sdk.api.permission.request
-      .list({ location: { directory } })
-      .then((result) => result.data.map(normalizePermissionRequest))
+    return input.sdk.api.permission.request.list({ location: { directory } }).then((result) => result.data)
   }
 
   function respondOnce(permission: PermissionRequest, directory?: string) {

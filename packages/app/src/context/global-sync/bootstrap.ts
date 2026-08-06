@@ -1,11 +1,8 @@
 import type {
   Config,
   Path,
-  PermissionRequest,
   Project,
   ProviderAuthResponse,
-  QuestionRequest,
-  ReferenceInfo,
   Session,
 } from "@/types"
 import type {
@@ -17,11 +14,14 @@ import type {
   CommandListOutput,
   LocationGetInput,
   LocationGetOutput,
+  PermissionRequest,
   ProjectCurrentInput,
   ProjectCurrentOutput,
   ProjectListOutput,
   ReferenceListInput,
   ReferenceListOutput,
+  ReferenceInfo,
+  QuestionRequest,
   SessionApi,
 } from "@opencode-ai/client/promise"
 import { showToast } from "@/utils/toast"
@@ -34,7 +34,6 @@ import type { ServerSession } from "../server-session"
 import {
   cmp,
   normalizeAgentList,
-  normalizePermissionRequest,
   normalizeProjectInfo,
   normalizeProviderList,
 } from "./utils"
@@ -368,7 +367,7 @@ export async function bootstrapDirectory(input: {
         retry(() =>
           input.api.permission.request
             .list({ location: { directory: input.directory } })
-            .then((result) => result.data.map(normalizePermissionRequest))
+            .then((result) => result.data)
             .then((permissions) => {
             const ids = permissions.map((permission) => permission.sessionID)
             const grouped = groupBySession(

@@ -81,7 +81,7 @@ import { promptDesignPlaceholder, promptPlaceholder } from "./prompt-input/place
 import { createPromptInputTransientState } from "./prompt-input/transient-state"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
-import type { ReferenceInfo } from "@/types"
+import type { ReferenceInfo } from "@opencode-ai/client/promise"
 
 export { createPromptInputHistory }
 export type { PromptInputControls, PromptInputHistory, PromptInputProps, PromptInputState, PromptInputSubmission }

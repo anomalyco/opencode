@@ -1,4 +1,5 @@
-import type { FilePart, Project, UserMessage, VcsFileDiff } from "@/types"
+import type { FilePart, Project, UserMessage } from "@/types"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
@@ -718,13 +719,13 @@ export default function Page() {
     if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
     return true
   }
-  const loadReviewDiff = async (file: string, version?: number): Promise<VcsFileDiff | undefined> => {
+  const loadReviewDiff = async (file: string, version?: number): Promise<FileDiffInfo | undefined> => {
     const mode = vcsMode()
     if (!mode) return
     const root = reviewRootDirectory(sync().project?.worktree ?? sdk().directory)
     const directory = reviewDiffDirectory(root, file)
     const source = reviewDiffs().find((diff) => diff.file === file)
-    const valid = (diff: VcsFileDiff | undefined) => {
+    const valid = (diff: FileDiffInfo | undefined) => {
       if (!diff || !source) return
       if (diff.additions !== source.additions || diff.deletions !== source.deletions) return
       if (reviewDiffNeedsLoad(diff)) return

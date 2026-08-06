@@ -3,7 +3,6 @@ import type {
   Path,
   Project,
   ProviderAuthResponse,
-  SessionStatus,
 } from "@/types"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
@@ -55,6 +54,7 @@ import type {
   McpResourceCatalogOutput,
   McpServer,
   SessionActiveOutput,
+  SessionStatus,
 } from "@opencode-ai/client/promise"
 import { toggleMcp } from "./global-sync/mcp"
 import { createServerSession, type ServerSession } from "./server-session"
@@ -476,7 +476,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 
     if (event.current) session.applyV2(event.current)
     session.apply(event)
-    if (event.type === "session.created" || event.type === "session.updated" || event.type === "session.deleted") {
+    if (event.type === "session.created" || event.type === "session.deleted") {
       if ("info" in event.properties) homeSessions.apply(event as Parameters<typeof homeSessions.apply>[0])
     }
     homeSessions.refresh(event.type)

@@ -4,13 +4,10 @@ import type { OpenCodeEvent, SessionApi, SessionMessageInfo } from "@opencode-ai
 import type {
   Message,
   Part,
-  PermissionRequest,
-  QuestionRequest,
   Session,
-  SessionStatus,
   Todo,
 } from "@/types"
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import type { FileDiffInfo, PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/client/promise"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { rootSession } from "@/utils/session-route"

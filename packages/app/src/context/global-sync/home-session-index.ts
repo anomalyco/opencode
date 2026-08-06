@@ -1,4 +1,5 @@
-import type { Event, Session, SessionV2Info, V2SessionListResponse } from "@/types"
+import type { Event, Session } from "@/types"
+import type { SessionInfo, SessionsResponse } from "@opencode-ai/client/promise"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import type { QueryClient } from "@tanstack/solid-query"
 import { trimSessions } from "./session-trim"
@@ -26,11 +27,11 @@ export async function loadHomeSessionIndex(
   list: (
     input: { limit: number; order: "desc"; cursor?: string },
     options: { signal?: AbortSignal },
-  ) => Promise<V2SessionListResponse>,
+  ) => Promise<SessionsResponse>,
   eventSequence = 0,
   signal?: AbortSignal,
 ) {
-  const data: SessionV2Info[] = []
+  const data: SessionInfo[] = []
   let cursor: string | undefined
 
   for (;;) {
@@ -126,7 +127,7 @@ export function createHomeSessionIndexCache(queryClient: QueryClient, server: st
 // multiple directories. A bounded page could omit an old session updated today.
 // Once released, use client.v2.project.list() and client.v2.session.list({
 // parentID: null, order: "desc" }), then remove this adapter and its V1 fields.
-export function parseHomeSessionIndex(sessions: SessionV2Info[]): Session[] {
+export function parseHomeSessionIndex(sessions: SessionInfo[]): Session[] {
   return sessions.flatMap((item) => {
     if (item.parentID || typeof item.time.archived === "number") return []
     return [toLegacySummary(item)]
@@ -141,7 +142,7 @@ export function retainHomeSessions(sessions: Session[], limit: number, now: numb
 export function applyHomeSessionEvent(sessions: Session[], event: HomeSessionEvent) {
   const info = event.properties.info
   const index = sessions.findIndex((session) => session.id === info.id)
-    if (event.type === "session.deleted" || info.parentID || typeof info.time.archived === "number") {
+  if (event.type === "session.deleted" || info.parentID || typeof info.time.archived === "number") {
     if (index === -1) return sessions
     return sessions.toSpliced(index, 1)
   }
@@ -150,7 +151,7 @@ export function applyHomeSessionEvent(sessions: Session[], event: HomeSessionEve
   return sessions.with(index, info)
 }
 
-function toLegacySummary(session: SessionV2Info): Session {
+function toLegacySummary(session: SessionInfo): Session {
   return {
     id: session.id,
     slug: session.id,

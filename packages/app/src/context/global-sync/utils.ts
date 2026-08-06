@@ -2,10 +2,9 @@ import type {
   AgentListOutput,
   ModelDefaultOutput,
   ModelListOutput,
-  PermissionRequest,
   ProviderListOutput,
 } from "@opencode-ai/client/promise"
-import type { Agent, Event, Project, Provider, ProviderListResponse } from "@/types"
+import type { Agent, Project, Provider, ProviderListResponse } from "@/types"
 import type { Project as CurrentProject } from "@opencode-ai/client/promise"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/utils/path-key"
@@ -34,22 +33,6 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ag
     options: agent.request.settings,
     steps: agent.steps,
   }))
-}
-
-type LegacyPermissionRequest = Extract<Event, { type: "permission.asked" }>["properties"]
-
-export function normalizePermissionRequest(input: PermissionRequest | LegacyPermissionRequest): LegacyPermissionRequest {
-  if ("permission" in input) return input
-  return {
-    id: input.id,
-    sessionID: input.sessionID,
-    permission: input.action,
-    patterns: input.resources,
-    always: input.save ?? [],
-    metadata: input.metadata ?? {},
-    tool:
-      input.source?.type === "tool" ? { messageID: input.source.messageID, callID: input.source.id } : undefined,
-  }
 }
 
 export function normalizeProviderList(
