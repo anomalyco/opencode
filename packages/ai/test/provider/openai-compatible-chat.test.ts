@@ -312,7 +312,7 @@ describe("OpenAI-compatible Chat route", () => {
                   { index: null, id: "call_london", function: { name: "weather", arguments: '{"city":"' } },
                 ],
               }),
-              deltaChunk({ tool_calls: [{ function: { arguments: 'London"}' } }] }),
+              deltaChunk({ tool_calls: [{ id: "call_london", function: { arguments: 'London"}' } }] }),
               deltaChunk({ tool_calls: [{ id: "call_paris", function: { arguments: 'Paris"}' } }] }),
               deltaChunk({}, "tool_calls"),
             ),
@@ -324,6 +324,59 @@ describe("OpenAI-compatible Chat route", () => {
         { id: "call_paris", name: "weather", input: { city: "Paris" } },
         { id: "call_london", name: "weather", input: { city: "London" } },
       ])
+    }),
+  )
+
+  it.effect("assembles one indexless tool call across chunks", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "weather", description: "Get weather", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({
+                tool_calls: [{ id: "call_paris", function: { name: "weather", arguments: '{"city":"' } }],
+              }),
+              deltaChunk({ tool_calls: [{ function: { arguments: 'Paris"}' } }] }),
+              deltaChunk({}, "tool_calls"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([
+        { id: "call_paris", name: "weather", input: { city: "Paris" } },
+      ])
+    }),
+  )
+
+  it.effect("rejects ambiguous indexless parallel tool deltas", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "weather", description: "Get weather", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({
+                tool_calls: [
+                  { id: "call_paris", function: { name: "weather", arguments: '{"city":"' } },
+                  { id: "call_london", function: { name: "weather", arguments: '{"city":"' } },
+                ],
+              }),
+              deltaChunk({ tool_calls: [{ function: { arguments: 'Paris"}' } }] }),
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.message).toContain("OpenAI Chat tool call delta has an ambiguous index")
     }),
   )
 
