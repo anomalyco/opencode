@@ -233,13 +233,13 @@ export const layer = (options?: Options) => Layer.effect(
 
       const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
       return [
+        ...(yield* loadWellknown().pipe(Effect.orDie)),
         ...claude,
         ...agents,
         ...(supplementary[0] ?? []),
         ...explicit,
         ...direct,
         ...supplementary.slice(1).flat(),
-        ...(yield* loadWellknown().pipe(Effect.orDie)),
         ...content,
       ]
     })
