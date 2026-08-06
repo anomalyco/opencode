@@ -34,6 +34,7 @@ export const dict: Record<Keys, string> = {
   "ui.lineComment.editorLabel.prefix": "Kommentar til ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Legg til kommentar",
+  "ui.lineComment.contextPlaceholder": "Legg til kontekst for denne endringen",
   "ui.lineComment.submit": "Kommenter",
 
   "ui.sessionTurn.steps.show": "Vis trinn",
@@ -93,6 +94,25 @@ export const dict: Record<Keys, string> = {
 
   "ui.messageNav.newMessage": "Ny melding",
 
+  "ui.promptInput.noMatchingItems": "Ingen treff",
+  "ui.promptInput.commands": "Kommandoer",
+  "ui.promptInput.dropFiles": "Slipp filer for å legge dem ved",
+  "ui.promptInput.removeAttachment": "Fjern vedlegg",
+  "ui.promptInput.label": "Prompt",
+  "ui.promptInput.placeholder.shell": "Skriv inn shell-kommando...",
+  "ui.promptInput.placeholder.normal": "Spør om hva som helst, {{slash}} for kommandoer, {{at}} for kontekst...",
+  "ui.promptInput.add": "Legg til bilder og filer",
+  "ui.promptInput.attachments": "Bilder og filer",
+  "ui.promptInput.context": "Kontekst",
+  "ui.promptInput.shell": "Shell-kommando",
+  "ui.promptInput.chooseAgent": "Velg agent",
+  "ui.promptInput.chooseModel": "Velg modell",
+  "ui.promptInput.chooseVariant": "Velg modellvariant",
+  "ui.promptInput.send": "Send",
+  "ui.promptInput.stop": "Stopp",
+
+  "ui.tabs.close": "Lukk fane",
+
   "ui.textField.copyToClipboard": "Kopier til utklippstavlen",
   "ui.textField.copyLink": "Kopier lenke",
   "ui.textField.copied": "Kopiert",
@@ -107,11 +127,13 @@ export const dict: Record<Keys, string> = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webhenting",
   "ui.tool.websearch": "Nettsøk",
+  "ui.tool.websearch.provider": "{{provider}} Nettsøk",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Gjøremål",
   "ui.tool.todos.read": "Les gjøremål",
   "ui.tool.questions": "Spørsmål",
+  "ui.tool.questions.numbered": "Spørsmål {{number}}",
   "ui.tool.agent": "{{type}}-agent",
   "ui.tool.agent.default": "Agent",
 
@@ -129,6 +151,8 @@ export const dict: Record<Keys, string> = {
   "ui.common.next": "Neste",
   "ui.common.submit": "Send inn",
   "ui.common.showMore": "Vis mer",
+  "ui.common.clear": "Tøm",
+  "ui.common.file": "Fil",
 
   "ui.permission.deny": "Avslå",
   "ui.permission.allowAlways": "Tillat alltid",

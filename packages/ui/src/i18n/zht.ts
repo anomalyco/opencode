@@ -53,6 +53,7 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "正在留言於 ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "新增留言",
+  "ui.lineComment.contextPlaceholder": "新增此變更的相關資訊",
   "ui.lineComment.submit": "留言",
   "ui.lineComment.cancel": "取消",
 
@@ -116,6 +117,25 @@ export const dict = {
 
   "ui.messageNav.newMessage": "新訊息",
 
+  "ui.promptInput.noMatchingItems": "沒有符合的項目",
+  "ui.promptInput.commands": "命令",
+  "ui.promptInput.dropFiles": "拖放檔案以附加",
+  "ui.promptInput.removeAttachment": "移除附件",
+  "ui.promptInput.label": "提示詞",
+  "ui.promptInput.placeholder.shell": "輸入 shell 命令...",
+  "ui.promptInput.placeholder.normal": "想問什麼都可以， {{slash}} 可使用命令， {{at}} 可加入上下文...",
+  "ui.promptInput.add": "新增圖片和檔案",
+  "ui.promptInput.attachments": "圖片和檔案",
+  "ui.promptInput.context": "上下文",
+  "ui.promptInput.shell": "shell 命令",
+  "ui.promptInput.chooseAgent": "選擇代理程式",
+  "ui.promptInput.chooseModel": "選擇模型",
+  "ui.promptInput.chooseVariant": "選擇模型變體",
+  "ui.promptInput.send": "傳送",
+  "ui.promptInput.stop": "停止",
+
+  "ui.tabs.close": "關閉分頁",
+
   "ui.textField.copyToClipboard": "複製到剪貼簿",
   "ui.textField.copyLink": "複製連結",
   "ui.textField.copied": "已複製",
@@ -130,11 +150,13 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
   "ui.tool.websearch": "網頁搜尋",
+  "ui.tool.websearch.provider": "{{provider}} 網頁搜尋",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "修補",
   "ui.tool.todos": "待辦",
   "ui.tool.todos.read": "讀取待辦",
   "ui.tool.questions": "問題",
+  "ui.tool.questions.numbered": "問題 {{number}}",
   "ui.tool.agent": "{{type}} 代理程式",
   "ui.tool.agent.default": "代理程式",
 
@@ -144,6 +166,8 @@ export const dict = {
   "ui.common.question.other": "個問題",
 
   "ui.common.add": "新增",
+  "ui.common.clear": "清除",
+  "ui.common.file": "檔案",
   "ui.common.back": "返回",
   "ui.common.cancel": "取消",
   "ui.common.confirm": "確認",

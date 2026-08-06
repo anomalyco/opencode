@@ -109,8 +109,8 @@
           width: 20px;
           height: 20px;
           margin-top: -2px;
-          margin-right: -2px;
-          margin-left: auto;
+          margin-inline-end: -2px;
+          margin-inline-start: auto;
           border-radius: 4px;
           flex-shrink: 0;
           cursor: pointer;
