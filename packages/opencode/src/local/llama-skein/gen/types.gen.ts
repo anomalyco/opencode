@@ -196,6 +196,26 @@ export type Model = {
      */
     reasoning?: boolean;
     last_error?: LastError;
+    /**
+     * Whether the model's primary weights file currently exists on disk. Distinct from being configured (present in this list at all) — a configured model's weight file can be missing (deleted, moved, or never finished installing). Omitted when it cannot be determined (e.g. no -m/--model path in the command).
+     */
+    installed?: boolean;
+    /**
+     * e.g. "unsloth/Qwen3.6-35B-A3B-GGUF". Recovered from the most recent succeeded install operation that registered this model_id (internal/operation.Store), not stored on the model config itself. Omitted when unknown — a model configured by hand, pulled via the older POST /api/models/pull route, or whose founding operation record has since been pruned has no recoverable source.
+     */
+    source_repository?: string;
+    /**
+     * Immutable revision (commit SHA) of source_repository, same provenance source and same omission conditions.
+     */
+    source_revision?: string;
+    /**
+     * Repository-relative paths of every artifact the founding install operation submitted (weights, shards, auxiliaries) — not live-rescanned from disk, so it reflects what was installed, not necessarily every file currently present at the destination. Same provenance source and omission conditions as source_repository.
+     */
+    artifact_paths?: Array<string>;
+    /**
+     * ID of a currently non-terminal model operation (see ModelOperation) whose registration.model_id is this model, if one is in progress — a reinstall, for instance. Omitted when no such operation exists.
+     */
+    active_operation_id?: string;
 };
 
 export type ConfigInfoResponse = {

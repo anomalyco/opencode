@@ -27,8 +27,25 @@
 
 - [x] 3.1 Merge/regenerate the llama-skein hypothetical-fit contract and
       replace handwritten fit response types where generated types exist.
-- [ ] 3.2 Regenerate the host-model-management operation client after its
-      OpenAPI change lands.
+- [x] 3.2 Regenerate the host-model-management operation client after its
+      OpenAPI change lands. Regenerated from
+      `llama-skein/contracts/llama-skein.openapi.json` via
+      `bun run build:llama-skein-client`. llama-skein's
+      host-model-management-api sections 1-5 are merged, so the operation
+      surface is now generated rather than handwritten:
+      `createModelOperation`, `getModelOperation`, `listModelOperations`,
+      `cancelModelOperation`, `streamModelOperationEvents`, alongside the
+      config-model CRUD and `postHypotheticalFit`.
+      The regeneration diff is 20 lines in `types.gen.ts` and nothing in
+      `sdk.gen.ts` — the operation *methods* were already generated from an
+      earlier contract; what had drifted were the provenance fields
+      llama-skein's task 5.1 added to `Model` (`installed`,
+      `source_repository`, `source_revision`, `artifact_paths`,
+      `active_operation_id`). Those are exactly what an Installed view needs to
+      distinguish "configured" from "actually on disk" and to reattach to an
+      install still in flight, so the client was quietly missing the fields
+      section 7 depends on.
+      `bun run typecheck` clean; `bun test test/local/` 189 pass.
 - [ ] 3.3 Add capability negotiation for hypothetical fit, inventory detail,
       install operations, cancellation, and event observation.
 - [ ] 3.4 Preserve existing installed-model discovery and inference against
