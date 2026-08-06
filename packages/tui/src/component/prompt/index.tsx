@@ -960,22 +960,22 @@ export function Prompt(props: PromptProps) {
       (data.location.command.list(currentLocation.ref) ?? []).some((command) => command.name === slashHead.name)
     const agent = local.agent.current()
     if (!agent) return false
-    const selectedModel = local.model.current()
-    if (!selectedModel) {
+    const selection = local.model.selection()
+    if (!selection) {
       void promptModelWarning()
       return false
     }
     const usesModel = !props.sessionID || (store.mode !== "shell" && !isSkill)
-    if (usesModel && !local.model.available(selectedModel)) {
+    if (usesModel && !local.model.available(selection)) {
       toast.show({
         title: "Model unavailable",
-        message: `${selectedModel.providerID}/${selectedModel.modelID} is not available in this session's location`,
+        message: `${selection.providerID}/${selection.modelID} is not available in this session's location`,
         variant: "warning",
       })
       return false
     }
 
-    const variant = local.model.variant.current()
+    const variant = selection.variant
     let sessionID = props.sessionID
     let session = sessionID ? data.session.get(sessionID) : undefined
     let finishMoveProgress = false
@@ -993,8 +993,8 @@ export function Prompt(props: PromptProps) {
           location: directory ? { directory } : location,
           agent: agent.id,
           model: {
-            providerID: selectedModel.providerID,
-            id: selectedModel.modelID,
+            providerID: selection.providerID,
+            id: selection.modelID,
             variant,
           },
         })
@@ -1028,8 +1028,8 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (slashHead && isCommand) {
       move.startSubmit()
-      const model = { providerID: selectedModel.providerID, id: selectedModel.modelID, variant }
-      const cancelCommit = local.model.expectCommit(sessionID, model)
+      const model = { providerID: selection.providerID, id: selection.modelID, variant }
+      const cancelCommit = local.model.trackSessionCommit(sessionID, model)
 
       void client.api.session
         .command({
@@ -1061,12 +1061,12 @@ export function Prompt(props: PromptProps) {
         await client.api.session.switchAgent({ sessionID, agent: agent.id })
       }
       if (
-        session?.model?.providerID !== selectedModel.providerID ||
-        session.model.id !== selectedModel.modelID ||
+        session?.model?.providerID !== selection.providerID ||
+        session.model.id !== selection.modelID ||
         (session.model.variant ?? "default") !== (variant ?? "default")
       ) {
-        const model = { providerID: selectedModel.providerID, id: selectedModel.modelID, variant }
-        const cancelCommit = local.model.expectCommit(sessionID, model)
+        const model = { providerID: selection.providerID, id: selection.modelID, variant }
+        const cancelCommit = local.model.trackSessionCommit(sessionID, model)
         await client.api.session.switchModel({ sessionID, model }).catch((error) => {
           cancelCommit()
           throw error
