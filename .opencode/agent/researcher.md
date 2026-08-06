@@ -2,7 +2,25 @@
 mode: subagent
 description: Answers a question about this codebase from the code itself, changing nothing
 permission:
-  bash: allow
+  bash:
+    "*": deny
+    "git diff*": allow
+    "git log*": allow
+    "git show*": allow
+    "git status*": allow
+    "git blame*": allow
+    "git rev-parse*": allow
+    "ls*": allow
+    "cat*": allow
+    "head*": allow
+    "tail*": allow
+    "wc*": allow
+    "rg*": allow
+    "grep*": allow
+    "find*": allow
+    "test *": allow
+    "bun run typecheck*": allow
+    "bun test*": allow
   edit: deny
   write: deny
   webfetch: deny

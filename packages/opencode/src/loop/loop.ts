@@ -759,28 +759,48 @@ export const layer = Layer.effect(
           .create({
             parentID: parentSessionID,
             title: `${gate}: ${agentName} on ${change.slug}`,
-            // The persona's own denies are put on the SESSION, not left to the
-            // agent selection alone. This session exists for one review and
-            // nothing else, and a reviewer that can edit what it is judging is
-            // not a reviewer — so it is worth stating structurally rather than
-            // relying on the agent staying selected for the whole turn.
+            // Order is load-bearing. Rules are evaluated last-match-wins
+            // (Permission.evaluate uses findLast) and tools merge as
+            // [agent rules, session rules], so whatever sits last here beats
+            // everything before it.
+            //
+            // The persona's ruleset goes on the session WHOLE and in order, not
+            // filtered to its denies: a read-only persona expresses itself as
+            // `bash: {"*": deny, "git diff*": allow}`, and copying only the
+            // deny would strand it with no bash at all.
+            //
+            // The derived ceiling goes LAST so it always wins — the parent's
+            // deny rules (the queue's no-push authority) must not be
+            // overridable by anything a persona says about itself.
             permission: [
+              ...persona.permission,
               ...deriveSubagentSessionPermission({
                 parentSessionPermission: parent?.permission ?? [],
                 subagent: persona,
               }),
-              ...persona.permission.filter((rule) => rule.action === "deny"),
             ],
           })
           .pipe(Effect.orElseSucceed(() => undefined))
         if (!child) return { passed: false, output: `could not start the ${agentName} subagent for the ${gate} gate` }
 
         const diff = yield* Effect.promise(() => exec("git diff HEAD"))
+        // Status as well as diff: `git diff HEAD` does not show untracked
+        // files, so a change whose entire contribution is a NEW file looks
+        // empty to the reviewer. Observed on the first live run — the reviewer
+        // saw only the tasks.md checkbox and correctly called it incomplete,
+        // but for the wrong reason. It can read the files itself once it knows
+        // they exist.
+        const status = yield* Effect.promise(() => exec("git status --porcelain"))
         const brief = [
           `Review the work done on openspec change "${change.slug}" (${change.directory}).`,
-          "Read the diff below, then the change's proposal.md and tasks.md, then whatever",
-          "surrounding code you need. Return your verdict in the format your instructions",
-          "describe. Your verdict decides whether this change advances to commit.",
+          "Read the diff and status below, then the change's proposal.md and tasks.md, then",
+          "whatever surrounding code you need. Files marked ?? are untracked and will NOT",
+          "appear in the diff — read them directly. Return your verdict in the format your",
+          "instructions describe. Your verdict decides whether this change advances to commit.",
+          "",
+          "## git status --porcelain",
+          "",
+          status.output.slice(0, 20_000) || "(clean)",
           "",
           "## git diff HEAD",
           "",

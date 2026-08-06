@@ -71,3 +71,38 @@ describe("repo personas", () => {
     }
   })
 })
+
+// `write: deny` and `edit: deny` do not stop an agent that can run `bash`, and
+// this is not hypothetical: on the first live run the reviewer announced it
+// could not write its review "due to file-writing restrictions" and then wrote
+// it anyway with a shell redirect, dirtying the tree the commit gate checks.
+describe("read-only personas cannot mutate through bash either", () => {
+  const readOnly = ["reviewer", "persona-auditor", "researcher"]
+
+  test("inspection commands are still allowed", () => {
+    for (const name of readOnly) {
+      const rules = Permission.fromConfig(loaded[name].permission ?? {})
+      for (const command of ["git diff HEAD", "git status --porcelain", "rg foo", "cat x.ts"]) {
+        expect(Permission.evaluate("bash", command, rules).action, `${name}: ${command}`).toBe("allow")
+      }
+    }
+  })
+
+  test("anything that writes is denied", () => {
+    for (const name of readOnly) {
+      const rules = Permission.fromConfig(loaded[name].permission ?? {})
+      for (const command of [
+        "echo hi > review.md",
+        "printf x >> notes.txt",
+        "mv a b",
+        "rm -rf x",
+        "sed -i '' s/a/b/ x.ts",
+        "git add -A",
+        "git commit -m x",
+        "tee out.txt",
+      ]) {
+        expect(Permission.evaluate("bash", command, rules).action, `${name}: ${command}`).toBe("deny")
+      }
+    }
+  })
+})

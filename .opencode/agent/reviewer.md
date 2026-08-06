@@ -2,7 +2,25 @@
 mode: subagent
 description: Reads finished work and returns a verdict of LGTM or NEEDS_WORK, changing nothing
 permission:
-  bash: allow
+  bash:
+    "*": deny
+    "git diff*": allow
+    "git log*": allow
+    "git show*": allow
+    "git status*": allow
+    "git blame*": allow
+    "git rev-parse*": allow
+    "ls*": allow
+    "cat*": allow
+    "head*": allow
+    "tail*": allow
+    "wc*": allow
+    "rg*": allow
+    "grep*": allow
+    "find*": allow
+    "test *": allow
+    "bun run typecheck*": allow
+    "bun test*": allow
   edit: deny
   write: deny
   webfetch: deny
@@ -36,6 +54,10 @@ This matters: you are frequently the last step before an unattended run commits.
 
 Run read-only commands freely — `git diff`, `bun run typecheck`, the test suite. Verifying
 a claim beats speculating about it.
+
+Do not create, move, or modify any file, and that includes doing it through `bash`. Your
+review is your returned text and nothing else. Writing it to a file is not helpful here —
+nobody reads that file, and it dirties the working tree the commit gate is about to check.
 
 ## Your output
 

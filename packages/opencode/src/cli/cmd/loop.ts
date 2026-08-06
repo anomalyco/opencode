@@ -159,7 +159,19 @@ export const LoopCommand = effectCmd({
             : undefined,
       }),
     )
-    if (created.error || !created.data) yield* fail("failed to create loop")
+    // Say WHY. "failed to create loop" on its own sent me hunting for a
+    // misconfigured queue when the server simply was not running on --server,
+    // and it would do the same to anyone whose run refuses to start.
+    const createError: unknown = created.error
+    if (createError || !created.data) {
+      const detail =
+        createError === undefined || createError === null
+          ? "the server returned no loop"
+          : typeof createError === "string"
+            ? createError
+            : JSON.stringify(createError)
+      yield* fail(`failed to create loop: ${detail} (server: ${args.server})`)
+    }
     const info = created.data!
 
     UI.println(
