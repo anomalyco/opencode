@@ -208,7 +208,8 @@ describe("ModelResolver", () => {
           body: {},
         }),
       )
-      const request = LLM.request({ model: resolved, prompt: "Hello" })
+      const request = LLM.request({ model: resolved, prompt: "Hello", generation: { maxTokens: 10 } })
+      const prepared = yield* compileRequest(request)
       const headers = yield* resolved.route.auth.apply({
         request,
         method: "POST",
@@ -222,6 +223,8 @@ describe("ModelResolver", () => {
       expect(resolved.compatibility?.reasoningField).toBe("vendor_reasoning")
       expect(resolved.compatibility?.maxTokensField).toBe("max_completion_tokens")
       expect(resolved.compatibility?.requireFinishReason).toBe(false)
+      expect(prepared.body).toMatchObject({ max_completion_tokens: 10 })
+      expect(prepared.body).not.toHaveProperty("max_tokens")
       expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
       expect(resolved.route.defaults.http?.body).toEqual({})
     }),
