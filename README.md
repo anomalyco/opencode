@@ -64,6 +64,48 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 
+### Setup From Source (this fork)
+
+The commands above install the real, published `opencode` — this repo (`leakdev0410/Leak-code`) isn't published anywhere, so to run *this* fork you build it from source.
+
+**Requirements:** [Bun](https://bun.sh) 1.3+, git.
+
+```bash
+git clone https://github.com/leakdev0410/Leak-code.git
+cd Leak-code
+bun install
+bun dev              # starts the TUI against packages/opencode
+```
+
+`bun dev <directory>` points the TUI at a different project; `bun dev .` runs it against this repo itself.
+
+Other apps in the monorepo each have a root shortcut:
+
+```bash
+bun run dev:web       # web app (Vite dev server, packages/app)
+bun run dev:desktop   # Electron desktop app (packages/desktop)
+bun run dev:console   # account/billing dashboard (packages/console/app)
+bun run dev:storybook # component storybook (packages/storybook)
+```
+
+The web app needs a running server to talk to — start `bun dev serve` (or any `bun dev` session) first, then `bun run dev:web` in another terminal.
+
+Check everything compiles and passes before opening a PR:
+
+```bash
+bun turbo typecheck
+bun test               # per-package; run from inside a package, e.g. cd packages/opencode && bun test
+```
+
+To compile a standalone binary for your current platform:
+
+```bash
+./packages/opencode/script/build.ts --single
+./packages/opencode/dist/leak-code-<platform>/bin/opencode --version
+```
+
+Replace `<platform>` with what the build step printed (e.g. `darwin-arm64`, `linux-x64`). See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full development guide, including running the API server standalone, debugging setup, and PR conventions.
+
 ### Desktop App (BETA)
 
 Leak Code is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
@@ -114,7 +156,7 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 ### Documentation
 
-For more info on how to configure Leak Code, [**head over to our docs**](https://opencode.ai/docs).
+Leak Code shares its config format and CLI with the upstream project, so [**opencode's docs**](https://opencode.ai/docs) mostly apply as-is. This repo's own copy of those docs (rebranded, occasionally out of sync) lives under [`packages/web/src/content/docs`](./packages/web/src/content/docs).
 
 ### Contributing
 
