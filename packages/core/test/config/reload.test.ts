@@ -43,7 +43,6 @@ describe("config plugin reloads", () => {
       yield* ConfigSkillPlugin.Plugin.effect(host)
       yield* ConfigReferencePlugin.Plugin.effect(host)
       yield* ConfigProviderPlugin.Plugin.effect(host)
-      yield* Effect.yieldNow
 
       expect((yield* agents.get(Agent.ID.make("first")))?.description).toBe("First agent")
       expect((yield* commands.get("first"))?.description).toBe("First command")

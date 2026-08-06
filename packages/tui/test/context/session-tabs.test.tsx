@@ -159,7 +159,7 @@ test("stores session tabs globally by default", async () => {
   try {
     const file = path.join(setup.state, "test", "tui", "tabs.json")
     await wait(() => Bun.file(file).size > 0)
-    expect(await Bun.file(file).json()).toMatchObject({
+    expect(await Bun.file(file).json()).toEqual({
       global: { tabs: [{ sessionID: "first" }], unread: {} },
       cwd: {},
     })
