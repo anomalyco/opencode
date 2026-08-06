@@ -88,15 +88,14 @@ const layer = Layer.effect(
         const project = yield* projects.resolve(input.location.directory)
         yield* persistProject(project)
         const messages = input.data.messages.map((message, index) => {
-          const imported = { ...message, id: SessionMessage.ID.create() }
-          const encoded = encodeMessage(imported)
+          const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded
           return {
-            id: imported.id,
+            id: message.id,
             session_id: sessionID,
             type,
             seq: index + 1,
-            time_created: DateTime.toEpochMillis(imported.time.created),
+            time_created: DateTime.toEpochMillis(message.time.created),
             data,
           }
         })
@@ -269,20 +268,12 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
           state: sanitizeToolState(message.id, content.state),
         }
       }),
-      error: message.error ? { ...message.error, message: redact("error", message.id, message.error.message) } : undefined,
-      retry: message.retry
-        ? {
-            ...message.retry,
-            error: { ...message.retry.error, message: redact("retry-error", message.id, message.retry.error.message) },
-          }
-        : undefined,
     }
   if (message.type === "compaction") {
     if (message.status === "failed")
       return {
         ...message,
         metadata: meta,
-        error: { ...message.error, message: redact("compaction-error", message.id, message.error.message) },
       }
     return {
       ...message,
@@ -319,7 +310,6 @@ function sanitizeToolState(id: string, state: SessionMessage.ToolState): Session
         ]
       : undefined,
     metadata: meta,
-    error: { ...state.error, message: redact("tool-error", id, state.error.message) },
   }
 }
 

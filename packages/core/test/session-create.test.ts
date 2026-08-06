@@ -759,6 +759,7 @@ describe("SessionTransfer", () => {
       const template = yield* session.create({ location, title: "Exported" })
       const sessionID = Session.ID.create()
       const sourceMessageID = SessionMessage.ID.create()
+      const errorMessageID = SessionMessage.ID.create()
 
       const imported = yield* transfer.import({
         data: {
@@ -770,6 +771,14 @@ describe("SessionTransfer", () => {
               text: "Imported message",
               time: { created: DateTime.makeUnsafe(100) },
             },
+            {
+              id: errorMessageID,
+              type: "compaction",
+              status: "failed",
+              reason: "manual",
+              error: { type: "test_error", message: "Original error" },
+              time: { created: DateTime.makeUnsafe(101) },
+            },
           ],
         },
         location,
@@ -777,22 +786,26 @@ describe("SessionTransfer", () => {
       const messages = yield* session.messages({ sessionID, order: "asc" })
 
       expect(imported).toMatchObject({ id: sessionID, title: "Exported", location })
-      expect(messages).toMatchObject([{ type: "user", text: "Imported message" }])
-      expect(messages[0].id).not.toBe(sourceMessageID)
-      expect(yield* Bus.latestSequence(db, sessionID)).toBe(1)
+      expect(messages).toMatchObject([
+        { id: sourceMessageID, type: "user", text: "Imported message" },
+        { id: errorMessageID, type: "compaction", error: { type: "test_error", message: "Original error" } },
+      ])
+      expect(yield* Bus.latestSequence(db, sessionID)).toBe(2)
       expect((yield* transfer.export({ sessionID })).messages).toEqual(messages)
-      expect((yield* transfer.export({ sessionID, sanitize: true })).messages[0]).toMatchObject({
-        text: `[redacted:text:${messages[0].id}]`,
-      })
+      expect((yield* transfer.export({ sessionID, sanitize: true })).messages).toMatchObject([
+        { id: sourceMessageID, text: `[redacted:text:${sourceMessageID}]` },
+        { id: errorMessageID, error: { type: "test_error", message: "Original error" } },
+      ])
 
       yield* session.prompt({ sessionID, text: "Continue", resume: false })
       yield* SessionPending.promote(db, bus, sessionID, "steer")
 
       expect((yield* session.messages({ sessionID, order: "asc" })).map((message) => message.type)).toEqual([
         "user",
+        "compaction",
         "user",
       ])
-      expect(yield* Bus.latestSequence(db, sessionID)).toBe(3)
+      expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
     }),
   )
 
