@@ -2577,9 +2577,16 @@ function Question(props: ToolProps) {
 }
 
 function Skill(props: ToolProps) {
+  const tuiConfig = useTuiConfig()
+  const name = stringValue(props.input.name)
   return (
-    <InlineTool icon="→" pending="Loading skill..." complete={stringValue(props.input.name)} part={props.part}>
-      Skill "{stringValue(props.input.name)}"
+    <InlineTool
+      icon="→"
+      pending="Loading skill..."
+      complete={tuiConfig.skill_display === "compact" ? `[skill: ${name}]` : name}
+      part={props.part}
+    >
+      Skill "{name}"
     </InlineTool>
   )
 }
