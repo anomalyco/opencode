@@ -790,34 +790,16 @@ export const layer = Layer.effect(
             outcome: "stopped",
           }
 
-          // One isolated session per CHANGE — not per iteration, and not one
-          // shared session for the whole run.
+          // The work runs in the session you are looking at. Not a child, not
+          // one per change: a child session's message stream is only reachable
+          // by keypress, so an unattended run looked like a still, empty screen.
+          // Being able to watch the agent outranks a clean context per change.
           //
-          // Per iteration was invisible and wasteful: a new session every few
-          // minutes, none of them findable. One shared session drags every
-          // change's history into every later change, and — the part that
-          // actually bit — it cannot carry the authority ceiling, because it is
-          // the session the user is typing in. A session per change gets all
-          // three: a clean context for that change, a boundary you can navigate
-          // to, and its own deny profile, which is also what marks it
-          // unattended so it never stops to ask.
-          const changeSession = yield* session
-            .create({
-              parentID: record.info.sessionID,
-              title: `auto: ${change.slug}`,
-              permission: [...QueueDenyRules],
-            })
-            .pipe(Effect.orElseSucceed(() => undefined))
-          if (!changeSession) {
-            yield* finishQueue(id, "error", `could not create a session for ${change.slug}; nothing was attempted`)
-            return
-          }
-          const changeSessionID = changeSession.id
-          yield* patch(id, (current) => ({
-            ...current,
-            info: { ...current.info, iterationSessionID: changeSessionID },
-          }))
-          yield* emit(id)
+          // The authority ceiling has to come along, because it is the session's
+          // ruleset that both denies pushing AND marks the run unattended so it
+          // never stops to ask. It is applied for the duration of the run and
+          // restored when the run ends — see `restorePermission` below.
+          const changeSessionID = record.info.sessionID
 
           const quarantineNow = (why: string, detail: string, byGate?: Gate) =>
             Effect.sync(() => {
@@ -1067,10 +1049,7 @@ export const layer = Layer.effect(
           directory = existing?.directory ?? ""
         } else {
           const parent = yield* session.create({
-            title: mode === "queue" ? "loop: openspec queue" : `loop: ${promptHead(prompt)}`,
-            // The queue's authority ceiling starts at the parent so even the
-            // degraded no-child fallback path inherits it.
-            permission: mode === "queue" ? [...QueueDenyRules] : undefined,
+            title: mode === "queue" ? "auto: openspec backlog" : `loop: ${promptHead(prompt)}`,
           })
           sessionID = parent.id
           parentSessionID = undefined
@@ -1138,6 +1117,26 @@ export const layer = Layer.effect(
         // iteration) would otherwise kill this fiber silently and leave the
         // loop stuck "running" forever with no way to observe why. Finalize
         // as "error" and log the cause instead.
+        // The authority ceiling rides on the session the work runs in — which
+        // is the session you are watching, because a run you cannot see is
+        // useless. That ruleset is what denies pushing AND what marks the run
+        // unattended so it never stops to ask.
+        //
+        // Applied here, next to the fiber that owns the run's whole lifetime,
+        // and released with `ensuring` so that draining, halting, cancelling
+        // or dying all hand your session back exactly as it was found. Doing
+        // this deeper inside the driver would leave the return paths to be
+        // audited one by one.
+        const priorPermission =
+          mode === "queue"
+            ? ((yield* session.get(sessionID).pipe(Effect.orElseSucceed(() => undefined)))?.permission ?? [])
+            : []
+        if (mode === "queue") {
+          yield* session
+            .setPermission({ sessionID, permission: [...priorPermission, ...QueueDenyRules] })
+            .pipe(Effect.ignore)
+        }
+
         const driver = mode === "queue" ? runQueue(id) : run(id)
         yield* driver
           .pipe(
@@ -1149,6 +1148,11 @@ export const layer = Layer.effect(
                 })
                 yield* finalize(id, "error")
               }),
+            ),
+            Effect.ensuring(
+              mode === "queue"
+                ? session.setPermission({ sessionID, permission: [...priorPermission] }).pipe(Effect.ignore)
+                : Effect.void,
             ),
           )
           .pipe(Effect.forkIn(scope))

@@ -96,6 +96,16 @@ targets) and the foreign-turn guard, which matters MORE now that the session is
 shared across iterations. Phases 2 and 3 (adaptive continuation prompt, pause
 Deferred) are unaffected.
 
+Re-attempted the same day as one session per CHANGE (rather than per iteration)
+and reversed again for the same reason: a child session is still a keypress away,
+so the main window still sits empty. If you try this a third time, know what the
+child session was carrying: the authority ceiling. A child got its deny profile
+at creation; a shared session has to be granted it for the duration of the run
+and handed back afterwards, which is what `create` now does with `ensuring`.
+That ruleset is not just about denying push — it is also what marks the session
+unattended, so dropping it silently turns /auto back into something that stops
+to ask.
+
 ## Phase 4: Tests & verification
 
 - [x] 4.1 Update existing loop tests to account for child sessions (assertion on `info.iterationSessionID`)

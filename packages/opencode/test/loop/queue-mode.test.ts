@@ -468,45 +468,55 @@ it.instance(
 )
 
 it.instance(
-  "each change gets its own session, carrying the authority ceiling",
+  "the work runs in your session, and the ceiling is applied then handed back",
   () =>
     Effect.gen(function* () {
       const { directory: dir } = yield* TestInstance
       const llm = yield* TestLLMServer
       yield* writeConfig(dir, providerCfg(llm.url))
-      writeChange(dir, "aaa-first", "- [ ] 1.1 work\n")
-      writeChange(dir, "zzz-second", "- [ ] 1.1 work\n")
+      writeChange(dir, "visible-change", "- [ ] 1.1 work\n")
       const loop = yield* Loop.Service
       const session = yield* Session.Service
 
-      const anchor = yield* session.create({ title: "my session" })
-      for (let i = 0; i < 10; i++) yield* llm.text("looking at it")
+      const mine = yield* session.create({ title: "my session" })
+      expect((yield* session.get(mine.id)).permission ?? []).toHaveLength(0)
+      for (let i = 0; i < 8; i++) yield* llm.text("looking at it")
 
       const info = yield* loop.create({
         prompt: "",
         mode: "queue",
-        sessionID: anchor.id,
+        sessionID: mine.id,
         interval: 0,
-        maxIterations: 4,
+        maxIterations: 3,
         queueOptions: { testCommand: "exit 0", verifyCommand: "exit 0", defaultBranch: "main" },
       })
-      yield* waitForTerminal(info.id, 40)
 
-      const all = yield* session.list()
-      const perChange = all.filter((item) => item.title?.startsWith("auto: "))
+      // While it runs, the session you are watching carries the ceiling — that
+      // ruleset is what denies pushing and what keeps the run from stopping to
+      // ask, and it has to be on the session the work actually runs in.
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const current = yield* session.get(mine.id)
+          return current.permission?.some((rule) => rule.action === "deny" && rule.pattern.includes("push"))
+            ? true
+            : undefined
+        }),
+        "the ceiling was never applied to the running session",
+        "10 seconds",
+      )
 
-      // A session per change — isolated context, and a boundary you can reach
-      // from the session you started in.
-      expect(perChange.length).toBeGreaterThanOrEqual(1)
-      for (const item of perChange) {
-        expect(item.parentID).toBe(anchor.id)
-        // The ceiling rides on that session: it is what denies pushing AND what
-        // marks the run unattended so it never stops to ask.
-        expect(item.permission?.some((rule) => rule.action === "deny" && rule.pattern.includes("push"))).toBe(true)
-      }
-      // The user's own session is never given the ceiling.
-      const mine = all.find((item) => item.id === anchor.id)
-      expect(mine?.permission ?? []).toHaveLength(0)
+      const final = yield* waitForTerminal(info.id, 40)
+      expect(final.iterations.every((item) => item.sessionID === mine.id)).toBe(true)
+
+      // ...and it is handed back when the run ends, however it ended.
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const current = yield* session.get(mine.id)
+          return (current.permission ?? []).length === 0 ? true : undefined
+        }),
+        "the ceiling was left behind on the session after the run",
+        "10 seconds",
+      )
     }),
   { config: {} },
 )
