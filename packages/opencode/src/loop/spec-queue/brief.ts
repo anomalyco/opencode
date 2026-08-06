@@ -17,6 +17,12 @@ export interface BriefInput {
   /** names of idle local peer providers; empty → no fan-out nudge */
   idlePeers: readonly string[]
   /**
+   * Other sessions working in this directory right now, already described.
+   * Empty means the repo is quiet — the paragraph is then omitted entirely,
+   * because a collision warning that fires constantly stops being read.
+   */
+  peers?: readonly string[]
+  /**
    * Agent bound to this gate, when one resolved. The nudge names it instead of
    * gesturing at "the task tool" — an instruction naming nobody is one the
    * model can ignore at no cost, which is exactly what happened. Absent means
@@ -120,6 +126,21 @@ export function buildBrief(input: BriefInput): string {
 
   for (const file of specFiles(change.directory)) {
     parts.push(`## ${path.relative(change.directory, file)}\n\n${fs.readFileSync(file, "utf8")}`)
+  }
+
+  if (input.peers && input.peers.length > 0) {
+    parts.push(
+      [
+        `Another agent is working in this repository right now — you are not alone in this checkout.`,
+        "Two agents editing one working tree is a real failure here, not a hypothetical:",
+        "",
+        ...input.peers.map((peer) => `- ${peer}`),
+        "",
+        "Before you touch shared state — a branch, the git index, a migration, a manifest —",
+        "consider whether that session is already doing it. If its title overlaps this change,",
+        "say so in your reply rather than racing it. You cannot read its messages.",
+      ].join("\n"),
+    )
   }
 
   if (input.idlePeers.length > 0 && input.persona) {

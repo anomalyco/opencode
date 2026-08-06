@@ -190,6 +190,25 @@ describe("buildBrief", () => {
 
   // An instruction to delegate to an agent that does not exist is worse than no
   // instruction — the model cannot carry it out and will improvise.
+  test("an active neighbour is named in the brief", () => {
+    const brief = buildBrief({
+      change: fixtureChange(),
+      gate: "implement",
+      idlePeers: [],
+      peers: ['ses_1 — "Merge five specsync worktrees into main" [busy], last active 30s ago'],
+    })
+    expect(brief).toContain("not alone in this checkout")
+    expect(brief).toContain("Merge five specsync worktrees into main")
+  })
+
+  // A collision warning that fires constantly stops being read.
+  test("a quiet repo produces no neighbour warning", () => {
+    const brief = buildBrief({ change: fixtureChange(), gate: "implement", idlePeers: [], peers: [] })
+    expect(brief).not.toContain("not alone in this checkout")
+    const noField = buildBrief({ change: fixtureChange(), gate: "implement", idlePeers: [] })
+    expect(noField).not.toContain("not alone in this checkout")
+  })
+
   test("no bound agent suppresses the nudge even with an idle fleet", () => {
     const brief = buildBrief({ change: fixtureChange(), gate: "implement", idlePeers: ["z4"] })
     expect(brief).not.toContain("Fleet capacity")

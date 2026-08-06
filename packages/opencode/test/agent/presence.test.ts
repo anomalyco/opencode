@@ -11,26 +11,27 @@ describe("Agent presence", () => {
     ).toBe("awaiting-permission")
   })
 
+  // The derivation takes the loop structurally (`{ status }`) rather than a
+  // whole Loop.Info: it lives in a leaf module so `session/peers.ts` can use it
+  // without closing an import cycle through the loop service.
   test("maps loop stalls independently of provider health", () => {
     expect(
       AgentPresence.statusFrom({
         session: { type: "busy" },
         permissionPending: false,
-        loop: {
-          id: "loop_01J00000000000000000000000" as NonNullable<AgentPresence.Info["loopID"]>,
-          directory: "/repo",
-          sessionID: "ses_01J00000000000000000000000" as AgentPresence.Info["sessionID"],
-          prompt: "redacted",
-          status: "stalled",
-          maxIterations: 10,
-          noProgressLimit: 3,
-          completionToken: "<promise>COMPLETE</promise>",
-          iteration: 7,
-          iterations: [],
-          startedAt: Date.now(),
-        },
+        loop: { status: "stalled" },
       }),
     ).toBe("stalled")
+  })
+
+  test("a cancelled loop reads as cancelling, not busy", () => {
+    expect(
+      AgentPresence.statusFrom({
+        session: { type: "busy" },
+        permissionPending: false,
+        loop: { status: "cancelled" },
+      }),
+    ).toBe("cancelling")
   })
 
   test("idle sessions are not active unless they own a paused loop", () => {

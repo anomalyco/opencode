@@ -335,6 +335,10 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
       "description": "The task for the agent to perform",
       "type": "string",
     },
+    "provider": {
+      "description": "Local provider (host) to run this subagent on, e.g. "rocky" or "m3". Use when the user names a host; copy the name exactly. Omit to auto-place on an idle host.",
+      "type": "string",
+    },
     "subagent_type": {
       "description": "The type of specialized agent to use for this task",
       "type": "string",

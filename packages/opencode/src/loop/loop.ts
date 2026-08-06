@@ -20,6 +20,8 @@ import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Agent as AgentSvc } from "@/agent/agent"
 import { deriveSubagentSessionPermission } from "@/agent/subagent-permissions"
+import { Permission } from "@/permission"
+import { describePeer, resolvePeers } from "@/session/peers"
 import { baseURLOf, parentCapacity } from "@/local/placement"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -264,6 +266,7 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const provider = yield* Provider.Service
     const agents = yield* AgentSvc.Service
+    const permission = yield* Permission.Service
     const scope = yield* Scope.Scope
 
     const state = yield* Ref.make<Map<LoopID, Record_>>(new Map())
@@ -618,6 +621,41 @@ export const layer = Layer.effect(
         return path.isAbsolute(configured) ? configured : path.resolve(base, configured)
       })
 
+    // Other agents working in this directory. Unlike the tool, this runs
+    // INSIDE the loop service, so it can see live loop state and does not have
+    // to infer activity from session status alone.
+    const activePeers = (callerID: SessionID, directory: string) =>
+      Effect.gen(function* () {
+        const [sessions, statuses, permissions, loops] = yield* Effect.all([
+          session.list().pipe(Effect.orElseSucceed(() => [])),
+          status.list().pipe(Effect.orElseSucceed(() => new Map())),
+          permission.list().pipe(Effect.orElseSucceed(() => [])),
+          Effect.map(Ref.get(state), (map) => [...map.values()].map((item) => item.info)),
+        ])
+        return resolvePeers({
+          sessions: sessions.map((item) => ({
+            id: item.id,
+            parentID: item.parentID,
+            directory: item.directory,
+            title: item.title,
+            agent: item.agent,
+            model: item.model ? { providerID: item.model.providerID, id: item.model.id } : undefined,
+            updatedAt: item.time.updated,
+          })),
+          statuses,
+          pendingPermission: new Set(permissions.map((item) => item.sessionID)),
+          loops: loops.map((item) => ({
+            id: item.id,
+            sessionID: item.sessionID,
+            status: item.status,
+            iteration: item.iteration,
+          })),
+          callerID,
+          directory,
+          now: Date.now(),
+        }).map(describePeer)
+      }).pipe(Effect.orElseSucceed(() => [] as string[]))
+
     // Idle local peers for the brief's fan-out nudge (design D9). Only
     // providers with a local baseURL are probed; errors read as "not idle".
     const idlePeers = Effect.gen(function* () {
@@ -696,11 +734,13 @@ export const layer = Layer.effect(
         const record = (yield* Ref.get(state)).get(id)
         if (!record) return undefined
         const peers = yield* idlePeers
+        const neighbours = yield* activePeers(changeSessionID, record.info.directory)
         const brief = buildBrief({
           change,
           gate,
           failure,
           idlePeers: peers,
+          peers: neighbours,
           guidance: record.queue?.guidance,
           persona,
         })
@@ -1487,6 +1527,7 @@ export const node = LayerNode.make(layer, [
   Config.node,
   Provider.node,
   AgentSvc.node,
+  Permission.node,
   EventV2Bridge.node,
 ])
 
