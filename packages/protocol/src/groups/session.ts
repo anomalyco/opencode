@@ -155,6 +155,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           location: Location.Ref.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),
+        error: UnknownError,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "v2.session.create",

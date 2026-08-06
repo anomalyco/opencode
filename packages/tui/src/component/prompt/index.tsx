@@ -974,20 +974,24 @@ export function Prompt(props: PromptProps) {
             variant,
           },
         })
-        .catch(() => undefined)
+        .then(
+          (data) => ({ data }),
+          (error) => ({ error }),
+        )
 
-      if (!created) {
+      if ("error" in created) {
         if (finishMoveProgress) move.finishSubmit()
         toast.show({
-          message: "Creating a session failed. Open console for more details.",
+          title: "Creating a session failed",
+          message: errorMessage(created.error),
           variant: "error",
         })
 
         return true
       }
 
-      sessionID = created.id
-      session = created
+      sessionID = created.data.id
+      session = created.data
     }
 
     const inputText = expandTrackedPastedText(

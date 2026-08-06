@@ -82,7 +82,22 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 model: ctx.payload.model,
                 location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
               })
-              .pipe(Effect.orDie),
+              .pipe(
+                Effect.catchCause((cause) => {
+                  const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+                  return Effect.logError("failed to create session", { cause }).pipe(
+                    Effect.annotateLogs({ ref }),
+                    Effect.andThen(
+                      Effect.fail(
+                        new UnknownError({
+                          message: "Unexpected server error. Check server logs for details.",
+                          ref,
+                        }),
+                      ),
+                    ),
+                  )
+                }),
+              ),
           }
         }),
       )

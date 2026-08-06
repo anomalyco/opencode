@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { isSessionNotFoundError, isUnauthorizedError, OpenCode } from "../src/promise/index"
+import { isSessionNotFoundError, isUnauthorizedError, isUnknownError, OpenCode } from "../src/promise/index"
 
 test("exposes every standard HTTP API group", () => {
   const client = OpenCode.make({ baseUrl: "http://localhost:3000" })
@@ -503,6 +503,25 @@ test("middleware errors remain declared client errors", async () => {
     throw new Error("Expected request to fail")
   } catch (error) {
     expect(isUnauthorizedError(error)).toBe(true)
+  }
+})
+
+test("session.create preserves server errors", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      Response.json(
+        { _tag: "UnknownError", message: "Unexpected server error. Check server logs for details.", ref: "err_test" },
+        { status: 500 },
+      ),
+  })
+
+  try {
+    await client.session.create({ location: { directory: "/tmp/project" } })
+    throw new Error("Expected request to fail")
+  } catch (error) {
+    expect(isUnknownError(error)).toBe(true)
+    expect(error).toMatchObject({ ref: "err_test" })
   }
 })
 
