@@ -1840,6 +1840,7 @@ function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "she
 
   return (
     <box
+      width="100%"
       border={["left"]}
       paddingTop={1}
       paddingBottom={1}
@@ -1947,17 +1948,22 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
       border={["left"]}
       borderColor={theme.border.default}
       customBorderChars={SplitBorder.customBorderChars}
-      paddingTop={1}
-      paddingBottom={1}
-      paddingLeft={2}
-      paddingRight={1}
-      flexDirection="row"
       onMouseUp={props.onOpen}
     >
-      <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
-        <span style={{ fg: theme.text.default }}>{props.prompts.length} queued</span>
-        <Show when={next()}>{(text) => <> · {text()}</>}</Show>
-      </text>
+      <box
+        width="100%"
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        paddingRight={1}
+        backgroundColor={theme.background.default}
+        flexDirection="row"
+      >
+        <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
+          <span style={{ fg: theme.text.default }}>{props.prompts.length} queued</span>
+          <Show when={next()}>{(text) => <> · {text()}</>}</Show>
+        </text>
+      </box>
     </box>
   )
 }
