@@ -10,7 +10,6 @@ import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
-import { useServerProtocol, useServerSDK } from "@/context/server-sdk"
 import { useUpdaterAction } from "../updater-action"
 import {
   monoDefault,
@@ -91,15 +90,13 @@ export const SettingsGeneralV2: Component<{
   const dialog = useDialog()
   const settings = useSettings()
   const serverSync = useServerSync()
-  const serverSdk = useServerSDK()
-  const protocol = useServerProtocol()
   const mobile = createMediaQuery("(max-width: 767px)")
 
   const updater = useUpdaterAction()
 
   const dir = createMemo(() => {
     if (!props.sessionID) return undefined
-    return serverSync().session.lineage.peek(props.sessionID)?.session.directory
+    return serverSync().session.lineage.peek(props.sessionID)?.session.location.directory
   })
   const accepting = createMemo(() => {
     const value = dir()
@@ -123,8 +120,11 @@ export const SettingsGeneralV2: Component<{
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
   const [shells] = createResource(
-    () => (protocol() === "v1" ? serverSdk() : undefined),
-    (sdk) => sdk.legacy.pty.shells().catch(() => [] as ShellOption[]),
+    async () => {
+      // TODO: Restore executable shell discovery when the V2 client exposes it.
+      // return (await sdk.api.pty.shells()).data
+      return [] as ShellOption[]
+    },
     { initialValue: [] as ShellOption[] },
   )
 
@@ -279,11 +279,10 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
 
-        <Show when={protocol() === "v1"}>
-          <SettingsRowV2
-            title={language.t("settings.general.row.shell.title")}
-            description={language.t("settings.general.row.shell.description")}
-          >
+        <SettingsRowV2
+          title={language.t("settings.general.row.shell.title")}
+          description={language.t("settings.general.row.shell.description")}
+        >
           <SelectV2
             appearance="inline"
             data-action="settings-shell"
@@ -299,8 +298,7 @@ export const SettingsGeneralV2: Component<{
               serverSync().updateConfig({ shell: option.value })
             }}
           />
-          </SettingsRowV2>
-        </Show>
+        </SettingsRowV2>
 
         <SettingsRowV2
           title={language.t("settings.general.row.reasoningSummaries.title")}

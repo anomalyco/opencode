@@ -84,10 +84,10 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     Spec.make("auth", {
       description: "Manage authentication",
       commands: [
-        Spec.make("connect", {
-          description: "Connect to a wellknown authentication provider",
+        Spec.make("login", {
+          description: "Log in to a well-known authentication provider",
           params: {
-            url: Argument.string("url").pipe(Argument.withDescription("Wellknown provider URL")),
+            url: Argument.string("url").pipe(Argument.withDescription("Well-known provider URL")),
           },
         }),
       ],
@@ -132,6 +132,10 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     Spec.make("plugin", {
       description: "Manage plugins",
       commands: [Spec.make("list", { description: "List active plugins" })],
+    }),
+    Spec.make("models", {
+      description: "List all available models",
+      params: ServerParams,
     }),
     Spec.make("mini", {
       description: "Start the minimal interactive interface",

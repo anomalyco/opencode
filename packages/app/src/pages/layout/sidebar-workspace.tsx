@@ -14,7 +14,7 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import type { Session } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { type LocalProject } from "@/context/layout"
 import { useServerSync, useQueryOptions } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -36,14 +36,12 @@ type InlineEditorComponent = (props: {
 
 export type WorkspaceSidebarContext = {
   currentDir: Accessor<string>
-  navList: Accessor<Session[]>
+  navList: Accessor<SessionInfo[]>
   sidebarExpanded: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   clearHoverProjectSoon: () => void
-  prefetchSession: (session: Session, priority?: "high" | "low") => void
-  archiveSession: (session: Session) => Promise<void>
-  canArchive: Accessor<boolean>
-  canResetWorkspace: Accessor<boolean>
+  prefetchSession: (session: SessionInfo, priority?: "high" | "low") => void
+  archiveSession: (session: SessionInfo) => Promise<void>
   workspaceName: (directory: string, projectId?: string, branch?: string) => string | undefined
   renameWorkspace: (directory: string, next: string, projectId?: string, branch?: string) => void
   editorOpen: (id: string) => boolean
@@ -153,7 +151,6 @@ const WorkspaceActions = (props: {
   workspaceValue: Accessor<string>
   openEditor: WorkspaceSidebarContext["openEditor"]
   showResetWorkspaceDialog: WorkspaceSidebarContext["showResetWorkspaceDialog"]
-  canResetWorkspace: WorkspaceSidebarContext["canResetWorkspace"]
   showDeleteWorkspaceDialog: WorkspaceSidebarContext["showDeleteWorkspaceDialog"]
   root: string
   clearHoverProjectSoon: WorkspaceSidebarContext["clearHoverProjectSoon"]
@@ -202,14 +199,13 @@ const WorkspaceActions = (props: {
           >
             <DropdownMenu.ItemLabel>{props.language.t("common.rename")}</DropdownMenu.ItemLabel>
           </DropdownMenu.Item>
-          <Show when={props.canResetWorkspace()}>
-            <DropdownMenu.Item
-              disabled={props.local() || props.busy()}
-              onSelect={() => props.showResetWorkspaceDialog(props.root, props.directory)}
-            >
-              <DropdownMenu.ItemLabel>{props.language.t("common.reset")}</DropdownMenu.ItemLabel>
-            </DropdownMenu.Item>
-          </Show>
+          <DropdownMenu.Item
+            // TODO: Restore reset when V2 exposes project-copy reset and instance disposal.
+            // onSelect={() => props.showResetWorkspaceDialog(props.root, props.directory)}
+            disabled
+          >
+            <DropdownMenu.ItemLabel>{props.language.t("common.reset")}</DropdownMenu.ItemLabel>
+          </DropdownMenu.Item>
           <DropdownMenu.Item
             disabled={props.local() || props.busy()}
             onSelect={() => props.showDeleteWorkspaceDialog(props.root, props.directory)}
@@ -247,7 +243,7 @@ const WorkspaceSessionList = (props: {
   ctx: WorkspaceSidebarContext
   showNew: Accessor<boolean>
   loading: Accessor<boolean>
-  sessions: Accessor<Session[]>
+  sessions: Accessor<SessionInfo[]>
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>
@@ -277,7 +273,6 @@ const WorkspaceSessionList = (props: {
           clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
           prefetchSession={props.ctx.prefetchSession}
           archiveSession={props.ctx.archiveSession}
-          canArchive={props.ctx.canArchive}
         />
       )}
     </For>
@@ -422,7 +417,6 @@ export const SortableWorkspace = (props: {
                 workspaceValue={workspaceValue}
                 openEditor={props.ctx.openEditor}
                 showResetWorkspaceDialog={props.ctx.showResetWorkspaceDialog}
-                canResetWorkspace={props.ctx.canResetWorkspace}
                 showDeleteWorkspaceDialog={props.ctx.showDeleteWorkspaceDialog}
                 root={props.project.worktree}
                 clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}

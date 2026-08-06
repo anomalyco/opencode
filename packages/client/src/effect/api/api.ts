@@ -287,6 +287,26 @@ export type Endpoint5_26Output =
           readonly id: Event.ID
           readonly created: DateTime.Utc
           readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.created"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?: Location.Ref | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly projectID: Project.ID
+            readonly location: Location.Ref
+            readonly subpath?: RelativePath | undefined
+            readonly parentID?: Session.ID | undefined
+            readonly slug: string
+            readonly title?: string | undefined
+            readonly agent?: Agent.ID | undefined
+            readonly model?: Model.Ref | undefined
+            readonly version: string
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: DateTime.Utc
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.agent.selected"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
@@ -1539,19 +1559,36 @@ export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
 }
 
-export type Endpoint27_0Input = {
+export type Endpoint27_0Output =
+  | { readonly status: "required" | "completed" }
+  | {
+      readonly status: "running"
+      readonly progress: {
+        readonly label: string
+        readonly numerator?: number | undefined
+        readonly denominator?: number | undefined
+      }
+    }
+  | { readonly status: "error"; readonly error: string }
+export type MigrationV1StatusOperation<E = never> = () => Effect.Effect<Endpoint27_0Output, E>
+
+export interface MigrationApi<E = never> {
+  readonly v1: { readonly status: MigrationV1StatusOperation<E> }
+}
+
+export type Endpoint28_0Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint27_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<WebSearch.Provider> }
-export type WebsearchProvidersOperation<E = never> = (input?: Endpoint27_0Input) => Effect.Effect<Endpoint27_0Output, E>
+export type Endpoint28_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<WebSearch.Provider> }
+export type WebsearchProvidersOperation<E = never> = (input?: Endpoint28_0Input) => Effect.Effect<Endpoint28_0Output, E>
 
-export type Endpoint27_1Input = {
+export type Endpoint28_1Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly query: string
   readonly providerID?: WebSearch.ID | undefined
 }
-export type Endpoint27_1Output = { readonly location: Location.Info; readonly data: WebSearch.Response }
-export type WebsearchQueryOperation<E = never> = (input: Endpoint27_1Input) => Effect.Effect<Endpoint27_1Output, E>
+export type Endpoint28_1Output = { readonly location: Location.Info; readonly data: WebSearch.Response }
+export type WebsearchQueryOperation<E = never> = (input: Endpoint28_1Input) => Effect.Effect<Endpoint28_1Output, E>
 
 export interface WebsearchApi<E = never> {
   readonly providers: WebsearchProvidersOperation<E>
@@ -1586,5 +1623,6 @@ export interface AppApi<E = never> {
   readonly projectCopy: ProjectCopyApi<E>
   readonly vcs: VcsApi<E>
   readonly debug: DebugApi<E>
+  readonly migration: MigrationApi<E>
   readonly websearch: WebsearchApi<E>
 }

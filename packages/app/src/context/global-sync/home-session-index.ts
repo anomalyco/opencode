@@ -1,4 +1,5 @@
-import type { Event, Session, SessionV2Info, V2SessionListResponse } from "@/types"
+import type { Event } from "@/types"
+import type { SessionInfo, SessionsResponse } from "@opencode-ai/client/promise"
 import type { QueryClient } from "@tanstack/solid-query"
 import { trimSessions } from "./session-trim"
 import { pathKey } from "@/utils/path-key"
@@ -7,31 +8,29 @@ export const HOME_V2_SESSION_PAGE_LIMIT = 5_000
 
 export type HomeSessionEvent = {
   type: "session.created" | "session.updated" | "session.deleted"
-  properties: { sessionID: string; info: Session }
+  properties: { sessionID: string; info?: SessionInfo }
 }
 export type HomeSessionEvents = {
   sequence: number
   entries: Array<{ sequence: number; event: HomeSessionEvent }>
 }
 export type HomeSessionIndex = {
-  sessions: Session[]
+  sessions: SessionInfo[]
   eventSequence: number
 }
 
 export const homeSessionIndexKey = (server: string) => ["home", "session-index", server] as const
 export const homeSessionEventsKey = (server: string) => ["home", "session-events", server] as const
 
-type HomeSessionPage = { data?: V2SessionListResponse }
-
 export async function loadHomeSessionIndex(
   list: (
     input: { limit: number; order: "desc"; cursor?: string },
     options: { signal?: AbortSignal },
-  ) => Promise<HomeSessionPage>,
+  ) => Promise<SessionsResponse>,
   eventSequence = 0,
   signal?: AbortSignal,
 ) {
-  const data: SessionV2Info[] = []
+  const data: SessionInfo[] = []
   let cursor: string | undefined
 
   for (;;) {
@@ -43,7 +42,7 @@ export async function loadHomeSessionIndex(
       },
       { signal },
     )
-    const page = response.data!
+    const page = response
     data.push(...page.data)
     if (page.data.length < HOME_V2_SESSION_PAGE_LIMIT || !page.cursor.next)
       return { sessions: parseHomeSessionIndex(data), eventSequence }
@@ -75,10 +74,7 @@ export function homeSessionIndexSessions(index: HomeSessionIndex | undefined, ev
 
 export function homeSessionIndexRefresh(event: Event["type"], connected: boolean) {
   if (event === "server.connected") return { connected: true, refetch: connected }
-  return {
-    connected,
-    refetch: event === "global.disposed" || event === "session.next.moved",
-  }
+  return { connected, refetch: false }
 }
 
 export function createHomeSessionIndexCache(queryClient: QueryClient, server: string) {
@@ -129,46 +125,32 @@ export function createHomeSessionIndexCache(queryClient: QueryClient, server: st
 // current V2 API orders by creation time and cannot filter roots, archives, or
 // multiple directories. A bounded page could omit an old session updated today.
 // Once released, use client.v2.project.list() and client.v2.session.list({
-// parentID: null, order: "desc" }), then remove this adapter and its V1 fields.
-export function parseHomeSessionIndex(sessions: SessionV2Info[]): Session[] {
+// parentID: null, order: "desc" }) and replace this full-table scan.
+export function parseHomeSessionIndex(sessions: SessionInfo[]): SessionInfo[] {
   return sessions.flatMap((item) => {
     if (item.parentID || typeof item.time.archived === "number") return []
-    return [toLegacySummary(item)]
+    return [item]
   })
 }
 
-export function retainHomeSessions(sessions: Session[], limit: number, now: number) {
-  const grouped = Map.groupBy(sessions, (session) => pathKey(session.directory))
+export function retainHomeSessions(sessions: SessionInfo[], limit: number, now: number) {
+  const grouped = Map.groupBy(sessions, (session) => pathKey(session.location.directory))
   return [...grouped.values()].flatMap((items) => trimSessions(items, { limit, permission: {}, now }))
 }
 
-export function applyHomeSessionEvent(sessions: Session[], event: HomeSessionEvent) {
+export function applyHomeSessionEvent(sessions: SessionInfo[], event: HomeSessionEvent) {
   const info = event.properties.info
-  const index = sessions.findIndex((session) => session.id === info.id)
-  if (event.type === "session.deleted" || info.parentID || typeof info.time.archived === "number") {
+  const index = sessions.findIndex((session) => session.id === (info?.id ?? event.properties.sessionID))
+  if (event.type === "session.deleted") {
+    if (index === -1) return sessions
+    return sessions.toSpliced(index, 1)
+  }
+  if (!info) return sessions
+  if (info.parentID || typeof info.time.archived === "number") {
     if (index === -1) return sessions
     return sessions.toSpliced(index, 1)
   }
   if (event.type !== "session.created" && event.type !== "session.updated") return sessions
   if (index === -1) return [...sessions, info]
   return sessions.with(index, info)
-}
-
-function toLegacySummary(session: SessionV2Info): Session {
-  return {
-    id: session.id,
-    slug: session.id,
-    projectID: session.projectID,
-    workspaceID: session.location.workspaceID,
-    directory: session.location.directory,
-    path: session.subpath,
-    parentID: session.parentID,
-    cost: session.cost,
-    tokens: session.tokens,
-    title: session.title,
-    agent: session.agent,
-    model: session.model,
-    version: "",
-    time: session.time,
-  }
 }

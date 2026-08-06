@@ -1,11 +1,10 @@
-import type { Session } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { displayLabel } from "@opencode-ai/util/session-title-fallback"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
@@ -15,6 +14,7 @@ import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
+import { sessionLabel } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { childSessionOnPath, getProjectAvatarSource, hasProjectPermissions } from "./helpers"
 
@@ -35,7 +35,7 @@ export const ProjectIcon = (props: {
   const hasPermissions = createMemo(() =>
     dirs().some((directory) => {
       return hasProjectPermissions(serverSync().session.data.permission, (item) => {
-        if (serverSync().session.get(item.sessionID)?.directory !== directory) return false
+        if (serverSync().session.get(item.sessionID)?.location.directory !== directory) return false
         return !permission.autoResponds(item, directory)
       })
     }),
@@ -74,9 +74,9 @@ export const ProjectIcon = (props: {
 }
 
 export type SessionItemProps = {
-  session: Session
-  list: Session[]
-  navList?: Accessor<Session[]>
+  session: SessionInfo
+  list: SessionInfo[]
+  navList?: Accessor<SessionInfo[]>
   slug: string
   mobile?: boolean
   dense?: boolean
@@ -85,13 +85,12 @@ export type SessionItemProps = {
   level?: number
   sidebarExpanded: Accessor<boolean>
   clearHoverProjectSoon: () => void
-  prefetchSession: (session: Session, priority?: "high" | "low") => void
-  archiveSession: (session: Session) => Promise<void>
-  canArchive: Accessor<boolean>
+  prefetchSession: (session: SessionInfo, priority?: "high" | "low") => void
+  archiveSession: (session: SessionInfo) => Promise<void>
 }
 
 const SessionRow = (props: {
-  session: Session
+  session: SessionInfo
   slug: string
   mobile?: boolean
   dense?: boolean
@@ -105,7 +104,7 @@ const SessionRow = (props: {
   warmPress: () => void
   warmFocus: () => void
 }): JSX.Element => {
-  const title = () => displayLabel(props.session)
+  const title = () => sessionLabel(props.session)
 
   return (
     <A
@@ -153,14 +152,14 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const serverSync = useServerSync()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
-  const [sessionStore] = serverSync().child(props.session.directory)
+  const [sessionStore] = serverSync().child(props.session.location.directory)
   const hasPermissions = createMemo(() => {
     return !!sessionPermissionRequest(
       sessionStore.session,
       serverSync().session.data.permission,
       props.session.id,
       (item) => {
-        return !permission.autoResponds(item, props.session.directory)
+        return !permission.autoResponds(item, props.session.location.directory)
       },
     )
   })
@@ -180,13 +179,17 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
-    const list = nav?.some((item) => item.id === props.session.id && item.directory === props.session.directory)
+    const list = nav?.some(
+      (item) => item.id === props.session.id && item.location.directory === props.session.location.directory,
+    )
       ? nav
       : props.list
 
     props.prefetchSession(props.session, priority)
 
-    const idx = list.findIndex((item) => item.id === props.session.id && item.directory === props.session.directory)
+    const idx = list.findIndex(
+      (item) => item.id === props.session.id && item.location.directory === props.session.location.directory,
+    )
     if (idx === -1) return
 
     for (let step = 1; step <= span; step++) {
@@ -230,7 +233,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
               fallback={
                 <Tooltip
                   placement={props.mobile ? "bottom" : "right"}
-                  value={displayLabel(props.session)}
+                  value={sessionLabel(props.session)}
                   gutter={10}
                   class="min-w-0 w-full"
                 >
@@ -242,7 +245,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
             </Show>
           </div>
 
-          <Show when={!props.level && props.canArchive()}>
+          {/* TODO: Restore the archive action when the V2 client exposes session archive. */}
+          <Show when={false}>
             <div
               class="shrink-0 overflow-hidden transition-[width,opacity]"
               classList={{

@@ -205,11 +205,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       }),
     )
     onCleanup(
-      event.on("session.error", (evt) => {
-        if (evt.data.sessionID) markUnread(evt.data.sessionID, "error")
-      }),
-    )
-    onCleanup(
       event.on("session.deleted", (evt) => {
         const target = root(evt.data.sessionID)
         closedTabs = closedTabs.filter((entry) => entry.tab.sessionID !== target)
@@ -220,8 +215,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
       const closed = closeSessionTab(state().tabs, target)
-      if (closed.tabs === state().tabs) return
       const selected = navigate && current() === target
+      if (closed.tabs === state().tabs && !selected) return
       const previous = selected
         ? moveSessionTabHistory(recordSessionTabHistory(history, target), closed.tabs, target, -1)
         : { history, sessionID: undefined }

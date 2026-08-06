@@ -26,7 +26,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
-import type { Session } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -390,22 +390,6 @@ export default function LegacyLayout(props: ParentProps) {
       }
 
       const unsub = serverSDK().event.listen((e) => {
-        if (e.details?.type === "worktree.ready") {
-          setBusy(e.name, false)
-          WorktreeState.ready(serverSDK().scope, e.name)
-          return
-        }
-
-        if (e.details?.type === "worktree.failed") {
-          setBusy(e.name, false)
-          WorktreeState.failed(
-            serverSDK().scope,
-            e.name,
-            e.details.properties?.message ?? language.t("common.requestFailed"),
-          )
-          return
-        }
-
         if (
           e.details?.type === "question.replied" ||
           e.details?.type === "question.rejected" ||
@@ -619,9 +603,9 @@ export default function LegacyLayout(props: ParentProps) {
   const currentSessions = createMemo(() => {
     const now = Date.now()
     const dirs = visibleSessionDirs()
-    if (dirs.length === 0) return [] as Session[]
+    if (dirs.length === 0) return [] as SessionInfo[]
 
-    const result: Session[] = []
+    const result: SessionInfo[] = []
     for (const dir of dirs) {
       const [dirStore] = serverSync().child(dir, { bootstrap: true })
       const dirSessions = sortedRootSessions(dirStore, now)
@@ -733,8 +717,8 @@ export default function LegacyLayout(props: ParentProps) {
     })
   }
 
-  const prefetchSession = (session: Session, priority: "high" | "low" = "low") => {
-    const directory = session.directory
+  const prefetchSession = (session: SessionInfo, priority: "high" | "low" = "low") => {
+    const directory = session.location.directory
     if (!directory) return
 
     const cached = untrack(() => !serverSync().session.shouldPrefetch(session.id, prefetchChunk))
@@ -769,7 +753,7 @@ export default function LegacyLayout(props: ParentProps) {
     pumpPrefetch(directory)
   }
 
-  const warm = (sessions: Session[], index: number) => {
+  const warm = (sessions: SessionInfo[], index: number) => {
     for (let offset = 1; offset <= span; offset++) {
       const next = sessions[index + offset]
       if (next) prefetchSession(next, offset === 1 ? "high" : "low")
@@ -871,13 +855,15 @@ export default function LegacyLayout(props: ParentProps) {
     }
   }
 
-  async function archiveSession(session: Session) {
-    const [store, setStore] = serverSync().child(session.directory)
+  async function archiveSession(session: SessionInfo) {
+    // TODO: Restore archiving when the V2 client exposes a session archive API.
+    void session
+    return
+    const [store, setStore] = serverSync().child(session.location.directory)
     const sessions = store.session ?? []
     const index = sessions.findIndex((s) => s.id === session.id)
     const nextSession = sessions[index + 1] ?? sessions[index - 1]
 
-    await serverSDK().legacy.session.archive(session.id, session.directory)
     setStore(
       produce((draft) => {
         const match = Binary.search(draft.session, session.id, (s) => s.id)
@@ -975,8 +961,8 @@ export default function LegacyLayout(props: ParentProps) {
         title: language.t("command.session.archive"),
         category: language.t("command.category.session"),
         keybind: "mod+shift+backspace",
-        hidden: serverSDK().protocolKind() !== "v1",
-        disabled: !params.dir || !params.id,
+        // TODO: Restore the command when the V2 client exposes session archive.
+        disabled: true,
         onSelect: () => {
           const session = currentSessions().find((s) => s.id === params.id)
           if (session) void archiveSession(session)
@@ -1185,13 +1171,10 @@ export default function LegacyLayout(props: ParentProps) {
     const refreshDirs = async (target?: string) => {
       if (!target || target === root || canOpen(target)) return canOpen(target)
       const listed = await Promise.resolve(
-        project?.id ?? serverSDK().currentApi.project.current({ location: { directory: root } }),
+        project?.id ?? serverSDK().api.project.current({ location: { directory: root } }),
       )
         .then((value) => (typeof value === "string" ? value : value.id))
-        .then(async (projectID) => {
-          await serverSDK().currentApi.projectCopy.refresh({ projectID, location: { directory: root } })
-          return serverSDK().currentApi.project.directories({ projectID, location: { directory: root } })
-        })
+        .then((projectID) => serverSDK().api.project.directories({ projectID, location: { directory: root } }))
         .then((items) => items.map((item) => item.directory).filter((item) => pathKey(item) !== pathKey(root)))
         .catch(() => [] as string[])
       dirs = effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root])
@@ -1209,10 +1192,10 @@ export default function LegacyLayout(props: ParentProps) {
         .sync(target.id)
         .then(() => sync.session.get(target.id))
         .catch(() => undefined)
-      if (!resolved?.directory) return false
-      if (!canOpen(resolved.directory)) return false
-      setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
-      navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
+      if (!resolved?.location.directory) return false
+      if (!canOpen(resolved.location.directory)) return false
+      setStore("lastProjectSession", root, { directory: resolved.location.directory, id: resolved.id, at: Date.now() })
+      navigateWithSidebarReset(`/${base64Encode(resolved.location.directory)}/session/${resolved.id}`)
       return true
     }
 
@@ -1228,7 +1211,7 @@ export default function LegacyLayout(props: ParentProps) {
       dirs.map((item) => serverSync().child(item, { bootstrap: false })[0]),
       Date.now(),
     )
-    if (latest && (await openSession(latest))) {
+    if (latest && (await openSession({ directory: latest.location.directory, id: latest.id }))) {
       return
     }
 
@@ -1236,7 +1219,7 @@ export default function LegacyLayout(props: ParentProps) {
       await Promise.all(
         dirs.map(async (item) => ({
           path: { directory: item },
-          session: await listAllSessions(serverSDK().currentApi.session, {
+          session: await listAllSessions(serverSDK().api.session, {
             directory: item,
             parentID: null,
             order: "desc",
@@ -1245,16 +1228,16 @@ export default function LegacyLayout(props: ParentProps) {
       ),
       Date.now(),
     )
-    if (fetched && (await openSession(fetched))) {
+    if (fetched && (await openSession({ directory: fetched.location.directory, id: fetched.id }))) {
       return
     }
 
     navigateWithSidebarReset(`/${base64Encode(root)}/session`)
   }
 
-  function navigateToSession(session: Session | undefined) {
+  function navigateToSession(session: SessionInfo | undefined) {
     if (!session) return
-    navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
+    navigateWithSidebarReset(`/${base64Encode(session.location.directory)}/session/${session.id}`)
   }
 
   function openProject(directory: string, navigate = true) {
@@ -1300,13 +1283,7 @@ export default function LegacyLayout(props: ParentProps) {
     const name = next === getFilename(project.worktree) ? "" : next
 
     if (project.id && project.id !== "global") {
-      const result = await serverSDK().legacy.project
-        .update({ projectID: project.id, directory: project.worktree, name })
-        .then((response) => response.data)
-      if (!result) return
-      serverSync().set("project", (items) =>
-        items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
-      )
+      // TODO: Restore project renames when the V2 client exposes a project update API.
       return
     }
 
@@ -1402,7 +1379,7 @@ export default function LegacyLayout(props: ParentProps) {
     const projectID = serverSync().data.project.find((project) => project.worktree === root)?.id
     const result = projectID
       ? await serverSDK()
-          .currentApi.projectCopy.remove({ projectID, directory, force: false, location: { directory: root } })
+          .api.projectCopy.remove({ projectID, directory, force: false, location: { directory: root } })
           .then(() => true)
           .catch((err) => {
             showToast({
@@ -1460,9 +1437,7 @@ export default function LegacyLayout(props: ParentProps) {
     })
     const dismiss = () => toaster.dismiss(progress)
 
-    const sessions = await listAllSessions(serverSDK().currentApi.session, { directory, order: "desc" }).catch(
-      () => [],
-    )
+    const sessions = await listAllSessions(serverSDK().api.session, { directory, order: "desc" }).catch(() => [])
 
     clearWorkspaceTerminals(
       directory,
@@ -1470,33 +1445,14 @@ export default function LegacyLayout(props: ParentProps) {
       platform,
       serverSDK().scope,
     )
-    const result = await serverSDK()
-      .legacy.workspace.reset(root, directory)
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: language.t("workspace.reset.failed.title"),
-          description: errorMessage(err, language.t("common.requestFailed")),
-        })
-        return false
-      })
+    // TODO: Restore workspace reset and instance disposal when V2 exposes these operations.
+    const result = false
 
     if (!result) {
       setBusy(directory, false)
       dismiss()
       return
     }
-
-    if ((await serverSDK().protocol) === "v1")
-      await Promise.all(
-        sessions
-          .filter((session) => session.time.archived === undefined)
-          .map((session) =>
-            serverSDK()
-              .legacy.session.archive(session.id, session.directory)
-              .catch(() => undefined),
-          ),
-      )
 
     setBusy(directory, false)
     dismiss()
@@ -1584,11 +1540,11 @@ export default function LegacyLayout(props: ParentProps) {
     const [state, setState] = createStore({
       status: "loading" as "loading" | "ready" | "error",
       dirty: false,
-      sessions: [] as Session[],
+      sessions: [] as SessionInfo[],
     })
 
     const refresh = async () => {
-      const sessions = await listAllSessions(serverSDK().currentApi.session, {
+      const sessions = await listAllSessions(serverSDK().api.session, {
         directory: props.directory,
         order: "desc",
       }).catch(() => [])
@@ -1830,7 +1786,7 @@ export default function LegacyLayout(props: ParentProps) {
     clearSidebarHoverState()
     const created = project.id
       ? await serverSDK()
-          .currentApi.projectCopy.create({
+          .api.projectCopy.create({
             projectID: project.id,
             strategy: "git_worktree",
             directory: getDirectory(project.worktree),
@@ -1880,8 +1836,6 @@ export default function LegacyLayout(props: ParentProps) {
     clearHoverProjectSoon,
     prefetchSession,
     archiveSession,
-    canArchive: () => serverSDK().protocolKind() === "v1",
-    canResetWorkspace: () => serverSDK().protocolKind() === "v1",
     workspaceName,
     renameWorkspace,
     editorOpen,
@@ -1918,7 +1872,6 @@ export default function LegacyLayout(props: ParentProps) {
     openSidebar: () => layout.sidebar.open(),
     closeProject,
     showEditProjectDialog: (proj) => showEditProjectDialog(server.current!, proj),
-    canEditProject: () => serverSDK().protocolKind() === "v1",
     toggleProjectWorkspaces,
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
     workspaceIds,
@@ -1929,7 +1882,6 @@ export default function LegacyLayout(props: ParentProps) {
       clearHoverProjectSoon,
       prefetchSession,
       archiveSession,
-      canArchive: () => serverSDK().protocolKind() === "v1",
     },
   }
 
@@ -2021,13 +1973,15 @@ export default function LegacyLayout(props: ParentProps) {
                 <div class="group/project flex items-start justify-between gap-2 py-2 pl-2 pr-0">
                   <div class="flex flex-col min-w-0">
                     <Show
-                      when={serverSDK().protocolKind() === "v1" || !project.id || project.id === "global"}
+                      when={!project.id || project.id === "global"}
                       fallback={<span class="text-14-medium text-text-strong truncate">{projectName()}</span>}
                     >
                       <InlineEditor
                         id={`project:${projectId()}`}
                         value={projectName}
-                        onSave={(next) => void renameProject(project, next)}
+                        onSave={(next) => {
+                          void renameProject(project, next)
+                        }}
                         class="text-14-medium text-text-strong truncate"
                         displayClass="text-14-medium text-text-strong truncate"
                         stopPropagation
@@ -2067,11 +2021,13 @@ export default function LegacyLayout(props: ParentProps) {
                     />
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content class="mt-1">
-                        <Show when={serverSDK().protocolKind() === "v1"}>
-                          <DropdownMenu.Item onSelect={() => showEditProjectDialog(server.current!, project)}>
-                            <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
-                          </DropdownMenu.Item>
-                        </Show>
+                        <DropdownMenu.Item
+                          onSelect={() => {
+                            showEditProjectDialog(server.current!, project)
+                          }}
+                        >
+                          <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
                         <DropdownMenu.Item
                           data-action="project-workspaces-toggle"
                           data-project={slug()}

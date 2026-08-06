@@ -15,8 +15,7 @@ export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
 
 const VERSION = "vertex-2023-10-16" as const
 
-// models.dev uses this provider id even though the API contract is Anthropic Messages.
-export const id = ProviderID.make("google-vertex-anthropic")
+export const id = ProviderID.make("google-vertex")
 
 export type Config = RouteDefaultsInput &
   GoogleVertexShared.OAuthOptions & {

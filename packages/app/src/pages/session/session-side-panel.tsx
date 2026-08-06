@@ -23,7 +23,6 @@ import { Mark } from "@opencode-ai/ui/logo"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import type { SnapshotFileDiff, VcsFileDiff } from "@/types"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -57,8 +56,8 @@ import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/session/v2/session-file-browser-tab"
 
-type ReviewDiff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
-type RenderDiff = FileDiffInfo | (SnapshotFileDiff & { file: string }) | VcsFileDiff
+type ReviewDiff = FileDiffInfo
+type RenderDiff = FileDiffInfo
 
 function renderDiff(value: ReviewDiff): value is RenderDiff {
   return typeof value.file === "string"

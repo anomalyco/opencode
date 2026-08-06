@@ -66,23 +66,21 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   let pathArea: HTMLDivElement | undefined
   let navigation = 0
 
-  const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
-    () => (missingBase() ? true : undefined),
-    async (): Promise<Path | undefined> => {
-      if ((await sdk.protocol) === "v1")
-        return sdk.legacy.path.get().catch(() => undefined)
-      return sdk.api.location
+    () => (!(sync.data.path.home || sync.data.path.directory) ? true : undefined),
+    () =>
+      sdk.api.location
         .get()
-        .then((location) => ({
-          state: "",
-          config: "",
-          worktree: location.project.directory,
-          directory: location.directory,
-          home: "",
-        }))
-        .catch(() => undefined)
-    },
+        .then(
+          (location): Path => ({
+            state: "",
+            config: "",
+            worktree: location.project.directory,
+            directory: location.directory,
+            home: "",
+          }),
+        )
+        .catch(() => undefined),
     { initialValue: undefined },
   )
   const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")
@@ -104,7 +102,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     if (!policy.includeFiles) return { query: value, items: directories.slice(0, 5) }
     const base = pickerRoot(cleaned) || root() || start()
     if (!base) return { query: value, items: directories.slice(0, 5) }
-    const files = await sdk.currentApi.file
+    const files = await sdk.api.file
       .find({
         location: { directory: base },
         query: pickerFileSearchQuery(base, value, home()),
@@ -134,7 +132,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
       existing ??
       loads.schedule(`${generation}:${key}`, eager ? "background" : "user", () => {
         if (!activeTreeNavigation(generation, navigation)) return Promise.resolve(undefined)
-        return sdk.currentApi.file
+        return sdk.api.file
           .list({ location: { directory: absolute } })
           .then((result) =>
             result.data.map((entry) => ({

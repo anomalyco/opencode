@@ -92,6 +92,22 @@ export const GoogleVertexPlugin = define({
           evt.options.fetch = authFetch(evt.options.fetch)
           return
         }
+        if (evt.package === "@ai-sdk/google-vertex/anthropic") {
+          const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex/anthropic"))
+          const project = resolveProject(evt.options)
+          const location = String(resolveLocation(evt.options))
+          const regionalBaseURL =
+            (location === "eu" || location === "us") && project && !evt.options.baseURL
+              ? `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`
+              : undefined
+          evt.sdk = mod.createVertexAnthropic({
+            ...evt.options,
+            project,
+            location,
+            ...(regionalBaseURL ? { baseURL: regionalBaseURL } : {}),
+          })
+          return
+        }
         if (evt.package !== "@ai-sdk/google-vertex") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex"))
         const project = resolveProject(evt.options)
@@ -109,65 +125,6 @@ export const GoogleVertexPlugin = define({
       "language",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== Provider.ID.googleVertex) return
-        evt.language = evt.sdk.languageModel(String(evt.model.modelID ?? evt.model.id).trim())
-      }),
-    )
-  }),
-})
-
-export const GoogleVertexAnthropicPlugin = define({
-  id: "opencode.provider.google-vertex-anthropic",
-  effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform((evt) => {
-      for (const item of evt.provider.list()) {
-        if (!Provider.isAISDK(item.provider.package)) continue
-        if (Provider.packageName(item.provider.package) !== "@ai-sdk/google-vertex/anthropic") continue
-        const project =
-          item.provider.settings?.project ??
-          process.env.GOOGLE_CLOUD_PROJECT ??
-          process.env.GCP_PROJECT ??
-          process.env.GCLOUD_PROJECT
-        const location =
-          item.provider.settings?.location ??
-          process.env.GOOGLE_CLOUD_LOCATION ??
-          process.env.VERTEX_LOCATION ??
-          "global"
-        evt.provider.update(item.provider.id, (provider) => {
-          provider.settings = { ...provider.settings, ...(project ? { project } : {}), location }
-        })
-      }
-    })
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/google-vertex/anthropic") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex/anthropic"))
-        const project =
-          typeof evt.options.project === "string"
-            ? evt.options.project
-            : (process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GCP_PROJECT ?? process.env.GCLOUD_PROJECT)
-        const location =
-          typeof evt.options.location === "string"
-            ? evt.options.location
-            : (process.env.GOOGLE_CLOUD_LOCATION ?? process.env.VERTEX_LOCATION ?? "global")
-        evt.sdk = mod.createVertexAnthropic({
-          ...evt.options,
-          project,
-          location,
-          // Continental multi-regions (eu, us) require Regional Endpoint Platform
-          // domains; the default {region}-aiplatform.googleapis.com does not resolve.
-          ...((location === "eu" || location === "us") && project && !evt.options.baseURL
-            ? {
-                baseURL: `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`,
-              }
-            : {}),
-        })
-      }),
-    )
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.make("google-vertex-anthropic")) return
         evt.language = evt.sdk.languageModel(String(evt.model.modelID ?? evt.model.id).trim())
       }),
     )

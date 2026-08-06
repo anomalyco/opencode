@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionV2Info } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import {
   applyHomeSessionEvent,
   appendHomeSessionEvent,
@@ -33,7 +33,7 @@ describe("Home V2 session index", () => {
     const calls: unknown[] = []
     const result = await loadHomeSessionIndex(async (input) => {
       calls.push(input)
-      return { data: { data: [session({ id: "root" })], cursor: {} } }
+      return { data: [session({ id: "root" })], cursor: {} }
     })
 
     expect(result.sessions).toHaveLength(1)
@@ -48,15 +48,11 @@ describe("Home V2 session index", () => {
         calls.push({ input, signal: options.signal })
         if (!("cursor" in input)) {
           return {
-            data: {
-              data: Array.from({ length: HOME_V2_SESSION_PAGE_LIMIT }, (_, index) =>
-                session({ id: `page-1-${index}` }),
-              ),
-              cursor: { next: "next-page" },
-            },
+            data: Array.from({ length: HOME_V2_SESSION_PAGE_LIMIT }, (_, index) => session({ id: `page-1-${index}` })),
+            cursor: { next: "next-page" },
           }
         }
-        return { data: { data: [session({ id: "page-2" })], cursor: {} } }
+        return { data: [session({ id: "page-2" })], cursor: {} }
       },
       0,
       controller.signal,
@@ -76,7 +72,7 @@ describe("Home V2 session index", () => {
     const activeNull = {
       ...session({ id: "active-null", updated: 20 }),
       time: { created: 1, updated: 20, archived: null },
-    } as unknown as SessionV2Info
+    } as unknown as SessionInfo
     const result = parseHomeSessionIndex([
       session({ id: "root", updated: 30 }),
       activeNull,
@@ -85,11 +81,9 @@ describe("Home V2 session index", () => {
     ])
 
     expect(result).toEqual([
-      expect.objectContaining({
-        id: "root",
-        slug: "root",
-        version: "",
-        directory: "/project",
+       expect.objectContaining({
+         id: "root",
+         location: { directory: "/project" },
         projectID: "project",
         title: "root",
         time: { created: 1, updated: 30 },
@@ -105,17 +99,17 @@ describe("Home V2 session index", () => {
     const now = 10 * 60 * 60 * 1000
     const sessions = Array.from({ length: 80 }, (_, index) => ({
       ...parseHomeSessionIndex([session({ id: `session-${index}`, updated: index + 1 })])[0],
-      directory: index % 2 === 0 ? "/one" : "/two",
+      location: { directory: index % 2 === 0 ? "/one" : "/two" },
     }))
 
     const retained = retainHomeSessions(sessions, 10, now)
-    expect(retained.filter((item) => item.directory === "/one")).toHaveLength(10)
-    expect(retained.filter((item) => item.directory === "/two")).toHaveLength(10)
+    expect(retained.filter((item) => item.location.directory === "/one")).toHaveLength(10)
+    expect(retained.filter((item) => item.location.directory === "/two")).toHaveLength(10)
   })
 
   test("replays session events over the loaded index", () => {
     const initial = parseHomeSessionIndex([session({ id: "old" })])
-    const created = { ...initial[0], id: "new", slug: "new", title: "new", time: { created: 2, updated: 2 } }
+    const created = { ...initial[0], id: "new", title: "new", time: { created: 2, updated: 2 } }
 
     const afterCreate = applyHomeSessionEvent(initial, {
       type: "session.created",
@@ -145,10 +139,8 @@ describe("Home V2 session index", () => {
     expect(homeSessionIndexSessions({ sessions: initial, eventSequence: 1 }, events)[0]?.title).toBe("current")
   })
 
-  test("refetches after reconnect, disposal, and session moves", () => {
+  test("refetches after reconnect", () => {
     expect(homeSessionIndexRefresh("server.connected", false)).toEqual({ connected: true, refetch: false })
     expect(homeSessionIndexRefresh("server.connected", true)).toEqual({ connected: true, refetch: true })
-    expect(homeSessionIndexRefresh("global.disposed", true).refetch).toBe(true)
-    expect(homeSessionIndexRefresh("session.next.moved", true).refetch).toBe(true)
   })
 })

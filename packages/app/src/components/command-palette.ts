@@ -14,7 +14,6 @@ import { useTabs } from "@/context/tabs"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { normalizeSessionInfo } from "@/utils/session"
 
 export type CommandPaletteEntry = {
   id: string
@@ -146,7 +145,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     server: ServerConnection.key(serverSDK.server),
     opened: serverCtx.projects.list,
     stored: () => serverCtx.sync.data.project,
-    load: (search, signal) => serverSDK.currentApi.session.list({ parentID: null, search, limit: 50 }, { signal }),
+    load: (search, signal) => serverSDK.api.session.list({ parentID: null, search, limit: 50 }, { signal }),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
   })
@@ -257,7 +256,6 @@ export function createServerSessionEntries(props: {
       .load(search, current.signal)
       .then((result) =>
         result.data
-          .map(normalizeSessionInfo)
           .filter((session) => !session.time.archived)
           .map((session) => {
             const project =
@@ -266,9 +264,9 @@ export function createServerSessionEntries(props: {
               id: `session:${props.server}:${session.id}`,
               type: "session" as const,
               title: session.title || props.untitled(),
-              description: project ? displayName(project) : getFilename(session.directory),
+              description: project ? displayName(project) : getFilename(session.location.directory),
               category: props.category(),
-              directory: session.directory,
+              directory: session.location.directory,
               sessionID: session.id,
               server: props.server,
               project,

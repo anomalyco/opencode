@@ -155,7 +155,7 @@ function LegacyTargetSessionRedirect() {
   )
 
   createEffect(() => {
-    const directory = current()?.session.directory
+    const directory = current()?.session.location.directory
     if (!directory) return
     navigate(legacySessionHref(directory, params.id), { replace: true })
   })
@@ -238,26 +238,6 @@ function UiI18nBridge(props: ParentProps) {
 }
 
 function LayoutCompatibility(props: ParentProps) {
-  const global = useGlobal()
-  const navigate = useNavigate()
-  const server = useServer()
-  const settings = useSettings()
-
-  createEffect(() => {
-    if (settings.general.newLayoutDesigns()) return
-    const current = server.current
-    if (!current) return
-    const protocol = global.ensureServerCtx(current).sdk.protocolKind()
-    if (protocol !== "v2") return
-    const next = global.servers.list().find((s) => {
-      if (ServerConnection.key(s) === ServerConnection.key(current)) return false
-      return global.ensureServerCtx(s).sdk.protocolKind() !== "v2"
-    })
-    if (!next) return
-    navigate("/")
-    queueMicrotask(() => server.setActive(ServerConnection.key(next)))
-  })
-
   return <>{props.children}</>
 }
 

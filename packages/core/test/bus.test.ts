@@ -4,7 +4,6 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
-import { SessionV1 } from "@opencode-ai/schema/session-v1"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -89,10 +88,10 @@ const VersionedMessage = Bus.durable({
   },
 })
 
-const DurableMessage = SessionV1.Event.MessageRemoved
+const DurableMessage = SessionEvent.Renamed
 const durableData = (sessionID: Session.ID, text: string) => ({
   sessionID,
-  messageID: SessionV1.MessageID.ascending(`msg_${text}`),
+  title: text,
 })
 
 /** Followed log read without markers: the old `durable` stream shape. */

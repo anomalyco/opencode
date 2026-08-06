@@ -161,16 +161,12 @@ describe("acp permission behavior", () => {
         send(
           durableEvent("session.created", {
             sessionID: "ses_child",
-            info: {
-              id: "ses_child",
-              slug: "ses_child",
-              projectID: "project",
-              directory: "/workspace",
-              parentID: "ses_parent",
-              title: "Review code",
-              version: "test",
-              time: { created: 1, updated: 1 },
-            },
+            slug: "ses_child",
+            projectID: "project",
+            location: { directory: "/workspace" },
+            parentID: "ses_parent",
+            title: "Review code",
+            version: "test",
           }),
         )
         send(durableEvent("session.execution.started", { sessionID: "ses_child" }))

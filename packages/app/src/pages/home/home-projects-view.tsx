@@ -40,7 +40,6 @@ export type HomeProjectsViewProps = {
   canDefaultServer: Accessor<boolean>
   defaultServerKey: Accessor<ServerConnection.Key | null | undefined>
   canRevealProject: (server: ServerConnection.Any) => boolean
-  canEditProject: (server: ServerConnection.Any) => boolean
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   onWheel: (event: WheelEvent) => void
   onChooseProject: (server: ServerConnection.Any) => void
@@ -549,11 +548,9 @@ function HomeProjectRow(
               <MenuV2.Item onSelect={() => props.onOpenProjectNewSession(props.server, props.project.worktree)}>
                 {props.language.t("command.session.new")}
               </MenuV2.Item>
-              <Show when={props.canEditProject(props.server)}>
-                <MenuV2.Item onSelect={() => props.onEditProject(props.server, props.project)}>
-                  {props.language.t("dialog.project.edit.title")}
-                </MenuV2.Item>
-              </Show>
+              <MenuV2.Item onSelect={() => props.onEditProject(props.server, props.project)}>
+                {props.language.t("dialog.project.edit.title")}
+              </MenuV2.Item>
               <Show when={props.canRevealProject(props.server)}>
                 <MenuV2.Item onSelect={() => props.onRevealProject(props.server, props.project)}>
                   {props.language.t(

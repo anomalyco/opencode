@@ -15,15 +15,28 @@ export const AzurePlugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (!Provider.isAISDK(item.provider.package)) continue
-        if (Provider.packageName(item.provider.package) !== "@ai-sdk/azure") continue
-        const configured = item.provider.settings?.resourceName
-        const resourceName =
-          typeof configured === "string" && configured.trim() !== "" ? configured : process.env.AZURE_RESOURCE_NAME
+        if (item.provider.id !== Provider.ID.azure && Provider.packageName(item.provider.package) !== "@ai-sdk/azure")
+          continue
+        const resourceName = resolveResourceName(item.provider.settings)
         if (!resourceName) continue
         evt.provider.update(item.provider.id, (provider) => {
-          provider.settings = { ...provider.settings, resourceName }
+          provider.settings = {
+            ...provider.settings,
+            resourceName,
+            ...(typeof provider.settings?.baseURL === "string"
+              ? { baseURL: expandResourceName(provider.settings.baseURL, resourceName) }
+              : {}),
+          }
         })
+        for (const model of item.models.values()) {
+          evt.model.update(item.provider.id, model.id, (draft) => {
+            if (typeof draft.settings?.baseURL !== "string") return
+            draft.settings.baseURL = expandResourceName(
+              draft.settings.baseURL,
+              resolveResourceName(draft.settings, resourceName) ?? resourceName,
+            )
+          })
+        }
       }
     })
     yield* ctx.aisdk.hook(
@@ -36,9 +49,7 @@ export const AzurePlugin = define({
             !evt.options.baseURL &&
             (!Provider.isAISDK(evt.model.package) || typeof evt.model.settings?.baseURL !== "string")
           ) {
-            throw new Error(
-              "AZURE_RESOURCE_NAME is missing, set it using env var or reconnecting the azure provider and setting it",
-            )
+            throw new Error("Azure resource name is missing; set AZURE_RESOURCE_NAME or configure resourceName/baseURL")
           }
         }
         const mod = yield* Effect.promise(() => import("@ai-sdk/azure"))
@@ -59,34 +70,14 @@ export const AzurePlugin = define({
   }),
 })
 
-export const AzureCognitiveServicesPlugin = define({
-  id: "opencode.provider.azure-cognitive-services",
-  effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform((evt) => {
-      const resourceName = process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME
-      if (!resourceName) return
-      for (const item of evt.provider.list()) {
-        if (!Provider.isAISDK(item.provider.package)) continue
-        if (Provider.packageName(item.provider.package) !== "@ai-sdk/openai-compatible") continue
-        if (!item.provider.id.includes("azure-cognitive-services")) continue
-        evt.provider.update(item.provider.id, (provider) => {
-          provider.settings = {
-            ...provider.settings,
-            baseURL: `https://${resourceName}.cognitiveservices.azure.com/openai`,
-          }
-        })
-      }
-    })
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.make("azure-cognitive-services")) return
-        evt.language = selectLanguage(
-          evt.sdk,
-          evt.model.modelID ?? evt.model.id,
-          Boolean(evt.options.useCompletionUrls),
-        )
-      }),
-    )
-  }),
-})
+function resolveResourceName(settings: Readonly<Record<string, unknown>> | undefined, fallback?: string) {
+  const configured = settings?.resourceName
+  if (typeof configured === "string" && configured.trim() !== "") return configured
+  return fallback ?? process.env.AZURE_RESOURCE_NAME ?? process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME
+}
+
+function expandResourceName(baseURL: string, resourceName: string) {
+  return baseURL
+    .replaceAll("${AZURE_RESOURCE_NAME}", resourceName)
+    .replaceAll("${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}", resourceName)
+}

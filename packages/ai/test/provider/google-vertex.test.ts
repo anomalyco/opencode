@@ -56,13 +56,14 @@ describe("Google Vertex providers", () => {
 
   it.effect("projects Anthropic Messages onto the Vertex raw-predict API", () =>
     Effect.gen(function* () {
+      const model = GoogleVertexMessages.configure({
+        accessToken: "vertex-token",
+        location: "eu",
+        project: "vertex-project",
+      }).model("claude-sonnet-4-6")
       const response = yield* LLMClient.generate(
         LLM.request({
-          model: GoogleVertexMessages.configure({
-            accessToken: "vertex-token",
-            location: "eu",
-            project: "vertex-project",
-          }).model("claude-sonnet-4-6"),
+          model,
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -97,6 +98,7 @@ describe("Google Vertex providers", () => {
         ),
       )
 
+      expect(model.provider).toBe("google-vertex")
       expect(response.text).toBe("Hello.")
     }),
   )

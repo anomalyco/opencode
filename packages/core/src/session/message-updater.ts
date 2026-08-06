@@ -56,6 +56,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
   const project = pipe(
     Match.type<SessionEvent.DurableEvent>(),
     Match.discriminatorsExhaustive("type")({
+      "session.created": () => Effect.void,
       "session.usage.recorded": () => Effect.void,
       "session.agent.selected": (event) => {
         return adapter.appendMessage(

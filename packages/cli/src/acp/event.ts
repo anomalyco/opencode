@@ -127,7 +127,7 @@ export async function streamTurn(input: {
       if (next.done) throw new Error("event stream disconnected during prompt execution")
       const event = next.value
       if (event.type === "session.created") {
-        const parentID = event.data.info.parentID
+        const parentID = event.data.parentID
         if (!parentID) continue
         const parent = parentID === input.sessionID ? undefined : children.get(parentID)
         if ((mode === "turn" && parentID === input.sessionID) || parent) {
@@ -135,7 +135,7 @@ export async function streamTurn(input: {
             id: event.data.sessionID,
             parentID,
             depth: parent ? parent.depth + 1 : 1,
-            title: event.data.info.title,
+            title: event.data.title,
           }
           children.set(child.id, child)
           openChildren.add(child.id)

@@ -3,13 +3,14 @@ import { Integration } from "@opencode-ai/schema/integration"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus"
 import { ModelsDev } from "../models-dev"
+import { Provider } from "../provider"
 
 export const ModelsDevPlugin = define({
   id: "opencode.models-dev",
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
     const bus = yield* Bus.Service
-    const loaded = { data: structuredClone(yield* modelsDev.get()) }
+    const loaded = { data: snapshots(yield* modelsDev.get()) }
     yield* ctx.integration.transform((integrations) => {
       for (const provider of loaded.data) {
         if (provider.environment.length === 0) continue
@@ -21,7 +22,10 @@ export const ModelsDevPlugin = define({
         })
         integrations.method.update({
           integrationID,
-          method: { type: "env", names: [...provider.environment] },
+          method: {
+            type: "env",
+            names: environmentNames(provider),
+          },
         })
       }
     })
@@ -39,7 +43,7 @@ export const ModelsDevPlugin = define({
     yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
       Stream.runForEach(() =>
         modelsDev.get().pipe(
-          Effect.tap((data) => Effect.sync(() => (loaded.data = structuredClone(data)))),
+          Effect.tap((data) => Effect.sync(() => (loaded.data = snapshots(data)))),
           Effect.andThen(ctx.integration.reload()),
           Effect.andThen(ctx.catalog.reload()),
         ),
@@ -48,3 +52,14 @@ export const ModelsDevPlugin = define({
     )
   }),
 })
+
+function environmentNames(provider: ModelsDev.Snapshot) {
+  if (provider.info.id !== Provider.ID.azure) return [...provider.environment]
+  return [...provider.environment.filter((name) => name.endsWith("_API_KEY")), "AZURE_COGNITIVE_SERVICES_API_KEY"]
+}
+
+function snapshots(data: readonly ModelsDev.Snapshot[]) {
+  return structuredClone(data).filter(
+    (provider) => provider.info.id !== "azure-cognitive-services" && provider.info.id !== "google-vertex-anthropic",
+  )
+}

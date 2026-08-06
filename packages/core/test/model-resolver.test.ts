@@ -12,6 +12,7 @@ import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { it } from "./lib/effect"
 
 interface ModelOptions {
+  readonly providerID?: Provider.ID
   readonly modelID?: string
   readonly compatibility?: Compatibility
   readonly settings?: Info["settings"]
@@ -25,7 +26,7 @@ const model = (packageName: string | undefined, options: ModelOptions = {}) =>
   Info.make({
     id: ID.make("test-model"),
     modelID: ID.make(options.modelID ?? "api-test-model"),
-    providerID: Provider.ID.make("test-provider"),
+    providerID: options.providerID ?? Provider.ID.make("test-provider"),
     name: "Test model",
     compatibility: options.compatibility,
     package: packageName,
@@ -42,6 +43,65 @@ const model = (packageName: string | undefined, options: ModelOptions = {}) =>
   })
 
 describe("ModelResolver", () => {
+  it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
+    Effect.gen(function* () {
+      const responses = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/azure"), {
+          providerID: Provider.ID.azure,
+          modelID: "responses-deployment",
+          settings: { resourceName: "modern-resource", apiVersion: "2025-01-01-preview" },
+        }),
+        Credential.Key.make({ type: "key", key: "secret" }),
+      )
+      const chat = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/azure"), {
+          providerID: Provider.ID.azure,
+          modelID: "chat-deployment",
+          settings: { resourceName: "modern-resource", useCompletionUrls: true },
+        }),
+      )
+      const deployment = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/azure"), {
+          providerID: Provider.ID.azure,
+          modelID: "legacy-url-deployment",
+          settings: {
+            resourceName: "modern-resource",
+            apiVersion: "2025-01-01-preview",
+            useDeploymentBasedUrls: true,
+          },
+        }),
+      )
+      const compatible = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+          providerID: Provider.ID.azure,
+          modelID: "legacy-deployment",
+          settings: {
+            resourceName: "legacy-resource",
+            baseURL: "https://legacy-resource.cognitiveservices.azure.com/openai",
+          },
+        }),
+      )
+
+      expect(responses).toMatchObject({ id: "responses-deployment", provider: "azure" })
+      expect(responses.route).toMatchObject({
+        id: "azure-openai-responses",
+        endpoint: {
+          baseURL: "https://modern-resource.openai.azure.com/openai/v1",
+          query: { "api-version": "2025-01-01-preview" },
+        },
+      })
+      expect(chat).toMatchObject({ id: "chat-deployment", provider: "azure" })
+      expect(chat.route.id).toBe("azure-openai-chat")
+      expect(deployment).toMatchObject({ id: "legacy-url-deployment", provider: "azure" })
+      expect(deployment.route.endpoint).toMatchObject({
+        baseURL: "https://modern-resource.openai.azure.com/openai/deployments/legacy-url-deployment",
+        query: { "api-version": "2025-01-01-preview" },
+      })
+      expect(compatible).toMatchObject({ id: "legacy-deployment", provider: "azure" })
+      expect(compatible.route.endpoint.baseURL).toBe("https://legacy-resource.cognitiveservices.azure.com/openai")
+    }),
+  )
+
   it.effect("maps Bedrock Mantle models to native Responses and safeguards to Chat", () =>
     Effect.gen(function* () {
       const credential = Credential.Key.make({ type: "key", key: "secret" })

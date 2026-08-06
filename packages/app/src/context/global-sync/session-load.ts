@@ -1,5 +1,4 @@
 import type { SessionApi } from "@opencode-ai/client/promise"
-import { normalizeSessionInfo } from "@/utils/session"
 
 export async function loadRootSessions(input: { api: Pick<SessionApi, "list">; directory: string; limit: number }) {
   const result = await input.api.list({
@@ -9,7 +8,7 @@ export async function loadRootSessions(input: { api: Pick<SessionApi, "list">; d
     order: "desc",
   })
   return {
-    data: result.data.map(normalizeSessionInfo),
+    data: result.data,
     limit: input.limit,
     limited: true,
   } as const

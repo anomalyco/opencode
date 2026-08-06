@@ -199,7 +199,7 @@ describe("acp event behavior", () => {
         send(
           durableEvent("session.created", {
             sessionID: "ses_child",
-            info: childSession("ses_child", "ses_parent", "Explore code"),
+            ...childSession("ses_child", "ses_parent", "Explore code"),
           }),
         )
         send(durableEvent("session.execution.started", { sessionID: "ses_child" }))
@@ -280,7 +280,7 @@ describe("acp event behavior", () => {
         send(
           durableEvent("session.created", {
             sessionID: "ses_background",
-            info: childSession("ses_background", "ses_parent", "Background research"),
+            ...childSession("ses_background", "ses_parent", "Background research"),
           }),
         )
         send(durableEvent("session.execution.succeeded", { sessionID: "ses_parent" }))
@@ -303,7 +303,7 @@ describe("acp event behavior", () => {
       fixture.send(
         durableEvent("session.created", {
           sessionID: "ses_future",
-          info: childSession("ses_future", "ses_parent", "Later turn child"),
+          ...childSession("ses_future", "ses_parent", "Later turn child"),
         }),
       )
       fixture.send(durableEvent("session.execution.started", { sessionID: "ses_future" }))
@@ -749,14 +749,12 @@ function turn(input: {
 
 function childSession(id: string, parentID: string, title: string) {
   return {
-    id,
     slug: id,
     projectID: "project",
-    directory: "/workspace",
+    location: { directory: "/workspace" },
     parentID,
     title,
     version: "test",
-    time: { created: 1, updated: 1 },
   }
 }
 

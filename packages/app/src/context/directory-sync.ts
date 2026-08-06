@@ -1,11 +1,11 @@
 import { Binary } from "@opencode-ai/core/util/binary"
-import type { Message, Part, Session } from "@/types"
+import type { Message, Part } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { createMemo } from "solid-js"
 import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
 import type { createServerSdkContext } from "./server-sdk"
 import type { createServerSyncContextInner } from "./server-sync"
 import type { State } from "./global-sync/types"
-import { normalizeSessionInfo } from "@/utils/session"
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 const sessionFields = new Set([
@@ -26,7 +26,6 @@ export const createDirSyncContext = (
   serverSync: ReturnType<typeof createServerSyncContextInner>,
   serverSDK: ReturnType<typeof createServerSdkContext>,
 ) => {
-  const client = serverSDK.createClient({ directory, throwOnError: true })
   const current = createMemo(() => serverSync.child(directory, { mcp: true }))
   const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
   const data = new Proxy({} as State, {
@@ -47,7 +46,7 @@ export const createDirSyncContext = (
 
   const index = (sessionID: string) => {
     const session = serverSync.session.get(sessionID)
-    if (!session || session.directory !== directory) return
+    if (!session || session.location.directory !== directory) return
     const [store, setStore] = current()
     const result = Binary.search(store.session, session.id, (item) => item.id)
     if (result.found) {
@@ -75,13 +74,13 @@ export const createDirSyncContext = (
       if (match.found) return serverSync.data.project[match.index]
     },
     session: {
-      remember(session: Session) {
+      remember(session: SessionInfo) {
         serverSync.session.remember(session)
         index(session.id)
       },
       get(sessionID: string) {
         const session = serverSync.session.get(sessionID)
-        if (session?.directory === directory) return session
+        if (session?.location.directory === directory) return session
       },
       optimistic: {
         add(input: { directory?: string; sessionID: string; message: Message; parts: Part[] }) {
@@ -124,9 +123,8 @@ export const createDirSyncContext = (
       fetch: async (count = 10) => {
         const [store, setStore] = current()
         setStore("limit", (value) => value + count)
-        const response = await serverSDK.currentApi.session.list({ directory, limit: store.limit, order: "desc" })
+        const response = await serverSDK.api.session.list({ directory, limit: store.limit, order: "desc" })
         const sessions = response.data
-          .map(normalizeSessionInfo)
           .sort((a, b) => cmp(a.id, b.id))
           .slice(0, store.limit)
         sessions.forEach(serverSync.session.remember)
@@ -134,14 +132,8 @@ export const createDirSyncContext = (
       },
       more: createMemo(() => current()[0].session.length >= current()[0].limit),
       archive: async (sessionID: string) => {
-        await serverSDK.legacy.session.archive(sessionID, directory)
-        current()[1](
-          "session",
-          produce((draft) => {
-            const match = Binary.search(draft, sessionID, (session) => session.id)
-            if (match.found) draft.splice(match.index, 1)
-          }),
-        )
+        // TODO: Restore archiving when the V2 client exposes a session archive API.
+        void sessionID
       },
     },
     mcp: {

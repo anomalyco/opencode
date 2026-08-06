@@ -11,13 +11,11 @@ import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
-import { useServerSDK } from "@/context/server-sdk"
 import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
 import { terminalWebSocketURL } from "@/utils/terminal-websocket-url"
-import { authTokenFromCredentials } from "@/utils/server"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -176,13 +174,8 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
-  // Terminal captures its connection for the PTY lifetime, so callers must key it per server/session.
-  const connection = useServerSDK()().server
   const directory = sdk().directory
   const url = sdk().url
-  const auth = connection.http
-  const username = auth?.username ?? "opencode"
-  const password = auth?.password ?? ""
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, [
     "pty",
@@ -241,7 +234,7 @@ export const Terminal = (props: TerminalProps) => {
 
   const pushSize = async (cols: number, rows: number) => {
     return sdk()
-      .currentApi.pty.update({
+      .api.pty.update({
         ptyID: id,
         location: { directory },
         size: { cols, rows },
@@ -523,7 +516,7 @@ export const Terminal = (props: TerminalProps) => {
 
       const gone = async () => {
         return sdk()
-          .currentApi.pty.get({ ptyID: id, location: { directory } })
+          .api.pty.get({ ptyID: id, location: { directory } })
           .then((result) => result.data.status === "exited")
           .catch((err) => {
             if (err && typeof err === "object" && "_tag" in err && err._tag === "PtyNotFoundError") return true
@@ -533,23 +526,8 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const connectToken = async () => {
-        const endpoint = new URL(`/api/pty/${encodeURIComponent(id)}/connect-token`, url)
-        endpoint.searchParams.set("location[directory]", directory)
-        const response = await (platform.fetch ?? globalThis.fetch)(endpoint, {
-          method: "POST",
-          headers: {
-            "x-opencode-ticket": "1",
-            ...(password
-              ? { Authorization: `Basic ${authTokenFromCredentials({ username, password })}` }
-              : undefined),
-          },
-        })
-        if (response.status === 403)
-          throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
-        if (!response.ok) throw new Error(`PTY connect ticket failed with ${response.status}`)
-        const result = (await response.json()) as { data?: { ticket?: string } }
-        if (!result.data?.ticket) throw new Error("PTY connect ticket response did not include a ticket")
-        return result.data.ticket
+        // TODO: Add PTY tickets when the V2 client exposes a connect-token API.
+        return undefined
       }
 
       const retry = (err: unknown) => {

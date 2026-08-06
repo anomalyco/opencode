@@ -16,7 +16,6 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -87,7 +86,7 @@ describe("Session.create", () => {
 
       expect(created.title).toBeUndefined()
       expect(row?.title).toBeNull()
-      expect(event?.data).not.toHaveProperty("info.title")
+      expect(event?.data).not.toHaveProperty("title")
       expect((yield* session.create({ location, title: "Explicit title" })).title).toBe("Explicit title")
     }),
   )
@@ -452,32 +451,7 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("returns the current Session projection after projected updates", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      const input = { id, location }
-      const created = yield* session.create(input)
-
-      yield* bus.publish(SessionV1.Event.Updated, {
-        sessionID: id,
-        info: SessionV1.SessionInfo.make({
-          id,
-          slug: "updated",
-          version: "test",
-          projectID: created.projectID,
-          directory: created.location.directory,
-          title: "updated",
-          agent: "build",
-          time: { created: 0, updated: 1 },
-        }),
-      })
-
-      expect(yield* session.create(input)).toMatchObject({ id, agent: "build" })
-    }),
-  )
-
-  it.effect("persists creation through the existing legacy created event", () =>
+  it.effect("persists creation through the current created event", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const { db } = yield* Database.Service
@@ -485,7 +459,7 @@ describe("Session.create", () => {
 
       expect(
         yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
-      ).toMatchObject([{ type: Bus.versionedType(SessionV1.Event.Created.type, 1) }])
+      ).toMatchObject([{ type: Bus.versionedType(SessionEvent.Created.type, 1) }])
     }),
   )
 
@@ -503,7 +477,7 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("omits legacy creation rows from the Session event stream", () =>
+  it.effect("includes current creation rows in the Session event stream", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const bus = yield* Bus.Service
@@ -517,8 +491,9 @@ describe("Session.create", () => {
       yield* SessionPending.promote(db, bus, created.id, "steer")
 
       expect(
-        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(2), Stream.runCollect)),
+        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(3), Stream.runCollect)),
       ).toMatchObject([
+        { durable: { seq: 0 }, type: "session.created" },
         {
           durable: { seq: 1 },
           type: "session.input.admitted",
@@ -604,7 +579,7 @@ describe("Session.create", () => {
             .all()
             .pipe(Effect.orDie)).map((event) => [event.seq, event.type]),
         ).toEqual([
-          [0, Bus.versionedType(SessionV1.Event.Created.type, 1)],
+          [0, Bus.versionedType(SessionEvent.Created.type, 1)],
           [1, Bus.versionedType(SessionEvent.InputAdmitted.type, 1)],
           [2, Bus.versionedType(SessionEvent.InputPromoted.type, 1)],
         ])
@@ -617,7 +592,7 @@ describe("Session.create", () => {
       const session = yield* Session.Service
       const event = yield* Bus.Service
       const defect = new Error("unrelated projector defect")
-      yield* event.project(SessionV1.Event.Created, () => Effect.die(defect))
+      yield* event.project(SessionEvent.Created, () => Effect.die(defect))
 
       expect(yield* session.create({ id, location }).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
     }),
@@ -671,7 +646,7 @@ describe("Session.create", () => {
 
       expect(yield* session.get(created.id)).toMatchObject({ agent: "plan" })
       expect(
-        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(1), Stream.runCollect)),
+        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.drop(1), Stream.take(1), Stream.runCollect)),
       ).toMatchObject([{ type: "session.agent.selected", data: { agent: "plan" } }])
     }),
   )
@@ -703,7 +678,9 @@ describe("Session.create", () => {
       yield* session.switchModel({ sessionID: created.id, model })
 
       expect(yield* session.get(created.id)).toMatchObject({ model })
-      const bus = Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(1), Stream.runCollect))
+      const bus = Array.from(
+        yield* logEvents(session, created.id, true).pipe(Stream.drop(1), Stream.take(1), Stream.runCollect),
+      )
       expect(bus).toMatchObject([{ type: "session.model.selected" }])
       expect(bus[0]?.data).toEqual({ sessionID: created.id, model })
     }),

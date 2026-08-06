@@ -109,7 +109,6 @@ export function createHomeProjectsController(home: HomeController) {
         home.server.context(conn).projects.move(worktree, index)
       },
       canReveal: canRevealProject,
-      canEdit: (conn: ServerConnection.Any) => home.server.context(conn).sdk.protocolKind() === "v1",
       reveal: (conn: ServerConnection.Any, project: LocalProject) => {
         if (!platform.openPath || !canRevealProject(conn)) return
         platform.openPath(project.worktree).catch((cause: unknown) =>

@@ -9,9 +9,9 @@ import { ServiceConfig } from "../../../services/service-config"
 const location = { directory: process.cwd() }
 
 export default Runtime.handler(
-  Commands.commands.auth.commands.connect,
-  Effect.fn("cli.auth.connect")(function* (input) {
-    process.stdout.write("Connecting..." + EOL + EOL)
+  Commands.commands.auth.commands.login,
+  Effect.fn("cli.auth.login")(function* (input) {
+    process.stdout.write("Logging in..." + EOL + EOL)
     const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     yield* request(() => client.integration.wellknown.add({ url: input.url, location }))
@@ -28,7 +28,7 @@ export default Runtime.handler(
     const status = yield* wait(client, integrationID, started.data.attemptID)
     if (status.status === "failed") return yield* Effect.fail(new Error(status.message))
     if (status.status === "expired") return yield* Effect.fail(new Error("Authentication expired"))
-    process.stdout.write("Connected" + EOL)
+    process.stdout.write("Logged in" + EOL)
   }),
 )
 
