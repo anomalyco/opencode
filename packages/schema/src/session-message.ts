@@ -2,7 +2,7 @@ export * as SessionMessage from "./session-message.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { Content } from "./tool.js"
+import { Content, FileContent } from "./tool.js"
 import { Model } from "./model.js"
 import { Prompt } from "./prompt.js"
 import { DateTimeUtcFromMillis, PositiveInt, RelativePath, statics } from "./schema.js"
@@ -222,6 +222,7 @@ export const CompactionCompleted = Schema.Struct({
   reason: Schema.Literals(["auto", "manual"]),
   summary: Schema.String,
   recent: Schema.String,
+  media: Schema.Array(FileContent).pipe(optional),
 }).annotate({ identifier: "Session.Message.Compaction.Completed" })
 
 export interface CompactionFailed extends Schema.Schema.Type<typeof CompactionFailed> {}

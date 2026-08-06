@@ -83,7 +83,7 @@ Add `compaction` to any [OpenCode configuration file](/config):
     "auto": true,
     "prune": false,
     "keep": {
-      "tokens": 8000
+      "tokens": 15000
     },
     "buffer": 20000
   }
@@ -94,7 +94,7 @@ Add `compaction` to any [OpenCode configuration file](/config):
 | --- | ---: | --- |
 | `auto` | `true` | Runs the preflight context-size check. It does not disable manual compaction or one-shot provider-overflow recovery. |
 | `prune` | None | Accepted by the V2 schema, but currently has no runtime effect. V2 does not prune old tool outputs in place. |
-| `keep.tokens` | `8000` | Approximate number of tokens from the newest serialized conversation context to retain beside the summary. |
+| `keep.tokens` | `15000` | Approximate number of tokens from the newest serialized conversation context to retain beside the summary. |
 | `buffer` | `20000` | Safety reserve below an explicit input limit. Without one, it is the minimum context reserve and the model output allowance wins when larger. |
 
 `keep.tokens` and `buffer` accept non-negative integers. Larger `keep.tokens`
@@ -110,9 +110,12 @@ and relevant files.
 
 The newest serialized context up to `keep.tokens` is retained separately. This
 is not a byte-for-byte transcript: tool output is limited to 2000 characters,
-and file or media attachments become textual descriptors rather than embedded
-data. On later compactions, V2 updates the previous summary and carries forward
-its retained recent context before selecting a new tail.
+and non-media attachments become textual descriptors. Media in the retained
+context is attached to the checkpoint in the same order as its descriptors.
+Tail selection budgets 1500 additional tokens per image or PDF as a
+provider-neutral planning estimate; it does not count base64 request bytes as
+text tokens. On later compactions, V2 updates the previous summary and carries
+forward its retained recent context before selecting a new tail.
 
 The completed compaction is presented to the model as historical conversation
 context, explicitly not as new instructions. Running and failed compactions are

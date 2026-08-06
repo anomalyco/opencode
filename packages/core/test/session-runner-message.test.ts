@@ -102,7 +102,15 @@ describe("toLLMMessages", () => {
           status: "completed",
           reason: "auto",
           summary: "Earlier work",
-          recent: "Recent work",
+          recent: "Recent work\n[Attached image/png: retained.png]",
+          media: [
+            {
+              type: "file",
+              uri: "data:image/png;base64,aGVsbG8=",
+              mime: "image/png",
+              name: "retained.png",
+            },
+          ],
           time: { created },
         }),
       ],
@@ -142,8 +150,15 @@ Earlier work
 
 <recent-context>
 Recent work
+[Attached image/png: retained.png]
 </recent-context>
 </conversation-checkpoint>`,
+        },
+        {
+          type: "media",
+          mediaType: "image/png",
+          data: "data:image/png;base64,aGVsbG8=",
+          filename: "retained.png",
         },
       ],
     ])

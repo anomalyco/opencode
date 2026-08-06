@@ -379,6 +379,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               reason: event.data.reason,
               summary: event.data.text,
               recent: event.data.recent,
+              media: event.data.media,
             })
             return
           }
@@ -391,6 +392,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               reason: event.data.reason,
               summary: event.data.text,
               recent: event.data.recent,
+              media: event.data.media,
               time: { created: event.created },
             }),
           )

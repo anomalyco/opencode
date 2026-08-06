@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { Event } from "./event.js"
 import { FinishReason } from "./llm.js"
-import { Content } from "./tool.js"
+import { Content, FileContent } from "./tool.js"
 import { Model } from "./model.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 import { FileAttachment } from "./prompt.js"
@@ -538,6 +538,7 @@ export namespace Compaction {
       reason: Started.data.fields.reason,
       text: Schema.String,
       recent: Schema.String,
+      media: Schema.Array(FileContent).pipe(optional),
     },
   })
   export type Ended = typeof Ended.Type

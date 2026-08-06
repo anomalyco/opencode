@@ -2,6 +2,7 @@ export * as SessionCompaction from "./compaction"
 
 import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest, type LanguageModel } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
+import { Tool } from "@opencode-ai/schema/tool"
 import { Context, Effect, Layer, Stream } from "effect"
 import { Config } from "../config"
 import { Bus } from "../bus"
@@ -19,9 +20,10 @@ import type { Info } from "../model"
 import { SessionUsage } from "./usage"
 
 const DEFAULT_BUFFER = 20_000
-const DEFAULT_KEEP_TOKENS = 8_000
+const DEFAULT_KEEP_TOKENS = 15_000
 const OUTPUT_TOKEN_MAX = 32_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
+const MEDIA_TOKEN_ESTIMATE = 1_500
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Objective
@@ -90,6 +92,7 @@ type Plan = {
   readonly reason: SessionMessage.Compaction["reason"]
   readonly prompt: string
   readonly recent: string
+  readonly media: readonly Tool.FileContent[]
   readonly inputID?: SessionMessage.ID
 }
 
@@ -108,12 +111,39 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 const truncate = (value: string) =>
   value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
 
+const isMedia = (mime: string) => {
+  const value = mime.toLowerCase()
+  return (
+    value.startsWith("image/") ||
+    value.startsWith("audio/") ||
+    value.startsWith("video/") ||
+    value === "application/pdf"
+  )
+}
 export const serializeToolContent = (content: SessionMessage.ToolStateCompleted["content"]) =>
   content
     .map((item) =>
       item.type === "text" ? item.text : `[Attached ${item.mime}${item.name === undefined ? "" : `: ${item.name}`}]`,
     )
     .join("\n")
+
+const isEstimatedMedia = (mime: string) =>
+  mime.toLowerCase().startsWith("image/") || mime.toLowerCase() === "application/pdf"
+
+export const estimateMediaTokens = (message: SessionMessage.Info) => {
+  if (message.type === "user")
+    return (message.files?.filter((file) => isEstimatedMedia(file.mime)).length ?? 0) * MEDIA_TOKEN_ESTIMATE
+  if (message.type !== "assistant") return 0
+  return (
+    message.content
+      .flatMap((part) =>
+        part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")
+          ? (part.state.content ?? [])
+          : [],
+      )
+      .filter((content) => content.type === "file" && isEstimatedMedia(content.mime)).length * MEDIA_TOKEN_ESTIMATE
+  )
+}
 
 const serialize = (message: SessionMessage.Info) => {
   if (message.type === "user") {
@@ -162,7 +192,11 @@ const settings = (documents: readonly Config.Entry[]) => {
 const select = (
   messages: readonly SessionMessage.Info[],
   tokens: number,
-): { readonly head: string; readonly recent: string } | undefined => {
+): {
+  readonly head: string
+  readonly recent: string
+  readonly media: readonly Tool.FileContent[]
+} | undefined => {
   const conversation = messages
     .filter((message) => message.type !== "compaction" && message.type !== "system")
     .flatMap((message) => {
@@ -173,7 +207,7 @@ const select = (
   let total = 0
   let split = conversation.length
   for (let index = conversation.length - 1; index >= 0; index--) {
-    const next = total + Token.estimate(conversation[index].text)
+    const next = total + Token.estimate(conversation[index].text) + estimateMediaTokens(conversation[index].message)
     if (split < conversation.length && next > tokens) break
     total = next
     split = index
@@ -183,15 +217,33 @@ const select = (
     const latestUser = conversation.findLastIndex((item) => item.message.type === "user")
     if (latestUser > 0) split = latestUser
   }
+  const tail = conversation.slice(split)
   return {
     head: conversation
       .slice(0, split)
       .map((item) => item.text)
       .join("\n\n"),
-    recent: conversation
-      .slice(split)
-      .map((item) => item.text)
-      .join("\n\n"),
+    recent: tail.map((item) => item.text).join("\n\n"),
+    media: tail.flatMap((item) => {
+      if (item.message.type === "user")
+        return (
+          item.message.files
+            ?.filter((file) => isMedia(file.mime))
+            .map((file) => ({
+              type: "file" as const,
+              uri: `data:${file.mime};base64,${file.data}`,
+              mime: file.mime,
+              name: file.name,
+            })) ?? []
+        )
+      if (item.message.type !== "assistant") return []
+      return item.message.content.flatMap((part) => {
+        if (part.type !== "tool" || (part.state.status !== "completed" && part.state.status !== "error")) return []
+        return (part.state.content ?? []).flatMap((content) =>
+          content.type === "file" && isMedia(content.mime) ? [content] : [],
+        )
+      })
+    }),
   }
 }
 
@@ -219,6 +271,7 @@ const planContent = (messages: readonly SessionMessage.Info[], tokens: number) =
       context: summarizeRecent ? [selected.recent] : [previousRecent, selected.head].filter(Boolean),
     }),
     recent: summarizeRecent ? "" : selected.recent,
+    media: summarizeRecent ? [] : selected.media,
   }
 }
 
@@ -318,6 +371,7 @@ const make = (dependencies: Dependencies) => {
       reason: plan.reason,
       text: summary,
       recent: plan.recent,
+      media: plan.media,
     })
     return { status: "completed" as const }
   })
