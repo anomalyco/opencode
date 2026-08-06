@@ -759,6 +759,8 @@ export const dict = {
 
   "session.header.search.placeholder": "Search {{project}}",
   "session.header.searchFiles": "Search files",
+  "session.search.placeholder": "Search conversation",
+  "session.search.noResults": "No matches",
   "session.header.openIn": "Open in",
   "session.header.open.action": "Open {{app}}",
   "session.header.open.ariaLabel": "Open in {{app}}",

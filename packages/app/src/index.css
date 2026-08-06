@@ -165,6 +165,15 @@
     }
   }
 
+  ::highlight(timeline-search-hit) {
+    background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+  }
+
+  ::highlight(timeline-search-hit-active) {
+    background-color: var(--v2-icon-icon-accent);
+    color: var(--v2-background-bg-deep);
+  }
+
   [data-component="getting-started"] {
     container-type: inline-size;
     container-name: getting-started;

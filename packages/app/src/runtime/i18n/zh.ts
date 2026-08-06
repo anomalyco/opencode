@@ -767,6 +767,8 @@ export const dict = {
   "session.new.lastModified": "最后修改",
   "session.header.search.placeholder": "搜索 {{project}}",
   "session.header.searchFiles": "搜索文件",
+  "session.search.placeholder": "搜索对话",
+  "session.search.noResults": "无匹配",
   "session.header.openIn": "打开方式",
   "session.header.open.action": "打开 {{app}}",
   "session.header.open.ariaLabel": "在 {{app}} 中打开",

@@ -723,6 +723,8 @@ export const dict = {
   "session.new.lastModified": "Última modificação",
   "session.header.search.placeholder": "Buscar {{project}}",
   "session.header.searchFiles": "Buscar arquivos",
+  "session.search.placeholder": "Buscar na conversa",
+  "session.search.noResults": "Nenhum resultado",
   "session.header.openIn": "Abrir em",
   "session.header.open.action": "Abrir {{app}}",
   "session.header.open.ariaLabel": "Abrir em {{app}}",
