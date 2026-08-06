@@ -18,57 +18,136 @@
 
 [data-component="dialog-v2"].settings-v2-ssh-dialog [data-slot="dialog-body"] {
   display: flex;
+  width: 100%;
+  min-width: 0;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  align-items: stretch;
+  padding: 0;
+  gap: 0;
+}
+
+[data-component="dialog-v2"].settings-v2-ssh-dialog [data-slot="dialog-footer"] {
+  padding: 0 16px 24px;
+  margin-top: 8px;
+}
+
+.settings-v2-ssh-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
+  box-sizing: border-box;
+  padding: 16px 16px 1px;
+}
+
+.settings-v2-ssh-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .settings-v2-ssh-hint {
+  font-style: normal;
+  font-weight: 440;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 16px;
+  letter-spacing: 0.05px;
   color: var(--v2-text-text-muted);
+}
+
+.settings-v2-ssh-section-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+  align-self: stretch;
+}
+
+.settings-v2-ssh-section-title {
+  flex: none;
+  user-select: none;
+  font-style: normal;
+  font-weight: 440;
+  font-size: 13px;
+  line-height: 16px;
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-muted);
+}
+
+.settings-v2-ssh-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .settings-v2-ssh-config-hosts {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  max-height: 168px;
+  align-items: flex-start;
+  flex: none;
+  align-self: stretch;
+  width: 100%;
+  height: fit-content;
+  max-height: 220px;
+  padding: 0;
+  border-radius: 8px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-raised);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
-.settings-v2-ssh-config-hosts-title {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--v2-text-text-muted);
-  margin-top: 4px;
-}
-
 .settings-v2-ssh-config-host {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  text-align: left;
-  font-size: 13px;
-  color: var(--v2-text-text-base);
-  background: transparent;
+  width: 100%;
+  min-height: 44px;
+  padding: 14px 14px 14px 16px;
   border: none;
+  border-bottom: 0.5px solid var(--v2-border-border-base);
+  background: transparent;
   cursor: pointer;
+  text-align: left;
+  font-style: normal;
+  font-weight: 440;
+  font-size: 13px;
+  line-height: 16px;
+  letter-spacing: -0.04px;
+  font-variant-numeric: tabular-nums;
+  color: var(--v2-text-text-base);
 }
 
-.settings-v2-ssh-config-host:hover {
+.settings-v2-ssh-config-host:last-child {
+  border-bottom: none;
+}
+
+.settings-v2-ssh-config-host:hover:not(:disabled) {
   background: var(--v2-fill-fill-muted);
+}
+
+.settings-v2-ssh-config-host:disabled {
+  cursor: default;
+  color: var(--v2-text-text-muted);
 }
 
 .settings-v2-ssh-status {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  font-style: normal;
+  font-weight: 440;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 16px;
+  letter-spacing: 0.05px;
 }
 
 .settings-v2-ssh-status[data-tone="success"] {
