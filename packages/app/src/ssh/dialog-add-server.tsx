@@ -39,22 +39,24 @@ export function DialogAddSshServer(props: DialogSshServerProps = {}) {
       </DialogHeader>
       <DividerV2 />
       <DialogBody class="settings-v2-ssh-dialog-body">
-        <TextInputV2
-          appearance="large"
-          aria-label={language.t("ssh.add.hostLabel")}
-          placeholder={language.t("ssh.add.hostPlaceholder")}
-          value={controller.host()}
-          disabled={controller.busy()}
-          onInput={(event) => controller.setHost(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") controller.runPrimary()
-          }}
-          spellcheck={false}
-          autocorrect="off"
-          autocomplete="off"
-          autocapitalize="off"
-        />
-        <p class="settings-v2-ssh-hint">{language.t("ssh.add.hint")}</p>
+        <div class="settings-v2-ssh-field">
+          <TextInputV2
+            appearance="large"
+            aria-label={language.t("ssh.add.hostLabel")}
+            placeholder={language.t("ssh.add.hostPlaceholder")}
+            value={controller.host()}
+            disabled={controller.busy()}
+            onInput={(event) => controller.setHost(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") controller.runPrimary()
+            }}
+            spellcheck={false}
+            autocorrect="off"
+            autocomplete="off"
+            autocapitalize="off"
+          />
+          <p class="settings-v2-ssh-hint">{language.t("ssh.add.hint")}</p>
+        </div>
         <Show when={controller.status()}>
           {(status) => (
             <div class="settings-v2-ssh-status" data-tone={status().tone}>
@@ -71,20 +73,24 @@ export function DialogAddSshServer(props: DialogSshServerProps = {}) {
           )}
         </Show>
         <Show when={controller.suggestions().length > 0}>
-          <span class="settings-v2-ssh-config-hosts-title">{language.t("ssh.add.configHosts")}</span>
-          <div class="settings-v2-ssh-config-hosts">
-            <For each={controller.suggestions()}>
-              {(host) => (
-                <button
-                  type="button"
-                  class="settings-v2-ssh-config-host"
-                  disabled={controller.busy()}
-                  onClick={() => controller.setHost(host)}
-                >
-                  {host}
-                </button>
-              )}
-            </For>
+          <div class="settings-v2-ssh-section">
+            <div class="settings-v2-ssh-section-header">
+              <span class="settings-v2-ssh-section-title">{language.t("ssh.add.configHosts")}</span>
+            </div>
+            <div class="settings-v2-ssh-config-hosts">
+              <For each={controller.suggestions()}>
+                {(host) => (
+                  <button
+                    type="button"
+                    class="settings-v2-ssh-config-host"
+                    disabled={controller.busy()}
+                    onClick={() => controller.setHost(host)}
+                  >
+                    {host}
+                  </button>
+                )}
+              </For>
+            </div>
           </div>
         </Show>
       </DialogBody>
