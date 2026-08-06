@@ -1,6 +1,7 @@
 export * as ConfigLSP from "./lsp.js"
 
 import { Schema } from "effect"
+import { optional } from "../schema.js"
 
 export const Disabled = Schema.Struct({
   disabled: Schema.Literal(true),
@@ -8,10 +9,10 @@ export const Disabled = Schema.Struct({
 
 export class Server extends Schema.Class<Server>("Config.LSP.Server")({
   command: Schema.String.pipe(Schema.Array),
-  extensions: Schema.String.pipe(Schema.Array, Schema.optional),
-  disabled: Schema.Boolean.pipe(Schema.optional),
-  env: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
-  initialization: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  extensions: Schema.String.pipe(Schema.Array, optional),
+  disabled: Schema.Boolean.pipe(optional),
+  env: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  initialization: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
 }) {}
 
 export const Entry = Schema.Union([Disabled, Server])

@@ -3,7 +3,7 @@ export * as Config from "./config.js"
 import { Schema } from "effect"
 import { ephemeral, inventory } from "./event.js"
 import { Permission } from "./permission.js"
-import { AbsolutePath } from "./schema.js"
+import { AbsolutePath, optional } from "./schema.js"
 import { ConfigAgent } from "./config/agent.js"
 import { ConfigMedia } from "./config/media.js"
 import { ConfigCompaction } from "./config/compaction.js"
@@ -22,94 +22,94 @@ import { ConfigWatcher } from "./config/watcher.js"
 import { ConfigWarming } from "./config/warming.js"
 
 export class Info extends Schema.Class<Info>("Config.Info")({
-  $schema: Schema.optional(Schema.String).annotate({
+  $schema: optional(Schema.String).annotate({
     description: "JSON schema reference for configuration validation",
   }),
-  shell: Schema.String.pipe(Schema.optional).annotate({
+  shell: Schema.String.pipe(optional).annotate({
     description: "Default shell to use for terminal and shell tool execution",
   }),
-  model: ConfigModel.Selection.pipe(Schema.optional).annotate({
+  model: ConfigModel.Selection.pipe(optional).annotate({
     description: "Default model to use when no session or agent model is selected",
   }),
-  default_agent: Schema.String.pipe(Schema.optional).annotate({
+  default_agent: Schema.String.pipe(optional).annotate({
     description: "Default primary agent to use when no session agent is selected",
   }),
   autoupdate: Schema.Union([Schema.Boolean, Schema.Literal("notify")])
-    .pipe(Schema.optional)
+    .pipe(optional)
     .annotate({
       description: "Automatically update or notify when a new version is available",
     }),
-  share: Schema.Literals(["manual", "auto", "disabled"]).pipe(Schema.optional).annotate({
+  share: Schema.Literals(["manual", "auto", "disabled"]).pipe(optional).annotate({
     description: "Control whether sessions may be shared manually, automatically, or not at all",
   }),
   enterprise: Schema.Struct({
-    url: Schema.String.pipe(Schema.optional),
+    url: Schema.String.pipe(optional),
   })
-    .pipe(Schema.optional)
+    .pipe(optional)
     .annotate({
       description: "Enterprise sharing service configuration",
     }),
-  username: Schema.String.pipe(Schema.optional).annotate({
+  username: Schema.String.pipe(optional).annotate({
     description: "Username displayed in conversations and used for telemetry identity",
   }),
-  permissions: Permission.Ruleset.pipe(Schema.optional).annotate({
+  permissions: Permission.Ruleset.pipe(optional).annotate({
     description: "Ordered tool permission rules applied to agent tool use",
   }),
-  agents: Schema.Record(Schema.String, ConfigAgent.Info).pipe(Schema.optional).annotate({
+  agents: Schema.Record(Schema.String, ConfigAgent.Info).pipe(optional).annotate({
     description: "Named built-in agent overrides and custom agent definitions",
   }),
-  snapshots: Schema.Boolean.pipe(Schema.optional).annotate({
+  snapshots: Schema.Boolean.pipe(optional).annotate({
     description: "Enable snapshots used for undo and revert behavior",
   }),
-  watcher: ConfigWatcher.Info.pipe(Schema.optional).annotate({
+  watcher: ConfigWatcher.Info.pipe(optional).annotate({
     description: "Filesystem watcher configuration",
   }),
-  formatter: ConfigFormatter.Info.pipe(Schema.optional).annotate({
+  formatter: ConfigFormatter.Info.pipe(optional).annotate({
     description: "Enable built-in formatters or configure formatter overrides",
   }),
-  lsp: ConfigLSP.Info.pipe(Schema.optional).annotate({
+  lsp: ConfigLSP.Info.pipe(optional).annotate({
     description: "Enable built-in language servers or configure server overrides",
   }),
-  media: ConfigMedia.Info.pipe(Schema.optional).annotate({
+  media: ConfigMedia.Info.pipe(optional).annotate({
     description: "Media processing configuration",
   }),
-  tool_output: ConfigToolOutput.Info.pipe(Schema.optional).annotate({
+  tool_output: ConfigToolOutput.Info.pipe(optional).annotate({
     description: "Tool output truncation thresholds",
   }),
-  mcp: ConfigMCP.Info.pipe(Schema.optional).annotate({
+  mcp: ConfigMCP.Info.pipe(optional).annotate({
     description: "MCP server configuration",
   }),
-  compaction: ConfigCompaction.Info.pipe(Schema.optional).annotate({
+  compaction: ConfigCompaction.Info.pipe(optional).annotate({
     description: "Conversation compaction behavior",
   }),
-  skills: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
+  skills: Schema.String.pipe(Schema.Array, optional).annotate({
     description: "Additional paths or URLs to discover skills from",
   }),
-  commands: Schema.Record(Schema.String, ConfigCommand.Info).pipe(Schema.optional).annotate({
+  commands: Schema.Record(Schema.String, ConfigCommand.Info).pipe(optional).annotate({
     description: "Named slash command definitions",
   }),
-  instructions: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
+  instructions: Schema.String.pipe(Schema.Array, optional).annotate({
     description: "Additional paths or URLs supplying ambient instructions",
   }),
-  references: ConfigReference.Info.pipe(Schema.optional).annotate({
+  references: ConfigReference.Info.pipe(optional).annotate({
     description: "Named local directories or Git repositories available as external context",
   }),
-  websearch: ConfigWebSearch.Info.pipe(Schema.optional).annotate({
+  websearch: ConfigWebSearch.Info.pipe(optional).annotate({
     description: "Web search provider selection",
   }),
-  plugins: ConfigPlugin.Plugins.pipe(Schema.optional).annotate({
+  plugins: ConfigPlugin.Plugins.pipe(optional).annotate({
     description: "Ordered plugin enablement directives and external package declarations",
   }),
-  warming: ConfigWarming.Warming.pipe(Schema.optional).annotate({
+  warming: ConfigWarming.Warming.pipe(optional).annotate({
     description: "Keep recently active sessions warm with transient model requests (default: false)",
   }),
-  providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
-  experimental: ConfigExperimental.Info.pipe(Schema.optional),
+  providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(optional),
+  experimental: ConfigExperimental.Info.pipe(optional),
 }) {}
 
 export class Document extends Schema.Class<Document>("Config.Document")({
   type: Schema.Literal("document"),
-  path: Schema.String.pipe(Schema.optional),
+  path: Schema.String.pipe(optional),
   info: Info,
 }) {}
 

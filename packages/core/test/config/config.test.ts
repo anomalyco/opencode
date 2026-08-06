@@ -516,12 +516,12 @@ describe("Config", () => {
       })
       expect(migrated.providers?.["azure-cognitive-services"]).toBeUndefined()
       expect(migrated.providers?.["google-vertex"]).toMatchObject({
-        package: undefined,
         settings: { project: "test-project", location: "us-central1" },
         models: {
           "claude-sonnet": { package: Provider.aisdk("@ai-sdk/google-vertex/anthropic") },
         },
       })
+      expect(migrated.providers?.["google-vertex"]).not.toHaveProperty("package")
       expect(migrated.providers?.["google-vertex-anthropic"]).toBeUndefined()
     }),
   )

@@ -1,5 +1,8 @@
 export * as ConfigMigrateV1 from "./migrate"
 
+import { Info } from "@opencode-ai/schema/config"
+import { ConfigAgent } from "@opencode-ai/schema/config/agent"
+import { Schema } from "effect"
 import { ConfigV1 } from "./config"
 import { ConfigAgentV1 } from "./agent"
 import { ConfigCommandV1 } from "./command"
@@ -9,6 +12,12 @@ import { ConfigProviderV1 } from "./provider"
 import { ConfigProviderOptionsV1 } from "./provider-options"
 import { Provider } from "../../provider"
 import { Model } from "../../model"
+
+const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+const decodeInfo = Schema.decodeUnknownSync(Schema.fromJsonString(Info), decodeOptions)
+const encodeInfo = Schema.encodeSync(Info)
+const decodeAgent = Schema.decodeUnknownSync(Schema.fromJsonString(ConfigAgent.Info), decodeOptions)
+const encodeAgent = Schema.encodeSync(ConfigAgent.Info)
 
 const keys = new Set([
   "logLevel",
@@ -48,42 +57,46 @@ export function isV1(input: unknown) {
 }
 
 export function migrate(info: typeof ConfigV1.Info.Type) {
-  return {
-    $schema: info.$schema,
-    shell: info.shell,
-    model: modelSelection(info.model),
-    default_agent: info.default_agent,
-    autoupdate: info.autoupdate,
-    share: info.share ?? (info.autoshare ? "auto" : undefined),
-    enterprise: info.enterprise,
-    username: info.username,
-    permissions: permissions(info.permission, info.tools),
-    agents: agents(info),
-    snapshots: info.snapshot,
-    watcher: info.watcher,
-    formatter: info.formatter,
-    lsp: info.lsp,
-    media: info.attachment,
-    tool_output: info.tool_output,
-    mcp: mcp(info),
-    compaction: info.compaction && {
-      auto: info.compaction.auto,
-      prune: info.compaction.prune,
-      keep: {
-        tokens: info.compaction.preserve_recent_tokens,
-      },
-      buffer: info.compaction.reserved,
-    },
-    skills: info.skills && [...(info.skills.paths ?? []), ...(info.skills.urls ?? [])],
-    commands: commands(info.command),
-    instructions: info.instructions,
-    references: info.references ?? info.reference,
-    experimental: experimental(info),
-    plugins: info.plugin?.map((plugin) =>
-      typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
+  return encodeInfo(
+    decodeInfo(
+      JSON.stringify({
+        $schema: info.$schema,
+        shell: info.shell,
+        model: modelSelection(info.model),
+        default_agent: info.default_agent,
+        autoupdate: info.autoupdate,
+        share: info.share ?? (info.autoshare ? "auto" : undefined),
+        enterprise: info.enterprise,
+        username: info.username,
+        permissions: permissions(info.permission, info.tools),
+        agents: agents(info),
+        snapshots: info.snapshot,
+        watcher: info.watcher,
+        formatter: info.formatter,
+        lsp: info.lsp,
+        media: info.attachment,
+        tool_output: info.tool_output,
+        mcp: mcp(info),
+        compaction: info.compaction && {
+          auto: info.compaction.auto,
+          prune: info.compaction.prune,
+          keep: {
+            tokens: info.compaction.preserve_recent_tokens,
+          },
+          buffer: info.compaction.reserved,
+        },
+        skills: info.skills && [...(info.skills.paths ?? []), ...(info.skills.urls ?? [])],
+        commands: commands(info.command),
+        instructions: info.instructions,
+        references: info.references ?? info.reference,
+        experimental: experimental(info),
+        plugins: info.plugin?.map((plugin) =>
+          typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
+        ),
+        providers: providers(info.provider),
+      }),
     ),
-    providers: providers(info.provider),
-  }
+  )
 }
 
 function experimental(info: typeof ConfigV1.Info.Type) {
@@ -154,18 +167,22 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
     ...(info.temperature === undefined ? {} : { temperature: info.temperature }),
     ...(info.top_p === undefined ? {} : { top_p: info.top_p }),
   }
-  return {
-    model: modelSelection(info.model, info.variant),
-    request: Object.keys(body).length ? { body } : undefined,
-    system: info.prompt,
-    description: info.description,
-    mode: info.mode,
-    hidden: info.hidden,
-    color: info.color === undefined ? undefined : info.color.startsWith("#") ? info.color : "#aaaaaa",
-    steps: info.steps,
-    disabled: info.disable,
-    permissions: permissions(info.permission),
-  }
+  return encodeAgent(
+    decodeAgent(
+      JSON.stringify({
+        model: modelSelection(info.model, info.variant),
+        request: Object.keys(body).length ? { body } : undefined,
+        system: info.prompt,
+        description: info.description,
+        mode: info.mode,
+        hidden: info.hidden,
+        color: info.color === undefined ? undefined : info.color.startsWith("#") ? info.color : "#aaaaaa",
+        steps: info.steps,
+        disabled: info.disable,
+        permissions: permissions(info.permission),
+      }),
+    ),
+  )
 }
 
 function commands(info?: Readonly<Record<string, ConfigCommandV1.Info>>) {

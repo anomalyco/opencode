@@ -1,15 +1,15 @@
 export * as ConfigMedia from "./media.js"
 
 import { Schema } from "effect"
-import { PositiveInt } from "../schema.js"
+import { optional, PositiveInt } from "../schema.js"
 
 export class Image extends Schema.Class<Image>("Config.Media.Image")({
-  auto_resize: Schema.Boolean.pipe(Schema.optional),
-  max_width: PositiveInt.pipe(Schema.optional),
-  max_height: PositiveInt.pipe(Schema.optional),
-  max_base64_bytes: PositiveInt.pipe(Schema.optional),
+  auto_resize: Schema.Boolean.pipe(optional),
+  max_width: PositiveInt.pipe(optional),
+  max_height: PositiveInt.pipe(optional),
+  max_base64_bytes: PositiveInt.pipe(optional),
 }) {}
 
 export class Info extends Schema.Class<Info>("Config.Media")({
-  image: Image.pipe(Schema.optional),
+  image: Image.pipe(optional),
 }) {}

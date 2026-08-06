@@ -1,14 +1,14 @@
 export * as ConfigCompaction from "./compaction.js"
 
 import { Schema } from "effect"
-import { NonNegativeInt } from "../schema.js"
+import { NonNegativeInt, optional } from "../schema.js"
 
 export class Keep extends Schema.Class<Keep>("Config.Compaction.Keep")({
-  tokens: NonNegativeInt.pipe(Schema.optional),
+  tokens: NonNegativeInt.pipe(optional),
 }) {}
 
 export class Info extends Schema.Class<Info>("Config.Compaction")({
-  auto: Schema.Boolean.pipe(Schema.optional),
-  keep: Keep.pipe(Schema.optional),
-  buffer: NonNegativeInt.pipe(Schema.optional),
+  auto: Schema.Boolean.pipe(optional),
+  keep: Keep.pipe(optional),
+  buffer: NonNegativeInt.pipe(optional),
 }) {}

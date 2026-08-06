@@ -16,7 +16,9 @@ it.live("returns ordered config entries for the requested directory", () =>
         const global = path.join(tmp.path, "global")
         const project = path.join(tmp.path, "project")
         const config = path.join(project, "opencode.json")
-        yield* Effect.promise(() => Promise.all([fs.mkdir(global, { recursive: true }), fs.mkdir(project, { recursive: true })]))
+        yield* Effect.promise(() =>
+          Promise.all([fs.mkdir(global, { recursive: true }), fs.mkdir(project, { recursive: true })]),
+        )
         yield* Effect.promise(() =>
           fs.writeFile(
             config,
@@ -25,6 +27,7 @@ it.live("returns ordered config entries for the requested directory", () =>
                 { action: "shell", resource: "*", effect: "ask" },
                 { action: "shell", resource: "git status", effect: "allow" },
               ],
+              mcp: { servers: { docs: { type: "remote", url: "https://example.com/mcp" } } },
             }),
           ),
         )
@@ -42,9 +45,8 @@ it.live("returns ordered config entries for the requested directory", () =>
         const response = yield* Effect.promise(() =>
           fetch(url, { headers: { authorization: `Basic ${btoa("opencode:secret")}` } }),
         )
-        const entries = Schema.decodeUnknownSync(Schema.Array(Config.Entry))(
-          yield* Effect.promise(() => response.json()),
-        )
+        const body: unknown = yield* Effect.promise(() => response.json())
+        const entries = Schema.decodeUnknownSync(Schema.Array(Config.Entry))(body)
 
         expect(response.status).toBe(200)
         expect(Array.isArray(entries)).toBe(true)
@@ -56,7 +58,21 @@ it.live("returns ordered config entries for the requested directory", () =>
           { action: "shell", resource: "git status", effect: "allow" },
         ])
         expect(entries.some((entry) => entry.type === "file" && entry.path === config)).toBe(true)
+        if (!Array.isArray(body)) throw new Error("Expected a config entry array")
+        const raw = body.find((entry) => isRecord(entry) && entry["type"] === "document" && entry["path"] === config)
+        if (!isRecord(raw) || !isRecord(raw["info"])) throw new Error("Expected a config document")
+        expect(raw["info"]).not.toHaveProperty("default_agent")
+        expect(raw["info"]).not.toHaveProperty("model")
+        const mcp = raw["info"]["mcp"]
+        if (!isRecord(mcp) || !isRecord(mcp["servers"]) || !isRecord(mcp["servers"]["docs"]))
+          throw new Error("Expected an MCP server config")
+        expect(mcp["servers"]["docs"]).not.toHaveProperty("headers")
+        expect(mcp["servers"]["docs"]).not.toHaveProperty("oauth")
       }),
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   ),
 )
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}

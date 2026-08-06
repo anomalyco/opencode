@@ -1701,44 +1701,43 @@ export type AgentInfo = {
 export type ConfigEntry =
   | {
       type: "document"
-      path?: string | null
+      path?: string
       info: {
-        $schema?: string | null
-        shell?: string | null
-        model?: string | { providerID: string; model: string; variant?: string | null } | null
-        default_agent?: string | null
-        autoupdate?: boolean | "notify" | null
-        share?: "manual" | "auto" | "disabled" | null
-        enterprise?: { url?: string | null } | null
-        username?: string | null
-        permissions?: PermissionRuleset | null
+        $schema?: string
+        shell?: string
+        model?: string | { providerID: string; model: string; variant?: string }
+        default_agent?: string
+        autoupdate?: boolean | "notify"
+        share?: "manual" | "auto" | "disabled"
+        enterprise?: { url?: string }
+        username?: string
+        permissions?: PermissionRuleset
         agents?: {
           [x: string]: {
-            model?: string | { providerID: string; model: string; variant?: string | null } | null
-            request?: { headers?: { [x: string]: string } | null; body?: { [x: string]: JsonValue } | null } | null
-            system?: string | null
-            description?: string | null
-            mode?: "subagent" | "primary" | "all" | null
-            hidden?: boolean | null
-            color?: string | null
-            steps?: number | null
-            disabled?: boolean | null
-            permissions?: PermissionRuleset | null
+            model?: string | { providerID: string; model: string; variant?: string }
+            request?: { headers?: { [x: string]: string }; body?: { [x: string]: JsonValue } }
+            system?: string
+            description?: string
+            mode?: "subagent" | "primary" | "all"
+            hidden?: boolean
+            color?: string
+            steps?: number
+            disabled?: boolean
+            permissions?: PermissionRuleset
           }
-        } | null
-        snapshots?: boolean | null
-        watcher?: { ignore?: Array<string> | null } | null
+        }
+        snapshots?: boolean
+        watcher?: { ignore?: Array<string> }
         formatter?:
           | boolean
           | {
               [x: string]: {
-                disabled?: boolean | null
-                command?: Array<string> | null
-                environment?: { [x: string]: string } | null
-                extensions?: Array<string> | null
+                disabled?: boolean
+                command?: Array<string>
+                environment?: { [x: string]: string }
+                extensions?: Array<string>
               }
             }
-          | null
         lsp?:
           | boolean
           | {
@@ -1746,125 +1745,117 @@ export type ConfigEntry =
                 | { disabled: true }
                 | {
                     command: Array<string>
-                    extensions?: Array<string> | null
-                    disabled?: boolean | null
-                    env?: { [x: string]: string } | null
-                    initialization?: { [x: string]: JsonValue } | null
+                    extensions?: Array<string>
+                    disabled?: boolean
+                    env?: { [x: string]: string }
+                    initialization?: { [x: string]: JsonValue }
                   }
             }
-          | null
         media?: {
-          image?: {
-            auto_resize?: boolean | null
-            max_width?: number | null
-            max_height?: number | null
-            max_base64_bytes?: number | null
-          } | null
-        } | null
-        tool_output?: { max_lines?: number | null; max_bytes?: number | null } | null
+          image?: { auto_resize?: boolean; max_width?: number; max_height?: number; max_base64_bytes?: number }
+        }
+        tool_output?: { max_lines?: number; max_bytes?: number }
         mcp?: {
-          timeout?: { startup?: number | null; catalog?: number | null; execution?: number | null } | null
+          timeout?: { startup?: number; catalog?: number; execution?: number }
           servers?: {
             [x: string]:
               | {
                   type: "local"
                   command: Array<string>
-                  cwd?: string | null
-                  environment?: { [x: string]: string } | null
-                  disabled?: boolean | null
-                  codemode?: boolean | null
-                  timeout?: { startup?: number | null; catalog?: number | null; execution?: number | null } | null
+                  cwd?: string
+                  environment?: { [x: string]: string }
+                  disabled?: boolean
+                  codemode?: boolean
+                  timeout?: { startup?: number; catalog?: number; execution?: number }
                 }
               | {
                   type: "remote"
                   url: string
-                  headers?: { [x: string]: string } | null
+                  headers?: { [x: string]: string }
                   oauth?:
                     | {
-                        client_id?: string | null
-                        client_secret?: string | null
-                        scope?: string | null
-                        callback_port?: number | null
-                        redirect_uri?: string | null
+                        client_id?: string
+                        client_secret?: string
+                        scope?: string
+                        callback_port?: number
+                        redirect_uri?: string
                       }
                     | false
-                    | null
-                  disabled?: boolean | null
-                  codemode?: boolean | null
-                  timeout?: { startup?: number | null; catalog?: number | null; execution?: number | null } | null
+                  disabled?: boolean
+                  codemode?: boolean
+                  timeout?: { startup?: number; catalog?: number; execution?: number }
                 }
-          } | null
-        } | null
-        compaction?: { auto?: boolean | null; keep?: { tokens?: number | null } | null; buffer?: number | null } | null
-        skills?: Array<string> | null
+          }
+        }
+        compaction?: { auto?: boolean; keep?: { tokens?: number }; buffer?: number }
+        skills?: Array<string>
         commands?: {
           [x: string]: {
             template: string
-            description?: string | null
-            agent?: string | null
-            model?: string | { providerID: string; model: string; variant?: string | null } | null
-            subtask?: boolean | null
+            description?: string
+            agent?: string
+            model?: string | { providerID: string; model: string; variant?: string }
+            subtask?: boolean
           }
-        } | null
-        instructions?: Array<string> | null
+        }
+        instructions?: Array<string>
         references?: {
           [x: string]:
             | string
-            | { repository: string; branch?: string | null; description?: string | null; hidden?: boolean | null }
-            | { path: string; description?: string | null; hidden?: boolean | null }
-        } | null
-        websearch?: { provider: string } | null
-        plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } | null }> | null
-        warming?: boolean | { prompt?: string | null; interval?: string | null; duration?: string | null } | null
+            | { repository: string; branch?: string; description?: string; hidden?: boolean }
+            | { path: string; description?: string; hidden?: boolean }
+        }
+        websearch?: { provider: string }
+        plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
+        warming?: boolean | { prompt?: string; interval?: string; duration?: string }
         providers?: {
           [x: string]: {
-            name?: string | null
-            env?: Array<string> | null
-            package?: string | null
-            settings?: { [x: string]: JsonValue } | null
-            headers?: { [x: string]: string } | null
-            body?: { [x: string]: JsonValue } | null
+            name?: string
+            env?: Array<string>
+            package?: string
+            settings?: { [x: string]: JsonValue }
+            headers?: { [x: string]: string }
+            body?: { [x: string]: JsonValue }
             models?: {
               [x: string]: {
-                modelID?: string | null
-                family?: string | null
-                name?: string | null
-                compatibility?: ModelCompatibility | null
-                package?: string | null
-                settings?: { [x: string]: JsonValue } | null
-                headers?: { [x: string]: string } | null
-                body?: { [x: string]: JsonValue } | null
-                capabilities?: ModelCapabilities | null
+                modelID?: string
+                family?: string
+                name?: string
+                compatibility?: ModelCompatibility
+                package?: string
+                settings?: { [x: string]: JsonValue }
+                headers?: { [x: string]: string }
+                body?: { [x: string]: JsonValue }
+                capabilities?: ModelCapabilities
                 variants?: Array<{
                   id: string
-                  settings?: { [x: string]: JsonValue } | null
-                  headers?: { [x: string]: string } | null
-                  body?: { [x: string]: JsonValue } | null
-                }> | null
+                  settings?: { [x: string]: JsonValue }
+                  headers?: { [x: string]: string }
+                  body?: { [x: string]: JsonValue }
+                }>
                 cost?:
                   | {
-                      tier?: { type: "context"; size: number } | null
+                      tier?: { type: "context"; size: number }
                       input: MoneyUSDPerMillionTokens
                       output: MoneyUSDPerMillionTokens
-                      cache?: { read?: MoneyUSDPerMillionTokens | null; write?: MoneyUSDPerMillionTokens | null } | null
+                      cache?: { read?: MoneyUSDPerMillionTokens; write?: MoneyUSDPerMillionTokens }
                     }
                   | Array<{
-                      tier?: { type: "context"; size: number } | null
+                      tier?: { type: "context"; size: number }
                       input: MoneyUSDPerMillionTokens
                       output: MoneyUSDPerMillionTokens
-                      cache?: { read?: MoneyUSDPerMillionTokens | null; write?: MoneyUSDPerMillionTokens | null } | null
+                      cache?: { read?: MoneyUSDPerMillionTokens; write?: MoneyUSDPerMillionTokens }
                     }>
-                  | null
-                disabled?: boolean | null
-                limit?: { context?: number | null; input?: number | null; output?: number | null } | null
+                disabled?: boolean
+                limit?: { context?: number; input?: number; output?: number }
               }
-            } | null
+            }
           }
-        } | null
+        }
         experimental?: {
-          subagent_depth?: number | null
-          policies?: Array<{ action: "provider.use"; resource: string; effect: "allow" | "deny" }> | null
-        } | null
+          subagent_depth?: number
+          policies?: Array<{ action: "provider.use"; resource: string; effect: "allow" | "deny" }>
+        }
       }
     }
   | { type: "directory"; path: string }
@@ -3250,41 +3241,28 @@ export type McpAddInput = {
       | {
           readonly type: "local"
           readonly command: ReadonlyArray<string>
-          readonly cwd?: string | undefined
-          readonly environment?: { readonly [x: string]: string } | undefined
-          readonly disabled?: boolean | undefined
-          readonly codemode?: boolean | undefined
-          readonly timeout?:
-            | {
-                readonly startup?: number | undefined
-                readonly catalog?: number | undefined
-                readonly execution?: number | undefined
-              }
-            | undefined
+          readonly cwd?: string
+          readonly environment?: { readonly [x: string]: string }
+          readonly disabled?: boolean
+          readonly codemode?: boolean
+          readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
         }
       | {
           readonly type: "remote"
           readonly url: string
-          readonly headers?: { readonly [x: string]: string } | undefined
+          readonly headers?: { readonly [x: string]: string }
           readonly oauth?:
             | {
-                readonly client_id?: string | undefined
-                readonly client_secret?: string | undefined
-                readonly scope?: string | undefined
-                readonly callback_port?: number | undefined
-                readonly redirect_uri?: string | undefined
+                readonly client_id?: string
+                readonly client_secret?: string
+                readonly scope?: string
+                readonly callback_port?: number
+                readonly redirect_uri?: string
               }
             | false
-            | undefined
-          readonly disabled?: boolean | undefined
-          readonly codemode?: boolean | undefined
-          readonly timeout?:
-            | {
-                readonly startup?: number | undefined
-                readonly catalog?: number | undefined
-                readonly execution?: number | undefined
-              }
-            | undefined
+          readonly disabled?: boolean
+          readonly codemode?: boolean
+          readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
         }
   }["config"]
 }
