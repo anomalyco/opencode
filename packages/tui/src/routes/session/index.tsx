@@ -175,6 +175,11 @@ export function Session() {
       .flatMap((sessionID) => data.session.form.list(sessionID) ?? [])
       .concat(global)
   })
+  const queuedPrompts = createMemo(() =>
+    data.session.pending.list(route.sessionID).flatMap((item) =>
+      item.type === "user" && item.delivery === "queue" ? [{ id: item.id, text: item.data.text }] : [],
+    ),
+  )
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
@@ -997,6 +1002,9 @@ export function Session() {
               </Show>
             </scrollbox>
             <box flexShrink={0}>
+              <Show when={!composer.open && !disabled() && queuedPrompts().length > 0}>
+                <QueuedPromptDock prompts={queuedPrompts()} />
+              </Show>
               <PluginSlot name="session.composer.top" input={{ sessionID: route.sessionID }} mode="all" />
               <Composer
                 sessionID={route.sessionID}
@@ -1081,9 +1089,6 @@ function SessionRowView(props: SessionRowViewProps) {
         </Match>
         <Match when={props.row.type === "compaction-queued"}>
           <CompactionQueued />
-        </Match>
-        <Match when={props.row.type === "queued-prompts" ? props.row : undefined}>
-          {(row) => <QueuedPrompts messageIDs={row().messageIDs} message={props.message} />}
         </Match>
         <Match when={props.row.type === "part" ? props.row : undefined}>
           {(row) => <SessionPartView partRef={row().ref} message={props.message} />}
@@ -1917,34 +1922,31 @@ function UserMessage(props: { message: SessionMessageUser }) {
   )
 }
 
-function QueuedPrompts(props: {
-  messageIDs: string[]
-  message: (messageID: string) => SessionMessageInfo | undefined
-}) {
+function QueuedPromptDock(props: { prompts: { id: string; text: string }[] }) {
   const theme = useTheme("elevated")
   const shortcut = Keymap.useShortcut("command.palette.show")
-  const next = createMemo(() => {
-    const message = props.message(props.messageIDs[0] ?? "")
-    return message?.type === "user" ? message.text : undefined
-  })
+  const next = createMemo(() => props.prompts[0]?.text)
 
   return (
     <box
       border={["left"]}
       borderColor={theme.border.default}
       customBorderChars={SplitBorder.customBorderChars}
-      paddingTop={1}
-      paddingBottom={1}
       paddingLeft={2}
+      paddingRight={1}
       backgroundColor={theme.background.default}
-      gap={1}
+      flexDirection="row"
+      justifyContent="space-between"
+      gap={2}
     >
-      <text fg={theme.text.default}>{props.messageIDs.length} prompts queued</text>
-      <Show when={next()}>{(text) => <text fg={theme.text.subdued}>Next · {text()}</text>}</Show>
+      <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
+        <span style={{ fg: theme.text.default }}>{props.prompts.length} queued</span>
+        <Show when={next()}>{(text) => <> · Next · {text()}</>}</Show>
+      </text>
       <Show when={shortcut()}>
         {(key) => (
-          <text fg={theme.text.subdued}>
-            <span style={{ fg: theme.text.default }}>{key()}</span> view all pending work
+          <text fg={theme.text.subdued} wrapMode="none" flexShrink={0}>
+            <span style={{ fg: theme.text.default }}>{key()}</span> view all
           </text>
         )}
       </Show>

@@ -2,13 +2,13 @@ import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import {
   cacheReuseDrop,
-  collapseQueuedPrompts,
   messageBoundaryIDs,
+  removeQueuedPrompts,
   reduceSessionRows,
 } from "../../../src/routes/session/rows"
 import type { SessionRow } from "../../../src/routes/session/rows"
 
-test("collapses more than three queued prompts into one bounded row", () => {
+test("removes queued prompts from transcript rows", () => {
   const rows: SessionRow[] = [
     { type: "message" as const, messageID: "active" },
     { type: "message" as const, messageID: "queue-1" },
@@ -18,12 +18,11 @@ test("collapses more than three queued prompts into one bounded row", () => {
     { type: "message" as const, messageID: "queue-4" },
   ]
 
-  collapseQueuedPrompts(rows, ["queue-1", "queue-2", "queue-3", "queue-4"])
+  removeQueuedPrompts(rows, ["queue-1", "queue-2", "queue-3", "queue-4"])
 
   expect(rows).toEqual([
     { type: "message", messageID: "active" },
     { type: "message", messageID: "steer" },
-    { type: "queued-prompts", messageIDs: ["queue-1", "queue-2", "queue-3", "queue-4"] },
   ])
 })
 
