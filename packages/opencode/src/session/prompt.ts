@@ -1108,11 +1108,22 @@ const layer = Layer.effect(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
 
+          // Compare by wall-clock, not by raw id. Ids only sort chronologically
+          // when minted by Identifier.ascending(), which is not guaranteed for
+          // sessions brought in through `opencode import`; an unordered id here
+          // used to keep this test permanently false, so the loop never exited.
+          // The id remains the tiebreaker within a single millisecond.
+          const assistantFollowsUser =
+            !!lastAssistant &&
+            (lastUser.time.created !== lastAssistant.time.created
+              ? lastUser.time.created < lastAssistant.time.created
+              : lastUser.id < lastAssistant.id)
+
           if (
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            lastUser.id < lastAssistant.id
+            assistantFollowsUser
           ) {
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
