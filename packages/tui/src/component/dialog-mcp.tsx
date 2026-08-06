@@ -19,13 +19,21 @@ function statusError(status: McpServer["status"]) {
   return undefined
 }
 
-function Status(props: { enabled: boolean; loading: boolean }) {
+function Status(props: { status: McpServer["status"]; loading: boolean }) {
   const theme = useTheme("elevated")
-  if (props.loading) return <span style={{ fg: theme.text.subdued }}>⋯ Loading</span>
-  if (props.enabled) {
-    return <span style={{ fg: theme.text.feedback.success.default, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
+  if (props.loading || props.status.status === "pending") {
+    return <span style={{ fg: theme.text.subdued }}>Connecting …</span>
   }
-  return <span style={{ fg: theme.text.subdued }}>○ Disabled</span>
+  if (props.status.status === "connected") {
+    return <span style={{ fg: theme.text.feedback.success.default, attributes: TextAttributes.BOLD }}>Connected ✓</span>
+  }
+  if (props.status.status === "failed") {
+    return <span style={{ fg: theme.text.feedback.error.default }}>Failed !</span>
+  }
+  if (props.status.status === "needs_auth") {
+    return <span style={{ fg: theme.text.feedback.warning.default }}>Sign in required →</span>
+  }
+  return <span style={{ fg: theme.text.subdued }}>Disabled ○</span>
 }
 
 export function DialogMcp() {
@@ -56,14 +64,22 @@ export function DialogMcp() {
     return servers().map((server) => ({
       value: server.name,
       title: server.name,
-      description: server.status.status,
-      footer: <Status enabled={server.status.status === "connected"} loading={loadingMcp === server.name} />,
+      footer: <Status status={server.status} loading={loadingMcp === server.name} />,
     }))
   })
 
+  const focusedServer = createMemo(() => servers().find((server) => server.name === focused()))
+
+  const toggleTitle = createMemo(() => {
+    const status = focusedServer()?.status.status
+    if (status === "connected") return "disconnect"
+    if (status === "failed") return "retry"
+    if (status === "needs_auth") return "sign in"
+    return "connect"
+  })
+
   const focusedError = createMemo(() => {
-    const name = focused()
-    const server = servers().find((entry) => entry.name === name)
+    const server = focusedServer()
     return server ? statusError(server.status) : undefined
   })
 
@@ -100,7 +116,7 @@ export function DialogMcp() {
             onSelect={(option) => open(option.value as string)}
             actions={[
               {
-                title: "toggle",
+                title: toggleTitle(),
                 command: "dialog.mcp.toggle",
                 onTrigger: (option) => {
                   setFocused(option.value as string)
