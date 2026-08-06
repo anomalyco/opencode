@@ -7,7 +7,7 @@ import { compileRequest } from "../../src/route/client"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { it } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
+import { dynamicResponse, fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
 const Json = Schema.fromJsonString(Schema.Unknown)
@@ -251,6 +251,150 @@ describe("OpenAI-compatible Chat route", () => {
         type: "finish",
         reason: { normalized: "stop", raw: "stop" },
       })
+    }),
+  )
+
+  it.effect("accepts nullable usage and preserves provider fields", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              usageChunk({
+                prompt_tokens: null,
+                completion_tokens: null,
+                total_tokens: null,
+                prompt_tokens_details: { cached_tokens: null, vendor_cache_tokens: 3 },
+                completion_tokens_details: {
+                  reasoning_tokens: null,
+                  accepted_prediction_tokens: null,
+                  rejected_prediction_tokens: null,
+                },
+                cost: "0.001",
+              }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+        providerMetadata: {
+          openai: {
+            prompt_tokens: null,
+            completion_tokens: null,
+            total_tokens: null,
+            prompt_tokens_details: { cached_tokens: null, vendor_cache_tokens: 3 },
+            cost: "0.001",
+          },
+        },
+      })
+    }),
+  )
+
+  it.effect("assembles indexless parallel tool calls across sparse chunks", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "weather", description: "Get weather", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({
+                tool_calls: [
+                  { id: "call_paris", function: { name: "weather", arguments: '{"city":"' } },
+                  { index: null, id: "call_london", function: { name: "weather", arguments: '{"city":"' } },
+                ],
+              }),
+              deltaChunk({ tool_calls: [{ function: { arguments: 'London"}' } }] }),
+              deltaChunk({ tool_calls: [{ id: "call_paris", function: { arguments: 'Paris"}' } }] }),
+              deltaChunk({}, "tool_calls"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([
+        { id: "call_paris", name: "weather", input: { city: "Paris" } },
+        { id: "call_london", name: "weather", input: { city: "London" } },
+      ])
+    }),
+  )
+
+  it.effect("preserves compatible tool thought signatures for continuation", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({
+                tool_calls: [
+                  {
+                    id: "call_1",
+                    function: { name: "lookup", arguments: "{}" },
+                    extra_content: { google: { thought_signature: "signed" } },
+                  },
+                ],
+              }),
+              deltaChunk({}, "tool_calls"),
+            ),
+          ),
+        ),
+      )
+      const replay = yield* compileRequest(LLMRequest.update(request, { messages: [response.message] }))
+
+      expect(response.toolCalls[0]?.providerMetadata).toEqual({ openai: { thoughtSignature: "signed" } })
+      expect(replay.body.messages.at(-1)).toMatchObject({
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: { name: "lookup", arguments: "{}" },
+            extra_content: { google: { thought_signature: "signed" } },
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("treats an empty finish reason as terminal", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "")))),
+      )
+
+      expect(response.finishReason).toEqual({ normalized: "unknown", raw: "" })
+    }),
+  )
+
+  it.effect("rejects content after a terminal chunk", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: "{}" } }] }),
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.message).toContain("OpenAI Chat received content after the finish reason")
     }),
   )
 })
