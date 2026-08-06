@@ -307,7 +307,7 @@ describe("Config", () => {
     }),
   )
 
-  it.live("loads authenticated wellknown config at highest priority", () =>
+  it.live("loads authenticated wellknown config below project config", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -370,7 +370,7 @@ describe("Config", () => {
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
             const bus = yield* Bus.Service
-            expect(Config.latest(yield* config.entries(), "shell")).toBe("secret")
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("project")
             const updated = yield* bus
               .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
@@ -378,7 +378,7 @@ describe("Config", () => {
             key = "next"
             yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID })
             expect(yield* Fiber.join(updated)).toHaveLength(1)
-            expect(Config.latest(yield* config.entries(), "shell")).toBe("next")
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("project")
           }).pipe(
             Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
           )

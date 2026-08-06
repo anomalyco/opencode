@@ -690,7 +690,7 @@ function canonical<S extends Schema.Codec<unknown, unknown, never, never>>(schem
       Schema.decodeUnknownOption(
         schema,
         options,
-      )(value).pipe(Option.flatMap((decoded) => Schema.encodeUnknownOption(schema, options)(decoded))),
+      )(plain(value)).pipe(Option.flatMap((decoded) => Schema.encodeUnknownOption(schema, options)(decoded))),
     ),
   )
 }
