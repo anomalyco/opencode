@@ -4,8 +4,8 @@ import { WebSearch } from "@opencode-ai/schema/websearch"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "./bus"
-import { KV } from "./kv"
 import { State } from "./state"
+import { WebSearchPreference } from "./websearch-preference"
 
 export const ID = WebSearch.ID
 export type ID = WebSearch.ID
@@ -75,7 +75,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const kv = yield* KV.Service
+    const preference = yield* WebSearchPreference.Service
     const decodeResults = Schema.decodeUnknownEffect(Schema.Array(Result))
     const state = State.create<Data, Draft>({
       initial: () => ({ providers: new Map() }),
@@ -98,7 +98,7 @@ const layer = Layer.effect(
       const data = state.get()
       const configured = data.defaultProviderID ? data.providers.get(data.defaultProviderID) : undefined
       if (configured) return configured
-      const stored = yield* kv.get("websearch:provider")
+      const stored = yield* preference.get()
       if (stored === false) return yield* new DisabledError()
       if (typeof stored !== "string") return
       return data.providers.get(ID.make(stored))
@@ -140,5 +140,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, KV.node],
+  deps: [Bus.node, WebSearchPreference.node],
 })

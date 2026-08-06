@@ -39,6 +39,7 @@ import { Skill } from "../skill"
 import { ReadToolFileSystem } from "../tool/read-filesystem"
 import { Tool } from "../tool"
 import { WebSearch } from "../websearch"
+import { WebSearchPreference } from "../websearch-preference"
 import { WellKnown } from "../wellknown"
 import { PluginInternal } from "./internal"
 import { PluginRuntime } from "./runtime"
@@ -345,6 +346,7 @@ export const node = makeLocationNode({
     Tool.node,
     Watcher.node,
     WebSearch.node,
+    WebSearchPreference.node,
     WellKnown.node,
   ],
 })
