@@ -1,8 +1,8 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Sprawdź aktualizacje...",
   "desktop.menu.installCli": "Zainstaluj CLI...",
-  "desktop.menu.reloadWebview": "Przeładuj Webview",
-  "desktop.menu.restart": "Restartuj",
+  "desktop.menu.reloadWebview": "Załaduj ponownie WebView",
+  "desktop.menu.restart": "Uruchom ponownie",
 
   "desktop.dialog.chooseFolder": "Wybierz folder",
   "desktop.dialog.chooseFile": "Wybierz plik",
@@ -20,9 +20,9 @@ export const dict = {
   "desktop.updater.installFailed.title": "Aktualizacja nie powiodła się",
   "desktop.updater.installFailed.message": "Nie udało się zainstalować aktualizacji",
 
-  "desktop.cli.installed.title": "CLI zainstalowane",
+  "desktop.cli.installed.title": "Zainstalowano interfejs CLI",
   "desktop.cli.installed.message":
-    "CLI zainstalowane w {{path}}\n\nUruchom ponownie terminal, aby użyć polecenia 'opencode'.",
+    "Interfejs CLI zainstalowano w {{path}}\n\nUruchom ponownie terminal, aby użyć polecenia „opencode”.",
   "desktop.cli.failed.title": "Instalacja nie powiodła się",
   "desktop.cli.failed.message": "Nie udało się zainstalować CLI: {{error}}",
 }

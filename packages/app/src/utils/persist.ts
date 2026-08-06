@@ -568,8 +568,9 @@ export function removePersisted(
 export function persisted<T>(
   target: string | PersistTarget,
   store: [Store<T>, SetStoreFunction<T>],
+  platformOverride?: Platform,
 ): PersistedWithReady<T> {
-  const platform = usePlatform()
+  const platform = platformOverride ?? usePlatform()
   const config = resolveTarget(typeof target === "string" ? { key: target } : target, platform)
 
   const defaults = snapshot(store[0])

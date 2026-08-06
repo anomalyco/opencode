@@ -1,4 +1,15 @@
-import { createEffect, createMemo, createResource, createSignal, Match, onMount, Show, Switch, untrack } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  Match,
+  on,
+  onMount,
+  Show,
+  Switch,
+  untrack,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -42,8 +53,11 @@ export type TitlebarUpdate = {
 }
 
 export function useTitlebarRightMount() {
+  const language = useLanguage()
   const [mount, setMount] = createSignal<HTMLElement | null>(null)
-  onMount(() => setMount(document.getElementById("opencode-titlebar-right")))
+  const sync = () => setMount(document.getElementById("opencode-titlebar-right"))
+  onMount(sync)
+  createEffect(on(language.direction, sync, { defer: true }))
   return mount
 }
 
@@ -113,9 +127,9 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
     return {
       visible: version !== undefined || installing,
       installing,
-      label: "Update",
+      label: language.t("titlebar.update"),
       ariaLabel: language.t("toast.update.action.installRestart"),
-      title: version ? `Update ${version}` : undefined,
+      title: version ? language.t("titlebar.updateVersion", { version }) : undefined,
       onInstall: () => props.update?.install(),
     }
   })
@@ -169,7 +183,8 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
         "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
         width: windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
-        "align-self": windows() ? "flex-start" : undefined,
+        // Native Windows caption controls remain on the physical right in both writing directions.
+        "margin-right": windows() ? "auto" : undefined,
       }}
       data-tauri-drag-region
     >
@@ -515,7 +530,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   <div
                     class="flex items-center shrink-0"
                     classList={{
-                      "-translate-x-[36px]": layout.sidebar.opened() && !!params.dir,
+                      "ltr:-translate-x-[36px] rtl:translate-x-[36px]": layout.sidebar.opened() && !!params.dir,
                       "duration-180 ease-out": !layout.sidebar.opened(),
                       "duration-180 ease-in": layout.sidebar.opened(),
                     }}
