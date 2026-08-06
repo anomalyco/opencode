@@ -1437,6 +1437,73 @@ describe("session.compaction.process", () => {
     { git: true },
   )
 
+  itCompaction.instance(
+    "serializes repeated compaction history as one user message",
+    () => {
+      const stub = llm()
+      let captured: LLM.StreamInput["messages"] = []
+      stub.push(
+        reply("summary two", (input) => {
+          captured = input.messages
+        }),
+      )
+
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const test = yield* TestInstance
+        const session = yield* ssn.create({})
+        const turn = yield* createUserMessage(session.id, "original request")
+        const kept = yield* createAssistantMessage(session.id, turn.id, test.directory)
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: kept.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: "read-call",
+          tool: "read",
+          state: {
+            status: "completed",
+            input: { filePath: "src/index.ts" },
+            output: "file contents",
+            title: "src/index.ts",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+
+        const previous = yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          model: ref,
+          sessionID: session.id,
+          agent: "build",
+          time: { created: Date.now() },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: previous.id,
+          sessionID: session.id,
+          type: "compaction",
+          auto: false,
+          tail_start_id: kept.id,
+        })
+        yield* createSummaryAssistantMessage(session.id, previous.id, test.directory, "summary one")
+        yield* createCompactionMarker(session.id)
+
+        const msgs = MessageV2.filterCompacted(yield* MessageV2.stream(session.id))
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        expect(captured).toHaveLength(1)
+        expect(captured[0]?.role).toBe("user")
+        expect(JSON.stringify(captured)).toContain("read-call")
+        expect(JSON.stringify(captured)).toContain("file contents")
+      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 0 }) }))
+    },
+    { git: true },
+  )
+
   itCompaction.instance("keeps recent pre-compaction turns across repeated compactions", () => {
     const stub = llm()
     stub.push(reply("summary one"))

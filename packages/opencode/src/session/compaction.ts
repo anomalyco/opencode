@@ -385,19 +385,35 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         model,
       })
+      // A retained split-turn tail can start with an assistant tool call, which Gemini rejects without a preceding turn.
       const result = yield* processor.process({
         user: userMessage,
         agent,
         sessionID: input.sessionID,
         tools: {},
         system: [],
-        messages: [
-          ...modelMessages,
-          {
-            role: "user",
-            content: [{ type: "text", text: nextPrompt }],
-          },
-        ],
+        messages:
+          modelMessages[0]?.role === "assistant"
+            ? [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "text",
+                      text: ["<conversation>", JSON.stringify(modelMessages), "</conversation>", nextPrompt].join(
+                        "\n\n",
+                      ),
+                    },
+                  ],
+                },
+              ]
+            : [
+                ...modelMessages,
+                {
+                  role: "user",
+                  content: [{ type: "text", text: nextPrompt }],
+                },
+              ],
         model,
       })
 
