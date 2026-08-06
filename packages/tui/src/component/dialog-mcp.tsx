@@ -6,7 +6,7 @@ import { pipe, sortBy } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useTheme } from "../context/theme"
-import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
+import { TextAttributes, type RGBA, type ScrollBoxRenderable } from "@opentui/core"
 import type { McpServer } from "@opencode-ai/client"
 import { useClipboard } from "../context/clipboard"
 import { useToast } from "../ui/toast"
@@ -19,21 +19,26 @@ function statusError(status: McpServer["status"]) {
   return undefined
 }
 
-function Status(props: { status: McpServer["status"]; loading: boolean }) {
+function Status(props: { status: McpServer["status"]; loading: boolean; active: boolean }) {
   const theme = useTheme("elevated")
+  const color = (fallback: RGBA) => (props.active ? theme.text.action.primary.focused : fallback)
   if (props.loading || props.status.status === "pending") {
-    return <span style={{ fg: theme.text.subdued }}>Connecting …</span>
+    return <span style={{ fg: color(theme.text.subdued) }}>Connecting …</span>
   }
   if (props.status.status === "connected") {
-    return <span style={{ fg: theme.text.feedback.success.default, attributes: TextAttributes.BOLD }}>Connected ✓</span>
+    return (
+      <span style={{ fg: color(theme.text.feedback.success.default), attributes: TextAttributes.BOLD }}>
+        Connected ✓
+      </span>
+    )
   }
   if (props.status.status === "failed") {
-    return <span style={{ fg: theme.text.feedback.error.default }}>Failed !</span>
+    return <span style={{ fg: color(theme.text.feedback.error.default) }}>Failed !</span>
   }
   if (props.status.status === "needs_auth") {
-    return <span style={{ fg: theme.text.feedback.warning.default }}>Sign in required →</span>
+    return <span style={{ fg: color(theme.text.feedback.warning.default) }}>Sign in required →</span>
   }
-  return <span style={{ fg: theme.text.subdued }}>Disabled ○</span>
+  return <span style={{ fg: color(theme.text.subdued) }}>Disabled ○</span>
 }
 
 export function DialogMcp() {
@@ -64,7 +69,7 @@ export function DialogMcp() {
     return servers().map((server) => ({
       value: server.name,
       title: server.name,
-      footer: <Status status={server.status} loading={loadingMcp === server.name} />,
+      footer: <Status status={server.status} loading={loadingMcp === server.name} active={focused() === server.name} />,
     }))
   })
 
