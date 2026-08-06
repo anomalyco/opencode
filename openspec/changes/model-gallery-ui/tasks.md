@@ -164,7 +164,32 @@
       defects deliberately fixed there.
       27 tests in `test/local/model-gallery-ranking.test.ts`; `bun run
       typecheck` clean; `bun test test/local/` 236 pass.
-- [ ] 5.7 Expose typed local HTTP API endpoints shared by app and TUI.
+- [x] 5.7 Expose typed local HTTP API endpoints shared by app and TUI.
+      New `gallery` HttpApi group (`groups/gallery.ts`, `handlers/gallery.ts`),
+      registered alongside the existing `local` group so the app and TUI both
+      reach it through the generated SDK. `GET /gallery/hosts` and
+      `POST /gallery/evaluate` are the whole surface: neither frontend gets a
+      private path into the catalog, because a second entry point would let the
+      two drift into showing different verdicts for the same model on the same
+      host — exactly the confusion this epic exists to remove.
+      Ranking and classification are computed server-side and shipped as data.
+      They depend on llama-skein fit calls a browser cannot make, and
+      re-deriving them per frontend would guarantee divergence. The score
+      breakdown is therefore part of the wire contract, not a derived nicety:
+      5.5's explanation is only useful if every client shows the same one.
+      Two shape decisions the tests pin. `busy` is optional so "unknown" stays
+      representable and distinct from idle — an unreachable host must never
+      serialize as `busy: false`, or a client reads it as free and dispatches
+      into a hole. And incompatible entries can be requested via
+      `includeIncompatible`, carrying their reasons, so the UI can answer "why
+      isn't this offered here" instead of silently omitting the host and
+      leaving the user to guess.
+      `src/local/model-gallery/catalog.ts` resolves candidate ids
+      independently and skips failures: one renamed or deleted repository in a
+      list of twenty is normal, not a reason to show nothing.
+      9 tests in `test/local/model-gallery-api.test.ts`; `bun run typecheck`
+      clean; `bun test test/local/` 245 pass; the composed API registers the
+      group (19 total).
 
 ## 6. Web and desktop experience
 
