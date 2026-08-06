@@ -49,6 +49,7 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "جارٍ التعليق على ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "أضف تعليقًا",
+  "ui.lineComment.contextPlaceholder": "أضف سياقًا لهذا التغيير",
   "ui.lineComment.submit": "تعليق",
   "ui.lineComment.cancel": "إلغاء",
 
@@ -130,6 +131,25 @@ export const dict = {
 
   "ui.messageNav.newMessage": "رسالة جديدة",
 
+  "ui.promptInput.noMatchingItems": "لا توجد عناصر مطابقة",
+  "ui.promptInput.commands": "الأوامر",
+  "ui.promptInput.dropFiles": "أفلت الملفات لإرفاقها",
+  "ui.promptInput.removeAttachment": "إزالة المرفق",
+  "ui.promptInput.label": "الموجّه",
+  "ui.promptInput.placeholder.shell": "أدخل أمر shell...",
+  "ui.promptInput.placeholder.normal": "اسأل عن أي شيء، {{slash}} للأوامر، {{at}} للسياق...",
+  "ui.promptInput.add": "إضافة صور وملفات",
+  "ui.promptInput.attachments": "الصور والملفات",
+  "ui.promptInput.context": "السياق",
+  "ui.promptInput.shell": "أمر shell",
+  "ui.promptInput.chooseAgent": "اختيار وكيل",
+  "ui.promptInput.chooseModel": "اختيار نموذج",
+  "ui.promptInput.chooseVariant": "اختيار متغير النموذج",
+  "ui.promptInput.send": "إرسال",
+  "ui.promptInput.stop": "إيقاف",
+
+  "ui.tabs.close": "إغلاق علامة التبويب",
+
   "ui.textField.copyToClipboard": "نسخ إلى الحافظة",
   "ui.textField.copyLink": "نسخ الرابط",
   "ui.textField.copied": "تم النسخ",
@@ -144,11 +164,13 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "جلب الويب",
   "ui.tool.websearch": "بحث الويب",
+  "ui.tool.websearch.provider": "{{provider}} بحث الويب",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "تطبيق رقعة",
   "ui.tool.todos": "المهام",
   "ui.tool.todos.read": "قراءة المهام",
   "ui.tool.questions": "أسئلة",
+  "ui.tool.questions.numbered": "أسئلة {{number}}",
   "ui.tool.agent": "وكيل {{type}}",
   "ui.tool.agent.default": "وكيل",
 
@@ -158,6 +180,8 @@ export const dict = {
   "ui.common.question.other": "أسئلة",
 
   "ui.common.add": "إضافة",
+  "ui.common.clear": "مسح",
+  "ui.common.file": "ملف",
   "ui.common.back": "رجوع",
   "ui.common.cancel": "إلغاء",
   "ui.common.confirm": "تأكيد",

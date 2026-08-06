@@ -31,6 +31,7 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "",
   "ui.lineComment.editorLabel.suffix": "에 댓글 작성 중",
   "ui.lineComment.placeholder": "댓글 추가",
+  "ui.lineComment.contextPlaceholder": "이 변경 사항에 대한 컨텍스트 추가",
   "ui.lineComment.submit": "댓글 달기",
 
   "ui.sessionTurn.steps.show": "단계 표시",
@@ -90,6 +91,25 @@ export const dict = {
 
   "ui.messageNav.newMessage": "새 메시지",
 
+  "ui.promptInput.noMatchingItems": "일치하는 항목 없음",
+  "ui.promptInput.commands": "명령어",
+  "ui.promptInput.dropFiles": "첨부할 파일을 놓으세요",
+  "ui.promptInput.removeAttachment": "첨부 파일 제거",
+  "ui.promptInput.label": "프롬프트",
+  "ui.promptInput.placeholder.shell": "셸 명령어 입력...",
+  "ui.promptInput.placeholder.normal": "무엇이든 물어보세요. {{slash}} 명령어, {{at}} 컨텍스트...",
+  "ui.promptInput.add": "이미지 및 파일 추가",
+  "ui.promptInput.attachments": "이미지 및 파일",
+  "ui.promptInput.context": "컨텍스트",
+  "ui.promptInput.shell": "셸 명령",
+  "ui.promptInput.chooseAgent": "에이전트 선택",
+  "ui.promptInput.chooseModel": "모델 선택",
+  "ui.promptInput.chooseVariant": "모델 변형 선택",
+  "ui.promptInput.send": "전송",
+  "ui.promptInput.stop": "중지",
+
+  "ui.tabs.close": "탭 닫기",
+
   "ui.textField.copyToClipboard": "클립보드에 복사",
   "ui.textField.copyLink": "링크 복사",
   "ui.textField.copied": "복사됨",
@@ -104,11 +124,13 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "웹 가져오기",
   "ui.tool.websearch": "웹 검색",
+  "ui.tool.websearch.provider": "{{provider}} 웹 검색",
   "ui.tool.shell": "셸",
   "ui.tool.patch": "패치",
   "ui.tool.todos": "할 일",
   "ui.tool.todos.read": "할 일 읽기",
   "ui.tool.questions": "질문",
+  "ui.tool.questions.numbered": "질문 {{number}}",
   "ui.tool.agent": "{{type}} 에이전트",
   "ui.tool.agent.default": "에이전트",
 
@@ -118,6 +140,8 @@ export const dict = {
   "ui.common.question.other": "질문",
 
   "ui.common.add": "추가",
+  "ui.common.clear": "지우기",
+  "ui.common.file": "파일",
   "ui.common.back": "뒤로",
   "ui.common.cancel": "취소",
   "ui.common.confirm": "확인",
