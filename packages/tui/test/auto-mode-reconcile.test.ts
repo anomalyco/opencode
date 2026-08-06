@@ -89,16 +89,16 @@ describe("reconcileQueue", () => {
   })
 
   test("only Auto drives the backlog", () => {
-    expect(modeSpec("auto").queue).toBe(true)
+    expect(modeSpec("auto").auto_queue).toBe(true)
     for (const mode of ["manual", "skip-ask", "continue"] as const) {
-      expect(modeSpec(mode).queue).toBe(false)
+      expect(modeSpec(mode).auto_queue).toBe(false)
     }
   })
 
   test("the mode a config maps to round-trips through its spec", () => {
     for (const mode of ["manual", "skip-ask", "continue", "auto"] as const) {
       const spec = modeSpec(mode)
-      expect(currentAutoMode(spec.auto_mode, spec.auto_continue)).toBe(mode)
+      expect(currentAutoMode(spec.auto_mode, spec.auto_continue, spec.auto_queue)).toBe(mode)
     }
   })
 })

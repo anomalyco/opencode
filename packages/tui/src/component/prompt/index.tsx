@@ -47,6 +47,7 @@ import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v
 import { parseLoopArgs } from "@opencode-ai/sdk/v2"
 import { DialogLoopList } from "../dialog-loop-list"
 import { DialogAutoMode } from "../dialog-auto-mode"
+import { currentAutoMode } from "../../util/auto-mode"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
@@ -1676,11 +1677,9 @@ function isRunControlInput(input: string): boolean {
                           // indicator opens the mode picker, which names every
                           // state instead of making you cycle blind.
                           //
-                          // Opened on mouse UP, not down: the dialog backdrop
-                          // dismisses on mouse-up, so opening on the down event
-                          // means the same physical click opens the dialog and
-                          // then immediately closes it — it just flashes.
-                          onMouseUp={() => dialog.replace(() => <DialogAutoMode />)}
+                          // NOTE: not wired to a mouse handler right now — see
+                          // the revert in the accompanying commit. Use /mode,
+                          // ctrl+x o, or the palette.
                           fg={fadeColor(
                             (sync.data.config.auto_mode ?? false) || (sync.data.config.auto_continue ?? false)
                               ? theme.success
@@ -1691,7 +1690,8 @@ function isRunControlInput(input: string): boolean {
                           {(() => {
                             const skip = sync.data.config.auto_mode ?? false
                             const cont = sync.data.config.auto_continue ?? false
-                            const dot = skip || cont ? "●" : "○"
+                            const queue = sync.data.config.auto_queue ?? false
+                            const dot = skip || cont || queue ? "●" : "○"
                             // Name the state exactly: "Auto" only when both are
                             // on, "Manual" when neither, and a single active
                             // flag names itself — the indicator must never
@@ -1700,8 +1700,17 @@ function isRunControlInput(input: string): boolean {
                             // starts one now, and reusing the word for the
                             // auto-continue switch made the two read as the
                             // same feature.
+                            // One shared derivation with the picker: the pill
+                            // and the menu must never name different rungs.
+                            const rung = currentAutoMode(skip, cont, queue)
                             const label =
-                              skip && cont ? "Auto" : !skip && !cont ? "Manual" : skip ? "Skip-ask" : "Continue"
+                              rung === "auto"
+                                ? "Auto"
+                                : rung === "continue"
+                                  ? "Continue"
+                                  : rung === "skip-ask"
+                                    ? "Skip-ask"
+                                    : "Manual"
                             // A live loop in this session is the other half of
                             // the story: show where it is, and for a queue run
                             // which change and gate it is working.
@@ -1711,11 +1720,8 @@ function isRunControlInput(input: string): boolean {
                         <Show when={activeLoop()}>
                           {(live) => (
                             <text
-                              // Clicking the live loop position opens the loops
-                              // dialog, where it can be paused or cancelled.
-                              // Mouse UP for the same reason as the mode
-                              // indicator above.
-                              onMouseUp={() => dialog.replace(() => <DialogLoopList />)}
+                              // NOTE: not clickable right now — see the revert
+                              // in the accompanying commit. Use /loop.
                               fg={fadeColor(theme.success, modelMetaAlpha())}
                             >
                               {live().currentChange

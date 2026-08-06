@@ -21829,6 +21829,9 @@
           "auto_continue": {
             "type": "boolean"
           },
+          "auto_queue": {
+            "type": "boolean"
+          },
           "plugin": {
             "type": "array",
             "items": {

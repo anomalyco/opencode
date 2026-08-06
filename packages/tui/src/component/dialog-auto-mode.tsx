@@ -17,7 +17,11 @@ export function DialogAutoMode() {
   const toast = useToast()
 
   const active = createMemo(() =>
-    currentAutoMode(sync.data.config.auto_mode ?? false, sync.data.config.auto_continue ?? false),
+    currentAutoMode(
+      sync.data.config.auto_mode ?? false,
+      sync.data.config.auto_continue ?? false,
+      sync.data.config.auto_queue ?? false,
+    ),
   )
 
   const options = createMemo(() =>
@@ -48,7 +52,7 @@ export function DialogAutoMode() {
         // decided by the checkboxes on disk, which is what makes the run
         // trustworthy. Leaving Auto, or any mode that starts nothing, is
         // immediate.
-        if (!modeSpec(value).queue) {
+        if (!modeSpec(value).auto_queue) {
           dialog.clear()
           await applyAutoMode({ sdk, sync, toast }, value)
           return

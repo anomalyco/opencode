@@ -994,8 +994,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "System",
         run: async () => {
           dialog.clear()
-          const next = !(sync.data.config.auto_mode ?? false)
-          await applyAutoMode({ sdk, sync, toast }, currentAutoMode(next, sync.data.config.auto_continue ?? false))
+          // Stepping a single switch has to land on a real rung, so this moves
+          // between Manual and Skip-ask rather than producing a combination the
+          // ladder does not contain.
+          const on = (sync.data.config.auto_mode ?? false) && !(sync.data.config.auto_continue ?? false)
+          await applyAutoMode({ sdk, sync, toast }, on ? "manual" : "skip-ask")
         },
       },
       {
@@ -1029,7 +1032,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.clear()
           const order: ModeValue[] = ["manual", "skip-ask", "continue", "auto"]
           const at = order.indexOf(
-            currentAutoMode(sync.data.config.auto_mode ?? false, sync.data.config.auto_continue ?? false),
+            currentAutoMode(
+              sync.data.config.auto_mode ?? false,
+              sync.data.config.auto_continue ?? false,
+              sync.data.config.auto_queue ?? false,
+            ),
           )
           // Same path as the picker, so cycling into Auto starts the backlog
           // run exactly as selecting Auto does.
@@ -1045,8 +1052,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "System",
         run: async () => {
           dialog.clear()
-          const next = !(sync.data.config.auto_continue ?? false)
-          await applyAutoMode({ sdk, sync, toast }, currentAutoMode(sync.data.config.auto_mode ?? false, next))
+          const on = sync.data.config.auto_continue ?? false
+          await applyAutoMode({ sdk, sync, toast }, on ? "skip-ask" : "continue")
         },
       },
     ].map((command) => ({

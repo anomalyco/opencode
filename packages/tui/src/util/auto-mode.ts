@@ -13,49 +13,62 @@ export interface ModeSpec {
   footer: string
   auto_mode: boolean
   auto_continue: boolean
-  /** Auto is the only mode that drives the openspec backlog on its own. */
-  queue: boolean
+  /** Auto is the only rung that takes work from the backlog on its own. */
+  auto_queue: boolean
 }
 
+// A LADDER, not a matrix. Each rung is strictly more autonomous than the one
+// above it, and every rung includes everything below it — so there is no
+// combination to reason about, only "how far up".
+//
+// The previous shape was two independent switches, which produced a state that
+// could not work: keep going after a turn, but still stop to ask permission.
+// Unattended, that parks on the first prompt with nobody there to answer. It
+// is gone: continuing implies not asking.
 export const MODES: ModeSpec[] = [
   {
     value: "manual",
-    title: "Manual — you are in the loop",
-    footer: "Asks before risky tools, and stops at the end of every turn.",
+    title: "Manual — you drive",
+    footer: "Asks before risky tools, and stops after every turn.",
     auto_mode: false,
     auto_continue: false,
-    queue: false,
+    auto_queue: false,
   },
   {
     value: "skip-ask",
-    title: "Skip-ask — stops asking, still stops working",
-    footer: "Approves what would have prompted. Still ends the turn and waits for you.",
+    title: "Skip-ask — no prompts, still stops",
+    footer: "Approves what would have asked. Still stops after every turn, so you say what is next.",
     auto_mode: true,
     auto_continue: false,
-    queue: false,
+    auto_queue: false,
   },
   {
     value: "continue",
-    title: "Continue — keeps going, still asks",
-    footer: "Keeps working on the prompt you gave, but prompts before risky tools.",
-    auto_mode: false,
+    title: "Continue — keeps working on your prompt",
+    footer: "No prompts, and keeps going on what you asked for until it is done. Does not touch the backlog.",
+    auto_mode: true,
     auto_continue: true,
-    queue: false,
+    auto_queue: false,
   },
   {
     value: "auto",
     title: "Auto — works the backlog unattended",
-    footer: "Neither asks nor stops: works openspec changes one by one. Never pushes; deny rules still hold.",
+    footer: "No prompts, never stops: takes the next openspec change itself. Never pushes; deny rules still hold.",
     auto_mode: true,
     auto_continue: true,
-    queue: true,
+    auto_queue: true,
   },
 ]
 
-export function currentAutoMode(auto_mode: boolean, auto_continue: boolean): ModeValue {
-  if (auto_mode && auto_continue) return "auto"
-  if (auto_mode) return "skip-ask"
+/**
+ * Reads the ladder rung out of config. Tolerates the off-ladder combinations an
+ * older config or a hand edit can contain by rounding to the nearest rung — the
+ * indicator must always name something real.
+ */
+export function currentAutoMode(auto_mode: boolean, auto_continue: boolean, auto_queue = false): ModeValue {
+  if (auto_queue) return "auto"
   if (auto_continue) return "continue"
+  if (auto_mode) return "skip-ask"
   return "manual"
 }
 
@@ -86,7 +99,7 @@ export async function reconcileQueue(input: {
   cancel: (loopID: string) => Promise<void>
 }): Promise<{ started?: Loop; stopped: number }> {
   const live = liveQueueRuns(await input.list())
-  if (modeSpec(input.mode).queue) {
+  if (modeSpec(input.mode).auto_queue) {
     // Already working the backlog — selecting Auto again must not stack a
     // second run over the same working tree.
     if (live.length > 0) return { stopped: 0 }

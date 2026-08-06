@@ -1990,6 +1990,7 @@ export type Config = {
   snapshot?: boolean
   auto_mode?: boolean
   auto_continue?: boolean
+  auto_queue?: boolean
   plugin?: Array<
     | string
     | [

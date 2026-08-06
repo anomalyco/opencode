@@ -21,7 +21,7 @@ export async function applyAutoMode(deps: Deps, value: ModeValue, guidance?: str
 
   try {
     await sdk.client.global.config.update(
-      { config: { auto_mode: mode.auto_mode, auto_continue: mode.auto_continue } },
+      { config: { auto_mode: mode.auto_mode, auto_continue: mode.auto_continue, auto_queue: mode.auto_queue } },
       { throwOnError: true },
     )
     // Read back through the SAME endpoint the rest of the app reads
