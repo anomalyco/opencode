@@ -605,16 +605,18 @@ function OAuthView(props: {
         )}
       </Show>
       <text fg={theme.text.subdued}>{props.message}</text>
-      <Show when={props.open}>
-        <text fg={theme.text.default}>
-          o <span style={{ fg: theme.text.subdued }}>open</span>
-        </text>
-      </Show>
-      <Show when={props.copy}>
-        <text fg={theme.text.default}>
-          c <span style={{ fg: theme.text.subdued }}>copy</span>
-        </text>
-      </Show>
+      <box flexDirection="row" gap={2}>
+        <Show when={props.open}>
+          <text fg={theme.text.default}>
+            o <span style={{ fg: theme.text.subdued }}>open</span>
+          </text>
+        </Show>
+        <Show when={props.copy}>
+          <text fg={theme.text.default}>
+            c <span style={{ fg: theme.text.subdued }}>copy</span>
+          </text>
+        </Show>
+      </box>
     </box>
   )
 }
