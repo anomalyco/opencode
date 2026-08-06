@@ -73,36 +73,42 @@ describe("repo personas", () => {
 })
 
 // `write: deny` and `edit: deny` do not stop an agent that can run `bash`, and
-// this is not hypothetical: on the first live run the reviewer announced it
-// could not write its review "due to file-writing restrictions" and then wrote
-// it anyway with a shell redirect, dirtying the tree the commit gate checks.
-describe("read-only personas cannot mutate through bash either", () => {
-  const readOnly = ["reviewer", "persona-auditor", "researcher"]
-
-  test("inspection commands are still allowed", () => {
-    for (const name of readOnly) {
+// this is not hypothetical: on two live runs the reviewer announced it could not
+// write its review "due to file-writing restrictions" and then wrote it anyway,
+// with `cat > .skein/review-reviewer.md << EOF`.
+//
+// A prefix allowlist does not fix that. `cat*` matches `cat > f`, and
+// `git diff*` matches `git diff HEAD > f` — any permitted prefix plus a redirect
+// is a write. There is no pattern set over shell strings that makes a shell
+// read-only, so the personas that DECIDE things do not get one.
+describe("gate personas have no shell to mutate through", () => {
+  test("reviewer and persona-auditor are denied bash outright", () => {
+    for (const name of ["reviewer", "persona-auditor"]) {
       const rules = Permission.fromConfig(loaded[name].permission ?? {})
-      for (const command of ["git diff HEAD", "git status --porcelain", "rg foo", "cat x.ts"]) {
-        expect(Permission.evaluate("bash", command, rules).action, `${name}: ${command}`).toBe("allow")
+      for (const command of ["git diff HEAD", "cat x > y", "echo hi > review.md", "rm -rf x"]) {
+        expect(evaluate(rules, "bash"), `${name} bash`).toBe("deny")
+        expect(Permission.evaluate("bash", command, rules).action, `${name}: ${command}`).toBe("deny")
+      }
+      expect(evaluate(rules, "write"), `${name} write`).toBe("deny")
+      expect(evaluate(rules, "edit"), `${name} edit`).toBe("deny")
+    }
+  })
+
+  // They still have to be able to READ, or the guarantee is worthless because
+  // the review is worthless.
+  test("they can still read the code they judge", () => {
+    for (const name of ["reviewer", "persona-auditor"]) {
+      const rules = Permission.fromConfig(loaded[name].permission ?? {})
+      for (const permission of ["read", "grep", "glob"]) {
+        expect(evaluate(rules, permission), `${name} ${permission}`).not.toBe("deny")
       }
     }
   })
 
-  test("anything that writes is denied", () => {
-    for (const name of readOnly) {
-      const rules = Permission.fromConfig(loaded[name].permission ?? {})
-      for (const command of [
-        "echo hi > review.md",
-        "printf x >> notes.txt",
-        "mv a b",
-        "rm -rf x",
-        "sed -i '' s/a/b/ x.ts",
-        "git add -A",
-        "git commit -m x",
-        "tee out.txt",
-      ]) {
-        expect(Permission.evaluate("bash", command, rules).action, `${name}: ${command}`).toBe("deny")
-      }
-    }
+  // researcher is advisory — it never decides whether work ships, so a shell is
+  // worth more than the guarantee. It is deliberately not in the list above.
+  test("researcher keeps its shell", () => {
+    const rules = Permission.fromConfig(loaded["researcher"].permission ?? {})
+    expect(evaluate(rules, "bash")).toBe("allow")
   })
 })

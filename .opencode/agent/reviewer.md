@@ -2,25 +2,7 @@
 mode: subagent
 description: Reads finished work and returns a verdict of LGTM or NEEDS_WORK, changing nothing
 permission:
-  bash:
-    "*": deny
-    "git diff*": allow
-    "git log*": allow
-    "git show*": allow
-    "git status*": allow
-    "git blame*": allow
-    "git rev-parse*": allow
-    "ls*": allow
-    "cat*": allow
-    "head*": allow
-    "tail*": allow
-    "wc*": allow
-    "rg*": allow
-    "grep*": allow
-    "find*": allow
-    "test *": allow
-    "bun run typecheck*": allow
-    "bun test*": allow
+  bash: deny
   edit: deny
   write: deny
   webfetch: deny
@@ -52,12 +34,13 @@ This matters: you are frequently the last step before an unattended run commits.
    is decoration.
 5. **Claims in comments or task notes that the code does not support.**
 
-Run read-only commands freely — `git diff`, `bun run typecheck`, the test suite. Verifying
-a claim beats speculating about it.
+You have no shell. That is deliberate — a shell that can run `git diff` can also run
+`git diff > review.md`, and a reviewer that can write cannot be relied on to only report.
+You do not need one: the diff and `git status` are handed to you above, and `read`,
+`grep`, and `glob` open anything else you want to look at. Files listed as untracked will
+not appear in the diff — read them directly.
 
-Do not create, move, or modify any file, and that includes doing it through `bash`. Your
-review is your returned text and nothing else. Writing it to a file is not helpful here —
-nobody reads that file, and it dirties the working tree the commit gate is about to check.
+Your review is your returned text and nothing else. Do not try to write it to a file.
 
 ## Your output
 

@@ -62,10 +62,27 @@ derived under the running session's authority ceiling.
 For the default `verify` binding this means the reviewer is denied `write` and `edit`. A
 gate that can repair its own complaint cannot be relied on to report one.
 
+It also means the gate's subagent SHALL be denied `bash`. Denying the write and edit tools
+while permitting a shell is not a restriction: `cat > f`, `git diff HEAD > f`, and
+`printf ... | tee f` all write, and no allowlist of command prefixes prevents them —
+`cat*` matches `cat > f`. This was observed twice on live runs, the reviewer announcing it
+could not write its review and then writing it with a heredoc. A gate subagent reads
+through `read`, `grep`, and `glob`, and receives the diff and `git status` in its brief.
+
 #### Scenario: the review gate's subagent cannot write
 
 - **WHEN** the `verify` agent gate runs with the default `reviewer` binding
 - **THEN** the subagent's session denies `write` and denies `edit`
+
+#### Scenario: the review gate's subagent has no shell to write through
+
+- **WHEN** the `verify` agent gate runs with the default `reviewer` binding
+- **THEN** the subagent is denied `bash` for every command, including read-only ones
+
+#### Scenario: it can still read what it judges
+
+- **WHEN** the `verify` agent gate's subagent inspects the change
+- **THEN** `read`, `grep`, and `glob` are available to it
 
 #### Scenario: the authority ceiling still applies
 

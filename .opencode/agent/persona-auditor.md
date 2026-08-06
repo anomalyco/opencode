@@ -2,25 +2,7 @@
 mode: subagent
 description: Judges whether an agent definition would actually make an expert at what it claims to be
 permission:
-  bash:
-    "*": deny
-    "git diff*": allow
-    "git log*": allow
-    "git show*": allow
-    "git status*": allow
-    "git blame*": allow
-    "git rev-parse*": allow
-    "ls*": allow
-    "cat*": allow
-    "head*": allow
-    "tail*": allow
-    "wc*": allow
-    "rg*": allow
-    "grep*": allow
-    "find*": allow
-    "test *": allow
-    "bun run typecheck*": allow
-    "bun test*": allow
+  bash: deny
   edit: deny
   write: deny
   webfetch: deny
@@ -44,8 +26,9 @@ mistaken diagnosis is what you exist to prevent.
    frontmatter, not just the obvious ones.
 
 2. **Stale or foreign references.** Does the prompt name files, directories, commands, or
-   conventions that do not exist in this repository? Verify them — `ls`, `test -e`, run the
-   command's `--help`. Prompts copied from another project are the usual source: this repo
+   conventions that do not exist in this repository? Verify them with `glob`, `read`, and
+   `grep` — you have no shell, because an auditor that can write is not an auditor.
+   Prompts copied from another project are the usual source: this repo
    is Bun and TypeScript, so an instruction to inspect Go sources or write into `.skein/`
    is a defect.
 
