@@ -13,6 +13,27 @@ const info = {
   title: "Exported session",
   location: { directory: "/project" },
 }
+const transfer = {
+  info: {
+    ...info,
+    title: "[redacted:session-title:ses_export_test]",
+    location: { directory: "/[redacted:session-directory:ses_export_test]" },
+  },
+  messages: [
+    {
+      id: "msg_first",
+      type: "user",
+      text: "[redacted:text:msg_first]",
+      time: { created: 1 },
+    },
+    {
+      id: "msg_second",
+      type: "user",
+      text: "[redacted:text:msg_second]",
+      time: { created: 2 },
+    },
+  ],
+}
 
 const health = () => Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
 
@@ -26,8 +47,8 @@ function run(args: string[], stdin?: string) {
   return Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
 }
 
-test("export writes the runtime transfer document", async () => {
-  const queries: URLSearchParams[] = []
+test("export writes the sanitized runtime transfer document", async () => {
+  let exports = 0
   const server = Bun.serve({
     port: 0,
     fetch(request) {
@@ -35,26 +56,8 @@ test("export writes the runtime transfer document", async () => {
       if (url.pathname === "/api/health") return health()
       if (url.pathname === `/api/session/${info.id}`) return Response.json({ data: info })
       if (url.pathname === `/api/session/${info.id}/export`) {
-        queries.push(url.searchParams)
-        return Response.json({
-          data: {
-            info,
-            messages: [
-              {
-                id: "msg_first",
-                type: "user",
-                text: "[redacted:text:msg_first]",
-                time: { created: 1 },
-              },
-              {
-                id: "msg_second",
-                type: "user",
-                text: "Second",
-                time: { created: 2 },
-              },
-            ],
-          },
-        })
+        exports++
+        return Response.json({ data: transfer })
       }
       return new Response("Not found", { status: 404 })
     },
@@ -65,11 +68,8 @@ test("export writes the runtime transfer document", async () => {
     const exported = JSON.parse(stdout)
 
     expect(exitCode).toBe(0)
-    expect(exported.info).toEqual(info)
-    expect(exported.messages.map((message: { id: string }) => message.id)).toEqual(["msg_first", "msg_second"])
-    expect(queries).toHaveLength(1)
-    expect(exported.messages[0].text).toBe("[redacted:text:msg_first]")
-    expect(queries[0].has("sanitize")).toBe(false)
+    expect(exports).toBe(1)
+    expect(exported).toEqual(transfer)
   } finally {
     await server.stop(true)
   }
@@ -78,8 +78,7 @@ test("export writes the runtime transfer document", async () => {
 test("import validates a file and sends it to the resolved location", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-import-"))
   const file = path.join(root, "session.json")
-  const body = { info, messages: [] }
-  await fs.writeFile(file, JSON.stringify(body))
+  await fs.writeFile(file, JSON.stringify(transfer))
   let imported: unknown
   const server = Bun.serve({
     port: 0,
@@ -112,7 +111,7 @@ test("import validates a file and sends it to the resolved location", async () =
 
     expect(exitCode).toBe(0)
     expect(stdout).toBe(`Imported session: ${info.id}${os.EOL}`)
-    expect(imported).toEqual({ ...body, location: { directory: root } })
+    expect(imported).toEqual({ ...transfer, location: { directory: root } })
   } finally {
     await server.stop(true)
     await fs.rm(root, { recursive: true, force: true })
