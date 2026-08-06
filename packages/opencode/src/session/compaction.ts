@@ -49,6 +49,42 @@ type CompletedCompaction = {
   summary: string | undefined
 }
 
+const truncate = (value: string) =>
+  value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
+
+const serialize = (message: SessionV1.WithParts) => {
+  if (message.info.role === "user") {
+    const text = message.parts
+      .filter((part): part is SessionV1.TextPart => part.type === "text" && !part.ignored)
+      .map((part) => part.text)
+      .filter(Boolean)
+      .join("\n")
+    const files = message.parts.flatMap((part) =>
+      part.type === "file" ? [`[Attached ${part.mime}: ${part.filename ?? "file"}]`] : [],
+    )
+    return [...(text ? [`[User]: ${text}`] : []), ...files].join("\n")
+  }
+  return message.parts
+    .flatMap((part) => {
+      if (part.type === "text") return part.text ? [`[Assistant]: ${part.text}`] : []
+      if (part.type === "reasoning") return part.text ? [`[Assistant reasoning]: ${part.text}`] : []
+      if (part.type !== "tool") return []
+      const call = `[Assistant tool call]: ${part.tool}(${JSON.stringify(part.state.input)})`
+      if (part.state.status === "completed") {
+        const attachments = (part.state.attachments ?? []).map(
+          (item) => `[Attached ${item.mime}: ${item.filename ?? "file"}]`,
+        )
+        const output = part.state.time.compacted
+          ? "[Old tool result content cleared]"
+          : truncate([part.state.output, ...attachments].join("\n"))
+        return [call, `[Tool result]: ${output}`]
+      }
+      if (part.state.status === "error") return [call, `[Tool error]: ${part.state.error}`]
+      return [call]
+    })
+    .join("\n")
+}
+
 function summaryText(message: SessionV1.WithParts) {
   const text = message.parts
     .filter((part): part is SessionV1.TextPart => part.type === "text")
@@ -348,10 +384,7 @@ const layer = Layer.effect(
       const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-      const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
-        stripMedia: true,
-        toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
-      })
+      const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")
       const ctx = yield* InstanceState.context
       const msg: SessionV1.Assistant = {
         id: MessageID.ascending(),
@@ -385,35 +418,25 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         model,
       })
-      // A retained split-turn tail can start with an assistant tool call, which Gemini rejects without a preceding turn.
       const result = yield* processor.process({
         user: userMessage,
         agent,
         sessionID: input.sessionID,
         tools: {},
         system: [],
-        messages:
-          modelMessages[0]?.role === "assistant"
-            ? [
-                {
-                  role: "user",
-                  content: [
-                    {
-                      type: "text",
-                      text: ["<conversation>", JSON.stringify(modelMessages), "</conversation>", nextPrompt].join(
-                        "\n\n",
-                      ),
-                    },
-                  ],
-                },
-              ]
-            : [
-                ...modelMessages,
-                {
-                  role: "user",
-                  content: [{ type: "text", text: nextPrompt }],
-                },
-              ],
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: [nextPrompt, "The following is the conversation history:", conversation]
+                  .filter(Boolean)
+                  .join("\n\n"),
+              },
+            ],
+          },
+        ],
         model,
       })
 

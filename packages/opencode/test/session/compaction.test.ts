@@ -1362,10 +1362,10 @@ describe("session.compaction.process", () => {
     "summarizes only the head while keeping recent tail out of summary input",
     () => {
       const stub = llm()
-      let captured = ""
+      let messages: LLM.StreamInput["messages"] = []
       stub.push(
         reply("summary", (input) => {
-          captured = JSON.stringify(input.messages)
+          messages = input.messages
         }),
       )
       return Effect.gen(function* () {
@@ -1386,7 +1386,10 @@ describe("session.compaction.process", () => {
           auto: false,
         })
 
-        expect(captured).toContain("older context")
+        const captured = JSON.stringify(messages)
+        expect(messages).toHaveLength(1)
+        expect(messages[0]?.role).toBe("user")
+        expect(captured).toContain("[User]: older context")
         expect(captured).not.toContain("keep this turn")
         expect(captured).not.toContain("and this one too")
         expect(captured).not.toContain("What did we do so far?")
@@ -1497,8 +1500,9 @@ describe("session.compaction.process", () => {
 
         expect(captured).toHaveLength(1)
         expect(captured[0]?.role).toBe("user")
-        expect(JSON.stringify(captured)).toContain("read-call")
-        expect(JSON.stringify(captured)).toContain("file contents")
+        expect(JSON.stringify(captured)).toContain('[Assistant tool call]: read({\\"filePath\\":\\"src/index.ts\\"})')
+        expect(JSON.stringify(captured)).toContain("[Tool result]: file contents")
+        expect(JSON.stringify(captured)).not.toContain('\\"role\\":\\"assistant\\"')
       }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 0 }) }))
     },
     { git: true },
