@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { FileDiffInfo, FileDiffLegacyInfo } from "@opencode-ai/client/promise"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { Message } from "@/types"
 import { diffs, message } from "./diffs"
 
@@ -9,7 +9,7 @@ const item = {
   additions: 1,
   deletions: 1,
   status: "modified",
-} satisfies FileDiffInfo & FileDiffLegacyInfo
+} satisfies FileDiffInfo
 
 describe("diffs", () => {
   test("keeps valid arrays", () => {

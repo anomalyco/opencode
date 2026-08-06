@@ -1,14 +1,14 @@
-import type { FileDiffInfo, FileDiffLegacyInfo } from "@opencode-ai/client/promise"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { Kind } from "@/components/file-tree-v2"
 import { normalizeFileTreeV2Path } from "@/components/file-tree-v2-model"
 
-export type RenderDiff = FileDiffInfo | (FileDiffLegacyInfo & { file: string })
+export type RenderDiff = FileDiffInfo
 
 export function normalizePath(p: string) {
   return normalizeFileTreeV2Path(p)
 }
 
-export function filterRenderableDiff(value: FileDiffInfo | FileDiffLegacyInfo): value is RenderDiff {
+export function filterRenderableDiff(value: FileDiffInfo): value is RenderDiff {
   return typeof value.file === "string"
 }
 

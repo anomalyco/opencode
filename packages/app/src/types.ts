@@ -1,13 +1,32 @@
 import type {
   EventSubscribeOutput,
-  FileDiffLegacyInfo,
+  FileDiffInfo,
   ProjectListOutput,
-  SessionV1Info,
 } from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 
 export type Project = Omit<ProjectListOutput[number], "canonical"> & { worktree: string }
-export type Session = Omit<SessionV1Info, "title"> & { title: string }
+export type Session = {
+  id: string
+  slug: string
+  projectID: string
+  workspaceID?: string
+  directory: string
+  path?: string
+  parentID?: string
+  summary?: { additions: number; deletions: number; files: number; diffs?: FileDiffInfo[] }
+  cost?: number
+  tokens?: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
+  share?: { url: string }
+  title: string
+  agent?: string
+  model?: { id: string; providerID: string; variant?: string }
+  version: string
+  metadata?: Record<string, unknown>
+  time: { created: number; updated: number; compacting?: number; archived?: number }
+  permission?: Array<{ permission: string; pattern: string; action: "allow" | "deny" | "ask" }>
+  revert?: { messageID: string; partID?: string; snapshot?: string; diff?: string }
+}
 
 type CurrentEvent = EventSubscribeOutput extends infer Item
   ? Item extends { type: infer Type extends string; data: infer Data }
@@ -17,7 +36,7 @@ type CurrentEvent = EventSubscribeOutput extends infer Item
 
 export type Event = CurrentEvent
 
-export type EventSessionError = Extract<Event, { type: "session.error" }>
+export type EventSessionError = Extract<Event, { type: "session.execution.failed" }>
 
 type MessageError =
   | { name: "ProviderAuthError"; data: { providerID: string; message: string } }
@@ -45,7 +64,7 @@ export type UserMessage = {
   role: "user"
   time: { created: number }
   format?: { type: "text" } | { type: "json_schema"; schema: Record<string, unknown>; retryCount?: number }
-  summary?: { title?: string; body?: string; diffs: FileDiffLegacyInfo[] }
+  summary?: { title?: string; body?: string; diffs: FileDiffInfo[] }
   agent: string
   model: { providerID: string; modelID: string; variant?: string }
   system?: string
