@@ -104,7 +104,7 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
         .select()
         .from(PartTable)
         .where(inArray(PartTable.message_id, ids))
-        .orderBy(PartTable.message_id, PartTable.id)
+        .orderBy(PartTable.message_id, PartTable.time_created, PartTable.id)
         .all()
         .pipe(Effect.orDie)
       for (const row of partRows) {
@@ -496,7 +496,7 @@ export function parts(messageID: MessageID) {
       .select()
       .from(PartTable)
       .where(eq(PartTable.message_id, messageID))
-      .orderBy(PartTable.id)
+      .orderBy(PartTable.time_created, PartTable.id)
       .all()
       .pipe(Effect.orDie)
     return rows.map(part)
@@ -577,27 +577,30 @@ export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: Ses
 
 // filterCompacted reorders messages for model consumption
 // ([compaction-user, summary, ...retained tail..., continue-user]), so array
-// position is not chronological. Derive each binding by max id (MessageID
-// is monotonic via MessageID.ascending) so a pre-compaction overflowing tail
-// assistant doesn't get mistaken for the most recent turn. tasks are
-// compaction/subtask parts attached to user messages newer than the latest
-// finished assistant — i.e. unprocessed work.
+// position is not chronological. Derive each binding by persisted creation time
+// so ID format changes, imported IDs, or client-supplied IDs cannot control turn
+// ordering. IDs remain the same-millisecond tiebreaker for native messages.
 export function latest(msgs: WithParts[]) {
   let user: User | undefined
   let assistant: Assistant | undefined
   let finished: Assistant | undefined
   for (const msg of msgs) {
     const info = msg.info
-    if (info.role === "user" && (!user || info.id > user.id)) user = info
-    if (info.role === "assistant" && (!assistant || info.id > assistant.id)) assistant = info
-    if (info.role === "assistant" && info.finish && (!finished || info.id > finished.id)) finished = info
+    if (info.role === "user" && (!user || isNewerMessage(info, user))) user = info
+    if (info.role === "assistant" && (!assistant || isNewerMessage(info, assistant))) assistant = info
+    if (info.role === "assistant" && info.finish && (!finished || isNewerMessage(info, finished))) finished = info
   }
   const tasks = msgs.flatMap((m) =>
-    finished && m.info.id <= finished.id
+    finished && !isNewerMessage(m.info, finished)
       ? []
       : m.parts.filter((p): p is CompactionPart | SubtaskPart => p.type === "compaction" || p.type === "subtask"),
   )
   return { user, assistant, finished, tasks }
+}
+
+function isNewerMessage(candidate: Info, current: Info) {
+  if (candidate.time.created !== current.time.created) return candidate.time.created > current.time.created
+  return candidate.id > current.id
 }
 
 export function fromError(

@@ -71,7 +71,8 @@ const layer = Layer.effect(
       if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
       yield* snap.revert(patches)
       if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot)
-      const range = all.filter((msg) => msg.info.id >= rev.messageID)
+      const start = all.findIndex((msg) => msg.info.id === rev.messageID)
+      const range = start === -1 ? [] : all.slice(start)
       const diffs = yield* summary.computeDiff({ messages: range })
       yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
       yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
@@ -104,14 +105,16 @@ const layer = Layer.effect(
       const messageID = session.revert.messageID
       const remove = [] as SessionV1.WithParts[]
       let target: SessionV1.WithParts | undefined
+      let reached = false
       for (const msg of msgs) {
-        if (msg.info.id < messageID) continue
-        if (msg.info.id > messageID) {
+        if (!reached) {
+          if (msg.info.id !== messageID) continue
+          reached = true
+          if (session.revert.partID) {
+            target = msg
+            continue
+          }
           remove.push(msg)
-          continue
-        }
-        if (session.revert.partID) {
-          target = msg
           continue
         }
         remove.push(msg)
