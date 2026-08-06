@@ -77,10 +77,10 @@ const layer = Layer.effect(
       }
 
       const after = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
-      const text = latestSummary(after)
+      const context = latestContext(after)
       // Compaction fails on its own when the history still exceeds the context window
       // after stripping media. Leave the session alone rather than handing off nothing.
-      if (!text) return yield* new SummaryUnavailableError({ sessionID: input.sessionID })
+      if (!context) return yield* new SummaryUnavailableError({ sessionID: input.sessionID })
 
       // A handoff produces a sibling. parentID stays unset because it means subagent.
       const next = yield* sessions.create({
@@ -94,9 +94,10 @@ const layer = Layer.effect(
         model,
         text: [
           `Continuing from session ${input.sessionID}, which was handed off to keep the context clean.`,
-          "The summary below is the authoritative account of the work so far.",
+          "Use this handoff context to continue the work. The recent conversation is newer than the summary.",
           "",
-          text,
+          context.summary,
+          context.recent && ["", "## Recent Context", context.recent].join("\n"),
         ].join("\n"),
       })
       yield* write({
@@ -112,16 +113,40 @@ const layer = Layer.effect(
   }),
 )
 
-const summarizes = (message: SessionV1.WithParts) =>
+const summarizes = (message: SessionV1.WithParts): message is SessionV1.WithParts & { info: SessionV1.Assistant } =>
   message.info.role === "assistant" && message.info.summary === true && !!message.info.finish && !message.info.error
 
-function latestSummary(messages: SessionV1.WithParts[]) {
-  const summarized = messages.findLast(summarizes)
-  return summarized ? SessionCompaction.summaryText(summarized) : undefined
+function latestContext(messages: SessionV1.WithParts[]) {
+  const summary = messages.findLast(summarizes)
+  const text = summary ? SessionCompaction.summaryText(summary) : undefined
+  if (!summary || !text) return
+  const marker = messages.find((message) => message.info.id === summary.info.parentID)
+  const part = marker?.parts.find((part): part is SessionV1.CompactionPart => part.type === "compaction")
+  if (!marker || !part?.tail_start_id) return { summary: text }
+  const start = messages.findIndex((message) => message.info.id === part.tail_start_id)
+  const end = messages.findIndex((message) => message.info.id === marker.info.id)
+  if (start === -1 || end === -1 || start >= end) return { summary: text }
+  const recent = messages
+    .slice(start, end)
+    .flatMap((message) => {
+      const text = message.parts
+        .flatMap((part) => {
+          if (part.type === "text") return part.synthetic ? [] : [part.text.trim()]
+          if (part.type !== "tool") return []
+          if (part.state.status === "completed") return [`[${part.tool} output]\n${part.state.output.trim()}`]
+          if (part.state.status === "error") return [`[${part.tool} error]\n${part.state.error.trim()}`]
+          return []
+        })
+        .filter(Boolean)
+        .join("\n\n")
+      return text ? [`### ${message.info.role}\n${text}`] : []
+    })
+    .join("\n\n")
+  return recent ? { summary: text, recent } : { summary: text }
 }
 
-// A summary only covers the work up to the point it was written, so anything added
-// afterwards has to be folded in before handing off.
+// A new summary is needed when visible work followed it, so the retained tail reflects
+// the state at the moment of handoff.
 function stale(messages: SessionV1.WithParts[]) {
   const summarized = messages.findLastIndex(summarizes)
   if (summarized === -1) return true

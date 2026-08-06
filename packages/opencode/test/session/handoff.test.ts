@@ -79,6 +79,30 @@ const addUser = Effect.fn("Test.addUser")(function* (sessionID: SessionID, text:
   return message.id
 })
 
+const addCompaction = Effect.fn("Test.addCompaction")(function* (input: {
+  sessionID: SessionID
+  tailStartID?: MessageID
+}) {
+  const sessions = yield* SessionNs.Service
+  const message = yield* sessions.updateMessage({
+    id: MessageID.ascending(),
+    role: "user",
+    sessionID: input.sessionID,
+    agent: "build",
+    model: ref,
+    time: { created: Date.now() },
+  })
+  yield* sessions.updatePart({
+    id: PartID.ascending(),
+    messageID: message.id,
+    sessionID: input.sessionID,
+    type: "compaction",
+    auto: false,
+    tail_start_id: input.tailStartID,
+  } satisfies SessionV1.CompactionPart)
+  return message.id
+})
+
 const addSummary = Effect.fn("Test.addSummary")(function* (sessionID: SessionID, parentID: MessageID, text: string) {
   const sessions = yield* SessionNs.Service
   const message = yield* sessions.updateMessage({
@@ -208,6 +232,46 @@ describe("session handoff reuses a current summary", () => {
 
       const seeded = yield* sessions.messages({ sessionID: next.id })
       expect(textOf(seeded[0])).toContain("already summarized")
+    }),
+  )
+})
+
+describe("session handoff with retained context", () => {
+  const it = testEffect(env(() => Effect.die("handoff should not compact when the newest summary is current")))
+
+  it.instance("includes the recent transcript retained by compaction", () =>
+    Effect.gen(function* () {
+      const sessions = yield* SessionNs.Service
+      const handoff = yield* SessionHandoff.Service
+      const created = yield* sessions.create({ title: "retained" })
+      yield* addUser(created.id, "finished work")
+      const current = yield* addUser(created.id, "continue the active investigation")
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: current,
+        sessionID: created.id,
+        type: "tool",
+        callID: "call_recent",
+        tool: "read",
+        state: {
+          status: "completed",
+          input: {},
+          output: "the current file contains the relevant implementation",
+          title: "Read file",
+          metadata: {},
+          time: { start: Date.now(), end: Date.now() },
+        },
+      } satisfies SessionV1.ToolPart)
+      const marker = yield* addCompaction({ sessionID: created.id, tailStartID: current })
+      yield* addSummary(created.id, marker, "## Objective\n- continue the work")
+
+      const next = yield* handoff.create({ sessionID: created.id, ...ref })
+
+      const seeded = yield* sessions.messages({ sessionID: next.id })
+      expect(textOf(seeded[0])).toContain("continue the work")
+      expect(textOf(seeded[0])).toContain("## Recent Context")
+      expect(textOf(seeded[0])).toContain("continue the active investigation")
+      expect(textOf(seeded[0])).toContain("the current file contains the relevant implementation")
     }),
   )
 })
