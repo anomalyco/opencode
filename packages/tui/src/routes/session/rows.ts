@@ -17,6 +17,7 @@ export type CacheUsage = {
 
 export type SessionRow =
   | { type: "message"; messageID: string }
+  | { type: "queued-prompts"; messageIDs: string[] }
   | { type: "compaction-queued"; inputID: string }
   | { type: "part"; ref: PartRef }
   | {
@@ -46,6 +47,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   function reduce() {
     const messages = data.session.message.list(sessionID())
     const inputs = new Set(data.session.input.list(sessionID()))
+    const pending = data.session.pending.list(sessionID())
     const boundary = revertBoundary()
     const rows = reduceSessionRows(
       boundary ? messages.filter((message) => message.id < boundary) : messages,
@@ -53,12 +55,17 @@ export function createSessionRows(sessionID: Accessor<string>) {
       turnTokens(),
     )
     partitionPending(rows, pendingPermissions())
+    collapseQueuedPrompts(
+      rows,
+      pending
+        .filter((item) => item.type === "user" && item.delivery === "queue")
+        .map((item) => item.id),
+    )
     const position = rows.findIndex((row) => row.type === "message" && inputs.has(row.messageID))
     rows.splice(
       position === -1 ? rows.length : position,
       0,
-      ...data.session.pending
-        .list(sessionID())
+      ...pending
         .filter((item) => item.type === "compaction")
         .map((item): SessionRow => ({ type: "compaction-queued", inputID: item.id })),
     )
@@ -112,10 +119,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   createEffect(
     on(
       () =>
-        data.session.pending
-          .list(sessionID())
-          .filter((item) => item.type === "compaction")
-          .map((item) => item.id),
+        data.session.pending.list(sessionID()).map((item) => `${item.id}:${"delivery" in item ? item.delivery : item.type}`),
       () => setRows(reconcile(reduce())),
       { defer: true },
     ),
@@ -196,7 +200,10 @@ export function createSessionRows(sessionID: Accessor<string>) {
 
   const queuedStart = (rows: SessionRow[]) => {
     const index = rows.findIndex(
-      (row) => row.type === "compaction-queued" || (row.type === "message" && isPending(row.messageID)),
+      (row) =>
+        row.type === "queued-prompts" ||
+        row.type === "compaction-queued" ||
+        (row.type === "message" && isPending(row.messageID)),
     )
     return index === -1 ? rows.length : index
   }
@@ -279,6 +286,13 @@ export function createSessionRows(sessionID: Accessor<string>) {
   onCleanup(() => subscriptions.forEach((unsubscribe) => unsubscribe()))
 
   return rows
+}
+
+export function collapseQueuedPrompts(rows: SessionRow[], messageIDs: string[]) {
+  if (messageIDs.length <= 3) return
+  const queued = new Set(messageIDs)
+  const visible = rows.filter((row) => row.type !== "message" || !queued.has(row.messageID))
+  rows.splice(0, rows.length, ...visible, { type: "queued-prompts", messageIDs })
 }
 
 export function reduceSessionRows(

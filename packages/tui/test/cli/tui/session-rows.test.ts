@@ -1,6 +1,31 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
-import { cacheReuseDrop, messageBoundaryIDs, reduceSessionRows } from "../../../src/routes/session/rows"
+import {
+  cacheReuseDrop,
+  collapseQueuedPrompts,
+  messageBoundaryIDs,
+  reduceSessionRows,
+} from "../../../src/routes/session/rows"
+import type { SessionRow } from "../../../src/routes/session/rows"
+
+test("collapses more than three queued prompts into one bounded row", () => {
+  const rows: SessionRow[] = [
+    { type: "message" as const, messageID: "active" },
+    { type: "message" as const, messageID: "queue-1" },
+    { type: "message" as const, messageID: "steer" },
+    { type: "message" as const, messageID: "queue-2" },
+    { type: "message" as const, messageID: "queue-3" },
+    { type: "message" as const, messageID: "queue-4" },
+  ]
+
+  collapseQueuedPrompts(rows, ["queue-1", "queue-2", "queue-3", "queue-4"])
+
+  expect(rows).toEqual([
+    { type: "message", messageID: "active" },
+    { type: "message", messageID: "steer" },
+    { type: "queued-prompts", messageIDs: ["queue-1", "queue-2", "queue-3", "queue-4"] },
+  ])
+})
 
 test("filters OpenAI cache quantization from cache reuse drops", () => {
   const openai = { id: "gpt", providerID: "openai" }

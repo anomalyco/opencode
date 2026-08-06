@@ -1082,6 +1082,9 @@ function SessionRowView(props: SessionRowViewProps) {
         <Match when={props.row.type === "compaction-queued"}>
           <CompactionQueued />
         </Match>
+        <Match when={props.row.type === "queued-prompts" ? props.row : undefined}>
+          {(row) => <QueuedPrompts messageIDs={row().messageIDs} message={props.message} />}
+        </Match>
         <Match when={props.row.type === "part" ? props.row : undefined}>
           {(row) => <SessionPartView partRef={row().ref} message={props.message} />}
         </Match>
@@ -1840,9 +1843,10 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const mode = themes.mode
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
-  const queued = createMemo(
-    () => data.session.status(ctx.sessionID) === "running" && data.session.input.has(ctx.sessionID, props.message.id),
-  )
+  const delivery = createMemo(() => {
+    const pending = data.session.pending.list(ctx.sessionID).find((item) => item.id === props.message.id)
+    return pending?.type === "user" ? pending.delivery : undefined
+  })
   const dialog = useDialog()
   const renderer = useRenderer()
   const promptRef = usePromptRef()
@@ -1851,7 +1855,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
     <Show when={props.message.text.trim() || files().length}>
       <box
         border={["left"]}
-        borderColor={queued() ? theme.border.default : color()}
+        borderColor={delivery() ? theme.border.default : color()}
         customBorderChars={SplitBorder.customBorderChars}
       >
         <box
@@ -1878,6 +1882,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
           flexShrink={0}
         >
           <text fg={theme.text.default}>{props.message.text}</text>
+          <Show when={delivery()}>
+            {(value) => <text fg={theme.text.subdued}>{value() === "queue" ? "queued" : "steering"}</text>}
+          </Show>
           <Show when={files().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={files()}>
@@ -1907,6 +1914,41 @@ function UserMessage(props: { message: SessionMessageUser }) {
         </box>
       </box>
     </Show>
+  )
+}
+
+function QueuedPrompts(props: {
+  messageIDs: string[]
+  message: (messageID: string) => SessionMessageInfo | undefined
+}) {
+  const theme = useTheme("elevated")
+  const shortcut = Keymap.useShortcut("command.palette.show")
+  const next = createMemo(() => {
+    const message = props.message(props.messageIDs[0] ?? "")
+    return message?.type === "user" ? message.text : undefined
+  })
+
+  return (
+    <box
+      border={["left"]}
+      borderColor={theme.border.default}
+      customBorderChars={SplitBorder.customBorderChars}
+      paddingTop={1}
+      paddingBottom={1}
+      paddingLeft={2}
+      backgroundColor={theme.background.default}
+      gap={1}
+    >
+      <text fg={theme.text.default}>{props.messageIDs.length} prompts queued</text>
+      <Show when={next()}>{(text) => <text fg={theme.text.subdued}>Next · {text()}</text>}</Show>
+      <Show when={shortcut()}>
+        {(key) => (
+          <text fg={theme.text.subdued}>
+            <span style={{ fg: theme.text.default }}>{key()}</span> view all pending work
+          </text>
+        )}
+      </Show>
+    </box>
   )
 }
 

@@ -981,6 +981,7 @@ export function createPromptState(input: PromptInput): PromptState {
   }))
 
   Keymap.createLayer(() => ({
+    priority: 1,
     enabled: input.prompt() && !visible(),
     commands: [
       {

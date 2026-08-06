@@ -157,6 +157,7 @@ export function Prompt(props: PromptProps) {
   const route = useRoute()
   const data = useData()
   const keymapCommands = Keymap.useCommands()
+  const queueShortcut = Keymap.useShortcut("prompt.queue")
   const currentLocation = useLocation()
   const config = useConfig().data
   const dialog = useDialog()
@@ -358,6 +359,20 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Queue prompt",
+        name: "prompt.queue",
+        category: "Prompt",
+        palette: undefined,
+        run: async (_input: string | undefined, event?: KeyEvent) => {
+          event?.preventDefault()
+          event?.stopPropagation()
+          if (!input.focused) return
+          const handled = await submit("queue")
+          if (!handled) return
+          dialog.clear()
+        },
+      },
+      {
         title: "Remove editor context",
         name: "prompt.editor_context.clear",
         category: "Prompt",
@@ -513,6 +528,11 @@ export function Prompt(props: PromptProps) {
   Keymap.createLayer(() => ({
     mode: "global",
     commands: promptCommands(),
+  }))
+
+  Keymap.createLayer(() => ({
+    priority: 1,
+    bindings: ["prompt.queue"],
   }))
 
   Keymap.createLayer(() => ({
@@ -900,7 +920,7 @@ export function Prompt(props: PromptProps) {
   })
 
   let submitting = false
-  async function submit() {
+  async function submit(delivery: "steer" | "queue" = "steer") {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
     // input's native onSubmit racing another dispatch). Without this guard,
     // a second call slips past the empty-input check before the first call
@@ -910,13 +930,13 @@ export function Prompt(props: PromptProps) {
     if (submitting) return false
     submitting = true
     try {
-      return await submitInner()
+      return await submitInner(delivery)
     } finally {
       submitting = false
     }
   }
 
-  async function submitInner() {
+  async function submitInner(delivery: "steer" | "queue") {
     // IME: double-defer may fire before onContentChange flushes the last
     // composed character (e.g. Korean hangul) to the store, so read
     // plainText directly and sync before any downstream reads.
@@ -929,12 +949,20 @@ export function Prompt(props: PromptProps) {
     if (auto()?.visible) return false
     if (!store.prompt.text) return false
     const trimmed = store.prompt.text.trim()
+    if (delivery === "queue" && (store.mode === "shell" || trimmed === "exit" || trimmed === "quit" || trimmed === ":q")) {
+      toast.show({ message: "This prompt cannot be queued", variant: "warning" })
+      return false
+    }
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
       return true
     }
     const slash = argumentSlash(store.prompt.text, keymapCommands())
     if (slash) {
+      if (delivery === "queue") {
+        toast.show({ message: "This prompt cannot be queued", variant: "warning" })
+        return false
+      }
       clearPrompt()
       await slash.command.run(slash.input)
       return true
@@ -958,6 +986,10 @@ export function Prompt(props: PromptProps) {
     const isCommand =
       slashHead !== undefined &&
       (data.location.command.list(currentLocation.ref) ?? []).some((command) => command.name === slashHead.name)
+    if (delivery === "queue" && isSkill) {
+      toast.show({ message: "Skills cannot be queued", variant: "warning" })
+      return false
+    }
     const agent = local.agent.current()
     if (!agent) return false
     const selection = local.model.selection()
@@ -1040,6 +1072,7 @@ export function Prompt(props: PromptProps) {
           model,
           files: store.prompt.files,
           agents: store.prompt.agents,
+          delivery,
         })
         .catch((error) => {
           cancelCommit()
@@ -1105,6 +1138,7 @@ export function Prompt(props: PromptProps) {
           text: inputText,
           files: store.prompt.files,
           agents: store.prompt.agents,
+          delivery,
         })
         .then(
           () => undefined,
@@ -1574,6 +1608,13 @@ export function Prompt(props: PromptProps) {
                       {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                     </span>
                   </text>
+                  <Show when={queueShortcut()}>
+                    {(shortcut) => (
+                      <text fg={theme.text.default} wrapMode="none" flexShrink={0}>
+                        {shortcut()} <span style={{ fg: theme.text.subdued }}>queue</span>
+                      </text>
+                    )}
+                  </Show>
                 </box>
               </Match>
               <Match when={move.progress()}>
