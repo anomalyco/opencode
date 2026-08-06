@@ -332,12 +332,11 @@ it.instance(
       const final = yield* waitForTerminal(info.id)
       expect(final.status).toBe("completed")
       expect(final.iterations).toHaveLength(1)
-      // The caller's session anchors the loop — no loop-owned parent session
-      // was created for it — and the iteration ran in a fresh child of it
-      // (fix-loop-reliability: per-iteration child sessions).
-      const iterationSession = yield* session.get(final.iterations[0]!.sessionID)
-      expect(iterationSession?.parentID).toBe(existing.id)
-      expect(final.iterationSessionID).toBe(final.iterations[0]?.sessionID)
+      // The iteration ran in the caller's own session, where the user can
+      // actually watch it — not in a hidden child. No loop-owned session was
+      // created either.
+      expect(final.iterations[0]?.sessionID).toBe(existing.id)
+      expect(final.iterationSessionID).toBe(existing.id)
       const sessions = yield* session.list()
       expect(sessions.filter((item) => item.title?.startsWith("loop:"))).toHaveLength(0)
     }),
@@ -392,7 +391,7 @@ it.instance(
 )
 
 it.instance(
-  "a stalled iteration gets a directive continuation prompt in a fresh child session",
+  "a stalled iteration gets a directive continuation prompt, in the visible session",
   () =>
     Effect.gen(function* () {
       const { directory: dir } = yield* TestInstance
@@ -415,9 +414,9 @@ it.instance(
       expect(final.status).toBe("completed")
       expect(final.iterations.length).toBeGreaterThanOrEqual(3)
 
-      // Every iteration ran in its own child session — no two alike.
-      const iterationSessions = final.iterations.map((i) => i.sessionID)
-      expect(new Set(iterationSessions).size).toBe(iterationSessions.length)
+      // Every iteration ran in the one session the user is watching.
+      const iterationSessions = new Set(final.iterations.map((i) => i.sessionID))
+      expect(iterationSessions.size).toBe(1)
 
       // The iteration after a stall carries the directive, prepended to the
       // user's own prompt (which must never be lost).

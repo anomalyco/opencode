@@ -81,6 +81,21 @@
   - Done 2026-08-05 (sleep kept only as a defensive fallback for a gateless pause,
     which `pause()` cannot produce).
 
+## Reversed 2026-08-06 — child sessions made the work invisible
+
+Phase 1 gave every iteration a fresh child session for a clean context window.
+That is real, but it moved the work out of the session the user is looking at, so
+`/loop` and `/auto` appeared to do nothing at all — the first thing said on trying
+`/auto` was "there is absolutely no output". Supervisability beats context hygiene:
+iterations now run in the loop's own session, where they show up as ordinary turns
+and any subagents appear as ordinary subagent parts. Compaction is what handles
+context growth.
+
+Kept from Phase 1: `iterationSessionID` (now the loop session, still what cancel
+targets) and the foreign-turn guard, which matters MORE now that the session is
+shared across iterations. Phases 2 and 3 (adaptive continuation prompt, pause
+Deferred) are unaffected.
+
 ## Phase 4: Tests & verification
 
 - [x] 4.1 Update existing loop tests to account for child sessions (assertion on `info.iterationSessionID`)

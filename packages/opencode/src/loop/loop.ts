@@ -280,31 +280,27 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         const iterationNumber = record.info.iteration + 1
         const startedAt = Date.now()
-        // Each iteration runs in a fresh child session of the loop session
-        // (tui-loop-command D3, restored by fix-loop-reliability): a clean
-        // context window per iteration instead of an ever-growing transcript
-        // the model re-reads and gets lost in. The parent session stays the
-        // navigation anchor; children appear under it in the session list.
-        // If child creation fails, fall back to prompting the loop session
-        // directly — a degraded iteration beats a dead loop.
-        const child = yield* session
-          .create({
-            parentID: record.info.sessionID,
-            title: override?.title ?? `loop iter ${iterationNumber}: ${promptHead(record.info.prompt)}`,
-            permission: override?.permission ? [...override.permission] : undefined,
-          })
-          .pipe(Effect.orElseSucceed(() => undefined))
-        // Foreign-turn guard: a fresh child can never have a running turn,
-        // but the degraded no-child fallback targets the loop session — if
-        // that session is already mid-turn, prompting it would make
-        // ensureRunning JOIN the foreign turn and attribute its output to
-        // this iteration. Skip the iteration instead.
-        if (!child) {
-          const busy = yield* status.get(record.info.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+        // Iterations run in the loop's OWN session — the one you are looking
+        // at — so the work appears as ordinary turns and any subagents it
+        // spawns appear as ordinary subagent parts.
+        //
+        // They used to run in a fresh child session each time, for a clean
+        // context window per iteration. That traded away the thing that matters
+        // more: work you cannot see is work you cannot supervise, and an
+        // unattended run looked like it was doing nothing at all. Context
+        // growth is what compaction is for.
+        //
+        // Foreign-turn guard: the loop session is shared across iterations, so
+        // if a turn is already running there, prompting would make
+        // ensureRunning JOIN it and attribute someone else's output to this
+        // iteration. Skip instead.
+        const targetSessionID = record.info.sessionID
+        {
+          const busy = yield* status.get(targetSessionID).pipe(Effect.orElseSucceed(() => undefined))
           if (busy?.type === "busy") {
             return {
               iteration: iterationNumber,
-              sessionID: record.info.sessionID,
+              sessionID: targetSessionID,
               toolCalls: 0,
               outputLength: 0,
               output: "",
@@ -317,10 +313,7 @@ export const layer = Layer.effect(
             }
           }
         }
-        const targetSessionID = child?.id ?? record.info.sessionID
-        // Record the active child BEFORE prompting, not after: cancel()
-        // aborts `iterationSessionID`, and the whole point is stopping the
-        // turn that is running right now — not the previous one.
+        // Recorded before prompting so cancel() aborts the turn running now.
         yield* patch(record.info.id, (current) => ({
           ...current,
           info: { ...current.info, iterationSessionID: targetSessionID },
@@ -371,13 +364,12 @@ export const layer = Layer.effect(
         // four files. That number feeds the no-progress guard, so undercounting
         // it scores productive work as a stall.
         //
-        // Each iteration owns a fresh child session, so every assistant message
-        // there belongs to this turn. On the degraded no-child path the loop
-        // session is shared across iterations, so bound by this turn's start.
+        // The loop session is shared across iterations now, so this turn's tool
+        // calls are the assistant messages created since it started.
         const turnMessages = yield* session
           .messages({ sessionID: targetSessionID })
           .pipe(Effect.orElseSucceed(() => [] as SessionV1.WithParts[]))
-        const boundary = child ? 0 : startedAt
+        const boundary = startedAt
         const countedTools = turnMessages
           .filter((item) => item.info.role === "assistant" && (item.info.time?.created ?? 0) >= boundary)
           .reduce((total, item) => total + item.parts.filter((part) => part.type === "tool").length, 0)
@@ -676,11 +668,7 @@ export const layer = Layer.effect(
         if (!record) return undefined
         const peers = yield* idlePeers
         const brief = buildBrief({ change, gate, failure, idlePeers: peers, guidance: record.queue?.guidance })
-        const result = yield* runIteration(record, {
-          promptText: brief,
-          title: `queue ${change.slug} [${gate}] iter ${record.info.iteration + 1}`,
-          permission: QueueDenyRules,
-        })
+        const result = yield* runIteration(record, { promptText: brief, permission: QueueDenyRules })
         yield* patch(id, (current) => ({
           ...current,
           info: {

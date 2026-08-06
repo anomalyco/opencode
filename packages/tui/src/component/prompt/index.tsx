@@ -1221,9 +1221,9 @@ function isRunControlInput(input: string): boolean {
           sdk.client.loop
             .create({
               prompt: parsed.queue ? "" : parsed.prompt,
-              // Queue mode drives openspec changes, not this session — it
-              // creates its own anchor session; slugs come from the args.
-              sessionID: parsed.queue ? undefined : props.sessionID,
+              // Runs in the session you are looking at, including /auto: work
+              // you cannot see is work you cannot supervise.
+              sessionID: props.sessionID,
               interval: parsed.interval,
               maxIterations: parsed.max,
               noProgressLimit: parsed.noProgressLimit,
