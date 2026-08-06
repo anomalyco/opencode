@@ -144,7 +144,11 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       description: "Export session data as JSON",
       params: {
         ...ServerParams,
-        session: Argument.string("session").pipe(Argument.withDescription("Session ID to export"), Argument.optional),
+        session: Flag.string("session").pipe(
+          Flag.withAlias("s"),
+          Flag.withDescription("Session ID to export to stdout"),
+          Flag.optional,
+        ),
       },
     }),
     Spec.make("import", {

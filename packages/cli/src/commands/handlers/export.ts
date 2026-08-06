@@ -1,7 +1,8 @@
 import { OpenCode, type SessionInfo } from "@opencode-ai/client"
 import { Service } from "@opencode-ai/client/effect/service"
 import { Effect, Option } from "effect"
-import { EOL } from "node:os"
+import { EOL, tmpdir } from "node:os"
+import path from "node:path"
 import { emitKeypressEvents, type Key } from "node:readline"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
@@ -38,7 +39,7 @@ export default Runtime.handler(
         })
     if (!sessionID) return
     const data = yield* Effect.promise(() => client.session.export({ sessionID }))
-    process.stdout.write(JSON.stringify(data, null, 2) + EOL)
+    process.stdout.write(yield* Effect.promise(() => writeExport(data, sessionID, requested !== undefined)))
   }),
 )
 
@@ -119,4 +120,12 @@ function selectSession(sessions: SessionInfo[]) {
   return new Promise<SessionInfo | undefined>((resolve) => {
     resolveSelection = resolve
   })
+}
+
+export async function writeExport(data: unknown, sessionID: string, stdout: boolean) {
+  const json = JSON.stringify(data, null, 2) + EOL
+  if (stdout) return json
+  const file = path.join(tmpdir(), `opencode-session-${sessionID}-${crypto.randomUUID().slice(0, 8)}.json`)
+  await Bun.write(file, json)
+  return file + EOL
 }

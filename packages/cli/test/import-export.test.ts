@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { OPENCODE_VERSION } from "../src/version"
+import { writeExport } from "../src/commands/handlers/export"
 
 const info = {
   id: "ses_export_test",
@@ -64,7 +65,7 @@ test("export writes the sanitized runtime transfer document", async () => {
   })
 
   try {
-    const [stdout, , exitCode] = await run(["export", info.id, "--server", server.url.toString()])
+    const [stdout, , exitCode] = await run(["export", "-s", info.id, "--server", server.url.toString()])
     const exported = JSON.parse(stdout)
 
     expect(exitCode).toBe(0)
@@ -100,6 +101,18 @@ test("export reports an empty session list without a stack trace", async () => {
     expect(stderr).toBe(`No sessions found${os.EOL}`)
   } finally {
     await server.stop(true)
+  }
+})
+
+test("interactive export writes a temporary JSON file", async () => {
+  const output = await writeExport(transfer, info.id, false)
+  const file = output.trim()
+
+  try {
+    expect(path.dirname(file)).toBe(os.tmpdir())
+    expect(await Bun.file(file).json()).toEqual(transfer)
+  } finally {
+    await fs.rm(file, { force: true })
   }
 })
 
