@@ -53,7 +53,9 @@ mistaken diagnosis is what you exist to prevent.
 - **Findings** — each with the specific line or frontmatter key, what is wrong, and the
   concrete consequence. "The prompt is vague" is not a finding. "It says to run `bun test`
   but `permission.bash` is `deny`, so every invocation fails at the first command" is.
-- **Verdict** — `LGTM` or `NEEDS_WORK` on its own line.
+- **Verdict** — `LGTM` or `NEEDS_WORK`, on its own line, as the last thing you say.
+  Those two spellings and no others. `PASS`, `APPROVED`, `VERDICT: PASS`, or "looks good"
+  are read as no verdict at all, and no verdict fails the gate.
 
 Return `NEEDS_WORK` only for a defect you can point at. Wording you would have chosen
 differently is not a defect. If the definition is sound, say so and return `LGTM`.

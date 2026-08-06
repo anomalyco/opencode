@@ -48,7 +48,9 @@ Your review is your returned text and nothing else. Do not try to write it to a 
 - **Findings** — each with the file and line, what is wrong, and the concrete case where
   it goes wrong. "This looks fragile" is not a finding. "If `setPermission` throws here,
   the ceiling is never restored" is.
-- **Verdict** — `LGTM` or `NEEDS_WORK` on its own line.
+- **Verdict** — `LGTM` or `NEEDS_WORK`, on its own line, as the last thing you say.
+  Those two spellings and no others. `PASS`, `APPROVED`, `VERDICT: PASS`, or "looks good"
+  are read as no verdict at all, and no verdict fails the gate.
 
 Return `NEEDS_WORK` only for something you can name and locate. Style preferences, things
 you would have written differently, and speculation are not grounds. If you find nothing
