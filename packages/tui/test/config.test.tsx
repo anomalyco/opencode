@@ -121,8 +121,10 @@ test("navigates session tabs with option arrows", () => {
 
   expect(config.keybinds.get("session.tab.next")).toMatchObject([{ key: "ctrl+tab,alt+down" }])
   expect(config.keybinds.get("session.tab.previous")).toMatchObject([{ key: "ctrl+shift+tab,alt+up" }])
-  expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "alt+shift+down" }])
-  expect(config.keybinds.get("session.tab.previous_unread")).toMatchObject([{ key: "alt+shift+up" }])
+  expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "pagedown,alt+shift+down" }])
+  expect(config.keybinds.get("session.tab.previous_unread")).toMatchObject([{ key: "pageup,alt+shift+up" }])
+  expect(config.keybinds.get("session.page.up")).toMatchObject([{ key: "ctrl+alt+b" }])
+  expect(config.keybinds.get("session.page.down")).toMatchObject([{ key: "ctrl+alt+f" }])
 })
 
 test("preserves pinned session bindings alongside tab bindings", () => {
