@@ -4,23 +4,39 @@ import {
   type AuthenticateResponse,
   type AuthMethod,
   type CancelNotification,
+  type CloseNesRequest,
+  type CloseNesResponse,
   type CloseSessionRequest,
   type CloseSessionResponse,
+  type DidChangeDocumentNotification,
+  type DidCloseDocumentNotification,
+  type DidFocusDocumentNotification,
+  type DidOpenDocumentNotification,
+  type DidSaveDocumentNotification,
+  type DisableProvidersRequest,
+  type DisableProvidersResponse,
   type ForkSessionRequest,
   type ForkSessionResponse,
   type InitializeRequest,
   type InitializeResponse,
+  type ListProvidersRequest,
+  type ListProvidersResponse,
   type ListSessionsRequest,
   type ListSessionsResponse,
   type LoadSessionRequest,
   type LoadSessionResponse,
+  type LogoutRequest,
+  type LogoutResponse,
   type McpServer,
   type NewSessionRequest,
   type NewSessionResponse,
   type PromptRequest,
   type PromptResponse,
+  type ProviderInfo,
   type ResumeSessionRequest,
   type ResumeSessionResponse,
+  type SetProvidersRequest,
+  type SetProvidersResponse,
   type SessionInfo,
   type SetSessionConfigOptionRequest,
   type SetSessionConfigOptionResponse,
@@ -28,6 +44,13 @@ import {
   type SetSessionModelResponse,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
+  type StartNesRequest,
+  type StartNesResponse,
+  type SuggestNesRequest,
+  type SuggestNesResponse,
+  type AcceptNesNotification,
+  type RejectNesNotification,
+  type CompleteElicitationNotification,
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -50,7 +73,18 @@ export const AuthMethodID = "opencode-login"
 
 export type Error = ACPError.Error
 type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
-  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+  Partial<
+    Pick<
+      AgentSideConnection,
+      | "requestPermission"
+      | "writeTextFile"
+      | "readTextFile"
+      | "createTerminal"
+      | "unstable_createElicitation"
+      | "unstable_completeElicitation"
+      | "extMethod"
+    >
+  >
 
 export type Interface = {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse, Error>
@@ -60,6 +94,7 @@ export type Interface = {
   readonly listSessions: (input: ListSessionsRequest) => Effect.Effect<ListSessionsResponse, Error>
   readonly resumeSession: (input: ResumeSessionRequest) => Effect.Effect<ResumeSessionResponse, Error>
   readonly closeSession: (input: CloseSessionRequest) => Effect.Effect<CloseSessionResponse, Error>
+  readonly deleteSession: (input: { sessionId: string; directory?: string }) => Effect.Effect<void, Error>
   readonly forkSession: (input: ForkSessionRequest) => Effect.Effect<ForkSessionResponse, Error>
   readonly setSessionConfigOption: (
     input: SetSessionConfigOptionRequest,
@@ -68,6 +103,23 @@ export type Interface = {
   readonly setSessionModel: (input: SetSessionModelRequest) => Effect.Effect<SetSessionModelResponse, Error>
   readonly prompt: (input: PromptRequest) => Effect.Effect<PromptResponse, Error>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void, Error>
+  readonly listProviders: (input: ListProvidersRequest) => Effect.Effect<ListProvidersResponse, Error>
+  readonly setProvider: (input: SetProvidersRequest) => Effect.Effect<SetProvidersResponse, Error>
+  readonly disableProvider: (input: DisableProvidersRequest) => Effect.Effect<DisableProvidersResponse, Error>
+  readonly logout: (input: LogoutRequest) => Effect.Effect<LogoutResponse, Error>
+  readonly startNes: (input: StartNesRequest) => Effect.Effect<StartNesResponse, Error>
+  readonly suggestNes: (input: SuggestNesRequest) => Effect.Effect<SuggestNesResponse, Error>
+  readonly closeNes: (input: CloseNesRequest) => Effect.Effect<CloseNesResponse, Error>
+  readonly didOpenDocument: (input: DidOpenDocumentNotification) => Effect.Effect<void, Error>
+  readonly didChangeDocument: (input: DidChangeDocumentNotification) => Effect.Effect<void, Error>
+  readonly didCloseDocument: (input: DidCloseDocumentNotification) => Effect.Effect<void, Error>
+  readonly didSaveDocument: (input: DidSaveDocumentNotification) => Effect.Effect<void, Error>
+  readonly didFocusDocument: (input: DidFocusDocumentNotification) => Effect.Effect<void, Error>
+  readonly acceptNes: (input: AcceptNesNotification) => Effect.Effect<void, Error>
+  readonly rejectNes: (input: RejectNesNotification) => Effect.Effect<void, Error>
+  readonly completeElicitation: (input: CompleteElicitationNotification) => Effect.Effect<void, Error>
+  readonly extMethod: (method: string, params: Record<string, unknown>) => Effect.Effect<Record<string, unknown>, Error>
+  readonly extNotification: (method: string, params: Record<string, unknown>) => Effect.Effect<void, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ACP/Service") {}
@@ -123,9 +175,33 @@ export function make(input: {
         },
         sessionCapabilities: {
           close: {},
+          delete: {},
           fork: {},
           list: {},
           resume: {},
+        },
+        auth: {
+          logout: {},
+        },
+        providers: {},
+        nes: {
+          events: {
+            document: {
+              didOpen: {},
+              didChange: { syncKind: "incremental" as const },
+              didClose: {},
+              didSave: {},
+              didFocus: {},
+            },
+          },
+          context: {
+            recentFiles: { maxCount: 10 },
+            relatedSnippets: {},
+            editHistory: { maxCount: 6 },
+            userActions: { maxCount: 16 },
+            openFiles: {},
+            diagnostics: {},
+          },
         },
       },
       authMethods: [authMethod],
@@ -479,6 +555,152 @@ export function make(input: {
     return {}
   })
 
+  const deleteSession = Effect.fn("ACP.deleteSession")(function* (params: {
+    sessionId: string
+    directory?: string
+  }) {
+    yield* request(
+      () =>
+        input.sdk.session.delete(
+          { sessionID: params.sessionId, directory: params.directory },
+          { throwOnError: true },
+        ),
+      "session",
+    )
+  })
+
+  const listProviders = Effect.fn("ACP.listProviders")(function* (_params: ListProvidersRequest) {
+    const snapshot = yield* directorySnapshot(".")
+    const providers: ProviderInfo[] = Object.values(snapshot.providers).map((provider) => ({
+      id: provider.id,
+      name: provider.name,
+      required: provider.id === "opencode",
+      supported: ["openai", "anthropic"],
+      ...(provider.models && Object.keys(provider.models).length > 0
+        ? {
+            current: {
+              apiType: "openai" as const,
+              baseUrl: "https://api.openai.com/v1",
+            },
+          }
+        : {}),
+    }))
+    return { providers }
+  })
+
+  const setProvider = Effect.fn("ACP.setProvider")(function* (_params: SetProvidersRequest) {
+    return {}
+  })
+
+  const disableProvider = Effect.fn("ACP.disableProvider")(function* (params: DisableProvidersRequest) {
+    if (params.id === "opencode") {
+      return yield* new ACPError.InvalidConfigOptionError({ configId: "provider" })
+    }
+    return {}
+  })
+
+  const logout = Effect.fn("ACP.logout")(function* (_params: LogoutRequest) {
+    return {}
+  })
+
+  const nesSessions = new Map<string, NesSession>()
+
+  const startNes = Effect.fn("ACP.startNes")(function* (params: StartNesRequest) {
+    const id = `nes-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    nesSessions.set(id, {
+      id,
+      workspaceUri: params.workspaceUri ?? "",
+      workspaceFolders: params.workspaceFolders ?? [],
+      repository: params.repository,
+      documents: new Map(),
+    })
+    return { sessionId: id }
+  })
+
+  const suggestNes = Effect.fn("ACP.suggestNes")(function* (params: SuggestNesRequest) {
+    const nesSession = nesSessions.get(params.sessionId)
+    if (!nesSession) {
+      return { suggestions: [] }
+    }
+    const doc = nesSession.documents.get(params.uri)
+    if (!doc) {
+      return { suggestions: [] }
+    }
+    return { suggestions: [] }
+  })
+
+  const closeNes = Effect.fn("ACP.closeNes")(function* (params: CloseNesRequest) {
+    nesSessions.delete(params.sessionId)
+    return {}
+  })
+
+  const didOpenDocument = Effect.fn("ACP.didOpenDocument")(function* (params: DidOpenDocumentNotification) {
+    const nesSession = nesSessions.get(params.sessionId)
+    if (nesSession) {
+      nesSession.documents.set(params.uri, {
+        uri: params.uri,
+        text: params.text,
+        version: params.version,
+        languageId: params.languageId,
+      })
+    }
+  })
+
+  const didChangeDocument = Effect.fn("ACP.didChangeDocument")(function* (params: DidChangeDocumentNotification) {
+    const nesSession = nesSessions.get(params.sessionId)
+    if (!nesSession) return
+    const doc = nesSession.documents.get(params.uri)
+    if (!doc) return
+    for (const change of params.contentChanges) {
+      if (change.range) {
+        const start = change.range.start
+        const end = change.range.end
+        const lines = doc.text.split("\n")
+        const before = lines.slice(0, start.line).join("\n") + (start.line > 0 ? "\n" : "")
+        const after = lines.slice(end.line).join("\n")
+        const middleLines = lines.slice(start.line, end.line)
+        if (middleLines.length > 0) {
+          middleLines[0] = middleLines[0].slice(0, start.character) + change.text + middleLines[0].slice(end.character)
+        }
+        doc.text = before + middleLines.join("\n") + after
+      } else {
+        doc.text = change.text
+      }
+    }
+    doc.version = params.version
+  })
+
+  const didCloseDocument = Effect.fn("ACP.didCloseDocument")(function* (params: DidCloseDocumentNotification) {
+    const nesSession = nesSessions.get(params.sessionId)
+    if (nesSession) {
+      nesSession.documents.delete(params.uri)
+    }
+  })
+
+  const didSaveDocument = Effect.fn("ACP.didSaveDocument")(function* (_params: DidSaveDocumentNotification) {})
+
+  const didFocusDocument = Effect.fn("ACP.didFocusDocument")(function* (_params: DidFocusDocumentNotification) {})
+
+  const acceptNes = Effect.fn("ACP.acceptNes")(function* (_params: AcceptNesNotification) {})
+
+  const rejectNes = Effect.fn("ACP.rejectNes")(function* (_params: RejectNesNotification) {})
+
+  const completeElicitation = Effect.fn("ACP.completeElicitation")(
+    function* (_params: CompleteElicitationNotification) {},
+  )
+
+  const extMethod = Effect.fn("ACP.extMethod")(function* (
+    _method: string,
+    _params: Record<string, unknown>,
+  ) {
+    return yield* new ACPError.UnsupportedOperationError({ method: _method })
+  })
+
+  const extNotification = Effect.fn("ACP.extNotification")(function* (
+    _method: string,
+    _params: Record<string, unknown>,
+  ) {})
+
   return {
     initialize,
     authenticate,
@@ -487,10 +709,28 @@ export function make(input: {
     listSessions,
     resumeSession,
     closeSession,
+    deleteSession,
     forkSession,
     setSessionConfigOption,
     setSessionMode,
     setSessionModel,
+    listProviders,
+    setProvider,
+    disableProvider,
+    logout,
+    startNes,
+    suggestNes,
+    closeNes,
+    didOpenDocument,
+    didChangeDocument,
+    didCloseDocument,
+    didSaveDocument,
+    didFocusDocument,
+    acceptNes,
+    rejectNes,
+    completeElicitation,
+    extMethod,
+    extNotification,
     prompt: Effect.fn("ACP.prompt")(function* (params: PromptRequest) {
       const current = yield* session.get(params.sessionId)
       const snapshot = yield* directorySnapshot(current.cwd)
@@ -1102,4 +1342,19 @@ function findProviderID(value: unknown): string | undefined {
   if ("providerId" in value && typeof value.providerId === "string") return value.providerId
   if ("data" in value) return findProviderID(value.data)
   if ("error" in value) return findProviderID(value.error)
+}
+
+type NesDocumentState = {
+  uri: string
+  text: string
+  version: number
+  languageId: string
+}
+
+type NesSession = {
+  id: string
+  workspaceUri: string
+  workspaceFolders: Array<{ uri: string; name: string }>
+  repository?: { name: string; owner: string; remoteUrl: string } | null
+  documents: Map<string, NesDocumentState>
 }

@@ -4,17 +4,32 @@ import {
   type AgentSideConnection,
   type AuthenticateRequest,
   type CancelNotification,
+  type CloseNesRequest,
   type CloseSessionRequest,
+  type DidChangeDocumentNotification,
+  type DidCloseDocumentNotification,
+  type DidFocusDocumentNotification,
+  type DidOpenDocumentNotification,
+  type DidSaveDocumentNotification,
+  type DisableProvidersRequest,
   type ForkSessionRequest,
   type InitializeRequest,
+  type ListProvidersRequest,
   type ListSessionsRequest,
   type LoadSessionRequest,
+  type LogoutRequest,
   type NewSessionRequest,
   type PromptRequest,
   type ResumeSessionRequest,
+  type SetProvidersRequest,
   type SetSessionConfigOptionRequest,
   type SetSessionModelRequest,
   type SetSessionModeRequest,
+  type StartNesRequest,
+  type SuggestNesRequest,
+  type AcceptNesNotification,
+  type RejectNesNotification,
+  type CompleteElicitationNotification,
 } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
@@ -82,6 +97,74 @@ export class Agent implements ACPAgent {
 
   cancel(params: CancelNotification) {
     return run(this.service.cancel(params))
+  }
+
+  unstable_listProviders(params: ListProvidersRequest) {
+    return run(this.service.listProviders(params))
+  }
+
+  unstable_setProvider(params: SetProvidersRequest) {
+    return run(this.service.setProvider(params))
+  }
+
+  unstable_disableProvider(params: DisableProvidersRequest) {
+    return run(this.service.disableProvider(params))
+  }
+
+  unstable_logout(params: LogoutRequest) {
+    return run(this.service.logout(params))
+  }
+
+  unstable_startNes(params: StartNesRequest) {
+    return run(this.service.startNes(params))
+  }
+
+  unstable_suggestNes(params: SuggestNesRequest) {
+    return run(this.service.suggestNes(params))
+  }
+
+  unstable_closeNes(params: CloseNesRequest) {
+    return run(this.service.closeNes(params))
+  }
+
+  unstable_didOpenDocument(params: DidOpenDocumentNotification) {
+    return run(this.service.didOpenDocument(params))
+  }
+
+  unstable_didChangeDocument(params: DidChangeDocumentNotification) {
+    return run(this.service.didChangeDocument(params))
+  }
+
+  unstable_didCloseDocument(params: DidCloseDocumentNotification) {
+    return run(this.service.didCloseDocument(params))
+  }
+
+  unstable_didSaveDocument(params: DidSaveDocumentNotification) {
+    return run(this.service.didSaveDocument(params))
+  }
+
+  unstable_didFocusDocument(params: DidFocusDocumentNotification) {
+    return run(this.service.didFocusDocument(params))
+  }
+
+  unstable_acceptNes(params: AcceptNesNotification) {
+    return run(this.service.acceptNes(params))
+  }
+
+  unstable_rejectNes(params: RejectNesNotification) {
+    return run(this.service.rejectNes(params))
+  }
+
+  unstable_completeElicitation(params: CompleteElicitationNotification) {
+    return run(this.service.completeElicitation(params))
+  }
+
+  extMethod(method: string, params: Record<string, unknown>) {
+    return run(this.service.extMethod(method, params))
+  }
+
+  extNotification(method: string, params: Record<string, unknown>) {
+    return run(this.service.extNotification(method, params))
   }
 }
 
