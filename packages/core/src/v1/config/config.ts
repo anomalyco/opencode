@@ -59,13 +59,13 @@ export const Info = Schema.Struct({
   }),
   auto_continue: Schema.optional(Schema.Boolean).annotate({
     description:
-      "Enable or disable automatic continuation past a stalled turn. When true, the TUI nudges the agent to keep working (via the /loop engine, with its iteration cap, no-progress detection, and completion token) after a turn that made tool calls but didn't reach a natural stopping point. Independent of 'auto_mode'. Defaults to false.",
+      "@deprecated No longer read. Continuing after a turn is what the /loop command does, so it is a verb rather " +
+      "than a setting; the key is still accepted so existing config files keep loading.",
   }),
   auto_queue: Schema.optional(Schema.Boolean).annotate({
     description:
-      "Enable or disable working the openspec backlog unattended. The top rung of the autonomy ladder: implies " +
-      "'auto_mode' and 'auto_continue'. When true the agent takes the next eligible change on its own instead of " +
-      "waiting to be told what to work on. Defaults to false.",
+      "@deprecated No longer read. Working the planned backlog is what the /auto command does; the key is still " +
+      "accepted so config files written while it existed keep loading.",
   }),
   plugin: Schema.optional(Schema.mutable(Schema.Array(ConfigPluginV1.Spec))),
   share: Schema.optional(Schema.Literals(["manual", "auto", "disabled"])).annotate({

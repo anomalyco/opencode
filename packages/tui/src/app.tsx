@@ -46,9 +46,6 @@ import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogLoopList } from "./component/dialog-loop-list"
-import { DialogAutoMode } from "./component/dialog-auto-mode"
-import { applyAutoMode } from "./component/auto-mode-apply"
-import { currentAutoMode, type ModeValue } from "./util/auto-mode"
 import { DialogTuning } from "./component/dialog-tuning"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
@@ -614,15 +611,16 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         // Relentless openspec queue run: implement -> test -> verify -> commit
         // per change, quarantining stuck changes rather than idling. Runs
         // under the no-push authority ceiling.
-        name: "loop.queue.start",
-        title: "Start openspec queue run (all eligible changes, never pushes)",
+        name: "loop.auto.start",
+        title: "Auto — work all planned tasks until none are left (never pushes)",
         category: "Loop",
-        // slashName makes `/queue` discoverable in the prompt's autocomplete;
-        // selecting it there starts a full-backlog run, which is the right
-        // default for a bare `/queue`. Typing arguments after it
-        // (`/queue slug --sync`) is handled by the prompt's own intercept, the
-        // same way `/loop` works.
-        slashName: "queue",
+        // Auto is a verb, not a mode. It is loop + do not ask + find the
+        // planned work itself, and it is done when no planned task remains.
+        // Selecting it here runs everything; typing arguments after it
+        // (`/auto <change> --sync`) is handled by the prompt's own intercept,
+        // the same way `/loop` works. `/queue` stays as an alias.
+        slashName: "auto",
+        slashAliases: ["queue"],
         run: async () => {
           dialog.clear()
           try {
@@ -631,8 +629,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             toast.show({
               variant: "success",
               message:
-                `Queue run ${info.id} started — it works the backlog until nothing is eligible. ` +
-                `Gate commands come from experimental.queue_gate; watch /loop for the change and gate.`,
+                `Auto started (${info.id}) — works planned tasks until none are left, and never pushes. ` +
+                `Watch /loop for what it is on.`,
             })
           } catch (error) {
             toast.show({ title: "Failed to start queue run", message: errorMessage(error), variant: "error" })
@@ -983,77 +981,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
           await sync.session.refresh()
           dialog.clear()
-        },
-      },
-      {
-        name: "app.toggle.automode.permissions",
-        title: () => {
-          const enabled = sync.data.config.auto_mode ?? false
-          return enabled ? "Disable permission auto-approve" : "Enable permission auto-approve"
-        },
-        category: "System",
-        run: async () => {
-          dialog.clear()
-          // Stepping a single switch has to land on a real rung, so this moves
-          // between Manual and Skip-ask rather than producing a combination the
-          // ladder does not contain.
-          const on = (sync.data.config.auto_mode ?? false) && !(sync.data.config.auto_continue ?? false)
-          await applyAutoMode({ sdk, sync, toast }, on ? "manual" : "skip-ask")
-        },
-      },
-      {
-        // The discoverable route: `/auto` or the palette opens a picker that
-        // names all four states and what each does. Cycling and the individual
-        // toggles stay for people who already know what they want.
-        name: "app.automode.show",
-        title: "Agent autonomy…",
-        category: "System",
-        slashName: "mode",
-        slashAliases: ["auto"],
-        run: () => {
-          dialog.replace(() => <DialogAutoMode />)
-        },
-      },
-      {
-        // One key steps through the whole space instead of hunting two
-        // separate toggles: off -> skip-ask -> loop -> auto -> off. Mirrors
-        // Claude Code's permission-mode cycle; the status pill names the
-        // state it lands on.
-        name: "app.automode.cycle",
-        title: () => {
-          const config = sync.data.config
-          const skip = config.auto_mode ?? false
-          const cont = config.auto_continue ?? false
-          const label = !skip && !cont ? "manual" : skip && cont ? "auto" : skip ? "skip-ask" : "continue"
-          return `Cycle auto mode (now: ${label})`
-        },
-        category: "System",
-        run: async () => {
-          dialog.clear()
-          const order: ModeValue[] = ["manual", "skip-ask", "continue", "auto"]
-          const at = order.indexOf(
-            currentAutoMode(
-              sync.data.config.auto_mode ?? false,
-              sync.data.config.auto_continue ?? false,
-              sync.data.config.auto_queue ?? false,
-            ),
-          )
-          // Same path as the picker, so cycling into Auto starts the backlog
-          // run exactly as selecting Auto does.
-          await applyAutoMode({ sdk, sync, toast }, order[(at + 1) % order.length])
-        },
-      },
-      {
-        name: "app.toggle.automode.continue",
-        title: () => {
-          const enabled = sync.data.config.auto_continue ?? false
-          return enabled ? "Disable auto-continue" : "Enable auto-continue"
-        },
-        category: "System",
-        run: async () => {
-          dialog.clear()
-          const on = sync.data.config.auto_continue ?? false
-          await applyAutoMode({ sdk, sync, toast }, on ? "skip-ask" : "continue")
         },
       },
     ].map((command) => ({

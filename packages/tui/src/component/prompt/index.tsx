@@ -37,17 +37,18 @@ import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 
+// Clickable text uses mouse-UP: the root box treats mouse-up as copy-on-select,
+// and down-then-up across a re-render is what made an earlier attempt flash.
 function ClickText(props: JSX.IntrinsicElements["text"]) {
   return <text {...props} />
 }
+
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { parseLoopArgs } from "@opencode-ai/sdk/v2"
 import { DialogLoopList } from "../dialog-loop-list"
-import { DialogAutoMode } from "../dialog-auto-mode"
-import { currentAutoMode } from "../../util/auto-mode"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
@@ -271,7 +272,7 @@ function matchesVerb(input: string, verb: string): boolean {
  * like "/loopback is broken" is still sent to the model.
  */
 function isLoopCommand(input: string): boolean {
-  return matchesVerb(input, "/loop") || matchesVerb(input, "/queue")
+  return matchesVerb(input, "/loop") || matchesVerb(input, "/auto") || matchesVerb(input, "/queue")
 }
 
 /**
@@ -1202,12 +1203,17 @@ function isRunControlInput(input: string): boolean {
       // `/loop --queue` still works so nothing that already exists breaks.
       const firstLineEnd = inputText.indexOf("\n")
       const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
-      const verb = firstLine.startsWith("/queue") ? "/queue" : "/loop"
+      const verb = firstLine.startsWith("/auto")
+        ? "/auto"
+        : firstLine.startsWith("/queue")
+          ? "/queue"
+          : "/loop"
       const rest = firstLine.slice(verb.length).trim()
       try {
         const parsedArgs = parseLoopArgs(rest)
-        // `/queue …` means queue mode even without the flag.
-        const parsed = verb === "/queue" ? { ...parsedArgs, queue: true } : parsedArgs
+        // `/auto …` (and its `/queue` alias) means "find the planned work
+        // yourself" even without the flag.
+        const parsed = verb === "/loop" ? parsedArgs : { ...parsedArgs, queue: true }
         if (!parsed.prompt && !parsed.queue) {
           dialog.replace(() => <DialogLoopList />)
         } else {
@@ -1238,7 +1244,7 @@ function isRunControlInput(input: string): boolean {
               toast.show({
                 variant: "success",
                 message: parsed.queue
-                  ? `Queue run ${result.data.id} started — works the backlog until nothing is eligible, and never pushes`
+                  ? `Auto started (${result.data.id}) — works planned tasks until none are left, and never pushes`
                   : `Loop ${result.data.id} started (max ${result.data.maxIterations} iterations, stops on ${result.data.completionToken})`,
               })
             })
@@ -1272,7 +1278,6 @@ function isRunControlInput(input: string): boolean {
       })
     } else {
       move.startSubmit()
-      const autoContinueEnabled = sync.data.config.auto_continue ?? false
       sdk.client.session
         .prompt(
           {
@@ -1292,47 +1297,6 @@ function isRunControlInput(input: string): boolean {
           },
           { throwOnError: true },
         )
-        .then((result) => {
-          if (!autoContinueEnabled) return
-          // Auto-continue: a turn that made real progress (tool calls) but
-          // didn't reach a natural stopping point (a question back to the
-          // user) looks stalled rather than finished, so nudge continuation
-          // via the same engine /loop uses — its own completion-token and
-          // no-progress detection govern every iteration after this one.
-          const parts = result.data.parts
-          const hasToolCall = parts.some((part) => part.type === "tool")
-          if (!hasToolCall) return
-          const finalText = parts
-            .filter((part) => part.type === "text")
-            .map((part) => part.text)
-            .join("")
-            .trim()
-          const looksLikeQuestion =
-            /\?\s*$/.test(finalText) ||
-            /\b(would you like|should i|shall i|let me know|do you want|can you confirm|please confirm|waiting for your|need your input)\b/i.test(
-              finalText,
-            )
-          if (looksLikeQuestion) return
-          sdk.client.loop
-            .create({ prompt: inputText, sessionID })
-            .then((loopResult) => {
-              if (loopResult.error || !loopResult.data) {
-                toast.show({
-                  title: "Auto-continue: failed",
-                  message: errorMessage(loopResult.error),
-                  variant: "error",
-                })
-                return
-              }
-              toast.show({
-                variant: "success",
-                message: `Auto-continue: looping (max ${loopResult.data.maxIterations} iterations)`,
-              })
-            })
-            .catch((error) => {
-              toast.show({ title: "Auto mode: failed to continue", message: errorMessage(error), variant: "error" })
-            })
-        })
         .catch((error) => {
           toast.show({
             title: "Failed to send prompt",
@@ -1671,62 +1635,16 @@ function isRunControlInput(input: string): boolean {
                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
                       </text>
                       <Show when={store.mode === "normal"}>
-                        <text
-                          // Clickable: a keybind you have to remember is not a
-                          // control most people will ever find. Clicking the
-                          // indicator opens the mode picker, which names every
-                          // state instead of making you cycle blind.
-                          //
-                          // NOTE: not wired to a mouse handler right now — see
-                          // the revert in the accompanying commit. Use /mode,
-                          // ctrl+x o, or the palette.
-                          fg={fadeColor(
-                            (sync.data.config.auto_mode ?? false) || (sync.data.config.auto_continue ?? false)
-                              ? theme.success
-                              : theme.textMuted,
-                            modelMetaAlpha(),
-                          )}
-                        >
-                          {(() => {
-                            const skip = sync.data.config.auto_mode ?? false
-                            const cont = sync.data.config.auto_continue ?? false
-                            const queue = sync.data.config.auto_queue ?? false
-                            const dot = skip || cont || queue ? "●" : "○"
-                            // Name the state exactly: "Auto" only when both are
-                            // on, "Manual" when neither, and a single active
-                            // flag names itself — the indicator must never
-                            // imply a mode that isn't actually enabled.
-                            // "Continue", not "Loop": /loop is a command that
-                            // starts one now, and reusing the word for the
-                            // auto-continue switch made the two read as the
-                            // same feature.
-                            // One shared derivation with the picker: the pill
-                            // and the menu must never name different rungs.
-                            const rung = currentAutoMode(skip, cont, queue)
-                            const label =
-                              rung === "auto"
-                                ? "Auto"
-                                : rung === "continue"
-                                  ? "Continue"
-                                  : rung === "skip-ask"
-                                    ? "Skip-ask"
-                                    : "Manual"
-                            // A live loop in this session is the other half of
-                            // the story: show where it is, and for a queue run
-                            // which change and gate it is working.
-                            return `${dot} ${label}`
-                          })()}
-                        </text>
                         <Show when={activeLoop()}>
                           {(live) => (
-                            <text
-                              // NOTE: not clickable right now — see the revert
-                              // in the accompanying commit. Use /loop.
-                              fg={fadeColor(theme.success, modelMetaAlpha())}
-                            >
+                            // No mode name here any more: there is nothing to
+                            // set. `/loop` and `/auto` are verbs, so the only
+                            // honest thing to show is what is running, and
+                            // nothing at all when nothing is.
+                            <text fg={fadeColor(theme.success, modelMetaAlpha())}>
                               {live().currentChange
-                                ? `· queue ${live().currentChange} [${live().currentGate ?? "?"}] ${live().iteration}/${live().maxIterations}`
-                                : `· loop ${live().iteration}/${live().maxIterations}`}
+                                ? `● auto ${live().currentChange} [${live().currentGate ?? "?"}] ${live().iteration}/${live().maxIterations}`
+                                : `● loop ${live().iteration}/${live().maxIterations}`}
                             </text>
                           )}
                         </Show>
