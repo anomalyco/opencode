@@ -32,6 +32,8 @@ export interface DialogSelectProps<T> {
   onMove?: (option: DialogSelectOption<T>) => void
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
+  // When provided, groups are ordered by category; otherwise first-seen order is preserved.
+  categorySort?: (a: string, b: string) => number
   skipFilter?: boolean
   renderFilter?: boolean
   locked?: boolean
@@ -82,6 +84,14 @@ export type DialogSelectRef<T> = {
   selected(): DialogSelectOption<T> | undefined
   focusInput(): void
   moveTo(value: T): void
+}
+
+export function sortDialogSelectGroups<T>(
+  groups: [string, DialogSelectOption<T>[]][],
+  categorySort?: (a: string, b: string) => number,
+) {
+  if (!categorySort) return groups
+  return groups.toSorted(([a], [b]) => categorySort(a, b))
 }
 
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
@@ -198,7 +208,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       // mapValues((x) => x.sort((a, b) => a.title.localeCompare(b.title))),
       entries(),
     )
-    return result
+    return sortDialogSelectGroups(result, props.categorySort)
   })
 
   const flat = createMemo(() => {

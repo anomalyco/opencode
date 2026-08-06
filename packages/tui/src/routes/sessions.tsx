@@ -131,6 +131,7 @@ function cachedReaddir() {
 // Survives the route remount when coming back from a session, so the list can
 // put the cursor back on the session the user just left.
 let lastOpenedSessionID: string | undefined
+const SESSION_DIRECTORY_COLLATOR = new Intl.Collator("en", { numeric: true, sensitivity: "base" })
 
 export function Sessions() {
   const route = useRoute()
@@ -492,6 +493,7 @@ export function Sessions() {
         title="All Sessions"
         placeholder="Search sessions across all projects"
         options={options()}
+        categorySort={SESSION_DIRECTORY_COLLATOR.compare}
         skipFilter={true}
         preserveSelection={true}
         fullHeight={true}
