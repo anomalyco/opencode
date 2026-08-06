@@ -30,7 +30,10 @@ export default Runtime.handler(
             order: "desc",
             limit: 50,
           })
-          if (page.data.length === 0) throw new Error("No sessions found")
+          if (page.data.length === 0) {
+            process.stderr.write(`No sessions found${EOL}`)
+            return undefined
+          }
           return (await selectSession(page.data))?.id
         })
     if (!sessionID) return

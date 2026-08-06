@@ -75,6 +75,34 @@ test("export writes the sanitized runtime transfer document", async () => {
   }
 }, 15_000)
 
+test("export reports an empty session list without a stack trace", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url)
+      if (url.pathname === "/api/health") return health()
+      if (url.pathname === "/api/location") {
+        return Response.json({
+          directory: "/project",
+          project: { id: "global", directory: "/project", canonical: "/project" },
+        })
+      }
+      if (url.pathname === "/api/session") return Response.json({ data: [], cursor: {} })
+      return new Response("Not found", { status: 404 })
+    },
+  })
+
+  try {
+    const [stdout, stderr, exitCode] = await run(["export", "--server", server.url.toString()])
+
+    expect(exitCode).toBe(0)
+    expect(stdout).toBe("")
+    expect(stderr).toBe(`No sessions found${os.EOL}`)
+  } finally {
+    await server.stop(true)
+  }
+})
+
 test("import validates a file and sends it to the resolved location", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-import-"))
   const file = path.join(root, "session.json")
