@@ -27,6 +27,7 @@ export const DESKTOP_NATIVE_LOCALES = [
   "az",
   "fi",
   "sv",
+  "fa",
 ] as const
 
 export type DesktopNativeLocale = (typeof DESKTOP_NATIVE_LOCALES)[number]

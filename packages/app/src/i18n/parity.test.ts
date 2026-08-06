@@ -27,6 +27,7 @@ const appLocales = [
   "pa",
   "az",
   "fi",
+  "fa",
   "sv",
 ] as const
 const desktopLocales = appLocales

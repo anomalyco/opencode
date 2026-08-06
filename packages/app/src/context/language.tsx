@@ -17,7 +17,7 @@ import {
 export type Locale = DesktopNativeLocale
 export type Direction = "ltr" | "rtl"
 
-const RTL_LOCALES: ReadonlySet<Locale> = new Set(["ar", "ur", "pa"])
+const RTL_LOCALES: ReadonlySet<Locale> = new Set(["ar", "ur", "pa", "fa"])
 
 function localeDirection(locale: Locale): Direction {
   return RTL_LOCALES.has(locale) ? "rtl" : "ltr"
@@ -67,6 +67,7 @@ const INTL: Record<Locale, string> = {
   az: "az-Latn-AZ",
   fi: "fi-FI",
   sv: "sv-SE",
+  fa: "fa-IR",
 }
 
 const LABEL_KEY: Partial<Record<Locale, keyof Dictionary>> = {
@@ -88,6 +89,7 @@ const LABEL_KEY: Partial<Record<Locale, keyof Dictionary>> = {
   th: "language.th",
   bs: "language.bs",
   tr: "language.tr",
+  fa: "language.fa",
 }
 
 const LABEL: Partial<Record<Locale, string>> = {
@@ -137,6 +139,7 @@ const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   az: () => merge(import("@/i18n/az"), import("@opencode-ai/ui/i18n/az")),
   fi: () => merge(import("@/i18n/fi"), import("@opencode-ai/ui/i18n/fi")),
   sv: () => merge(import("@/i18n/sv"), import("@opencode-ai/ui/i18n/sv")),
+  fa: () => merge(import("@/i18n/fa"), import("@opencode-ai/ui/i18n/fa")),
 }
 
 function loadDict(locale: Locale) {
@@ -197,6 +200,7 @@ const localeMatchers: Array<{ locale: Locale; match: (language: string) => boole
   },
   { locale: "fi", match: (language) => language.startsWith("fi") },
   { locale: "sv", match: (language) => language.startsWith("sv") },
+  { locale: "fa", match: (language) => language.startsWith("fa") },
 ]
 
 function detectLocale(): Locale {
