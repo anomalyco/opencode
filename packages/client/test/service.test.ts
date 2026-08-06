@@ -107,6 +107,28 @@ test("does not spawn contenders while an incompatible service rejects replacemen
   expect(existing.exitCode).toBe(null)
 })
 
+test("does not replace a version rejected by the caller", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const contender = join(directory, "contender.json")
+  const existing = spawn(registration, "graceful")
+  await waitForFile(registration)
+
+  await expect(
+    run(
+      Service.ensure({
+        file: registration,
+        version: "old",
+        canReplace: () => false,
+        command: [process.execPath, fixture, contender, "record-start"],
+      }),
+    ),
+  ).rejects.toThrow("Client version old cannot replace server version test")
+
+  expect(await Bun.file(contender + ".started").exists()).toBe(false)
+  expect(existing.exitCode).toBe(null)
+})
+
 test("a legacy health response is still replaced", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")

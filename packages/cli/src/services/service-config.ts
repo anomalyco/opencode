@@ -5,6 +5,7 @@ import { Service } from "@opencode-ai/client/effect/service"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
+import semver from "semver"
 import { selfCommand } from "../util/process"
 
 // The CLI's service configuration file, plus the Service.EnsureOptions binding that
@@ -104,9 +105,20 @@ export const options = Effect.fnUntraced(function* () {
   return {
     file,
     version: OPENCODE_VERSION,
+    canReplace: (version: string | undefined) => canReplaceVersion(version),
     command: [...selfCommand(), "serve", "--service"],
   }
 })
+
+export function canReplaceVersion(serverVersion: string | undefined, clientVersion = OPENCODE_VERSION) {
+  if (serverVersion === undefined) return true
+  // Preview versions end in `<channel>-<build>[.<attempt>]`. Convert the build
+  // to a numeric semver identifier so next-15000 sorts after next-9999.
+  const server = serverVersion.replace(/-(\d+)(?=(?:\.\d+)?$)/, ".$1")
+  const client = clientVersion.replace(/-(\d+)(?=(?:\.\d+)?$)/, ".$1")
+  if (!semver.valid(server) || !semver.valid(client)) return true
+  return semver.lt(server, client)
+}
 
 export const read = Effect.fn("cli.service-config.read")(function* () {
   const { fs, configFile, legacyConfigFile } = yield* paths

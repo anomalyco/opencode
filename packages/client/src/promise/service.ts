@@ -2,7 +2,14 @@ import { readFile } from "node:fs/promises"
 import { spawn, type ChildProcess } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
+import {
+  VersionMismatchError,
+  type DiscoverOptions,
+  type Endpoint,
+  type Info,
+  type EnsureOptions,
+  type StopOptions,
+} from "../service.js"
 import type { ServiceHealth, ServiceStopResponse } from "./generated/types.js"
 
 export * from "../service.js"
@@ -70,6 +77,8 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (compatible && service.state === "ready") return service.endpoint
       if (compatible && service.state === "failed") throw new Error("Background service failed to start")
       if (!compatible) {
+        if (options.canReplace?.(service.version) === false)
+          throw new VersionMismatchError(options.version, service.version)
         announce("version-mismatch", service.version)
         await kill(service, options).catch(() => undefined)
         lastSpawn = 0

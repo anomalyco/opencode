@@ -70,6 +70,25 @@ test("reports a failed registered service", async () => {
   )
 })
 
+test("does not replace a version rejected by the caller", async () => {
+  const registration = await setup("graceful")
+  const directory = await temp()
+  const contender = join(directory, "contender.json")
+  const info = await Bun.file(registration).json()
+
+  await expect(
+    Service.ensure({
+      file: registration,
+      version: "old",
+      canReplace: () => false,
+      command: [process.execPath, fixture, contender, "record-start"],
+    }),
+  ).rejects.toThrow("Client version old cannot replace server version test")
+
+  expect(await Bun.file(contender + ".started").exists()).toBe(false)
+  expect(process.kill(info.pid, 0)).toBe(true)
+})
+
 test("requests graceful stop of the exact service instance", async () => {
   const registration = await setup("graceful")
   const info = await Bun.file(registration).json()

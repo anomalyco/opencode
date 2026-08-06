@@ -3,7 +3,13 @@ import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { spawn, type ChildProcess } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type { DiscoverOptions, Endpoint, EnsureOptions, StopOptions } from "../service.js"
+import {
+  VersionMismatchError,
+  type DiscoverOptions,
+  type Endpoint,
+  type EnsureOptions,
+  type StopOptions,
+} from "../service.js"
 
 export * from "../service.js"
 /** Contents of the local service registration file. */
@@ -89,6 +95,8 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       if (compatible && service.state === "failed")
         return yield* Effect.fail(new Error("Background service failed to start"))
       if (compatible) return Option.none<LocalService>()
+      if (options.canReplace?.(service.version) === false)
+        return yield* Effect.fail(new VersionMismatchError(options.version, service.version))
       yield* announce("version-mismatch", service.version)
       yield* kill(service, options).pipe(Effect.ignore)
       lastSpawn = 0

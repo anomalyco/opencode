@@ -28,8 +28,22 @@ export type EnsureReason = "missing" | "version-mismatch"
 export type EnsureOptions = DiscoverOptions & {
   /** Service command and arguments. Defaults to `opencode serve --service`. */
   readonly command?: ReadonlyArray<string>
+  /** Decide whether a version-mismatched service may be replaced. Defaults to true. */
+  readonly canReplace?: (version: string | undefined) => boolean
   /** Called once before spawning a new service process. */
   readonly onStart?: (reason: EnsureReason, previousVersion?: string) => void
+}
+
+/** A healthy service exists, but the caller's replacement policy protects it. */
+export class VersionMismatchError extends Error {
+  override readonly name = "VersionMismatchError"
+
+  constructor(
+    readonly clientVersion: string | undefined,
+    readonly serverVersion: string | undefined,
+  ) {
+    super(`Client version ${clientVersion ?? "unknown"} cannot replace server version ${serverVersion ?? "unknown"}`)
+  }
 }
 
 /** Options used to stop the local OpenCode service. */
