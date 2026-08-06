@@ -16,6 +16,7 @@ import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Pty } from "@opencode-ai/core/pty"
 import { Project } from "@opencode-ai/core/project"
 import { Session } from "@opencode-ai/core/session"
+import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { Shell } from "@opencode-ai/core/shell"
 import { Job } from "@opencode-ai/core/job"
 import { MCP } from "@opencode-ai/core/mcp/index"
@@ -51,6 +52,7 @@ const applicationServices = LayerNode.group([
   Job.node,
   Project.node,
   Session.node,
+  SessionTransfer.node,
   PluginRuntime.providerNode,
   SdkPlugins.node,
   PermissionSaved.node,

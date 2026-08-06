@@ -15,6 +15,10 @@ import type {
   SessionListOutput,
   SessionCreateInput,
   SessionCreateOutput,
+  SessionImportInput,
+  SessionImportOutput,
+  SessionExportInput,
+  SessionExportOutput,
   SessionActiveOutput,
   SessionGetInput,
   SessionGetOutput,
@@ -474,6 +478,29 @@ export function make(options: ClientOptions) {
             },
             successStatus: 200,
             declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      import: (input: SessionImportInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionImportOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/import`,
+            body: { info: input["info"], messages: input["messages"], location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [409, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      export: (input: SessionExportInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionExportOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/export`,
+            successStatus: 200,
+            declaredStatuses: [404, 500, 401, 400],
             empty: false,
           },
           requestOptions,
