@@ -6,7 +6,7 @@ import { pipe, sortBy } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useTheme } from "../context/theme"
-import { TextAttributes, type RGBA, type ScrollBoxRenderable } from "@opentui/core"
+import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import type { McpServer } from "@opencode-ai/client"
 import { useClipboard } from "../context/clipboard"
 import { useToast } from "../ui/toast"
@@ -19,26 +19,20 @@ function statusError(status: McpServer["status"]) {
   return undefined
 }
 
-function Status(props: { status: McpServer["status"]; loading: boolean; active: boolean }) {
-  const theme = useTheme("elevated")
-  const color = (fallback: RGBA) => (props.active ? theme.text.action.primary.focused : fallback)
+function Status(props: { status: McpServer["status"]; loading: boolean }) {
   if (props.loading || props.status.status === "pending") {
-    return <span style={{ fg: color(theme.text.subdued) }}>Connecting …</span>
+    return <>Connecting …</>
   }
   if (props.status.status === "connected") {
-    return (
-      <span style={{ fg: color(theme.text.feedback.success.default), attributes: TextAttributes.BOLD }}>
-        Connected ✓
-      </span>
-    )
+    return <span style={{ attributes: TextAttributes.BOLD }}>Connected ✓</span>
   }
   if (props.status.status === "failed") {
-    return <span style={{ fg: color(theme.text.feedback.error.default) }}>Failed !</span>
+    return <>Failed !</>
   }
   if (props.status.status === "needs_auth") {
-    return <span style={{ fg: color(theme.text.feedback.warning.default) }}>Sign in required →</span>
+    return <>Sign in required →</>
   }
-  return <span style={{ fg: color(theme.text.subdued) }}>Disabled ○</span>
+  return <>Disabled ○</>
 }
 
 export function DialogMcp() {
@@ -50,6 +44,13 @@ export function DialogMcp() {
   const [focused, setFocused] = createSignal<string>()
   const [detail, setDetail] = createSignal<McpServer>()
   const [loading, setLoading] = createSignal<string | null>(null)
+
+  const statusColor = (status: McpServer["status"]) => {
+    if (status.status === "connected") return theme.text.feedback.success.default
+    if (status.status === "failed") return theme.text.feedback.error.default
+    if (status.status === "needs_auth") return theme.text.feedback.warning.default
+    return theme.text.subdued
+  }
 
   const servers = createMemo(() =>
     pipe(
@@ -66,11 +67,15 @@ export function DialogMcp() {
 
   const options = createMemo(() => {
     const loadingMcp = loading()
-    return servers().map((server) => ({
-      value: server.name,
-      title: server.name,
-      footer: <Status status={server.status} loading={loadingMcp === server.name} active={focused() === server.name} />,
-    }))
+    return servers().map((server) => {
+      const pending = loadingMcp === server.name || server.status.status === "pending"
+      return {
+        value: server.name,
+        title: server.name,
+        footer: <Status status={server.status} loading={pending} />,
+        footerColor: pending ? theme.text.subdued : statusColor(server.status),
+      }
+    })
   })
 
   const focusedServer = createMemo(() => servers().find((server) => server.name === focused()))

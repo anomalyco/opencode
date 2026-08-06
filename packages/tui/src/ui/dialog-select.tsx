@@ -71,6 +71,7 @@ export interface DialogSelectOption<T = any> {
   detailsColor?: RGBA
   detailsWrap?: boolean
   footer?: JSX.Element | string
+  footerColor?: RGBA
   titleWidth?: number
   truncateTitle?: boolean | "left"
   category?: string
@@ -727,6 +728,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                               footer={
                                 flatten() ? (option.searchFooter ?? option.category ?? option.footer) : option.footer
                               }
+                              footerColor={option.footerColor}
                               titleWidth={option.titleWidth}
                               truncateTitle={option.truncateTitle}
                               description={option.description !== category ? option.description : undefined}
@@ -784,6 +786,7 @@ function Option(props: {
   current?: boolean
   muted?: boolean
   footer?: JSX.Element | string
+  footerColor?: RGBA
   titleWidth?: number
   truncateTitle?: boolean | "left"
   gutter?: () => JSX.Element
@@ -832,7 +835,17 @@ function Option(props: {
       </text>
       <Show when={props.footer}>
         <box flexShrink={0}>
-          <text fg={props.active && !props.muted ? text() : theme.text.subdued}>{props.footer}</text>
+          <text
+            fg={
+              props.active && !props.muted
+                ? text()
+                : props.muted && (props.active || props.current)
+                  ? theme.text.subdued
+                  : (props.footerColor ?? theme.text.subdued)
+            }
+          >
+            {props.footer}
+          </text>
         </box>
       </Show>
     </>
