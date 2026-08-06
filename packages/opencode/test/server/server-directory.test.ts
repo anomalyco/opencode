@@ -42,7 +42,12 @@ describe("ServerDirectory", () => {
     expect(String(ServerDirectory.parse("\\\\server\\share\\repo", { kind: "win32" }))).toBe(
       "\\\\server\\share\\repo",
     )
-    expect(String(ServerDirectory.parse("relative\\repo", { kind: "win32" }))).toBe("relative\\repo")
+  })
+
+  test("preserves relative paths under the Windows profile", () => {
+    for (const input of ["relative/repo", "relative\\repo", "../repo", "..\\repo", "foo/../repo"]) {
+      expect(String(ServerDirectory.parse(input, { kind: "win32" }))).toBe(input)
+    }
   })
 
   test("rejects foreign POSIX-rooted syntax under the Windows profile", () => {

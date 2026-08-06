@@ -48,6 +48,14 @@ export function parse(raw: string, target: Profile = profile()): Directory {
 
 function parseWindows(raw: string): Directory {
   if (hasPosixRoot(raw)) throw foreignPathError(raw)
+  if (
+    !hasWindowsDriveRoot(raw) &&
+    !hasWindowsUncRoot(raw) &&
+    !hasWindowsDriveRelative(raw) &&
+    !hasUriScheme(raw)
+  ) {
+    return raw as Directory
+  }
   try {
     return toWin32(normalize(raw) as CanonicalPath) as Directory
   } catch (error) {
@@ -59,12 +67,20 @@ function hasWindowsDriveRoot(value: string) {
   return /^[A-Za-z]:[\\/]/.test(value)
 }
 
+function hasWindowsDriveRelative(value: string) {
+  return /^[A-Za-z]:(?:$|[^\\/])/.test(value)
+}
+
 function hasWindowsUncRoot(value: string) {
   return /^\\\\/.test(value) || /^\/\/(?:[^/]|$)/.test(value)
 }
 
 function hasPosixRoot(value: string) {
   return value.startsWith("/") && !hasWindowsUncRoot(value)
+}
+
+function hasUriScheme(value: string) {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(value)
 }
 
 function foreignPathError(raw: string) {
