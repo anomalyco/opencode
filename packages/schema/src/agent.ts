@@ -41,7 +41,7 @@ export const Info = Schema.Struct({
           id,
           name: Name.make(id),
           request: { settings: {}, headers: {}, body: {} },
-          mode: "all",
+          mode: "primary",
           hidden: false,
           permissions: [
             { action: "*", resource: "*", effect: "allow" },
