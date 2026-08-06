@@ -1675,7 +1675,12 @@ function isRunControlInput(input: string): boolean {
                           // control most people will ever find. Clicking the
                           // indicator opens the mode picker, which names every
                           // state instead of making you cycle blind.
-                          onMouseDown={() => dialog.replace(() => <DialogAutoMode />)}
+                          //
+                          // Opened on mouse UP, not down: the dialog backdrop
+                          // dismisses on mouse-up, so opening on the down event
+                          // means the same physical click opens the dialog and
+                          // then immediately closes it — it just flashes.
+                          onMouseUp={() => dialog.replace(() => <DialogAutoMode />)}
                           fg={fadeColor(
                             (sync.data.config.auto_mode ?? false) || (sync.data.config.auto_continue ?? false)
                               ? theme.success
@@ -1708,7 +1713,9 @@ function isRunControlInput(input: string): boolean {
                             <text
                               // Clicking the live loop position opens the loops
                               // dialog, where it can be paused or cancelled.
-                              onMouseDown={() => dialog.replace(() => <DialogLoopList />)}
+                              // Mouse UP for the same reason as the mode
+                              // indicator above.
+                              onMouseUp={() => dialog.replace(() => <DialogLoopList />)}
                               fg={fadeColor(theme.success, modelMetaAlpha())}
                             >
                               {live().currentChange

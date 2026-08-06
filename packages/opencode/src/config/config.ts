@@ -646,6 +646,15 @@ export const layer = Layer.effect(
 
     const invalidate = Effect.fn("Config.invalidate")(function* () {
       yield* invalidateGlobal
+      // The global cache is only half of it: `get()` returns a per-instance
+      // snapshot of the MERGED config, built once when the instance loads. If
+      // only the global cache is dropped, a write lands on disk and in
+      // `getGlobal()` while every `get()` keeps answering with the old value —
+      // so a setting toggled at runtime appears to save, then reverts on the
+      // next read, and never takes effect on the server at all. Invalidating
+      // the instance state makes the next `get()` recompute from the file we
+      // just wrote.
+      yield* InstanceState.invalidate(state).pipe(Effect.ignore)
     })
 
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (

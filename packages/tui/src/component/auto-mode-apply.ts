@@ -24,7 +24,13 @@ export async function applyAutoMode(deps: Deps, value: ModeValue, guidance?: str
       { config: { auto_mode: mode.auto_mode, auto_continue: mode.auto_continue } },
       { throwOnError: true },
     )
-    const refreshed = await sdk.client.global.config.get({ throwOnError: true })
+    // Read back through the SAME endpoint the rest of the app reads
+    // (`config.get`, the effective merged config for this workspace) rather
+    // than `global.config.get`. They are different views: refreshing from the
+    // global file made the indicator show a value that the next bootstrap —
+    // triggered by something as ordinary as sending a prompt — would overwrite
+    // with the workspace's view, so Auto silently flipped back to Manual.
+    const refreshed = await sdk.client.config.get({}, { throwOnError: true })
     sync.set("config", refreshed.data!)
   } catch {
     toast.show({ variant: "warning", message: "Failed to update auto mode setting" })
