@@ -53,6 +53,7 @@ import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
 import { PluginSlot } from "../../plugin/render"
+import { createPromptSubmission } from "../../prompt/submission"
 
 export type PromptProps = {
   sessionID?: string
@@ -252,6 +253,7 @@ export function Prompt(props: PromptProps) {
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const connected = useConnected()
+  const promptSubmission = createPromptSubmission()
   const hasRightContent = createMemo(() => Boolean(props.right))
 
   function promptModelWarning() {
@@ -952,27 +954,72 @@ export function Prompt(props: PromptProps) {
     }
 
     const variant = local.model.variant.current()
-    let sessionID = props.sessionID
+    const currentMode = store.mode
+    const prompt = {
+      text: store.prompt.text,
+      files: store.prompt.files?.map((file) => ({
+        ...file,
+        mention: file.mention && { ...file.mention },
+      })),
+      agents: store.prompt.agents?.map((agent) => ({
+        ...agent,
+        mention: agent.mention && { ...agent.mention },
+      })),
+      pasted: store.prompt.pasted.map((part) => ({
+        ...part,
+        source: { ...part.source },
+      })),
+    } satisfies PromptInfo
+    const inputText = expandTrackedPastedText(
+      prompt.text,
+      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
+        const ref = store.extmarkToPart.get(extmark.id)
+        if (ref?.type !== "pasted") return []
+        const part = prompt.pasted[ref.index]
+        if (!part) return []
+        return [{ start: extmark.start, end: extmark.end, text: part.text }]
+      }),
+    )
+    const directory = props.sessionID == null ? await move.getDirectory() : undefined
+    if (props.sessionID == null && move.pending() && !directory) return false
+    const sessionInput = {
+      location: directory ? { directory } : (currentLocation.ref ?? data.location.default()),
+      agent: agent.id,
+      model: {
+        providerID: selectedModel.providerID,
+        id: selectedModel.modelID,
+        variant,
+      },
+    }
+    const promptInput = {
+      text: inputText,
+      files: prompt.files,
+      agents: prompt.agents,
+    }
+    // Keep both IDs stable until the whole create/admit sequence succeeds. If the
+    // transport drops after either durable write, retry reconciles that write.
+    const sessionID = await promptSubmission.begin(
+      Bun.hash(
+        JSON.stringify({
+          sessionID: props.sessionID,
+          session: sessionInput,
+          prompt: promptInput,
+          mode: currentMode,
+        }),
+      ),
+      props.sessionID,
+    )
     let session = sessionID ? data.session.get(sessionID) : undefined
     let finishMoveProgress = false
-    if (sessionID == null) {
-      const directory = await move.getDirectory()
-      if (move.pending() && !directory) return false
+    if (props.sessionID == null) {
       finishMoveProgress = Boolean(move.progress())
       // The location context is where the next session is created: seeded by the home
       // route (launch cwd, inherited session location, or picked project) and updated
       // by /cd before a session exists.
-      const location = currentLocation.ref ?? data.location.default()
-
       const created = await client.api.session
         .create({
-          location: directory ? { directory } : location,
-          agent: agent.id,
-          model: {
-            providerID: selectedModel.providerID,
-            id: selectedModel.modelID,
-            variant,
-          },
+          id: sessionID,
+          ...sessionInput,
         })
         .catch(() => undefined)
 
@@ -986,27 +1033,13 @@ export function Prompt(props: PromptProps) {
         return true
       }
 
-      sessionID = created.id
       session = created
     }
 
-    const inputText = expandTrackedPastedText(
-      store.prompt.text,
-      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
-        const ref = store.extmarkToPart.get(extmark.id)
-        if (ref?.type !== "pasted") return []
-        const part = store.prompt.pasted[ref.index]
-        if (!part) return []
-        return [{ start: extmark.start, end: extmark.end, text: part.text }]
-      }),
-    )
-
-    // Capture mode before it gets reset
-    const currentMode = store.mode
     const editorSelection = editorContext()
     const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
 
-    if (store.mode === "shell") {
+    if (currentMode === "shell") {
       move.startSubmit()
       void client.api.session.shell({
         sessionID,
@@ -1033,9 +1066,9 @@ export function Prompt(props: PromptProps) {
           command: command.slice(1),
           arguments: args,
           agent: agent.id,
-          model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
-          files: store.prompt.files,
-          agents: store.prompt.agents,
+          model: sessionInput.model,
+          files: promptInput.files,
+          agents: promptInput.agents,
         })
         .catch((error) => {
           toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
@@ -1067,7 +1100,7 @@ export function Prompt(props: PromptProps) {
       ) {
         await client.api.session.switchModel({
           sessionID,
-          model: { providerID: selectedModel.providerID, id: selectedModel.modelID, variant },
+          model: sessionInput.model,
         })
       }
       if (session?.revert) {
@@ -1100,9 +1133,8 @@ export function Prompt(props: PromptProps) {
       const error = await client.api.session
         .prompt({
           sessionID,
-          text: inputText,
-          files: store.prompt.files,
-          agents: store.prompt.agents,
+          id: await promptSubmission.message(),
+          ...promptInput,
         })
         .then(
           () => undefined,
@@ -1114,8 +1146,9 @@ export function Prompt(props: PromptProps) {
       }
       if (pendingEditorSelection) editor.markSelectionSent()
     }
+    promptSubmission.complete()
     history.append({
-      ...store.prompt,
+      ...prompt,
       mode: currentMode,
     })
     input.extmarks.clear()

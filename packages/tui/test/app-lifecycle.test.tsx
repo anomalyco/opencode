@@ -302,3 +302,123 @@ test("session startup prompt is submitted exactly once", async () => {
     mock.restore()
   }
 })
+
+test("home prompt retry reuses the accepted session and message IDs", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const core = await import("@opentui/core")
+  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
+  const ready = Promise.withResolvers<void>()
+  const sessionReady = Promise.withResolvers<void>()
+  const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
+  setup.renderer.setTerminalTitle = (title) => {
+    if (title === "OpenCode") ready.resolve()
+    if (title === "OC | New session") sessionReady.resolve()
+    setTitle(title)
+  }
+  const events = createEventStream()
+  const cwd = process.cwd()
+  const location = { directory: cwd, project: { id: "project", directory: cwd } }
+  const creates: unknown[] = []
+  const prompts: unknown[] = []
+  const modelLoaded = Promise.withResolvers<void>()
+  const firstPrompt = Promise.withResolvers<void>()
+  const secondPrompt = Promise.withResolvers<void>()
+  let createdID: string | undefined
+  const session = (id: string) => ({
+    id,
+    title: "New session",
+    projectID: "project",
+    location: { directory: cwd },
+    agent: "build",
+    model: { providerID: "provider", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  })
+  const calls = createFetch(async (url, request) => {
+    if (url.pathname === "/api/location") return json(location)
+    if (url.pathname === "/api/agent")
+      return json({
+        location,
+        data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }],
+      })
+    if (url.pathname === "/api/model") {
+      modelLoaded.resolve()
+      return json({
+        location,
+        data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }],
+      })
+    }
+    if (url.pathname === "/api/session" && request.method === "GET")
+      return json({ data: createdID ? [session(createdID)] : [], cursor: {} })
+    if (url.pathname === "/api/session" && request.method === "POST") {
+      const body = await request.json()
+      if (!body || typeof body !== "object" || !("id" in body) || typeof body.id !== "string") {
+        throw new Error("session create did not supply an ID")
+      }
+      creates.push(body)
+      createdID = body.id
+      return json({ data: session(body.id) })
+    }
+    if (createdID && url.pathname === `/api/session/${createdID}`) return json({ data: session(createdID) })
+    if (createdID && url.pathname === `/api/session/${createdID}/message`) return json({ data: [], cursor: {} })
+    if (createdID && url.pathname === `/api/session/${createdID}/pending`) return json({ data: [] })
+    if (createdID && url.pathname === `/api/session/${createdID}/permission`) return json({ data: [] })
+    if (createdID && url.pathname === `/api/session/${createdID}/prompt`) {
+      prompts.push(await request.json())
+      if (prompts.length === 1) {
+        firstPrompt.resolve()
+        return json({ error: "response lost after admission" }, { status: 500 })
+      }
+      secondPrompt.resolve()
+      return json({ data: {} })
+    }
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({}), update: async () => ({}) },
+        packages: { resolve: async () => undefined },
+        args: {},
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await Promise.all([ready.promise, modelLoaded.promise])
+    await setup.mockInput.typeText("RETRY_READY")
+    setup.mockInput.pressEnter()
+    await Promise.race([
+      firstPrompt.promise,
+      Bun.sleep(2_000).then(() => {
+        throw new Error("first home prompt was not submitted")
+      }),
+    ])
+    await setup.waitForFrame((frame) => frame.includes("Failed to send prompt"))
+    setup.mockInput.pressEnter()
+    await Promise.race([
+      secondPrompt.promise,
+      Bun.sleep(2_000).then(() => {
+        throw new Error("home prompt was not retried")
+      }),
+    ])
+    await sessionReady.promise
+    setup.renderer.destroy()
+    await task
+
+    expect(creates).toHaveLength(2)
+    expect(prompts).toHaveLength(2)
+    expect(creates[1]).toEqual(creates[0])
+    expect(prompts[1]).toEqual(prompts[0])
+    expect(creates[0]).toMatchObject({ id: expect.stringMatching(/^ses_/) })
+    expect(prompts[0]).toMatchObject({ id: expect.stringMatching(/^msg_/), text: "RETRY_READY" })
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+    mock.restore()
+  }
+})
