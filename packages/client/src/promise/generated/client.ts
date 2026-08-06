@@ -499,6 +499,7 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/export`,
+            query: { sanitize: input["sanitize"] },
             successStatus: 200,
             declaredStatuses: [404, 500, 401, 400],
             empty: false,

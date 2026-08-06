@@ -149,6 +149,10 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
           Flag.withDescription("Session ID to export to stdout"),
           Flag.optional,
         ),
+        sanitize: Flag.boolean("sanitize").pipe(
+          Flag.withDescription("Redact sensitive transcript and file data"),
+          Flag.withDefault(false),
+        ),
       },
     }),
     Spec.make("import", {

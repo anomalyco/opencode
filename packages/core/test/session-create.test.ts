@@ -780,7 +780,8 @@ describe("SessionTransfer", () => {
       expect(messages).toMatchObject([{ type: "user", text: "Imported message" }])
       expect(messages[0].id).not.toBe(sourceMessageID)
       expect(yield* Bus.latestSequence(db, sessionID)).toBe(1)
-      expect((yield* transfer.export({ sessionID })).messages[0]).toMatchObject({
+      expect((yield* transfer.export({ sessionID })).messages).toEqual(messages)
+      expect((yield* transfer.export({ sessionID, sanitize: true })).messages[0]).toMatchObject({
         text: `[redacted:text:${messages[0].id}]`,
       })
 

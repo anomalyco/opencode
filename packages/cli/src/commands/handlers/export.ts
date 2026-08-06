@@ -20,8 +20,8 @@ export default Runtime.handler(
       headers: Service.headers(server.endpoint),
     })
     const requested = Option.getOrUndefined(input.session)
-    const sessionID = requested
-      ? requested
+    const selected = requested
+      ? undefined
       : yield* Effect.promise(async () => {
           const location = await client.location.get({ location: { directory: process.cwd() } })
           const page = await client.session.list({
@@ -35,15 +35,20 @@ export default Runtime.handler(
             process.stderr.write(`No sessions found${EOL}`)
             return undefined
           }
-          return (await selectSession(page.data))?.id
+          return selectSession(page.data, input.sanitize)
         })
+    const sessionID = requested ?? selected?.session.id
     if (!sessionID) return
-    const data = yield* Effect.promise(() => client.session.export({ sessionID }))
+    const data = yield* Effect.promise(() =>
+      client.session.export({ sessionID, sanitize: selected?.sanitize ?? input.sanitize }),
+    )
     process.stdout.write(yield* Effect.promise(() => writeExport(data, sessionID, requested !== undefined)))
   }),
 )
 
-function selectSession(sessions: SessionInfo[]) {
+type Selection = { session: SessionInfo; sanitize: boolean }
+
+function selectSession(sessions: SessionInfo[], initialSanitize: boolean) {
   if (!process.stdin.isTTY) return Promise.reject(new Error("Session ID is required when stdin is not interactive"))
   const input = process.stdin
   const output = process.stderr
@@ -59,6 +64,7 @@ function selectSession(sessions: SessionInfo[]) {
   const titleWidth = Math.max(8, Math.min(48, columns - 34))
   let selected = 0
   let offset = 0
+  let sanitize = initialSanitize
   let height = 0
 
   const render = () => {
@@ -73,7 +79,9 @@ function selectSession(sessions: SessionInfo[]) {
         return index === selected ? `\x1b[1m${row}\x1b[0m` : row
       }),
       "",
-      "  navigate \x1b[2mup/down\x1b[0m   export \x1b[2menter\x1b[0m   cancel \x1b[2mesc\x1b[0m",
+      `  [${sanitize ? "x" : " "}] sanitize sensitive data`,
+      "",
+      "  navigate \x1b[2mup/down\x1b[0m   sanitize \x1b[2mspace\x1b[0m   export \x1b[2menter\x1b[0m   cancel \x1b[2mesc\x1b[0m",
     )
     if (height > 0) output.write(`\x1b[${height}F\x1b[J`)
     output.write(lines.join(EOL) + EOL)
@@ -86,7 +94,7 @@ function selectSession(sessions: SessionInfo[]) {
     input.setRawMode(wasRaw ?? false)
     if (wasPaused) input.pause()
   }
-  const onKeypress = (_value: string | undefined, key: Key) => {
+  const onKeypress = (value: string | undefined, key: Key) => {
     if (key.name === "up") {
       selected = (selected - 1 + sessions.length) % sessions.length
       if (selected === sessions.length - 1) offset = Math.max(0, sessions.length - 10)
@@ -97,19 +105,20 @@ function selectSession(sessions: SessionInfo[]) {
       if (selected === 0) offset = 0
       if (selected >= offset + 10) offset = selected - 9
     }
+    if (key.name === "space" || value === " ") sanitize = !sanitize
     if (key.name === "return") return finish(sessions[selected])
     if (key.name === "escape" || (key.ctrl && key.name === "c")) return cancel()
     render()
   }
   const finish = (session: SessionInfo) => {
     clear()
-    resolveSelection?.(session)
+    resolveSelection?.({ session, sanitize })
   }
   const cancel = () => {
     clear()
     resolveSelection?.()
   }
-  let resolveSelection: ((session?: SessionInfo) => void) | undefined
+  let resolveSelection: ((selection?: Selection) => void) | undefined
 
   emitKeypressEvents(input)
   input.setRawMode(true)
@@ -117,7 +126,7 @@ function selectSession(sessions: SessionInfo[]) {
   input.on("keypress", onKeypress)
   output.write("\x1b[?25l")
   render()
-  return new Promise<SessionInfo | undefined>((resolve) => {
+  return new Promise<Selection | undefined>((resolve) => {
     resolveSelection = resolve
   })
 }

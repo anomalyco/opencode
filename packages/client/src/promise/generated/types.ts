@@ -3206,7 +3206,10 @@ export type SessionImportInput = {
 
 export type SessionImportOutput = { data: SessionInfo }["data"]
 
-export type SessionExportInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionExportInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly sanitize?: { readonly sanitize?: boolean | undefined }["sanitize"]
+}
 
 export type SessionExportOutput = { data: SessionTransferData }["data"]
 

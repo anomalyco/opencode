@@ -15,6 +15,13 @@ const info = {
   location: { directory: "/project" },
 }
 const transfer = {
+  info,
+  messages: [
+    { id: "msg_first", type: "user", text: "First", time: { created: 1 } },
+    { id: "msg_second", type: "user", text: "Second", time: { created: 2 } },
+  ],
+}
+const sanitizedTransfer = {
   info: {
     ...info,
     title: "[redacted:session-title:ses_export_test]",
@@ -48,8 +55,8 @@ function run(args: string[], stdin?: string) {
   return Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
 }
 
-test("export writes the sanitized runtime transfer document", async () => {
-  let exports = 0
+test("export is raw by default and supports explicit sanitization", async () => {
+  const sanitization: string[] = []
   const server = Bun.serve({
     port: 0,
     fetch(request) {
@@ -57,8 +64,8 @@ test("export writes the sanitized runtime transfer document", async () => {
       if (url.pathname === "/api/health") return health()
       if (url.pathname === `/api/session/${info.id}`) return Response.json({ data: info })
       if (url.pathname === `/api/session/${info.id}/export`) {
-        exports++
-        return Response.json({ data: transfer })
+        sanitization.push(url.searchParams.get("sanitize") ?? "")
+        return Response.json({ data: url.searchParams.get("sanitize") === "true" ? sanitizedTransfer : transfer })
       }
       return new Response("Not found", { status: 404 })
     },
@@ -69,8 +76,19 @@ test("export writes the sanitized runtime transfer document", async () => {
     const exported = JSON.parse(stdout)
 
     expect(exitCode).toBe(0)
-    expect(exports).toBe(1)
     expect(exported).toEqual(transfer)
+
+    const [sanitized, , sanitizedExitCode] = await run([
+      "export",
+      "-s",
+      info.id,
+      "--sanitize",
+      "--server",
+      server.url.toString(),
+    ])
+    expect(sanitizedExitCode).toBe(0)
+    expect(JSON.parse(sanitized)).toEqual(sanitizedTransfer)
+    expect(sanitization).toEqual(["false", "true"])
   } finally {
     await server.stop(true)
   }

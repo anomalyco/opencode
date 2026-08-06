@@ -135,7 +135,7 @@ export type Endpoint5_2Input = {
 export type Endpoint5_2Output = Session.Info
 export type SessionImportOperation<E = never> = (input: Endpoint5_2Input) => Effect.Effect<Endpoint5_2Output, E>
 
-export type Endpoint5_3Input = { readonly sessionID: Session.ID }
+export type Endpoint5_3Input = { readonly sessionID: Session.ID; readonly sanitize?: boolean | undefined }
 export type Endpoint5_3Output = { readonly info: Session.Info; readonly messages: ReadonlyArray<SessionMessage.Info> }
 export type SessionExportOperation<E = never> = (input: Endpoint5_3Input) => Effect.Effect<Endpoint5_3Output, E>
 

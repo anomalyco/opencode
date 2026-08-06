@@ -183,6 +183,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
     .add(
       HttpApiEndpoint.get("session.export", "/api/session/:sessionID/export", {
         params: { sessionID: Session.ID },
+        query: Schema.Struct({ sanitize: BooleanFromString.pipe(Schema.optional) }),
         success: Schema.Struct({ data: SessionTransfer.Data }),
         error: [SessionNotFoundError, UnknownError],
       }).annotateMerge(

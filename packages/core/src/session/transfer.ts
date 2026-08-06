@@ -31,6 +31,7 @@ export class ImportConflictError extends Schema.TaggedErrorClass<ImportConflictE
 export interface Interface {
   readonly export: (input: {
     sessionID: Session.ID
+    sanitize?: boolean
   }) => Effect.Effect<Data, Session.NotFoundError | Session.MessageDecodeError>
   readonly import: (input: {
     data: Data
@@ -73,7 +74,7 @@ const layer = Layer.effect(
           info: yield* sessions.get(input.sessionID),
           messages: yield* sessions.messages({ sessionID: input.sessionID, order: "asc" }),
         }
-        return sanitize(data)
+        return input.sanitize ? sanitize(data) : data
       }),
       import: Effect.fn("SessionTransfer.import")(function* (input) {
         const sessionID = input.data.info.id

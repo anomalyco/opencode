@@ -114,7 +114,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.export",
         Effect.fn(function* (ctx) {
           return {
-            data: yield* transfer.export({ sessionID: ctx.params.sessionID }).pipe(
+            data: yield* transfer.export({ sessionID: ctx.params.sessionID, sanitize: ctx.query.sanitize }).pipe(
               Effect.catchTag(
                 "Session.NotFoundError",
                 (error) =>

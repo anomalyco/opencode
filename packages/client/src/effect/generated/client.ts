@@ -333,7 +333,7 @@ const Endpoint5_2 = (raw: RawClient["server.session"]) => (input: Endpoint5_2Inp
 
 const Endpoint5_3 = (raw: RawClient["server.session"]) => (input: Endpoint5_3Input) =>
   preserveEffect<Endpoint5_3Output>()(
-    raw["session.export"]({ params: { sessionID: input["sessionID"] } }).pipe(
+    raw["session.export"]({ params: { sessionID: input["sessionID"] }, query: { sanitize: input["sanitize"] } }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
     ),
