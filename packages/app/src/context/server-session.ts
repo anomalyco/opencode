@@ -1,17 +1,15 @@
 import { Binary } from "@opencode-ai/core/util/binary"
 import { retry } from "@opencode-ai/core/util/retry"
-import type { OpenCodeEvent, SessionApi, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent, SessionApi, SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type {
   Message,
   Part,
-  Session,
   Todo,
 } from "@/types"
 import type { FileDiffInfo, PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/client/promise"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { rootSession } from "@/utils/session-route"
-import { normalizeSessionInfo } from "@/utils/session"
 import { normalizeSessionMessages } from "@/utils/session-message"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
@@ -189,7 +187,7 @@ export function createServerSession(
   const messageApi = bundled ? api.message : (messageApiOrOptions as MessageApi)
   const options = bundled ? (messageApiOrOptions as ServerSessionOptions | undefined) : currentOptions
   const [data, setData] = createStore({
-    info: {} as Record<string, Session | undefined>,
+    info: {} as Record<string, SessionInfo | undefined>,
     session_status: {} as Record<string, SessionStatus>,
     session_diff: {} as Record<string, FileDiffInfo[]>,
     todo: {} as Record<string, Todo[]>,
@@ -203,7 +201,7 @@ export function createServerSession(
       return (this.session_status[id]?.type ?? "idle") !== "idle"
     },
   })
-  const requests = new Map<string, Promise<Session>>()
+  const requests = new Map<string, Promise<SessionInfo>>()
   const inflight = new Map<string, Promise<void>>()
   const inflightTodo = new Map<string, Promise<void>>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
@@ -252,7 +250,7 @@ export function createServerSession(
     )
   }
 
-  const remember = (session: Session) => {
+  const remember = (session: SessionInfo) => {
     setData("info", session.id, reconcile(session))
     infoSeen.delete(session.id)
     infoSeen.add(session.id)
@@ -302,7 +300,7 @@ export function createServerSession(
     const pending = requests.get(sessionID)
     if (pending) return pending
     const active = generation(sessionID)
-    const request = sessionApi.get({ sessionID }).then(normalizeSessionInfo)
+    const request = sessionApi.get({ sessionID })
     const resolved = request.then((result) => {
       if (generations.get(sessionID) !== active) return result
       return remember(result)
@@ -918,9 +916,8 @@ export function createServerSession(
       remember({
         ...info,
         projectID: event.data.projectID ?? info.projectID,
-        workspaceID: event.data.location.workspaceID,
-        directory: event.data.location.directory,
-        path: event.data.subpath,
+        location: event.data.location,
+        subpath: event.data.subpath,
         time: { ...info.time, updated: event.created },
       })
     if (event.type === "session.usage.updated" && info)
@@ -966,16 +963,17 @@ export function createServerSession(
     }
     switch (event.type) {
       case "session.created":
-        remember((event.properties as { info: Session }).info)
+        if ((event.properties as { info?: SessionInfo }).info)
+          remember((event.properties as { info: SessionInfo }).info)
         return
       case "session.updated": {
-        const info = (event.properties as { info: Session }).info
+        const info = (event.properties as { info: SessionInfo }).info
         remember(info)
         if (info.time.archived) evict([info.id])
         return
       }
       case "session.deleted": {
-        const properties = event.properties as { sessionID?: string; info?: Session }
+        const properties = event.properties as { sessionID?: string; info?: SessionInfo }
         const sessionID = properties.info?.id ?? properties.sessionID
         if (!sessionID) return
         infoSeen.delete(sessionID)

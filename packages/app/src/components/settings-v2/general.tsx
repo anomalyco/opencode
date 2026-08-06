@@ -96,7 +96,7 @@ export const SettingsGeneralV2: Component<{
 
   const dir = createMemo(() => {
     if (!props.sessionID) return undefined
-    return serverSync().session.lineage.peek(props.sessionID)?.session.directory
+    return serverSync().session.lineage.peek(props.sessionID)?.session.location.directory
   })
   const accepting = createMemo(() => {
     const value = dir()

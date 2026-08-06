@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Session } from "@/types"
-import type { PermissionRequest, QuestionRequest } from "@opencode-ai/client/promise"
+import type { PermissionRequest, QuestionRequest, SessionInfo } from "@opencode-ai/client/promise"
 import { todoDockAtBoundary, todoState } from "./session-composer-state"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 
@@ -8,7 +7,7 @@ const session = (input: { id: string; parentID?: string }) =>
   ({
     id: input.id,
     parentID: input.parentID,
-  }) as Session
+  }) as SessionInfo
 
 const permission = (id: string, sessionID: string) =>
   ({

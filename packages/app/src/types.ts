@@ -6,27 +6,6 @@ import type {
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 
 export type Project = Omit<ProjectListOutput[number], "canonical"> & { worktree: string }
-export type Session = {
-  id: string
-  slug: string
-  projectID: string
-  workspaceID?: string
-  directory: string
-  path?: string
-  parentID?: string
-  summary?: { additions: number; deletions: number; files: number; diffs?: FileDiffInfo[] }
-  cost?: number
-  tokens?: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
-  share?: { url: string }
-  title: string
-  agent?: string
-  model?: { id: string; providerID: string; variant?: string }
-  version: string
-  metadata?: Record<string, unknown>
-  time: { created: number; updated: number; compacting?: number; archived?: number }
-  permission?: Array<{ permission: string; pattern: string; action: "allow" | "deny" | "ask" }>
-  revert?: { messageID: string; partID?: string; snapshot?: string; diff?: string }
-}
 
 type CurrentEvent = EventSubscribeOutput extends infer Item
   ? Item extends { type: infer Type extends string; data: infer Data }

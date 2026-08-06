@@ -14,7 +14,7 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import type { Session } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { type LocalProject } from "@/context/layout"
 import { useServerSync, useQueryOptions } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -36,12 +36,12 @@ type InlineEditorComponent = (props: {
 
 export type WorkspaceSidebarContext = {
   currentDir: Accessor<string>
-  navList: Accessor<Session[]>
+  navList: Accessor<SessionInfo[]>
   sidebarExpanded: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   clearHoverProjectSoon: () => void
-  prefetchSession: (session: Session, priority?: "high" | "low") => void
-  archiveSession: (session: Session) => Promise<void>
+  prefetchSession: (session: SessionInfo, priority?: "high" | "low") => void
+  archiveSession: (session: SessionInfo) => Promise<void>
   workspaceName: (directory: string, projectId?: string, branch?: string) => string | undefined
   renameWorkspace: (directory: string, next: string, projectId?: string, branch?: string) => void
   editorOpen: (id: string) => boolean
@@ -243,7 +243,7 @@ const WorkspaceSessionList = (props: {
   ctx: WorkspaceSidebarContext
   showNew: Accessor<boolean>
   loading: Accessor<boolean>
-  sessions: Accessor<Session[]>
+  sessions: Accessor<SessionInfo[]>
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>

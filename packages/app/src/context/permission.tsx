@@ -132,7 +132,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       if (draft) return draft.directory
       if (!params.id) return
       if (!global.servers.list().some((conn) => ServerConnection.key(conn) === activeServer())) return
-      return selected().sync.session.lineage.peek(params.id)?.session.directory
+      return selected().sync.session.lineage.peek(params.id)?.session.location.directory
     })
 
     createEffect(() => {

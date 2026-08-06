@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Session } from "@/types"
-import type { PermissionRequest } from "@opencode-ai/client/promise"
+import type { PermissionRequest, SessionInfo } from "@opencode-ai/client/promise"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { autoRespondsPermission, isDirectoryAutoAccepting, sessionAutoAccept } from "./permission-auto-respond"
 
@@ -8,7 +7,7 @@ const session = (input: { id: string; parentID?: string }) =>
   ({
     id: input.id,
     parentID: input.parentID,
-  }) as Session
+  }) as SessionInfo
 
 const permission = (sessionID: string) =>
   ({

@@ -1,4 +1,4 @@
-import type { Session } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { type Accessor, createMemo, For, Show } from "solid-js"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
@@ -9,7 +9,7 @@ import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { SessionTabAvatarView } from "@/pages/layout/session-tab-avatar"
-import { sessionTitle } from "@/utils/session-title"
+import { sessionLabel } from "@/utils/session-title"
 import { shouldOpenSessionInBackground } from "../home-session-open"
 import {
   HomeSessionStatusController,
@@ -53,8 +53,8 @@ export type HomeSessionsViewProps = {
   titleOpacity: (id: HomeSessionGroup["id"]) => number
   isOpenTab: (record: HomeSessionRecord) => boolean
   onCreateSession: () => void
-  onOpenSession: (session: Session, options?: OpenSessionOptions) => void
-  onArchiveSession: (session: Session) => Promise<void>
+  onOpenSession: (session: SessionInfo, options?: OpenSessionOptions) => void
+  onArchiveSession: (session: SessionInfo) => Promise<void>
   onSetHoverTarget: (element: HTMLElement) => void
   onSetThumbTrack: (element: HTMLDivElement) => void
   onSetContent: (element: HTMLDivElement) => void
@@ -192,7 +192,7 @@ function HomeSessionLeading(props: {
       </Show>
       <SessionTabAvatarView
         project={props.record.project}
-        directory={props.record.session.directory}
+        directory={props.record.session.location.directory}
         revealProjectOnHover={props.revealProjectOnHover}
         unread={props.unread}
         loading={props.loading}
@@ -344,7 +344,7 @@ function HomeSessionSearchResultRow(
     selected: boolean
   },
 ) {
-  const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
+  const title = createMemo(() => sessionLabel(props.record.session))
   const showProjectName = () => props.showProjectName() && props.record.projectName
   const key = () => homeSessionSearchKey(props.record)
 
@@ -415,7 +415,7 @@ function HomeSessionGroupHeader(props: {
 }
 
 function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionRecord }) {
-  const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
+  const title = createMemo(() => sessionLabel(props.record.session))
   const showProjectName = () => props.showProjectName() && props.record.projectName
 
   return (

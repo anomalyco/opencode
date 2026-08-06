@@ -5,7 +5,6 @@ import type {
   Message,
   Part,
   Path,
-  Session,
   Todo,
   VcsInfo,
 } from "@/types"
@@ -14,6 +13,7 @@ import type {
   PermissionRequest,
   QuestionRequest,
   ReferenceInfo,
+  SessionInfo,
   SessionStatus,
 } from "@opencode-ai/client/promise"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
@@ -44,7 +44,7 @@ export type State = {
   provider: NormalizedProviderListResponse
   config: Config
   path: Path
-  session: Session[]
+  session: SessionInfo[]
   sessionTotal: number
   session_status: {
     [sessionID: string]: SessionStatus

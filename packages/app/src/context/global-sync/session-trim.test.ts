@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Session } from "@/types"
-import type { PermissionRequest } from "@opencode-ai/client/promise"
+import type { PermissionRequest, SessionInfo } from "@opencode-ai/client/promise"
 import { trimSessions } from "./session-trim"
 
 const session = (input: { id: string; parentID?: string; created: number; updated?: number; archived?: number }) =>
@@ -12,7 +11,7 @@ const session = (input: { id: string; parentID?: string; created: number; update
       updated: input.updated,
       archived: input.archived,
     },
-  }) as Session
+  }) as SessionInfo
 
 describe("trimSessions", () => {
   test("keeps base roots and recent roots beyond the limit", () => {

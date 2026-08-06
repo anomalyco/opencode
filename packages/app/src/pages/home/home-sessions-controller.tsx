@@ -1,4 +1,4 @@
-import type { Session } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMarked } from "@opencode-ai/ui/context/marked"
@@ -26,7 +26,7 @@ import type { HomeController } from "./home-controller"
 
 const HOME_SESSION_LIMIT = 64
 export type HomeSessionRecord = {
-  session: Session
+  session: SessionInfo
   project: LocalProject
   projectName: string
 }
@@ -180,8 +180,8 @@ export function createHomeSessionsController(home: HomeController) {
       server: () => home.selection.value().server,
       canCreate: () => !!home.project.newSession(),
       create: home.project.openNewSession,
-      open: (session: Session, options?: OpenSessionOptions) => {
-        const directoryKey = pathKey(session.directory)
+      open: (session: SessionInfo, options?: OpenSessionOptions) => {
+        const directoryKey = pathKey(session.location.directory)
         const project =
           home.project
             .list()
@@ -192,7 +192,7 @@ export function createHomeSessionsController(home: HomeController) {
             ) ?? projectForSession(session, home.project.list(), projectByID())
         const conn = home.server.focused()
         if (!conn) return
-        const directory = project?.worktree ?? session.directory
+        const directory = project?.worktree ?? session.location.directory
         const ctx = home.server.focusedContext()
         if (!ctx) return
         ctx.projects.open(directory)
@@ -206,11 +206,11 @@ export function createHomeSessionsController(home: HomeController) {
           tabs.select(tab)
         })
       },
-      archive: async (session: Session) => {
+      archive: async (session: SessionInfo) => {
         const conn = home.server.focused()
         const ctx = home.server.focusedContext()
         if (!conn || !ctx) return
-        const [, setStore] = ctx.sync.child(session.directory)
+        const [, setStore] = ctx.sync.child(session.location.directory)
         await archiveHomeSession({
           server: ServerConnection.key(conn),
           session,
@@ -243,17 +243,17 @@ function directories(project: LocalProject) {
 }
 
 function buildHomeSessionRecords(input: {
-  sessions: () => Session[]
+  sessions: () => SessionInfo[]
   projectDirectories: () => string[]
   projects: () => LocalProject[]
   projectByID: () => Map<string, LocalProject>
 }) {
   const directories = new Set(input.projectDirectories().map(pathKey))
-  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.directory)))
+  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.location.directory)))
   return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
     .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
     .flatMap((session) => {
-      const directory = pathKey(session.directory)
+      const directory = pathKey(session.location.directory)
       const project =
         input
           .projects()
@@ -267,7 +267,7 @@ function buildHomeSessionRecords(input: {
 }
 
 export function homeSessionSearchKey(record: HomeSessionRecord) {
-  return `${pathKey(record.session.directory)}:${record.session.id}`
+  return `${pathKey(record.session.location.directory)}:${record.session.id}`
 }
 
 function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof useLanguage>): HomeSessionGroup[] {
@@ -304,7 +304,7 @@ export function HomeSessionStatusController(props: {
 }) {
   const avatar = useSessionTabAvatarState(
     props.server,
-    () => props.record.session.directory,
+    () => props.record.session.location.directory,
     () => props.record.session.id,
   )
   return props.render({

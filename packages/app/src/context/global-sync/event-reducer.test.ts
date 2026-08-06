@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, Project, Session } from "@/types"
-import type { PermissionRequest, QuestionRequest } from "@opencode-ai/client/promise"
+import type { Message, Part, Project } from "@/types"
+import type { PermissionRequest, QuestionRequest, SessionInfo } from "@opencode-ai/client/promise"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
@@ -14,7 +14,7 @@ const rootSession = (input: { id: string; parentID?: string; archived?: number }
       updated: 1,
       archived: input.archived,
     },
-  }) as Session
+  }) as SessionInfo
 
 const userMessage = (id: string, sessionID: string) =>
   ({

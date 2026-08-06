@@ -1,4 +1,5 @@
-import type { Message, Session } from "@/types"
+import type { Message } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
@@ -21,7 +22,6 @@ import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
 import { ScopedKey } from "@/utils/server-scope"
 import { createPromptSubmissionState } from "./submission-state"
-import { normalizeSessionInfo } from "@/utils/session"
 import { Event } from "@opencode-ai/schema/event"
 
 type PendingPrompt = {
@@ -310,10 +310,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
   }
 
-  const seed = (dir: string, info: Session) => {
+  const seed = (dir: string, info: SessionInfo) => {
     serverSync().session.remember(info)
     const [, setStore] = serverSync().child(dir)
-    setStore("session", (list: Session[]) => {
+    setStore("session", (list: SessionInfo[]) => {
       const result = Binary.search(list, info.id, (item) => item.id)
       const next = [...list]
       if (result.found) {
@@ -407,7 +407,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           model: { id: currentModel.id, providerID: currentModel.provider.id, variant },
           location: { directory: sessionDirectory },
         })
-        .then(normalizeSessionInfo)
         .catch((err) => {
           showToast({
             title: language.t("prompt.toast.sessionCreateFailed.title"),

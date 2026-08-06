@@ -26,7 +26,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
-import type { Session } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -603,9 +603,9 @@ export default function LegacyLayout(props: ParentProps) {
   const currentSessions = createMemo(() => {
     const now = Date.now()
     const dirs = visibleSessionDirs()
-    if (dirs.length === 0) return [] as Session[]
+    if (dirs.length === 0) return [] as SessionInfo[]
 
-    const result: Session[] = []
+    const result: SessionInfo[] = []
     for (const dir of dirs) {
       const [dirStore] = serverSync().child(dir, { bootstrap: true })
       const dirSessions = sortedRootSessions(dirStore, now)
@@ -717,8 +717,8 @@ export default function LegacyLayout(props: ParentProps) {
     })
   }
 
-  const prefetchSession = (session: Session, priority: "high" | "low" = "low") => {
-    const directory = session.directory
+  const prefetchSession = (session: SessionInfo, priority: "high" | "low" = "low") => {
+    const directory = session.location.directory
     if (!directory) return
 
     const cached = untrack(() => !serverSync().session.shouldPrefetch(session.id, prefetchChunk))
@@ -753,7 +753,7 @@ export default function LegacyLayout(props: ParentProps) {
     pumpPrefetch(directory)
   }
 
-  const warm = (sessions: Session[], index: number) => {
+  const warm = (sessions: SessionInfo[], index: number) => {
     for (let offset = 1; offset <= span; offset++) {
       const next = sessions[index + offset]
       if (next) prefetchSession(next, offset === 1 ? "high" : "low")
@@ -855,11 +855,11 @@ export default function LegacyLayout(props: ParentProps) {
     }
   }
 
-  async function archiveSession(session: Session) {
+  async function archiveSession(session: SessionInfo) {
     // TODO: Restore archiving when the V2 client exposes a session archive API.
     void session
     return
-    const [store, setStore] = serverSync().child(session.directory)
+    const [store, setStore] = serverSync().child(session.location.directory)
     const sessions = store.session ?? []
     const index = sessions.findIndex((s) => s.id === session.id)
     const nextSession = sessions[index + 1] ?? sessions[index - 1]
@@ -1192,10 +1192,10 @@ export default function LegacyLayout(props: ParentProps) {
         .sync(target.id)
         .then(() => sync.session.get(target.id))
         .catch(() => undefined)
-      if (!resolved?.directory) return false
-      if (!canOpen(resolved.directory)) return false
-      setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
-      navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
+      if (!resolved?.location.directory) return false
+      if (!canOpen(resolved.location.directory)) return false
+      setStore("lastProjectSession", root, { directory: resolved.location.directory, id: resolved.id, at: Date.now() })
+      navigateWithSidebarReset(`/${base64Encode(resolved.location.directory)}/session/${resolved.id}`)
       return true
     }
 
@@ -1211,7 +1211,7 @@ export default function LegacyLayout(props: ParentProps) {
       dirs.map((item) => serverSync().child(item, { bootstrap: false })[0]),
       Date.now(),
     )
-    if (latest && (await openSession(latest))) {
+    if (latest && (await openSession({ directory: latest.location.directory, id: latest.id }))) {
       return
     }
 
@@ -1228,16 +1228,16 @@ export default function LegacyLayout(props: ParentProps) {
       ),
       Date.now(),
     )
-    if (fetched && (await openSession(fetched))) {
+    if (fetched && (await openSession({ directory: fetched.location.directory, id: fetched.id }))) {
       return
     }
 
     navigateWithSidebarReset(`/${base64Encode(root)}/session`)
   }
 
-  function navigateToSession(session: Session | undefined) {
+  function navigateToSession(session: SessionInfo | undefined) {
     if (!session) return
-    navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
+    navigateWithSidebarReset(`/${base64Encode(session.location.directory)}/session/${session.id}`)
   }
 
   function openProject(directory: string, navigate = true) {
@@ -1540,7 +1540,7 @@ export default function LegacyLayout(props: ParentProps) {
     const [state, setState] = createStore({
       status: "loading" as "loading" | "ready" | "error",
       dirty: false,
-      sessions: [] as Session[],
+      sessions: [] as SessionInfo[],
     })
 
     const refresh = async () => {

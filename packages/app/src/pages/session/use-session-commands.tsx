@@ -187,7 +187,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    const existing = info()?.share?.url
+    const existing = undefined
     if (existing) {
       await copyShare(existing, true)
       return

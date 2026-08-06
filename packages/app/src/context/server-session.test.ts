@@ -8,19 +8,19 @@ import type {
   SessionMessageAssistantTool,
   SessionMessageInfo,
 } from "@opencode-ai/client/promise"
-import type { Message, Part, Session } from "@/types"
+import type { Message, Part } from "@/types"
 import { createServerSession } from "./server-session"
 import type { ServerApi } from "@/utils/server"
 
 type MessageApi = ServerApi["message"]
 
-const session = (id: string, parentID?: string): Session => ({
+const session = (id: string, parentID?: string): SessionInfo => ({
   id,
-  slug: id,
   projectID: "project",
-  directory: "/repo",
+  location: { directory: "/repo" },
   title: id,
-  version: "1",
+  cost: 0,
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   parentID,
   time: { created: 1, updated: 1 },
 })
@@ -35,18 +35,8 @@ type MessageResponse = {
 }
 type SingleMessageResponse = { data: MessageResponse["data"][number] }
 
-function sessionInfo(value: Session): SessionInfo {
-  return {
-    id: value.id,
-    parentID: value.parentID,
-    projectID: value.projectID,
-    cost: value.cost ?? 0,
-    tokens: value.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: value.time,
-    title: value.title,
-    location: { directory: value.directory, workspaceID: value.workspaceID },
-    subpath: value.path,
-  }
+function sessionInfo(value: SessionInfo): SessionInfo {
+  return value
 }
 
 function currentMessages(data: MessageResponse["data"]): SessionMessageInfo[] {
@@ -272,7 +262,7 @@ const retryImmediately: typeof retry = async (task, options = {}) => {
   }
 }
 
-function setup(sessions: Record<string, Session>) {
+function setup(sessions: Record<string, SessionInfo>) {
   const get: unknown[] = []
   const messages: unknown[] = []
   const client = {
@@ -1687,7 +1677,7 @@ describe("server session", () => {
     ctx.store.apply({ type: "session.created", properties: { sessionID: "root", info: session("root") } })
     ctx.store.apply({ type: "session.status", properties: { sessionID: "root", status: { type: "busy" } } })
 
-    expect(ctx.store.get("root")?.directory).toBe("/repo")
+    expect(ctx.store.get("root")?.location.directory).toBe("/repo")
     expect(ctx.store.data.session_working("root")).toBe(true)
     expect(ctx.get).toEqual([])
   })

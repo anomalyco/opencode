@@ -160,7 +160,7 @@ export function SessionPage() {
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
   const serverSync = useServerSync()
-  const directory = createMemo(() => serverSync().session.lineage.peek(params.id)?.session.directory)
+  const directory = createMemo(() => serverSync().session.lineage.peek(params.id)?.session.location.directory)
   return (
     // Settings must keep the target-server SDK, sync, and models context and remain registered
     // when session content falls back to the route error boundary.
@@ -253,7 +253,7 @@ function ResolvedTargetSessionRoute() {
     () => params.id,
     () => sync().session.lineage,
   )
-  const directory = createMemo(() => current()?.session.directory)
+  const directory = createMemo(() => current()?.session.location.directory)
   const targetDirectory = () => directory()!
 
   createEffect(() => {

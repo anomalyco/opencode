@@ -305,7 +305,7 @@ export const SortableProject = (props: {
   const isWorking = createMemo(() =>
     dirs().some((directory) => {
       return Object.keys(serverSync().session.data.session_status).some((id) => {
-        if (serverSync().session.get(id)?.directory !== directory) return false
+        if (serverSync().session.get(id)?.location.directory !== directory) return false
         return serverSync().session.data.session_working(id)
       })
     }),

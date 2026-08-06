@@ -81,11 +81,9 @@ describe("Home V2 session index", () => {
     ])
 
     expect(result).toEqual([
-      expect.objectContaining({
-        id: "root",
-        slug: "root",
-        version: "",
-        directory: "/project",
+       expect.objectContaining({
+         id: "root",
+         location: { directory: "/project" },
         projectID: "project",
         title: "root",
         time: { created: 1, updated: 30 },
@@ -101,17 +99,17 @@ describe("Home V2 session index", () => {
     const now = 10 * 60 * 60 * 1000
     const sessions = Array.from({ length: 80 }, (_, index) => ({
       ...parseHomeSessionIndex([session({ id: `session-${index}`, updated: index + 1 })])[0],
-      directory: index % 2 === 0 ? "/one" : "/two",
+      location: { directory: index % 2 === 0 ? "/one" : "/two" },
     }))
 
     const retained = retainHomeSessions(sessions, 10, now)
-    expect(retained.filter((item) => item.directory === "/one")).toHaveLength(10)
-    expect(retained.filter((item) => item.directory === "/two")).toHaveLength(10)
+    expect(retained.filter((item) => item.location.directory === "/one")).toHaveLength(10)
+    expect(retained.filter((item) => item.location.directory === "/two")).toHaveLength(10)
   })
 
   test("replays session events over the loaded index", () => {
     const initial = parseHomeSessionIndex([session({ id: "old" })])
-    const created = { ...initial[0], id: "new", slug: "new", title: "new", time: { created: 2, updated: 2 } }
+    const created = { ...initial[0], id: "new", title: "new", time: { created: 2, updated: 2 } }
 
     const afterCreate = applyHomeSessionEvent(initial, {
       type: "session.created",

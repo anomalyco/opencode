@@ -123,7 +123,7 @@ describe("pickDirectoriesToEvict", () => {
 })
 
 describe("loadRootSessions", () => {
-  test("loads and normalizes a limited page of root sessions", async () => {
+  test("loads a limited page of root sessions", async () => {
     const calls: SessionListInput[] = []
 
     const result = await loadRootSessions({
@@ -137,9 +137,7 @@ describe("loadRootSessions", () => {
       limit: 10,
     })
 
-    expect(result.data).toEqual([
-      expect.objectContaining({ id: "session-1", directory: "dir", slug: "session-1", version: "" }),
-    ])
+    expect(result.data).toEqual([expect.objectContaining({ id: "session-1", location: { directory: "dir" } })])
     expect(result.limited).toBe(true)
     expect(calls).toEqual([{ directory: "dir", parentID: null, limit: 10, order: "desc" }])
   })

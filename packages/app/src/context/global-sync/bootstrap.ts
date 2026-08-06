@@ -3,7 +3,6 @@ import type {
   Path,
   Project,
   ProviderAuthResponse,
-  Session,
 } from "@/types"
 import type {
   AgentListInput,
@@ -23,6 +22,7 @@ import type {
   ReferenceInfo,
   QuestionRequest,
   SessionApi,
+  SessionInfo,
 } from "@opencode-ai/client/promise"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
@@ -42,7 +42,6 @@ import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
-import { normalizeSessionInfo } from "@/utils/session"
 import type { ServerApi } from "@/utils/server"
 
 type GlobalStore = {
@@ -182,7 +181,7 @@ function projectID(directory: string, projects: Project[]) {
   return projects.find((project) => project.worktree === directory || project.sandboxes?.includes(directory))?.id
 }
 
-function mergeSession(setStore: SetStoreFunction<State>, session: Session) {
+function mergeSession(setStore: SetStoreFunction<State>, session: SessionInfo) {
   setStore("session", (list) => {
     const next = list.slice()
     const idx = next.findIndex((item) => item.id >= session.id)
@@ -207,9 +206,7 @@ function warmSessions(input: {
   if (ids.length === 0) return Promise.resolve()
   return Promise.all(
     ids.map((sessionID) =>
-      retry(() => input.api.get({ sessionID })).then((session) =>
-        mergeSession(input.setStore, normalizeSessionInfo(session)),
-      ),
+      retry(() => input.api.get({ sessionID })).then((session) => mergeSession(input.setStore, session)),
     ),
   ).then(() => undefined)
 }
@@ -381,7 +378,7 @@ export async function bootstrapDirectory(input: {
                 const current = input.session?.data.permission ?? input.store.permission
                 for (const sessionID of Object.keys(current)) {
                   if (grouped[sessionID]) continue
-                  if (input.session?.get(sessionID)?.directory !== input.directory) continue
+                   if (input.session?.get(sessionID)?.location.directory !== input.directory) continue
                   if (input.session) input.session.set("permission", sessionID, [])
                   if (!input.session) input.setStore("permission", sessionID, [])
                 }
@@ -415,7 +412,7 @@ export async function bootstrapDirectory(input: {
                 const current = input.session?.data.question ?? input.store.question
                 for (const sessionID of Object.keys(current)) {
                   if (grouped[sessionID]) continue
-                  if (input.session?.get(sessionID)?.directory !== input.directory) continue
+                   if (input.session?.get(sessionID)?.location.directory !== input.directory) continue
                   if (input.session) input.session.set("question", sessionID, [])
                   if (!input.session) input.setStore("question", sessionID, [])
                 }

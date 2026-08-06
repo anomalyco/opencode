@@ -19,7 +19,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { showToast } from "@/utils/toast"
 import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./titlebar-tab-order"
-import type { Session } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 
 function SessionTabSlot(props: {
   tab: SessionTab
@@ -27,7 +27,7 @@ function SessionTabSlot(props: {
   index: () => number
   active: () => boolean
   forceTruncate: boolean
-  session: () => Session | undefined
+  session: () => SessionInfo | undefined
   fallbackTitle?: string
   onRename: (title: string) => Promise<void>
   onNavigate: (element: HTMLDivElement) => void
@@ -127,7 +127,7 @@ function SessionTabEntry(props: {
     createRoot((dispose) => {
       try {
         void ctx.sync
-          .ensureDirSyncContext(value.directory)
+          .ensureDirSyncContext(value.location.directory)
           .session.sync(value.id)
           .catch(() => {})
           .finally(dispose)
@@ -144,7 +144,7 @@ function SessionTabEntry(props: {
     const current = sdk()
     if (!current) return
     createTabPromptState(tabs, props.tab, current.scope, {
-      dir: base64Encode(value.directory),
+      dir: base64Encode(value.location.directory),
       id: value.id,
     })
   })

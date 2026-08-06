@@ -155,7 +155,7 @@ function LegacyTargetSessionRedirect() {
   )
 
   createEffect(() => {
-    const directory = current()?.session.directory
+    const directory = current()?.session.location.directory
     if (!directory) return
     navigate(legacySessionHref(directory, params.id), { replace: true })
   })

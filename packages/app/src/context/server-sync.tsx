@@ -451,7 +451,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   }
 
   const indexSession = (info: Parameters<typeof session.remember>[0]) => {
-    const key = directoryKey(info.directory)
+    const key = directoryKey(info.location.directory)
     const existing = children.children[key]
     if (!existing) return
     applyDirectoryEvent({
@@ -476,6 +476,23 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 
     if (event.current) session.applyV2(event.current)
     session.apply(event)
+    if (event.current?.type === "session.created")
+      void session
+        .resolve(event.current.data.sessionID, { force: true })
+        .then((info) => {
+          if (!session.get(info.id)) return
+          indexSession(info)
+          homeSessions.apply({
+            type: "session.created",
+            properties: { sessionID: info.id, info },
+          })
+        })
+        .catch(() => {})
+    if (event.current?.type === "session.deleted")
+      homeSessions.apply({
+        type: "session.deleted",
+        properties: { sessionID: event.current.data.sessionID },
+      })
     if (event.type === "session.created" || event.type === "session.deleted") {
       if ("info" in event.properties) homeSessions.apply(event as Parameters<typeof homeSessions.apply>[0])
     }

@@ -298,7 +298,7 @@ export function MessageTimeline(props: {
   })
   const titleValue = createMemo(() => info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
-  const shareUrl = createMemo(() => info()?.share?.url)
+  const shareUrl = (): string | undefined => undefined
   // TODO: Restore these actions when the V2 client exposes session sharing.
   // const shareEnabled = createMemo(() => sync().data.config.share !== "disabled")
   const shareEnabled = () => false
