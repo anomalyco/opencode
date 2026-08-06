@@ -657,3 +657,76 @@ it.instance(
     }),
   { config: {} },
 )
+
+it.instance(
+  "a completed change is pushed, and the report says which branch",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, { ...providerCfg(llm.url), agent: { reviewer: REVIEWER } })
+      const changeDir = writeChange(dir, "shipped-change", "- [ ] 1.1 the work\n")
+
+      // A bare repo standing in for origin, so the push is real rather than
+      // mocked — the point of this test is that the command actually works.
+      const origin = path.join(path.dirname(dir), `${path.basename(dir)}-origin.git`)
+      const sh = (command: string) =>
+        Effect.promise(() => Bun.$`bash -lc ${command}`.cwd(dir).quiet().nothrow().text())
+      yield* sh(`git init -q --bare ${origin}`)
+      yield* sh("git init -q")
+      yield* sh("git config user.email t@t.t")
+      yield* sh("git config user.name t")
+      yield* sh("git add -A")
+      yield* sh("git commit -q -m init")
+      yield* sh(`git remote add origin ${origin}`)
+      yield* sh("git checkout -q -b loop/shipped-change")
+
+      const loop = yield* Loop.Service
+      // One implement turn that checks the box AND commits, so the commit gate
+      // passes on its first evaluation. The scripted LLM is a single FIFO shared
+      // by every session in the run, so the fewer turns, the less brittle.
+      yield* llm.tool("write", { filePath: path.join(changeDir, "tasks.md"), content: "- [x] 1.1 the work\n" })
+      yield* llm.tool("bash", {
+        command: `git add -A && git commit -q -m "feat: shipped-change"`,
+        description: "commit the change",
+      })
+      yield* llm.text("implemented and committed")
+      for (let i = 0; i < 6; i++) yield* llm.text("Verdict: LGTM")
+
+      const info = yield* loop.create({
+        prompt: "",
+        mode: "queue",
+        interval: 0,
+        maxIterations: 12,
+        queueOptions: { testCommand: "exit 0", verifyCommand: "exit 0", defaultBranch: "main" },
+      })
+      const final = yield* waitForTerminal(info.id, 120)
+
+      expect(final.report).toContain("shipped-change: completed")
+      expect(final.report).toContain("Pushed:")
+      expect(final.report).toContain("pushed loop/shipped-change")
+
+      // The branch is really on the remote, not just claimed in a report.
+      const remote = yield* sh(`git --git-dir=${origin} branch --list`)
+      expect(remote).toContain("loop/shipped-change")
+      expect(remote).not.toContain("main")
+    }),
+  { config: {} },
+)
+
+it.instance(
+  "--no-push leaves the commits local and says so",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      writeChange(dir, "held-change", "- [x] 1.1 done\n")
+      const loop = yield* Loop.Service
+
+      const info = yield* loop.create({ prompt: "", mode: "queue", interval: 0, queuePush: false })
+      const final = yield* waitForTerminal(info.id, 30)
+      expect(final.report).toContain("Push disabled")
+    }),
+  { config: {} },
+)

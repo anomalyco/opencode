@@ -149,6 +149,12 @@ export const CreateInput = Schema.Struct({
   // GitHub/beads is an outward-facing side effect an unattended run must not
   // take unless asked. When on, a dry run is executed and logged first.
   queueSync: Schema.optional(Schema.Boolean),
+  // Push a completed change's branch. On by default: "done" means the work
+  // left this machine, and a run that stops at a local commit has not finished
+  // the job it was asked to do. Only the branch the commit gate already
+  // enforced is pushed, never the default branch, and the model still cannot
+  // push anything itself — the driver runs the one command.
+  queuePush: Schema.optional(Schema.Boolean),
   // Gate command overrides. Defaults: `bun test`, `bun run typecheck`, and
   // the default branch detected from origin/HEAD (fallback "main").
   queueOptions: Schema.optional(
@@ -226,7 +232,9 @@ type QueueState = {
   /** Gates that have passed at least once in this run — see the misconfiguration halt. */
   gatesPassed: Set<Gate>
   options?: CreateInput["queueOptions"]
+  push?: boolean
   syncs: { slug: string; ok: boolean; output: string }[]
+  pushes: { slug: string; branch: string; ok: boolean; output: string }[]
   outcomes: ChangeOutcome[]
   consecutiveQuarantines: number
   anyGatePassed: boolean
@@ -649,7 +657,17 @@ export const layer = Layer.effect(
         lines.push("", "Tracker sync (--sync):")
         for (const item of queue.syncs) lines.push(`- ${item.slug}: ${item.ok ? "synced" : "sync failed"}`)
       }
-      lines.push("", "Nothing was pushed. Branches with commits are awaiting your review and push.")
+      if (queue.push === false) {
+        lines.push("", "Push disabled (--no-push). Branches with commits are waiting for you.")
+      } else if (queue.pushes.length > 0) {
+        lines.push("", "Pushed:")
+        for (const item of queue.pushes) {
+          lines.push(`- ${item.slug}: ${item.ok ? `pushed ${item.branch}` : `push failed — ${item.output}`}`)
+        }
+        lines.push("", "Branches were pushed. Nothing was merged into the default branch.")
+      } else {
+        lines.push("", "Nothing reached the commit gate, so nothing was pushed.")
+      }
       return lines.join("\n")
     }
 
@@ -1165,6 +1183,48 @@ export const layer = Layer.effect(
             iterations,
             cause: ending.cause,
           })
+          // Push the completed change's branch. The commit gate has already
+          // established that a commit exists, that it touches this change, that
+          // the tree is clean, and that we are NOT on the default branch — so
+          // there is exactly one safe ref to publish and this computes it
+          // rather than taking the model's word for it.
+          //
+          // The DRIVER runs this, not the model: QueueDenyRules still deny
+          // `*git*push*` to every session in the run. The distinction is the
+          // point. An unattended agent that can push anything it likes is a
+          // different risk from a harness that pushes one branch it verified,
+          // after gates it verified, and reports exactly what it did.
+          if (ending.outcome === "completed" && queueState.push !== false) {
+            const head = yield* Effect.promise(() => exec("git rev-parse --abbrev-ref HEAD"))
+            const branch = head.output.trim()
+            if (head.code !== 0 || branch === "" || branch === "HEAD") {
+              queueState.pushes.push({
+                slug: change.slug,
+                branch,
+                ok: false,
+                output: `could not determine the current branch: ${head.output.slice(-500)}`,
+              })
+            } else if (branch === options.defaultBranch) {
+              // Unreachable if the commit gate did its job; kept because this
+              // is the one check whose failure is unrecoverable.
+              queueState.pushes.push({
+                slug: change.slug,
+                branch,
+                ok: false,
+                output: `refused to push the default branch "${branch}"`,
+              })
+            } else {
+              const push = yield* Effect.promise(() => exec(`git push -u origin ${branch}`))
+              queueState.pushes.push({
+                slug: change.slug,
+                branch,
+                ok: push.code === 0,
+                output: push.output.slice(-2_000),
+              })
+              yield* Effect.logInfo("queue push", { "change.slug": change.slug, branch, code: push.code })
+            }
+          }
+
           // Tracker sync, opt-in only (--sync). A dry run goes first and both
           // are logged, so an unattended run can be audited for exactly what
           // it wrote outward. A sync failure never changes the change's
@@ -1277,9 +1337,11 @@ export const layer = Layer.effect(
                     only: input.queue?.length ? [...input.queue] : undefined,
                     guidance: input.queueGuidance,
                     sync: input.queueSync ?? false,
+                    push: input.queuePush ?? true,
                     gatesPassed: new Set<Gate>(),
                     options: input.queueOptions,
                     syncs: [],
+                    pushes: [],
                     outcomes: [],
                     consecutiveQuarantines: 0,
                     anyGatePassed: false,

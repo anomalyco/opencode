@@ -10,6 +10,7 @@ import { ControlPlaneApi } from "./groups/control-plane"
 import { EventApi } from "./groups/event"
 import { ExperimentalApi } from "./groups/experimental"
 import { FileApi } from "./groups/file"
+import { GalleryApi } from "./groups/gallery"
 import { InstanceApi } from "./groups/instance"
 import { LocalApi } from "./groups/local"
 import { LoopApi } from "./groups/loop"
@@ -58,6 +59,7 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(FileApi)
   .addHttpApi(InstanceApi)
   .addHttpApi(LocalApi)
+  .addHttpApi(GalleryApi)
   .addHttpApi(LoopApi)
   .addHttpApi(McpApi)
   .addHttpApi(ProjectApi)

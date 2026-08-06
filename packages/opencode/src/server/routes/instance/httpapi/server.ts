@@ -89,6 +89,7 @@ import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
 import { instanceHandlers } from "./handlers/instance"
 import { localHandlers } from "./handlers/local"
+import { galleryHandlers } from "./handlers/gallery"
 import { loopHandlers } from "./handlers/loop"
 import { mcpHandlers } from "./handlers/mcp"
 import { permissionHandlers } from "./handlers/permission"
@@ -156,6 +157,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     fileHandlers,
     instanceHandlers,
     localHandlers,
+  galleryHandlers,
     loopHandlers,
     mcpHandlers,
     projectHandlers,

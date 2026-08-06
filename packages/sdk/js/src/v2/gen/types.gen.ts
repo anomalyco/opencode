@@ -6907,6 +6907,7 @@ export type LoopCreateData = {
     queue?: Array<string>
     queueGuidance?: string
     queueSync?: boolean
+    queuePush?: boolean
     queueOptions?: {
       testCommand?: string
       verifyCommand?: string

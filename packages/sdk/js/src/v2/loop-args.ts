@@ -23,6 +23,10 @@ export interface ParsedLoopArgs {
   queue: boolean
   /** true when --sync was passed (queue mode: specsync completed changes) */
   sync: boolean
+  /** false when --no-push was passed (queue mode: push completed branches) */
+  push: boolean
+  /** queue mode: standing instruction repeated on every iteration */
+  guidance?: string
   /** queue mode gate overrides; unset falls back to experimental.queue_gate */
   gateCwd?: string
   testCommand?: string
@@ -53,6 +57,8 @@ export function parseLoopArgs(input: string): ParsedLoopArgs {
   let completionToken: string | undefined
   let queue = false
   let sync = false
+  let push = true
+  let guidance: string | undefined
   let gateCwd: string | undefined
   let testCommand: string | undefined
   let verifyCommand: string | undefined
@@ -74,6 +80,20 @@ export function parseLoopArgs(input: string): ParsedLoopArgs {
     }
     if (token === "--sync") {
       sync = true
+      continue
+    }
+    if (token === "--no-push") {
+      push = false
+      continue
+    }
+    // Guidance is prose, and the TUI's single-line form has no quoting, so it
+    // takes the rest of the line rather than one token. It therefore has to
+    // come last — which is also how it reads naturally.
+    if (token === "--guidance") {
+      const rest = tokens.slice(i + 1).join(" ").trim()
+      if (rest === "") throw new LoopArgError("--guidance requires text")
+      guidance = rest
+      i = tokens.length
       continue
     }
     const stringField = STRING_FLAGS[token]
@@ -108,6 +128,8 @@ export function parseLoopArgs(input: string): ParsedLoopArgs {
 
   return {
     prompt: promptParts.join(" ").trim(),
+    push,
+    guidance,
     interval,
     max,
     noProgressLimit,

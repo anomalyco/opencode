@@ -87,14 +87,26 @@ the change and advance the queue.
 - **WHEN** a gate fails three times while every iteration makes tool calls
 - **THEN** the change is quarantined, even though the existing no-progress guard would not fire
 
-### Requirement: unattended runs cannot push or deploy
+### Requirement: the MODEL cannot push or deploy; the DRIVER publishes one verified branch
 
 A queue loop SHALL run under a permission profile that denies pushing, tagging,
-publishing, releasing, and deploying. The restriction SHALL be enforced by the permission
-system rather than by prompt instruction, and SHALL NOT be bypassable by invoking the
-denied operation indirectly.
+publishing, releasing, and deploying to every session in the run. The restriction SHALL be
+enforced by the permission system rather than by prompt instruction, and SHALL NOT be
+bypassable by invoking the denied operation indirectly.
 
-#### Scenario: push is denied
+Separately, and by default, the loop's driver SHALL push a change's branch once that
+change has passed the `commit` gate. This is not a relaxation of the boundary above — it
+is the distinction the boundary exists to draw. An unattended agent that may push whatever
+it constructs is a different risk from a harness that pushes one ref it computed itself,
+after gates it evaluated itself, and reports exactly what it did.
+
+The driver SHALL push only the current branch, SHALL refuse to push the default branch,
+and SHALL NOT merge, tag, or release. A push failure SHALL be reported and SHALL NOT change
+the change's outcome — the work is done and committed either way.
+
+Pushing SHALL be disableable per run.
+
+#### Scenario: the model's own push is denied
 
 - **WHEN** an iteration attempts `git push`
 - **THEN** the command is denied by the permission layer and the denial is recorded in the run report
@@ -109,10 +121,25 @@ denied operation indirectly.
 - **WHEN** an iteration attempts to push via a wrapper script, an alias, or a generated script it then executes
 - **THEN** the push does not succeed
 
-#### Scenario: local commit is permitted
+#### Scenario: a completed change is published
 
-- **WHEN** the `commit` gate is reached
-- **THEN** the loop commits to a non-default branch and does not push
+- **WHEN** a change passes the `commit` gate
+- **THEN** the driver pushes the current branch to origin and the report names the branch pushed
+
+#### Scenario: the default branch is never pushed
+
+- **WHEN** the current branch is the repository's default branch at the point the driver would push
+- **THEN** no push is attempted and the refusal is reported
+
+#### Scenario: a failed push does not fail the change
+
+- **WHEN** the push command exits non-zero
+- **THEN** the change is still reported as completed and the push failure is reported alongside it
+
+#### Scenario: pushing can be turned off
+
+- **WHEN** a run is started with pushing disabled
+- **THEN** no push is attempted and the report says the commits are waiting locally
 
 ### Requirement: a stuck change is quarantined, not allowed to halt the queue
 
@@ -183,10 +210,10 @@ no idle peers, no nudge.
 ### Requirement: the run produces a report
 
 A completed or halted queue run SHALL produce a report covering, per change, the final
-gate reached, iterations used, and commit sha if any; plus what is committed and awaiting
-the user's push.
+gate reached, iterations used, and commit sha if any; plus which branches were pushed, or
+why they were not.
 
-#### Scenario: report tells the user what to push
+#### Scenario: report says what was published
 
 - **WHEN** a queue run completes all changes
-- **THEN** the report lists each branch and commit created, and states that nothing was pushed
+- **THEN** the report lists each branch pushed, and states that nothing was merged into the default branch

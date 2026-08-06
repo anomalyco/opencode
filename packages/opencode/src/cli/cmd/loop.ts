@@ -75,7 +75,7 @@ export const LoopCommand = effectCmd({
         type: "string",
         array: true,
         describe:
-          "queue mode: work openspec changes to completion (implement, test, verify, commit — never push). " +
+          "queue mode: work openspec changes to completion (implement, test, verify, commit, push). " +
           "Pass change slugs to restrict/order the queue; bare --queue takes every eligible change. " +
           "Stuck changes are quarantined via .skein/blocker.md and the run continues.",
       })
@@ -108,6 +108,18 @@ export const LoopCommand = effectCmd({
         type: "boolean",
         default: false,
         describe: "queue mode: run specsync for each completed change (a dry run is executed first). Off by default",
+      })
+      .option("push", {
+        type: "boolean",
+        default: true,
+        describe:
+          "queue mode: push each completed change's branch to origin (default: on). --no-push leaves the commits local. " +
+          "The default branch is never pushed, and the model still cannot run a push itself — the driver does it.",
+      })
+      .option("guidance", {
+        type: "string",
+        describe:
+          "queue mode: a standing instruction repeated on every iteration. Steers HOW the work is done; never what is worked",
       })
       .option("completion-token", {
         type: "string",
@@ -149,6 +161,8 @@ export const LoopCommand = effectCmd({
         mode: queueMode ? "queue" : undefined,
         queue: queueMode && args.queue && args.queue.length > 0 ? args.queue : undefined,
         queueSync: queueMode && args.sync ? true : undefined,
+        queuePush: queueMode && args.push === false ? false : undefined,
+        queueGuidance: queueMode ? args.guidance : undefined,
         queueOptions:
           queueMode && (args["gate-cwd"] || args["test-command"] || args["verify-command"])
             ? {

@@ -1231,6 +1231,8 @@ function isRunControlInput(input: string): boolean {
               mode: parsed.queue ? "queue" : undefined,
               queue: parsed.queue && parsed.prompt ? parsed.prompt.split(/\s+/) : undefined,
               queueSync: parsed.queue && parsed.sync ? true : undefined,
+              queuePush: parsed.queue && !parsed.push ? false : undefined,
+              queueGuidance: parsed.queue ? parsed.guidance : undefined,
               queueOptions:
                 parsed.queue && (parsed.gateCwd || parsed.testCommand || parsed.verifyCommand)
                   ? { cwd: parsed.gateCwd, testCommand: parsed.testCommand, verifyCommand: parsed.verifyCommand }
@@ -1244,7 +1246,7 @@ function isRunControlInput(input: string): boolean {
               toast.show({
                 variant: "success",
                 message: parsed.queue
-                  ? `Auto started (${result.data.id}) — works planned tasks until none are left, and never pushes`
+                  ? `Auto started (${result.data.id}) — works planned tasks until none are left, pushing each completed branch${parsed.push ? "" : " (push disabled)"}`
                   : `Loop ${result.data.id} started (max ${result.data.maxIterations} iterations, stops on ${result.data.completionToken})`,
               })
             })
