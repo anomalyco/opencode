@@ -146,20 +146,6 @@ export const fromCatalogModel = (
     if (draft.settings?.apiKey === "") delete draft.settings.apiKey
     if (credential?.type === "key" && credential.metadata !== undefined)
       draft.body = Provider.mergeOverlay(draft.body, credential.metadata)
-    if (draft.providerID !== Provider.ID.azure) return
-    const configured = draft.settings?.resourceName
-    const resourceName =
-      typeof configured === "string" && configured.trim() !== ""
-        ? configured
-        : (process.env.AZURE_RESOURCE_NAME ?? process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME)
-    if (resourceName) draft.settings = { ...draft.settings, resourceName }
-    if (typeof draft.settings?.baseURL !== "string") return
-    draft.settings.baseURL = draft.settings.baseURL
-      .replaceAll("${AZURE_RESOURCE_NAME}", resourceName ?? "${AZURE_RESOURCE_NAME}")
-      .replaceAll(
-        "${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}",
-        resourceName ?? "${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}",
-      )
   })
   const packageName = Provider.packageName(resolved.package)
   const key = apiKey(resolved, credential)

@@ -43,7 +43,7 @@ const model = (packageName: string | undefined, options: ModelOptions = {}) =>
   })
 
 describe("ModelResolver", () => {
-  it.effect("constructs native Azure requests with deployment IDs and resolved resource URLs", () =>
+  it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
     Effect.gen(function* () {
       const responses = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/azure"), {
@@ -77,7 +77,7 @@ describe("ModelResolver", () => {
           modelID: "legacy-deployment",
           settings: {
             resourceName: "legacy-resource",
-            baseURL: "https://${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
+            baseURL: "https://legacy-resource.cognitiveservices.azure.com/openai",
           },
         }),
       )
