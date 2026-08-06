@@ -327,10 +327,7 @@ export function Prompt(props: PromptProps) {
     if (!session) return
     const agent = session.agent && local.agent.list().find((agent) => agent.id === session.agent)
     if (agent && !args.agent) local.agent.set(agent.id)
-    if (session.model) {
-      local.model.set({ providerID: session.model.providerID, modelID: session.model.id })
-      local.model.variant.set(session.model.variant)
-    }
+    if (!local.model.hydrate(session.model)) return
     syncedSessionID = sessionID
   })
 

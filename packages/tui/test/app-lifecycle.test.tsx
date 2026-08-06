@@ -226,79 +226,110 @@ test("session title generated while an untitled session is loading remains visib
   }
 })
 
-test("session startup prompt is submitted exactly once", async () => {
-  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const core = await import("@opentui/core")
-  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
-  const events = createEventStream()
-  const cwd = process.cwd()
-  const location = { directory: cwd, project: { id: "project", directory: cwd } }
-  const session = {
-    id: "dummy",
-    title: "Demo session",
-    projectID: "project",
-    location: { directory: cwd },
-    agent: "build",
-    model: { providerID: "provider", id: "model" },
-    cost: 0,
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    time: { created: 0, updated: 0 },
-  }
-  const bodies: unknown[] = []
-  const promptSubmitted = Promise.withResolvers<void>()
-  const calls = createFetch(async (url, request) => {
-    if (url.pathname === "/api/location") return json(location)
-    if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
-    if (url.pathname === "/api/session/dummy") return json({ data: session })
-    if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
-    if (url.pathname === "/api/session/dummy/pending") return json({ data: [] })
-    if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
-    if (url.pathname === "/api/agent")
-      return json({
-        location,
-        data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }],
-      })
-    if (url.pathname === "/api/model")
-      return json({
-        location,
-        data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }],
-      })
-    if (url.pathname === "/api/session/dummy/prompt") {
-      bodies.push(await request.json())
-      promptSubmitted.resolve()
-      return json({ data: {} })
+for (const scenario of [
+  { name: "session startup prompt is submitted exactly once", delayed: false },
+  { name: "session model hydration retries after the model catalog loads", delayed: true },
+]) {
+  test(scenario.name, async () => {
+    const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+    const core = await import("@opentui/core")
+    mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
+    const events = createEventStream()
+    const cwd = process.cwd()
+    const location = { directory: cwd, project: { id: "project", directory: cwd } }
+    const selected = scenario.delayed ? "selected" : "model"
+    const session = {
+      id: "dummy",
+      title: "Demo session",
+      projectID: "project",
+      location: { directory: cwd },
+      agent: "build",
+      model: { providerID: "provider", id: selected },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 0, updated: 0 },
     }
-  }, events)
-  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+    const sessionRequested = Promise.withResolvers<void>()
+    const modelRequested = Promise.withResolvers<void>()
+    const releaseModels = Promise.withResolvers<void>()
+    const promptSubmitted = Promise.withResolvers<void>()
+    const bodies: unknown[] = []
+    const selections: unknown[] = []
+    const calls = createFetch(async (url, request) => {
+      if (url.pathname === "/api/location") return json(location)
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === "/api/session/dummy") {
+        sessionRequested.resolve()
+        return json({ data: session })
+      }
+      if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
+      if (url.pathname === "/api/session/dummy/pending") return json({ data: [] })
+      if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
+      if (url.pathname === "/api/agent")
+        return json({
+          location,
+          data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }],
+        })
+      if (url.pathname === "/api/model") {
+        modelRequested.resolve()
+        if (scenario.delayed) await releaseModels.promise
+        return json({
+          location,
+          data: [
+            ...(scenario.delayed ? [{ id: "fallback", providerID: "provider", name: "Fallback", variants: [] }] : []),
+            { id: selected, providerID: "provider", name: "Selected", variants: [] },
+          ],
+        })
+      }
+      if (url.pathname === "/api/session/dummy/model") {
+        selections.push(await request.json())
+        return new Response(null, { status: 204 })
+      }
+      if (url.pathname === "/api/session/dummy/prompt") {
+        bodies.push(await request.json())
+        promptSubmitted.resolve()
+        return json({ data: {} })
+      }
+    }, events)
+    const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
 
-  try {
-    const { run } = await import("../src/app")
-    const task = Effect.runPromise(
-      run({
-        app: { name: "test", version: "test", channel: "test" },
-        server: { endpoint: { url: server.url.toString() } },
-        config: { get: async () => ({}), update: async () => ({}) },
-        packages: { resolve: async () => undefined },
-        args: { sessionID: "dummy", prompt: "RESUME_READY" },
-        log: () => {},
-      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
-    )
+    try {
+      const { run } = await import("../src/app")
+      const task = Effect.runPromise(
+        run({
+          app: { name: "test", version: "test", channel: "test" },
+          server: { endpoint: { url: server.url.toString() } },
+          config: { get: async () => ({}), update: async () => ({}) },
+          packages: { resolve: async () => undefined },
+          args: { sessionID: "dummy", prompt: "RESUME_READY" },
+          log: () => {},
+        }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+      )
 
-    await Promise.race([
-      promptSubmitted.promise,
-      Bun.sleep(2000).then(() => {
-        throw new Error("startup prompt was not submitted")
-      }),
-    ])
-    await Bun.sleep(20)
-    setup.renderer.destroy()
-    await task
+      if (scenario.delayed) {
+        await Promise.all([sessionRequested.promise, modelRequested.promise])
+        await Bun.sleep(20)
+        expect(bodies).toEqual([])
+        releaseModels.resolve()
+      }
+      await Promise.race([
+        promptSubmitted.promise,
+        Bun.sleep(2000).then(() => {
+          throw new Error("startup prompt was not submitted")
+        }),
+      ])
+      await Bun.sleep(20)
+      setup.renderer.destroy()
+      await task
 
-    expect(bodies).toHaveLength(1)
-    expect(bodies[0]).toMatchObject({ text: "RESUME_READY" })
-  } finally {
-    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
-    await server.stop()
-    mock.restore()
-  }
-})
+      expect(bodies).toHaveLength(1)
+      expect(bodies[0]).toMatchObject({ text: "RESUME_READY" })
+      expect(selections).toEqual([])
+    } finally {
+      releaseModels.resolve()
+      if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+      await server.stop()
+      mock.restore()
+    }
+  })
+}

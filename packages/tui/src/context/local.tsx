@@ -6,7 +6,6 @@ import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
-import { useClient } from "./client"
 import { RGBA } from "@opentui/core"
 import { readJson, writeJsonAtomic } from "../util/persistence"
 import {
@@ -48,7 +47,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
     const data = useData()
-    const client = useClient()
     const toast = useToast()
     const theme = useTheme()
     const { mode } = useThemes()
@@ -210,6 +208,47 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         )
       })
 
+      function select(model: ModelPreferenceModel, options?: { recent?: boolean }) {
+        batch(() => {
+          if (!isModelValid(model)) return
+          const a = agent.current()
+          if (!a) return
+          setModelStore("model", a.id, model)
+          if (!options?.recent) return
+          setModelStore("recent", recentModels(model, modelStore.recent))
+          save()
+        })
+      }
+
+      function selectVariant(value: string | undefined) {
+        const model = currentModel()
+        if (!model) return
+        const key = modelPreferenceKey(model)
+        const variant = normalizeModelVariant(value)
+        if (modelStore.variant[key] === variant) return
+        setModelStore("variant", key, variant)
+        save()
+      }
+
+      function matches(model?: { providerID: string; id: string }) {
+        if (!modelStore.ready) return false
+        const current = currentModel()
+        if (!current) return false
+        if (!model) return true
+        return current.providerID === model.providerID && current.modelID === model.id
+      }
+
+      function hydrate(model?: { providerID: string; id: string; variant?: string }) {
+        if (!modelStore.ready) return false
+        if (!model) return true
+        if (data.location.model.list() === undefined) return false
+        const selected = { providerID: model.providerID, modelID: model.id }
+        if (!isModelValid(selected)) return false
+        select(selected)
+        selectVariant(model.variant)
+        return matches(model)
+      }
+
       return {
         current: currentModel,
         get ready() {
@@ -221,6 +260,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         favorite() {
           return modelStore.favorite
         },
+        hydrate,
+        matches,
         parsed: createMemo(() => {
           const value = currentModel()
           if (!value) {
@@ -285,18 +326,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setModelStore("recent", recentModels(next, modelStore.recent))
           save()
         },
-        set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
-          batch(() => {
-            if (!isModelValid(model)) return
-            const a = agent.current()
-            if (!a) return
-            setModelStore("model", a.id, model)
-            if (options?.recent) {
-              setModelStore("recent", recentModels(model, modelStore.recent))
-              save()
-            }
-          })
-        },
+        set: select,
         toggleFavorite(model: { providerID: string; modelID: string }) {
           batch(() => {
             if (!isModelValid(model)) return
@@ -333,10 +363,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return info?.variants?.map((variant) => variant.id) ?? []
           },
           set(value: string | undefined) {
-            const m = currentModel()
-            if (!m) return
-            setModelStore("variant", modelPreferenceKey(m), normalizeModelVariant(value))
-            save()
+            selectVariant(value)
           },
           cycle() {
             const variants = this.list()
