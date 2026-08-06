@@ -44,11 +44,12 @@ export type SQLiteEffectSelectPrepare<
   TEffectHKT
 >
 
+// Explicit variance prevents comparisons from recursively scanning Drizzle's conditional select types.
 export class SQLiteEffectSelectBuilder<
-  TSelection extends SelectedFields | undefined,
-  TRunResult,
-  TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
-  TBuilderMode extends "db" | "qb" = "db",
+  out TSelection extends SelectedFields | undefined,
+  out TRunResult,
+  out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+  out TBuilderMode extends "db" | "qb" = "db",
 > {
   static readonly [entityKind]: string = "SQLiteEffectSelectBuilder"
 
