@@ -986,23 +986,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
-        name: "app.toggle.automode",
-        title: () => {
-          const config = sync.data.config
-          const enabled = (config.auto_mode ?? false) && (config.auto_continue ?? false)
-          return enabled
-            ? "Disable auto mode (skip permissions + auto-continue)"
-            : "Enable auto mode (skip permissions + auto-continue)"
-        },
-        category: "System",
-        run: async () => {
-          dialog.clear()
-          const config = sync.data.config
-          const bothEnabled = (config.auto_mode ?? false) && (config.auto_continue ?? false)
-          await applyAutoMode({ sdk, sync, toast }, bothEnabled ? "manual" : "auto")
-        },
-      },
-      {
         name: "app.toggle.automode.permissions",
         title: () => {
           const enabled = sync.data.config.auto_mode ?? false
@@ -1020,9 +1003,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         // names all four states and what each does. Cycling and the individual
         // toggles stay for people who already know what they want.
         name: "app.automode.show",
-        title: "Auto mode…",
+        title: "Agent autonomy…",
         category: "System",
-        slashName: "auto",
+        slashName: "mode",
+        slashAliases: ["auto"],
         run: () => {
           dialog.replace(() => <DialogAutoMode />)
         },

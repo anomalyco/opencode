@@ -34,7 +34,10 @@ export function DialogAutoMode() {
 
   return (
     <DialogSelect
-      title="Auto mode"
+      // "Auto mode" as a title made "Manual" one of its options read as a
+      // contradiction. This menu is not about auto — it is about how much the
+      // agent does without asking, and Auto is simply the far end of it.
+      title="Agent autonomy — how much it does without asking"
       options={options()}
       skipFilter={true}
       onSelect={async (option) => {
