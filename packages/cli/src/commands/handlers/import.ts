@@ -47,6 +47,10 @@ export default Runtime.handler(
         }),
       }),
     )
+    if (response.status === 409) {
+      process.stderr.write(`Session already exists${EOL}`)
+      return
+    }
     if (!response.ok) yield* Effect.fail(new Error(`Failed to import session: ${response.statusText}`))
     const imported = yield* Schema.decodeUnknownEffect(
       Schema.fromJsonString(Schema.Struct({ data: Session.Info })),

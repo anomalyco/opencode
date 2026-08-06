@@ -158,3 +158,35 @@ test("import validates a file and sends it to the resolved location", async () =
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+test("import reports an existing session without a stack trace", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-import-conflict-"))
+  const file = path.join(root, "session.json")
+  await fs.writeFile(file, JSON.stringify(transfer))
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url)
+      if (url.pathname === "/api/health") return health()
+      if (url.pathname === "/api/location") {
+        return Response.json({
+          directory: root,
+          project: { id: "global", directory: root, canonical: root },
+        })
+      }
+      if (url.pathname === "/api/session/import") return new Response("Conflict", { status: 409 })
+      return new Response("Not found", { status: 404 })
+    },
+  })
+
+  try {
+    const [stdout, stderr, exitCode] = await run(["import", file, "--server", server.url.toString()])
+
+    expect(exitCode).toBe(0)
+    expect(stdout).toBe("")
+    expect(stderr).toBe(`Session already exists${os.EOL}`)
+  } finally {
+    await server.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
