@@ -151,6 +151,9 @@ describe("ModelResolver", () => {
           http: { body: { custom_extension: { enabled: true } } },
         },
       })
+      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      expect(prepared.body.max_output_tokens).toBeUndefined()
+      expect(JSON.stringify(prepared.body)).not.toContain("max_output_tokens")
     }),
   )
 

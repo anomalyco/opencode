@@ -220,8 +220,7 @@ export const OpenAIPlugin = define({
             return
           }
           draft.cost = []
-          // Match Codex CLI so context consumption and subscription usage stay consistent between clients.
-          draft.limit = { ...draft.limit, context: 272_000, input: 272_000 }
+          draft.limit = { ...draft.limit, context: 400_000, input: 272_000 }
         })
       }
     })
