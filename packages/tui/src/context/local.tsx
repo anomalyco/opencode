@@ -22,6 +22,7 @@ import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { useData } from "./data"
 import { usePermission } from "./permission"
+import { useLocation } from "./location"
 
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
@@ -44,6 +45,16 @@ export function recentModels(model: ModelPreferenceModel, recent: ModelPreferenc
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
 }
 
+export function firstValidModel(
+  available: { providerID: string; id: string }[] | undefined,
+  candidates: (ModelPreferenceModel | undefined)[],
+) {
+  return candidates.find(
+    (candidate) =>
+      candidate && available?.some((model) => model.providerID === candidate.providerID && model.id === candidate.modelID),
+  )
+}
+
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
@@ -57,19 +68,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const args = useArgs()
     const event = useEvent()
     const permission = usePermission()
+    const location = useLocation()
+
+    const models = () => data.location.model.list(location.ref ?? data.location.default())
+    const providers = () => data.location.provider.list(location.ref ?? data.location.default())
 
     function isModelValid(model: ModelPreferenceModel) {
-      return !!data.location.model
-        .list()
-        ?.some((item) => item.providerID === model.providerID && item.id === model.modelID)
+      return !!models()?.some((item) => item.providerID === model.providerID && item.id === model.modelID)
     }
 
     function getFirstValidModel(...modelFns: (() => ModelPreferenceModel | undefined)[]) {
-      for (const modelFn of modelFns) {
-        const model = modelFn()
-        if (!model) continue
-        if (isModelValid(model)) return model
-      }
+      return firstValidModel(
+        models(),
+        modelFns.map((model) => model()),
+      )
     }
 
     function createAgent() {
@@ -191,7 +203,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        const model = data.location.model.list()?.[0]
+        const model = models()?.[0]
         if (!model) return undefined
         return {
           providerID: model.providerID,
@@ -230,10 +242,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               reasoning: false,
             }
           }
-          const provider = data.location.provider.list()?.find((item) => item.id === value.providerID)
-          const info = data.location.model
-            .list()
-            ?.find((item) => item.providerID === value.providerID && item.id === value.modelID)
+          const provider = providers()?.find((item) => item.id === value.providerID)
+          const info = models()?.find((item) => item.providerID === value.providerID && item.id === value.modelID)
           return {
             provider: provider?.name ?? value.providerID,
             model: info?.name ?? value.modelID,
@@ -327,9 +337,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           list() {
             const m = currentModel()
             if (!m) return []
-            const info = data.location.model
-              .list()
-              ?.find((item) => item.providerID === m.providerID && item.id === m.modelID)
+            const info = models()?.find((item) => item.providerID === m.providerID && item.id === m.modelID)
             return info?.variants?.map((variant) => variant.id) ?? []
           },
           set(value: string | undefined) {
