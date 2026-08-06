@@ -275,7 +275,7 @@ export const layer = Layer.effect(
 
     const runIteration = (
       record: Record_,
-      override?: { promptText: string; title?: string; permission?: PermissionV1.Ruleset },
+      override?: { promptText: string; sessionID?: SessionID },
     ) =>
       Effect.gen(function* () {
         const iterationNumber = record.info.iteration + 1
@@ -294,7 +294,7 @@ export const layer = Layer.effect(
         // if a turn is already running there, prompting would make
         // ensureRunning JOIN it and attribute someone else's output to this
         // iteration. Skip instead.
-        const targetSessionID = record.info.sessionID
+        const targetSessionID = override?.sessionID ?? record.info.sessionID
         {
           const busy = yield* status.get(targetSessionID).pipe(Effect.orElseSucceed(() => undefined))
           if (busy?.type === "busy") {
@@ -662,13 +662,19 @@ export const layer = Layer.effect(
 
     // One model turn inside a queue run. Iteration bookkeeping matches run():
     // the child session is recorded before prompting so cancel targets it.
-    const queueTurn = (id: LoopID, change: QueueChange, gate: Gate, failure?: { gate: Gate; output: string }) =>
+    const queueTurn = (
+      id: LoopID,
+      change: QueueChange,
+      gate: Gate,
+      changeSessionID: SessionID,
+      failure?: { gate: Gate; output: string },
+    ) =>
       Effect.gen(function* () {
         const record = (yield* Ref.get(state)).get(id)
         if (!record) return undefined
         const peers = yield* idlePeers
         const brief = buildBrief({ change, gate, failure, idlePeers: peers, guidance: record.queue?.guidance })
-        const result = yield* runIteration(record, { promptText: brief, permission: QueueDenyRules })
+        const result = yield* runIteration(record, { promptText: brief, sessionID: changeSessionID })
         yield* patch(id, (current) => ({
           ...current,
           info: {
@@ -784,6 +790,35 @@ export const layer = Layer.effect(
             outcome: "stopped",
           }
 
+          // One isolated session per CHANGE — not per iteration, and not one
+          // shared session for the whole run.
+          //
+          // Per iteration was invisible and wasteful: a new session every few
+          // minutes, none of them findable. One shared session drags every
+          // change's history into every later change, and — the part that
+          // actually bit — it cannot carry the authority ceiling, because it is
+          // the session the user is typing in. A session per change gets all
+          // three: a clean context for that change, a boundary you can navigate
+          // to, and its own deny profile, which is also what marks it
+          // unattended so it never stops to ask.
+          const changeSession = yield* session
+            .create({
+              parentID: record.info.sessionID,
+              title: `auto: ${change.slug}`,
+              permission: [...QueueDenyRules],
+            })
+            .pipe(Effect.orElseSucceed(() => undefined))
+          if (!changeSession) {
+            yield* finishQueue(id, "error", `could not create a session for ${change.slug}; nothing was attempted`)
+            return
+          }
+          const changeSessionID = changeSession.id
+          yield* patch(id, (current) => ({
+            ...current,
+            info: { ...current.info, iterationSessionID: changeSessionID },
+          }))
+          yield* emit(id)
+
           const quarantineNow = (why: string, detail: string, byGate?: Gate) =>
             Effect.sync(() => {
               quarantine(change, { cause: why, detail })
@@ -837,7 +872,7 @@ export const layer = Layer.effect(
                 if (failure) {
                   const repairing = failure
                   iterations += 1
-                  const attempt = yield* queueTurn(id, change, "implement", repairing)
+                  const attempt = yield* queueTurn(id, change, "implement", changeSessionID, repairing)
                   if (!attempt) return
                   if (attempt.aborted) {
                     yield* finishQueue(id, "cancelled", "cancelled by user")
@@ -862,7 +897,7 @@ export const layer = Layer.effect(
                   continue
                 }
                 iterations += 1
-                const result = yield* queueTurn(id, change, "implement", failure)
+                const result = yield* queueTurn(id, change, "implement", changeSessionID, failure)
                 if (!result) return
                 if (result.aborted) {
                   yield* finishQueue(id, "cancelled", "cancelled by user")
@@ -925,7 +960,7 @@ export const layer = Layer.effect(
                   break change
                 }
                 iterations += 1
-                const result = yield* queueTurn(id, change, "commit", { gate: "commit", output: check.output })
+                const result = yield* queueTurn(id, change, "commit", changeSessionID, { gate: "commit", output: check.output })
                 if (!result) return
                 if (result.aborted) {
                   yield* finishQueue(id, "cancelled", "cancelled by user")

@@ -466,3 +466,47 @@ it.instance(
     }),
   { config: {} },
 )
+
+it.instance(
+  "each change gets its own session, carrying the authority ceiling",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      writeChange(dir, "aaa-first", "- [ ] 1.1 work\n")
+      writeChange(dir, "zzz-second", "- [ ] 1.1 work\n")
+      const loop = yield* Loop.Service
+      const session = yield* Session.Service
+
+      const anchor = yield* session.create({ title: "my session" })
+      for (let i = 0; i < 10; i++) yield* llm.text("looking at it")
+
+      const info = yield* loop.create({
+        prompt: "",
+        mode: "queue",
+        sessionID: anchor.id,
+        interval: 0,
+        maxIterations: 4,
+        queueOptions: { testCommand: "exit 0", verifyCommand: "exit 0", defaultBranch: "main" },
+      })
+      yield* waitForTerminal(info.id, 40)
+
+      const all = yield* session.list()
+      const perChange = all.filter((item) => item.title?.startsWith("auto: "))
+
+      // A session per change — isolated context, and a boundary you can reach
+      // from the session you started in.
+      expect(perChange.length).toBeGreaterThanOrEqual(1)
+      for (const item of perChange) {
+        expect(item.parentID).toBe(anchor.id)
+        // The ceiling rides on that session: it is what denies pushing AND what
+        // marks the run unattended so it never stops to ask.
+        expect(item.permission?.some((rule) => rule.action === "deny" && rule.pattern.includes("push"))).toBe(true)
+      }
+      // The user's own session is never given the ceiling.
+      const mine = all.find((item) => item.id === anchor.id)
+      expect(mine?.permission ?? []).toHaveLength(0)
+    }),
+  { config: {} },
+)
