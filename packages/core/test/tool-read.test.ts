@@ -311,9 +311,7 @@ describe("ReadTool", () => {
       })
       expect(settled.status).toBe("completed")
       if (settled.status !== "completed") return
-      // Image base64 is carried by the content file item only; read produces no
-      // metadata, so the original bytes are never persisted twice.
-      expect(settled.metadata).toBeUndefined()
+      expect(settled.metadata).toEqual({ truncated: false })
       expect(settled.content).toMatchObject([
         { type: "text", text: "Image read successfully" },
         { type: "file", mime: "image/png", uri: `data:image/png;base64,${png}` },
@@ -731,6 +729,7 @@ describe("ReadTool", () => {
         output: { entries: listResult.entries, truncated: true, next: 4 },
       })
       if (result.status !== "completed") return
+      expect(result.metadata).toEqual({ truncated: true })
       expect(result.content).toEqual([
         {
           type: "text",
@@ -805,6 +804,7 @@ describe("ReadTool", () => {
         output: { type: "text-page", content: "hello", mime: "text/plain", offset: 2, truncated: true, next: 3 },
       })
       if (result.status !== "completed") return
+      expect(result.metadata).toEqual({ truncated: true })
       expect(result.content).toEqual([
         {
           type: "text",

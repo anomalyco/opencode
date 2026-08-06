@@ -114,6 +114,7 @@ export const Plugin = {
               Effect.map((output) => ({
                 output,
                 content: toModelContent(input.path, input.offset, output),
+                metadata: { truncated: output.type === "file" ? false : output.truncated },
               })),
               Effect.mapError((error) => {
                 if (error instanceof ToolFailure) return error
