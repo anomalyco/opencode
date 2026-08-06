@@ -824,22 +824,13 @@ export function Session() {
           if (options === null) return
 
           const content =
-            options.format === "markdown"
-              ? formatSessionTranscript(sessionData, messages(), options.thinking)
-              : await (async () => {
-                  const messages: unknown[] = []
-                  let cursor: string | undefined
-                  do {
-                    const page = await client.api.message.list(
-                      cursor
-                        ? { sessionID: sessionData.id, limit: 200, cursor }
-                        : { sessionID: sessionData.id, limit: 200, order: "asc" },
-                    )
-                    messages.push(...page.data)
-                    cursor = page.data.length ? (page.cursor.next ?? undefined) : undefined
-                  } while (cursor)
-                  return JSON.stringify({ info: sessionData, messages }, null, 2) + EOL
-                })()
+              options.format === "markdown"
+                ? formatSessionTranscript(sessionData, messages(), options.thinking)
+                : JSON.stringify(
+                    await client.api.session.export({ sessionID: sessionData.id, sanitize: options.sanitize }),
+                    null,
+                    2,
+                  ) + EOL
 
           if (options.action === "copy") {
             await clipboard.write?.(content)
