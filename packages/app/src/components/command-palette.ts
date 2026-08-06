@@ -1,5 +1,5 @@
 import { getFilename } from "@opencode-ai/core/util/path"
-import type { Project } from "@opencode-ai/sdk/v2/client"
+import type { Project } from "@/types"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createMemo, onCleanup } from "solid-js"

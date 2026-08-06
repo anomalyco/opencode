@@ -4,7 +4,6 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
-import { SessionV1 } from "@opencode-ai/schema/session-v1"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -89,10 +88,10 @@ const VersionedMessage = Bus.durable({
   },
 })
 
-const DurableMessage = SessionV1.Event.MessageRemoved
+const DurableMessage = SessionEvent.Renamed
 const durableData = (sessionID: Session.ID, text: string) => ({
   sessionID,
-  messageID: SessionV1.MessageID.ascending(`msg_${text}`),
+  title: text,
 })
 
 /** Followed log read without markers: the old `durable` stream shape. */
@@ -100,9 +99,19 @@ const tail = (bus: Bus.Interface, input: { aggregateID: string; after?: number }
   bus.log({ ...input, follow: true }).pipe(Stream.filter((item): item is Event.Payload => !Bus.isSynced(item)))
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, Location.node]), [[Location.node, locationLayer]]),
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, Location.node]), [
+    [Location.node, locationLayer],
+    [Bus.node, Bus.configured({ persist: true })],
+  ]),
 )
-const itWithoutLocation = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node])))
+const itWithoutLocation = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+    [Bus.node, Bus.configured({ persist: true })],
+  ]),
+)
+const itWithoutPersistence = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node])),
+)
 
 describe("Bus", () => {
   it.effect("subscribes to multiple event definitions with a discriminated payload union", () =>
@@ -251,6 +260,27 @@ describe("Bus", () => {
       expect(
         yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
       ).toEqual([])
+    }),
+  )
+
+  itWithoutPersistence.effect("projects durable events without retaining their payloads", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const aggregateID = Event.ID.create()
+      yield* db.run("CREATE TABLE IF NOT EXISTS event_commit_probe (value text NOT NULL)")
+      yield* bus.project(SyncMessage, () =>
+        db.run("INSERT INTO event_commit_probe (value) VALUES ('projected')").pipe(Effect.orDie, Effect.asVoid),
+      )
+
+      const event = yield* bus.publish(SyncMessage, { id: aggregateID, text: "hello" })
+
+      expect(event.durable?.seq).toBe(Event.Seq.make(0))
+      expect(yield* db.all("SELECT value FROM event_commit_probe")).toEqual([{ value: "projected" }])
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
+      expect(
+        yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
+      ).toEqual([{ aggregate_id: aggregateID, seq: 0, owner_id: null }])
     }),
   )
 
@@ -472,12 +502,18 @@ describe("Bus", () => {
       const readStarted = yield* Deferred.make<void>()
       const continueRead = yield* Deferred.make<void>()
       let pause = true
-      const eventLayer = Bus.layerWith({
-        beforeAggregateRead: () =>
-          pause
-            ? Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(continueRead)))
-            : Effect.void,
-      }).pipe(Layer.provide(LayerNode.compile(Database.node)))
+      const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        [
+          Bus.node,
+          Bus.configured({
+            persist: true,
+            beforeAggregateRead: () =>
+              pause
+                ? Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(continueRead)))
+                : Effect.void,
+          }),
+        ],
+      ])
 
       yield* Effect.gen(function* () {
         const bus = yield* Bus.Service
@@ -492,7 +528,7 @@ describe("Bus", () => {
         expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
           [0, durableData(aggregateID, "during handoff")],
         ])
-      }).pipe(Effect.provide(Layer.merge(LayerNode.compile(Database.node), eventLayer)))
+      }).pipe(Effect.provide(eventLayer))
     }),
   )
 
@@ -1235,7 +1271,9 @@ describe("Bus", () => {
 
   it.effect("log replays across configured read pages", () =>
     Effect.gen(function* () {
-      const eventLayer = Bus.layerWith({ logReadPageSize: 2 }).pipe(Layer.provide(LayerNode.compile(Database.node)))
+      const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        [Bus.node, Bus.configured({ persist: true, logReadPageSize: 2 })],
+      ])
 
       yield* Effect.gen(function* () {
         const bus = yield* Bus.Service
@@ -1257,7 +1295,7 @@ describe("Bus", () => {
           "log.synced",
         ])
         expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID, seq: Event.Seq.make(4) })
-      }).pipe(Effect.provide(Layer.merge(LayerNode.compile(Database.node), eventLayer)))
+      }).pipe(Effect.provide(eventLayer))
     }),
   )
 
@@ -1266,15 +1304,21 @@ describe("Bus", () => {
       const readStarted = yield* Deferred.make<void>()
       const releaseRead = yield* Deferred.make<void>()
       const firstRead = yield* Ref.make(true)
-      const eventLayer = Bus.layerWith({
-        beforeAggregateRead: () =>
-          Ref.getAndSet(firstRead, false).pipe(
-            Effect.flatMap((shouldBlock) => {
-              if (!shouldBlock) return Effect.void
-              return Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseRead)))
-            }),
-          ),
-      }).pipe(Layer.provide(LayerNode.compile(Database.node)))
+      const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        [
+          Bus.node,
+          Bus.configured({
+            persist: true,
+            beforeAggregateRead: () =>
+              Ref.getAndSet(firstRead, false).pipe(
+                Effect.flatMap((shouldBlock) => {
+                  if (!shouldBlock) return Effect.void
+                  return Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseRead)))
+                }),
+              ),
+          }),
+        ],
+      ])
 
       yield* Effect.gen(function* () {
         const bus = yield* Bus.Service
@@ -1294,28 +1338,8 @@ describe("Bus", () => {
           { type: "log.synced", aggregateID, seq: Event.Seq.make(0) },
           Event.Seq.make(1),
         ])
-      }).pipe(Effect.provide(Layer.merge(LayerNode.compile(Database.node), eventLayer)))
+      }).pipe(Effect.provide(eventLayer))
     }),
   )
 
-  it.effect("sequences returns the latest committed seq per aggregate and omits unknown aggregates", () =>
-    Effect.gen(function* () {
-      const bus = yield* Bus.Service
-      const first = Session.ID.create()
-      const second = Session.ID.create()
-      yield* bus.publish(DurableMessage, durableData(first, "zero"))
-      yield* bus.publish(DurableMessage, durableData(first, "one"))
-      yield* bus.publish(DurableMessage, durableData(second, "zero"))
-
-      const sequences = yield* bus.sequences([first, second, Session.ID.create()])
-
-      expect(sequences).toEqual(
-        new Map([
-          [first, Event.Seq.make(1)],
-          [second, Event.Seq.make(0)],
-        ]),
-      )
-      expect(yield* bus.sequences([])).toEqual(new Map())
-    }),
-  )
 })

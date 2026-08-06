@@ -130,26 +130,9 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
   }
 
   const saveMutation = useMutation(() => ({
-    mutationFn: async (result: NonNullable<ReturnType<typeof validate>>) => {
-      if ((await serverSDK().protocol) !== "v1") throw new Error("Custom providers are unavailable on this server")
-      const disabledProviders = serverSync().data.config.disabled_providers ?? []
-      const nextDisabled = disabledProviders.filter((id) => id !== result.providerID)
-
-      if (result.key) {
-        await serverSDK().client.auth.set({
-          providerID: result.providerID,
-          auth: {
-            type: "api",
-            key: result.key,
-          },
-        })
-      }
-
-      await serverSync().updateConfig({
-        provider: { [result.providerID]: result.config },
-        disabled_providers: nextDisabled,
-      })
-      return result
+    mutationFn: async (result: NonNullable<ReturnType<typeof validate>>): Promise<typeof result> => {
+      // TODO: Restore custom providers when V2 exposes config and arbitrary credential APIs.
+      throw new Error(`Custom provider ${result.providerID} is unavailable`)
     },
     onSuccess: (result) => {
       dialog.close()

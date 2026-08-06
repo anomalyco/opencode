@@ -4,12 +4,11 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMutation } from "@tanstack/solid-query"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { displayLabel } from "@opencode-ai/util/session-title-fallback"
 import { useGlobal } from "@/context/global"
 import { ServerConnection, serverName } from "@/context/server"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
-import type { Session } from "@opencode-ai/sdk/v2"
+import type { Session } from "@/types"
 import { canOpenTabRename, forwardTabRef } from "./titlebar-tab-gesture"
 import { TabPreviewPopover } from "./titlebar-tab-popover"
 import "./titlebar-tab-nav.css"
@@ -55,10 +54,7 @@ export function TabNavItem(props: {
     if (!session) return
     return projectForSession(session, serverCtx()?.projects.list() ?? [])
   })
-  const title = createMemo(() => {
-    const session = props.session()
-    return session ? displayLabel(session) : props.fallbackTitle
-  })
+  const title = createMemo(() => props.session()?.title ?? props.fallbackTitle)
 
   const projectName = createMemo(() => {
     const session = props.session()
@@ -306,7 +302,7 @@ export function TabNavItem(props: {
       }}
       data={{
         projectName: projectName(),
-        title: title(),
+        title: props.session()?.title,
         path: previewPath(),
         serverName: serverLabel(),
       }}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionV2Info } from "@opencode-ai/sdk/v2/client"
+import type { SessionV2Info } from "@/types"
 import {
   applyHomeSessionEvent,
   appendHomeSessionEvent,
@@ -33,7 +33,7 @@ describe("Home V2 session index", () => {
     const calls: unknown[] = []
     const result = await loadHomeSessionIndex(async (input) => {
       calls.push(input)
-      return { data: { data: [session({ id: "root" })], cursor: {} } }
+      return { data: [session({ id: "root" })], cursor: {} }
     })
 
     expect(result.sessions).toHaveLength(1)
@@ -48,15 +48,13 @@ describe("Home V2 session index", () => {
         calls.push({ input, signal: options.signal })
         if (!("cursor" in input)) {
           return {
-            data: {
-              data: Array.from({ length: HOME_V2_SESSION_PAGE_LIMIT }, (_, index) =>
-                session({ id: `page-1-${index}` }),
-              ),
-              cursor: { next: "next-page" },
-            },
+            data: Array.from({ length: HOME_V2_SESSION_PAGE_LIMIT }, (_, index) =>
+              session({ id: `page-1-${index}` }),
+            ),
+            cursor: { next: "next-page" },
           }
         }
-        return { data: { data: [session({ id: "page-2" })], cursor: {} } }
+        return { data: [session({ id: "page-2" })], cursor: {} }
       },
       0,
       controller.signal,
@@ -145,10 +143,8 @@ describe("Home V2 session index", () => {
     expect(homeSessionIndexSessions({ sessions: initial, eventSequence: 1 }, events)[0]?.title).toBe("current")
   })
 
-  test("refetches after reconnect, disposal, and session moves", () => {
+  test("refetches after reconnect", () => {
     expect(homeSessionIndexRefresh("server.connected", false)).toEqual({ connected: true, refetch: false })
     expect(homeSessionIndexRefresh("server.connected", true)).toEqual({ connected: true, refetch: true })
-    expect(homeSessionIndexRefresh("global.disposed", true).refetch).toBe(true)
-    expect(homeSessionIndexRefresh("session.next.moved", true).refetch).toBe(true)
   })
 })

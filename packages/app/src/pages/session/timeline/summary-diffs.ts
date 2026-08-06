@@ -1,4 +1,4 @@
-import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+import type { SnapshotFileDiff } from "@/types"
 import type { SummaryDiff } from "./timeline-row"
 
 export function uniqueSummaryDiffs(diffs: SnapshotFileDiff[] | undefined) {

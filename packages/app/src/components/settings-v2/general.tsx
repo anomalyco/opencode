@@ -10,7 +10,6 @@ import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
-import { useServerSDK } from "@/context/server-sdk"
 import { useUpdaterAction } from "../updater-action"
 import {
   monoDefault,
@@ -91,7 +90,6 @@ export const SettingsGeneralV2: Component<{
   const dialog = useDialog()
   const settings = useSettings()
   const serverSync = useServerSync()
-  const serverSdk = useServerSDK()
   const mobile = createMediaQuery("(max-width: 767px)")
 
   const updater = useUpdaterAction()
@@ -123,10 +121,7 @@ export const SettingsGeneralV2: Component<{
 
   const [shells] = createResource(
     async () => {
-      const sdk = serverSdk()
-      if ((await sdk.protocol) === "v1") {
-        return (await sdk.client.pty.shells()).data ?? []
-      }
+      // TODO: Restore executable shell discovery when the V2 client exposes it.
       // return (await sdk.api.pty.shells()).data
       return [] as ShellOption[]
     },

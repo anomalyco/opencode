@@ -159,6 +159,7 @@ const testLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
       Session.node,
     ]),
     [
+      [Bus.node, Bus.configured({ persist: true })],
       [LayerNodePlatform.llmClient, llmClient],
       [Permission.node, permission],
       [Catalog.node, promptCatalog],

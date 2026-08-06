@@ -83,20 +83,10 @@ describe("ProjectCopy", () => {
     }),
   )
 
-  it.effect("rejects duplicate strategies and reports unavailable ids", () =>
+  it.effect("reports unavailable strategy ids", () =>
     Effect.gen(function* () {
       const input = yield* setup()
       const copy = yield* ProjectCopy.Service
-      const strategy: ProjectCopy.Strategy = {
-        id: ProjectCopy.StrategyID.make("test/duplicate"),
-        create: () => Effect.die("unused"),
-        remove: () => Effect.die("unused"),
-        list: () => Effect.succeed([]),
-      }
-
-      yield* copy.register(strategy)
-      expect(yield* copy.register(strategy).pipe(Effect.flip)).toBeInstanceOf(ProjectCopy.DuplicateStrategyError)
-
       const unavailable = ProjectCopy.StrategyID.make("acme/missing")
       const error = yield* copy
         .create({

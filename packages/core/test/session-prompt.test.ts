@@ -68,6 +68,7 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
+      [Bus.node, Bus.configured({ persist: true })],
       [SessionExecution.node, execution],
       [LocationServiceMap.node, locations],
     ],
@@ -550,6 +551,47 @@ describe("Session.prompt", () => {
       expect(retried).toEqual(first)
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(yield* admittedCount).toBe(1)
+    }),
+  )
+
+  it.effect("reconciles an exact retry from the promoted message without admission history", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const input = { sessionID, id: messageID, text: "Fix the failing tests", resume: false }
+      const first = yield* session.prompt(input)
+      yield* SessionPending.promote(db, bus, sessionID, "steer")
+      yield* db
+        .delete(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+
+      const retried = yield* session.prompt(input)
+
+      expect(retried).toMatchObject({ id: first.id, type: "user", data: { text: first.data.text } })
+      expect(yield* session.messages({ sessionID })).toMatchObject([
+        { id: messageID, type: "user", text: "Fix the failing tests" },
+      ])
+    }),
+  )
+
+  it.effect("ignores delivery when retrying a promoted message", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const input = { sessionID, id: messageID, text: "Fix the failing tests", resume: false }
+      yield* session.prompt(input)
+      yield* SessionPending.promote(db, bus, sessionID, "steer")
+
+      const retried = yield* session.prompt({ ...input, delivery: "queue" })
+
+      expect(retried).toMatchObject({ id: messageID, type: "user", data: { text: input.text } })
+      expect(yield* admitted(messageID)).toBeUndefined()
     }),
   )
 

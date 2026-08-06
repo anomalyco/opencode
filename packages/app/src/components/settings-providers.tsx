@@ -6,7 +6,7 @@ import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { useServerProtocol, useServerSDK } from "@/context/server-sdk"
+import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { DialogConnectProvider, useProviderConnectController } from "./dialog-connect-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
@@ -39,7 +39,6 @@ const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => 
   const dialog = useDialog()
   const language = useLanguage()
   const serverSDK = useServerSDK()
-  const protocol = useServerProtocol()
   const serverSync = useServerSync()
   const providers = useProviders(() => undefined)
   const providerConnect = useProviderConnectController({ onBack: props.onBack })
@@ -84,8 +83,7 @@ const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => 
     return language.t("settings.providers.tag.other")
   }
 
-  const canDisconnect = (item: ProviderItem) =>
-    source(item) !== "env" && (protocol() === "v1" || !isConfigCustom(item.id))
+  const canDisconnect = (item: ProviderItem) => source(item) !== "env" && !isConfigCustom(item.id)
 
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
@@ -98,7 +96,7 @@ const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => 
   }
 
   const disableProvider = async (providerID: string, name: string) => {
-    if (protocol() !== "v1") return
+    return
     const before = serverSync().data.config.disabled_providers ?? []
     const next = before.includes(providerID) ? before : [...before, providerID]
     serverSync().set("config", "disabled_providers", next)
@@ -121,17 +119,14 @@ const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => 
   }
 
   const disconnect = async (providerID: string, name: string) => {
-    if (isConfigCustom(providerID)) {
-      await serverSDK()
-        .client.auth.remove({ providerID })
-        .catch(() => undefined)
-      await disableProvider(providerID, name)
-      return
-    }
     await serverSDK()
-      .client.auth.remove({ providerID })
-      .then(async () => {
-        await serverSDK().client.global.dispose()
+      .api.integration.get({ integrationID: providerID })
+      .then(async (integration) => {
+        const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
+        if (credentials.length === 0) throw new Error(`No removable credentials found for ${name}`)
+        await Promise.all(
+          credentials.map((credential) => serverSDK().api.credential.remove({ credentialID: credential.id })),
+        )
         showToast({
           variant: "success",
           icon: "circle-check",
@@ -221,7 +216,7 @@ const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => 
               )}
             </For>
 
-            <Show when={protocol() === "v1"}>
+            <Show when={false}>
               <div
                 class="flex items-center justify-between gap-4 min-h-16 border-b border-border-weak-base last:border-none flex-wrap py-3"
                 data-component="custom-provider-section"

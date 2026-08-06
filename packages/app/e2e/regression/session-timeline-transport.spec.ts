@@ -90,7 +90,7 @@ test("reconnects after a stream error", async ({ page }) => {
 })
 
 test("does not request replay when reconnecting the volatile V2 event stream", async ({ page }) => {
-  const timeline = await setupTimeline(page, { eventRetry: 10, protocol: "v2" })
+  const timeline = await setupTimeline(page, { eventRetry: 10 })
   const first = await timeline.transport.send(partUpdated(textPart("prt_transport_id", "event with id")), {
     id: "timeline-event-7",
   })
@@ -107,10 +107,10 @@ test("passes through non-event fetches", async ({ page }) => {
   const timeline = await setupTimeline(page)
 
   const health = await page.evaluate(async () => {
-    const response = await fetch("/global/health")
+    const response = await fetch("/api/health")
     return response.json()
   })
 
-  expect(health).toEqual({ healthy: true })
+  expect(health).toEqual({ healthy: true, version: "2.0.0", pid: 1 })
   expect(await timeline.transport.connections()).toHaveLength(1)
 })

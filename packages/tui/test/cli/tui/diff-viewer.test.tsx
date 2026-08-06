@@ -147,12 +147,12 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
   const config = createTuiResolvedConfig()
   const transport = createFetch((url) => {
     if (url.pathname !== "/api/vcs/diff") return
-    if (fail) return json({ message: "boom" }, { status: 500 })
     vcsDiffInput = {
       location: { directory: url.searchParams.get("location[directory]") },
       mode: url.searchParams.get("mode"),
       context: url.searchParams.get("context"),
     }
+    if (fail) return json({ message: "boom" }, { status: 500 })
     return json({
       location: { directory: "/repo/session", project: { id: "project-1", directory: "/repo/session" } },
       data: vcsDiff,
@@ -238,6 +238,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
 
   const app = await testRender(() => <Harness />, { width: 80, height })
   await waitForCommand(app, commands, "diff.close")
+  await app.waitFor(() => vcsDiffInput !== undefined)
   return {
     app,
     commands,

@@ -1,4 +1,4 @@
-import type { Message, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Session } from "@/types"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
@@ -15,6 +15,7 @@ import { useSDK, type DirectorySDK } from "@/context/sdk"
 import { useSync, type DirectorySync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
+import { getDirectory } from "@opencode-ai/core/util/path"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
@@ -44,6 +45,7 @@ type FollowupSendInput = {
   api: DirectorySDK["api"]["session"]
   serverSync: ServerSync
   sync: DirectorySync
+  session: Accessor<{ agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined>
   draft: FollowupDraft
   messageID?: string
   optimisticBusy?: boolean
@@ -156,13 +158,28 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       return false
     }
 
+    const session = input.session()
+    if (session?.agent !== input.draft.agent) {
+      await input.api.switchAgent({ sessionID: input.draft.sessionID, agent: input.draft.agent })
+    }
+    if (
+      session?.model?.providerID !== input.draft.model.providerID ||
+      session.model.id !== input.draft.model.modelID ||
+      (session.model.variant ?? "default") !== (input.draft.variant ?? "default")
+    ) {
+      await input.api.switchModel({
+        sessionID: input.draft.sessionID,
+        model: {
+          id: input.draft.model.modelID,
+          providerID: input.draft.model.providerID,
+          variant: input.draft.variant,
+        },
+      })
+    }
+
     await input.api.prompt({
       sessionID: input.draft.sessionID,
       id: messageID,
-      agent: input.draft.agent,
-      model: input.draft.model,
-      variant: input.draft.variant,
-      legacyParts: requestParts,
       text: requestParts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
       files: requestParts.flatMap((part) => {
         if (part.type !== "file") return []
@@ -200,7 +217,9 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
 type PromptSubmitInput = {
   prompt: ReturnType<typeof usePrompt>
-  info: Accessor<{ id: string } | undefined>
+  info: Accessor<
+    { id: string; agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined
+  >
   imageAttachments: Accessor<ImageAttachmentPart[]>
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
@@ -348,13 +367,15 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const worktreeSelection = input.newSessionWorktree?.() || "main"
 
     let sessionDirectory = projectDirectory
-    let client = sdk().client
-
     if (isNewSession) {
       if (worktreeSelection === "create") {
-        const createdWorktree = await client.worktree
-          .create({ directory: projectDirectory })
-          .then((x) => x.data)
+        const createdWorktree = await sdk()
+          .api.projectCopy.create({
+            projectID: sync().data.project,
+            strategy: "git_worktree",
+            directory: getDirectory(projectDirectory),
+            location: { directory: projectDirectory },
+          })
           .catch((err) => {
             showToast({
               title: language.t("prompt.toast.worktreeCreateFailed.title"),
@@ -362,14 +383,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             })
             return undefined
           })
-
-        if (!createdWorktree?.directory) {
-          showToast({
-            title: language.t("prompt.toast.worktreeCreateFailed.title"),
-            description: language.t("common.requestFailed"),
-          })
-          return
-        }
+        if (!createdWorktree) return
         WorktreeState.pending(sdk().scope, createdWorktree.directory)
         sessionDirectory = createdWorktree.directory
       }
@@ -379,10 +393,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
 
       if (sessionDirectory !== projectDirectory) {
-        client = sdk().createClient({
-          directory: sessionDirectory,
-          throwOnError: true,
-        })
         serverSync().child(sessionDirectory)
       }
 
@@ -487,8 +497,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           sessionID: session.id,
           id: eventID,
           command: text,
-          agent,
-          model,
         })
         .catch((err) => {
           showToast({
@@ -609,6 +617,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       api: sdk().api.session,
       sync: sync(),
       serverSync: serverSync(),
+      session: () => input.info() ?? session,
       draft,
       messageID,
       optimisticBusy: sessionDirectory === projectDirectory,

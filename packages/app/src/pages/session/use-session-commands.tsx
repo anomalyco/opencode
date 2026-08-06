@@ -15,7 +15,7 @@ import { showToast } from "@/utils/toast"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
-import { UserMessage } from "@opencode-ai/sdk/v2"
+import type { UserMessage } from "@/types"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionOwnership } from "./session-ownership"
 import { useLocal } from "@/context/local"
@@ -193,10 +193,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    const url = await sdk()
-      .client.session.share({ sessionID })
-      .then((res) => res.data?.share?.url)
-      .catch(() => undefined)
+    // TODO: Restore sharing when the V2 client exposes a session sharing API.
+    const url = undefined
     if (!url) {
       showToast({
         title: language.t("toast.session.share.failed.title"),
@@ -213,22 +211,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    await sdk()
-      .client.session.unshare({ sessionID })
-      .then(() =>
-        showToast({
-          title: language.t("toast.session.unshare.success.title"),
-          description: language.t("toast.session.unshare.success.description"),
-          variant: "success",
-        }),
-      )
-      .catch(() =>
-        showToast({
-          title: language.t("toast.session.unshare.failed.title"),
-          description: language.t("toast.session.unshare.failed.description"),
-          variant: "error",
-        }),
-      )
+    // TODO: Restore unsharing when the V2 client exposes a session sharing API.
+    showToast({
+      title: language.t("toast.session.unshare.failed.title"),
+      description: language.t("toast.session.unshare.failed.description"),
+      variant: "error",
+    })
   }
 
   const openFile = () => {
@@ -366,19 +354,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    const model = local.model.current()
-    if (!model) {
-      showToast({
-        title: language.t("toast.model.none.title"),
-        description: language.t("toast.model.none.description"),
-      })
-      return
-    }
-
-    await sdk().api.session.compact({
-      sessionID,
-      model: { providerID: model.provider.id, modelID: model.id },
-    })
+    await sdk().api.session.compact({ sessionID })
   }
 
   const fork = () => {
@@ -389,7 +365,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const shareCmds = () => {
-    if (sync().data.config.share === "disabled") return []
+    // TODO: Restore these commands when the V2 client exposes session sharing.
+    // if (sync().data.config.share === "disabled") return []
+    return []
+    /*
     return [
       sessionCommand({
         id: "session.share",
@@ -410,6 +389,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         onSelect: unshare,
       }),
     ]
+    */
   }
 
   const sessionCmds = () => [

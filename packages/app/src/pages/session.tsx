@@ -1,4 +1,4 @@
-import type { FilePart, Project, UserMessage, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FilePart, Project, UserMessage, VcsFileDiff } from "@/types"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
@@ -847,11 +847,8 @@ export default function Page() {
   }
 
   const gitMutation = useMutation(() => ({
-    mutationFn: () => sdk().client.project.initGit(),
-    onSuccess: (x) => {
-      if (!x.data) return
-      upsert(x.data)
-    },
+    // TODO: Restore Git initialization when the V2 client exposes this operation.
+    mutationFn: async () => Promise.reject(new Error("Git initialization is unavailable")),
     onError: (err) => {
       showToast({
         variant: "error",
@@ -1217,11 +1214,7 @@ export default function Page() {
           {language.t("session.review.noVcs.createGit.description")}
         </div>
       </div>
-      <Button size="large" disabled={gitMutation.isPending} onClick={initGit}>
-        {gitMutation.isPending
-          ? language.t("session.review.noVcs.createGit.actionLoading")
-          : language.t("session.review.noVcs.createGit.action")}
-      </Button>
+      {/* TODO: Restore the init button when the V2 client exposes Git initialization. */}
     </div>
   )
 
@@ -1254,7 +1247,8 @@ export default function Page() {
       return <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
     }
     if (reviewMode() === "turn" && nogit()) {
-      return <SessionReviewEmptyNoGitV2 pending={gitMutation.isPending} onInitGit={initGit} />
+      // TODO: Restore SessionReviewEmptyNoGitV2 when the V2 client exposes Git initialization.
+      return empty(language.t("session.review.noVcs.createGit.description"))
     }
     return <SessionReviewEmptyChangesV2 />
   }
@@ -1727,6 +1721,7 @@ export default function Page() {
         api: sdk().api.session,
         sync: sync(),
         serverSync: serverSync(),
+        session: () => sync().session.get(input.sessionID),
         draft: item,
         optimisticBusy: item.sessionDirectory === sdk().directory,
       }).catch((err) => {

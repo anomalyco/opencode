@@ -80,10 +80,9 @@ export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(fun
     .transaction(() =>
       Effect.gen(function* () {
         const messages = yield* messageEntries(db, sessionID)
-        const assembled = yield* InstructionState.assemble(db, sessionID, instructions)
         return {
-          initial: assembled.initial,
-          entries: [...messages, ...assembled.updates].toSorted((a, b) => a.seq - b.seq),
+          initial: yield* InstructionState.initial(db, sessionID, instructions),
+          entries: messages,
         }
       }),
     )
@@ -106,10 +105,9 @@ export const preview = Effect.fn("SessionHistory.preview")(function* (
         )
         const settled = unsettled === -1 ? messages : messages.slice(0, unsettled)
         const assembled = yield* InstructionState.preview(db, sessionID, instructions, observed)
-        const entries = [...settled, ...assembled.updates].toSorted((a, b) => a.seq - b.seq)
         return {
           initial: assembled.initial,
-          messages: entries.map((entry) => entry.message),
+          messages: settled.map((entry) => entry.message),
           instructionUpdate: assembled.update,
         }
       }),

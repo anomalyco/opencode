@@ -18,7 +18,6 @@ import { SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { Agent } from "./agent"
-import { SessionV1 } from "./v1/session"
 import { Money } from "@opencode-ai/schema/money"
 import { App } from "./app"
 import { Slug } from "./util/slug"
@@ -51,9 +50,6 @@ import { Global } from "@opencode-ai/util/global"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { fileURLToPath } from "url"
-
-export const RevertState = Session.Revert
-export type RevertState = Session.Revert
 
 // get project -> project.locations
 //
@@ -110,13 +106,6 @@ type ForkInput = {
   boundary: Session.ForkRequestBoundary
 }
 
-export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
-  "Session.OperationUnavailableError",
-  {
-    operation: Schema.Literals(["move", "skill", "switchAgent", "compact"]),
-  },
-) {}
-
 export { MessageDecodeError, NotFoundError }
 
 export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
@@ -159,23 +148,6 @@ export class DestinationNotDirectoryError extends Schema.TaggedErrorClass<Destin
 ) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
-
-export type Error =
-  | NotFoundError
-  | MessageDecodeError
-  | OperationUnavailableError
-  | PromptConflictError
-  | SyntheticConflictError
-  | AttachmentError
-  | CompactionConflictError
-  | BusyError
-  | SkillNotFoundError
-  | DestinationNotFoundError
-  | DestinationNotDirectoryError
-  | Command.NotFoundError
-  | Command.EvaluationError
-  | MessageNotFoundError
-  | SessionGenerate.Error
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<{
@@ -221,14 +193,8 @@ export interface Interface {
     after?: number
     follow?: boolean
   }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.Synced, NotFoundError>
-  readonly switchAgent: (input: {
-    sessionID: SessionSchema.ID
-    agent: Agent.ID
-  }) => Effect.Effect<void, NotFoundError>
-  readonly switchModel: (input: {
-    sessionID: SessionSchema.ID
-    model: Model.Ref
-  }) => Effect.Effect<void, NotFoundError>
+  readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: Agent.ID }) => Effect.Effect<void, NotFoundError>
+  readonly switchModel: (input: { sessionID: SessionSchema.ID; model: Model.Ref }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
   readonly move: (input: {
     sessionID: SessionSchema.ID
@@ -364,45 +330,45 @@ const layer = Layer.effect(
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
         const project = yield* projects.resolve(location.directory)
         yield* persistProject(project)
-        const now = Date.now()
-        const info = SessionV1.SessionInfo.make({
-          id: sessionID,
-          slug: Slug.create(),
-          version: app.version,
-          projectID: project.id,
-          parentID: input.parentID,
-          directory: location.directory,
-          path: path.relative(project.directory, location.directory).replaceAll("\\", "/"),
-          workspaceID: location.workspaceID ? Workspace.ID.make(location.workspaceID) : undefined,
-          title: input.title,
-          agent: input.agent,
-          model: input.model
-            ? {
-                id: Model.ID.make(input.model.id),
-                providerID: input.model.providerID,
-                variant: input.model.variant,
+        const projected = yield* bus
+          .publish(
+            SessionEvent.Created,
+            {
+              sessionID,
+              slug: Slug.create(),
+              version: app.version,
+              projectID: project.id,
+              parentID: input.parentID,
+              location,
+              subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
+              title: input.title,
+              agent: input.agent,
+              model: input.model
+                ? {
+                    id: Model.ID.make(input.model.id),
+                    providerID: input.model.providerID,
+                    variant: input.model.variant,
+                  }
+                : undefined,
+            },
+            { location },
+          )
+          .pipe(
+            Effect.as({ type: "created" } as const),
+            Effect.catchDefect((defect) => {
+              if (!(defect instanceof SessionProjector.SessionAlreadyProjected)) {
+                return Effect.die(defect)
               }
-            : undefined,
-          cost: Money.USD.zero,
-          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-          time: { created: now, updated: now },
-        })
-        const projected = yield* bus.publish(SessionV1.Event.Created, { sessionID, info }, { location }).pipe(
-          Effect.as({ type: "created" } as const),
-          Effect.catchDefect((defect) => {
-            if (!(defect instanceof SessionProjector.SessionAlreadyProjected)) {
-              return Effect.die(defect)
-            }
-            // Concurrent creation lost the projection race. The existing Session identity wins.
-            return store
-              .get(sessionID)
-              .pipe(
-                Effect.flatMap((session) =>
-                  session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(defect),
-                ),
-              )
-          }),
-        )
+              // Concurrent creation lost the projection race. The existing Session identity wins.
+              return store
+                .get(sessionID)
+                .pipe(
+                  Effect.flatMap((session) =>
+                    session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(defect),
+                  ),
+                )
+            }),
+          )
         if (projected.type === "existing") return projected.session
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
@@ -410,7 +376,7 @@ const layer = Layer.effect(
       fork: Effect.fn("Session.fork")(function* (input) {
         const parent = yield* result.get(input.sessionID)
         const boundary = yield* db
-          .select({ id: SessionMessageTable.id, seq: SessionMessageTable.seq })
+          .select({ id: SessionMessageTable.id })
           .from(SessionMessageTable)
           .where(
             and(
@@ -429,13 +395,14 @@ const layer = Layer.effect(
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
         const sessionID = SessionSchema.ID.create()
-        const instructionThrough =
-          input.boundary.type === "before" ? boundary.seq - 1 : yield* Bus.latestSequence(db, parent.id)
+        // The fork adopts the parent's newest instruction values rather than the
+        // values in effect at the boundary; copied history may contain frozen
+        // instruction-update text the initial baseline already reflects.
         yield* bus.publish(SessionEvent.Forked, {
           sessionID,
           parentID: parent.id,
           boundary: { ...input.boundary, messageID: boundary.id },
-          instructions: yield* InstructionState.valuesAt(db, parent.id, instructionThrough),
+          instructions: yield* InstructionState.current(db, parent.id),
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
@@ -557,8 +524,7 @@ const layer = Layer.effect(
             const session = yield* result.get(input.sessionID)
             // A staged revert must be committed before admitting new input so the prompt
             // continues from the reverted boundary rather than stale post-boundary history.
-            if (session.revert)
-              yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
+            if (session.revert) yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
             // Resolved lazily so prompt admission only boots location services when an
             // image attachment actually needs the resizer.
             const image = Image.Service.pipe(Effect.provide(locations.get(session.location)))
@@ -738,23 +704,23 @@ const layer = Layer.effect(
         const info = yield* fs.stat(directory).pipe(Effect.catch(() => Effect.succeed(undefined)))
         if (!info) return yield* new DestinationNotFoundError({ directory })
         if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
-        if (
-          current.location.directory === directory &&
-          current.location.workspaceID === input.workspaceID
-        )
-          return
+        if (current.location.directory === directory && current.location.workspaceID === input.workspaceID) return
         const project = yield* projects.resolve(directory)
         yield* persistProject(project)
         if ((yield* execution.active).has(input.sessionID)) {
           yield* execution.interrupt(input.sessionID)
           yield* execution.awaitIdle(input.sessionID)
         }
-        yield* bus.publish(SessionEvent.Moved, {
-          sessionID: input.sessionID,
-          location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
-          projectID: project.id,
-          subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
-        })
+        yield* bus.publish(
+          SessionEvent.Moved,
+          {
+            sessionID: input.sessionID,
+            location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
+            projectID: project.id,
+            subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
+          },
+          { location: current.location },
+        )
       }),
       compact: Effect.fn("Session.compact")(function* (input) {
         yield* result.get(input.sessionID)
@@ -835,9 +801,7 @@ const layer = Layer.effect(
           }),
         ),
       ),
-      interrupt: Effect.fn("Session.interrupt")((sessionID) =>
-        Effect.uninterruptible(execution.interrupt(sessionID)),
-      ),
+      interrupt: Effect.fn("Session.interrupt")((sessionID) => Effect.uninterruptible(execution.interrupt(sessionID))),
       revert: {
         stage: Effect.fn("Session.revert.stage")(function* (input) {
           const session = yield* result.get(input.sessionID)
@@ -936,12 +900,7 @@ const materializeAttachment = Effect.fn("Session.materializeAttachment")(functio
             .join("\n"),
         )
       : resolved.bytes
-  const normalized = yield* normalizeImageAttachment(
-    input,
-    Buffer.from(content).toString("base64"),
-    mime,
-    image,
-  )
+  const normalized = yield* normalizeImageAttachment(input, Buffer.from(content).toString("base64"), mime, image)
   return FileAttachment.create({
     data: normalized.data,
     mime: normalized.mime,

@@ -10,6 +10,7 @@ import { Catalog } from "../catalog"
 import { Command } from "../command"
 import { Config } from "../config"
 import { ConfigPlugin } from "../config/plugin"
+import { Credential } from "../credential"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { Bus } from "../bus"
@@ -317,6 +318,7 @@ export const node = makeLocationNode({
     Catalog.node,
     Command.node,
     Config.node,
+    Credential.node,
     Bus.node,
     FileMutation.node,
     Formatter.node,

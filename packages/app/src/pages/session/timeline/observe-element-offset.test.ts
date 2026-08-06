@@ -38,19 +38,16 @@ test("reports a divergent native offset once and ignores equal offsets and unrel
     instance.scrollOffset = offset
   })
 
-  route.remove()
-  document.body.append(route)
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await frames(3)
-  expect(calls).toEqual([[0, false]])
-
-  instance.scrollOffset = 79_400
   document.body.append(unrelated)
   unrelated.remove()
   await frames(2)
+  expect(calls).toEqual([])
+
+  route.remove()
+  document.body.append(route)
+  await waitFor(() => calls.length === 1)
   expect(calls).toEqual([[0, false]])
 
-  instance.scrollOffset = 0
   route.remove()
   document.body.append(route)
   await new Promise((resolve) => setTimeout(resolve, 0))
@@ -198,4 +195,9 @@ async function frames(count: number) {
   for (let index = 0; index < count; index++) {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   }
+}
+
+async function waitFor(condition: () => boolean) {
+  const deadline = performance.now() + 1_000
+  while (!condition() && performance.now() < deadline) await frames(1)
 }

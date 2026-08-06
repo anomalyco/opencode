@@ -28,7 +28,7 @@ const layer = Layer.effect(
               read: Effect.sync(() =>
                 [
                   "<env>",
-                  `  Session ID: ${sessionID}`,
+                  `  Current conversation session ID: ${sessionID}`,
                   `  Working directory: ${location.directory}`,
                   `  Workspace root folder: ${location.project.directory}`,
                   `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,

@@ -21,7 +21,7 @@ const words = [
   "vector",
 ]
 
-const serverKey = "http://127.0.0.1:4096"
+const serverKey = `http://127.0.0.1:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const sourceID = "ses_smoke_source"
 const targetID = "ses_smoke_target"
 const directory = "C:/OpenCode/SmokeProject"
@@ -134,7 +134,7 @@ function toolPart(
   return {
     id: id(`prt_tool_${tool}_${partIndex}`, index),
     type: "tool",
-    callID: id("call", index * 10 + partIndex),
+    callID: id("call", index * 100 + partIndex),
     tool,
     state: {
       status: "completed",
@@ -235,8 +235,17 @@ function renderable(part: MessagePart) {
   return part.type !== "step-start" && part.type !== "step-finish" && part.type !== "patch"
 }
 
-function orderedParts(message: Message) {
-  return message.parts.slice().sort((a, b) => a.id.localeCompare(b.id))
+function currentPartIDs(message: Message) {
+  const ordinals = { text: 0, reasoning: 0 }
+  return message.parts
+    .flatMap((part) => {
+      if (!renderable(part)) return []
+      if (part.type === "text") return [`${message.info.id}:text:${ordinals.text++}`]
+      if (part.type === "reasoning") return [`${message.info.id}:reasoning:${ordinals.reasoning++}`]
+      if (part.type === "tool") return [typeof part.callID === "string" ? part.callID : part.id]
+      return []
+    })
+    .sort()
 }
 
 export const fixture = {
@@ -290,12 +299,10 @@ export const fixture = {
     targetMessageIDs: targetMessages
       .filter((message) => message.info.role === "user")
       .map((message) => message.info.id),
-    targetPartIDs: targetMessages.flatMap((message) =>
-      orderedParts(message)
-        .filter(renderable)
-        .map((part) => part.id),
-    ),
-    expandedShellPartID: targetMessages.flatMap((message) => message.parts).find((part) => part.tool === "bash")!.id,
+    targetPartIDs: targetMessages.flatMap(currentPartIDs),
+    expandedShellPartID: targetMessages
+      .flatMap((message) => message.parts)
+      .find((part) => part.tool === "bash")!.callID,
   },
 }
 

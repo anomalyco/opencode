@@ -160,7 +160,7 @@ export function DialogEditProject(props: { project: LocalProject; server: Server
           <Button type="button" variant="ghost" size="large" onClick={model.close}>
             {language.t("common.cancel")}
           </Button>
-          <Button type="submit" variant="primary" size="large" disabled={model.save.isPending}>
+          <Button type="submit" variant="primary" size="large" disabled={!model.supported || model.save.isPending}>
             {model.save.isPending ? language.t("common.saving") : language.t("common.save")}
           </Button>
         </div>

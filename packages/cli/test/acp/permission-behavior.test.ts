@@ -153,6 +153,64 @@ describe("acp permission behavior", () => {
     }
   })
 
+  test("routes foreground child permissions through the parent ACP session", async () => {
+    const permissionRequests: RequestPermissionRequest[] = []
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(durableEvent("session.input.promoted", { sessionID: "ses_parent", inputID: id }))
+        send(
+          durableEvent("session.created", {
+            sessionID: "ses_child",
+            slug: "ses_child",
+            projectID: "project",
+            location: { directory: "/workspace" },
+            parentID: "ses_parent",
+            title: "Review code",
+            version: "test",
+          }),
+        )
+        send(durableEvent("session.execution.started", { sessionID: "ses_child" }))
+        send(
+          permissionAsked("ses_child", "perm_child", {
+            action: "read",
+            metadata: { path: "/workspace/child.ts" },
+            source: { type: "tool", messageID: "msg_child", id: "call_child" },
+          }),
+        )
+        send(durableEvent("session.execution.succeeded", { sessionID: "ses_child" }))
+        send(durableEvent("session.execution.succeeded", { sessionID: "ses_parent" }))
+      },
+    })
+    const connection = {
+      sessionUpdate: async () => {},
+      requestPermission: async (request) => {
+        permissionRequests.push(request)
+        return { outcome: { outcome: "selected", optionId: "once" } } as const
+      },
+    } satisfies Connection
+
+    try {
+      await startTurn(fixture, connection, "ses_parent", "input_parent")
+
+      expect(permissionRequests).toHaveLength(1)
+      expect(permissionRequests[0]).toMatchObject({
+        sessionId: "ses_parent",
+        toolCall: {
+          toolCallId: "ses_child:call_child",
+          title: "Review code: /workspace/child.ts",
+        },
+      })
+      expect(fixture.requests).toContainEqual(
+        expect.objectContaining({
+          method: "POST",
+          path: "/api/session/ses_child/permission/perm_child/reply",
+        }),
+      )
+    } finally {
+      await fixture.stop()
+    }
+  })
+
   test("previews edits during approval and syncs the completed file", async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-acp-permission-"))
     const file = path.join(cwd, "file.ts")

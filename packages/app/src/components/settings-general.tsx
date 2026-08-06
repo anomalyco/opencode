@@ -128,11 +128,7 @@ export const SettingsGeneral: Component = () => {
 
   const [shells] = createResource(
     async () => {
-      const sdk = serverSdk()
-      if ((await sdk.protocol) === "v1") {
-        return (await sdk.client.pty.shells()).data ?? []
-      }
-      // return (await sdk.api.pty.shells()).data
+      // TODO: Restore executable shell discovery; V2 shell.list only lists shell processes.
       return [] as ShellOption[]
     },
     { initialValue: [] as ShellOption[] },
@@ -331,6 +327,7 @@ export const SettingsGeneral: Component = () => {
         >
           <Select
             data-action="settings-shell"
+            disabled
             options={shellOptions()}
             current={shellOptions().find((o) => o.value === currentShell()) ?? autoOption}
             value={(o) => o.id}
@@ -338,7 +335,8 @@ export const SettingsGeneral: Component = () => {
             onSelect={(option) => {
               if (!option) return
               if (option.value === currentShell()) return
-              serverSync().updateConfig({ shell: option.value })
+              // TODO: Restore config writes when the V2 client exposes a config API.
+              // void serverSync().updateConfig({ shell: option.value })
             }}
             variant="secondary"
             size="small"

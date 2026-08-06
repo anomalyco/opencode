@@ -3,7 +3,7 @@ export * as Bus from "./bus"
 import { Cause, Context, DateTime, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { EventLog } from "@opencode-ai/schema/event-log"
-import { and, asc, eq, gt, inArray, lte, sql } from "drizzle-orm"
+import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -134,8 +134,6 @@ export interface Interface {
     readonly after?: number
     readonly follow?: boolean
   }) => Stream.Stream<LogItem>
-  /** Latest committed seq per aggregate. Aggregates without events are absent. */
-  readonly sequences: (aggregateIDs: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, Event.Seq>>
   /** @deprecated Use `subscribe()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
   readonly project: <D extends Event.Definition>(definition: D, projector: Subscriber<D>) => Effect.Effect<void>
@@ -154,16 +152,19 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Bus") {}
 
-export interface LayerOptions {
+interface Options {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
   /** Maximum durable rows read per page while replaying or tailing an aggregate log. */
   readonly logReadPageSize?: number
+  /** Retain durable event payloads for historical log reads and replay. */
+  readonly persist?: boolean
 }
 
-export const layerWith = (options?: LayerOptions) =>
-  Layer.effect(
-    Service,
-    Effect.gen(function* () {
+export function configured(options?: Options) {
+  return makeGlobalNode({
+    service: Service,
+    deps: [Database.node],
+    layer: Layer.effect(Service, Effect.gen(function* () {
       const pubsub = {
         live: yield* PubSub.unbounded<Event.Payload>(),
         durable: new Map<string, Set<PubSub.PubSub<void>>>(),
@@ -173,6 +174,7 @@ export const layerWith = (options?: LayerOptions) =>
       const listeners = new Array<Subscriber>()
       const { db } = yield* Database.Service
       const logReadPageSize = options?.logReadPageSize ?? 512
+      const persist = options?.persist ?? false
 
       const getOrCreate = (definition: Event.Definition) =>
         Effect.gen(function* () {
@@ -253,6 +255,7 @@ export const layerWith = (options?: LayerOptions) =>
                             )
                           }
                           if (input && input.seq <= latest) {
+                            if (!persist) return
                             const stored = yield* db
                               .select()
                               .from(EventTable)
@@ -294,19 +297,21 @@ export const layerWith = (options?: LayerOptions) =>
                               }),
                             )
                           }
-                          const stored = yield* db
-                            .select({ aggregateID: EventTable.aggregate_id, seq: EventTable.seq })
-                            .from(EventTable)
-                            .where(eq(EventTable.id, event.id))
-                            .get()
-                            .pipe(Effect.orDie)
-                          if (stored)
-                            yield* Effect.die(
-                              new InvalidDurableEventError({
-                                type: event.type,
-                                message: `Event ${event.id} already exists at aggregate ${stored.aggregateID} sequence ${stored.seq}`,
-                              }),
-                            )
+                          if (persist) {
+                            const stored = yield* db
+                              .select({ aggregateID: EventTable.aggregate_id, seq: EventTable.seq })
+                              .from(EventTable)
+                              .where(eq(EventTable.id, event.id))
+                              .get()
+                              .pipe(Effect.orDie)
+                            if (stored)
+                              yield* Effect.die(
+                                new InvalidDurableEventError({
+                                  type: event.type,
+                                  message: `Event ${event.id} already exists at aggregate ${stored.aggregateID} sequence ${stored.seq}`,
+                                }),
+                              )
+                          }
                           const committed = {
                             ...event,
                             durable: { aggregateID, seq, version: durable.version },
@@ -327,20 +332,21 @@ export const layerWith = (options?: LayerOptions) =>
                             })
                             .run()
                             .pipe(Effect.orDie)
-                          yield* db
-                            .insert(EventTable)
-                            .values([
-                              {
-                                id: event.id,
-                                aggregate_id: aggregateID,
-                                seq,
-                                created: DateTime.toEpochMillis(event.created ?? DateTime.makeUnsafe(0)),
-                                type: versionedType(definition.type, durable.version),
-                                data: encoded,
-                              },
-                            ])
-                            .run()
-                            .pipe(Effect.orDie)
+                          if (persist)
+                            yield* db
+                              .insert(EventTable)
+                              .values([
+                                {
+                                  id: event.id,
+                                  aggregate_id: aggregateID,
+                                  seq,
+                                  created: DateTime.toEpochMillis(event.created ?? DateTime.makeUnsafe(0)),
+                                  type: versionedType(definition.type, durable.version),
+                                  data: encoded,
+                                },
+                              ])
+                              .run()
+                              .pipe(Effect.orDie)
                           return { aggregateID, seq }
                         }),
                       { behavior: "immediate" },
@@ -657,19 +663,6 @@ export const layerWith = (options?: LayerOptions) =>
           }),
         )
 
-      const sequences = (aggregateIDs: ReadonlyArray<string>): Effect.Effect<ReadonlyMap<string, Event.Seq>> => {
-        if (aggregateIDs.length === 0) return Effect.succeed(new Map())
-        return db
-          .select({ aggregateID: EventSequenceTable.aggregate_id, seq: EventSequenceTable.seq })
-          .from(EventSequenceTable)
-          .where(inArray(EventSequenceTable.aggregate_id, Array.from(aggregateIDs)))
-          .all()
-          .pipe(
-            Effect.orDie,
-            Effect.map((rows) => new Map(rows.map((row) => [row.aggregateID, Event.Seq.make(row.seq)]))),
-          )
-      }
-
       const listen = (listener: Subscriber): Effect.Effect<Unsubscribe> =>
         Effect.sync(() => {
           listeners.push(listener)
@@ -691,7 +684,6 @@ export const layerWith = (options?: LayerOptions) =>
         publish,
         subscribe,
         log,
-        sequences,
         listen,
         project,
         replay,
@@ -699,8 +691,8 @@ export const layerWith = (options?: LayerOptions) =>
         remove,
         claim,
       })
-    }),
-  )
+    })),
+  })
+}
 
-export const layer = layerWith()
-export const node = makeGlobalNode({ service: Service, layer: layer, deps: [Database.node] })
+export const node = configured()

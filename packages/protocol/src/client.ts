@@ -36,6 +36,7 @@ export const groupNames = {
   "server.health": "health",
   "server.server": "server",
   "server.debug": "debug",
+  "server.migration": "migration",
   "server.location": "location",
   "server.agent": "agent",
   "server.plugin": "plugin",

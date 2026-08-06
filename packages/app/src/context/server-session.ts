@@ -3,19 +3,16 @@ import { retry } from "@opencode-ai/core/util/retry"
 import type { OpenCodeEvent, SessionApi, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type {
   Message,
-  OpencodeClient,
   Part,
   PermissionRequest,
   QuestionRequest,
   Session,
   SessionStatus,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@/types"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { message as cleanMessage } from "@/utils/diffs"
-import { sessionNotFoundError } from "@/utils/server-errors"
 import { rootSession } from "@/utils/session-route"
 import { normalizeSessionInfo } from "@/utils/session"
 import { normalizeSessionMessages } from "@/utils/session-message"
@@ -32,6 +29,29 @@ const initialMessagePageSize = 20
 const historyMessagePageSize = 200
 const sessionInfoLimit = 2_048
 const emptyIDs: ReadonlySet<string> = new Set()
+
+function projectMessageSource(message: Message): SessionMessageInfo[] {
+  if (message.role === "user") {
+    return [
+      { id: `${message.id}:agent`, type: "agent-switched", agent: message.agent, time: message.time },
+      {
+        id: `${message.id}:model`,
+        type: "model-switched",
+        model: { id: message.model.modelID, providerID: message.model.providerID, variant: message.model.variant },
+        time: message.time,
+      },
+      { id: message.id, type: "user", text: "", time: message.time },
+    ]
+  }
+  return [{
+    id: message.id,
+    type: "assistant",
+    agent: message.agent ?? message.mode,
+    model: { id: message.modelID, providerID: message.providerID, variant: message.variant },
+    content: [],
+    time: message.time,
+  }]
+}
 
 function needsOlderTurnRoot(source: readonly SessionMessageInfo[]) {
   const boundary = source.find(
@@ -59,30 +79,6 @@ type MessagePage = {
   projectSource?: boolean
   cursor?: string
   complete: boolean
-}
-
-function legacyMessageSource(items: { info: Message; parts: Part[] }[]): SessionMessageInfo[] {
-  return items
-    .slice()
-    .sort((a, b) => cmp(a.info.id, b.info.id))
-    .map((item) => {
-      if (item.info.role === "user") {
-        return {
-          id: item.info.id,
-          type: "user" as const,
-          text: item.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
-          time: item.info.time,
-        }
-      }
-      return {
-        id: item.info.id,
-        type: "assistant" as const,
-        agent: item.info.agent ?? item.info.mode,
-        model: { id: item.info.modelID, providerID: item.info.providerID, variant: item.info.variant },
-        content: [],
-        time: item.info.time,
-      }
-    })
 }
 
 // Most markers describe the current HTTP attempt; deltaParts persists non-durable stream state across retries.
@@ -183,16 +179,18 @@ function reconcileFetched<T extends { id: string }>(
   return [...result.values()].sort((a, b) => cmp(a.id, b.id))
 }
 
-type ServerSessionOptions = { retry?: typeof retry; protocol?: Promise<"v1" | "v2"> }
+type ServerSessionOptions = { retry?: typeof retry }
+type ServerSessionApis = { session: SessionApi; message: MessageApi }
 
 export function createServerSession(
-  client: OpencodeClient,
-  sessionApiOrOptions?: SessionApi | ServerSessionOptions,
-  messageApi?: MessageApi,
+  api: SessionApi | ServerSessionApis,
+  messageApiOrOptions?: MessageApi | ServerSessionOptions,
   currentOptions?: ServerSessionOptions,
 ) {
-  const sessionApi = messageApi ? (sessionApiOrOptions as SessionApi) : undefined
-  const options = messageApi ? currentOptions : (sessionApiOrOptions as ServerSessionOptions | undefined)
+  const bundled = "session" in api
+  const sessionApi = bundled ? api.session : api
+  const messageApi = bundled ? api.message : (messageApiOrOptions as MessageApi)
+  const options = bundled ? (messageApiOrOptions as ServerSessionOptions | undefined) : currentOptions
   const [data, setData] = createStore({
     info: {} as Record<string, Session | undefined>,
     session_status: {} as Record<string, SessionStatus>,
@@ -247,13 +245,13 @@ export function createServerSession(
     at: {} as Record<string, number | undefined>,
   })
 
-  const indexLegacyMessage = (message: Message) => {
+  const indexProjectedMessage = (message: Message) => {
     const current = data.session_message[message.sessionID] ?? []
     if (current.some((item) => item.id === message.id)) return
     setData(
       "session_message",
       message.sessionID,
-      reconcile([...current, ...legacyMessageSource([{ info: message, parts: [] }])]),
+      reconcile([...current, ...projectMessageSource(message)]),
     )
   }
 
@@ -307,12 +305,7 @@ export function createServerSession(
     const pending = requests.get(sessionID)
     if (pending) return pending
     const active = generation(sessionID)
-    const request = sessionApi
-      ? sessionApi.get({ sessionID }).then(normalizeSessionInfo)
-      : client.session.get({ sessionID }).then((result) => {
-          if (!result.data) throw sessionNotFoundError(sessionID)
-          return result.data
-        })
+    const request = sessionApi.get({ sessionID }).then(normalizeSessionInfo)
     const resolved = request.then((result) => {
       if (generations.get(sessionID) !== active) return result
       return remember(result)
@@ -538,72 +531,43 @@ export function createServerSession(
     )
 
   const fetchMessages = async (sessionID: string, limit: number, before?: string, onAttempt?: () => void) => {
-    if (messageApi && (await options?.protocol) !== "v1") {
-      const request = (cursor?: string) =>
-        (options?.retry ?? retry)(() => {
-          onAttempt?.()
-          return messageApi.list(cursor ? { sessionID, limit, cursor } : { sessionID, limit, order: "desc" })
-        })
-      const first = await request(before)
-      const pages = [first]
-      while (pages.at(-1)?.cursor.next && needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) {
-        const response = await request(pages.at(-1)!.cursor.next ?? undefined)
-        pages.push(response)
-        if (!response.data.length) break
-      }
-      const response = pages.at(-1)!
-      const source = pages.flatMap((page) => page.data).toReversed()
-      const normalized = normalizeSessionMessages(sessionID, source)
-      return {
-        session: normalized.messages.sort((a, b) => cmp(a.id, b.id)),
-        part: [...normalized.parts.entries()]
-          .map(([id, part]) => ({ id, part: part.sort((a, b) => cmp(a.id, b.id)) }))
-          .sort((a, b) => cmp(a.id, b.id)),
-        source,
-        sourceMode: before ? ("older" as const) : ("latest" as const),
-        projectSource: true,
-        cursor: response.cursor.next ?? undefined,
-        complete: response.data.length === 0,
-      }
+    const request = (cursor?: string) =>
+      (options?.retry ?? retry)(() => {
+        onAttempt?.()
+        return messageApi.list(cursor ? { sessionID, limit, cursor } : { sessionID, limit, order: "desc" })
+      })
+    const first = await request(before)
+    const pages = [first]
+    while (pages.at(-1)?.cursor.next && needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) {
+      const response = await request(pages.at(-1)!.cursor.next ?? undefined)
+      pages.push(response)
+      if (!response.data.length) break
     }
-    const response = await (options?.retry ?? retry)(() => {
-      onAttempt?.()
-      return client.session.messages({ sessionID, limit, before })
-    })
-    const items = (response.data ?? []).filter((item) => !!item?.info?.id)
+    const response = pages.at(-1)!
+    const source = pages.flatMap((page) => page.data).toReversed()
+    const normalized = normalizeSessionMessages(sessionID, source)
     return {
-      session: items.map((item) => cleanMessage(item.info)).sort((a, b) => cmp(a.id, b.id)),
-      part: items.map((item) => ({
-        id: item.info.id,
-        part: item.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id)),
-      })),
-      source: legacyMessageSource(items),
+      session: normalized.messages.sort((a, b) => cmp(a.id, b.id)),
+      part: [...normalized.parts.entries()]
+        .map(([id, part]) => ({ id, part: part.sort((a, b) => cmp(a.id, b.id)) }))
+        .sort((a, b) => cmp(a.id, b.id)),
+      source,
       sourceMode: before ? ("older" as const) : ("latest" as const),
-      cursor: response.response.headers.get("x-next-cursor") ?? undefined,
-      complete: !response.response.headers.get("x-next-cursor"),
+      projectSource: true,
+      cursor: response.cursor.next ?? undefined,
+      complete: !response.cursor.next,
     }
   }
 
   const fetchMessage = async (sessionID: string, messageID: string, onAttempt?: () => void) => {
-    if (sessionApi && (await options?.protocol) !== "v1") {
-      const response = await (options?.retry ?? retry)(() => {
-        onAttempt?.()
-        return sessionApi.message({ sessionID, messageID })
-      })
-      const normalized = normalizeSessionMessages(sessionID, [response])
-      const message = normalized.messages[0]
-      if (!message) throw new Error(`Message not found: ${messageID}`)
-      return { message, parts: normalized.parts.get(messageID) ?? [] }
-    }
     const response = await (options?.retry ?? retry)(() => {
       onAttempt?.()
-      return client.session.message({ sessionID, messageID })
+      return sessionApi.message({ sessionID, messageID })
     })
-    if (!response.data?.info?.id) throw new Error(`Message not found: ${messageID}`)
-    return {
-      message: cleanMessage(response.data.info),
-      parts: response.data.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id)),
-    }
+    const normalized = normalizeSessionMessages(sessionID, [response])
+    const message = normalized.messages[0]
+    if (!message) throw new Error(`Message not found: ${messageID}`)
+    return { message, parts: normalized.parts.get(messageID) ?? [] }
   }
 
   const replaceMessages = (sessionID: string, messages: Message[]) => {
@@ -683,7 +647,14 @@ export function createServerSession(
       ? (() => {
           const incoming = new Map(page.source.map((message) => [message.id, message]))
           const existing = data.session_message[sessionID] ?? []
-          const current = existing.filter((message) => !incoming.has(message.id))
+          const boundary = Math.min(...page.source.map((message) => message.time.created))
+          const current = existing.filter(
+            (message) =>
+              !incoming.has(message.id) &&
+              (page.sourceMode === "older" ||
+                load?.touchedSource.has(message.id) ||
+                (!page.complete && message.time.created < boundary)),
+          )
           const live = new Map(existing.map((message) => [message.id, message]))
           return (page.sourceMode === "older" ? [...page.source, ...current] : [...current, ...page.source]).map(
             (message) => (load?.touchedSource.has(message.id) ? (live.get(message.id) ?? message) : message),
@@ -1029,8 +1000,8 @@ export function createServerSession(
         return
       }
       case "message.updated": {
-        const info = cleanMessage((event.properties as { info: Message }).info)
-        indexLegacyMessage(info)
+        const info = (event.properties as { info: Message }).info
+        indexProjectedMessage(info)
         const load = messageLoads.get(info.sessionID)
         load?.touchedMessages.add(info.id)
         load?.removedMessages.delete(info.id)
@@ -1381,17 +1352,8 @@ export function createServerSession(
     async todo(sessionID: string, request?: { force?: boolean }) {
       touch(sessionID)
       if (data.todo[sessionID] !== undefined && !request?.force) return
-      if ((await options?.protocol) === "v2") {
-        setData("todo", sessionID, [])
-        return
-      }
-      return runInflight(inflightTodo, sessionID, () => {
-        const active = generation(sessionID)
-        return (options?.retry ?? retry)(() => client.session.todo({ sessionID })).then((result) => {
-          if (generations.get(sessionID) !== active) return
-          setData("todo", sessionID, reconcile(result.data ?? [], { key: "id" }))
-        })
-      })
+      // TODO: Restore todos when the V2 client exposes a session todo API.
+      setData("todo", sessionID, [])
     },
     history: {
       more: (sessionID: string) =>

@@ -157,13 +157,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       })
     })
 
-    // Warm open tabs' session data so first switches render from cache instead of fetching inside
-    // the switch gesture. Uses only existing sync methods (each dedupes internally), so reruns on
-    // tab-set or connection changes are no-ops for already-warm sessions, and reconnects double as
-    // a cache refresh after an SSE gap. The delay lets the current session's own mount syncs get
-    // the first connection slots. The effect tracks only the id set: reorders, tab switches, and
-    // title updates neither restart the timer nor an in-flight warm pass; the timer callback
-    // itself runs untracked, where the current session is skipped.
+    // Load lightweight session metadata concurrently so persisted tabs can resolve their project
+    // labels immediately. Delay the heavier per-tab data so the visible session keeps the first
+    // connection slots and switches still render from a warm cache.
     const openTabSessions = createMemo(() =>
       state()
         .tabs.map((tab) => tab.sessionID)
@@ -173,7 +169,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     createEffect(() => {
       if (!enabled()) return
       if (client.connection.status() !== "connected") return
-      if (openTabSessions() === "") return
+      const sessionIDs = openTabSessions()
+      if (sessionIDs === "") return
+      void Promise.allSettled(sessionIDs.split("\n").map((sessionID) => data.session.sync(sessionID)))
       let stale = false
       const timer = setTimeout(async () => {
         const sessions = state()
@@ -182,7 +180,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         for (const sessionID of sessions) {
           if (stale) return
           await Promise.allSettled([
-            data.session.sync(sessionID),
             data.session.message.sync(sessionID),
             data.session.pending.sync(sessionID),
             data.session.permission.sync(sessionID),
@@ -208,11 +205,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       }),
     )
     onCleanup(
-      event.on("session.error", (evt) => {
-        if (evt.data.sessionID) markUnread(evt.data.sessionID, "error")
-      }),
-    )
-    onCleanup(
       event.on("session.deleted", (evt) => {
         const target = root(evt.data.sessionID)
         closedTabs = closedTabs.filter((entry) => entry.tab.sessionID !== target)
@@ -223,8 +215,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
       const closed = closeSessionTab(state().tabs, target)
-      if (closed.tabs === state().tabs) return
       const selected = navigate && current() === target
+      if (closed.tabs === state().tabs && !selected) return
       const previous = selected
         ? moveSessionTabHistory(recordSessionTabHistory(history, target), closed.tabs, target, -1)
         : { history, sessionID: undefined }

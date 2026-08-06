@@ -29,21 +29,13 @@ import { Skill } from "./skill.js"
 import { SessionCompactionEvent } from "./session-compaction-event.js"
 import { SessionEvent } from "./session-event.js"
 import { SessionStatusEvent } from "./session-status-event.js"
-import { SessionV1 } from "./session-v1.js"
 import { TuiEvent } from "./tui-event.js"
 import { VcsEvent } from "./vcs-event.js"
 import { WorkspaceEvent } from "./workspace-event.js"
 import { WorktreeEvent } from "./worktree-event.js"
 import { WebSearch } from "./websearch.js"
 
-const sessionV1DurableDefinitions = SessionV1.Event.Definitions.filter(
-  (definition) => definition.durability === "durable",
-)
-const sessionV1LiveDefinitions = SessionV1.Event.Definitions.filter(
-  (definition) => definition.durability === "ephemeral",
-)
-
-const coreDefinitions = Event.inventory(...sessionV1DurableDefinitions, ...SessionEvent.Definitions)
+const coreDefinitions = Event.inventory(...SessionEvent.Definitions)
 
 const foundationDefinitions = Event.inventory(
   ...ModelsDev.Event.Definitions,
@@ -79,8 +71,6 @@ export const ServerDefinitions = Event.inventory(
   ...VcsEvent.Definitions,
   McpEvent.StatusChanged,
   McpEvent.ResourcesChanged,
-  // Shared transitional event retained until the TUI moves to the current session error surface.
-  SessionV1.Error,
 )
 export const Server = Event.latest(ServerDefinitions)
 export type ServerEvent = Schema.Schema.Type<(typeof ServerDefinitions)[number]>
@@ -88,7 +78,6 @@ export const isServer = (event: { readonly type: string }): event is ServerEvent
 
 export const Definitions = Event.inventory(
   ...foundationDefinitions,
-  ...sessionV1LiveDefinitions,
   ...InstallationEvent.Definitions,
   ...featureDefinitions,
   ...LspEvent.Definitions,

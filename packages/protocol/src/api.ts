@@ -31,6 +31,7 @@ import { CredentialGroup } from "./groups/credential.js"
 import { ProjectGroup } from "./groups/project.js"
 import { ProjectCopyGroup } from "./groups/project-copy.js"
 import { VcsGroup } from "./groups/vcs.js"
+import { MigrationGroup } from "./groups/migration.js"
 
 type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof LocationGroup, LocationId>
@@ -55,7 +56,7 @@ type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
 
 type SessionGroups<SessionLocationId extends HttpApiMiddleware.AnyId, SessionLocationService> =
   | ReturnType<typeof makeSessionGroup<SessionLocationId, SessionLocationService>>
-  | HttpApiGroup.AddMiddleware<typeof MessageGroup, SessionLocationId>
+  | typeof MessageGroup
 
 type FormGroups<
   LocationId extends HttpApiMiddleware.AnyId,
@@ -85,6 +86,7 @@ type ApiGroups<
   | typeof HealthGroup
   | typeof ServerGroup
   | typeof DebugGroup
+  | typeof MigrationGroup
   | LocationGroups<LocationId>
   | FormGroups<LocationId, LocationService, FormLocationId, FormLocationService>
   | SessionGroups<SessionLocationId, SessionLocationService>
@@ -150,7 +152,7 @@ const makeApiFromGroup = <
     .add(AgentGroup.middleware(locationMiddleware))
     .add(PluginGroup.middleware(locationMiddleware))
     .add(makeSessionGroup(sessionLocationMiddleware))
-    .add(MessageGroup.middleware(sessionLocationMiddleware))
+    .add(MessageGroup)
     .add(ModelGroup.middleware(locationMiddleware))
     .add(GenerateGroup.middleware(locationMiddleware))
     .add(ProviderGroup.middleware(locationMiddleware))
@@ -171,6 +173,7 @@ const makeApiFromGroup = <
     .add(ProjectCopyGroup.middleware(locationMiddleware))
     .add(VcsGroup.middleware(locationMiddleware))
     .add(DebugGroup)
+    .add(MigrationGroup)
     .add(WebSearchGroup.middleware(locationMiddleware))
     .annotateMerge(
       OpenApi.annotations({

@@ -14,7 +14,7 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "@/types"
 import { type LocalProject } from "@/context/layout"
 import { useServerSync, useQueryOptions } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
@@ -200,8 +200,9 @@ const WorkspaceActions = (props: {
             <DropdownMenu.ItemLabel>{props.language.t("common.rename")}</DropdownMenu.ItemLabel>
           </DropdownMenu.Item>
           <DropdownMenu.Item
-            disabled={props.local() || props.busy()}
-            onSelect={() => props.showResetWorkspaceDialog(props.root, props.directory)}
+            // TODO: Restore reset when V2 exposes project-copy reset and instance disposal.
+            // onSelect={() => props.showResetWorkspaceDialog(props.root, props.directory)}
+            disabled
           >
             <DropdownMenu.ItemLabel>{props.language.t("common.reset")}</DropdownMenu.ItemLabel>
           </DropdownMenu.Item>

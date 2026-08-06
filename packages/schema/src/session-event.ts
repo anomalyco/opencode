@@ -45,6 +45,24 @@ const options = {
     version: 1,
   },
 } as const
+export const Created = Event.durable({
+  type: "session.created",
+  ...options,
+  schema: {
+    ...Base,
+    projectID: Project.ID,
+    location: Location.Ref,
+    subpath: RelativePath.pipe(optional),
+    parentID: SessionID.pipe(optional),
+    slug: Schema.String,
+    title: Schema.String.pipe(optional),
+    agent: Agent.ID.pipe(optional),
+    model: Model.Ref.pipe(optional),
+    version: Schema.String,
+  },
+})
+export type Created = typeof Created.Type
+
 export const AgentSelected = Event.durable({
   type: "session.agent.selected",
   ...options,
@@ -186,6 +204,11 @@ export const InstructionsUpdated = Event.durable({
   schema: {
     ...Base,
     delta: Instruction.Delta,
+    /**
+     * The rendered chronological update shown to the model, frozen at emit time.
+     * Absent for the initial baseline observation and for deltas that render empty.
+     */
+    text: Schema.String.pipe(optional),
   },
 })
 export type InstructionsUpdated = typeof InstructionsUpdated.Type
@@ -547,6 +570,7 @@ export namespace RevertEvent {
 }
 
 export const Definitions = Event.inventory(
+  Created,
   AgentSelected,
   ModelSelected,
   Moved,

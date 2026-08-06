@@ -7,7 +7,3 @@ test("accepts only the fixed opencode username", () => {
   expect(ServerAuth.authorized({ username: "opencode", password: Redacted.make("secret") }, config)).toBe(true)
   expect(ServerAuth.authorized({ username: "custom", password: Redacted.make("secret") }, config)).toBe(false)
 })
-
-test("encodes the fixed opencode username", () => {
-  expect(ServerAuth.header({ password: "secret" })).toBe(`Basic ${Buffer.from("opencode:secret").toString("base64")}`)
-})

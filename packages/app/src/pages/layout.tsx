@@ -25,8 +25,8 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import { getFilename } from "@opencode-ai/core/util/path"
-import { Session } from "@opencode-ai/sdk/v2/client"
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import type { Session } from "@/types"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -390,22 +390,6 @@ export default function LegacyLayout(props: ParentProps) {
       }
 
       const unsub = serverSDK().event.listen((e) => {
-        if (e.details?.type === "worktree.ready") {
-          setBusy(e.name, false)
-          WorktreeState.ready(serverSDK().scope, e.name)
-          return
-        }
-
-        if (e.details?.type === "worktree.failed") {
-          setBusy(e.name, false)
-          WorktreeState.failed(
-            serverSDK().scope,
-            e.name,
-            e.details.properties?.message ?? language.t("common.requestFailed"),
-          )
-          return
-        }
-
         if (
           e.details?.type === "question.replied" ||
           e.details?.type === "question.rejected" ||
@@ -872,17 +856,14 @@ export default function LegacyLayout(props: ParentProps) {
   }
 
   async function archiveSession(session: Session) {
-    if ((await serverSDK().protocol) !== "v1") return
+    // TODO: Restore archiving when the V2 client exposes a session archive API.
+    void session
+    return
     const [store, setStore] = serverSync().child(session.directory)
     const sessions = store.session ?? []
     const index = sessions.findIndex((s) => s.id === session.id)
     const nextSession = sessions[index + 1] ?? sessions[index - 1]
 
-    await serverSDK().client.session.update({
-      sessionID: session.id,
-      directory: session.directory,
-      time: { archived: Date.now() },
-    })
     setStore(
       produce((draft) => {
         const match = Binary.search(draft.session, session.id, (s) => s.id)
@@ -980,7 +961,8 @@ export default function LegacyLayout(props: ParentProps) {
         title: language.t("command.session.archive"),
         category: language.t("command.category.session"),
         keybind: "mod+shift+backspace",
-        disabled: !params.dir || !params.id,
+        // TODO: Restore the command when the V2 client exposes session archive.
+        disabled: true,
         onSelect: () => {
           const session = currentSessions().find((s) => s.id === params.id)
           if (session) void archiveSession(session)
@@ -1301,16 +1283,7 @@ export default function LegacyLayout(props: ParentProps) {
     const name = next === getFilename(project.worktree) ? "" : next
 
     if (project.id && project.id !== "global") {
-      const sdk = serverSDK()
-      if ((await sdk.protocol) !== "v1") return
-      const result = await sdk.client.project
-        .update({ projectID: project.id, directory: project.worktree, name })
-        .then((response) => response.data)
-      if (!result) return
-      // const result = await serverSDK().api.project.update({ projectID: project.id, name })
-      serverSync().set("project", (items) =>
-        items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
-      )
+      // TODO: Restore project renames when the V2 client exposes a project update API.
       return
     }
 
@@ -1403,16 +1376,19 @@ export default function LegacyLayout(props: ParentProps) {
 
     setBusy(directory, true)
 
-    const result = await serverSDK()
-      .client.worktree.remove({ directory: root, worktreeRemoveInput: { directory } })
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: language.t("workspace.delete.failed.title"),
-          description: errorMessage(err, language.t("common.requestFailed")),
-        })
-        return false
-      })
+    const projectID = serverSync().data.project.find((project) => project.worktree === root)?.id
+    const result = projectID
+      ? await serverSDK()
+          .api.projectCopy.remove({ projectID, directory, force: false, location: { directory: root } })
+          .then(() => true)
+          .catch((err) => {
+            showToast({
+              title: language.t("workspace.delete.failed.title"),
+              description: errorMessage(err, language.t("common.requestFailed")),
+            })
+            return false
+          })
+      : false
 
     setBusy(directory, false)
 
@@ -1469,41 +1445,14 @@ export default function LegacyLayout(props: ParentProps) {
       platform,
       serverSDK().scope,
     )
-    await serverSDK()
-      .client.instance.dispose({ directory })
-      .catch(() => undefined)
-
-    const result = await serverSDK()
-      .client.worktree.reset({ directory: root, worktreeResetInput: { directory } })
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: language.t("workspace.reset.failed.title"),
-          description: errorMessage(err, language.t("common.requestFailed")),
-        })
-        return false
-      })
+    // TODO: Restore workspace reset and instance disposal when V2 exposes these operations.
+    const result = false
 
     if (!result) {
       setBusy(directory, false)
       dismiss()
       return
     }
-
-    if ((await serverSDK().protocol) === "v1")
-      await Promise.all(
-        sessions
-          .filter((session) => session.time.archived === undefined)
-          .map((session) =>
-            serverSDK()
-              .client.session.update({
-                sessionID: session.id,
-                directory: session.directory,
-                time: { archived: Date.now() },
-              })
-              .catch(() => undefined),
-          ),
-      )
 
     setBusy(directory, false)
     dismiss()
@@ -1835,20 +1784,26 @@ export default function LegacyLayout(props: ParentProps) {
 
   const createWorkspace = async (project: LocalProject) => {
     clearSidebarHoverState()
-    const created = await serverSDK()
-      .client.worktree.create({ directory: project.worktree })
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: language.t("workspace.create.failed.title"),
-          description: errorMessage(err, language.t("common.requestFailed")),
-        })
-        return undefined
-      })
+    const created = project.id
+      ? await serverSDK()
+          .api.projectCopy.create({
+            projectID: project.id,
+            strategy: "git_worktree",
+            directory: getDirectory(project.worktree),
+            location: { directory: project.worktree },
+          })
+          .catch((err) => {
+            showToast({
+              title: language.t("workspace.create.failed.title"),
+              description: errorMessage(err, language.t("common.requestFailed")),
+            })
+            return undefined
+          })
+      : undefined
 
     if (!created?.directory) return
 
-    setWorkspaceName(created.directory, created.branch ?? getFilename(created.directory), project.id, created.branch)
+    setWorkspaceName(created.directory, getFilename(created.directory), project.id)
 
     const local = project.worktree
     const key = pathKey(created.directory)
@@ -2017,16 +1972,21 @@ export default function LegacyLayout(props: ParentProps) {
               <div class="shrink-0 pl-1 py-1">
                 <div class="group/project flex items-start justify-between gap-2 py-2 pl-2 pr-0">
                   <div class="flex flex-col min-w-0">
-                    <InlineEditor
-                      id={`project:${projectId()}`}
-                      value={projectName}
-                      onSave={(next) => {
-                        void renameProject(project, next)
-                      }}
-                      class="text-14-medium text-text-strong truncate"
-                      displayClass="text-14-medium text-text-strong truncate"
-                      stopPropagation
-                    />
+                    <Show
+                      when={!project.id || project.id === "global"}
+                      fallback={<span class="text-14-medium text-text-strong truncate">{projectName()}</span>}
+                    >
+                      <InlineEditor
+                        id={`project:${projectId()}`}
+                        value={projectName}
+                        onSave={(next) => {
+                          void renameProject(project, next)
+                        }}
+                        class="text-14-medium text-text-strong truncate"
+                        displayClass="text-14-medium text-text-strong truncate"
+                        stopPropagation
+                      />
+                    </Show>
 
                     <Tooltip
                       placement="bottom"

@@ -51,7 +51,7 @@ import type {
   Part as PartType,
   ToolPart,
   UserMessage,
-} from "@opencode-ai/sdk/v2"
+} from "@/types"
 import { showToast } from "@/utils/toast"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
@@ -70,7 +70,7 @@ import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/sessio
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
-import { displayLabel } from "@opencode-ai/util/session-title-fallback"
+import { sessionTitle } from "@/utils/session-title"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { createTimelineProjection } from "./projection"
@@ -296,13 +296,12 @@ export function MessageTimeline(props: {
     if (!id) return
     return sync().session.get(id)
   })
-  const titleLabel = createMemo(() => {
-    const session = info()
-    if (!session) return
-    return displayLabel(session)
-  })
+  const titleValue = createMemo(() => info()?.title)
+  const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const shareUrl = createMemo(() => info()?.share?.url)
-  const shareEnabled = createMemo(() => sync().data.config.share !== "disabled")
+  // TODO: Restore these actions when the V2 client exposes session sharing.
+  // const shareEnabled = createMemo(() => sync().data.config.share !== "disabled")
+  const shareEnabled = () => false
   const parentID = createMemo(() => info()?.parentID)
   const parent = createMemo(() => {
     const id = parentID()
@@ -314,10 +313,7 @@ export function MessageTimeline(props: {
     if (!id) return emptyMessages
     return sync().data.message[id] ?? emptyMessages
   })
-  const parentTitle = createMemo(() => {
-    const session = parent()
-    return session ? displayLabel(session) : language.t("command.session.new")
-  })
+  const parentTitle = createMemo(() => sessionTitle(parent()?.title) ?? language.t("command.session.new"))
   const getMsgParts = (msgId: string) => sync().data.part[msgId] ?? emptyParts
   const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
   const childTaskDescription = createMemo(() => {
@@ -335,7 +331,7 @@ export function MessageTimeline(props: {
     if (value) return value
     return language.t("command.session.new")
   })
-  const showHeader = createMemo(() => !!(titleLabel() || parentID()))
+  const showHeader = createMemo(() => !!(titleValue() || parentID()))
   const projection = createTimelineProjection({
     messages: sessionMessages,
     userMessages: () => props.userMessages,
@@ -665,14 +661,16 @@ export function MessageTimeline(props: {
   }
 
   const shareMutation = useMutation(() => ({
-    mutationFn: (id: string) => serverSDK().client.session.share({ sessionID: id }),
+    // TODO: Restore sharing when the V2 client exposes a session sharing API.
+    mutationFn: async (_id: string) => Promise.reject(new Error("Session sharing is unavailable")),
     onError: (err) => {
       console.error("Failed to share session", err)
     },
   }))
 
   const unshareMutation = useMutation(() => ({
-    mutationFn: (id: string) => serverSDK().client.session.unshare({ sessionID: id }),
+    // TODO: Restore unsharing when the V2 client exposes a session sharing API.
+    mutationFn: async (_id: string) => Promise.reject(new Error("Session sharing is unavailable")),
     onError: (err) => {
       console.error("Failed to unshare session", err)
     },
@@ -818,14 +816,12 @@ export function MessageTimeline(props: {
   const archiveSession = async (sessionID: string) => {
     const session = sync().session.get(sessionID)
     if (!session) return
-    if ((await sdk().protocol) !== "v1") return
-
     const sessions = sync().data.session ?? []
     const index = sessions.findIndex((s) => s.id === sessionID)
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
 
-    await sdk()
-      .client.session.update({ sessionID, directory: sdk().directory, time: { archived: Date.now() } })
+    // TODO: Restore archiving when the V2 client exposes a session archive API.
+    await Promise.reject(new Error("Session archiving is unavailable"))
       .then(() => {
         sync().set(
           produce((draft) => {
@@ -918,10 +914,9 @@ export function MessageTimeline(props: {
   }
 
   function DialogDeleteSession(props: { sessionID: string }) {
-    const name = createMemo(() => {
-      const session = sync().session.get(props.sessionID)
-      return session ? displayLabel(session) : language.t("command.session.new")
-    })
+    const name = createMemo(
+      () => sessionTitle(sync().session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
+    )
     const handleDelete = async () => {
       await deleteSession(props.sessionID)
       dialog.close()
@@ -1574,9 +1569,7 @@ export function MessageTimeline(props: {
                                     </DropdownMenu.ItemLabel>
                                   </DropdownMenu.Item>
                                 </Show>
-                                <DropdownMenu.Item onSelect={() => void archiveSession(id)}>
-                                  <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
+                                {/* TODO: Restore archive when the V2 client exposes session archive. */}
                                 <DropdownMenu.Separator />
                                 <DropdownMenu.Item
                                   onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}
@@ -1645,9 +1638,7 @@ export function MessageTimeline(props: {
                                   {language.t("session.share.action.share")}...
                                 </MenuV2.Item>
                               </Show>
-                              <MenuV2.Item onSelect={() => void archiveSession(id)}>
-                                {language.t("common.archive")}
-                              </MenuV2.Item>
+                              {/* TODO: Restore archive when the V2 client exposes session archive. */}
                               <MenuV2.Separator />
                               <MenuV2.Item onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}>
                                 {language.t("common.delete")}...

@@ -66,7 +66,6 @@ async function readProbe(page: Page) {
 
 async function setup(page: Page) {
   await mockOpenCodeServer(page, {
-    protocol: "v2",
     directory,
     project: {
       id: projectID,

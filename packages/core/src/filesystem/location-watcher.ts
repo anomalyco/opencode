@@ -3,7 +3,6 @@ export * as LocationWatcher from "./location-watcher"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Stream } from "effect"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
-import os from "os"
 import path from "path"
 import { Config } from "../config"
 import { Bus } from "../bus"
@@ -44,7 +43,7 @@ const layer = Layer.effect(
       const config = (yield* configService.entries())
         .filter((entry): entry is Config.Document => entry.type === "document")
         .flatMap((item) => item.info.watcher?.ignore ?? [])
-      const home = path.resolve(location.directory) === path.resolve(os.homedir())
+      const home = Protected.isHome(location.directory)
 
       if (!home && location.vcs) {
         const updates = yield* watcher.subscribe({

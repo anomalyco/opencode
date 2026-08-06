@@ -6,7 +6,7 @@ import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { createMemo, type Accessor, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { useServerProtocol, useServerSDK } from "@/context/server-sdk"
+import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { DialogConnectProvider, useProviderConnectController } from "../dialog-connect-provider"
 import { DialogCustomProvider } from "../dialog-custom-provider"
@@ -36,7 +36,6 @@ export const SettingsProvidersV2: Component<{
   const dialog = useDialog()
   const language = useLanguage()
   const serverSdk = useServerSDK()
-  const protocol = useServerProtocol()
   const serverSync = useServerSync()
   const providers = useProviders(props.directory)
   const providerConnect = useProviderConnectController({ onBack: props.onBack })
@@ -81,8 +80,7 @@ export const SettingsProvidersV2: Component<{
     return language.t("settings.providers.tag.other")
   }
 
-  const canDisconnect = (item: ProviderItem) =>
-    source(item) !== "env" && (protocol() === "v1" || !isConfigCustom(item.id))
+  const canDisconnect = (item: ProviderItem) => source(item) !== "env" && !isConfigCustom(item.id)
 
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
@@ -95,7 +93,7 @@ export const SettingsProvidersV2: Component<{
   }
 
   const disableProvider = async (providerID: string, name: string) => {
-    if (protocol() !== "v1") return
+    return
     const before = serverSync().data.config.disabled_providers ?? []
     const next = before.includes(providerID) ? before : [...before, providerID]
     serverSync().set("config", "disabled_providers", next)
@@ -118,17 +116,17 @@ export const SettingsProvidersV2: Component<{
   }
 
   const disconnect = async (providerID: string, name: string) => {
-    if (isConfigCustom(providerID)) {
-      await serverSdk()
-        .client.auth.remove({ providerID })
-        .catch(() => undefined)
-      await disableProvider(providerID, name)
-      return
-    }
+    const location = props.directory() ? { directory: props.directory() } : undefined
     await serverSdk()
-      .client.auth.remove({ providerID })
-      .then(async () => {
-        await serverSdk().client.global.dispose()
+      .api.integration.get({ integrationID: providerID, location })
+      .then(async (integration) => {
+        const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
+        if (credentials.length === 0) throw new Error(`No removable credentials found for ${name}`)
+        await Promise.all(
+          credentials.map((credential) =>
+            serverSdk().api.credential.remove({ credentialID: credential.id, location }),
+          ),
+        )
         showToast({
           variant: "success",
           icon: "circle-check",
@@ -224,7 +222,7 @@ export const SettingsProvidersV2: Component<{
               )}
             </For>
 
-            <Show when={protocol() === "v1"}>
+            <Show when={false}>
               <div class="settings-v2-provider-row" data-component="custom-provider-section">
                 <div class="settings-v2-provider-lead">
                   <ProviderIcon

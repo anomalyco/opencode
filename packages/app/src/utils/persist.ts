@@ -558,7 +558,7 @@ export function persisted<T>(
   const config = resolveTarget(typeof target === "string" ? { key: target } : target, platform)
 
   const defaults = snapshot(store[0])
-  const legacy = config.legacy ?? []
+  const legacy = config["legacy"] ?? []
 
   const isDesktop = platform.platform === "desktop" && !!platform.storage
 

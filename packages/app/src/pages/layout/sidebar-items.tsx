@@ -1,11 +1,10 @@
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "@/types"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { displayLabel } from "@opencode-ai/util/session-title-fallback"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
@@ -15,6 +14,7 @@ import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
+import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { childSessionOnPath, getProjectAvatarSource, hasProjectPermissions } from "./helpers"
 
@@ -104,7 +104,7 @@ const SessionRow = (props: {
   warmPress: () => void
   warmFocus: () => void
 }): JSX.Element => {
-  const title = () => displayLabel(props.session)
+  const title = () => sessionTitle(props.session.title)
 
   return (
     <A
@@ -229,7 +229,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
               fallback={
                 <Tooltip
                   placement={props.mobile ? "bottom" : "right"}
-                  value={displayLabel(props.session)}
+                  value={sessionTitle(props.session.title)}
                   gutter={10}
                   class="min-w-0 w-full"
                 >
@@ -241,7 +241,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
             </Show>
           </div>
 
-          <Show when={!props.level}>
+          {/* TODO: Restore the archive action when the V2 client exposes session archive. */}
+          <Show when={false}>
             <div
               class="shrink-0 overflow-hidden transition-[width,opacity]"
               classList={{

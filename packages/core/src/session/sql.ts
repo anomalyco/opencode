@@ -8,7 +8,6 @@ import type { FileDiff } from "@opencode-ai/schema/file-diff"
 import { PermissionV1 } from "../v1/permission"
 import { Project } from "../project"
 import type { SessionSchema } from "./schema"
-import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { Workspace } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
 import type { Instruction } from "@opencode-ai/schema/instruction"
@@ -18,11 +17,9 @@ import type { RevertV1 } from "@opencode-ai/schema/session-revert"
 import type { Schema } from "effect"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Info)["Encoded"], "type" | "id">
-type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
-type V1PartData = Omit<SessionV1.Part, "id" | "sessionID" | "messageID">
 
 export const SessionTable = sqliteTable(
-  "session",
+  "session_v2",
   {
     id: text().$type<SessionSchema.ID>().primaryKey(),
     project_id: text()
@@ -64,44 +61,12 @@ export const SessionTable = sqliteTable(
     time_suspended: integer(),
   },
   (table) => [
-    index("session_project_idx").on(table.project_id),
-    index("session_workspace_idx").on(table.workspace_id),
-    index("session_parent_idx").on(table.parent_id),
-    index("session_time_suspended_idx")
+    index("session_v2_project_idx").on(table.project_id),
+    index("session_v2_workspace_idx").on(table.workspace_id),
+    index("session_v2_parent_idx").on(table.parent_id),
+    index("session_v2_time_suspended_idx")
       .on(table.time_suspended)
       .where(sql`${table.time_suspended} is not null`),
-  ],
-)
-
-export const MessageTable = sqliteTable(
-  "message",
-  {
-    id: text().$type<MessageID>().primaryKey(),
-    session_id: text()
-      .$type<SessionSchema.ID>()
-      .notNull()
-      .references(() => SessionTable.id, { onDelete: "cascade" }),
-    ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<V1MessageData>(),
-  },
-  (table) => [index("message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id)],
-)
-
-export const PartTable = sqliteTable(
-  "part",
-  {
-    id: text().$type<PartID>().primaryKey(),
-    message_id: text()
-      .$type<MessageID>()
-      .notNull()
-      .references(() => MessageTable.id, { onDelete: "cascade" }),
-    session_id: text().$type<SessionSchema.ID>().notNull(),
-    ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<V1PartData>(),
-  },
-  (table) => [
-    index("part_message_id_id_idx").on(table.message_id, table.id),
-    index("part_session_idx").on(table.session_id),
   ],
 )
 

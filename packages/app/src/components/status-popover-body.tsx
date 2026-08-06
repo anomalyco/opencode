@@ -5,7 +5,7 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { showToast } from "@/utils/toast"
 import { useNavigate } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, createResource, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
@@ -16,7 +16,7 @@ import { type ServerHealth } from "@/utils/server-health"
 import { useGlobal } from "@/context/global"
 import { useSettings } from "@/context/settings"
 import { useMcpToggle } from "@/context/mcp"
-import { useServerProtocol } from "@/context/server-sdk"
+import { useSDK } from "@/context/sdk"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -251,6 +251,7 @@ function ServerStatusList(props: { state: ServerStatusState }) {
 
 export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const sync = useSync()
+  const sdk = useSDK()
   const global = useGlobal()
   const server = useServer()
   const platform = usePlatform()
@@ -258,7 +259,6 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const language = useLanguage()
   const navigate = useNavigate()
   const settings = useSettings()
-  const protocol = useServerProtocol()
 
   const fail = (err: unknown) => {
     showToast({
@@ -279,9 +279,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     dialogRun += 1
   })
   const sortedServers = createMemo(() => {
-    const list = settings.general.newLayoutDesigns()
-      ? global.servers.list()
-      : global.servers.list().filter((x) => global.ensureServerCtx(x).sdk.protocolKind() !== "v2")
+    const list = global.servers.list()
     return listServersByHealth(list, server.key, global.servers.health)
   })
   const toggleMcp = useMcpToggle()
@@ -291,9 +289,11 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync().data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
-  const plugins = createMemo(() =>
-    (sync().data.config.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),
+  const [pluginList] = createResource(
+    () => (props.shown() ? sdk().directory : undefined),
+    (directory) => sdk().api.plugin.list({ location: { directory } }).then((result) => result.data),
   )
+  const plugins = createMemo(() => (pluginList.latest ?? []).map((item) => item.id))
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
 
@@ -322,7 +322,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
             {lspCount() > 0 ? `${lspCount()} ` : ""}
             {language.t("status.popover.tab.lsp")}
           </Tabs.Trigger>
-          <Show when={protocol() === "v1"}>
+          <Show when={true}>
             <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
               {pluginCount() > 0 ? `${pluginCount()} ` : ""}
               {language.t("status.popover.tab.plugins")}
@@ -487,7 +487,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
           </div>
         </Tabs.Content>
 
-        <Show when={protocol() === "v1"}>
+        <Show when={true}>
           <Tabs.Content value="plugins">
             <div class="flex flex-col px-2 pb-2">
               <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">

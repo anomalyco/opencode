@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
@@ -16,7 +17,7 @@ const addPlugin = Effect.fn(function* () {
 })
 
 describe("XAIPlugin", () => {
-  it.effect("registers browser OAuth, device OAuth, and API key methods", () =>
+  it.effect("registers device OAuth and API key methods", () =>
     Effect.gen(function* () {
       yield* addPlugin()
       const integrations = yield* Integration.Service
@@ -24,17 +25,44 @@ describe("XAIPlugin", () => {
       expect(integration?.name).toBe("xAI")
       expect(integration?.methods).toEqual([
         {
-          id: Integration.MethodID.make("browser"),
-          type: "oauth",
-          label: "xAI Grok OAuth (SuperGrok Subscription)",
-        },
-        {
           id: Integration.MethodID.make("device"),
           type: "oauth",
-          label: "xAI Grok OAuth (Headless / Remote / VPS)",
+          label: "SuperGrok Subscription",
         },
         { type: "key", label: "Manually enter API Key" },
       ])
+    }),
+  )
+
+  it.effect("migrates browser OAuth credentials to the device method", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const original = yield* credentials.create({
+        integrationID: Integration.ID.make("xai"),
+        label: "personal",
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("browser"),
+          access: "access",
+          refresh: "refresh",
+          expires: 123,
+          metadata: { account: "account" },
+        }),
+      })
+
+      yield* addPlugin()
+
+      expect(yield* credentials.get(original.id)).toEqual({
+        ...original,
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("device"),
+          access: "access",
+          refresh: "refresh",
+          expires: 123,
+          metadata: { account: "account" },
+        }),
+      })
     }),
   )
 })

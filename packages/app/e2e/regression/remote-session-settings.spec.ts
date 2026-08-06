@@ -3,7 +3,7 @@ import { expect, test, type Page, type Route } from "@playwright/test"
 import { installSseTransport } from "../utils/sse-transport"
 import { currentSession } from "../utils/mock-server"
 
-const serverA = "http://127.0.0.1:4096"
+const serverA = `http://127.0.0.1:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const serverB = "http://127.0.0.1:4097"
 const directoryA = "C:/server-a"
 const directoryB = "/home/server-b"
@@ -32,7 +32,7 @@ test("session settings use the remote server context", async ({ page }) => {
     .poll(() =>
       permissionRequests.some((request) => {
         const url = new URL(request)
-        return url.origin === serverB && url.searchParams.get("directory") === directoryB
+        return url.origin === serverB && url.searchParams.get("location[directory]") === directoryB
       }),
     )
     .toBe(true)
@@ -67,7 +67,7 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     .poll(() =>
       permissionRequests.some((request) => {
         const url = new URL(request)
-        return url.origin === serverA && url.searchParams.get("directory") === directoryA
+        return url.origin === serverA && url.searchParams.get("location[directory]") === directoryA
       }),
     )
     .toBe(true)
@@ -99,10 +99,10 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     .toEqual([
       {
         origin: serverA,
-        directory: directoryA,
+        directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-background-a",
-        body: { response: "once" },
+        body: { reply: "once" },
       },
     ])
 
@@ -127,17 +127,17 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
     .toEqual([
       {
         origin: serverA,
-        directory: directoryA,
+        directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-background-a",
-        body: { response: "once" },
+        body: { reply: "once" },
       },
       {
         origin: serverA,
-        directory: directoryA,
+        directory: undefined,
         sessionID: childSessionA.id,
         permissionID: "permission-background-a-child",
-        body: { response: "once" },
+        body: { reply: "once" },
       },
     ])
 })
@@ -168,8 +168,8 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
     const remote = url.origin === serverB
     const directory = remote ? directoryB : directoryA
     const sessions = remote ? [sessionB] : [sessionA, childSessionA]
-    const requestDirectory = url.searchParams.get("directory")
-    const response = url.pathname.match(/^\/session\/([^/]+)\/permissions\/([^/]+)$/)
+    const requestDirectory = url.searchParams.get("location[directory]")
+    const response = url.pathname.match(/^\/api\/session\/([^/]+)\/permission\/([^/]+)\/reply$/)
     if (route.request().method() === "POST" && response) {
       permissionResponses.push({
         origin: url.origin,
@@ -181,13 +181,21 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
       return json(route, true)
     }
     if (requestDirectory && requestDirectory !== directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/global/event" || url.pathname === "/event" || url.pathname === "/api/event")
+    if (url.pathname === "/api/event")
       return sse(route)
-    if (url.pathname === "/global/health") return json(route, { healthy: true })
-    if (url.pathname === "/api/provider" || url.pathname === "/api/model" || url.pathname === "/api/agent")
-      return json(route, { data: [] })
-    if (url.pathname === "/api/model/default") return json(route, { data: null })
-    if (["/api/command", "/api/reference", "/api/permission/request", "/api/question/request"].includes(url.pathname))
+    if (url.pathname === "/api/provider")
+      return json(route, {
+        location: { directory },
+        data: [{ id: remote ? "server-b" : "server-a", name: remote ? "Server B Provider" : "Server A Provider", package: "test" }],
+      })
+    if (url.pathname === "/api/model") return json(route, { location: { directory }, data: [model(remote)] })
+    if (url.pathname === "/api/model/default") return json(route, { location: { directory }, data: model(remote) })
+    if (url.pathname === "/api/agent") return json(route, { location: { directory }, data: [] })
+    if (url.pathname === "/api/permission/request") {
+      permissionRequests.push(url.toString())
+      return json(route, { location: { directory }, data: [] })
+    }
+    if (["/api/command", "/api/reference", "/api/question/request"].includes(url.pathname))
       return json(route, { location: { directory }, data: [] })
     if (url.pathname === "/api/mcp") return json(route, { location: { directory }, data: [] })
     if (url.pathname === "/api/mcp/resource")
@@ -211,8 +219,6 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
     if (currentSessionInfo) return json(route, { data: currentSession(currentSessionInfo) })
     if (sessions.some((session) => url.pathname === `/api/session/${session.id}/message`))
       return json(route, { data: [], cursor: {} })
-    const current = sessions.find((session) => url.pathname === `/session/${session.id}`)
-    if (current) return json(route, current)
     if (/^\/session\/[^/]+$/.test(url.pathname)) return json(route, { name: "NotFoundError" }, 404)
     if (/^\/session\/[^/]+\/message$/.test(url.pathname)) return json(route, [])
     if (/^\/session\/[^/]+\/(children|todo|diff)$/.test(url.pathname)) return json(route, [])
@@ -222,7 +228,6 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
     }
     if (["/skill", "/command", "/lsp", "/formatter", "/question", "/vcs/diff", "/pty/shells"].includes(url.pathname))
       return json(route, [])
-    if (["/global/config", "/config", "/provider/auth", "/mcp"].includes(url.pathname)) return json(route, {})
     if (url.pathname === "/provider") return json(route, provider(remote ? "server-b" : "server-a"))
     if (url.pathname === "/agent") return json(route, [{ name: "build", mode: "primary" }])
     if (url.pathname === "/project" || url.pathname === "/project/current") {
@@ -285,6 +290,25 @@ function provider(id: string) {
     ],
     connected: [id],
     default: { providerID: id, modelID: id },
+  }
+}
+
+function model(remote: boolean) {
+  const id = remote ? "server-b" : "server-a"
+  const name = remote ? "Server B" : "Server A"
+  return {
+    id,
+    modelID: id,
+    providerID: id,
+    name: `${name} Model`,
+    family: id,
+    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    variants: [],
+    time: { released: Date.now() },
+    cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
+    status: "active",
+    enabled: true,
+    limit: { context: 200_000, output: 32_000 },
   }
 }
 

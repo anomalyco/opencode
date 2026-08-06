@@ -9,7 +9,7 @@ import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { useGlobal } from "@/context/global"
 import { cleanPickerInput, createDirectorySearch, displayPickerPath } from "./directory-picker-domain"
-import type { Path } from "@opencode-ai/sdk/v2/client"
+import type { Path } from "@/types"
 
 interface DialogSelectDirectoryProps {
   title?: string
@@ -57,16 +57,21 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const [filter, setFilter] = createSignal("")
   let list: ListRef | undefined
 
-  const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
-    () => (missingBase() ? true : undefined),
-    async (): Promise<Path | undefined> => {
-      if ((await sdk.protocol) !== "v1") return
-      return sdk.client.path
+    () => (!(sync.data.path.home || sync.data.path.directory) ? true : undefined),
+    () =>
+      sdk.api.location
         .get()
-        .then((result) => result.data)
-        .catch(() => undefined)
-    },
+        .then(
+          (location): Path => ({
+            state: "",
+            config: "",
+            worktree: location.project.directory,
+            directory: location.directory,
+            home: "",
+          }),
+        )
+        .catch(() => undefined),
     { initialValue: undefined },
   )
 

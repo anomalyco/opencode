@@ -25,7 +25,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   let detailFailures = 1
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
-    protocol: "v1",
+    protocol: "v2",
     directory,
     project: {
       id: projectID,
@@ -62,33 +62,32 @@ test("keeps the review tree and terminal sized when both panels are open", async
     events: () => events.splice(0, 1),
     eventRetry: 16,
   })
-  await page.route(/\/vcs(?:\?.*)?$/, (route) =>
+  await page.route(/\/api\/vcs(?:\?.*)?$/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        branch: "review-pane-performance",
-        default_branch: "dev",
+        location: { directory, project: { id: projectID, directory, canonical: directory } },
+        data: { branch: "review-pane-performance", defaultBranch: "dev" },
       }),
     }),
   )
-  await page.route("**/vcs/diff**", (route) => {
+  await page.route("**/api/vcs/diff**", (route) => {
     const url = new URL(route.request().url())
-    const scope = url.searchParams.get("directory")?.replaceAll("\\", "/")
+    const scope = url.searchParams.get("location[directory]")?.replaceAll("\\", "/")
     const detail = scope?.endsWith("/src/branch/d00027")
     if (detail && detailFailures-- > 0) return route.fulfill({ status: 500, body: "retry detail" })
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(
-        url.searchParams.get("mode") === "branch"
-          ? detail
-            ? branchDiffs
-                .filter((diff) => diff.file.startsWith("src/branch/d00027/"))
-                .map((diff) => fileDiff(diff.file, diff.additions, true, detailVersion))
-            : branchDiffs
-          : Array.from({ length: 7 }, (_, index) => fileDiff(`src/git-${index}.ts`, 1)),
-      ),
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory, canonical: directory } },
+        data: detail
+          ? branchDiffs
+              .filter((diff) => diff.file.startsWith("src/branch/d00027/"))
+              .map((diff) => fileDiff(diff.file, diff.additions, true, detailVersion))
+          : branchDiffs,
+      }),
     })
   })
   await page.route("**/pty*", (route) =>
@@ -109,7 +108,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
       }),
     }),
   )
-  await page.route("**/pty/pty_review_terminal*", (route) =>
+  await page.route("**/api/pty/pty_review_terminal*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -127,7 +126,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
       }),
     }),
   )
-  await page.route("**/pty/pty_review_terminal/connect-token*", (route) =>
+  await page.route("**/api/pty/pty_review_terminal/connect-token*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -137,7 +136,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
       }),
     }),
   )
-  await page.routeWebSocket("**/pty/pty_review_terminal/connect", () => undefined)
+  await page.routeWebSocket("**/api/pty/pty_review_terminal/connect", () => undefined)
   await page.addInitScript(() => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
     localStorage.setItem(
@@ -149,9 +148,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
   await expect(page.locator("#review-panel")).toBeVisible()
-  await expectTree(page, 8, "git-0.ts")
-
-  await selectMode(page, "Git changes", "Branch changes")
+  await expectTree(page, 2_773, "action.yml")
   await expect(page.locator("#session-side-panel-review-tab")).toHaveText("Files Changed 2740")
   await page.keyboard.press("Control+Backquote")
   await expect(page.locator("#terminal-panel")).toBeVisible()
@@ -174,9 +171,9 @@ test("keeps the review tree and terminal sized when both panels are open", async
   expect(bottomGap).toBeLessThanOrEqual(16)
   const lazyDiff = page.waitForRequest((request) => {
     const url = new URL(request.url())
-    return (
-      url.pathname === "/vcs/diff" &&
-      url.searchParams.get("directory")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
+      return (
+        url.pathname === "/api/vcs/diff" &&
+      url.searchParams.get("location[directory]")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
     )
   })
   await lastFile.click()
@@ -190,58 +187,45 @@ test("keeps the review tree and terminal sized when both panels are open", async
   const refreshedDiff = page.waitForRequest((request) => {
     const url = new URL(request.url())
     return (
-      url.pathname === "/vcs/diff" &&
-      url.searchParams.get("directory")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
+      url.pathname === "/api/vcs/diff" &&
+      url.searchParams.get("location[directory]")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
     )
   })
   sessionStatus[sessionID] = { type: "idle" }
   events.push(statusEvent("idle"))
   await refreshedDiff
   await expect(preview).toContainText("after-2")
-  await selectMode(page, "Branch changes", "Git changes")
-  await expectTree(page, 8, "git-0.ts")
-  await page.getByRole("button", { name: "git-0.ts" }).click()
-  await selectMode(page, "Git changes", "Branch changes")
-  await expectTree(page, 2_773, "action.yml")
-
   const filter = page.getByRole("searchbox", { name: "Filter files" })
   await filter.fill("generated-2738")
   await expectTree(page, 1, "generated-2738.ts")
   await filter.fill("")
-  await expectTree(page, 2_773, "action.yml")
+  await expectTree(page, 2_773, "generated-2738.ts")
 
   await page.getByRole("button", { name: "Toggle file tree" }).click()
   await expect(page.locator('[data-slot="session-review-v2-sidebar"]')).toHaveCount(0)
   await expect(page.locator('#review-panel [data-component="file-tree-v2"]')).toHaveCount(0)
   await page.getByRole("button", { name: "Toggle file tree" }).click()
-  await expectTree(page, 2_773, "action.yml")
+  await expectTree(page, 2_773, "generated-2738.ts")
 
   await page.keyboard.press("Control+Backquote")
   await expect(page.locator("#terminal-panel")).toHaveCount(0)
-  await expectTree(page, 2_773, "action.yml")
+  await expectTree(page, 2_773, "generated-2738.ts")
   await page.keyboard.press("Control+Backquote")
   await expect(page.locator("#terminal-panel")).toBeVisible()
-  await expectTree(page, 2_773, "action.yml")
+  await expectTree(page, 2_773, "generated-2738.ts")
 
   await page.getByRole("button", { name: "Toggle review" }).click()
   await expect(page.locator("#review-panel")).toHaveCount(0)
   await page.getByRole("button", { name: "Toggle review" }).click()
-  await expectTree(page, 2_773, "action.yml")
+  await expectTree(page, 2_773, "generated-2738.ts")
   await page.setViewportSize({ width: 1_000, height: 700 })
-  await expectTree(page, 2_773, "action.yml")
+  await expectTree(page, 2_773, "generated-2738.ts")
   await expectStackGeometry(page)
   await page.setViewportSize({ width: 1_000, height: 120 })
   await page.setViewportSize({ width: 1_400, height: 900 })
-  await expectTree(page, 2_773, "action.yml")
+  await expectTree(page, 2_773, "generated-2738.ts")
   await expectStackGeometry(page)
 })
-
-async function selectMode(page: Page, current: string, next: string) {
-  await page.getByRole("button", { name: current }).click()
-  const option = page.getByRole("option", { name: next })
-  await expect(option).toBeVisible()
-  await option.click()
-}
 
 async function expectTree(page: Page, total: number, file: string) {
   await expectMountedTree(page, total)

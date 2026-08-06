@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Provjeri ažuriranja...",
-  "desktop.menu.installCli": "Instaliraj CLI...",
   "desktop.menu.reloadWebview": "Ponovo učitavanje webview-a",
   "desktop.menu.restart": "Restartuj",
 
@@ -19,10 +18,4 @@ export const dict = {
     "Verzija {{version}} OpenCode-a je preuzeta. Želiš li da je instaliraš i ponovo pokreneš aplikaciju?",
   "desktop.updater.installFailed.title": "Ažuriranje nije uspjelo",
   "desktop.updater.installFailed.message": "Neuspjela instalacija ažuriranja",
-
-  "desktop.cli.installed.title": "CLI instaliran",
-  "desktop.cli.installed.message":
-    "CLI je instaliran u {{path}}\n\nRestartuj terminal da bi koristio komandu 'opencode'.",
-  "desktop.cli.failed.title": "Instalacija nije uspjela",
-  "desktop.cli.failed.message": "Neuspjela instalacija CLI-a: {{error}}",
 }

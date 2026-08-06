@@ -5,7 +5,7 @@ import type {
   PermissionRequest,
   ProviderListOutput,
 } from "@opencode-ai/client/promise"
-import type { Agent, Event, Project, Provider, ProviderListResponse } from "@opencode-ai/sdk/v2/client"
+import type { Agent, Event, Project, Provider, ProviderListResponse } from "@/types"
 import type { Project as CurrentProject } from "@opencode-ai/client/promise"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/utils/path-key"
@@ -58,20 +58,7 @@ export function normalizeProviderList(
   defaultModel?: ModelDefaultOutput["data"],
 ): NormalizedProviderListResponse {
   if (!Array.isArray(providers)) {
-    return {
-      ...providers,
-      all: new Map(
-        providers.all.map((provider) => [
-          provider.id,
-          {
-            ...provider,
-            models: Object.fromEntries(
-              Object.entries(provider.models).filter(([, model]) => model.status !== "deprecated"),
-            ),
-          },
-        ]),
-      ),
-    }
+    return providers
   }
   const all = new Map<string, Provider>()
 
@@ -150,18 +137,6 @@ export function normalizeProviderList(
         return model ? [[provider.id, model.id]] : []
       }),
     ),
-  }
-}
-
-export function sanitizeProject(project: Project) {
-  if (!project.icon?.url && !project.icon?.override) return project
-  return {
-    ...project,
-    icon: {
-      ...project.icon,
-      url: undefined,
-      override: undefined,
-    },
   }
 }
 

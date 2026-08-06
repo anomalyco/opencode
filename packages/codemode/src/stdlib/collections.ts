@@ -58,13 +58,3 @@ export const setMethods = new Set([
   "isSupersetOf",
   "isDisjointFrom",
 ])
-
-export const spreadItems = (value: unknown): Array<unknown> | undefined => {
-  if (Array.isArray(value)) return value
-  if (typeof value === "string") return Array.from(value)
-  if (value instanceof CodeModeMap) return Array.from(value.map.entries(), ([key, item]) => [key, item])
-  if (value instanceof CodeModeSet) return Array.from(value.set.values())
-  if (value instanceof CodeModeURLSearchParams) return Array.from(value.params.entries(), ([key, item]) => [key, item])
-  return undefined
-}
-import { CodeModeMap, CodeModeSet, CodeModeURLSearchParams } from "../values.js"
