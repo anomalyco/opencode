@@ -1018,7 +1018,10 @@ describe("DatabaseMigration", () => {
           }),
         ).pipe(
           Effect.provide(
-            AppNodeBuilder.build(LayerNode.group([Bus.node, SessionProjector.node]), [[Database.node, database]]),
+            AppNodeBuilder.build(LayerNode.group([Bus.node, SessionProjector.node]), [
+              [Database.node, database],
+              [Bus.node, Bus.configured({ persist: true })],
+            ]),
           ),
         )
 
