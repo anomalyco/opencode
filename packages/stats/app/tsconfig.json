@@ -1,6 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
+    "incremental": true,
     "target": "ESNext",
     "module": "ESNext",
     "skipLibCheck": true,

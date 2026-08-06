@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "incremental": true,
     // Environment setup & latest features
     "lib": ["ESNext"],
     "target": "ESNext",
