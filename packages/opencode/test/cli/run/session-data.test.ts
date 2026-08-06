@@ -443,6 +443,63 @@ describe("run session data", () => {
     ).toEqual([])
   })
 
+  test("streams running bash metadata output into scrollback", () => {
+    let data = createSessionData()
+    const first = reduce(
+      data,
+      tool({
+        id: "tool-1",
+        messageID: "msg-1",
+        callID: "call-1",
+        tool: "bash",
+        state: {
+          status: "running",
+          input: { command: "pytest -v" },
+          metadata: { output: "collected 1 item\n" },
+          time: { start: 1 },
+        },
+      }),
+    )
+
+    expect(first.commits).toEqual([
+      expect.objectContaining({ kind: "tool", tool: "bash", phase: "start", text: "running bash" }),
+      expect.objectContaining({
+        kind: "tool",
+        tool: "bash",
+        phase: "progress",
+        text: "collected 1 item\n",
+        toolState: "running",
+      }),
+    ])
+
+    data = first.data
+    const second = reduce(
+      data,
+      tool({
+        id: "tool-1",
+        messageID: "msg-1",
+        callID: "call-1",
+        tool: "bash",
+        state: {
+          status: "running",
+          input: { command: "pytest -v" },
+          metadata: { output: "collected 1 item\ntest_demo.py::test_demo PASSED\n" },
+          time: { start: 1 },
+        },
+      }),
+    )
+
+    expect(second.commits).toEqual([
+      expect.objectContaining({
+        kind: "tool",
+        tool: "bash",
+        phase: "progress",
+        text: "test_demo.py::test_demo PASSED\n",
+        toolState: "running",
+      }),
+    ])
+  })
+
   test("suppresses shell events when the legacy bash part claimed the call first", () => {
     let data = reduce(
       createSessionData(),

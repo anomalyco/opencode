@@ -670,6 +670,34 @@ function bashCommand(part: ToolPart): string | undefined {
   return typeof command === "string" ? command : undefined
 }
 
+function bashMetadataOutput(part: ToolPart): string | undefined {
+  if (part.tool !== "bash" || part.state.status !== "running") return undefined
+  const metadata = "metadata" in part.state ? part.state.metadata : undefined
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return undefined
+  const output = Reflect.get(metadata, "output")
+  return typeof output === "string" && output.trim() ? output : undefined
+}
+
+function flushToolOutput(
+  data: SessionData,
+  commits: SessionCommit[],
+  part: ToolPart,
+  output: string,
+  toolState: NonNullable<SessionCommit["toolState"]>,
+) {
+  const previous = data.visible.get(part.id) ?? ""
+  const text = output.startsWith(previous) ? output.slice(previous.length) : output
+  data.visible.set(part.id, output)
+  if (!text.trim()) return
+  commits.push(
+    toolCommit(part, {
+      text,
+      phase: "progress",
+      toolState,
+    }),
+  )
+}
+
 function shellCommit(
   input: {
     callID: string
@@ -939,6 +967,9 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
           commits.push(startTool(part))
         }
 
+        const output = bashMetadataOutput(part)
+        if (output) flushToolOutput(data, commits, part, output, "running")
+
         return out(data, commits, view ?? patch({ status: toolStatus(part) }))
       }
 
@@ -959,17 +990,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
 
         const output = part.state.output
         if (mode.output && typeof output === "string" && output.trim()) {
-          commits.push({
-            kind: "tool",
-            text: output,
-            phase: "progress",
-            source: "tool",
-            messageID: part.messageID,
-            partID: part.id,
-            tool: part.tool,
-            part,
-            toolState: "completed",
-          })
+          flushToolOutput(data, commits, part, output, "completed")
         }
 
         if (mode.final) {
