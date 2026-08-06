@@ -521,6 +521,9 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Dosya yüklenemedi",
   "toast.file.listFailed.title": "Dosyalar listelenemedi",
+  "toast.file.uploadFailed.title": "Dosya yüklenemedi",
+  "toast.file.downloadFailed.title": "Dosya indirilemedi",
+  "toast.file.deleteFailed.title": "Dosya silinemedi",
 
   "toast.context.noLineSelection.title": "Satır seçimi yok",
   "toast.context.noLineSelection.description": "Önce bir dosya sekmesinde satır aralığı seçin.",
@@ -643,10 +646,17 @@ export const dict = {
   "session.files.empty": "Dosya yok",
   "session.files.binaryContent": "İkili dosya (içerik görüntülenemiyor)",
   "session.files.uploadFile": "Dosya yükle",
+  "session.files.uploading": "Yükleniyor…",
   "session.files.downloadFile": "İndir",
   "session.files.refresh": "Yenile",
   "session.files.dropFiles": "Dosyaları buraya bırakın veya yüklemek için +'a tıklayın",
   "session.files.deleteConfirm": "\"{{path}}\" silinsin mi?",
+  "session.files.uploadTooLarge": "Dosya çok büyük (maks. {{size}})",
+  "dialog.provider.custom.label": "OpenAI uyumlu özel sağlayıcı",
+  "dialog.model.unpaid.viewMoreProviders": "70+ daha fazla sağlayıcıyı gör",
+  "session.header.reveal.finder": "Finder'da göster",
+  "session.header.reveal.fileExplorer": "Dosya Gezgini'nde göster",
+  "session.header.reveal.containingFolder": "İçeren klasörü aç",
 
   "session.messages.renderEarlier": "Önceki mesajları göster",
   "session.messages.loadingEarlier": "Önceki mesajlar yükleniyor...",

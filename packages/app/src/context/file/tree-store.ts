@@ -1,5 +1,4 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import { createSignal } from "solid-js"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
 type DirectoryState = {
@@ -26,7 +25,6 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     dir: { "": { expanded: true } },
   })
 
-  const [version, setVersion] = createSignal(0)
   const inflight = new Map<string, Promise<void>>()
 
   const reset = () => {
@@ -108,8 +106,6 @@ export function createFileTreeStore(options: TreeStoreOptions) {
             draft.children = nextChildren
           }),
         )
-
-        setVersion((v) => v + 1)
       })
       .catch((e) => {
         if (options.scope() !== directory) return
@@ -174,6 +170,5 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     node: (path: string) => tree.node[path],
     isLoaded: (path: string) => Boolean(tree.dir[path]?.loaded),
     reset,
-    version,
   }
 }

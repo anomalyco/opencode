@@ -2504,7 +2504,6 @@ export type FilesUploadInput = {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
     readonly path: string
   }["path"]
-  readonly content: { readonly content: string }["content"]
 }
 
 export type FilesUploadOutput = void

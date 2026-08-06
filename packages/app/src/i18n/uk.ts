@@ -531,6 +531,9 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Не вдалося завантажити файл",
   "toast.file.listFailed.title": "Не вдалося отримати список файлів",
+  "toast.file.uploadFailed.title": "Не вдалося завантажити файл",
+  "toast.file.downloadFailed.title": "Не вдалося скачати файл",
+  "toast.file.deleteFailed.title": "Не вдалося видалити файл",
 
   "toast.context.noLineSelection.title": "Не вибрано рядків",
   "toast.context.noLineSelection.description": "Спочатку виберіть діапазон рядків у вкладці файлу.",
@@ -665,10 +668,17 @@ export const dict = {
   "session.files.empty": "Немає файлів",
   "session.files.binaryContent": "Бінарний файл (вміст не може бути відображено)",
   "session.files.uploadFile": "Завантажити файл",
+  "session.files.uploading": "Завантаження…",
   "session.files.downloadFile": "Завантажити",
   "session.files.refresh": "Оновити",
   "session.files.dropFiles": "Перетягніть файли сюди або натисніть +, щоб завантажити",
   "session.files.deleteConfirm": "Видалити \"{{path}}\"?",
+  "session.files.uploadTooLarge": "Файл занадто великий (макс. {{size}})",
+  "dialog.provider.custom.label": "Користувацький провайдер, сумісний з OpenAI",
+  "dialog.model.unpaid.viewMoreProviders": "Показати ще 70+ провайдерів",
+  "session.header.reveal.finder": "Показати у Finder",
+  "session.header.reveal.fileExplorer": "Показати у провіднику",
+  "session.header.reveal.containingFolder": "Відкрити теку, що містить",
 
   "session.messages.renderEarlier": "Відобразити раніші повідомлення",
   "session.messages.loadingEarlier": "Завантаження раніших повідомлень...",

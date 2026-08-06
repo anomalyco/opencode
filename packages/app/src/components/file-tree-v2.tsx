@@ -17,11 +17,8 @@ import type { FileNode } from "@opencode-ai/sdk/v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { pathToFileUrl, withFileDragImage, type Kind } from "@/components/file-tree"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
-import { useSDK } from "@/context/sdk"
-import { useServer } from "@/context/server"
 import { useLanguage } from "@/context/language"
-import { useConfirm } from "@/components/confirm-dialog"
-import { deleteFile, downloadFile, fsAuthHeaders } from "@/utils/file-transfer"
+import { useFileActions } from "@/hooks/use-file-actions"
 import {
   buildFileTreeV2Model,
   flattenFileTreeV2,
@@ -119,7 +116,7 @@ const FileTreeNodeV2 = (
         <span
           role="button"
           tabindex={0}
-          class="opacity-0 group-hover/file-tree-v2-row:opacity-100 transition-opacity ml-1"
+          class="opacity-0 group-hover/file-tree-v2-row:opacity-100 focus-visible:opacity-100 transition-opacity ml-1"
           onClick={(e) => {
             e.stopPropagation()
             local.onDownload?.(local.node.path)
@@ -137,7 +134,7 @@ const FileTreeNodeV2 = (
         <span
           role="button"
           tabindex={0}
-          class="opacity-0 group-hover/file-tree-v2-row:opacity-100 transition-opacity ml-1"
+          class="opacity-0 group-hover/file-tree-v2-row:opacity-100 focus-visible:opacity-100 transition-opacity ml-1"
           onClick={(e) => {
             e.stopPropagation()
             local.onDelete?.(local.node.path)
@@ -183,40 +180,13 @@ export default function FileTreeV2(props: {
   onFileDoubleClick?: (file: FileNode) => void
 }) {
   const file = useFile()
-  const sdk = useSDK()
-  const server = useServer()
   const language = useLanguage()
-  const confirm = useConfirm()
+  const actions = useFileActions()
   const live = () => props.allowed === undefined
   const draggable = () => props.draggable ?? true
   const active = () => normalizeFileTreeV2Path(props.active ?? "")
-  const dir = () => sdk().directory.replace(/\/+$/, "")
-  const handleDownload = async (path: string) => {
-    try {
-      await downloadFile({
-        url: sdk().url,
-        directory: dir(),
-        headers: fsAuthHeaders(server.current),
-        path,
-      })
-    } catch { /* ignore */ }
-  }
-  const handleDelete = async (path: string) => {
-    const ok = await confirm({ title: language.t("common.delete"), message: language.t("session.files.deleteConfirm", { path }) })
-    if (!ok) return
-    try {
-      await deleteFile({
-        url: sdk().url,
-        directory: dir(),
-        headers: fsAuthHeaders(server.current),
-        path,
-      })
-      const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ""
-      await file.tree.refresh(parent)
-      if (parent) await file.tree.refresh("")
-      file.tree.bump()
-    } catch { /* ignore */ }
-  }
+  const handleDownload = (path: string) => void actions.download(path)
+  const handleDelete = (path: string) => void actions.remove(path)
   const model = createMemo(() => (live() ? undefined : buildFileTreeV2Model(props.allowed ?? [])))
   const expanded = (path: string) => file.tree.state(path)?.expanded ?? !live()
   const rows = createMemo(() => {

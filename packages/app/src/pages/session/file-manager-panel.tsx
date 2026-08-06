@@ -2,35 +2,35 @@ import { Show, createEffect, createMemo, createSignal, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Progress } from "@opencode-ai/ui/progress"
 import { useSDK } from "@/context/sdk"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { useServer } from "@/context/server"
 import { useLanguage } from "@/context/language"
-import { useConfirm } from "@/components/confirm-dialog"
-import { deleteFile, downloadFile, fsAuthHeaders, uploadFile } from "@/utils/file-transfer"
+import { useFileActions } from "@/hooks/use-file-actions"
 
 type FileEntry = { path: string; type: "file" | "directory" }
 
 export function FileManagerPanel() {
   const sdk = useSDK()
-  const server = useServer()
   const language = useLanguage()
-  const confirm = useConfirm()
   const { view } = useSessionLayout()
+  const actions = useFileActions({ onError: (_, message) => setError(message) })
 
   const [entries, setEntries] = createStore<FileEntry[]>([])
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
   const [uploading, setUploading] = createSignal(false)
+  const [uploadProgress, setUploadProgress] = createSignal(0)
   const [dragOver, setDragOver] = createSignal(false)
 
   const opened = createMemo(() => view().fileManager.opened())
-
   const directory = createMemo(() => sdk().directory)
 
   createEffect(() => {
-    if (!opened()) return
-    loadFiles()
+    const open = opened()
+    directory()
+    if (!open) return
+    void loadFiles()
   })
 
   async function loadFiles() {
@@ -47,69 +47,37 @@ export function FileManagerPanel() {
     }
   }
 
-  async function handleUpload(file: File) {
+  async function handleUpload(files: File[]) {
     setUploading(true)
+    setUploadProgress(0)
     setError(null)
     try {
-      await uploadFile({
-        url: sdk().url,
-        directory: directory(),
-        headers: fsAuthHeaders(server.current),
-        path: file.name,
-        file,
-      })
-      await loadFiles()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      let changed = false
+      for (const file of files) {
+        if (await actions.upload(file, setUploadProgress)) changed = true
+      }
+      if (changed) await loadFiles()
     } finally {
       setUploading(false)
-    }
-  }
-
-  async function handleDownload(path: string) {
-    try {
-      await downloadFile({
-        url: sdk().url,
-        directory: directory(),
-        headers: fsAuthHeaders(server.current),
-        path,
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  async function handleDelete(path: string) {
-    const ok = await confirm({ title: language.t("common.delete"), message: language.t("session.files.deleteConfirm", { path }) })
-    if (!ok) return
-    try {
-      await deleteFile({
-        url: sdk().url,
-        directory: directory(),
-        headers: fsAuthHeaders(server.current),
-        path,
-      })
-      await loadFiles()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setUploadProgress(0)
     }
   }
 
   function onFilePick(event: Event) {
     const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-    if (!file) return
-    void handleUpload(file)
+    const files = Array.from(input.files ?? [])
     input.value = ""
+    if (files.length === 0) return
+    void handleUpload(files)
   }
 
   function onDrop(event: DragEvent) {
     event.preventDefault()
     event.stopPropagation()
     setDragOver(false)
-    const file = event.dataTransfer?.files?.[0]
-    if (!file) return
-    void handleUpload(file)
+    const files = Array.from(event.dataTransfer?.files ?? [])
+    if (files.length === 0) return
+    void handleUpload(files)
   }
 
   function onDragOver(event: DragEvent) {
@@ -155,7 +123,7 @@ export function FileManagerPanel() {
             aria-label={language.t("session.files.uploadFile")}
             onClick={() => document.getElementById("file-manager-upload-input")?.click()}
           />
-          <input id="file-manager-upload-input" type="file" class="hidden" onChange={onFilePick} disabled={uploading()} />
+          <input id="file-manager-upload-input" type="file" multiple class="hidden" onChange={onFilePick} disabled={uploading()} />
           <IconButton icon="reset" variant="ghost" iconSize="large" onClick={loadFiles} aria-label={language.t("session.files.refresh")} />
         </div>
 
@@ -189,15 +157,15 @@ export function FileManagerPanel() {
                   <span class="flex-1 min-w-0 truncate text-13-regular text-text-strong">{entry.path}</span>
                   <Show when={entry.type === "file"}>
                     <button
-                      onClick={() => void handleDownload(entry.path)}
-                      class="opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => void actions.download(entry.path)}
+                      class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                       aria-label={language.t("session.files.downloadFile")}
                     >
                       <Icon name="download" size="small" class="text-icon-weak" />
                     </button>
                     <button
-                      onClick={() => void handleDelete(entry.path)}
-                      class="opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => void actions.remove(entry.path).then((deleted) => { if (deleted) void loadFiles() })}
+                      class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                       aria-label={language.t("common.delete")}
                     >
                       <Icon name="trash" size="small" class="text-icon-weak" />
@@ -210,7 +178,14 @@ export function FileManagerPanel() {
         </div>
 
         <Show when={uploading()}>
-          <div class="h-1 bg-accent-base animate-pulse" />
+          <Progress
+            value={uploadProgress() * 100}
+            maxValue={100}
+            showValueLabel
+            hideLabel
+            class="px-3 py-1.5"
+            aria-label={language.t("session.files.uploading")}
+          />
         </Show>
       </div>
     </div>

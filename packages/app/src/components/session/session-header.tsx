@@ -17,12 +17,10 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
-import { useSDK } from "@/context/sdk"
-import { useFile } from "@/context/file"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
-import { fsAuthHeaders, uploadFile } from "@/utils/file-transfer"
+import { useFileActions } from "@/hooks/use-file-actions"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
@@ -144,13 +142,12 @@ export function SessionHeader() {
   const layout = useLayout()
   const command = useCommand()
   const server = useServer()
-  const sdk = useSDK()
   const platform = usePlatform()
   const language = useLanguage()
   const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
-  const file = useFile()
+  const actions = useFileActions()
   const { params, view } = useSessionLayout()
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
@@ -160,23 +157,19 @@ export function SessionHeader() {
     return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
   })
 
+  const [uploadProgress, setUploadProgress] = createSignal<number | null>(null)
+  const uploading = createMemo(() => uploadProgress() !== null)
+
   async function uploadFromInput(event: Event) {
     const input = event.target as HTMLInputElement
-    const uploaded = input.files?.[0]
-    if (!uploaded) return
+    const files = Array.from(input.files ?? [])
     input.value = ""
+    if (files.length === 0) return
+    setUploadProgress(0)
     try {
-      await uploadFile({
-        url: sdk().url,
-        directory: sdk().directory,
-        headers: fsAuthHeaders(server.current),
-        path: uploaded.name,
-        file: uploaded,
-      })
-      await file.tree.refresh("")
-      file.tree.bump()
-    } catch (err) {
-      console.error("Upload failed:", err)
+      for (const file of files) await actions.upload(file, setUploadProgress)
+    } finally {
+      setUploadProgress(null)
     }
   }
   const name = createMemo(() => {
@@ -512,13 +505,34 @@ export function SessionHeader() {
                       <Button
                         variant="ghost"
                         class="group/filemanager-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                        disabled={uploading()}
                         onClick={() => document.getElementById("session-header-upload-input")?.click()}
                         aria-label={language.t("session.files.uploadFile")}
                       >
-                        <Icon size="small" name="cloud-upload" />
+                        <Icon size="small" name="arrow-up" />
                       </Button>
-                      <input id="session-header-upload-input" type="file" class="hidden" onChange={uploadFromInput} />
+                      <input id="session-header-upload-input" type="file" multiple class="hidden" onChange={uploadFromInput} />
                     </Tooltip>
+                    <Show when={uploading()}>
+                      <div
+                        role="progressbar"
+                        aria-label={language.t("session.files.uploading")}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={Math.round((uploadProgress() ?? 0) * 100)}
+                        class="flex h-6 items-center gap-1.5 shrink-0"
+                      >
+                        <div class="h-1 w-16 overflow-hidden rounded bg-surface-raised-base">
+                          <div
+                            class="h-full rounded bg-accent-base transition-[width] duration-150 ease-out"
+                            style={{ width: `${(uploadProgress() ?? 0) * 100}%` }}
+                          />
+                        </div>
+                        <span class="text-10-regular tabular-nums text-text-weak">
+                          {Math.round((uploadProgress() ?? 0) * 100)}%
+                        </span>
+                      </div>
+                    </Show>
 
                     <div class="hidden md:flex items-center gap-1 shrink-0">
                       <TooltipKeybind

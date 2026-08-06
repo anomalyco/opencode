@@ -496,13 +496,11 @@ type Endpoint10_2Request = Parameters<RawClient["server.fs"]["fs.upload"]>[0]
 type Endpoint10_2Input = {
   readonly location?: Endpoint10_2Request["query"]["location"]
   readonly path: Endpoint10_2Request["query"]["path"]
-  readonly content: Endpoint10_2Request["payload"]["content"]
 }
 const Endpoint10_2 = (raw: RawClient["server.fs"]) => (input: Endpoint10_2Input) =>
-  raw["fs.upload"]({
-    query: { location: input["location"], path: input["path"] },
-    payload: { content: input["content"] },
-  }).pipe(Effect.mapError(mapClientError))
+  raw["fs.upload"]({ query: { location: input["location"], path: input["path"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
 
 type Endpoint10_3Request = Parameters<RawClient["server.fs"]["fs.delete"]>[0]
 type Endpoint10_3Input = {

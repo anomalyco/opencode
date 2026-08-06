@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from
 import { realpathSync } from "fs"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
-import { Context, Effect, FileSystem, Layer, Schema } from "effect"
+import { Context, Effect, FileSystem, Layer, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { Glob } from "./util/glob"
 import { serviceUse } from "./effect/service-use"
@@ -37,6 +37,7 @@ export namespace FSUtil {
     readonly writeJson: (path: string, data: unknown, mode?: number) => Effect.Effect<void, Error>
     readonly ensureDir: (path: string) => Effect.Effect<void, Error>
     readonly writeWithDirs: (path: string, content: string | Uint8Array, mode?: number) => Effect.Effect<void, Error>
+    readonly writeStream: (path: string, stream: Stream.Stream<Uint8Array, unknown>) => Effect.Effect<void, Error>
     readonly readDirectoryEntries: (path: string) => Effect.Effect<DirEntry[], Error>
     readonly resolve: (path: string) => Effect.Effect<string>
     readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
@@ -144,6 +145,19 @@ export namespace FSUtil {
         if (mode) yield* fs.chmod(path, mode)
       })
 
+      const writeStream = Effect.fn("FileSystem.writeStream")(function* (
+        path: string,
+        stream: Stream.Stream<Uint8Array, unknown>,
+      ) {
+        // The multipart file part streams chunks as they arrive; write each
+        // chunk through a sink that opens a file handle instead of buffering
+        // the whole upload in memory.
+        yield* ensureDir(dirname(path))
+        yield* Stream.run(stream, fs.sink(path)).pipe(
+          Effect.mapError((cause) => new FileSystemError({ method: "writeStream", cause })),
+        )
+      })
+
       const glob = Effect.fn("FileSystem.glob")(function* (pattern: string, options?: Glob.Options) {
         return yield* Effect.tryPromise({
           try: () => Glob.scan(pattern, options),
@@ -209,6 +223,7 @@ export namespace FSUtil {
         writeJson,
         ensureDir,
         writeWithDirs,
+        writeStream,
         findUp,
         up,
         globUp,

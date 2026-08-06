@@ -518,6 +518,9 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Neuspjelo učitavanje datoteke",
   "toast.file.listFailed.title": "Neuspješno listanje datoteka",
+  "toast.file.uploadFailed.title": "Neuspješno slanje datoteke",
+  "toast.file.downloadFailed.title": "Neuspješno preuzimanje datoteke",
+  "toast.file.deleteFailed.title": "Neuspješno brisanje datoteke",
 
   "toast.context.noLineSelection.title": "Nema odabranih linija",
   "toast.context.noLineSelection.description": "Prvo odaberi raspon linija u kartici datoteke.",
@@ -639,10 +642,17 @@ export const dict = {
   "session.files.empty": "Nema datoteka",
   "session.files.binaryContent": "Binarna datoteka (sadržaj se ne može prikazati)",
   "session.files.uploadFile": "Prenesi datoteku",
+  "session.files.uploading": "Otpremanje…",
   "session.files.downloadFile": "Preuzmi",
   "session.files.refresh": "Osvježi",
   "session.files.dropFiles": "Prevucite datoteke ovdje ili kliknite + za prijenos",
   "session.files.deleteConfirm": "Izbriši \"{{path}}\"?",
+  "session.files.uploadTooLarge": "Datoteka je prevelika (maks. {{size}})",
+  "dialog.provider.custom.label": "Prilagođeni provajder kompatibilan s OpenAI",
+  "dialog.model.unpaid.viewMoreProviders": "Pogledaj još 70+ provajdera",
+  "session.header.reveal.finder": "Prikaži u Finderu",
+  "session.header.reveal.fileExplorer": "Prikaži u File Exploreru",
+  "session.header.reveal.containingFolder": "Otvori nadređenu mapu",
 
   "session.messages.renderEarlier": "Prikaži ranije poruke",
   "session.messages.loadingEarlier": "Učitavanje ranijih poruka...",

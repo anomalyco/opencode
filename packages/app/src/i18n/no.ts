@@ -437,6 +437,9 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Kunne ikke laste fil",
   "toast.file.listFailed.title": "Kunne ikke liste filer",
+  "toast.file.uploadFailed.title": "Kunne ikke laste opp fil",
+  "toast.file.downloadFailed.title": "Kunne ikke laste ned fil",
+  "toast.file.deleteFailed.title": "Kunne ikke slette fil",
 
   "toast.context.noLineSelection.title": "Ingen linjevalg",
   "toast.context.noLineSelection.description": "Velg først et linjeområde i en filfane.",
@@ -532,10 +535,17 @@ export const dict = {
   "session.files.empty": "Ingen filer",
   "session.files.binaryContent": "Binær fil (innhold kan ikke vises)",
   "session.files.uploadFile": "Last opp fil",
+  "session.files.uploading": "Laster opp…",
   "session.files.downloadFile": "Last ned",
   "session.files.refresh": "Oppdater",
   "session.files.dropFiles": "Slipp filer her eller klikk + for å laste opp",
   "session.files.deleteConfirm": "Slett \"{{path}}\"?",
+  "session.files.uploadTooLarge": "Filen er for stor (maks. {{size}})",
+  "dialog.provider.custom.label": "Egendefinert OpenAI-kompatibel leverandør",
+  "dialog.model.unpaid.viewMoreProviders": "Se 70+ flere leverandører",
+  "session.header.reveal.finder": "Vis i Finder",
+  "session.header.reveal.fileExplorer": "Vis i Filutforsker",
+  "session.header.reveal.containingFolder": "Åpne overordnet mappe",
 
   "session.messages.renderEarlier": "Vis tidligere meldinger",
   "session.messages.loadingEarlier": "Laster inn tidligere meldinger...",

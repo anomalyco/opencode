@@ -6,12 +6,8 @@ import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { kindChange, kindLabel, type Kind } from "@/components/file-tree-v2"
 import { normalizePath } from "@/pages/session/v2/review-diff-kinds"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
-import { useSDK } from "@/context/sdk"
-import { useServer } from "@/context/server"
 import { useLanguage } from "@/context/language"
-import { useFile } from "@/context/file"
-import { useConfirm } from "@/components/confirm-dialog"
-import { deleteFile, downloadFile, fsAuthHeaders } from "@/utils/file-transfer"
+import { useFileActions } from "@/hooks/use-file-actions"
 import { virtualScrollElement } from "@/components/virtual-scroll-element"
 
 // Drives the highlight/selection of the flat search-result list from the filter
@@ -56,38 +52,10 @@ export function SessionFileListV2(props: {
   onFileClick: (path: string) => void
   onFileDoubleClick?: (path: string) => void
 }) {
-  const sdk = useSDK()
-  const server = useServer()
   const language = useLanguage()
-  const file = useFile()
-  const confirm = useConfirm()
-  const dir = () => sdk().directory.replace(/\/+$/, "")
-  const handleDownload = async (path: string) => {
-    try {
-      await downloadFile({
-        url: sdk().url,
-        directory: dir(),
-        headers: fsAuthHeaders(server.current),
-        path,
-      })
-    } catch { /* ignore */ }
-  }
-  const handleDelete = async (path: string) => {
-    const ok = await confirm({ title: language.t("common.delete"), message: language.t("session.files.deleteConfirm", { path }) })
-    if (!ok) return
-    try {
-      await deleteFile({
-        url: sdk().url,
-        directory: dir(),
-        headers: fsAuthHeaders(server.current),
-        path,
-      })
-      const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ""
-      await file.tree.refresh(parent)
-      if (parent) await file.tree.refresh("")
-      file.tree.bump()
-    } catch { /* ignore */ }
-  }
+  const actions = useFileActions()
+  const handleDownload = (path: string) => void actions.download(path)
+  const handleDelete = (path: string) => void actions.remove(path)
   const active = () => normalizePath(props.active ?? "")
   const highlighted = () => normalizePath(props.highlighted ?? "")
   const normalized = createMemo(() => props.files.map(normalizePath))
@@ -190,7 +158,7 @@ export function SessionFileListV2(props: {
                     <span
                       role="button"
                       tabindex={0}
-                      class="opacity-0 group-hover/file-tree-v2-row:opacity-100 transition-opacity ml-1"
+                      class="opacity-0 group-hover/file-tree-v2-row:opacity-100 focus-visible:opacity-100 transition-opacity ml-1"
                       onClick={(e) => {
                         e.stopPropagation()
                         handleDownload(path)
@@ -208,7 +176,7 @@ export function SessionFileListV2(props: {
                     <span
                       role="button"
                       tabindex={0}
-                      class="opacity-0 group-hover/file-tree-v2-row:opacity-100 transition-opacity ml-1"
+                      class="opacity-0 group-hover/file-tree-v2-row:opacity-100 focus-visible:opacity-100 transition-opacity ml-1"
                       onClick={(e) => {
                         e.stopPropagation()
                         handleDelete(path)

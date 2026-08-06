@@ -516,6 +516,9 @@ export const dict = {
 
   "toast.file.loadFailed.title": "ไม่สามารถโหลดไฟล์",
   "toast.file.listFailed.title": "ไม่สามารถแสดงรายการไฟล์",
+  "toast.file.uploadFailed.title": "ไม่สามารถอัปโหลดไฟล์",
+  "toast.file.downloadFailed.title": "ไม่สามารถดาวน์โหลดไฟล์",
+  "toast.file.deleteFailed.title": "ไม่สามารถลบไฟล์",
 
   "toast.context.noLineSelection.title": "ไม่มีการเลือกบรรทัด",
   "toast.context.noLineSelection.description": "เลือกช่วงบรรทัดในแท็บไฟล์ก่อน",
@@ -633,10 +636,17 @@ export const dict = {
   "session.files.all": "ไฟล์ทั้งหมด",
   "session.files.binaryContent": "ไฟล์ไบนารี (ไม่สามารถแสดงเนื้อหาได้)",
   "session.files.uploadFile": "อัปโหลดไฟล์",
+  "session.files.uploading": "กำลังอัปโหลด…",
   "session.files.downloadFile": "ดาวน์โหลด",
   "session.files.refresh": "รีเฟรช",
   "session.files.dropFiles": "วางไฟล์ที่นี่หรือคลิก + เพื่ออัปโหลด",
   "session.files.deleteConfirm": "ลบ \"{{path}}\" หรือไม่",
+  "session.files.uploadTooLarge": "ไฟล์ใหญ่เกินไป (สูงสุด {{size}})",
+  "dialog.provider.custom.label": "ผู้ให้บริการที่กำหนดเองที่เข้ากันได้กับ OpenAI",
+  "dialog.model.unpaid.viewMoreProviders": "ดูผู้ให้บริการเพิ่มอีก 70+ ราย",
+  "session.header.reveal.finder": "แสดงใน Finder",
+  "session.header.reveal.fileExplorer": "แสดงใน File Explorer",
+  "session.header.reveal.containingFolder": "เปิดโฟลเดอร์ที่เก็บไฟล์",
 
   "session.messages.renderEarlier": "แสดงข้อความก่อนหน้า",
   "session.messages.loadingEarlier": "กำลังโหลดข้อความก่อนหน้า...",

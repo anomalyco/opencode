@@ -518,6 +518,9 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Fallo al cargar archivo",
   "toast.file.listFailed.title": "Fallo al listar archivos",
+  "toast.file.uploadFailed.title": "Fallo al subir el archivo",
+  "toast.file.downloadFailed.title": "Fallo al descargar el archivo",
+  "toast.file.deleteFailed.title": "Fallo al eliminar el archivo",
 
   "toast.context.noLineSelection.title": "Sin selección de líneas",
   "toast.context.noLineSelection.description": "Primero selecciona un rango de líneas en una pestaña de archivo.",
@@ -640,10 +643,17 @@ export const dict = {
   "session.files.empty": "Sin archivos",
   "session.files.binaryContent": "Archivo binario (el contenido no puede ser mostrado)",
   "session.files.uploadFile": "Subir archivo",
+  "session.files.uploading": "Subiendo…",
   "session.files.downloadFile": "Descargar",
   "session.files.refresh": "Actualizar",
   "session.files.dropFiles": "Suelta los archivos aquí o haz clic en + para subir",
   "session.files.deleteConfirm": "Eliminar \"{{path}}\"?",
+  "session.files.uploadTooLarge": "El archivo es demasiado grande (máx. {{size}})",
+  "dialog.provider.custom.label": "Proveedor personalizado compatible con OpenAI",
+  "dialog.model.unpaid.viewMoreProviders": "Ver más de 70 proveedores",
+  "session.header.reveal.finder": "Revelar en Finder",
+  "session.header.reveal.fileExplorer": "Revelar en el Explorador de archivos",
+  "session.header.reveal.containingFolder": "Abrir carpeta contenedora",
 
   "session.messages.renderEarlier": "Renderizar mensajes anteriores",
   "session.messages.loadingEarlier": "Cargando mensajes anteriores...",
