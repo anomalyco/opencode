@@ -223,6 +223,15 @@ export const Info = Schema.Struct({
           "'test_command' and 'verify_command' are the test and verify gates, and 'default_branch' is the branch " +
           "the commit gate must never commit to. Per-loop options override these.",
       }),
+      queue_personas: Schema.optional(
+        Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Literal(false)])),
+      ).annotate({
+        description:
+          "Agent bound to each gate of `loop --queue` / `/auto`, e.g. {\"verify\": \"reviewer\"}. Defaults to " +
+          "implement→coder, test→tester, verify→reviewer where those agents exist. A gate bound to an agent " +
+          "runs that agent as a subagent and takes its verdict; set a gate to false to keep the plain " +
+          "command behaviour. Naming an agent that does not exist is reported when the run starts.",
+      }),
       stream_inactivity_seconds: Schema.optional(PositiveInt).annotate({
         description:
           "Fail a provider stream that delivers no events for this many seconds (default: 300, 0 disables). Guards against half-open connections that would otherwise park a turn forever.",

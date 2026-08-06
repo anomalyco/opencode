@@ -171,12 +171,28 @@ describe("buildBrief", () => {
     expect(brief).toContain("expected 2 to be 3")
   })
 
-  test("idle peers produce the fan-out nudge, busy fleet does not", () => {
-    const withPeers = buildBrief({ change: fixtureChange(), gate: "implement", idlePeers: ["z4", "m3"] })
-    expect(withPeers).toContain("Fleet capacity")
-    expect(withPeers).toContain("z4")
-    const without = buildBrief({ change: fixtureChange(), gate: "implement", idlePeers: [] })
-    expect(without).not.toContain("Fleet capacity")
+  test("the fan-out nudge names the gate's agent", () => {
+    const brief = buildBrief({
+      change: fixtureChange(),
+      gate: "implement",
+      idlePeers: ["z4", "m3"],
+      persona: "coder",
+    })
+    expect(brief).toContain("Fleet capacity")
+    expect(brief).toContain("z4")
+    expect(brief).toContain('subagent_type "coder"')
+  })
+
+  test("a busy fleet suppresses the nudge even with an agent bound", () => {
+    const brief = buildBrief({ change: fixtureChange(), gate: "implement", idlePeers: [], persona: "coder" })
+    expect(brief).not.toContain("Fleet capacity")
+  })
+
+  // An instruction to delegate to an agent that does not exist is worse than no
+  // instruction — the model cannot carry it out and will improvise.
+  test("no bound agent suppresses the nudge even with an idle fleet", () => {
+    const brief = buildBrief({ change: fixtureChange(), gate: "implement", idlePeers: ["z4"] })
+    expect(brief).not.toContain("Fleet capacity")
   })
 })
 

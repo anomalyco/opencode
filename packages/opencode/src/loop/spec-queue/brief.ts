@@ -17,6 +17,15 @@ export interface BriefInput {
   /** names of idle local peer providers; empty → no fan-out nudge */
   idlePeers: readonly string[]
   /**
+   * Agent bound to this gate, when one resolved. The nudge names it instead of
+   * gesturing at "the task tool" — an instruction naming nobody is one the
+   * model can ignore at no cost, which is exactly what happened. Absent means
+   * the repo has no such persona, and no fan-out instruction is emitted at all:
+   * telling a model to delegate to an agent that does not exist is worse than
+   * telling it nothing.
+   */
+  persona?: string
+  /**
    * Optional standing instruction from the operator, repeated on every
    * iteration of the run. Steers HOW the work is done ("prefer small commits",
    * "leave the CLI alone"); it never decides WHAT is worked, because that is
@@ -113,13 +122,14 @@ export function buildBrief(input: BriefInput): string {
     parts.push(`## ${path.relative(change.directory, file)}\n\n${fs.readFileSync(file, "utf8")}`)
   }
 
-  if (input.idlePeers.length > 0) {
+  if (input.idlePeers.length > 0 && input.persona) {
     parts.push(
       [
         `Fleet capacity: ${input.idlePeers.length} idle local provider${input.idlePeers.length === 1 ? "" : "s"}`,
         `(${input.idlePeers.join(", ")}) can take delegated work right now. Where this change's`,
-        "tasks allow parallel work (implementation vs tests vs verification), use the task tool",
-        "to delegate subtasks — placement will put them on idle peers automatically.",
+        `tasks are independent of each other, delegate them with the task tool using`,
+        `subagent_type "${input.persona}" — one call per independent slice, and placement will`,
+        "put them on idle peers automatically. Keep work that shares a file in one call.",
       ].join(" "),
     )
   }

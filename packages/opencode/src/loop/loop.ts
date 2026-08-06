@@ -18,6 +18,8 @@ import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
+import { Agent as AgentSvc } from "@/agent/agent"
+import { deriveSubagentSessionPermission } from "@/agent/subagent-permissions"
 import { baseURLOf, parentCapacity } from "@/local/placement"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -42,6 +44,7 @@ import {
   type QueueChange,
 } from "./spec-queue/queue"
 import { QueueDenyRules, withoutCredentials } from "./spec-queue/authority"
+import { AgentGates, readVerdict, resolvePersonas, type PersonaBindings } from "./spec-queue/personas"
 
 import { contractPart, DEFAULT_COMPLETION_TOKEN, matchesCompletion, promptDisablesCompletion } from "./completion"
 
@@ -252,6 +255,7 @@ export const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
     const provider = yield* Provider.Service
+    const agents = yield* AgentSvc.Service
     const scope = yield* Scope.Scope
 
     const state = yield* Ref.make<Map<LoopID, Record_>>(new Map())
@@ -668,12 +672,20 @@ export const layer = Layer.effect(
       gate: Gate,
       changeSessionID: SessionID,
       failure?: { gate: Gate; output: string },
+      persona?: string,
     ) =>
       Effect.gen(function* () {
         const record = (yield* Ref.get(state)).get(id)
         if (!record) return undefined
         const peers = yield* idlePeers
-        const brief = buildBrief({ change, gate, failure, idlePeers: peers, guidance: record.queue?.guidance })
+        const brief = buildBrief({
+          change,
+          gate,
+          failure,
+          idlePeers: peers,
+          guidance: record.queue?.guidance,
+          persona,
+        })
         const result = yield* runIteration(record, { promptText: brief, sessionID: changeSessionID })
         yield* patch(id, (current) => ({
           ...current,
@@ -702,6 +714,93 @@ export const layer = Layer.effect(
       })
 
     const BLOCKED_TOKEN = "<promise>BLOCKED</promise>"
+
+    // Gate → persona bindings, resolved once per run against the live agent
+    // registry. Config missing entirely is the common case and must produce
+    // defaults, not nothing.
+    const personaBindings = Effect.gen(function* () {
+      const cfg = yield* config.get().pipe(Effect.orElseSucceed(() => ({}) as never))
+      const configured = (cfg as { experimental?: { queue_personas?: Record<string, string | false> } }).experimental
+        ?.queue_personas
+      const list = yield* agents.list().pipe(Effect.orElseSucceed(() => [] as { name: string }[]))
+      return resolvePersonas(
+        configured,
+        list.map((item) => item.name),
+      )
+    })
+
+    /**
+     * Run a gate whose verdict a subagent decides.
+     *
+     * The subagent gets its own child session under the running one, so its
+     * parts render inline where the user is already looking, and its permission
+     * ruleset is derived from its persona UNDER the run's authority ceiling —
+     * the reviewer is denied write/edit by its own definition, and the run's
+     * deny rules still apply on top.
+     *
+     * Any outcome that is not an unambiguous pass fails the gate. That is
+     * deliberate: this is the last gate before `commit` in an unattended run,
+     * and a crashed reviewer must never read as approval.
+     */
+    const runAgentGate = (
+      gate: Gate,
+      agentName: string,
+      change: QueueChange,
+      parentSessionID: SessionID,
+      exec: Exec,
+    ): Effect.Effect<{ passed: boolean; output: string }> =>
+      Effect.gen(function* () {
+        const persona = yield* agents.get(agentName).pipe(Effect.orElseSucceed(() => undefined))
+        if (!persona) {
+          return { passed: false, output: `the ${gate} gate is bound to "${agentName}", which is not a known agent` }
+        }
+        const parent = yield* session.get(parentSessionID).pipe(Effect.orElseSucceed(() => undefined))
+        const child = yield* session
+          .create({
+            parentID: parentSessionID,
+            title: `${gate}: ${agentName} on ${change.slug}`,
+            // The persona's own denies are put on the SESSION, not left to the
+            // agent selection alone. This session exists for one review and
+            // nothing else, and a reviewer that can edit what it is judging is
+            // not a reviewer — so it is worth stating structurally rather than
+            // relying on the agent staying selected for the whole turn.
+            permission: [
+              ...deriveSubagentSessionPermission({
+                parentSessionPermission: parent?.permission ?? [],
+                subagent: persona,
+              }),
+              ...persona.permission.filter((rule) => rule.action === "deny"),
+            ],
+          })
+          .pipe(Effect.orElseSucceed(() => undefined))
+        if (!child) return { passed: false, output: `could not start the ${agentName} subagent for the ${gate} gate` }
+
+        const diff = yield* Effect.promise(() => exec("git diff HEAD"))
+        const brief = [
+          `Review the work done on openspec change "${change.slug}" (${change.directory}).`,
+          "Read the diff below, then the change's proposal.md and tasks.md, then whatever",
+          "surrounding code you need. Return your verdict in the format your instructions",
+          "describe. Your verdict decides whether this change advances to commit.",
+          "",
+          "## git diff HEAD",
+          "",
+          diff.output.slice(0, 100_000) || "(empty)",
+        ].join("\n")
+
+        const outcome = yield* promptSvc
+          .prompt({ sessionID: child.id, agent: agentName, parts: [{ type: "text", text: brief }] })
+          .pipe(Effect.result)
+        if (Result.isFailure(outcome)) {
+          return { passed: false, output: `the ${agentName} subagent errored during the ${gate} gate` }
+        }
+        const text = outcome.success.parts
+          .filter((part) => part.type === "text")
+          .map((part) => (part as { text: string }).text)
+          .join("\n")
+        const verdict = readVerdict(text)
+        return verdict.passed ? { passed: true, output: "" } : { passed: false, output: verdict.reason }
+      })
+
 
     const runQueue = (id: LoopID): Effect.Effect<void> =>
       Effect.gen(function* () {
@@ -735,6 +834,25 @@ export const layer = Layer.effect(
             "queue.complete": first.complete.join(", ") || "(none)",
           })
         }
+        // A gate bound to an agent that does not exist halts the run here
+        // rather than silently reverting to the command. A review gate that
+        // quietly stops reviewing is worse than one that refuses to start: the
+        // run keeps advancing toward commit with nobody checking the work.
+        const personas: PersonaBindings = yield* personaBindings
+        if (personas.errors.length > 0) {
+          yield* finishQueue(
+            id,
+            "error",
+            `queue persona misconfiguration — nothing was attempted:\n${personas.errors.join("\n")}`,
+          )
+          return
+        }
+        yield* Effect.logInfo("queue personas", {
+          "queue.personas":
+            Object.entries(personas.bindings)
+              .map(([gate, agent]) => `${gate}→${agent}`)
+              .join(", ") || "(none)",
+        })
         const options = yield* gateOptions(exec, initial?.queue?.options)
 
         const running = () =>
@@ -854,7 +972,7 @@ export const layer = Layer.effect(
                 if (failure) {
                   const repairing = failure
                   iterations += 1
-                  const attempt = yield* queueTurn(id, change, "implement", changeSessionID, repairing)
+                  const attempt = yield* queueTurn(id, change, "implement", changeSessionID, repairing, personas.bindings.implement)
                   if (!attempt) return
                   if (attempt.aborted) {
                     yield* finishQueue(id, "cancelled", "cancelled by user")
@@ -879,7 +997,7 @@ export const layer = Layer.effect(
                   continue
                 }
                 iterations += 1
-                const result = yield* queueTurn(id, change, "implement", changeSessionID, failure)
+                const result = yield* queueTurn(id, change, "implement", changeSessionID, failure, personas.bindings.implement)
                 if (!result) return
                 if (result.aborted) {
                   yield* finishQueue(id, "cancelled", "cancelled by user")
@@ -924,7 +1042,13 @@ export const layer = Layer.effect(
                 continue
               }
               case "verify": {
-                const result = yield* Effect.promise(() => evaluateVerify(exec, change, options))
+                // A passing command proves the tests ran, not that the change
+                // is any good — and this is the last gate before commit. When a
+                // reviewer is bound, its verdict decides the gate instead.
+                const reviewer = AgentGates.includes("verify") ? personas.bindings.verify : undefined
+                const result = reviewer
+                  ? { ...(yield* runAgentGate("verify", reviewer, change, changeSessionID, exec)), gate: "verify" as const }
+                  : yield* Effect.promise(() => evaluateVerify(exec, change, options))
                 if (result.passed) {
                   failCounts.verify = 0
                   gate = "commit"
@@ -966,10 +1090,14 @@ export const layer = Layer.effect(
           // `bun test` invoked from a repo root that refuses to run tests
           // there). Halting is only honest if it also un-poisons the change —
           // otherwise a config mistake blockers finished work forever.
+          // An agent gate is excluded: a reviewer that returns NEEDS_WORK three
+          // times is doing its job, and quarantining the change is the correct
+          // outcome. Only a command that never once succeeded is suspect.
           const suspectGate =
             ending.outcome === "quarantined" &&
             ending.gate !== undefined &&
             (ending.gate === "test" || ending.gate === "verify") &&
+            personas.bindings[ending.gate] === undefined &&
             !queueState.gatesPassed.has(ending.gate)
           if (suspectGate) {
             yield* Effect.sync(() => unquarantine(change))
@@ -1249,6 +1377,7 @@ export const node = LayerNode.make(layer, [
   SessionStatus.node,
   Config.node,
   Provider.node,
+  AgentSvc.node,
   EventV2Bridge.node,
 ])
 

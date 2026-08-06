@@ -520,3 +520,128 @@ it.instance(
     }),
   { config: {} },
 )
+
+// --- persona-bound gates -----------------------------------------------------
+
+const REVIEWER = {
+  mode: "subagent" as const,
+  description: "Reads finished work and returns a verdict",
+  prompt: "Review the work and return LGTM or NEEDS_WORK.",
+  permission: { write: "deny" as const, edit: "deny" as const },
+}
+
+it.instance(
+  "a gate bound to an agent that does not exist halts the run before anything is attempted",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, {
+        ...providerCfg(llm.url),
+        experimental: { queue_personas: { verify: "nobody" } },
+      })
+      writeChange(dir, "unstarted-change", "- [ ] 1.1 work\n")
+      const loop = yield* Loop.Service
+
+      const info = yield* loop.create({ prompt: "", mode: "queue", interval: 0 })
+      const final = yield* waitForTerminal(info.id, 20)
+
+      // A review gate that quietly stops reviewing is worse than one that
+      // refuses to start: the run would keep advancing toward commit.
+      expect(final.status).toBe("error")
+      expect(final.report).toContain("nobody")
+      expect(final.report).toContain("nothing was attempted")
+      expect(yield* llm.hits).toHaveLength(0)
+    }),
+  { config: {} },
+)
+
+it.instance(
+  "a NEEDS_WORK verdict fails the verify gate and its findings reach the repair brief",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, { ...providerCfg(llm.url), agent: { reviewer: REVIEWER } })
+      const changeDir = writeChange(dir, "reviewed-change", "- [ ] 1.1 the work\n")
+      const tasksFile = path.join(changeDir, "tasks.md")
+      const loop = yield* Loop.Service
+
+      // The first turn actually does the work — a change is only eligible while
+      // a box is unchecked, so the queue cannot reach `verify` without one
+      // turn that checks it.
+      yield* llm.tool("write", { filePath: tasksFile, content: "- [x] 1.1 the work\n" })
+      yield* llm.text("implemented")
+      // Everything after that — reviewer verdicts and repair turns alike —
+      // says NEEDS_WORK, so verify strikes out and the change is quarantined.
+      for (let i = 0; i < 12; i++) yield* llm.text("Findings: the ceiling leaks on throw.\n\nVerdict: NEEDS_WORK")
+
+      const info = yield* loop.create({
+        prompt: "",
+        mode: "queue",
+        interval: 0,
+        maxIterations: 12,
+        queueOptions: { testCommand: "exit 0", verifyCommand: "exit 0", defaultBranch: "main" },
+      })
+      const final = yield* waitForTerminal(info.id, 90)
+
+      expect(final.report).toContain("reviewed-change: quarantined")
+      expect(final.report).toContain("gate reached: verify")
+
+      // The verdict text has to reach a repair turn, or the model is being
+      // asked to fix something it was never told about.
+      const bodies = (yield* llm.hits).map((hit) => JSON.stringify(hit.body)).join("\n")
+      expect(bodies).toContain("the ceiling leaks on throw")
+
+      // An agent gate that keeps saying no is doing its job — it must not be
+      // mistaken for the misconfigured-command case, which un-quarantines.
+      expect(final.report).not.toContain("suspected misconfigured")
+    }),
+  { config: {} },
+)
+
+it.instance(
+  "the review subagent runs in its own session and cannot edit what it judges",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, { ...providerCfg(llm.url), agent: { reviewer: REVIEWER } })
+      const changeDir = writeChange(dir, "judged-change", "- [ ] 1.1 the work\n")
+      const loop = yield* Loop.Service
+      const session = yield* Session.Service
+
+      yield* llm.tool("write", { filePath: path.join(changeDir, "tasks.md"), content: "- [x] 1.1 the work\n" })
+      yield* llm.text("implemented")
+      for (let i = 0; i < 12; i++) yield* llm.text("Verdict: NEEDS_WORK")
+
+      const info = yield* loop.create({
+        prompt: "",
+        mode: "queue",
+        interval: 0,
+        maxIterations: 12,
+        queueOptions: { testCommand: "exit 0", verifyCommand: "exit 0", defaultBranch: "main" },
+      })
+
+      const reviewSession = yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const current = yield* loop.get(info.id)
+          if (!current) return undefined
+          const kids = yield* session.children(current.sessionID)
+          return kids.find((kid) => kid.title.startsWith("verify: reviewer"))
+        }),
+        "the reviewer never got its own session",
+        "60 seconds",
+      )
+
+      const rules = reviewSession.permission ?? []
+      const denies = (permission: string) =>
+        rules.some((rule) => rule.permission === permission && rule.action === "deny" && rule.pattern === "*")
+      expect(denies("write")).toBe(true)
+      expect(denies("edit")).toBe(true)
+
+      yield* loop.cancel(info.id).pipe(Effect.ignore)
+      yield* waitForTerminal(info.id, 30)
+    }),
+  { config: {} },
+)
