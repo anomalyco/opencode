@@ -45,10 +45,7 @@ export const layer = Layer.effect(
             .filter((part) => part.length > 0)
             .map(SystemPart.make),
           messages: [
-            ...toLLMMessages(history.messages, model.ref, providerMetadataKey, {
-              requested: model.requested,
-              via: model.via === "legacy-provider" ? model.via : undefined,
-            }),
+            ...toLLMMessages(history.messages, model.ref, providerMetadataKey),
             ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
             Message.user(input.prompt),
           ],

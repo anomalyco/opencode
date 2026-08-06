@@ -70,6 +70,19 @@ describe("ConfigNormalize", () => {
     expect(result.agents?.reviewer?.system).toBe("Use V2")
   })
 
+  test("normalizes retired model provider IDs unless native providers claim the exact ID", () => {
+    expect(String(decoded({ model: "azure-cognitive-services/chat" }).model?.providerID)).toBe("azure")
+    expect(String(decoded({ model: "google-vertex-anthropic/claude" }).model?.providerID)).toBe("google-vertex")
+    expect(
+      String(
+        decoded({
+          model: "azure-cognitive-services/chat",
+          providers: { "azure-cognitive-services": { models: { chat: {} } } },
+        }).model?.providerID,
+      ),
+    ).toBe("azure-cognitive-services")
+  })
+
   test("canonicalizes transformed native values through decode then encode", () => {
     const result = normalized({ warming: { interval: "4 minutes", duration: "30 minutes" } })
     expect(result.encoded.warming).toEqual({ interval: "240000 millis", duration: "1800000 millis" })
@@ -246,6 +259,21 @@ describe("ConfigNormalize", () => {
       ["plugins"],
       ["instructions"],
     ])
+  })
+
+  test("omits all-invalid formatter and LSP maps while preserving explicit empty maps", () => {
+    const invalid = normalized({
+      formatter: { prettier: { command: [1] } },
+      lsp: { typescript: { command: [1] } },
+    })
+    expect(invalid.encoded).not.toHaveProperty("formatter")
+    expect(invalid.encoded).not.toHaveProperty("lsp")
+    expect(invalid.diagnostics.filter((item) => item.kind === "invalid").map((item) => item.path)).toEqual([
+      ["formatter", "prettier"],
+      ["lsp", "typescript"],
+    ])
+
+    expect(normalized({ formatter: {}, lsp: {} }).encoded).toMatchObject({ formatter: {}, lsp: {} })
   })
 
   test("combines legacy and native MCP servers and merges timeout leaves", () => {

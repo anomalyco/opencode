@@ -44,15 +44,13 @@ Set `model` in `opencode.json` or `opencode.jsonc`:
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5#high"
+  "model": "anthropic/claude-sonnet-4-5"
 }
 ```
 
 The configured model becomes the catalog default when its provider is available and the model is enabled. Otherwise,
 session execution falls back to the newest available supported model. An explicit model already selected on a session
-takes precedence over the default; switching models changes that session and does not rewrite your config. When the
-configured reference includes a variant, execution retains and applies it. Model-default APIs and plugin surfaces continue
-to return the canonical base model because their `Model.Info` contract does not represent a selected variant.
+takes precedence over the default; switching models changes that session and does not rewrite your config.
 
 See [Config](/config) for configuration locations and precedence.
 
@@ -230,8 +228,8 @@ Root, agent, and command `model` fields accept both forms. Use the IDs shown by 
 ### Caveats
 
 - The selector object uses `model`, while a provider catalog entry uses `modelID` for the upstream API identifier.
-- The root `model` retains an optional variant for execution. Model-default surfaces still report only the canonical base
-  provider and model.
+- The root `model` currently sets the default provider and model only. Although its selection shape accepts a variant,
+  the V2 catalog default does not retain it; select a variant in the TUI, with `opencode2 run`, or on an agent or command.
 - Model options are provider-specific. A setting accepted by one provider package may be ignored or rejected by another.
 - Catalog data, credentials, and config are location-scoped. A model available in one project may be unavailable in
   another.

@@ -231,14 +231,10 @@ export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog
             default: {
               get: () => {
                 const value = draft.model.default.get()
-                return value && { providerID: value.providerID, modelID: value.modelID, variant: value.variant }
+                return value && { providerID: value.providerID, modelID: value.modelID }
               },
-              set: (providerID, modelID, variant) =>
-                draft.model.default.set(
-                  Provider.ID.make(providerID),
-                  Model.ID.make(modelID),
-                  variant === undefined ? undefined : Model.VariantID.make(variant),
-                ),
+              set: (providerID, modelID) =>
+                draft.model.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
             },
           },
         }),

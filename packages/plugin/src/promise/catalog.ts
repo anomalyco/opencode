@@ -21,8 +21,8 @@ export interface CatalogDraft {
     update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
     remove(providerID: string, modelID: string): void
     readonly default: {
-      get(): { providerID: string; modelID: string; variant?: string } | undefined
-      set(providerID: string, modelID: string, variant?: string): void
+      get(): { providerID: string; modelID: string } | undefined
+      set(providerID: string, modelID: string): void
     }
   }
 }

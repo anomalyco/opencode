@@ -20,7 +20,6 @@ import { Location } from "./location"
 import { LocationMutation } from "./location-mutation"
 import { LocationServiceMap } from "./location-service-map"
 import { ModelResolver } from "./model-resolver"
-import { ProviderCompatibility } from "./provider/compatibility"
 import { MCP } from "./mcp/index"
 import { Permission } from "./permission"
 import { Plugin } from "./plugin"
@@ -60,7 +59,6 @@ const locationServiceNodes = [
   WebSearch.node,
   Integration.node,
   Catalog.node,
-  ProviderCompatibility.node,
   ModelResolver.node,
   AISDK.node,
   Plugin.node,

@@ -768,39 +768,6 @@ Recent work
     ])
   })
 
-  test("reuses legacy provider metadata only with compatibility lookup context", () => {
-    const legacy = Provider.ID.make("azure-cognitive-services")
-    const canonical = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.azure })
-    const message = SessionMessage.Assistant.make({
-      id: id("assistant-legacy-provider"),
-      type: "assistant",
-      agent: build,
-      model: { id: Model.ID.make("model"), providerID: legacy },
-      content: [
-        SessionMessage.AssistantReasoning.make({
-          type: "reasoning",
-          text: "Think",
-          state: { signature: "legacy-signature" },
-        }),
-      ],
-      time: { created, completed: created },
-    })
-
-    expect(toLLMMessages([message], canonical)[0]?.content).toEqual([{ type: "text", text: "Think" }])
-    expect(
-      toLLMMessages([message], canonical, "azure", {
-        requested: Model.Ref.make({ id: Model.ID.make("model"), providerID: legacy }),
-        via: "legacy-provider",
-      })[0]?.content,
-    ).toEqual([
-      {
-        type: "reasoning",
-        text: "Think",
-        providerMetadata: { azure: { signature: "legacy-signature" } },
-      },
-    ])
-  })
-
   test("preserves assistant text provider state across same-provider model changes and failures", () => {
     const messages = toLLMMessages(
       [

@@ -31,38 +31,6 @@ const addPlugin = Effect.fn(function* (entries: Entry[]) {
 })
 
 describe("ConfigPolicyPlugin.Plugin", () => {
-  it.effect("allows a canonical target after a shared baseline deny", () =>
-    Effect.sync(() => {
-      const entries = [policies({ effect: "deny", resource: "*" }, { effect: "allow", resource: "azure" })]
-      expect(
-        ConfigPolicyPlugin.compatibility(
-          ConfigPolicyPlugin.effective(entries),
-          "azure-cognitive-services",
-          "azure",
-        ),
-      ).toBe("allowed")
-    }),
-  )
-
-  it.effect("distinguishes source-only and canonical target denials", () =>
-    Effect.sync(() => {
-      expect(
-        ConfigPolicyPlugin.compatibility(
-          ConfigPolicyPlugin.effective([policies({ effect: "deny", resource: "azure-cognitive-services" })]),
-          "azure-cognitive-services",
-          "azure",
-        ),
-      ).toBe("source-denied")
-      expect(
-        ConfigPolicyPlugin.compatibility(
-          ConfigPolicyPlugin.effective([policies({ effect: "deny", resource: "azure" })]),
-          "azure-cognitive-services",
-          "azure",
-        ),
-      ).toBe("target-denied")
-    }),
-  )
-
   it.effect("filters plugin-provided providers with ordered wildcard policies", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

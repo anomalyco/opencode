@@ -185,10 +185,7 @@ export const layer = Layer.effect(
       const system = [agent.info.system ? agent.info.system : PROMPT_DEFAULT, input.context.initial]
         .filter((part) => part.length > 0)
         .map(SystemPart.make)
-      const history = toLLMMessages(input.context.messages, resolved.ref, providerMetadataKey, {
-        requested: resolved.requested,
-        via: resolved.via === "legacy-provider" ? resolved.via : undefined,
-      })
+      const history = toLLMMessages(input.context.messages, resolved.ref, providerMetadataKey)
       const messages = stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history
       const registry = new Map(tools.definitions.map((tool) => [tool.name, tool]))
       // The definition objects we hand to hooks, mapped back to their tools. Hooks rename a

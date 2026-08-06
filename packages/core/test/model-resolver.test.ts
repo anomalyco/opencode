@@ -2,23 +2,14 @@ import { describe, expect } from "bun:test"
 import { LLM, LanguageModel } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
-import { Compatibility, ID, Info, Ref, VariantID } from "@opencode-ai/core/model"
+import { Compatibility, ID, Info, VariantID } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Config } from "@opencode-ai/core/config"
-import { Bus } from "@opencode-ai/core/bus"
-import { Location } from "@opencode-ai/core/location"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { ProviderCompatibility } from "@opencode-ai/core/provider/compatibility"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { location } from "./fixture/location"
-import { it, testEffect } from "./lib/effect"
+import { it } from "./lib/effect"
 
 interface ModelOptions {
   readonly providerID?: Provider.ID
@@ -808,113 +799,6 @@ describe("ModelResolver", () => {
       expect(ModelResolver.supported(model(Provider.aisdk("@ai-sdk/openai")))).toBe(true)
       expect(ModelResolver.supported(model("@opencode-ai/ai/providers/custom"))).toBe(true)
       expect(ModelResolver.supported(model(undefined))).toBe(false)
-    }),
-  )
-})
-
-const selectorLocation = Layer.succeed(
-  Location.Service,
-  Location.Service.of(location({ directory: AbsolutePath.make("test") })),
-)
-const selectorLayer = AppNodeBuilder.build(
-  LayerNode.group([ProviderCompatibility.node, Catalog.node, Bus.node, Credential.node, Integration.node]),
-  [
-    [Location.node, selectorLocation],
-    [Config.node, Config.testLayer()],
-  ],
-)
-const selectorIt = testEffect(selectorLayer)
-
-describe("ProviderCompatibility", () => {
-  selectorIt.effect("uses compatibility for configured default surfaces", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      const selector = yield* ProviderCompatibility.Service
-      const variant = VariantID.make("high")
-      const requested = Ref.make({
-        providerID: Provider.ID.make("azure-cognitive-services"),
-        id: ID.make("chat"),
-        variant,
-      })
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(Provider.ID.azure, (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/openai")
-          provider.settings = { apiKey: "configured" }
-        })
-        catalog.model.update(Provider.ID.azure, requested.id, (model) => {
-          model.variants = [{ id: variant }]
-        })
-        catalog.model.default.set(requested.providerID, requested.id, requested.variant)
-      })
-
-      expect(yield* selector.default()).toMatchObject({
-        model: { providerID: Provider.ID.azure, id: requested.id },
-        requested,
-        via: "legacy-provider",
-      })
-    }),
-  )
-
-  selectorIt.effect("selects canonical aliases and preserves requested variants", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      const selector = yield* ProviderCompatibility.Service
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(Provider.ID.azure, (provider) => {
-          provider.settings = { apiKey: "configured" }
-        })
-        catalog.model.update(Provider.ID.azure, ID.make("chat"), (model) => {
-          model.variants = [{ id: VariantID.make("high") }]
-        })
-      })
-      const requested = Ref.make({
-        providerID: Provider.ID.make("azure-cognitive-services"),
-        id: ID.make("chat"),
-        variant: VariantID.make("high"),
-      })
-
-      const result = yield* selector.select(requested, "available")
-      expect(result).toMatchObject({
-        type: "legacy-provider",
-        requested,
-        model: { providerID: "azure", id: "chat" },
-      })
-    }),
-  )
-
-  selectorIt.effect("blocks aliases for an exact claimed namespace even after removal", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      const selector = yield* ProviderCompatibility.Service
-      const legacy = Provider.ID.make("azure-cognitive-services")
-      yield* catalog.transform((catalog) => {
-        catalog.model.update(Provider.ID.azure, ID.make("chat"), () => {})
-        catalog.model.update(legacy, ID.make("chat"), () => {})
-        catalog.provider.remove(legacy)
-      })
-
-      expect(
-        yield* selector.select(Ref.make({ providerID: legacy, id: ID.make("chat") }), "configured"),
-      ).toEqual({ type: "fallback-blocked" })
-    }),
-  )
-
-  selectorIt.effect("uses configured and available lookup modes for exact and aliased providers", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      const selector = yield* ProviderCompatibility.Service
-      yield* catalog.transform((catalog) => {
-        catalog.model.update(Provider.ID.azure, ID.make("chat"), (model) => {
-          model.enabled = false
-        })
-      })
-      const requested = Ref.make({
-        providerID: Provider.ID.make("azure-cognitive-services"),
-        id: ID.make("chat"),
-      })
-
-      expect((yield* selector.select(requested, "configured")).type).toBe("legacy-provider")
-      expect((yield* selector.select(requested, "available")).type).toBe("absent")
     }),
   )
 })

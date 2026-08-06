@@ -108,16 +108,8 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
-const assistant = (
-  message: SessionMessage.Assistant,
-  model: Model.Ref,
-  providerMetadataKey: string,
-  compatibility?: { readonly requested?: Model.Ref; readonly via?: "legacy-provider" },
-) => {
-  const sameProvider =
-    String(message.model.providerID) === String(model.providerID) ||
-    (compatibility?.via === "legacy-provider" &&
-      String(message.model.providerID) === String(compatibility.requested?.providerID))
+const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
+  const sameProvider = String(message.model.providerID) === String(model.providerID)
   const sameModel = sameProvider && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
@@ -185,12 +177,7 @@ const assistant = (
   ]
 }
 
-function toLLMMessage(
-  message: SessionMessage.Info,
-  model: Model.Ref,
-  providerMetadataKey: string,
-  compatibility?: { readonly requested?: Model.Ref; readonly via?: "legacy-provider" },
-): Message[] {
+function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -228,7 +215,7 @@ function toLLMMessage(
         }),
       ]
     case "assistant":
-      return assistant(message, model, providerMetadataKey, compatibility)
+      return assistant(message, model, providerMetadataKey)
     case "compaction":
       if (message.status !== "completed") return []
       return [
@@ -257,5 +244,4 @@ export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-  compatibility?: { readonly requested?: Model.Ref; readonly via?: "legacy-provider" },
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey, compatibility))
+) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))

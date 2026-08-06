@@ -8,12 +8,9 @@ import { Generate } from "@opencode-ai/core/generate"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import { ID, Info, Ref } from "@opencode-ai/core/model"
-import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Provider } from "@opencode-ai/core/provider"
-import { ProviderCompatibility } from "@opencode-ai/core/provider/compatibility"
 import { Npm } from "@opencode-ai/util/npm"
-import { Effect, Fiber, Layer } from "effect"
-import { TestClock } from "effect/testing"
+import { Effect, Layer } from "effect"
 import { testEffect } from "./lib/effect"
 
 const selected = Info.make({
@@ -25,7 +22,6 @@ const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", ro
 const catalog = Layer.mock(Catalog.Service, {
   provider: {
     get: () => Effect.succeed(undefined),
-    claimed: () => Effect.succeed(false),
     all: () => Effect.die("unused"),
     available: () => Effect.die("unused"),
   },
@@ -34,7 +30,6 @@ const catalog = Layer.mock(Catalog.Service, {
     all: () => Effect.die("unused"),
     available: () => Effect.die("unused"),
     default: () => Effect.die("unused"),
-    configured: () => Effect.die("unused"),
     small: () => Effect.die("unused"),
   },
 })
@@ -70,29 +65,10 @@ const aisdk = Layer.mock(AISDK.Service, {
   },
   model: () => Effect.succeed(runtime),
 })
-let selections = 0
-const compatibility = Layer.mock(ProviderCompatibility.Service, {
-  default: () => Effect.die("unused ProviderCompatibility.default"),
-  select: (requested) =>
-    Effect.sync(() => {
-      selections++
-      return { type: "exact" as const, model: selected, requested }
-    }),
-})
 const client = TestLLM.clientLayer.pipe(Layer.provide(TestLLM.layer({ fallback: TestLLM.text("OK", "generate") })))
 
-const resolver = ModelResolver.layer.pipe(
-  Layer.provide(Layer.mergeAll(catalog, compatibility, integrations, npm, aisdk)),
-)
-const generateLayer = (flush: Effect.Effect<void>) =>
-  Generate.layer.pipe(
-    Layer.provide(
-      Layer.mergeAll(resolver, client, Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush }))),
-    ),
-  )
-const it = testEffect(generateLayer(Effect.void))
-const delayedIt = testEffect(generateLayer(Effect.sleep("1 second")))
-const unsettledIt = testEffect(generateLayer(Effect.never))
+const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
+const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, client))))
 const resolverIt = testEffect(resolver)
 
 it.effect("loads dynamic AI SDK models", () =>
@@ -107,47 +83,6 @@ it.effect("loads dynamic AI SDK models", () =>
   }),
 )
 
-delayedIt.effect("waits for plugin settlement before selecting a model", () =>
-  Effect.gen(function* () {
-    selections = 0
-    const generate = yield* Generate.Service
-    const result = yield* generate
-      .text({
-        prompt: "Return exactly OK",
-        model: Ref.make({ providerID: selected.providerID, id: selected.id }),
-      })
-      .pipe(Effect.forkScoped({ startImmediately: true }))
-
-    yield* TestClock.adjust("999 millis")
-    expect(selections).toBe(0)
-    yield* TestClock.adjust("1 millis")
-    expect(yield* Fiber.join(result)).toBe("OK")
-    expect(selections).toBe(1)
-  }),
-)
-
-unsettledIt.effect("bounds plugin settlement before model selection", () =>
-  Effect.gen(function* () {
-    selections = 0
-    const generate = yield* Generate.Service
-    const result = yield* generate
-      .text({
-        prompt: "Return exactly OK",
-        model: Ref.make({ providerID: selected.providerID, id: selected.id }),
-      })
-      .pipe(Effect.flip, Effect.forkScoped({ startImmediately: true }))
-
-    yield* TestClock.adjust("5 seconds")
-    expect(yield* Fiber.join(result)).toEqual(
-      new Generate.UnavailableError({
-        message: "Model catalog initialization timed out",
-        service: "model.catalog",
-      }),
-    )
-    expect(selections).toBe(0)
-  }),
-)
-
 resolverIt.effect("resolves dynamic models with their catalog metadata", () =>
   Effect.gen(function* () {
     const resolver = yield* ModelResolver.Service
@@ -156,8 +91,6 @@ resolverIt.effect("resolves dynamic models with their catalog metadata", () =>
     expect(result).toEqual({
       model: runtime,
       ref: Ref.make({ providerID: selected.providerID, id: selected.id }),
-      requested: Ref.make({ providerID: selected.providerID, id: selected.id }),
-      via: "exact",
       capabilities: selected.capabilities,
       cost: selected.cost,
     })

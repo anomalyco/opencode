@@ -178,7 +178,7 @@ export function normalize(input: unknown): Result {
   }
   Object.entries(nativeAtomic).forEach(([key, schema]) => {
     if (!own(input, key)) return
-    const value = decodeEncoded(schema, input[key], [key], diagnostics)
+    const value = decodeEncoded(schema, key === "model" ? normalizeModel(input) : input[key], [key], diagnostics)
     if (value === undefined) return
     overlay(encoded, key, value, [key], diagnostics)
   })
@@ -187,6 +187,16 @@ export function normalize(input: unknown): Result {
   if (instructions.length || Array.isArray(input.instructions)) encoded.instructions = instructions
 
   return { type: "normalized", encoded, diagnostics }
+}
+
+function normalizeModel(input: Record<string, unknown>) {
+  if (typeof input.model !== "string") return input.model
+  const separator = input.model.indexOf("/")
+  if (separator < 1) return input.model
+  const providerID = input.model.slice(0, separator)
+  const migrated = ConfigMigrateV1.providerID(providerID)
+  if (migrated === providerID || (isRecord(input.providers) && own(input.providers, providerID))) return input.model
+  return `${migrated}${input.model.slice(separator)}`
 }
 
 function normalizeSkills(input: Record<string, unknown>, encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {
@@ -419,7 +429,8 @@ function normalizeFormatter(
     return
   }
   const entries = decodeEncodedMap(input.formatter, ConfigFormatter.Entry, ["formatter"], diagnostics)
-  if (isRecord(input.formatter)) encoded.formatter = entries
+  if (isRecord(input.formatter) && (!Object.keys(input.formatter).length || Object.keys(entries).length))
+    encoded.formatter = entries
 }
 
 function normalizeLsp(input: Record<string, unknown>, encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {
@@ -430,7 +441,7 @@ function normalizeLsp(input: Record<string, unknown>, encoded: Record<string, un
     return
   }
   const entries = decodeEncodedMap(input.lsp, ConfigLSP.Entry, ["lsp"], diagnostics)
-  if (isRecord(input.lsp)) encoded.lsp = entries
+  if (isRecord(input.lsp) && (!Object.keys(input.lsp).length || Object.keys(entries).length)) encoded.lsp = entries
 }
 
 function migrateTools(value: unknown, diagnostics: Diagnostic[]) {
