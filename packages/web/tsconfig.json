@@ -3,7 +3,6 @@
   "include": [".astro/types.d.ts", "**/*"],
   "exclude": ["dist"],
   "compilerOptions": {
-    "incremental": true,
     "jsx": "preserve",
     "jsxImportSource": "solid-js"
   }

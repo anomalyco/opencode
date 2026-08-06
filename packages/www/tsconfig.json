@@ -2,7 +2,6 @@
   "extends": "astro/tsconfigs/strict",
   "include": [".blume/.astro/types.d.ts", ".blume/src/env.d.ts", "**/*"],
   "compilerOptions": {
-    "incremental": true,
     "types": ["bun"]
   }
 }

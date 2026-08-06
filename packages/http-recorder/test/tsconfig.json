@@ -1,7 +1,6 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "incremental": true,
     "rootDir": "..",
     "noEmit": true,
     "declaration": false,
