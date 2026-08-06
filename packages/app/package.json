@@ -1,11 +1,12 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.18.11",
+  "version": "1.18.14",
   "description": "",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./desktop-menu": "./src/desktop-menu.ts",
+    "./i18n/desktop-native": "./src/i18n/desktop-native.ts",
     "./updater": "./src/updater.ts",
     "./wsl/types": "./src/wsl/types.ts",
     "./vite": "./vite.js",
