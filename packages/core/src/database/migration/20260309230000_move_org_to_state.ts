@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260309230000_move_org_to_state",
   up(tx) {
     return Effect.gen(function* () {
@@ -12,4 +12,6 @@ export default {
       yield* tx.run(`ALTER TABLE \`account\` DROP COLUMN \`selected_org_id\`;`)
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration

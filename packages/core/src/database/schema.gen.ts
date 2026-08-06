@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "./migration"
 
-export default {
+const schema: Omit<DatabaseMigration.Migration, "id"> = {
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`
@@ -248,4 +248,6 @@ export default {
       )
     })
   },
-} satisfies Omit<DatabaseMigration.Migration, "id">
+}
+
+export default schema

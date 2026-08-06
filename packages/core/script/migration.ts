@@ -132,14 +132,16 @@ function renderMigration(name: string, sql: string) {
   return `import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: ${JSON.stringify(name)},
   up(tx) {
     return Effect.gen(function* () {
 ${renderStatements(sql)}
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration
 `
 }
 
@@ -147,13 +149,15 @@ function renderSchema(sql: string) {
   return `import { Effect } from "effect"
 import type { DatabaseMigration } from "./migration"
 
-export default {
+const schema: Omit<DatabaseMigration.Migration, "id"> = {
   up(tx) {
     return Effect.gen(function* () {
 ${renderStatements(sql)}
     })
   },
-} satisfies Omit<DatabaseMigration.Migration, "id">
+}
+
+export default schema
 `
 }
 
@@ -191,10 +195,10 @@ async function formatTypescript(input: string) {
 function renderRegistry(names: string[]) {
   return `import type { DatabaseMigration } from "./migration"
 
-export const migrations = (
+export const migrations: DatabaseMigration.Migration[] = (
   await Promise.all([
 ${names.map((name) => `    import("./migration/${name}"),`).join("\n")}
   ])
-).map((module) => module.default) satisfies DatabaseMigration.Migration[]
+).map((module) => module.default)
 `
 }

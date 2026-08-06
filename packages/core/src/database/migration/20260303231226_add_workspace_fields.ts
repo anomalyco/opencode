@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260303231226_add_workspace_fields",
   up(tx) {
     return Effect.gen(function* () {
@@ -12,4 +12,6 @@ export default {
       yield* tx.run(`ALTER TABLE \`workspace\` DROP COLUMN \`config\`;`)
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration

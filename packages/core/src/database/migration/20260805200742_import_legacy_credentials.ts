@@ -30,12 +30,14 @@ const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 const decodeValue = Schema.decodeUnknownOption(LegacyValue)
 const wellKnownSourcesKey = "wellknown:sources"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260805200742_import_legacy_credentials",
   up(tx) {
     return importLegacyCredentials(tx, path.join(Global.Path.data, "auth.json"))
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration
 
 export function importLegacyCredentials(tx: Parameters<DatabaseMigration.Migration["up"]>[0], filepath: string) {
   return Effect.gen(function* () {

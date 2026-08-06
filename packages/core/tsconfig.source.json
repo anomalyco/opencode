@@ -8,9 +8,9 @@
     "incremental": true,
     "noEmit": false,
     "noUncheckedIndexedAccess": false,
-    "outDir": "node_modules/.ts-dist/instructions",
-    "rootDir": "src/instructions",
-    "tsBuildInfoFile": "node_modules/.ts-dist/instructions.tsbuildinfo"
+    "outDir": "node_modules/.ts-dist/source",
+    "rootDir": "src",
+    "tsBuildInfoFile": "node_modules/.ts-dist/source.tsbuildinfo"
   },
-  "files": ["src/instructions/index.ts"]
+  "include": ["src"]
 }

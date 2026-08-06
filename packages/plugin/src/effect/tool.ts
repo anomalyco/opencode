@@ -4,7 +4,7 @@ import type { Session } from "@opencode-ai/schema/session"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { Hooks, Transform } from "./registration.js"
 
-interface ToolDraft {
+export interface ToolDraft {
   add<
     Input extends Tool.ValueSchema<any>,
     Output extends Tool.ValueSchema<any> | undefined,

@@ -5,7 +5,6 @@
     "incremental": true,
     "noUncheckedIndexedAccess": false
   },
-  "include": ["src", "test", "script", "drizzle.config.ts"],
-  "exclude": ["src/instructions/index.ts"],
-  "references": [{ "path": "./tsconfig.instructions.json" }]
+  "include": ["drizzle.config.ts", "script", "test"],
+  "references": [{ "path": "./tsconfig.source.json" }]
 }

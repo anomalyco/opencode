@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260501142318_next_venus",
   up(tx) {
     return Effect.gen(function* () {
@@ -9,4 +9,6 @@ export default {
       yield* tx.run(`ALTER TABLE \`session\` ADD \`model\` text;`)
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260413175956_chief_energizer",
   up(tx) {
     return Effect.gen(function* () {
@@ -21,4 +21,6 @@ export default {
       yield* tx.run(`CREATE INDEX \`session_entry_time_created_idx\` ON \`session_entry\` (\`time_created\`);`)
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration
