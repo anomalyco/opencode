@@ -28,9 +28,29 @@ target SHALL be required as an index or agent name, and an ambiguous or absent t
 SHALL produce the listing instead of a delivery. A steer MUST NOT be redirected to the
 parent session when the intended target cannot be resolved.
 
-The text SHALL be delivered to a subagent that is mid-turn once that turn completes,
-rather than being dropped or interrupting the turn in progress. The result SHALL report
-delivery, not completion.
+The text SHALL be delivered **between steps of the running turn** — appended to the
+subagent's message history so its next model call sees it — rather than after the turn or
+by interrupting the step in flight. The result SHALL report delivery, not completion.
+
+"After the turn completes" is not an acceptable delivery point and MUST NOT be
+implemented. For a one-shot subagent the end of the turn is the end of the subagent: the
+parent has already taken its result, and a steer delivered then starts an orphaned turn
+nobody is waiting on. Steering has to reach the agent while it is still working or it does
+nothing.
+
+Prompting a session whose runner is already `Running` MUST NOT be used as the delivery
+mechanism. `Runner.ensureRunning` joins the in-flight run and discards the submitted work,
+so a steer sent that way is silently lost.
+
+#### Scenario: a steer reaches the agent before its next step
+
+- **WHEN** a steer targets a subagent that is between tool calls in a running turn
+- **THEN** the text is present in the message history the subagent's next model call receives
+
+#### Scenario: a steer is never delivered by re-prompting a busy session
+
+- **WHEN** a steer targets a subagent whose runner is running
+- **THEN** delivery does not go through the ordinary prompt path for that session
 
 #### Scenario: the only live child is the implied target
 
@@ -46,11 +66,6 @@ delivery, not completion.
 
 - **WHEN** a steer names a target that is not a live child of this session
 - **THEN** no message is delivered to any session and the failure is reported
-
-#### Scenario: a mid-turn child receives the steer after its turn
-
-- **WHEN** a steer targets a subagent that is currently producing a turn
-- **THEN** the text is queued onto that subagent's session and delivered when the turn completes
 
 ### Requirement: steering MUST NOT cancel a running loop
 
