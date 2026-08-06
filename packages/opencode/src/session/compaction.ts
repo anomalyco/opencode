@@ -28,6 +28,13 @@ export const Event = SessionCompactionEvent
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
+const RECENT_TAIL_AUDIT_MAX_CHARS = 4_000
+const RECENT_TAIL_AUDIT_PART_MAX_CHARS = 1_000
+const RECENT_TAIL_AUDIT_PREFIX = [
+  "<recent-preserved-tail-audit>",
+  "Use this text-only view only to reconcile Work State and Next Move. Do not copy it wholesale into the summary.",
+].join("\n")
+const RECENT_TAIL_AUDIT_SUFFIX = "</recent-preserved-tail-audit>"
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
@@ -75,6 +82,49 @@ function completedCompactions(messages: SessionV1.WithParts[]) {
     if (userIndex === undefined) return []
     return [{ userIndex, assistantIndex, summary: summaryText(msg) }]
   })
+}
+
+function recentTailAudit(messages: SessionV1.WithParts[]) {
+  const selected: Array<{ role: "user" | "assistant"; parts: string[] }> = []
+  let remaining = RECENT_TAIL_AUDIT_MAX_CHARS - RECENT_TAIL_AUDIT_PREFIX.length - RECENT_TAIL_AUDIT_SUFFIX.length - 2
+
+  for (const message of messages.toReversed()) {
+    if (message.info.role !== "user" && message.info.role !== "assistant") continue
+    const role = message.info.role
+    const parts: string[] = []
+    for (const text of recentTailMessageText(message).toReversed()) {
+      const part = text.trim()
+      if (!part) continue
+
+      const prefix = parts.length ? "\n".length : `### ${role}\n`.length + (selected.length ? "\n\n".length : 0)
+      if (remaining <= prefix) break
+
+      const value = truncateTail(part, Math.min(RECENT_TAIL_AUDIT_PART_MAX_CHARS, remaining - prefix))
+      parts.unshift(value)
+      remaining -= prefix + value.length
+    }
+    if (parts.length) selected.unshift({ role, parts })
+    if (remaining === 0) break
+  }
+
+  if (!selected.length) return undefined
+  return [
+    RECENT_TAIL_AUDIT_PREFIX,
+    selected.map((message) => `### ${message.role}\n${message.parts.join("\n")}`).join("\n\n"),
+    RECENT_TAIL_AUDIT_SUFFIX,
+  ].join("\n")
+}
+
+function recentTailMessageText(message: SessionV1.WithParts) {
+  if (message.info.role !== "user" && message.info.role !== "assistant") return []
+  return message.parts.flatMap((part) => (part.type === "text" && !part.ignored && !part.synthetic ? [part.text] : []))
+}
+
+function truncateTail(text: string, max: number) {
+  if (text.length <= max) return text
+  const marker = "\n[truncated]"
+  if (max <= marker.length) return text.slice(-max)
+  return `${marker}${text.slice(-(max - marker.length))}`
 }
 
 function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
@@ -191,10 +241,10 @@ const layer = Layer.effect(
       model: Provider.Model
     }) {
       const limit = input.cfg.compaction?.tail_turns ?? DEFAULT_TAIL_TURNS
-      if (limit <= 0) return { head: input.messages, tail_start_id: undefined }
+      if (limit <= 0) return { head: input.messages, tail: [], tail_start_id: undefined }
       const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
       const all = turns(input.messages)
-      if (!all.length) return { head: input.messages, tail_start_id: undefined }
+      if (!all.length) return { head: input.messages, tail: [], tail_start_id: undefined }
       const recent = all.slice(-limit)
       const sizes = yield* Effect.forEach(
         recent,
@@ -231,9 +281,10 @@ const layer = Layer.effect(
         break
       }
 
-      if (!keep || keep.start === 0) return { head: input.messages, tail_start_id: undefined }
+      if (!keep || keep.start === 0) return { head: input.messages, tail: [], tail_start_id: undefined }
       return {
         head: input.messages.slice(0, keep.start),
+        tail: input.messages.slice(keep.start),
         tail_start_id: keep.id,
       }
     })
@@ -345,10 +396,14 @@ const layer = Layer.effect(
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
-      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
-      const msgs = structuredClone(selected.head)
+      const tailIDs = new Set(selected.tail.map((message) => message.info.id))
+      const msgs = structuredClone([...selected.head, ...selected.tail])
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-      const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
+      const tail = msgs.filter((message) => tailIDs.has(message.info.id))
+      const head = msgs.filter((message) => !tailIDs.has(message.info.id))
+      const context = [recentTailAudit(tail), ...compacting.context].filter((item): item is string => Boolean(item))
+      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context })
+      const modelMessages = yield* MessageV2.toModelMessagesEffect(head, model, {
         stripMedia: true,
         toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
       })

@@ -43,6 +43,8 @@ Rules:
 - Keep every section, even when empty.
 - Use terse bullets, not prose paragraphs.
 - Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
+- Next Move must contain only unfinished future actions.
+- If recent preserved-tail audit says a task was completed, move it to Work State > Completed and out of Active/Next Move.
 - Do not mention the summary process or that context was compacted.`
 
 type Entry = {
