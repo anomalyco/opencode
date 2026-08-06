@@ -2,9 +2,15 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "@tsconfig/bun/tsconfig.json",
   "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
     "incremental": true,
-    "noUncheckedIndexedAccess": false
+    "noEmit": false,
+    "noUncheckedIndexedAccess": false,
+    "outDir": "node_modules/.ts-dist/source",
+    "rootDir": "src",
+    "tsBuildInfoFile": "node_modules/.ts-dist/source.tsbuildinfo"
   },
-  "include": ["drizzle.config.ts", "script", "test"],
-  "references": [{ "path": "./tsconfig.source.json" }]
+  "include": ["src"]
 }
