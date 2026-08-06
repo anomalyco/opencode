@@ -1068,11 +1068,11 @@ test("direct footer submits slash autocomplete selections without dispatching sh
     await app.renderOnce()
 
     expect(submits).toEqual([
-      { text: "/review ", parts: [], command: { name: "review", arguments: "" } },
-      { text: "/review ", parts: [], command: { name: "review", arguments: "" } },
-      { text: "/review branch", parts: [], command: { name: "review", arguments: "branch" } },
-      { text: "/new ", parts: [] },
-      { text: "/new ", parts: [] },
+      { text: "/review ", parts: [], command: { name: "review", arguments: "" }, delivery: "steer" },
+      { text: "/review ", parts: [], command: { name: "review", arguments: "" }, delivery: "steer" },
+      { text: "/review branch", parts: [], command: { name: "review", arguments: "branch" }, delivery: "steer" },
+      { text: "/new ", parts: [], delivery: "steer" },
+      { text: "/new ", parts: [], delivery: "steer" },
     ])
     expect(app.renderer.currentFocusedEditor?.plainText).toBe("/settings ")
   } finally {
@@ -1100,7 +1100,9 @@ test("direct footer slash autocomplete keeps a real skills command", async () =>
     app.mockInput.pressEnter()
     await app.renderOnce()
 
-    expect(submits).toEqual([{ text: "/skills ", parts: [], command: { name: "skills", arguments: "" } }])
+    expect(submits).toEqual([
+      { text: "/skills ", parts: [], command: { name: "skills", arguments: "" }, delivery: "steer" },
+    ])
     expect(app.captureCharFrame()).not.toContain("Apply formatter fixes")
   } finally {
     app.cleanup()
@@ -1158,7 +1160,12 @@ test("direct footer tags skill slash submissions with their catalog source", asy
     await app.renderOnce()
 
     expect(submits).toEqual([
-      { text: "/formatter src", parts: [], command: { name: "formatter", arguments: "src", source: "skill" } },
+      {
+        text: "/formatter src",
+        parts: [],
+        command: { name: "formatter", arguments: "src", source: "skill" },
+        delivery: "steer",
+      },
     ])
   } finally {
     app.cleanup()

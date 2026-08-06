@@ -71,7 +71,7 @@ export type SessionResizeReplayInput = {
 
 export type SessionTransport = {
   runPromptTurn(input: SessionTurnInput, admitted?: () => void): Promise<void>
-  queuePromptTurn(input: SessionTurnInput): Promise<void>
+  admitPromptTurn(input: SessionTurnInput, delivery: "steer" | "queue"): Promise<void>
   waitForIdle(): Promise<void>
   interruptActiveTurn(): Promise<void>
   selectSubagent(sessionID: string | undefined): void
@@ -1643,14 +1643,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   }
 
   return {
-    async queuePromptTurn(next) {
+    async admitPromptTurn(next, delivery) {
       if (next.prompt.mode === "shell" || next.prompt.command?.source === "skill")
         throw new Error("This prompt cannot be queued")
       if (!state.connected) throw new Error("Event stream is reconnecting")
       const client = sdk
       if (next.agent)
         await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
-      mergePending(await admitPrompt(next, client, "queue"))
+      mergePending(await admitPrompt(next, client, delivery))
       settlementClient = client
     },
     async waitForIdle() {
@@ -1688,7 +1688,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (command) {
-        await runTurnWait(next, messageID, client, () => admitPrompt(next, client, "steer"), admitted)
+        await runTurnWait(next, messageID, client, () => admitPrompt(next, client, next.prompt.delivery ?? "steer"), admitted)
         return
       }
 
@@ -1700,7 +1700,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (selected)
         await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
 
-      await runTurnWait(next, messageID, client, () => admitPrompt(next, client, "steer"), admitted)
+      await runTurnWait(next, messageID, client, () => admitPrompt(next, client, next.prompt.delivery ?? "steer"), admitted)
     },
     async interruptActiveTurn() {
       // A running shell holds no drain, so session.interrupt cannot reach it;

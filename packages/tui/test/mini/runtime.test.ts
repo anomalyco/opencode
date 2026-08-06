@@ -126,7 +126,7 @@ describe("run interactive runtime", () => {
                 turnStarted.resolve()
                 api.close()
               },
-              queuePromptTurn: async () => {},
+              admitPromptTurn: async () => {},
               waitForIdle: async () => {},
               interruptActiveTurn: async () => {},
               selectSubagent: () => {},
@@ -209,7 +209,7 @@ describe("run interactive runtime", () => {
             streamStarted.resolve()
             return {
               runPromptTurn: async () => {},
-              queuePromptTurn: async () => {},
+              admitPromptTurn: async () => {},
               waitForIdle: async () => {},
               interruptActiveTurn: async () => {},
               selectSubagent: () => {},
@@ -556,7 +556,7 @@ describe("run interactive runtime", () => {
             setTimeout(() => input.footer.close(), 0)
             return {
               runPromptTurn: async () => {},
-              queuePromptTurn: async () => {},
+              admitPromptTurn: async () => {},
               waitForIdle: async () => {},
               interruptActiveTurn: async () => {},
               selectSubagent: () => {},

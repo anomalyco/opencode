@@ -185,6 +185,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const command = () => shortcut("command.palette.show")
   const subagentShortcut = () => shortcut("session.child.first")
   const queuedShortcut = () => shortcut("session.queued_prompts")
+  const queueShortcut = () => shortcut("prompt.queue")
   const backgroundShortcut = () => shortcut("session.background")
   const subagentInterruptShortcut = () => shortcut("subagent.interrupt")
   const interrupt = () => shortcut("session.interrupt")
@@ -456,6 +457,9 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
     if (activeTabs().length > 0 && subagentShortcut()) {
       items.push({ key: subagentShortcut(), label: "subagents" })
+    }
+    if (busy() && queueShortcut()) {
+      items.push({ key: queueShortcut(), label: "queue" })
     }
 
     return items

@@ -19,6 +19,7 @@ import {
   displayCharAt,
   displaySlice,
   isExitCommand,
+  isCompactCommand,
   mentionTriggerIndex,
   isNewCommand,
   movePromptHistory,
@@ -983,6 +984,15 @@ export function createPromptState(input: PromptInput): PromptState {
     enabled: input.prompt() && !visible(),
     commands: [
       {
+        id: "prompt.queue",
+        title: "Queue prompt",
+        group: "Prompt",
+        run() {
+          syncDraft()
+          submitPrompt(promptCopy(draft), "queue")
+        },
+      },
+      {
         id: "prompt.editor",
         title: "Open editor",
         group: "Prompt",
@@ -1116,7 +1126,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
   }
 
-  const submitPrompt = (next: RunPrompt) => {
+  const submitPrompt = (next: RunPrompt, delivery: "steer" | "queue" = "steer") => {
     if (!area || area.isDestroyed) {
       draft = promptCopy(next)
     }
@@ -1136,6 +1146,13 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const command = next.mode === "shell" ? undefined : selectedCommand(next.text, next.command)
+    if (
+      delivery === "queue" &&
+      (next.mode === "shell" || command?.source === "skill" || isNewCommand(next.text) || isCompactCommand(next.text))
+    ) {
+      input.onStatus("this prompt cannot be queued")
+      return
+    }
     if (!command && next.mode !== "shell" && isExitCommand(next.text)) {
       input.onExit()
       return
@@ -1157,10 +1174,10 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const submit = command
-      ? { ...next, command }
+      ? { ...next, command, delivery }
       : parsed?.type === "command"
-        ? { ...next, command: parsed.command }
-        : next
+        ? { ...next, command: parsed.command, delivery }
+        : { ...next, delivery }
     const shellMode = next.mode === "shell"
 
     resetDraft()

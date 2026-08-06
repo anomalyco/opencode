@@ -75,6 +75,7 @@ export type RunPrompt = {
   messageID?: string
   text: string
   parts: RunPromptPart[]
+  delivery?: "steer" | "queue"
   mode?: "shell"
   command?: {
     name: string
