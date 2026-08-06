@@ -125,10 +125,10 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
   const app = await testRender(() => <Harness />)
   try {
     expect(counts).toEqual({
-      base: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 1 },
-      question: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 0 },
+      base: { "session.list": 2, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 1 },
+      question: { "session.list": 2, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 0 },
       autocomplete: {
-        "session.list": 1,
+        "session.list": 2,
         "session.new": 1,
         "session.page.up": 2,
         "session.first": 2,
