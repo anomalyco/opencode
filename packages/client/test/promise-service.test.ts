@@ -70,6 +70,32 @@ test("reports a failed registered service", async () => {
   )
 })
 
+test("evicts an unresponsive registered service before starting its replacement", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const existing = Bun.spawn([process.execPath, fixture, registration, "hanging"], {
+    stdout: "ignore",
+    stderr: "inherit",
+  })
+  processes.push(existing)
+  await waitForFile(registration)
+  const original = await Bun.file(registration).json()
+
+  const endpoint = await Service.ensure({
+    file: registration,
+    version: "test",
+    command: [process.execPath, fixture, registration, "delayed", "10"],
+  })
+  const replacement = await Bun.file(registration).json()
+
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
+  expect(await existing.exited).toBe(0)
+  expect(replacement.pid).not.toBe(original.pid)
+  expect(endpoint.url).toBe(replacement.url)
+  process.kill(replacement.pid, "SIGTERM")
+  await waitForExit(replacement.pid)
+}, 20_000)
+
 test("requests graceful stop of the exact service instance", async () => {
   const registration = await setup("graceful")
   const info = await Bun.file(registration).json()
