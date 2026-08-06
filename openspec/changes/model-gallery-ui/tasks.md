@@ -69,12 +69,50 @@
 
 ## 5. Multi-host gallery
 
-- [ ] 5.1 Reuse discovered llama-skein identities/base URLs rather than
+- [x] 5.1 Reuse discovered llama-skein identities/base URLs rather than
       introducing a second discovery mechanism.
-- [ ] 5.2 Batch each candidate's exact variants through bounded concurrent
+      `src/local/model-gallery/hosts.ts` is a projection of `scanLlamaSwap`,
+      not a parallel implementation — a second mechanism would drift from the
+      first and show the user a gallery listing different hosts than the
+      provider picker on the same screen. What it does add is a stable join
+      key (`hostId`, the normalized base URL), because 5.3 joins across async
+      calls and neither mDNS names nor reverse-DNS names are usable as keys.
+      Offline hosts are retained rather than filtered: 5.6 has to say "that
+      host is offline", which dropping the host would make indistinguishable
+      from the host never existing. Duplicate discoveries of one endpoint
+      collapse, preferring the entry that actually answered.
+- [x] 5.2 Batch each candidate's exact variants through bounded concurrent
       hypothetical-fit calls to all compatible hosts.
-- [ ] 5.3 Join inventory, runtime state, hardware/storage, fit, and candidate
+      `src/local/model-gallery/fit.ts`. Batching is free because llama-skein's
+      hypothetical-fit endpoint already takes a variant list, so one request
+      carries every quantization of one candidate: request count is
+      (candidates x hosts), not (candidates x variants x hosts) — 100 requests
+      instead of 600 for a 20-candidate gallery over 5 hosts with 6 quants.
+      Concurrency is capped (default 4) because these are the user's actual
+      GPUs, possibly mid-inference; the gallery is a background nicety and must
+      never be why a chat stalls. Offline hosts are skipped rather than
+      attempted, so a dead host costs one discovery probe instead of one
+      timeout per candidate.
+      Every failure mode — offline, timeout, older build without the endpoint,
+      reshaped response — collapses to `answered: false`, never to a negative
+      verdict. Responses are read defensively field by field, because the
+      gallery talks to whatever llama-skein build the user happens to run and a
+      missing field must not throw and take the whole fan-out with it.
+- [x] 5.3 Join inventory, runtime state, hardware/storage, fit, and candidate
       evidence by stable host/variant identity.
+      `src/local/model-gallery/join.ts` emits one row per (candidate, host)
+      keyed on `hostId` + `candidateId`, including pairs where a source is
+      missing — the absence is the signal 5.6 classifies on, so dropping those
+      pairs would erase it. Capacity is indexed through the same host-id
+      normalization, since a trailing slash would otherwise silently lose every
+      busy signal.
+      An unreachable capacity probe leaves `busy` undefined rather than false:
+      "idle" and "we have no idea" must not be the same value, or a scheduler
+      reads an unreachable host as free and dispatches into a hole. Row order
+      is stable and deliberately unranked — ranking is 5.5, and a join that
+      quietly sorted by desirability would make that untestable in isolation.
+      20 tests in `test/local/model-gallery-dataplane.test.ts`; `bun run
+      typecheck` clean; `bun test test/local/` 209 pass.
 - [ ] 5.4 Implement hard compatibility filters before ranking.
 - [ ] 5.5 Implement explained fit/context, quality, speed/benchmark,
       capability, provenance, recency, and popularity evidence.
