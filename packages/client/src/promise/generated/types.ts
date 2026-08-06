@@ -169,6 +169,8 @@ export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: nu
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
+export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
+
 export type ModelCapabilities = { tools: boolean; input: Array<string>; output: Array<string> }
 
 export type ModelVariant = {
@@ -1230,7 +1232,11 @@ export type SessionToolCalled = {
 
 export type ToolContent1 = ToolTextContent | ToolFileContent1
 
-export type ModelCompatibility = { reasoningField?: ModelReasoningField }
+export type ModelCompatibility = {
+  reasoningField?: ModelReasoningField
+  maxTokensField?: ModelMaxTokensField
+  requireFinishReason?: boolean
+}
 
 export type ModelCost = {
   tier?: { type: "context"; size: number }

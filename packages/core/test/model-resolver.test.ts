@@ -194,7 +194,11 @@ describe("ModelResolver", () => {
     Effect.gen(function* () {
       const resolved = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/openai-compatible"), {
-          compatibility: { reasoningField: "vendor_reasoning" },
+          compatibility: {
+            reasoningField: "vendor_reasoning",
+            maxTokensField: "max_completion_tokens",
+            requireFinishReason: false,
+          },
           settings: {
             apiKey: "settings-secret",
             baseURL: "https://compatible.example/v1",
@@ -216,6 +220,8 @@ describe("ModelResolver", () => {
       expect(headers.authorization).toBe("Bearer settings-secret")
       expect(resolved.route.id).toBe("openai-compatible-chat")
       expect(resolved.compatibility?.reasoningField).toBe("vendor_reasoning")
+      expect(resolved.compatibility?.maxTokensField).toBe("max_completion_tokens")
+      expect(resolved.compatibility?.requireFinishReason).toBe(false)
       expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
       expect(resolved.route.defaults.http?.body).toEqual({})
     }),

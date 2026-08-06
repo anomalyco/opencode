@@ -237,7 +237,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
                   models: {
                     chat: {
                       name: "First",
-                      compatibility: { reasoningField: "vendor_reasoning" },
+                      compatibility: {
+                        reasoningField: "vendor_reasoning",
+                        maxTokensField: "max_completion_tokens",
+                        requireFinishReason: false,
+                      },
                       capabilities: { tools: true, input: ["text"], output: ["text"] },
                       disabled: true,
                       limit: { context: 100, output: 50 },
@@ -318,7 +322,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
         expect(model.id).toBe(modelID)
         expect(model.modelID).toBe(Model.ID.make("api-chat"))
         expect(model.name).toBe("Last")
-        expect(model.compatibility).toEqual({ reasoningField: "vendor_reasoning" })
+        expect(model.compatibility).toEqual({
+          reasoningField: "vendor_reasoning",
+          maxTokensField: "max_completion_tokens",
+          requireFinishReason: false,
+        })
         expect(model.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
         expect(model.enabled).toBe(false)
         expect(model.limit).toEqual({ context: 100, output: 75 })
