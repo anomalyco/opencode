@@ -39,7 +39,7 @@ const RETRYABLE_MESSAGE_PATTERNS = [
   /try your request again|retry your request|resource exhausted|resource_exhausted/i,
 ]
 
-// Auto-continue provider-error families. These transient families recover by
+// Auto-continue provider-error families. Three transient families recover by
 // re-sending a minimal "continue" prompt — the session is NOT actually failed
 // (confirmed live in the agent-teams relay):
 //   1. DeepSeek thinking mode: when a request carries tools, the previous
@@ -48,16 +48,21 @@ const RETRYABLE_MESSAGE_PATTERNS = [
 //        "The `reasoning_content` in the thinking mode must be passed back to the API"
 //   2. AI JSON parse failures that surface as:
 //        "AI_JSONParseError: JSON parsing failed: Text: ..."
-//   3. Provider-overload 503 request queue full:
+//   3. Provider overload where the request queue is full:
 //        "Streaming response failed: [503] The request queue is full."
-// A same-request retry is deterministic and fails identically (for the 400-class
-// families), so the processor reforms the request (appends a "continue" user
-// message) before the retried stream runs. Retries for these families are
-// capped so a genuinely stuck session still surfaces its error.
+//      A 503 is already retried by the generic 5xx rule; this match adds the
+//      same "continue" request reform so the retry differs from the rejected
+//      request instead of being byte-identical.
+// A same-request retry is deterministic and fails identically, so the processor
+// reforms the request (appends a "continue" user message) before the retried
+// stream runs. Retries for these families are capped so a genuinely stuck
+// session still surfaces its error.
 export const AUTO_CONTINUE_MAX = 2 // max auto-"continue" retries for transient provider errors
 
 // True for the auto-continue provider-error families. Matches the exact wording
-// seen in production without over-matching generic errors.
+// seen in production without over-matching generic errors. For the queue-full
+// family the distinctive token "request queue is full" is matched rather than
+// "streaming response failed" to avoid over-matching generic 503s.
 export function isAutoContinueError(text: string) {
   return (
     (/reasoning_content/i.test(text) && /must be passed back/i.test(text)) ||

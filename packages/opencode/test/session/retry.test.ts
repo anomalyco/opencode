@@ -405,6 +405,13 @@ describe("session.retry.auto_continue", () => {
     expect(SessionRetry.isAutoContinueError("JSON parsing failed: Text: <!DOCTYPE html>")).toBe(true)
   })
 
+  test("classifier matches the request-queue-full production error string", () => {
+    const QUEUE_FULL_MESSAGE = "Streaming response failed: [503] The request queue is full."
+    expect(SessionRetry.isAutoContinueError(QUEUE_FULL_MESSAGE)).toBe(true)
+    expect(SessionRetry.isAutoContinueError("request queue is full")).toBe(true)
+    expect(SessionRetry.isAutoContinueError("The request queue is full. Please retry later.")).toBe(true)
+  })
+
   test("classifier does not over-match generic provider errors", () => {
     expect(SessionRetry.isAutoContinueError("Invalid prompt")).toBe(false)
     expect(SessionRetry.isAutoContinueError("Internal server error")).toBe(false)
@@ -413,6 +420,13 @@ describe("session.retry.auto_continue", () => {
     expect(SessionRetry.isAutoContinueError("reasoning_content must not be empty")).toBe(false)
     expect(SessionRetry.isAutoContinueError("Agent ran out of retries")).toBe(false)
     expect(SessionRetry.isAutoContinueError("")).toBe(false)
+  })
+
+  test("classifier does not over-match generic 503s without the queue-full phrase", () => {
+    expect(SessionRetry.isAutoContinueError("Service Unavailable")).toBe(false)
+    expect(SessionRetry.isAutoContinueError("Streaming response failed: [503] Service Unavailable")).toBe(false)
+    expect(SessionRetry.isAutoContinueError("Internal Server Error")).toBe(false)
+    expect(SessionRetry.isAutoContinueError("streaming response failed")).toBe(false)
   })
 
   test("retries the production reasoning_content error even though it is a 400", () => {
@@ -458,6 +472,31 @@ describe("session.retry.auto_continue", () => {
   test("retries the JSON parse error when surfaced as an UnknownError", () => {
     const error = wrap(`UnknownError: ${JSON_PARSE_MESSAGE}`)
     expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: `UnknownError: ${JSON_PARSE_MESSAGE}` })
+  })
+
+  test("retries the request-queue-full 503 even when isRetryable is false", () => {
+    const QUEUE_FULL_MESSAGE = "Streaming response failed: [503] The request queue is full."
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: QUEUE_FULL_MESSAGE,
+        isRetryable: false,
+        statusCode: 503,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: QUEUE_FULL_MESSAGE })
+  })
+
+  test("retries a generic 503 without the queue-full phrase via the 5xx rule", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "Service Unavailable",
+        isRetryable: false,
+        statusCode: 503,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Service Unavailable" })
   })
 
   test("does not retry a normal 400 invalid prompt", () => {
