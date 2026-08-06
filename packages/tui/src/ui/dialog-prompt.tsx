@@ -85,6 +85,7 @@ export function DialogPrompt(props: DialogPromptProps) {
         {props.description?.()}
         <textarea
           height={1}
+          wrapMode="none"
           ref={(val: TextareaRenderable) => {
             textarea = val
             setTextareaTarget(val)
