@@ -103,7 +103,7 @@ Every decoder preserves `propertyOrder: "original"` because V1 permission preced
 
 Provider ID compatibility remains a config migration concern only. Existing V1 agent, command, provider, and provider-policy adapters continue using the migration helper's retired-ID mapping.
 
-For the shared top-level string model form, the normalizer maps the two retired built-in IDs to their canonical V2 IDs. A native `providers` entry under the exact old-looking ID suppresses that mapping for the document. Explicit object model selections remain native and unchanged.
+The shared top-level `model` field remains exact because its string and object forms are valid native V2 syntax and provider declarations may come from a different config layer. It is never reinterpreted based on unrelated legacy fields.
 
 This change does not add runtime provider aliases or modify provider policy evaluation, catalog state, model resolution, Sessions, plugins, Server behavior, or generation.
 

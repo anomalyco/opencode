@@ -370,9 +370,9 @@ V2 consolidated two legacy provider namespaces:
 | `azure-cognitive-services` | `azure` |
 | `google-vertex-anthropic` | `google-vertex` |
 
-OpenCode normalizes model references using these legacy IDs to the canonical ID in memory. If the same config document
-declares an exact native `providers` entry under the old-looking ID, that native declaration remains authoritative and the
-model reference is left unchanged.
+Migration of unambiguous V1 provider, agent, command, and provider-filter fields uses these canonical IDs. The shared
+top-level `model` field keeps its exact provider ID because the same syntax is valid in native V2 config; update that field
+to the canonical ID when migrating a legacy built-in provider.
 
 ### Models and variants
 

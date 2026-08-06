@@ -178,7 +178,7 @@ export function normalize(input: unknown): Result {
   }
   Object.entries(nativeAtomic).forEach(([key, schema]) => {
     if (!own(input, key)) return
-    const value = decodeEncoded(schema, key === "model" ? normalizeModel(input) : input[key], [key], diagnostics)
+    const value = decodeEncoded(schema, input[key], [key], diagnostics)
     if (value === undefined) return
     overlay(encoded, key, value, [key], diagnostics)
   })
@@ -187,16 +187,6 @@ export function normalize(input: unknown): Result {
   if (instructions.length || Array.isArray(input.instructions)) encoded.instructions = instructions
 
   return { type: "normalized", encoded, diagnostics }
-}
-
-function normalizeModel(input: Record<string, unknown>) {
-  if (typeof input.model !== "string") return input.model
-  const separator = input.model.indexOf("/")
-  if (separator < 1) return input.model
-  const providerID = input.model.slice(0, separator)
-  const migrated = ConfigMigrateV1.providerID(providerID)
-  if (migrated === providerID || (isRecord(input.providers) && own(input.providers, providerID))) return input.model
-  return `${migrated}${input.model.slice(separator)}`
 }
 
 function normalizeSkills(input: Record<string, unknown>, encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {
@@ -476,8 +466,8 @@ function migratePermissions(value: unknown, diagnostics: Diagnostic[]) {
       invalid(["permission", action], diagnostics)
       return []
     }
-    return Object.entries(raw).flatMap(([resource, effect]) => {
-      const decoded = decodeValue(ConfigPermissionV1.Action, effect, ["permission", action, resource], diagnostics)
+    return Object.entries(raw).flatMap(([resource, effect], index) => {
+      const decoded = decodeValue(ConfigPermissionV1.Action, effect, ["permission", action, String(index)], diagnostics)
       return decoded === undefined
         ? []
         : [{ action: ConfigMigrateV1.normalizeAction(action), resource, effect: decoded }]

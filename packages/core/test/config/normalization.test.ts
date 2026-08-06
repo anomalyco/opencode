@@ -70,19 +70,6 @@ describe("ConfigNormalize", () => {
     expect(result.agents?.reviewer?.system).toBe("Use V2")
   })
 
-  test("normalizes retired model provider IDs unless native providers claim the exact ID", () => {
-    expect(String(decoded({ model: "azure-cognitive-services/chat" }).model?.providerID)).toBe("azure")
-    expect(String(decoded({ model: "google-vertex-anthropic/claude" }).model?.providerID)).toBe("google-vertex")
-    expect(
-      String(
-        decoded({
-          model: "azure-cognitive-services/chat",
-          providers: { "azure-cognitive-services": { models: { chat: {} } } },
-        }).model?.providerID,
-      ),
-    ).toBe("azure-cognitive-services")
-  })
-
   test("canonicalizes transformed native values through decode then encode", () => {
     const result = normalized({ warming: { interval: "4 minutes", duration: "30 minutes" } })
     expect(result.encoded.warming).toEqual({ interval: "240000 millis", duration: "1800000 millis" })
@@ -214,6 +201,20 @@ describe("ConfigNormalize", () => {
       { action: "subagent", resource: "*", effect: "allow" },
       { action: "native", resource: "*", effect: "deny" },
     ])
+  })
+
+  test("redacts permission resource keys from invalid diagnostics", () => {
+    const result = normalized({
+      permission: { bash: { "curl -H Authorization:Bearer TOPSECRET *": "bogus" } },
+    })
+    expect(result.diagnostics).toEqual([
+      {
+        kind: "invalid",
+        path: ["permission", "bash", "0"],
+        message: "skipped malformed recognized value",
+      },
+    ])
+    expect(JSON.stringify(result.diagnostics)).not.toContain("TOPSECRET")
   })
 
   test("recovers list items for skills, plugins, instructions, and permissions", () => {
