@@ -157,7 +157,6 @@ export function Prompt(props: PromptProps) {
   const route = useRoute()
   const data = useData()
   const keymapCommands = Keymap.useCommands()
-  const queueShortcut = Keymap.useShortcut("prompt.queue")
   const currentLocation = useLocation()
   const config = useConfig().data
   const dialog = useDialog()
@@ -1608,13 +1607,6 @@ export function Prompt(props: PromptProps) {
                       {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                     </span>
                   </text>
-                  <Show when={queueShortcut()}>
-                    {(shortcut) => (
-                      <text fg={theme.text.default} wrapMode="none" flexShrink={0}>
-                        {shortcut()} <span style={{ fg: theme.text.subdued }}>queue</span>
-                      </text>
-                    )}
-                  </Show>
                 </box>
               </Match>
               <Match when={move.progress()}>

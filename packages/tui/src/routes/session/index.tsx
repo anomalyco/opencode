@@ -1906,9 +1906,6 @@ function UserMessage(props: { message: SessionMessageUser }) {
           flexShrink={0}
         >
           <text fg={theme.text.default}>{props.message.text}</text>
-          <Show when={delivery()}>
-            {(value) => <text fg={theme.text.subdued}>{value() === "queue" ? "queued" : "steering"}</text>}
-          </Show>
           <Show when={files().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={files()}>
