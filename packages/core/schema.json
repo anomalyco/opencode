@@ -1,15 +1,11 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "2d214a71-3b0a-48c1-a667-741952c4e188",
+  "id": "2415fa65-3def-4f9f-be85-eb35f4f94ddd",
   "prevIds": [
-    "f14a9b18-8207-487e-a3d3-227e629ba9ad"
+    "4d283c23-533f-4b87-9aa4-218f7fd36bca"
   ],
   "ddl": [
-    {
-      "name": "workspace",
-      "entityType": "tables"
-    },
     {
       "name": "account_state",
       "entityType": "tables"
@@ -75,84 +71,8 @@
       "entityType": "tables"
     },
     {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "type",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "''",
-      "generated": null,
-      "name": "name",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "branch",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "directory",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "extra",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "project_id",
-      "entityType": "columns",
-      "table": "workspace"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_used",
-      "entityType": "columns",
-      "table": "workspace"
+      "name": "workspace",
+      "entityType": "tables"
     },
     {
       "type": "integer",
@@ -1385,18 +1305,63 @@
       "table": "session_v2"
     },
     {
-      "columns": [
-        "project_id"
-      ],
-      "tableTo": "project",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "nameExplicit": false,
-      "name": "fk_workspace_project_id_project_id_fk",
-      "entityType": "fks",
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "workspace"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider",
+      "entityType": "columns",
+      "table": "workspace"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "binding",
+      "entityType": "columns",
+      "table": "workspace"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "root",
+      "entityType": "columns",
+      "table": "workspace"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "workspace"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
       "table": "workspace"
     },
     {
@@ -1569,15 +1534,6 @@
         "id"
       ],
       "nameExplicit": false,
-      "name": "workspace_pk",
-      "table": "workspace",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
       "name": "account_state_pk",
       "table": "account_state",
       "entityType": "pks"
@@ -1688,6 +1644,15 @@
       "nameExplicit": false,
       "name": "session_v2_pk",
       "table": "session_v2",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "workspace_pk",
+      "table": "workspace",
       "entityType": "pks"
     },
     {

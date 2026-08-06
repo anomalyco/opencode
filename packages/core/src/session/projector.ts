@@ -7,16 +7,16 @@ import { Bus } from "../bus"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Model } from "../model"
 import { SessionEvent } from "./event"
+
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionPending } from "./pending"
-import { Workspace } from "../workspace"
 import { InstructionState } from "./instruction-state"
 import { SessionPendingTable, SessionMessageTable, SessionTable } from "./sql"
 import { Slug } from "../util/slug"
 import { Money } from "@opencode-ai/schema/money"
 import type { SessionSchema } from "./schema"
-import { WorkspaceTable } from "../control-plane/workspace.sql"
+import { Workspace } from "../workspace"
 
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
@@ -376,13 +376,6 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (!stored) return yield* Effect.die(new SessionAlreadyProjected())
-        if (!event.data.location.workspaceID) return
-        yield* db
-          .update(WorkspaceTable)
-          .set({ time_used: Date.now() })
-          .where(eq(WorkspaceTable.id, event.data.location.workspaceID))
-          .run()
-          .pipe(Effect.orDie)
       }),
     )
     yield* bus.project(SessionEvent.Moved, (event) =>
@@ -393,7 +386,7 @@ const layer = Layer.effectDiscard(
             directory: event.data.location.directory,
             path: event.data.subpath,
             ...(event.data.projectID ? { project_id: event.data.projectID } : {}),
-            workspace_id: event.data.location.workspaceID ? Workspace.ID.make(event.data.location.workspaceID) : null,
+            workspace_id: null,
             time_updated: DateTime.toEpochMillis(event.created),
           })
           .where(eq(SessionTable.id, event.data.sessionID))

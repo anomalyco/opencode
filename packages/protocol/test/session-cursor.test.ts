@@ -6,7 +6,6 @@ import { Session } from "@opencode-ai/schema/session"
 describe("SessionsCursor", () => {
   test("round trips without Node globals", async () => {
     const input = {
-      workspace: undefined,
       search: "protocol",
       order: "desc" as const,
       anchor: { id: Session.ID.make("ses_test"), time: 1, direction: "next" as const },

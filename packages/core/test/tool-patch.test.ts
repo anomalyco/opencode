@@ -13,6 +13,8 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Tool } from "@opencode-ai/core/tool"
 import { PatchTool } from "@opencode-ai/core/tool/plugin/patch"
+import { FileMutation } from "@opencode-ai/core/file-mutation"
+import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -22,7 +24,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
-  deps: [Tool.node, Formatter.node, FSUtil.node, Location.node, Permission.node],
+  deps: [Tool.node, LocationMutation.node, FileMutation.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_patch_tool_test")
@@ -604,6 +606,24 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("preserves a BOM when moving a file", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const source = path.join(directory, "source.txt")
+        const moved = path.join(directory, "moved.txt")
+        yield* Effect.promise(() => fs.writeFile(source, "\uFEFFbefore\n"))
+        yield* executeTool(
+          registry,
+          call(
+            "*** Begin Patch\n*** Update File: source.txt\n*** Move to: moved.txt\n@@\n-before\n+after\n*** End Patch",
+          ),
+        )
+        expect(yield* exists(source)).toBe(false)
+        expect(yield* Effect.promise(() => fs.readFile(moved, "utf8"))).toBe("\uFEFFafter\n")
+      }),
+    ),
+  )
+
   it.live("rejects an update with missing context", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
@@ -828,7 +848,9 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("treats a sibling path inside the project worktree as internal", () =>
+  // Paths outside the active Location require external approval — the same
+  // boundary the edit and write tools derive from LocationMutation.
+  it.live("requires external approval for sibling paths outside the location", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -847,7 +869,7 @@ describe("PatchTool", () => {
                       call("*** Begin Patch\n*** Update File: ../sibling.txt\n@@\n-before\n+after\n*** End Patch"),
                     ),
                   ).toMatchObject({ status: "completed" })
-                  expect(assertions.map((input) => input.action)).toEqual(["edit"])
+                  expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
                   expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
                 }),
               tmp.path,

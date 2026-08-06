@@ -1021,13 +1021,12 @@ describe("OpenAPI.fromSpec", () => {
 
     await Effect.runPromise(
       location
-        .execute({ location: { directory: "/tmp", workspace: "workspace-1" } })
+        .execute({ location: { directory: "/tmp" } })
         .pipe(Effect.provide(client.layer)),
     )
 
     const url = new URL(client.requests[0]!.url)
     expect(url.searchParams.get("location[directory]")).toBe("/tmp")
-    expect(url.searchParams.get("location[workspace]")).toBe("workspace-1")
   })
 
   test("serializes supported simple and form parameter shapes", async () => {

@@ -5,19 +5,6 @@ export default {
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`
-        CREATE TABLE \`workspace\` (
-          \`id\` text PRIMARY KEY,
-          \`type\` text NOT NULL,
-          \`name\` text DEFAULT '' NOT NULL,
-          \`branch\` text,
-          \`directory\` text,
-          \`extra\` text,
-          \`project_id\` text NOT NULL,
-          \`time_used\` integer NOT NULL,
-          CONSTRAINT \`fk_workspace_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
         CREATE TABLE \`account_state\` (
           \`id\` integer PRIMARY KEY,
           \`active_account_id\` text,
@@ -214,6 +201,16 @@ export default {
           \`time_archived\` integer,
           \`time_suspended\` integer,
           CONSTRAINT \`fk_session_v2_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`workspace\` (
+          \`id\` text PRIMARY KEY,
+          \`provider\` text NOT NULL,
+          \`binding\` text NOT NULL,
+          \`root\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
         );
       `)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)

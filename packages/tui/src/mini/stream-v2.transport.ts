@@ -421,7 +421,6 @@ async function resolveSelectedModel(
         ? {
             location: {
               directory: input.location.directory,
-              workspace: input.location.workspaceID,
             },
           }
         : undefined,
@@ -819,7 +818,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       input.location
         ? client.form.request.list(
             {
-              location: { directory: input.location.directory, workspace: input.location.workspaceID },
+              location: { directory: input.location.directory },
             },
             options,
           )

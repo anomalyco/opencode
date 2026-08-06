@@ -1,6 +1,5 @@
 export * as PtyTicket from "./ticket"
 
-import { Workspace } from "../workspace"
 import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
 import { PtyID } from "./schema"
 import { Cache, Context, Duration, Effect, Layer } from "effect"
@@ -14,7 +13,6 @@ export const ConnectToken = PtyTicket.ConnectToken
 export type Scope = {
   readonly ptyID: PtyID
   readonly directory?: string
-  readonly workspaceID?: Workspace.ID
 }
 
 export interface Interface {
@@ -25,9 +23,7 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/PtyTicket") {}
 
 function matches(record: Scope, input: Scope) {
-  return (
-    record.ptyID === input.ptyID && record.directory === input.directory && record.workspaceID === input.workspaceID
-  )
+  return record.ptyID === input.ptyID && record.directory === input.directory
 }
 
 // Tickets are inserted via Cache.set and removed atomically via invalidateWhen. The lookup is

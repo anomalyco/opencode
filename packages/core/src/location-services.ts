@@ -11,6 +11,7 @@ import { FileMutation } from "./file-mutation"
 import { Formatter } from "./formatter"
 import { FileSystem } from "./filesystem"
 import { FileSystemSearch } from "./filesystem/search"
+import { Ripgrep } from "./ripgrep"
 import { Generate } from "./generate"
 import { Form } from "./form"
 import { Image } from "./image"
@@ -47,6 +48,8 @@ import { McpTool } from "./tool/mcp"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { Tool } from "./tool"
 import { Vcs } from "./vcs"
+import { Workspace } from "@opencode-ai/schema/workspace"
+import { WorkspaceEnvironment } from "./workspace/environment"
 
 export { LocationServiceMap } from "./location-service-map"
 
@@ -104,6 +107,27 @@ export const locationServices = LayerNode.group<typeof locationServiceNodes>(loc
 export type LocationServices = LayerNode.Output<typeof locationServices>
 export type LocationError = LayerNode.Error<typeof locationServices>
 
+/**
+ * Hosted graphs state their Location (no host discovery), read only global
+ * config sources, and bind the workspace environment; local graphs are
+ * byte-identical to before. Exported so tests can verify that every
+ * Location-path-consuming service is environment-backed in hosted graphs.
+ */
+export function hostedReplacements(ref: Location.Ref, workspaceID: Workspace.ID): LayerNode.Replacements {
+  return [
+    [Location.node, Location.hostedBoundNode(ref, workspaceID)],
+    [Config.node, Config.configured({ project: false })],
+    [InstructionDiscovery.node, InstructionDiscovery.configured({ project: false })],
+    [WorkspaceEnvironment.node, WorkspaceEnvironment.hostedNode(workspaceID)],
+    [Ripgrep.node, Ripgrep.hostedNode],
+    [FileSystem.node, FileSystem.hostedNode],
+    [LocationMutation.node, LocationMutation.hostedNode],
+    [FileMutation.node, FileMutation.hostedNode],
+    [ReadToolFileSystem.node, ReadToolFileSystem.hostedNode],
+    [Shell.node, Shell.hostedNode],
+  ]
+}
+
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
 ): Layer.Layer<LocationServiceMap.Service> {
@@ -118,7 +142,10 @@ export function buildLocationServiceMap(
       LayerMap.make(
         (ref: Location.Ref) => {
           const startedAt = performance.now()
-          const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
+          const workspaceID = ref.workspaceID
+          const allReplacements = replacements.concat(
+            workspaceID ? hostedReplacements(ref, workspaceID) : [[Location.node, Location.boundNode(ref)]],
+          )
           // Apply replacements during hoist, not afterward: replacements can
           // introduce new tagged dependencies (Location.boundNode depends on
           // Project), and the hoist walk is the only pass that can still slice

@@ -155,6 +155,7 @@ const mutation = Layer.succeed(
       const externalResource = path.join(directory, "*").replaceAll("\\", "/")
       return Effect.succeed({
         canonical,
+        absolute: canonical,
         resource,
         externalDirectory: external
           ? {

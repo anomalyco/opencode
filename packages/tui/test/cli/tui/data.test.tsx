@@ -1916,7 +1916,7 @@ test("keeps shell state scoped to location", async () => {
     app.mockInput.pressKey("d", { ctrl: true })
     await wait(() => removed !== undefined)
     expect(removed?.searchParams.get("location[directory]")).toBe(other)
-    expect(removed?.searchParams.get("location[workspace]")).toBe(workspace)
+    expect(removed?.searchParams.get("location[workspace]")).toBeNull()
 
     events.emit({
       id: "evt_shell_created",

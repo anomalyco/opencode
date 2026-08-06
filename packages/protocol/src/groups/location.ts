@@ -6,7 +6,6 @@ export const LocationQuery = Schema.Struct({
   location: Schema.optional(
     Schema.Struct({
       directory: Schema.optional(Schema.String),
-      workspace: Schema.optional(Schema.String),
     }),
   ),
 }).annotate({ identifier: "LocationQuery" })

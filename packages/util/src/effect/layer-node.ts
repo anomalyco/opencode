@@ -1,6 +1,6 @@
 import { Brand, Context, Layer } from "effect"
 
-type AnyNode = Node<unknown, unknown, any>
+export type AnyNode = Node<unknown, unknown, any>
 type RuntimeLayer = Layer.Layer<never, unknown, unknown>
 type NodeList<Item extends AnyNode = AnyNode> = readonly [] | readonly [Item, ...Item[]]
 export type Output<Item> = [Item] extends [never] ? never : Item extends Node<infer A, unknown, any> ? A : never
@@ -155,7 +155,7 @@ function nodeMakeIdentity(node: AnyNode): NodeIdentity {
   return { name: node.name }
 }
 
-function isNode(input: Layer.Any | AnyNode): input is AnyNode {
+export function isNode(input: Layer.Any | AnyNode): input is AnyNode {
   return "kind" in input && "dependencies" in input
 }
 
@@ -168,7 +168,7 @@ type VisitContext<Result> = {
   readonly visit: (node: AnyNode) => Result
 }
 
-function walk<Result>(
+export function walk<Result>(
   root: AnyNode,
   visit: Visit<Result>,
   options: {

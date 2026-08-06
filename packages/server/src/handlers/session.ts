@@ -39,7 +39,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               : ctx.query
           const page = yield* session.list({
             ...query,
-            workspaceID: query.workspace,
             limit: ctx.query.limit ?? DefaultSessionsLimit,
           })
           const sessions = page.data
@@ -84,7 +83,15 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 model: ctx.payload.model,
                 location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
               })
-              .pipe(Effect.orDie),
+              .pipe(
+                Effect.catchTags({
+                  "Workspace.NotFoundError": (error) =>
+                    Effect.fail(new InvalidRequestError({ message: `Workspace not found: ${error.id}` })),
+                  "Session.WorkspaceDirectoryError": (error) =>
+                    Effect.fail(new InvalidRequestError({ message: error.message })),
+                }),
+                Effect.orDie,
+              ),
           }
         }),
       )
@@ -265,7 +272,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             .move({
               sessionID: ctx.params.sessionID,
               directory: ctx.payload.directory,
-              workspaceID: ctx.payload.workspaceID,
             })
             .pipe(
               Effect.catchTag("Session.NotFoundError", (error) =>
@@ -455,6 +461,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     message: `Session not found: ${error.sessionID}`,
                   }),
                 ),
+              ),
+              Effect.catchTag("Shell.InvalidCwdError", (error) =>
+                Effect.fail(new InvalidRequestError({ message: error.message })),
               ),
             )
           return HttpApiSchema.NoContent.make()

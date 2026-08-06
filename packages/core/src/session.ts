@@ -5,7 +5,6 @@ import { Effect, Layer, Schema, Context, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, ne, or, type SQL } from "drizzle-orm"
 import { Project } from "./project"
-import { Workspace } from "./workspace"
 import { Model } from "./model"
 import { Location } from "./location"
 import { SessionMessage } from "./session/message"
@@ -27,7 +26,8 @@ import { fromRow } from "./session/info"
 import { SessionRunner } from "./session/runner/index"
 import { SessionStore } from "./session/store"
 import { SessionExecution } from "./session/execution"
-import { ForkEmptyError, MessageDecodeError, NotFoundError } from "./session/error"
+import { ForkEmptyError, MessageDecodeError, NotFoundError, WorkspaceDirectoryError } from "./session/error"
+import { Workspace } from "./workspace"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LocationServiceMap } from "./location-service-map"
 import { SessionEvent } from "./session/event"
@@ -58,12 +58,9 @@ import { fileURLToPath } from "url"
 
 // - by project
 //   - by subpath
-// - by workspace (home is special)
-
 export { ListAnchor }
 
 const ListInputBase = {
-  workspaceID: Workspace.ID.pipe(Schema.optional),
   search: Schema.String.pipe(Schema.optional),
   limit: PositiveInt.pipe(Schema.optional),
   order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
@@ -153,7 +150,9 @@ export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<{
     readonly data: SessionSchema.Info[]
   }>
-  readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  readonly create: (
+    input: CreateInput,
+  ) => Effect.Effect<SessionSchema.Info, NotFoundError | Workspace.NotFoundError | WorkspaceDirectoryError>
   readonly fork: (
     input: ForkInput,
   ) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError | ForkEmptyError>
@@ -199,7 +198,6 @@ export interface Interface {
   readonly move: (input: {
     sessionID: SessionSchema.ID
     directory: AbsolutePath
-    workspaceID?: Location.Ref["workspaceID"]
   }) => Effect.Effect<void, NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError>
   readonly prompt: (input: {
     id?: SessionMessage.ID
@@ -235,7 +233,7 @@ export interface Interface {
     id?: Event.ID
     sessionID: SessionSchema.ID
     command: string
-  }) => Effect.Effect<void, NotFoundError>
+  }) => Effect.Effect<void, NotFoundError | Shell.InvalidCwdError>
   readonly skill: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -280,6 +278,7 @@ const layer = Layer.effect(
     const db = database.db
     const bus = yield* Bus.Service
     const projects = yield* Project.Service
+    const workspaces = yield* Workspace.Service
     const global = yield* Global.Service
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
@@ -291,6 +290,17 @@ const layer = Layer.effect(
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
+    // Host Project discovery must not run against provider directories; hosted
+    // Sessions state the global Project until rediscovery inside the Workspace.
+    const hostedProject = Effect.fn("Session.hostedProject")(function* (
+      workspaceID: Workspace.ID,
+      directory: AbsolutePath,
+    ) {
+      const workspace = yield* workspaces.get(workspaceID)
+      if (!FSUtil.containsPosix(workspace.root, directory))
+        return yield* new WorkspaceDirectoryError({ workspaceID, directory, root: workspace.root })
+      return Project.hostedGlobal(workspace.root)
+    })
     const persistProject = (project: Project.Resolved) => {
       const vcs = project.vcs?.type
       return db
@@ -328,7 +338,9 @@ const layer = Layer.effect(
         const location = parent?.location ?? input.location
         if (location === undefined)
           return yield* Effect.die(new Error("Session.create requires either location or an existing parentID"))
-        const project = yield* projects.resolve(location.directory)
+        const project = location.workspaceID
+          ? yield* hostedProject(location.workspaceID, location.directory)
+          : yield* projects.resolve(location.directory)
         yield* persistProject(project)
         const projected = yield* bus
           .publish(
@@ -340,7 +352,9 @@ const layer = Layer.effect(
               projectID: project.id,
               parentID: input.parentID,
               location,
-              subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
+              subpath: RelativePath.make(
+                FSUtil.slash(Location.paths(location).relative(project.directory, location.directory)),
+              ),
               title: input.title,
               agent: input.agent,
               model: input.model
@@ -427,7 +441,6 @@ const layer = Layer.effect(
         const sortColumn = SessionTable.time_updated
         const conditions: SQL[] = []
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
-        if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
@@ -701,10 +714,10 @@ const layer = Layer.effect(
         const expanded =
           value === "~" ? global.home : value.startsWith("~/") ? path.join(global.home, value.slice(2)) : value
         const directory = AbsolutePath.make(path.resolve(current.location.directory, expanded))
+        if (current.location.directory === directory) return
         const info = yield* fs.stat(directory).pipe(Effect.catch(() => Effect.succeed(undefined)))
         if (!info) return yield* new DestinationNotFoundError({ directory })
         if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
-        if (current.location.directory === directory && current.location.workspaceID === input.workspaceID) return
         const project = yield* projects.resolve(directory)
         yield* persistProject(project)
         if ((yield* execution.active).has(input.sessionID)) {
@@ -715,9 +728,9 @@ const layer = Layer.effect(
           SessionEvent.Moved,
           {
             sessionID: input.sessionID,
-            location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
+            location: Location.Ref.make({ directory }),
             projectID: project.id,
-            subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
+            subpath: RelativePath.make(FSUtil.slash(path.relative(project.directory, directory))),
           },
           { location: current.location },
         )
@@ -1013,6 +1026,7 @@ export const node = makeGlobalNode({
     Database.node,
     Bus.node,
     Project.node,
+    Workspace.node,
     SessionExecution.node,
     SessionStore.node,
     LocationServiceMap.node,

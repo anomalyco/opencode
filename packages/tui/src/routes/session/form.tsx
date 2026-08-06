@@ -37,7 +37,6 @@ function requestOptions(form: FormWithLocation) {
   return {
     headers: {
       "x-opencode-directory": encodeURIComponent(form.location.directory),
-      ...(form.location.workspaceID ? { "x-opencode-workspace": form.location.workspaceID } : {}),
     },
   }
 }

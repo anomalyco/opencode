@@ -4,7 +4,6 @@ import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
-import { Workspace } from "@opencode-ai/core/workspace"
 import { eq } from "drizzle-orm"
 import { Effect, Layer, Schema } from "effect"
 import { HttpRouter } from "effect/unstable/http"
@@ -40,7 +39,7 @@ export const sessionLocationLayer = Layer.effect(
           ),
         )
         const row = yield* db
-          .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
+          .select({ directory: SessionTable.directory, workspace_id: SessionTable.workspace_id })
           .from(SessionTable)
           .where(eq(SessionTable.id, sessionID))
           .get()
@@ -54,9 +53,11 @@ export const sessionLocationLayer = Layer.effect(
         return yield* effect.pipe(
           Effect.provide(
             locations.get(
+              // Hosted-ness is a server-side fact from the session row; clients
+              // never assert workspace identity per-request.
               Location.Ref.make({
                 directory: AbsolutePath.make(row.directory),
-                workspaceID: row.workspaceID ? Workspace.ID.make(row.workspaceID) : undefined,
+                workspaceID: row.workspace_id ?? undefined,
               }),
             ),
           ),

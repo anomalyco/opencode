@@ -6,11 +6,8 @@ import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Schema } from "effect"
 import { PlatformError } from "effect/PlatformError"
-import path from "path"
-import { Bom } from "@opencode-ai/util/bom"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Formatter } from "../../formatter"
-import { Location } from "../../location"
+import { FileMutation } from "../../file-mutation"
+import { LocationMutation } from "../../location-mutation"
 import { Patch } from "@opencode-ai/util/patch"
 import { Permission } from "../../permission"
 import DESCRIPTION from "../patch.txt"
@@ -57,286 +54,232 @@ type Prepared =
       readonly moveTarget?: Target
     })
 
-interface Target {
-  readonly canonical: string
-  readonly resource: string
-  readonly externalDirectory?: {
-    readonly directory: string
-    readonly resource: string
-  }
-}
+type Target = LocationMutation.Target
 
 export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: PluginContext) {
-    const fs = yield* FSUtil.Service
-    const formatter = yield* Formatter.Service
-    const location = yield* Location.Service
+    const mutation = yield* LocationMutation.Service
+    const files = yield* FileMutation.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
       .transform((draft) =>
-        draft.add(
-          ({
-              name,
-              options: { codemode: false, permission: "edit" },
-              description: DESCRIPTION,
-              input: Input,
-              output: Output,
-              execute: (input, context) => {
-                const applied: Array<typeof Applied.Type> = []
-                const fail = (operation: string, error: unknown) => {
-                  const completed = applied.map((item) => item.resource).join(", ")
-                  return new ToolFailure({
-                    message: `${operation}: ${errorMessage(error)}${completed ? `. Completed before failure: ${completed}` : ""}`,
-                  })
-                }
-                return Effect.gen(function* () {
-                  const source = {
-                    type: "tool" as const,
-                    messageID: context.messageID,
-                    id: context.id,
-                  }
-                  if (!input.patchText) return yield* new ToolFailure({ message: "patchText is required" })
-                  const hunks = yield* Effect.fromResult(Patch.parse(input.patchText)).pipe(
+        draft.add({
+          name,
+          options: { codemode: false, permission: "edit" },
+          description: DESCRIPTION,
+          input: Input,
+          output: Output,
+          execute: (input, context) => {
+            const applied: Array<typeof Applied.Type> = []
+            const fail = (operation: string, error: unknown) => {
+              const completed = applied.map((item) => item.resource).join(", ")
+              return new ToolFailure({
+                message: `${operation}: ${errorMessage(error)}${completed ? `. Completed before failure: ${completed}` : ""}`,
+              })
+            }
+            return Effect.gen(function* () {
+              const source = {
+                type: "tool" as const,
+                messageID: context.messageID,
+                id: context.id,
+              }
+              if (!input.patchText) return yield* new ToolFailure({ message: "patchText is required" })
+              const hunks = yield* Effect.fromResult(Patch.parse(input.patchText)).pipe(
+                Effect.mapError((error) => new ToolFailure({ message: `patch verification failed: ${error.message}` })),
+              )
+              if (hunks.length === 0) {
+                return yield* new ToolFailure({ message: "patch rejected: empty patch" })
+              }
+              const prepared: Prepared[] = []
+              const targets: Target[] = []
+              const updates = new Map<string, string>()
+              const resolveHunkTarget = (value: string) =>
+                mutation
+                  .resolve({ path: value, kind: "file" })
+                  .pipe(
                     Effect.mapError(
-                      (error) => new ToolFailure({ message: `patch verification failed: ${error.message}` }),
+                      (error) => new ToolFailure({ message: `patch verification failed: ${errorMessage(error)}` }),
                     ),
                   )
-                  if (hunks.length === 0) {
-                    return yield* new ToolFailure({ message: "patch rejected: empty patch" })
+              for (const hunk of hunks) {
+                yield* Effect.gen(function* () {
+                  const target = yield* resolveHunkTarget(hunk.path)
+                  targets.push(target)
+                  if (target.externalDirectory) {
+                    yield* permission.assert({
+                      ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
+                      sessionID: context.sessionID,
+                      agent: context.agent,
+                      source,
+                    })
                   }
-                  const prepared: Prepared[] = []
-                  const targets: Target[] = []
-                  const updates = new Map<string, string>()
-                  for (const hunk of hunks) {
-                    yield* Effect.gen(function* () {
-                      const target = resolveTarget(location, hunk.path)
-                      targets.push(target)
-                      if (target.externalDirectory) {
-                        yield* permission.assert({
-                          action: "external_directory",
-                          resources: [target.externalDirectory.resource],
-                          save: [target.externalDirectory.resource],
-                          metadata: {
-                            filepath: target.canonical,
-                            parentDir: target.externalDirectory.directory,
-                          },
-                          sessionID: context.sessionID,
-                          agent: context.agent,
-                          source,
-                        })
-                      }
-                      if (hunk.type === "add") {
-                        prepared.push({
-                          ...hunk,
-                          target,
-                          before: "",
-                          after: Bom.split(
-                            hunk.contents.endsWith("\n") || hunk.contents === ""
-                              ? hunk.contents
-                              : `${hunk.contents}\n`,
-                          ).text,
-                        })
-                        return
-                      }
-                      if (hunk.type === "delete") {
-                        const content = yield* Bom.readFile(fs, target.canonical).pipe(
-                          Effect.mapError(
-                            (error) =>
-                              new ToolFailure({
-                                message: `patch verification failed: Failed to delete ${target.resource}: ${errorMessage(error)}`,
-                              }),
-                          ),
-                        )
-                        prepared.push({ ...hunk, target, before: content.text, after: "" })
-                        return
-                      }
-                      const previous = updates.get(target.canonical)
-                      const original =
-                        previous ??
-                        (yield* Effect.gen(function* () {
-                          const stats = yield* fs.stat(target.canonical).pipe(
-                            Effect.mapError(
-                              (error) =>
-                                new ToolFailure({
-                                  message: `patch verification failed: Failed to read file to update ${target.canonical}: ${errorMessage(error)}`,
-                                }),
-                            ),
-                          )
-                          if (stats.type === "Directory") {
-                            return yield* new ToolFailure({
-                              message: `patch verification failed: Failed to read file to update ${target.canonical}: path is a directory`,
-                            })
-                          }
-                          const content = yield* Bom.readFile(fs, target.canonical).pipe(
-                            Effect.mapError(
-                              (error) =>
-                                new ToolFailure({
-                                  message: `patch verification failed: Failed to read file to update ${target.canonical}: ${errorMessage(error)}`,
-                                }),
-                            ),
-                          )
-                          return Bom.join(content.text, content.bom)
-                        }))
-                      const before = Bom.split(original).text
-                      const update = yield* Effect.try({
-                        try: () => Patch.derive(hunk.path, hunk.chunks, original),
-                        catch: (error) =>
-                          new ToolFailure({ message: `patch verification failed: ${errorMessage(error)}` }),
-                      })
-                      const moveTarget = hunk.movePath ? resolveTarget(location, hunk.movePath) : undefined
-                      if (moveTarget) targets.push(moveTarget)
-                      if (moveTarget?.externalDirectory) {
-                        yield* permission.assert({
-                          action: "external_directory",
-                          resources: [moveTarget.externalDirectory.resource],
-                          save: [moveTarget.externalDirectory.resource],
-                          metadata: {
-                            filepath: moveTarget.canonical,
-                            parentDir: moveTarget.externalDirectory.directory,
-                          },
-                          sessionID: context.sessionID,
-                          agent: context.agent,
-                          source,
-                        })
-                      }
-                      prepared.push({
-                        ...hunk,
-                        target,
-                        content: Patch.joinBom(update.content, update.bom),
-                        before,
-                        after: update.content,
-                        moveTarget,
-                      })
-                      if (!moveTarget) updates.set(target.canonical, Patch.joinBom(update.content, update.bom))
-                    }).pipe(
-                      Effect.mapError((error) =>
-                        error instanceof ToolFailure
-                          ? error
-                          : new ToolFailure({ message: `Unable to prepare patch at ${hunk.path}`, error }),
+                  if (hunk.type === "add") {
+                    const contents =
+                      hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
+                    prepared.push({
+                      ...hunk,
+                      contents,
+                      target,
+                      before: "",
+                      after: FileMutation.normalizeText(contents),
+                    })
+                    return
+                  }
+                  if (hunk.type === "delete") {
+                    const content = yield* files.read(target).pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ToolFailure({
+                            message: `patch verification failed: Failed to delete ${target.resource}: ${errorMessage(error)}`,
+                          }),
                       ),
                     )
+                    prepared.push({ ...hunk, target, before: content, after: "" })
+                    return
                   }
-
-                  const patchFiles = prepared.map((change) => patchFile(change))
-                  yield* permission.assert({
-                    action: "edit",
-                    resources: [...new Set(targets.map((target) => target.resource))],
-                    save: ["*"],
-                    metadata: {
-                      filepath: targets.map((target) => target.resource).join(", "),
-                      diff: patchFiles.map((file) => `${file.patch}\n`).join(""),
-                      files: patchFiles,
-                    },
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source,
+                  const previous = updates.get(target.canonical)
+                  const original =
+                    previous ??
+                    (yield* files.read(target).pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ToolFailure({
+                            message: `patch verification failed: Failed to read file to update ${target.canonical}: ${errorMessage(error)}`,
+                          }),
+                      ),
+                    ))
+                  const update = yield* Effect.try({
+                    try: () => Patch.derive(hunk.path, hunk.chunks, original),
+                    catch: (error) => new ToolFailure({ message: `patch verification failed: ${errorMessage(error)}` }),
                   })
-
-                  yield* Effect.forEach(
-                    prepared,
-                    (change) =>
-                      Effect.gen(function* () {
-                        if (change.type === "add") {
-                          yield* fs
-                            .writeWithDirs(
-                              change.target.canonical,
-                              change.contents.endsWith("\n") || change.contents === ""
-                                ? change.contents
-                                : `${change.contents}\n`,
-                            )
-                            .pipe(
-                              Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)),
-                            )
-                          applied.push({
-                            type: change.type,
-                            resource: change.target.resource,
-                            target: change.target.canonical,
-                          })
-                          return
-                        }
-                        if (change.type === "delete") {
-                          yield* fs
-                            .remove(change.target.canonical)
-                            .pipe(
-                              Effect.mapError((error) => fail(`Failed to delete ${change.target.resource}`, error)),
-                            )
-                          applied.push({
-                            type: change.type,
-                            resource: change.target.resource,
-                            target: change.target.canonical,
-                          })
-                          return
-                        }
-                        if (change.moveTarget) {
-                          const moveTarget = change.moveTarget
-                          yield* fs
-                            .writeWithDirs(moveTarget.canonical, change.content)
-                            .pipe(Effect.mapError((error) => fail(`Failed to write ${moveTarget.resource}`, error)))
-                          yield* fs.remove(change.target.canonical).pipe(
-                            Effect.mapError((error) =>
-                              fail(`Wrote ${moveTarget.resource} but failed to remove ${change.target.resource}`, error),
-                            ),
-                          )
-                          applied.push({
-                            type: change.type,
-                            resource: change.moveTarget.resource,
-                            target: change.moveTarget.canonical,
-                          })
-                          return
-                        }
-                        yield* fs
-                          .writeWithDirs(change.target.canonical, change.content)
-                          .pipe(Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)))
-                        applied.push({
-                          type: change.type,
-                          resource: change.target.resource,
-                          target: change.target.canonical,
-                        })
-                      }),
-                    { discard: true },
-                  )
-                  const formatted = new Map<string, string>()
-                  yield* Effect.forEach(
-                    [...new Set(applied.filter((item) => item.type !== "delete").map((item) => item.target))],
-                    (target) =>
-                      Effect.gen(function* () {
-                        const current = yield* Bom.readFile(fs, target).pipe(
-                          Effect.mapError((error) => fail(`Failed to read ${target}`, error)),
-                        )
-                        formatted.set(
-                          target,
-                          (yield* formatter.file(target))
-                            ? yield* Bom.syncFile(fs, target, current.bom).pipe(
-                                Effect.mapError((error) => fail(`Failed to sync ${target}`, error)),
-                              )
-                            : current.text,
-                        )
-                      }),
-                    { discard: true },
-                  )
-                  const files = yield* Effect.forEach(prepared, (change) => {
-                    if (change.type === "delete") return Effect.succeed(patchFile(change))
-                    const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
-                    return Effect.succeed(patchFile(change, formatted.get(target.canonical)))
+                  const content = FileMutation.normalizeText(update.content)
+                  const moveTarget = hunk.movePath ? yield* resolveHunkTarget(hunk.movePath) : undefined
+                  if (moveTarget) targets.push(moveTarget)
+                  if (moveTarget?.externalDirectory) {
+                    yield* permission.assert({
+                      ...LocationMutation.externalDirectoryPermission(moveTarget.externalDirectory),
+                      sessionID: context.sessionID,
+                      agent: context.agent,
+                      source,
+                    })
+                  }
+                  prepared.push({
+                    ...hunk,
+                    target,
+                    content: Patch.joinBom(update.content, update.bom),
+                    before: original,
+                    after: content,
+                    moveTarget,
                   })
-                  return { applied, files }
+                  if (!moveTarget) updates.set(target.canonical, content)
                 }).pipe(
-                  Effect.map((output) => ({
-                    output,
-                    content: toModelOutput(output),
-                    metadata: { files: output.files },
-                  })),
                   Effect.mapError((error) =>
                     error instanceof ToolFailure
                       ? error
-                      : new ToolFailure({ message: "Unable to apply patch", error }),
+                      : new ToolFailure({ message: `Unable to prepare patch at ${hunk.path}`, error }),
                   ),
                 )
-              },
-            }),
-        ),
+              }
+
+              const patchFiles = prepared.map((change) => patchFile(change))
+              yield* permission.assert({
+                action: "edit",
+                resources: [...new Set(targets.map((target) => target.resource))],
+                save: ["*"],
+                metadata: {
+                  filepath: targets.map((target) => target.resource).join(", "),
+                  diff: patchFiles.map((file) => `${file.patch}\n`).join(""),
+                  files: patchFiles,
+                },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source,
+              })
+
+              // FileMutation.write formats where the files live and reports
+              // the final text, so the diff output reflects disk.
+              const formatted = new Map<string, string>()
+              yield* Effect.forEach(
+                prepared,
+                (change) =>
+                  Effect.gen(function* () {
+                    if (change.type === "add") {
+                      const result = yield* files
+                        .write({ target: change.target, content: change.contents })
+                        .pipe(Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)))
+                      formatted.set(change.target.canonical, result.content)
+                      applied.push({
+                        type: change.type,
+                        resource: change.target.resource,
+                        target: change.target.canonical,
+                      })
+                      return
+                    }
+                    if (change.type === "delete") {
+                      yield* files
+                        .remove(change.target)
+                        .pipe(Effect.mapError((error) => fail(`Failed to delete ${change.target.resource}`, error)))
+                      applied.push({
+                        type: change.type,
+                        resource: change.target.resource,
+                        target: change.target.canonical,
+                      })
+                      return
+                    }
+                    if (change.moveTarget) {
+                      const moveTarget = change.moveTarget
+                      const result = yield* files
+                        .move({ from: change.target, to: moveTarget, content: change.content })
+                        .pipe(
+                          Effect.mapError((error) =>
+                            error instanceof FileMutation.MoveIncompleteError
+                              ? fail(
+                                  `Wrote ${moveTarget.resource} but failed to remove ${change.target.resource}`,
+                                  error.cause,
+                                )
+                              : fail(`Failed to write ${moveTarget.resource}`, error),
+                          ),
+                        )
+                      formatted.set(moveTarget.canonical, result.content)
+                      applied.push({
+                        type: change.type,
+                        resource: change.moveTarget.resource,
+                        target: change.moveTarget.canonical,
+                      })
+                      return
+                    }
+                    const result = yield* files
+                      .write({ target: change.target, content: change.content })
+                      .pipe(Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)))
+                    formatted.set(change.target.canonical, result.content)
+                    applied.push({
+                      type: change.type,
+                      resource: change.target.resource,
+                      target: change.target.canonical,
+                    })
+                  }),
+                { discard: true },
+              )
+              const fileDiffs = yield* Effect.forEach(prepared, (change) => {
+                if (change.type === "delete") return Effect.succeed(patchFile(change))
+                const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
+                return Effect.succeed(patchFile(change, formatted.get(target.canonical)))
+              })
+              return { applied, files: fileDiffs }
+            }).pipe(
+              Effect.map((output) => ({
+                output,
+                content: toModelOutput(output),
+                metadata: { files: output.files },
+              })),
+              Effect.mapError((error) =>
+                error instanceof ToolFailure ? error : new ToolFailure({ message: "Unable to apply patch", error }),
+              ),
+            )
+          },
+        }),
       )
       .pipe(Effect.orDie)
 
@@ -354,8 +297,13 @@ export const Plugin = {
     )
   }),
 }
-
 function errorMessage(error: unknown) {
+  if (error instanceof FileMutation.NotFoundError) return "file does not exist"
+  if (error instanceof FileMutation.NotAFileError) return "path is a directory"
+  if (error instanceof LocationMutation.PathError)
+    return error.reason === "outside_workspace"
+      ? `path is outside the workspace: ${error.path}`
+      : `ancestor is not a directory: ${error.path}`
   if (error instanceof PlatformError) {
     if (error.reason._tag === "NotFound") return "file does not exist"
     return error.reason.description ?? error.reason.message
@@ -365,9 +313,7 @@ function errorMessage(error: unknown) {
 
 function patchFile(change: Prepared, after = change.after): typeof FileDiff.Info.Type {
   const target = (change.type === "update" ? change.moveTarget : undefined)?.resource ?? change.target.resource
-  const patch = trimDiff(
-    createTwoFilesPatch(change.target.canonical, change.target.canonical, change.before, after),
-  )
+  const patch = trimDiff(createTwoFilesPatch(change.target.canonical, change.target.canonical, change.before, after))
   const counts =
     change.type === "delete"
       ? { additions: 0, deletions: change.before.split("\n").length }
@@ -413,25 +359,4 @@ function trimDiff(diff: string) {
       return line
     })
     .join("\n")
-}
-
-function resolveTarget(location: Location.Interface, value: string): Target {
-  const canonical =
-    process.platform === "win32"
-      ? FSUtil.normalizePath(path.resolve(location.directory, value))
-      : path.resolve(location.directory, value)
-  const projectRoot = path.parse(location.project.directory).root
-  const external =
-    !FSUtil.contains(location.directory, canonical) &&
-    (location.project.directory === projectRoot || !FSUtil.contains(location.project.directory, canonical))
-  const directory = path.dirname(canonical)
-  const resource =
-    process.platform === "win32"
-      ? FSUtil.normalizePathPattern(path.join(directory, "*"))
-      : path.join(directory, "*").replaceAll("\\", "/")
-  return {
-    canonical,
-    resource: path.relative(location.project.directory, canonical).replaceAll("\\", "/") || ".",
-    externalDirectory: external ? { directory, resource } : undefined,
-  }
 }

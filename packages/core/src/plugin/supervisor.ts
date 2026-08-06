@@ -282,7 +282,9 @@ const layer = Layer.effect(
     })
     const updates = Stream.merge(
       config.changes().pipe(
-        Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path))),
+        Stream.filterEffect((update) =>
+          Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path)),
+        ),
         Stream.merge(Stream.fromPubSub(configuredChanges)),
       ),
       bus.subscribe([Event.Updated, SdkPlugins.Updated]),
@@ -338,7 +340,6 @@ export const node = makeLocationNode({
     Form.node,
     ReadToolFileSystem.node,
     Reference.node,
-    Ripgrep.node,
     SessionInstructions.node,
     Shell.node,
     Skill.node,

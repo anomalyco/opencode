@@ -46,6 +46,7 @@ describe("FileMutation", () => {
           target: target.canonical,
           resource: "hello.txt",
           existed: true,
+          content: "after",
         })
         expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("after")
       }).pipe(provide(directory)),
@@ -65,6 +66,7 @@ describe("FileMutation", () => {
           target: target.canonical,
           resource: "src/nested/hello.txt",
           existed: false,
+          content: "hello",
         })
         expect(yield* Effect.promise(() => fs.readFile(result.target, "utf8"))).toBe("hello")
       }).pipe(provide(directory)),
@@ -80,11 +82,36 @@ describe("FileMutation", () => {
         const created = yield* (yield* LocationMutation.Service).resolve({ path: "created.txt" })
         const files = yield* FileMutation.Service
 
-        yield* files.writeTextPreservingBom({ target: preserved, content: "\uFEFFafter" })
-        yield* files.writeTextPreservingBom({ target: created, content: "\uFEFF\uFEFF\uFEFFcreated" })
+        yield* files.write({ target: preserved, content: "\uFEFFafter" })
+        yield* files.write({ target: created, content: "\uFEFF\uFEFF\uFEFFcreated" })
 
         expect(yield* Effect.promise(() => fs.readFile(preservedPath, "utf8"))).toBe("\uFEFFafter")
         expect(yield* Effect.promise(() => fs.readFile(created.canonical, "utf8"))).toBe("\uFEFFcreated")
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("moves a file and transfers its BOM to the destination", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const fromPath = path.join(directory, "from.txt")
+        yield* Effect.promise(() => fs.writeFile(fromPath, "\uFEFFbefore"))
+        const mutation = yield* LocationMutation.Service
+        const from = yield* mutation.resolve({ path: "from.txt" })
+        const to = yield* mutation.resolve({ path: "to.txt" })
+
+        const result = yield* (yield* FileMutation.Service).move({ from, to, content: "after" })
+
+        expect(result.content).toBe("after")
+        expect(yield* Effect.promise(() => fs.readFile(to.canonical, "utf8"))).toBe("\uFEFFafter")
+        expect(
+          yield* Effect.promise(() =>
+            fs.access(fromPath).then(
+              () => true,
+              () => false,
+            ),
+          ),
+        ).toBe(false)
       }).pipe(provide(directory)),
     ),
   )
@@ -102,6 +129,7 @@ describe("FileMutation", () => {
             target: target.canonical,
             resource: target.resource,
             existed: false,
+            content: "external",
           })
           expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("external")
         }).pipe(provide(directory)),

@@ -32,7 +32,6 @@ import { Npm } from "@opencode-ai/util/npm"
 import { Permission } from "../permission"
 import { Reference } from "../reference"
 import { WebSearch } from "../websearch"
-import { Ripgrep } from "../ripgrep"
 import { SessionInstructions } from "../session/instructions"
 import { Shell } from "../shell"
 import { Skill } from "../skill"
@@ -89,7 +88,6 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const read = yield* ReadToolFileSystem.Service
   const reference = yield* Reference.Service
   const websearch = yield* WebSearch.Service
-  const ripgrep = yield* Ripgrep.Service
   const instructions = yield* SessionInstructions.Service
   const shell = yield* Shell.Service
   const skill = yield* Skill.Service
@@ -121,7 +119,6 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(ReadToolFileSystem.Service, read),
     Context.make(Reference.Service, reference),
     Context.make(WebSearch.Service, websearch),
-    Context.make(Ripgrep.Service, ripgrep),
     Context.make(SessionInstructions.Service, instructions),
     Context.make(Shell.Service, shell),
     Context.make(Skill.Service, skill),

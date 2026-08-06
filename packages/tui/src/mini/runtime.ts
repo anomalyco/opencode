@@ -151,7 +151,6 @@ function formRequestOptions(location: LocationRef | undefined) {
   return {
     headers: {
       "x-opencode-directory": encodeURIComponent(location.directory),
-      ...(location.workspaceID ? { "x-opencode-workspace": location.workspaceID } : {}),
     },
   }
 }
@@ -236,7 +235,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         .find({
           query,
           type: "file",
-          location: { directory: state.location.directory, workspace: state.location.workspaceID },
+          location: { directory: state.location.directory },
         })
         .then((result) => result.data.map((file) => file.path))
         .catch(() => []),
@@ -651,7 +650,6 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         {
           location: {
             directory: state.location.directory,
-            workspace: state.location.workspaceID,
           },
         },
         { signal: attempt.signal },

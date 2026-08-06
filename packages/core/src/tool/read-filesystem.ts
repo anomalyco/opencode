@@ -2,11 +2,13 @@ export * as ReadToolFileSystem from "./read-filesystem"
 
 import path from "path"
 import { pathToFileURL } from "url"
-import { Context, Effect, Layer, Option, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
+import { systemError } from "effect/PlatformError"
 import { FileSystem } from "../filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath } from "../schema"
+import { WorkspaceEnvironment } from "../workspace/environment"
 
 export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
@@ -109,6 +111,24 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ReadToolFileSystem") {}
 
+type FileType = WorkspaceEnvironment.FileInfo["type"]
+
+/** The filesystem surface `read` consumes; FSUtil satisfies it structurally. */
+export interface ReadSource {
+  readonly realPath: (path: string) => Effect.Effect<string, FSUtil.Error>
+  readonly open: (
+    path: string,
+    options: { readonly flag: "r" },
+  ) => Effect.Effect<
+    {
+      readonly stat: Effect.Effect<{ readonly type: FileType; readonly size: bigint | number }, FSUtil.Error>
+      readonly readAlloc: (bytes: number) => Effect.Effect<Option.Option<Uint8Array>, FSUtil.Error>
+    },
+    FSUtil.Error,
+    Scope.Scope
+  >
+}
+
 const extensions = new Set([
   ".zip",
   ".tar",
@@ -169,7 +189,10 @@ const decodeUtf8 = (resource: string, decoder: TextDecoder, bytes?: Uint8Array) 
 const decodeChunk = (resource: string, decoder: TextDecoder, bytes: Uint8Array) =>
   bytes.includes(0) ? Effect.fail(new BinaryFileError({ resource })) : decodeUtf8(resource, decoder, bytes)
 
-export const inspect = Effect.fn("ReadTool.inspect")(function* (fs: FSUtil.Interface, input: string) {
+export const inspect = Effect.fn("ReadTool.inspect")(function* (
+  fs: { readonly stat: (path: string) => Effect.Effect<{ readonly type: FileType }, FSUtil.Error> },
+  input: string,
+) {
   const info = yield* fs.stat(input)
   const type = info.type === "File" ? "file" : info.type === "Directory" ? "directory" : undefined
   if (!type) return yield* Effect.fail(new PathKindError({ resource: input, expected: "a file or directory" }))
@@ -177,7 +200,7 @@ export const inspect = Effect.fn("ReadTool.inspect")(function* (fs: FSUtil.Inter
 })
 
 export const read = Effect.fn("ReadTool.read")(function* (
-  fs: FSUtil.Interface,
+  fs: ReadSource,
   input: string,
   resource: string,
   page: PageInput = {},
@@ -210,10 +233,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
           type: "file" as const,
           uri: pathToFileURL(real).href,
           name: path.basename(real),
-          content: Buffer.concat(
-            chunks.map((chunk) => Buffer.from(chunk)),
-            total,
-          ).toString("base64"),
+          content: Buffer.concat(chunks, total).toString("base64"),
           encoding: "base64" as const,
           mime,
         }
@@ -334,8 +354,6 @@ export const read = Effect.fn("ReadTool.read")(function* (
 export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, input: string, page: PageInput = {}) {
   const real = yield* fs.realPath(input)
   const items = yield* fs.readDirectoryEntries(real)
-  const offset = page.offset || 1
-  const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
   const entries = yield* Effect.forEach(
     items,
     (item) =>
@@ -353,9 +371,16 @@ export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, 
       }),
     { concurrency: 16 },
   )
-  const visible = entries
-    .filter((item): item is FileSystem.Entry => item !== undefined)
-    .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1))
+  return sortAndPage(
+    entries.filter((item): item is FileSystem.Entry => item !== undefined),
+    page,
+  )
+})
+
+const sortAndPage = (entries: FileSystem.Entry[], page: PageInput) => {
+  const offset = page.offset || 1
+  const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
+  const visible = entries.sort(FileSystem.compareEntries)
   const selected = visible.slice(offset - 1, offset - 1 + limit)
   const truncated = offset - 1 + selected.length < visible.length
   return new ListPage({
@@ -364,7 +389,7 @@ export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, 
     truncated,
     ...(truncated ? { next: offset + selected.length } : {}),
   })
-})
+}
 
 const layer = Layer.effect(
   Service,
@@ -379,3 +404,118 @@ const layer = Layer.effect(
 )
 
 export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node] })
+
+// Reads through WorkspaceEnvironment.Files so hosted sessions never touch the
+// host filesystem. The environment has no ranged read, so file reads transfer
+// the whole file once and page in memory.
+const hostedLayer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const env = yield* WorkspaceEnvironment.Service
+
+    // Absence surfaces as a platform NotFound so the read tool's missing-file
+    // handling stays backend-agnostic; other failures become filesystem errors.
+    const mapError =
+      (method: string) =>
+      (error: WorkspaceEnvironment.Error | WorkspaceEnvironment.NotFoundError): FSUtil.Error =>
+        error._tag === "WorkspaceEnvironment.NotFoundError"
+          ? systemError({ _tag: "NotFound", module: "FileSystem", method, pathOrDescriptor: error.path, cause: error })
+          : WorkspaceEnvironment.toFileSystemError(method)(error)
+
+    const stats = { stat: (target: string) => env.files.stat(target).pipe(Effect.mapError(mapError("stat"))) }
+
+    const source: ReadSource = {
+      // Paths arrive canonical from LocationMutation.resolve, so identity
+      // avoids a provider canonicalization round trip per read.
+      realPath: Effect.succeed,
+      // The environment has no ranged read, so each read call transfers the
+      // whole file once and pages in memory. Happy-path opens are that one
+      // transfer; only the failure path stats to classify a non-file target,
+      // which the shared read reports as PathKindError.
+      // TODO: Bound and page large hosted reads once environments expose file
+      // size and ranged reads.
+      open: (target) =>
+        env.files.read(target).pipe(
+          Effect.map((bytes) => {
+            let cursor = 0
+            return {
+              stat: Effect.succeed({ type: "File" as const, size: bytes.length }),
+              readAlloc: (size: number) =>
+                Effect.sync(() => {
+                  if (cursor >= bytes.length) return Option.none<Uint8Array>()
+                  const chunk = bytes.subarray(cursor, Math.min(cursor + size, bytes.length))
+                  cursor += chunk.length
+                  return Option.some(chunk)
+                }),
+            }
+          }),
+          Effect.catchTag("WorkspaceEnvironment.Error", (error) =>
+            stats.stat(target).pipe(
+              Effect.catch(() => Effect.fail(mapError("read")(error))),
+              Effect.flatMap((info) =>
+                info.type === "File"
+                  ? Effect.fail(mapError("read")(error))
+                  : Effect.succeed({
+                      stat: Effect.succeed({ type: info.type, size: 0 }),
+                      readAlloc: () => Effect.succeed(Option.none<Uint8Array>()),
+                    }),
+              ),
+            ),
+          ),
+          Effect.catchTag("WorkspaceEnvironment.NotFoundError", (error) => Effect.fail(mapError("read")(error))),
+        ),
+    }
+
+    // Matches the local list semantics: symlinks resolve and escape-filter
+    // against the listed directory. Non-symlink types come from the listing
+    // itself, keeping provider round trips proportional to symlink count.
+    const resolveSymlink = Effect.fnUntraced(function* (parent: string, name: string) {
+      const target = yield* env.files
+        .realPath(path.posix.join(parent, name))
+        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (target === undefined || !FSUtil.containsPosix(parent, target)) return undefined
+      const info = yield* env.files.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (info?.type === "Directory") return "directory" as const
+      if (info?.type === "File") return "file" as const
+      return undefined
+    })
+
+    const list = Effect.fn("ReadTool.list")(function* (input: string, page: PageInput = {}) {
+      const items = yield* env.files.list(input).pipe(Effect.mapError(mapError("list")))
+      const entries = yield* Effect.forEach(
+        items,
+        (item) =>
+          Effect.gen(function* () {
+            const type =
+              item.type === "file" || item.type === "directory"
+                ? item.type
+                : item.type === "symlink"
+                  ? yield* resolveSymlink(input, item.name)
+                  : undefined
+            if (!type) return
+            return FileSystem.Entry.make({
+              path: RelativePath.make(item.name + (type === "directory" ? "/" : "")),
+              type,
+            })
+          }),
+        { concurrency: 4 },
+      )
+      return sortAndPage(
+        entries.filter((item): item is FileSystem.Entry => item !== undefined),
+        page,
+      )
+    })
+
+    return Service.of({
+      inspect: (target) => inspect(stats, target),
+      read: (target, resource, page) => read(source, target, resource, page),
+      list,
+    })
+  }),
+)
+
+export const hostedNode = makeLocationNode({
+  service: Service,
+  layer: hostedLayer,
+  deps: [WorkspaceEnvironment.node],
+})

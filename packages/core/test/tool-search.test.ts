@@ -6,11 +6,9 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileSystem } from "@opencode-ai/core/filesystem"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { Permission } from "@opencode-ai/core/permission"
-import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { GlobTool } from "@opencode-ai/core/tool/plugin/glob"
@@ -24,19 +22,12 @@ import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 const globToolNode = makeLocationNode({
   name: "test/glob-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(GlobTool.Plugin)),
-  deps: [
-    Tool.node,
-    FSUtil.node,
-    Ripgrep.node,
-    Location.node,
-    LocationMutation.node,
-    Permission.node,
-  ],
+  deps: [Tool.node, FileSystem.node, Location.node, LocationMutation.node, Permission.node],
 })
 const grepToolNode = makeLocationNode({
   name: "test/grep-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(GrepTool.Plugin)),
-  deps: [Tool.node, FSUtil.node, Ripgrep.node, Location.node, LocationMutation.node, Permission.node],
+  deps: [Tool.node, FileSystem.node, Location.node, LocationMutation.node, Permission.node],
 })
 const sessionID = Session.ID.make("ses_search_tool_test")
 
@@ -181,14 +172,37 @@ describe("search tools", () => {
     ),
   )
 
+  it.live("reports the lexical path when grepping a symlinked file", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.promise(async () => {
+          await fs.mkdir(path.join(tmp.path, "actual"))
+          await fs.writeFile(path.join(tmp.path, "actual", "target.txt"), "needle\n")
+          await fs.symlink(path.join(tmp.path, "actual", "target.txt"), path.join(tmp.path, "link.txt"))
+        }).pipe(
+          Effect.andThen(
+            withTools(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const result = yield* executeTool(registry, call("grep", { path: "link.txt", pattern: "needle" }))
+                expect(result).toMatchObject({
+                  status: "completed",
+                  output: [{ entry: { path: "link.txt" }, line: 1, text: "needle\n" }],
+                })
+              }),
+            ),
+          ),
+        ),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("reports no grep matches", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
         Effect.promise(() => fs.writeFile(path.join(tmp.path, "file.txt"), "haystack\n")).pipe(
-          Effect.andThen(
-            withTools(tmp.path, (registry) => executeTool(registry, call("grep", { pattern: "needle" }))),
-          ),
+          Effect.andThen(withTools(tmp.path, (registry) => executeTool(registry, call("grep", { pattern: "needle" })))),
           Effect.tap((result) =>
             Effect.sync(() => {
               expect(result).toMatchObject({
@@ -297,9 +311,7 @@ describe("search tools", () => {
       (tmp) =>
         Effect.promise(() => fs.writeFile(path.join(tmp.path, "file.txt"), "content\n")).pipe(
           Effect.andThen(
-            withTools(tmp.path, (registry) =>
-              executeTool(registry, call("glob", { path: "file.txt", pattern: "*" })),
-            ),
+            withTools(tmp.path, (registry) => executeTool(registry, call("glob", { path: "file.txt", pattern: "*" }))),
           ),
           Effect.tap((result) =>
             Effect.sync(() => {
@@ -331,9 +343,7 @@ describe("search tools", () => {
             Effect.sync(() => {
               expect(result.status).toBe("completed")
               expect(assertions.map((input) => input.action)).toEqual(["external_directory", "glob"])
-              expect(assertions[0]?.resources).toEqual([
-                path.join(outside.path, "*").replaceAll("\\", "/"),
-              ])
+              expect(assertions[0]?.resources).toEqual([path.join(outside.path, "*").replaceAll("\\", "/")])
             }),
           ),
         )

@@ -2,6 +2,7 @@ export * as SessionErrors from "./error"
 
 import { Schema } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
+import { WorkspaceID } from "@opencode-ai/schema/workspace-id"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { SessionError } from "@opencode-ai/schema/session-error"
@@ -15,6 +16,19 @@ export class ForkEmptyError extends Schema.TaggedErrorClass<ForkEmptyError>()("S
 }) {
   override get message() {
     return `Cannot fork empty session: ${this.sessionID}`
+  }
+}
+
+export class WorkspaceDirectoryError extends Schema.TaggedErrorClass<WorkspaceDirectoryError>()(
+  "Session.WorkspaceDirectoryError",
+  {
+    workspaceID: WorkspaceID,
+    directory: Schema.String,
+    root: Schema.String,
+  },
+) {
+  override get message() {
+    return `Directory ${this.directory} is outside workspace ${this.workspaceID} root ${this.root}`
   }
 }
 

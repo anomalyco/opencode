@@ -26,7 +26,6 @@ export default Runtime.handler(
           const location = await client.location.get({ location: { directory: process.cwd() } })
           const page = await client.session.list({
             directory: location.directory,
-            workspace: location.workspaceID,
             parentID: null,
             order: "desc",
             limit: 50,

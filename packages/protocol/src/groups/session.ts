@@ -7,7 +7,6 @@ import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, PositiveInt, RelativePath, statics } from "@opencode-ai/schema/schema"
 import { Event } from "@opencode-ai/schema/event"
-import { Workspace } from "@opencode-ai/schema/workspace"
 import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
@@ -43,7 +42,6 @@ const ParentIDFilter = Schema.Union([
 })
 
 const SessionsQueryFields = {
-  workspace: Workspace.ID.pipe(Schema.optional),
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional).annotate({
     description: "Maximum number of sessions to return. Defaults to the newest 50 sessions.",
   }),
@@ -156,6 +154,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           location: Location.Ref.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),
+        error: InvalidRequestError,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "v2.session.create",

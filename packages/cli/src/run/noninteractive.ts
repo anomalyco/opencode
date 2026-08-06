@@ -703,7 +703,7 @@ export async function runNonInteractivePrompt(input: Input) {
         ? Promise.resolve(undefined)
         : input.client.form.request
             .list({
-              location: { directory: input.location.directory, workspace: input.location.workspaceID },
+              location: { directory: input.location.directory },
             })
             .catch(() => undefined),
     ])
@@ -757,7 +757,6 @@ function formRequestOptions(location: LocationRef | undefined): [] | [{ headers:
     {
       headers: {
         "x-opencode-directory": encodeURIComponent(location.directory),
-        ...(location.workspaceID ? { "x-opencode-workspace": location.workspaceID } : {}),
       },
     },
   ]

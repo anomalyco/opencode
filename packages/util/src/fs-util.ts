@@ -269,8 +269,26 @@ export namespace FSUtil {
     return contains(a, b) || contains(b, a)
   }
 
+  /** Normalize path separators to forward slashes for display and resources. */
+  export function slash(value: string) {
+    return value.replaceAll("\\", "/")
+  }
+
   export function contains(parent: string, child: string) {
-    const result = relative(parent, child)
-    return result === "" || (!isAbsolute(result) && result !== ".." && !result.startsWith(`..${sep}`))
+    return containsUsing({ relative, isAbsolute, sep }, parent, child)
+  }
+
+  /** `contains` with posix rules regardless of host platform, for provider paths. */
+  export function containsPosix(parent: string, child: string) {
+    return containsUsing(path.posix, parent, child)
+  }
+
+  function containsUsing(
+    paths: Pick<typeof path.posix, "relative" | "isAbsolute" | "sep">,
+    parent: string,
+    child: string,
+  ) {
+    const result = paths.relative(parent, child)
+    return result === "" || (!paths.isAbsolute(result) && result !== ".." && !result.startsWith(`..${paths.sep}`))
   }
 }

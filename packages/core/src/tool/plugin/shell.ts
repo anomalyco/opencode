@@ -4,8 +4,7 @@ import path from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Content } from "@opencode-ai/schema/tool"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
-import { Deferred, Effect, Schema, Scope } from "effect"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Array, Deferred, Effect, Schema, Scope } from "effect"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
 import { PluginRuntime } from "../../plugin/runtime"
@@ -82,7 +81,6 @@ export const Plugin = {
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: PluginContext) {
     const runtime = yield* PluginRuntime.Service
     const scope = yield* Scope.Scope
-    const fsUtil = yield* FSUtil.Service
     const mutation = yield* LocationMutation.Service
     const shell = yield* Shell.Service
     const permission = yield* Permission.Service
@@ -154,10 +152,12 @@ export const Plugin = {
                       )
                       invocation.cwd = target.canonical
                       finalTimeout = invocation.timeout
-                      const external = [target, ...directories]
-                        .map((item) => item.externalDirectory)
-                        .filter((item) => item !== undefined)
-                        .filter((item, index, items) => items.findIndex((other) => other.resource === item.resource) === index)
+                      const external = Array.dedupeWith(
+                        [target, ...directories]
+                          .map((item) => item.externalDirectory)
+                          .filter((item) => item !== undefined),
+                        (left, right) => left.resource === right.resource,
+                      )
                       if (external.length > 0)
                         yield* permission.assert({
                           action: "external_directory",
@@ -176,13 +176,6 @@ export const Plugin = {
                           agent: context.agent,
                           source,
                         })
-                      const workdir = yield* fsUtil.stat(target.canonical).pipe(
-                        Effect.catchReason("PlatformError", "NotFound", () =>
-                          Effect.fail(new Error(`Working directory does not exist: ${target.canonical}`)),
-                        ),
-                      )
-                      if (workdir.type !== "Directory")
-                        return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.canonical}`))
                     }),
                 )
                 yield* context.progress({ shellID: info.id })

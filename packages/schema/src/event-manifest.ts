@@ -31,7 +31,6 @@ import { SessionEvent } from "./session-event.js"
 import { SessionStatusEvent } from "./session-status-event.js"
 import { TuiEvent } from "./tui-event.js"
 import { VcsEvent } from "./vcs-event.js"
-import { WorkspaceEvent } from "./workspace-event.js"
 import { WorktreeEvent } from "./worktree-event.js"
 import { WebSearch } from "./websearch.js"
 
@@ -89,7 +88,6 @@ export const Definitions = Event.inventory(
   ...SessionStatusEvent.Definitions,
   ...SessionCompactionEvent.Definitions,
   ...VcsEvent.Definitions,
-  ...WorkspaceEvent.Definitions,
   ...WorktreeEvent.Definitions,
   ...ServerEvent.Definitions,
 )

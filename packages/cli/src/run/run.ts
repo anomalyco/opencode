@@ -96,7 +96,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
         next.model ??
         (options.variant
           ? await client.model
-              .default({ location: { directory: next.location.directory, workspace: next.location.workspaceID } })
+              .default({ location: { directory: next.location.directory } })
               .then((result) => result.data)
           : undefined)
       const model = selected

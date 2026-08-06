@@ -20,6 +20,10 @@ export function has(content: Uint8Array) {
   return content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf
 }
 
+export function fromBytes(content: Uint8Array) {
+  return split(decode(content))
+}
+
 export const readFile = Effect.fn("Bom.readFile")(function* (fs: FSUtil.Interface, filepath: string) {
   return split(decode(yield* fs.readFile(filepath)))
 })

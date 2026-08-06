@@ -163,6 +163,35 @@ describe("LocationMutation", () => {
     ),
   )
 
+  it.live("authorizes an external symlink by the named path", () =>
+    withTmp((directory) =>
+      withTmp((outside) =>
+        withTmp((referent) =>
+          Effect.gen(function* () {
+            if (process.platform === "win32") return
+            const targetPath = path.join(referent, "target.txt")
+            const linkPath = path.join(outside, "link.txt")
+            yield* Effect.promise(async () => {
+              await fs.writeFile(targetPath, "content")
+              await fs.symlink(targetPath, linkPath)
+            })
+
+            const target = yield* (yield* LocationMutation.Service).resolve({ path: linkPath })
+            expect(target).toMatchObject({
+              absolute: linkPath,
+              canonical: yield* Effect.promise(() => fs.realpath(targetPath)),
+              resource: linkPath.replaceAll("\\", "/"),
+              externalDirectory: {
+                directory: outside,
+                resource: path.join(outside, "*").replaceAll("\\", "/"),
+              },
+            })
+          }).pipe(provide(directory)),
+        ),
+      ),
+    ),
+  )
+
   it.live("anchors prospective external descendants at their stable existing directory", () =>
     withTmp((directory) =>
       withTmp((outside) =>

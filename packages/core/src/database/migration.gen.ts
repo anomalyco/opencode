@@ -42,5 +42,7 @@ export const migrations = (
     import("./migration/20260622202450_simplify_session_input"),
     import("./migration/20260804233008_loose_psylocke"),
     import("./migration/20260805200742_import_legacy_credentials"),
+    import("./migration/20260806150823_remove_workspace"),
+    import("./migration/20260806150824_add_workspace"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

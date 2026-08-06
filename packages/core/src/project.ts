@@ -44,6 +44,18 @@ export interface Resolved {
   readonly vcs?: Vcs
 }
 
+/**
+ * The stated Project for hosted Locations: global identity until rediscovery
+ * inside the Workspace finds a repository. Canonical "/" matches the local
+ * non-VCS fallback on posix hosts, so persisting it never repoints the global
+ * row at a provider path.
+ */
+export const hostedGlobal = (root: string): Resolved => ({
+  id: ID.global,
+  directory: AbsolutePath.make(root),
+  canonical: AbsolutePath.make("/"),
+})
+
 // Keep this filesystem-only; permission checks use it and should not execute VCS commands.
 export const root = Effect.fn("Project.root")(function* (
   fs: FSUtil.Interface,
