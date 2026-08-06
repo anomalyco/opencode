@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.18.11",
+  "version": "1.18.14",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -94,7 +94,6 @@
     "katex": "0.16.27",
     "luxon": "catalog:",
     "marked": "catalog:",
-    "marked-katex-extension": "5.1.6",
     "marked-shiki": "catalog:",
     "morphdom": "2.7.8",
     "motion": "12.34.5",
