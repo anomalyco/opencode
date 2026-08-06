@@ -1,4 +1,4 @@
-export * as ToolOutputStore from "./tool-output-store"
+export * as ToolTruncation from "./tool-truncation"
 
 import path from "path"
 import type { Tool } from "@opencode-ai/schema/tool"
@@ -10,18 +10,18 @@ import { Config } from "./config"
 import { Identifier } from "./util/identifier"
 
 export const MAX_LINES = 2_000
-export const MAX_BYTES = 50 * 1024
+export const MAX_BYTES = 50 * 1024 // 50 KiB
 export const RETENTION = Duration.days(7)
 export const DIRECTORY = "tool-output"
 
 type Result = Tool.Result
 
 export interface Interface {
-  readonly bound: (result: Result) => Effect.Effect<Result>
+  readonly apply: (result: Result) => Effect.Effect<Result>
   readonly cleanup: () => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ToolOutputStore") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/ToolTruncation") {}
 
 const layer = Layer.effect(
   Service,
@@ -31,7 +31,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const directory = path.join(global.data, DIRECTORY)
 
-    const cleanup = Effect.fn("ToolOutputStore.cleanup")(function* () {
+    const cleanup = Effect.fn("ToolTruncation.cleanup")(function* () {
       const entries = yield* fs.readDirectory(directory).pipe(Effect.catch(() => Effect.succeed([])))
       const cutoff = Date.now() - Duration.toMillis(RETENTION)
       yield* Effect.forEach(
@@ -49,7 +49,7 @@ const layer = Layer.effect(
       )
     })
 
-    const bound = Effect.fn("ToolOutputStore.bound")(function* (result: Result) {
+    const apply = Effect.fn("ToolTruncation.apply")(function* (result: Result) {
       if (result.metadata?.truncated === true) return result
       const content =
         typeof result.content === "string" ? [{ type: "text" as const, text: result.content }] : (result.content ?? [])
@@ -86,7 +86,7 @@ const layer = Layer.effect(
     })
 
     yield* cleanup().pipe(Effect.repeat(Schedule.spaced(Duration.hours(1))), Effect.forkScoped)
-    return Service.of({ bound, cleanup })
+    return Service.of({ apply, cleanup })
   }),
 )
 

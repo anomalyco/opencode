@@ -6,14 +6,14 @@ import { Document, Info } from "@opencode-ai/schema/config"
 import { ConfigToolOutput } from "@opencode-ai/schema/config/tool-output"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { ToolTruncation } from "@opencode-ai/core/tool-truncation"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
 const withStore = <A, E, R>(
-  body: (store: ToolOutputStore.Interface, fs: FSUtil.Interface, root: string) => Effect.Effect<A, E, R>,
+  body: (truncation: ToolTruncation.Interface, fs: FSUtil.Interface, root: string) => Effect.Effect<A, E, R>,
   info = new Info(),
 ) =>
   Effect.acquireUseRelease(
@@ -26,24 +26,24 @@ const withStore = <A, E, R>(
           changes: () => Stream.empty,
         }),
       )
-      const layer = AppNodeBuilder.build(LayerNode.group([ToolOutputStore.node, FSUtil.node]), [
+      const layer = AppNodeBuilder.build(LayerNode.group([ToolTruncation.node, FSUtil.node]), [
         [Config.node, config],
         [Global.node, Global.layerWith({ data: tmp.path })],
       ])
       return Effect.gen(function* () {
-        return yield* body(yield* ToolOutputStore.Service, yield* FSUtil.Service, tmp.path)
+        return yield* body(yield* ToolTruncation.Service, yield* FSUtil.Service, tmp.path)
       }).pipe(Effect.provide(layer))
     },
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   )
 
-describe("ToolOutputStore", () => {
+describe("ToolTruncation", () => {
   it.live("writes oversized text and returns a bounded preview", () =>
     withStore(
-      (store, fs) =>
+      (truncation, fs) =>
         Effect.gen(function* () {
           const output = { items: [1, 2, 3] }
-          const result = yield* store.bound({ output, content: "one\ntwo\nthree" })
+          const result = yield* truncation.apply({ output, content: "one\ntwo\nthree" })
           expect(result.output).toBe(output)
           expect(result.metadata).toMatchObject({ truncated: true })
           const outputPath = result.metadata?.outputPath
@@ -59,27 +59,27 @@ describe("ToolOutputStore", () => {
   )
 
   it.live("skips results already marked truncated", () =>
-    withStore((store) =>
+    withStore((truncation) =>
       Effect.gen(function* () {
         const result = { content: "one\ntwo", metadata: { truncated: true, source: "tool" } }
-        expect(yield* store.bound(result)).toBe(result)
+        expect(yield* truncation.apply(result)).toBe(result)
       }),
     ),
   )
 
   it.live("marks results that fit without changing their content", () =>
-    withStore((store) =>
+    withStore((truncation) =>
       Effect.gen(function* () {
         const content = [{ type: "text" as const, text: "small" }]
-        expect(yield* store.bound({ content })).toEqual({ content, metadata: { truncated: false } })
+        expect(yield* truncation.apply({ content })).toEqual({ content, metadata: { truncated: false } })
       }),
     ),
   )
 
   it.live("removes expired managed files", () =>
-    withStore((store, fs, root) =>
+    withStore((truncation, fs, root) =>
       Effect.gen(function* () {
-        const directory = path.join(root, ToolOutputStore.DIRECTORY)
+        const directory = path.join(root, ToolTruncation.DIRECTORY)
         const old = path.join(directory, "tool_old")
         const recent = path.join(directory, "tool_recent")
         yield* fs.ensureDir(directory)
@@ -87,7 +87,7 @@ describe("ToolOutputStore", () => {
         yield* fs.writeFileString(recent, "recent")
         const expired = new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000)
         yield* fs.utimes(old, expired, expired)
-        yield* store.cleanup()
+        yield* truncation.cleanup()
         expect(yield* fs.exists(old)).toBe(false)
         expect(yield* fs.exists(recent)).toBe(true)
       }),
