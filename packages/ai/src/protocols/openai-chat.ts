@@ -15,7 +15,6 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
-  type ProviderMetadata,
   type ReasoningPart,
   type TextPart,
   type ToolCallPart,
@@ -65,11 +64,14 @@ const OpenAIChatAssistantToolCall = Schema.Struct({
     name: Schema.String,
     arguments: Schema.String,
   }),
-  extra_content: Schema.optional(
-    Schema.Struct({ google: Schema.Struct({ thought_signature: Schema.String }) }),
-  ),
 })
 type OpenAIChatAssistantToolCall = Schema.Schema.Type<typeof OpenAIChatAssistantToolCall>
+
+// Intentionally omit Gemini's provider-specific `extra_content.google.thought_signature`
+// extension until direct Google OpenAI-compatible routing is supported here:
+// https://github.com/vercel/ai/issues/11590
+// https://github.com/vercel/ai/pull/11745
+// https://ai.google.dev/gemini-api/docs/thought-signatures#openai
 
 const OpenAIChatUserContent = Schema.Union([
   Schema.Struct({
@@ -186,11 +188,6 @@ const OpenAIChatToolCallDelta = Schema.Struct({
   index: optionalNull(Schema.Number),
   id: optionalNull(Schema.String),
   function: optionalNull(OpenAIChatToolCallDeltaFunction),
-  extra_content: optionalNull(
-    Schema.Struct({
-      google: optionalNull(Schema.Struct({ thought_signature: optionalNull(Schema.String) })),
-    }),
-  ),
 })
 type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta>
 
@@ -229,7 +226,6 @@ interface PendingToolDelta {
   readonly id?: string
   readonly name?: string
   readonly input: string
-  readonly providerMetadata?: ProviderMetadata
 }
 
 export interface ParserState {
@@ -277,19 +273,14 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ type: "function" as const, function: { name } }),
   })
 
-const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => {
-  const signature = part.providerMetadata?.openai?.thoughtSignature
-  return {
-    id: part.id,
-    type: "function",
-    function: {
-      name: part.name,
-      arguments: ProviderShared.encodeJson(part.input),
-    },
-    extra_content:
-      typeof signature === "string" ? { google: { thought_signature: signature } } : undefined,
-  }
-}
+const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
+  id: part.id,
+  type: "function",
+  function: {
+    name: part.name,
+    arguments: ProviderShared.encodeJson(part.input),
+  },
+})
 
 const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
   const media = yield* ProviderShared.validateMedia("OpenAI Chat", part, IMAGE_MIMES)
@@ -615,11 +606,6 @@ const toolIndexByID = (
   return entry ? Number(entry[0]) : undefined
 }
 
-const toolMetadata = (tool: OpenAIChatToolCallDelta): ProviderMetadata | undefined => {
-  const signature = tool.extra_content?.google?.thought_signature
-  return signature ? { openai: { thoughtSignature: signature } } : undefined
-}
-
 const reasoningDelta = (
   delta: Schema.Schema.Type<typeof OpenAIChatDelta> | null | undefined,
   configuredField?: string,
@@ -722,11 +708,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       reasoning !== undefined ||
       (Array.isArray(delta?.reasoning_details) && delta.reasoning_details.length > 0) ||
       toolDeltas.some(
-        (tool) =>
-          Boolean(tool.id) ||
-          Boolean(tool.function?.name) ||
-          Boolean(tool.function?.arguments) ||
-          Boolean(tool.extra_content?.google?.thought_signature),
+        (tool) => Boolean(tool.id) || Boolean(tool.function?.name) || Boolean(tool.function?.arguments),
       )
     if (state.finishReason !== undefined) {
       if (hasLateContent)
@@ -774,13 +756,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       const id = current?.id ?? pending?.id ?? (tool.id || undefined)
       const name = current?.name ?? pending?.name ?? (tool.function?.name || undefined)
       const text = `${pending?.input ?? ""}${tool.function?.arguments ?? ""}`
-      const providerMetadata = toolMetadata(tool) ?? pending?.providerMetadata
       latestToolIndex = index
       nextToolIndex = Math.max(nextToolIndex, index + 1)
       if (!current && (!id || !name)) {
         pendingTools = {
           ...pendingTools,
-          [index]: { id: id || undefined, name: name || undefined, input: text, providerMetadata },
+          [index]: { id: id || undefined, name: name || undefined, input: text },
         }
         continue
       }
@@ -792,7 +773,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         ADAPTER,
         tools,
         index,
-        { id: id || undefined, name: name || undefined, text, providerMetadata },
+        { id: id || undefined, name: name || undefined, text },
         "OpenAI Chat tool call delta is missing id or name",
       )
       if (ToolStream.isError(result)) return yield* result

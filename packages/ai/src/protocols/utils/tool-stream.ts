@@ -136,12 +136,7 @@ export const appendOrStart = <K extends StreamKey>(
   route: string,
   tools: State<K>,
   key: K,
-  delta: {
-    readonly id?: string
-    readonly name?: string
-    readonly text: string
-    readonly providerMetadata?: ProviderMetadata
-  },
+  delta: { readonly id?: string; readonly name?: string; readonly text: string },
   missingToolMessage: string,
 ): AppendOutcome<K> | AIError => {
   const current = tools[key]
@@ -154,15 +149,9 @@ export const appendOrStart = <K extends StreamKey>(
     name,
     input: `${current?.input ?? ""}${delta.text}`,
     providerExecuted: current?.providerExecuted,
-    providerMetadata: delta.providerMetadata ?? current?.providerMetadata,
+    providerMetadata: current?.providerMetadata,
   }
-  if (
-    current &&
-    delta.text.length === 0 &&
-    delta.providerMetadata === undefined &&
-    current.id === id &&
-    current.name === name
-  )
+  if (current && delta.text.length === 0 && current.id === id && current.name === name)
     return { tools, tool: current, events: [] }
   return appendTool(tools, key, tool, delta.text)
 }

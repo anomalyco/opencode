@@ -327,48 +327,6 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("preserves compatible tool thought signatures for continuation", () =>
-    Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
-        }),
-      ).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              deltaChunk({
-                tool_calls: [
-                  {
-                    id: "call_1",
-                    function: { name: "lookup", arguments: "{}" },
-                    extra_content: { google: { thought_signature: "signed" } },
-                  },
-                ],
-              }),
-              deltaChunk({}, "tool_calls"),
-            ),
-          ),
-        ),
-      )
-      const replay = yield* compileRequest(LLMRequest.update(request, { messages: [response.message] }))
-
-      expect(response.toolCalls[0]?.providerMetadata).toEqual({ openai: { thoughtSignature: "signed" } })
-      expect(replay.body.messages.at(-1)).toMatchObject({
-        role: "assistant",
-        content: null,
-        tool_calls: [
-          {
-            id: "call_1",
-            type: "function",
-            function: { name: "lookup", arguments: "{}" },
-            extra_content: { google: { thought_signature: "signed" } },
-          },
-        ],
-      })
-    }),
-  )
-
   it.effect("treats an empty finish reason as terminal", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
