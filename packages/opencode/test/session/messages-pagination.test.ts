@@ -666,6 +666,21 @@ describe("MessageV2.filterCompacted", () => {
     ),
   )
 
+  it.instance("retains history for an incomplete compaction", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const before = yield* fill(sessionID, 2)
+        const compaction = yield* addUser(sessionID)
+        yield* addCompactionPart(sessionID, compaction)
+        const summary = yield* addAssistant(sessionID, compaction, { summary: true, finish: "end_turn" })
+        const after = yield* fill(sessionID, 60)
+
+        const result = yield* MessageV2.filterCompactedEffect(sessionID)
+        expect(result.map((item) => item.info.id)).toEqual([...before, compaction, summary, ...after])
+      }),
+    ),
+  )
+
   it.instance("skips assistant with error even if marked as summary", () =>
     withSession(({ sessionID }) =>
       Effect.gen(function* () {
@@ -952,8 +967,9 @@ describe("MessageV2.filterCompacted", () => {
     withSession(({ session, sessionID }) =>
       Effect.gen(function* () {
         const old = yield* addUser(sessionID, "old prompt")
+        const tail = yield* addUser(sessionID, "retained prompt")
         const compaction = yield* addUser(sessionID)
-        yield* addCompactionPart(sessionID, compaction)
+        yield* addCompactionPart(sessionID, compaction, tail)
         const summary = yield* addAssistant(sessionID, compaction, { summary: true, finish: "end_turn" })
         yield* session.updatePart({
           id: PartID.ascending(),
@@ -968,7 +984,7 @@ describe("MessageV2.filterCompacted", () => {
         yield* db.run(sql`UPDATE part SET data = 'invalid json' WHERE message_id = ${old}`)
 
         const result = yield* MessageV2.filterCompactedEffect(sessionID)
-        expect(result.map((item) => item.info.id)).toEqual([compaction, summary, ...recent])
+        expect(result.map((item) => item.info.id)).toEqual([compaction, summary, tail, ...recent])
       }),
     ),
   )
