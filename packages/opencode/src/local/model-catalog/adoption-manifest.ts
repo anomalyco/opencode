@@ -66,8 +66,32 @@ export const ADOPTION_MANIFEST: readonly AdoptionEntry[] = [
       "opencode-skein's ModelCandidate has no equivalent AlreadyHave field yet. Context-floor " +
       "selection (bestRecommendationVariant, OptimalCtxSize) was not ported: it depends on live " +
       "VRAM/host capacity data that belongs to the multi-host fit evaluation slice (tasks.md " +
-      "section 5), not the catalog domain.",
-    tests: ["test/local/model-catalog-family.test.ts"],
+      "section 5), not the catalog domain. " +
+      "DELIBERATE DIVERGENCES FROM THE SOURCE (skein fleet-model-gallery task 3.2, validated " +
+      "against Skein's exported golden fixtures): two defects present in the Go original are " +
+      "fixed here rather than reproduced, because this is the surviving implementation and Skein's " +
+      "copy is being retired. (1) recommendationQuantRank ranked only ud_q4_k_m, so UD-Q5_K_M and " +
+      "UD-Q8_0 parsed correctly but fell through to unranked and sorted below Q2_K — a ranking " +
+      "would have preferred the lowest-quality file over a much better one; both are now ranked at " +
+      "their base quant. (2) modelFamilyVersion accepted only '.' as a decimal separator, so " +
+      "internlm2_5 and internlm2_6 both truncated to version 2, tied, and made a real point-release " +
+      "upgrade vanish from both the upgrade and fresh lists; '_' is now accepted, matching the " +
+      "convention quant.ts already uses for the same naming pattern. " +
+      "ONE DEFECT IS REPRODUCED ON PURPOSE: an MoE 'NxM' expert-count marker (Mixtral-8x7B vs " +
+      "8x22B) is still read as a version, so both tie at 8. A narrow regex fix would relocate the " +
+      "corruption rather than remove it — an expert count is not a version, and comparing MoE model " +
+      "sizes needs parameter count, which this function does not produce.",
+    tests: [
+      "test/local/model-catalog-family.test.ts",
+      "test/local/model-catalog-golden-parity.test.ts",
+      // The golden cases the parity test runs against, copied verbatim from
+      // skein:openspec/changes/fleet-model-gallery/fixtures/. Listed
+      // individually rather than as a directory so the manifest's own
+      // existence check covers them.
+      "test/local/fixtures/fleet-model-gallery/quant-cases.json",
+      "test/local/fixtures/fleet-model-gallery/family-version-cases.json",
+      "test/local/fixtures/fleet-model-gallery/upgrade-fresh-cases.json",
+    ],
     license: null,
     attribution: "private repository, same author/organization as opencode-skein",
   },
