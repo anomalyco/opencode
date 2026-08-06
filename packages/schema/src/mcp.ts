@@ -68,13 +68,9 @@ const Failed = Schema.Struct({ status: Schema.Literal("failed"), error: Schema.S
 const NeedsAuth = Schema.Struct({ status: Schema.Literal("needs_auth") }).annotate({
   identifier: "Mcp.Status.NeedsAuth",
 })
-const NeedsClientRegistration = Schema.Struct({
-  status: Schema.Literal("needs_client_registration"),
-  error: Schema.String,
-}).annotate({ identifier: "Mcp.Status.NeedsClientRegistration" })
 
 export type Status = typeof Status.Type
-export const Status = Schema.Union([Connected, Pending, Disabled, Failed, NeedsAuth, NeedsClientRegistration]).pipe(
+export const Status = Schema.Union([Connected, Pending, Disabled, Failed, NeedsAuth]).pipe(
   Schema.toTaggedUnion("status"),
 )
 

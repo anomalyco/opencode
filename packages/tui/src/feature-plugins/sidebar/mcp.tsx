@@ -8,13 +8,7 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
   const list = createMemo(() => props.context.data.location.mcp.server.list(session()?.location) ?? [])
   const on = createMemo(() => list().filter((item) => item.status.status === "connected").length)
   const bad = createMemo(
-    () =>
-      list().filter(
-        (item) =>
-          item.status.status === "failed" ||
-          item.status.status === "needs_auth" ||
-          item.status.status === "needs_client_registration",
-      ).length,
+    () => list().filter((item) => item.status.status === "failed" || item.status.status === "needs_auth").length,
   )
 
   const dot = (status: string) => {
@@ -22,7 +16,6 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
     if (status === "failed") return theme.text.feedback.error.default
     if (status === "disabled") return theme.text.subdued
     if (status === "needs_auth") return theme.text.feedback.warning.default
-    if (status === "needs_client_registration") return theme.text.feedback.error.default
     return theme.text.subdued
   }
 
@@ -65,7 +58,6 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
                       </Match>
                       <Match when={item.status.status === "disabled"}>Disabled</Match>
                       <Match when={item.status.status === "needs_auth"}>Needs auth</Match>
-                      <Match when={item.status.status === "needs_client_registration"}>Needs client ID</Match>
                     </Switch>
                   </span>
                 </text>

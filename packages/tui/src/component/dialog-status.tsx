@@ -14,7 +14,6 @@ export function DialogStatus() {
     if (status === "connected") return theme.text.feedback.success.default
     if (status === "failed") return theme.text.feedback.error.default
     if (status === "needs_auth") return theme.text.feedback.warning.default
-    if (status === "needs_client_registration") return theme.text.feedback.error.default
     return theme.text.subdued
   }
   return (
@@ -46,9 +45,6 @@ export function DialogStatus() {
                       <Match when={item.status.status === "failed" && item.status}>{(val) => val().error}</Match>
                       <Match when={item.status.status === "disabled"}>Disabled in configuration</Match>
                       <Match when={item.status.status === "needs_auth"}>Needs authentication</Match>
-                      <Match when={item.status.status === "needs_client_registration" && item.status}>
-                        {(val) => (val() as { error: string }).error}
-                      </Match>
                     </Switch>
                   </span>
                 </text>

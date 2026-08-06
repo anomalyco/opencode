@@ -20687,25 +20687,6 @@
         ],
         "additionalProperties": false
       },
-      "Mcp.Status.NeedsClientRegistration": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": [
-              "needs_client_registration"
-            ]
-          },
-          "error": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "error"
-        ],
-        "additionalProperties": false
-      },
       "Mcp.Server": {
         "type": "object",
         "properties": {
@@ -20728,9 +20709,6 @@
               },
               {
                 "$ref": "#/components/schemas/Mcp.Status.NeedsAuth"
-              },
-              {
-                "$ref": "#/components/schemas/Mcp.Status.NeedsClientRegistration"
               }
             ]
           },

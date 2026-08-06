@@ -426,8 +426,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                             "bg-icon-success-base": status() === "connected",
                             "bg-icon-critical-base": status() === "failed",
                             "bg-border-weak-base": status() === "disabled",
-                            "bg-icon-warning-base":
-                              status() === "needs_auth" || status() === "needs_client_registration",
+                            "bg-icon-warning-base": status() === "needs_auth",
                           }}
                         />
                         <span class="flex flex-col min-w-0 flex-1">

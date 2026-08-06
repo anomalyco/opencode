@@ -259,8 +259,6 @@ export type McpStatusFailed = { status: "failed"; error: string }
 
 export type McpStatusNeedsAuth = { status: "needs_auth" }
 
-export type McpStatusNeedsClientRegistration = { status: "needs_client_registration"; error: string }
-
 export type McpResource = { server: string; name: string; uri: string; description?: string; mimeType?: string }
 
 export type McpResourceTemplate = {
@@ -1261,13 +1259,7 @@ export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
 
 export type McpServer = {
   name: string
-  status:
-    | McpStatusConnected
-    | McpStatusPending
-    | McpStatusDisabled
-    | McpStatusFailed
-    | McpStatusNeedsAuth
-    | McpStatusNeedsClientRegistration
+  status: McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth
   integrationID?: string
 }
 

@@ -15,7 +15,7 @@ import { useConfig } from "../config"
 import { getScrollAcceleration } from "../util/scroll"
 
 function statusError(status: McpServer["status"]) {
-  if (status.status === "failed" || status.status === "needs_client_registration") return status.error
+  if (status.status === "failed") return status.error
   return undefined
 }
 
