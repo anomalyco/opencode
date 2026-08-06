@@ -30,7 +30,6 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Database } from "@opencode-ai/core/database/database"
 import { httpApiLayer } from "./httpapi-layer"
-import { GlobalBus, type GlobalEvent } from "@/bus/global"
 
 const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const appLayer = AppNodeBuilder.build(
@@ -849,7 +848,6 @@ describe("HttpApi SDK", () => {
         const clearPrompt = yield* capture(() => sdk.tui.clearPrompt())
         const executeCommand = yield* capture(() => sdk.tui.executeCommand({ command: "session_new" }))
         const showToast = yield* capture(() => sdk.tui.showToast({ title: "SDK", message: "hello", variant: "info" }))
-        const toastMount = yield* capture(() => sdk.tui.toastMount())
         const selectSession = yield* capture(() => sdk.tui.selectSession({ sessionID }))
         const missingSession = yield* capture(() => sdk.tui.selectSession({ sessionID: "ses_missing" }))
         const invalidSession = yield* capture(() => sdk.tui.selectSession({ sessionID: "invalid_session_id" }))
@@ -866,7 +864,6 @@ describe("HttpApi SDK", () => {
             clearPrompt,
             executeCommand,
             showToast,
-            toastMount,
             selectSession,
             missingSession,
             invalidSession,
@@ -881,27 +878,9 @@ describe("HttpApi SDK", () => {
             clearPrompt: clearPrompt.data,
             executeCommand: executeCommand.data,
             showToast: showToast.data,
-            toastMount: toastMount.data,
             selectSession: selectSession.data,
           },
         }
-      }),
-    ),
-  )
-
-  serverPathParity("publishes a TUI toast-mount event", (serverPath) =>
-    withStandardProject(serverPath, ({ sdk, directory }) =>
-      Effect.gen(function* () {
-        const events: GlobalEvent[] = []
-        const on = (event: GlobalEvent) => {
-          if (event.directory !== directory || event.payload.type !== "tui.toast.mount") return
-          events.push(event)
-        }
-        GlobalBus.on("event", on)
-        yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", on)))
-
-        yield* capture(() => sdk.tui.toastMount())
-        expect(events).toHaveLength(1)
       }),
     ),
   )

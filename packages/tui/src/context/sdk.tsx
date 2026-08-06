@@ -31,17 +31,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     }
 
     let sdk = createSDK()
-    let resolveTransport: () => void
-    const transport = new Promise<void>((resolve) => {
-      resolveTransport = resolve
-    })
-    let isToastMounted = false
-
-    function markToastMount() {
-      if (isToastMounted) return
-      isToastMounted = true
-      void sdk.tui.toastMount().catch(() => {})
-    }
 
     const handlers = new Set<(event: GlobalEvent) => void>()
     const emitter = {
@@ -103,7 +92,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
             signal: ctrl.signal,
             sseMaxRetryAttempts: 0,
           })
-          resolveTransport()
 
           if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
             // Start syncing workspaces, it's important to do this after
@@ -125,14 +113,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           const backoff = Math.min(retryDelay * 2 ** (attempt - 1), maxRetryDelay)
           await new Promise((resolve) => setTimeout(resolve, backoff))
         }
-      })().catch(resolveTransport)
+      })().catch(() => {})
     }
 
     onMount(async () => {
       if (props.events) {
         const unsub = await props.events.subscribe(handleEvent)
         onCleanup(unsub)
-        resolveTransport()
 
         if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
           // Start syncing workspaces, it's important to do this after
@@ -156,9 +143,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
         return sdk
       },
       directory: props.directory,
-      ready: true,
-      transport,
-      markToastMount,
       event: emitter,
       fetch: props.fetch ?? fetch,
       url: props.url,

@@ -74,7 +74,6 @@ export type Event =
   | EventTuiPromptAppend2
   | EventTuiCommandExecute2
   | EventTuiToastShow2
-  | EventTuiToastMount
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
@@ -1440,13 +1439,6 @@ export type GlobalEvent = {
           message: string
           variant: "info" | "success" | "warning" | "error"
           duration?: number
-        }
-      }
-    | {
-        id: string
-        type: "tui.toast.mount"
-        properties: {
-          [key: string]: unknown
         }
       }
     | {
@@ -2926,7 +2918,6 @@ export type V2Event =
   | TuiPromptAppend
   | TuiCommandExecute
   | TuiToastShow
-  | TuiToastMount
   | TuiSessionSelect
   | McpToolsChanged
   | McpBrowserOpenFailed
@@ -5816,23 +5807,6 @@ export type TuiToastShow = {
   }
 }
 
-export type TuiToastMount = {
-  id: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  type: "tui.toast.mount"
-  durable?: {
-    aggregateID: string
-    seq: number
-    version: number
-  }
-  location?: LocationRef
-  data: {
-    [key: string]: unknown
-  }
-}
-
 export type TuiSessionSelect = {
   id: string
   metadata?: {
@@ -6904,14 +6878,6 @@ export type EventPermissionReplied = {
     sessionID: string
     requestID: string
     reply: "once" | "always" | "reject"
-  }
-}
-
-export type EventTuiToastMount = {
-  id: string
-  type: "tui.toast.mount"
-  properties: {
-    [key: string]: unknown
   }
 }
 
@@ -10905,34 +10871,6 @@ export type TuiShowToastResponses = {
 }
 
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
-
-export type TuiToastMountData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/tui/toast-mount"
-}
-
-export type TuiToastMountErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type TuiToastMountError = TuiToastMountErrors[keyof TuiToastMountErrors]
-
-export type TuiToastMountResponses = {
-  /**
-   * TUI startup notifications delivered successfully
-   */
-  200: boolean
-}
-
-export type TuiToastMountResponse = TuiToastMountResponses[keyof TuiToastMountResponses]
 
 export type TuiPublishData = {
   body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect

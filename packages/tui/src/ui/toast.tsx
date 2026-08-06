@@ -20,7 +20,9 @@ export function Toast() {
   const dimensions = useTerminalDimensions()
 
   onMount(() => {
-    void sdk.transport.then(sdk.markToastMount)
+    void sdk.client.tui
+      .publish({ body: { type: "tui.command.execute", properties: { command: "tui.toast.mount" } } })
+      .catch(() => {})
   })
 
   return (

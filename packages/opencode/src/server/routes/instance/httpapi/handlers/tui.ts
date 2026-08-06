@@ -83,11 +83,6 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
       return true
     })
 
-    const toastMount = Effect.fn("TuiHttpApi.toastMount")(function* () {
-      yield* events.publish(TuiEvent.ToastMount, {})
-      return true
-    })
-
     const publish = Effect.fn("TuiHttpApi.publish")(function* (ctx: { payload: typeof TuiPublishPayload.Type }) {
       if (ctx.payload.type === TuiEvent.PromptAppend.type)
         yield* events.publish(TuiEvent.PromptAppend, ctx.payload.properties)
@@ -128,7 +123,6 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
       .handle("clearPrompt", clearPrompt)
       .handle("executeCommand", executeCommand)
       .handle("showToast", showToast)
-      .handle("toastMount", toastMount)
       .handle("publish", publish)
       .handle("selectSession", selectSession)
       .handle("controlNext", controlNext)
