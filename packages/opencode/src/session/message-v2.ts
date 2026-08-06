@@ -588,9 +588,9 @@ export function latest(msgs: WithParts[]) {
   let finished: Assistant | undefined
   for (const msg of msgs) {
     const info = msg.info
-    if (info.role === "user" && (!user || info.id > user.id)) user = info
-    if (info.role === "assistant" && (!assistant || info.id > assistant.id)) assistant = info
-    if (info.role === "assistant" && info.finish && (!finished || info.id > finished.id)) finished = info
+    if (info.role === "user" && (!user || info.time.created > user.time.created)) user = info
+    if (info.role === "assistant" && (!assistant || info.time.created > assistant.time.created)) assistant = info
+    if (info.role === "assistant" && info.finish && (!finished || info.time.created > finished.time.created)) finished = info
   }
   const tasks = msgs.flatMap((m) =>
     finished && m.info.id <= finished.id
