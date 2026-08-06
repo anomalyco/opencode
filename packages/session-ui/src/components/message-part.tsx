@@ -30,8 +30,7 @@ import {
   QuestionAnswer,
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
-import type { SessionInfo } from "@opencode-ai/client/promise"
-import { useData } from "../context"
+import { type SessionSummary, useData } from "../context"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
@@ -601,7 +600,7 @@ function currentSession(path: string) {
 function taskSession(
   input: Record<string, any>,
   path: string,
-  sessions: SessionInfo[] | undefined,
+  sessions: SessionSummary[] | undefined,
   agents?: readonly { name: string; color?: string }[],
 ) {
   const parentID = currentSession(path)

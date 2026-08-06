@@ -3,6 +3,8 @@ import type { FileDiffInfo, SessionInfo } from "@opencode-ai/client/promise"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
+export type SessionSummary = Pick<SessionInfo, "id" | "parentID" | "title" | "time">
+
 export type NormalizedProviderListResponse = {
   all: Map<string, Provider>
   default: {
@@ -17,7 +19,7 @@ type Data = {
     color?: string
   }[]
   provider?: NormalizedProviderListResponse
-  session: SessionInfo[]
+  session: SessionSummary[]
   session_status: {
     [sessionID: string]: SessionStatus
   }
