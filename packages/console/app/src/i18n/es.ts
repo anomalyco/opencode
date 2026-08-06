@@ -257,9 +257,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "siguientes excepciones",
 
   "go.title": "OpenCode Go | Modelos de programación de bajo coste para todos",
-  "go.banner.text": "Kimi K3 tiene límites de uso 2x mayores por tiempo limitado",
+  "go.banner.text": "GPT 5.6 Luna tiene límites de uso 2x mayores por tiempo limitado",
   "go.meta.description":
-    "Go comienza en $5 el primer mes, luego 10 $/mes, con generosos límites de solicitudes de 5 horas para Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash y Hy3.",
+    "Go comienza en $5 el primer mes, luego 10 $/mes, con límites de uso generosos y acceso fiable a modelos de programación líderes.",
   "go.hero.title": "Modelos de programación de bajo coste para todos",
   "go.hero.body":
     "Go lleva la programación agéntica a programadores de todo el mundo. Ofrece límites generosos y acceso fiable a los modelos de código abierto más capaces, para que puedas crear con agentes potentes sin preocuparte por el coste o la disponibilidad.",
@@ -307,8 +307,7 @@ export const dict = {
   "go.problem.item1": "Precios de suscripción de bajo coste",
   "go.problem.item2": "Límites generosos y acceso fiable",
   "go.problem.item3": "Creado para tantos programadores como sea posible",
-  "go.problem.item4":
-    "Incluye Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash y Hy3",
+  "go.problem.item4": "Una selección de modelos probados para programación agéntica",
   "go.how.title": "Cómo funciona Go",
   "go.how.body": "Go comienza en $5 el primer mes, luego 10 $/mes. Puedes usarlo con OpenCode o cualquier agente.",
   "go.how.step1.title": "Crear una cuenta",
@@ -333,7 +332,7 @@ export const dict = {
   "go.faq.a2": "Go incluye los modelos que se indican abajo, con límites generosos y acceso confiable.",
   "go.faq.q3": "¿Es Go lo mismo que Zen?",
   "go.faq.a3":
-    "No. Zen es pago por uso, mientras que Go comienza en $5 el primer mes, luego 10 $/mes, con límites generosos y acceso fiable a los modelos de código abierto Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash y Hy3.",
+    "No. Zen es de pago por uso, mientras que Go comienza en $5 el primer mes, luego 10 $/mes, con límites generosos y acceso fiable a una selección de modelos.",
   "go.faq.q4": "¿Cuánto cuesta Go?",
   "go.faq.a4.p1.beforePricing": "Go cuesta",
   "go.faq.a4.p1.pricingLink": "$5 el primer mes",
@@ -342,8 +341,21 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "cuenta",
   "go.faq.a4.p3": "Cancela en cualquier momento.",
   "go.faq.q5": "¿Qué pasa con los datos y la privacidad?",
-  "go.faq.a5.body":
-    "El plan está diseñado principalmente para usuarios internacionales, con modelos alojados en EE. UU., UE y Singapur para un acceso global estable. Nuestros proveedores siguen una política de retención cero y no utilizan tus datos para el entrenamiento de modelos.",
+  "go.faq.a5.model": "Modelo",
+  "go.faq.a5.training": "Entrenamiento del modelo",
+  "go.faq.a5.retention": "Retención de datos",
+  "go.faq.a5.retention30": "30 días",
+  "go.faq.a5.retention0": "0 días",
+  "go.faq.a5.used": "Utilizado",
+  "go.faq.a5.notUsed": "No utilizado",
+  "go.faq.a5.noAgreement": "Sin acuerdo",
+  "go.faq.a5.grokRetention":
+    "ZDR deshabilita funciones importantes de la API que dependen de datos almacenados, incluidas la Responses API con estado, Files and Collections y la Batch API.",
+  "go.faq.a5.gptRetention":
+    "Se generan registros de supervisión de abusos para todo el uso de funciones de la API y se conservan durante un máximo de 30 días.",
+  "go.faq.a5.learnMore": "Más información",
+  "go.faq.a5.deepseekRetention":
+    "El acuerdo de ZDR se renueva mensualmente. El acuerdo actual es válido hasta el 31 de agosto de 2026.",
   "go.faq.a5.beforeExceptions":
     "Los modelos de Go están alojados en EE. UU. Los proveedores siguen una política de retención cero y no utilizan tus datos para el entrenamiento de modelos, con las",
   "go.faq.a5.exceptionsLink": "siguientes excepciones",
@@ -357,7 +369,7 @@ export const dict = {
 
   "go.faq.q9": "¿Cuál es la diferencia entre los modelos gratuitos y Go?",
   "go.faq.a9":
-    "Los modelos gratuitos incluyen Big Pickle más modelos promocionales disponibles en el momento, con una cuota de 200 solicitudes/día. Go incluye Grok 4.5, GLM-5.2, GLM-5.1, Kimi K3, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro, DeepSeek V4 Flash y Hy3 con cuotas de solicitud más altas aplicadas a través de ventanas móviles (5 horas, semanal y mensual), aproximadamente equivalente a 12 $ por 5 horas, 30 $ por semana y 60 $ por mes (los recuentos reales de solicitudes varían según el modelo y el uso).",
+    "Los modelos gratuitos incluyen Big Pickle y los modelos promocionales disponibles en ese momento, con una cuota de 200 solicitudes/día. Go ofrece una selección de modelos con cuotas de solicitudes más altas aplicadas en ventanas móviles (de 5 horas, semanales y mensuales), aproximadamente equivalentes a 12 $ por 5 horas, 30 $ por semana y 60 $ por mes (la cantidad real de solicitudes varía según el modelo y el uso).",
 
   "zen.api.error.rateLimitExceeded": "Límite de tasa excedido. Por favor, inténtalo de nuevo más tarde.",
   "zen.api.error.modelNotSupported": "Modelo {{model}} no soportado",
@@ -382,7 +394,7 @@ export const dict = {
     "Has alcanzado tu límite de gasto mensual de ${{amount}}. Gestiona tus límites aquí: {{membersUrl}}",
   "zen.api.error.modelDisabled": "El modelo está deshabilitado",
   "zen.api.error.regionNotAllowed":
-    "Este modelo está alojado en China. Si quieres usar este modelo, actívalo en tu configuración: {{consoleGoUrl}}",
+    "La versión más reciente de este modelo solo está disponible alojada en China y requiere una aceptación explícita: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "La promoción gratuita de {{model}} ha finalizado. Puedes seguir usando el modelo suscribiéndote a OpenCode Go - {{link}}",
 
@@ -674,7 +686,7 @@ export const dict = {
   "workspace.lite.promo.price": "$5 el primer mes",
   "workspace.lite.promo.modelsTitle": "Qué incluye",
   "workspace.lite.promo.footer":
-    "El plan está diseñado principalmente para usuarios internacionales, con modelos alojados en EE. UU., la UE y Singapur para un acceso global estable. Los precios y los límites de uso pueden cambiar a medida que aprendemos del uso inicial y los comentarios.",
+    "El plan está diseñado principalmente para usuarios internacionales y ofrece un acceso global estable. Los precios y los límites de uso pueden cambiar a medida que aprendemos del uso inicial y de los comentarios recibidos.",
   "workspace.lite.promo.subscribe": "Suscribirse a Go",
   "workspace.lite.promo.subscribing": "Redirigiendo...",
   "workspace.lite.promo.otherMethods": "Otros métodos de pago",

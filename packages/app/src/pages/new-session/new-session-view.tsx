@@ -78,9 +78,9 @@ export function NewSessionStatus(props: { mount: Accessor<HTMLElement | null>; v
   const language = useLanguage()
 
   return (
-    <Show when={props.mount()}>
+    <Show when={props.mount()} keyed>
       {(mount) => (
-        <Portal mount={mount()}>
+        <Portal mount={mount}>
           <Show when={props.visible()}>
             <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
               <StatusPopoverV2 />
