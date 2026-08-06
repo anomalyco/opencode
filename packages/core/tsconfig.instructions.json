@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@tsconfig/bun/tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "incremental": true,
+    "noEmit": false,
+    "noUncheckedIndexedAccess": false,
+    "outDir": "node_modules/.ts-dist/instructions",
+    "rootDir": "src/instructions",
+    "tsBuildInfoFile": "node_modules/.ts-dist/instructions.tsbuildinfo"
+  },
+  "files": ["src/instructions/index.ts"]
+}
