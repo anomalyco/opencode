@@ -1951,7 +1951,6 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
       paddingBottom={1}
       paddingLeft={2}
       paddingRight={1}
-      backgroundColor={theme.background.default}
       flexDirection="row"
       onMouseUp={props.onOpen}
     >
