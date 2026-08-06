@@ -239,6 +239,7 @@ export interface ParserState {
   readonly reasoningDetails: Array<unknown>
   readonly reasoningDetailsObserved: boolean
   readonly reasoningEmitted: boolean
+  readonly latestToolIndex?: number
   readonly nextToolIndex: number
 }
 
@@ -696,6 +697,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools
     let pendingTools = state.pendingTools
+    let latestToolIndex = state.latestToolIndex
     let nextToolIndex = state.nextToolIndex
 
     let lifecycle = state.lifecycle
@@ -740,15 +742,11 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
     }
 
-    // Compatible providers may omit indexes. Prefer durable identity, use batch
-    // position for parallel deltas, and only infer a singleton continuation
-    // when exactly one call is active.
+    // Compatible providers may omit indexes. Prefer durable identity, then use
+    // batch position for parallel deltas or the latest call for sparse chunks.
     for (const [position, tool] of toolDeltas.entries()) {
       const matched = toolIndexByID(tools, pendingTools, tool.id || undefined)
-      const active = Object.keys({ ...pendingTools, ...tools }).map(Number)
-      if ((tool.index === undefined || tool.index === null) && matched === undefined && !tool.id && active.length > 1)
-        return yield* ProviderShared.eventError(ADAPTER, "OpenAI Chat tool call delta has an ambiguous index")
-      const fallback = toolDeltas.length > 1 ? position : (active[0] ?? position)
+      const fallback = toolDeltas.length > 1 ? position : (latestToolIndex ?? position)
       const fallbackTool = tools[fallback] ?? pendingTools[fallback]
       const index =
         tool.index ?? matched ??
@@ -758,6 +756,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       const id = current?.id ?? pending?.id ?? (tool.id || undefined)
       const name = current?.name ?? pending?.name ?? (tool.function?.name || undefined)
       const text = `${pending?.input ?? ""}${tool.function?.arguments ?? ""}`
+      latestToolIndex = index
       nextToolIndex = Math.max(nextToolIndex, index + 1)
       if (!current && (!id || !name)) {
         pendingTools = {
@@ -805,6 +804,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         reasoningDetails: state.reasoningDetails,
         reasoningDetailsObserved,
         reasoningEmitted,
+        latestToolIndex,
         nextToolIndex,
       },
       events,
