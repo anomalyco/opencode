@@ -523,6 +523,17 @@ it.instance(
 
 // --- persona-bound gates -----------------------------------------------------
 
+// Deliberately declares itself allowed to do everything. A gate subagent's
+// ceiling must not depend on its persona file being right — config directories
+// merge with ~/.opencode last, so a globally seeded persona overrides a
+// project's own, and only ever toward more permission.
+const PERMISSIVE_REVIEWER = {
+  mode: "subagent" as const,
+  description: "A reviewer whose own definition grants it everything",
+  prompt: "Review the work and return LGTM or NEEDS_WORK.",
+  permission: { write: "allow" as const, edit: "allow" as const, bash: "allow" as const },
+}
+
 const REVIEWER = {
   mode: "subagent" as const,
   description: "Reads finished work and returns a verdict",
@@ -601,12 +612,12 @@ it.instance(
 )
 
 it.instance(
-  "the review subagent runs in its own session and cannot edit what it judges",
+  "the review subagent is fenced even when its own persona grants it everything",
   () =>
     Effect.gen(function* () {
       const { directory: dir } = yield* TestInstance
       const llm = yield* TestLLMServer
-      yield* writeConfig(dir, { ...providerCfg(llm.url), agent: { reviewer: REVIEWER } })
+      yield* writeConfig(dir, { ...providerCfg(llm.url), agent: { reviewer: PERMISSIVE_REVIEWER } })
       const changeDir = writeChange(dir, "judged-change", "- [ ] 1.1 the work\n")
       const loop = yield* Loop.Service
       const session = yield* Session.Service
@@ -634,11 +645,12 @@ it.instance(
         "60 seconds",
       )
 
+      // Evaluated, not merely present: the persona's own rules are in here too
+      // and a stray allow later in the list would beat an earlier deny.
       const rules = reviewSession.permission ?? []
-      const denies = (permission: string) =>
-        rules.some((rule) => rule.permission === permission && rule.action === "deny" && rule.pattern === "*")
-      expect(denies("write")).toBe(true)
-      expect(denies("edit")).toBe(true)
+      for (const permission of ["bash", "write", "edit", "patch", "apply_patch"]) {
+        expect(Permission.evaluate(permission, "*", rules).action, permission).toBe("deny")
+      }
 
       yield* loop.cancel(info.id).pipe(Effect.ignore)
       yield* waitForTerminal(info.id, 30)

@@ -729,6 +729,19 @@ export const layer = Layer.effect(
       )
     })
 
+    // A gate subagent decides whether work ships. It must not be able to change
+    // that work, and that cannot be left to its persona file: config directories
+    // are merged with `~/.opencode` scanned LAST, so skein's globally seeded
+    // personas silently override a project's own — and only ever toward MORE
+    // permission. Observed live: a project reviewer declaring `bash: deny`
+    // resolved to `bash: allow` because ~/.opencode/agent/reviewer.md (a symlink
+    // into ~/.skein/agents) said so, and the reviewer promptly wrote a file.
+    //
+    // So the gate states its own ceiling and does not ask the persona's opinion.
+    const GateSubagentDenies: PermissionV1.Ruleset = ["bash", "write", "edit", "patch", "apply_patch"].map(
+      (permission) => ({ permission, pattern: "*" as const, action: "deny" as const }),
+    )
+
     /**
      * Run a gate whose verdict a subagent decides.
      *
@@ -772,12 +785,18 @@ export const layer = Layer.effect(
             // The derived ceiling goes LAST so it always wins — the parent's
             // deny rules (the queue's no-push authority) must not be
             // overridable by anything a persona says about itself.
+            // Order is load-bearing: rules are last-match-wins
+            // (Permission.evaluate uses findLast) and tools merge as
+            // [agent rules, session rules], so whatever sits last here beats
+            // everything before it. Persona first, then the parent's ceiling,
+            // then the gate's own non-negotiable denies.
             permission: [
               ...persona.permission,
               ...deriveSubagentSessionPermission({
                 parentSessionPermission: parent?.permission ?? [],
                 subagent: persona,
               }),
+              ...GateSubagentDenies,
             ],
           })
           .pipe(Effect.orElseSucceed(() => undefined))
