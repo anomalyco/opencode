@@ -113,11 +113,57 @@
       quietly sorted by desirability would make that untestable in isolation.
       20 tests in `test/local/model-gallery-dataplane.test.ts`; `bun run
       typecheck` clean; `bun test test/local/` 209 pass.
-- [ ] 5.4 Implement hard compatibility filters before ranking.
-- [ ] 5.5 Implement explained fit/context, quality, speed/benchmark,
+- [x] 5.4 Implement hard compatibility filters before ranking.
+      `src/local/model-gallery/filter.ts`. "Hard" means disqualifying fact, not
+      preference: a model that cannot run on a host is not a low-scoring
+      option, it is not an option. Two reasons it must precede ranking —
+      ranking weights are tuned against plausible options, so impossible ones
+      distort every relative score around them; and "ranked last" and "cannot
+      run" look identical in a sorted list, so a user scrolling to the bottom
+      sees a suggestion the machine cannot honour.
+      An UNKNOWN fit deliberately does not disqualify. Filtering there would
+      hide a perfectly good model because a host runs an older llama-swap
+      build, and the user could not tell that apart from the model not
+      existing; 5.6 labels it instead. All applicable reasons are collected
+      rather than short-circuiting, since naming one of three problems invites
+      the user to fix it and find the pair still unavailable.
+- [x] 5.5 Implement explained fit/context, quality, speed/benchmark,
       capability, provenance, recency, and popularity evidence.
-- [ ] 5.6 Add installed, upgrade, fresh, stale, offline, unsupported, and
+      `src/local/model-gallery/rank.ts`. "Explained" does the work here: a
+      single number tells the user nothing actionable, because they cannot
+      tell a model that ranked low for barely fitting from one that ranked low
+      for being unpopular — and those call for opposite responses. Scoring
+      therefore emits named, signed contributions whose sum IS the total, so
+      the UI can show the total, the top contributor, or the full breakdown
+      and none can drift from the others.
+      All seven dimensions are covered, reusing existing vocabulary rather
+      than inventing a parallel one: `ModelEvidence.kind` gained "provenance"
+      and "recency" (backward compatible — existing emitters are untouched),
+      and quality/speed come from llmfit's tables in `quant.ts`, keyed on the
+      variant that would actually be installed rather than the candidate in
+      the abstract. Compatibility and context outrank popularity, as the
+      proposal requires; an unverifiable fit scores below a verified one
+      (a penalty for being unverifiable, not for being bad); context headroom
+      beyond the request earns no extra credit; and recency uses an injected
+      clock so tests are not time-dependent.
+- [x] 5.6 Add installed, upgrade, fresh, stale, offline, unsupported, and
       unknown classifications.
+      `src/local/model-gallery/classify.ts`. Each row gets exactly one label
+      because the UI shows one badge; the substance is the PRECEDENCE, since
+      several are true at once for most rows and picking the wrong one tells
+      the user to fix the wrong thing. Order is most-fundamental-first, the
+      same principle Skein's placement port uses: offline > unsupported >
+      installed > unknown > stale > upgrade/fresh. A down host is also
+      technically "nothing fits" and "not installed", and reporting either
+      sends the user after a model problem they do not have.
+      "unknown" deliberately outranks "stale" and the family labels: claiming
+      a fresh find on a host we could not query is an invention, whereas
+      admitting we do not know is always true. Upgrade detection reuses
+      `model-catalog/family`'s version parsing rather than reimplementing it,
+      so the gallery and catalog cannot disagree — including the two Skein
+      defects deliberately fixed there.
+      27 tests in `test/local/model-gallery-ranking.test.ts`; `bun run
+      typecheck` clean; `bun test test/local/` 236 pass.
 - [ ] 5.7 Expose typed local HTTP API endpoints shared by app and TUI.
 
 ## 6. Web and desktop experience

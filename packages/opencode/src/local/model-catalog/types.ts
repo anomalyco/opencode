@@ -43,7 +43,10 @@ export const ModelVariant = Schema.Struct({
 export type ModelVariant = typeof ModelVariant.Type
 
 export const ModelEvidence = Schema.Struct({
-  kind: Schema.Literals(["fit", "context", "quality", "speed", "capability", "popularity"]),
+  // "provenance" and "recency" were added for the gallery's explained
+  // ranking (model-gallery-ui 5.5). Extending this list is backward
+  // compatible: existing emitters keep using the kinds they always did.
+  kind: Schema.Literals(["fit", "context", "quality", "speed", "capability", "popularity", "provenance", "recency"]),
   source: Schema.String,
   measured: Schema.Boolean,
   value: Schema.Unknown,
