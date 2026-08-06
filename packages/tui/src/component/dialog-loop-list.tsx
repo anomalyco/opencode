@@ -68,15 +68,15 @@ export function DialogLoopList() {
 
   return (
     <DialogSelect
-      title="Loops"
+      title="Work — running and finished"
       options={options()}
       skipFilter={true}
       emptyView={
         <text>
-          No loops yet. /loop &lt;prompt&gt; repeats a prompt until the agent emits
-          &lt;promise&gt;COMPLETE&lt;/promise&gt;. /loop --queue works the openspec backlog change by change
-          (implement, test, verify, commit — never pushes). Set experimental.queue_gate in your config so
-          the queue's test and verify commands run in the right directory.
+          Nothing has run yet. /loop &lt;prompt&gt; keeps working on that prompt until it is done. /auto works
+          the planned tasks itself — change by change, implement, test, verify, commit — and stops when none
+          are left. Neither ever pushes. Set experimental.queue_gate so the test and verify commands run in
+          the right directory for this repo.
         </text>
       }
       onSelect={(option) => {

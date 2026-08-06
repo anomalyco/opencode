@@ -2091,3 +2091,43 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+// A setting written while the app is running has to reach `Config.get()` — the
+// reader everything else uses — without waiting for the instance to reload.
+// `get()` answers from a per-instance snapshot whose rebuild resolves plugins
+// through npm, so it is deliberately not rebuilt on write; a runtime overlay
+// covers the gap for the keys that are actually written at runtime.
+//
+// This regression exists because the obvious fix — invalidating the instance
+// state — reloaded auth and plugins on every write and hung the app.
+it.instance("a runtime write reaches get() without reloading the instance", () =>
+  Effect.gen(function* () {
+    expect((yield* Config.use.get()).auto_mode ?? false).toBe(false)
+
+    yield* Config.use.updateGlobal({ auto_mode: true })
+    expect((yield* Config.use.get()).auto_mode).toBe(true)
+    expect((yield* Config.use.getGlobal()).auto_mode).toBe(true)
+
+    // Tracks the value rather than latching on the first write.
+    yield* Config.use.updateGlobal({ auto_mode: false })
+    expect((yield* Config.use.get()).auto_mode).toBe(false)
+  }),
+)
+
+it.instance("structural keys are left out of the overlay, and stay snapshot-scoped", () =>
+  Effect.gen(function* () {
+    // Force the instance snapshot to exist before writing, so this measures the
+    // overlay rather than a lazy first load picking the new file up anyway.
+    expect((yield* Config.use.get()).provider?.["demo"]).toBeUndefined()
+
+    yield* Config.use.updateGlobal({ provider: { demo: { name: "Demo" } } })
+
+    // Written, and visible globally...
+    expect((yield* Config.use.getGlobal()).provider?.["demo"]?.name).toBe("Demo")
+    // ...but deliberately NOT overlaid onto the instance view: `provider` is
+    // merged per project by loadInstanceState, and shadowing that merge would
+    // be a subtler bug than the staleness being fixed. Structural keys still
+    // take effect when the instance next loads, which is the accepted trade.
+    expect((yield* Config.use.get()).provider?.["demo"]).toBeUndefined()
+  }),
+)

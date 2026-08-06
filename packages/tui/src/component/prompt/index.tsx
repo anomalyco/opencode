@@ -1641,11 +1641,18 @@ function isRunControlInput(input: string): boolean {
                             // set. `/loop` and `/auto` are verbs, so the only
                             // honest thing to show is what is running, and
                             // nothing at all when nothing is.
-                            <text fg={fadeColor(theme.success, modelMetaAlpha())}>
+                            // ClickText is the file's existing clickable-text
+                            // idiom (mouse-up, as the retry link uses) rather
+                            // than a hand-rolled handler — the hand-rolled one
+                            // fought the root box's copy-on-select.
+                            <ClickText
+                              fg={fadeColor(theme.success, modelMetaAlpha())}
+                              onMouseUp={() => dialog.replace(() => <DialogLoopList />)}
+                            >
                               {live().currentChange
                                 ? `● auto ${live().currentChange} [${live().currentGate ?? "?"}] ${live().iteration}/${live().maxIterations}`
                                 : `● loop ${live().iteration}/${live().maxIterations}`}
-                            </text>
+                            </ClickText>
                           )}
                         </Show>
                         <box flexDirection="row" gap={1}>

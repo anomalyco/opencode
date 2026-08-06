@@ -18,7 +18,7 @@ import { isRecord } from "@/util/record"
 import type { ConsoleState } from "@opencode-ai/core/v1/config/console-state"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
-import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
+import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Ref, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
@@ -138,6 +138,14 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
 
 export const use = serviceUse(Service)
+
+/**
+ * Settings that can be written while the app is running, and so must take
+ * effect without waiting for the instance to reload. Keep this to simple
+ * scalars: see the overlay comment on `get()` for why structural keys must not
+ * be listed here.
+ */
+const RUNTIME_OVERLAY_KEYS = ["auto_mode"] as const
 
 function globalConfigFile() {
   const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
@@ -617,8 +625,25 @@ export const layer = Layer.effect(
       }),
     )
 
+    // `get()` answers from a per-instance snapshot built by loadInstanceState,
+    // which resolves plugins through npm — far too expensive to rebuild every
+    // time a single setting is written. But without SOMETHING, a value written
+    // at runtime never reaches `get()`: it lands on disk and in `getGlobal()`
+    // while every reader keeps seeing the old one, so a toggle silently does
+    // nothing until the instance happens to reload.
+    //
+    // The overlay closes that gap for exactly the keys that are written at
+    // runtime. It is an allowlist rather than "whatever was written" on
+    // purpose: overlaying a structural key like `provider` would shadow the
+    // per-project merging that loadInstanceState did, which is a much subtler
+    // bug than the one being fixed.
+    const overlay = yield* Ref.make<Partial<Info>>({})
+
     const get = Effect.fn("Config.get")(function* () {
-      return yield* InstanceState.use(state, (s) => s.config)
+      const base = yield* InstanceState.use(state, (s) => s.config)
+      const patch = yield* Ref.get(overlay)
+      for (const _ in patch) return { ...base, ...patch }
+      return base
     })
 
     const directories = Effect.fn("Config.directories")(function* () {
@@ -679,7 +704,17 @@ export const layer = Layer.effect(
         if (changed) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
       }
 
-      if (changed) yield* invalidate()
+      if (changed) {
+        yield* invalidate()
+        const runtime: Partial<Info> = {}
+        for (const key of RUNTIME_OVERLAY_KEYS) {
+          if (key in patch) (runtime as Record<string, unknown>)[key] = (patch as Record<string, unknown>)[key]
+        }
+        for (const _ in runtime) {
+          yield* Ref.update(overlay, (current) => ({ ...current, ...runtime }))
+          break
+        }
+      }
       return { info: next, changed }
     })
 
