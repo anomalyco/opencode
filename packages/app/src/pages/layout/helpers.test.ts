@@ -18,6 +18,7 @@ import {
   homeProjectDirectories,
   homeSessionServerStatus,
   latestRootSession,
+  projectForSession,
   toggleHomeProjectSelection,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
@@ -317,5 +318,62 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+})
+
+describe("projectForSession", () => {
+  // Project.resolve keys the ID off the git remote, so directories that share a
+  // repo identity - separate clones, sibling worktrees, or one nested inside the
+  // other's repo - all carry the same one.
+  const projectB = { id: "github.com/me/repo", worktree: "/home/me/projects/beta" }
+  const projectT = { id: "github.com/me/repo", worktree: "/home/me/projects/tango" }
+
+  test("resolves each project by directory when they share a repo identity", () => {
+    const projects = [projectB, projectT]
+    const id = "github.com/me/repo"
+
+    expect(
+      projectForSession(session({ id: "ses_b", directory: "/home/me/projects/beta", projectID: id }), projects),
+    ).toBe(projectB)
+    expect(
+      projectForSession(session({ id: "ses_t", directory: "/home/me/projects/tango", projectID: id }), projects),
+    ).toBe(projectT)
+  })
+
+  test("resolves each project by directory when they share the global ID", () => {
+    const outsideA = { id: "global", worktree: "/home/me/notes" }
+    const outsideB = { id: "global", worktree: "/home/me/scratch" }
+    const projects = [outsideA, outsideB]
+
+    expect(
+      projectForSession(session({ id: "ses_a", directory: "/home/me/notes", projectID: "global" }), projects),
+    ).toBe(outsideA)
+    expect(
+      projectForSession(session({ id: "ses_b", directory: "/home/me/scratch", projectID: "global" }), projects),
+    ).toBe(outsideB)
+  })
+
+  test("falls back to the ID for a session below a repo root", () => {
+    const repo = { id: "prj_repo", worktree: "/home/me/repo" }
+
+    expect(
+      projectForSession(session({ id: "ses_nested", directory: "/home/me/repo/packages/app", projectID: "prj_repo" }), [
+        repo,
+      ]),
+    ).toBe(repo)
+  })
+
+  test("matches a sandbox directory", () => {
+    const project = { id: "prj_one", worktree: "/home/me/repo", sandboxes: ["/home/me/sandbox"] }
+
+    expect(
+      projectForSession(session({ id: "ses_sb", directory: "/home/me/sandbox", projectID: "other" }), [project]),
+    ).toBe(project)
+  })
+
+  test("returns undefined when nothing matches", () => {
+    expect(
+      projectForSession(session({ id: "ses_x", directory: "/home/me/elsewhere", projectID: "nope" }), [projectB]),
+    ).toBeUndefined()
   })
 })

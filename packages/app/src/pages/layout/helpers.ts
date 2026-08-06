@@ -106,13 +106,21 @@ export function projectForSession<T extends { id?: string; worktree: string; san
   projects: T[],
   byID: Map<string, T> = new Map(projects.flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
 ) {
-  const direct = byID.get(session.projectID)
-  if (direct) return direct
+  // Match the directory before the ID. A project ID does not identify an opened
+  // directory: Project.resolve keys it off the git remote (falling back to the
+  // repo's root commit), so separate clones, sibling worktrees, and a directory
+  // nested inside another's repo all share one — as does everything outside a
+  // repo, under the global ID. Keying off the ID first collapses every session
+  // in those directories onto whichever was opened first. A worktree or sandbox
+  // path identifies an opened project on its own; the ID is only needed for
+  // sessions below a repo root, where no path matches exactly.
   const directory = pathKey(session.directory)
-  return projects.find(
+  const byPath = projects.find(
     (project) =>
       pathKey(project.worktree) === directory || project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
   )
+  if (byPath) return byPath
+  return byID.get(session.projectID)
 }
 
 export const errorMessage = (err: unknown, fallback: string) => {
