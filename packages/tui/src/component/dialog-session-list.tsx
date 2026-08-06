@@ -19,7 +19,7 @@ import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
 import { useEvent } from "../context/event"
 
-type SessionListFilter = { scope?: "project"; path?: string }
+type SessionListFilter = { scope?: "project"; directory?: string }
 
 export function createDialogSessionListQuery(input: { search?: string; filter: SessionListFilter }) {
   const search = input.search?.trim()

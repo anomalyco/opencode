@@ -13,6 +13,7 @@ import { NotFoundError } from "@/storage/storage"
 import { EOL } from "os"
 import path from "path"
 import { which } from "@opencode-ai/core/util/which"
+import { InstanceRef } from "@/effect/instance-ref"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -84,7 +85,11 @@ export const SessionListCommand = effectCmd({
         default: "table",
       }),
   handler: Effect.fn("Cli.session.list")(function* (args) {
-    const sessions = yield* Session.Service.use((svc) => svc.list({ roots: true, limit: args.maxCount }))
+    const ctx = yield* InstanceRef
+    if (!ctx) return yield* Effect.die("InstanceRef not provided")
+    const sessions = yield* Session.Service.use((svc) =>
+      svc.list(createSessionListQuery({ directory: ctx.directory, maxCount: args.maxCount })),
+    )
 
     if (sessions.length === 0) return
 
@@ -114,6 +119,14 @@ export const SessionListCommand = effectCmd({
     }
   }),
 })
+
+export function createSessionListQuery(input: { directory: string; maxCount?: number }) {
+  return {
+    directory: input.directory,
+    roots: true,
+    limit: input.maxCount,
+  }
+}
 
 function formatSessionTable(sessions: Session.Info[]): string {
   const lines: string[] = []
