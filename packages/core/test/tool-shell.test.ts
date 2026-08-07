@@ -524,7 +524,8 @@ describe("ShellTool", () => {
           const content = settled.content?.[0]
           if (!content || content.type !== "text") throw new Error("Expected text content")
           expect(content.text).not.toContain("one")
-          expect(content.text).toStartWith("two\nthree")
+          // Windows shells emit CRLF; the assertion targets line limits, not line endings.
+          expect(content.text.replaceAll("\r\n", "\n")).toStartWith("two\nthree")
           expect(content.text).toContain("output truncated; full output saved to:")
         })
       },
