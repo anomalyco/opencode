@@ -72,19 +72,27 @@ function LimitsGraph(props: { href: string }) {
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "270ms" },
-    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna (2x usage)", req: 4100, baseReq: 2050, d: "290ms" },
+    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 4100, baseReq: 2050, d: "290ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
     { id: "hy3", name: "Hy3", req: 4300, d: "320ms" },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
-    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 31650, d: "340ms" },
+    {
+      id: "deepseek-v4-flash",
+      name: "DeepSeek V4 Flash",
+      req: 63300,
+      baseReq: 31650,
+      edge: true,
+      d: "340ms",
+    },
   ]
 
-  const w = 720
+  const w = 1040
+  const chartW = 720
   const left = 40
   const right = 60
   const top = 18
   const bottom = 44
-  const plot = w - left - right
+  const plot = chartW - left - right
 
   const ratio = (n: number) => n / baseline
   const rmax = Math.max(1, ...graph.map((m) => ratio(m.req)))
@@ -195,10 +203,12 @@ function LimitsGraph(props: { href: string }) {
                 data-item
                 data-kind="go"
                 data-model={m.id}
+                data-edge={"edge" in m ? "" : undefined}
                 style={{ "--x": px(x(ratio(m.req))), "--y": py(gy(i())), "--d": m.d } as any}
               >
                 <span data-value>{m.req.toLocaleString()}</span>
                 <span data-name>{m.name}</span>
+                {m.baseReq && <span data-bonus>2x usage</span>}
               </span>
             )}
           </For>

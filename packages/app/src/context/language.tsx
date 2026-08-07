@@ -9,6 +9,7 @@ import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import {
   createDesktopNativeBundle,
   DESKTOP_NATIVE_ENGLISH,
+  DESKTOP_NATIVE_LABELS,
   DESKTOP_NATIVE_LOCALES,
   type DesktopNativeBundle,
   type DesktopNativeLocale,
@@ -67,40 +68,6 @@ const INTL: Record<Locale, string> = {
   az: "az-Latn-AZ",
   fi: "fi-FI",
   sv: "sv-SE",
-}
-
-const LABEL_KEY: Partial<Record<Locale, keyof Dictionary>> = {
-  en: "language.en",
-  zh: "language.zh",
-  zht: "language.zht",
-  ko: "language.ko",
-  de: "language.de",
-  es: "language.es",
-  fr: "language.fr",
-  da: "language.da",
-  ja: "language.ja",
-  pl: "language.pl",
-  ru: "language.ru",
-  uk: "language.uk",
-  ar: "language.ar",
-  no: "language.no",
-  br: "language.br",
-  th: "language.th",
-  bs: "language.bs",
-  tr: "language.tr",
-}
-
-const LABEL: Partial<Record<Locale, string>> = {
-  hi: "हिन्दी",
-  nl: "Nederlands",
-  id: "Bahasa Indonesia",
-  vi: "Tiếng Việt",
-  it: "Italiano",
-  ur: "اردو",
-  pa: "پنجابی",
-  az: "Azərbaycanca",
-  fi: "Suomi",
-  sv: "Svenska",
 }
 
 const base = i18n.flatten({ ...en, ...uiEn })
@@ -272,11 +239,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       return i18n.resolveTemplate(current[candidate] ?? current[fallback] ?? fallback, { ...params, count })
     }
 
-    const label = (value: Locale) => {
-      const key = LABEL_KEY[value]
-      if (key) return t(key)
-      return LABEL[value] ?? value
-    }
+    const label = (value: Locale) => DESKTOP_NATIVE_LABELS[value]
 
     createEffect(() => {
       if (typeof document !== "object") return
