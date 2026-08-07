@@ -11,41 +11,44 @@ export const CloudflareAIGatewayPlugin = define({
   id: "opencode.provider.cloudflare-ai-gateway",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
-    const complete = typeof configured?.baseURL === "string"
+    const hasBaseURL = typeof configured?.baseURL === "string"
     yield* ctx.integration.transform((draft) => {
-      const forms = [
-        ...(complete || process.env.CLOUDFLARE_ACCOUNT_ID || stringOption(configured ?? {}, "accountId")
-          ? []
-          : [
-              {
-                type: "string" as const,
-                key: "accountId",
-                title: "Enter your Cloudflare Account ID",
-                placeholder: "e.g. 1234567890abcdef1234567890abcdef",
-                required: true,
-              },
-            ]),
-        ...(complete ||
-        process.env.CLOUDFLARE_GATEWAY_ID ||
-        stringOption(configured ?? {}, "gatewayId") ||
-        stringOption(configured ?? {}, "gateway")
-          ? []
-          : [
-              {
-                type: "string" as const,
-                key: "gatewayId",
-                title: "Enter your Cloudflare AI Gateway ID",
-                placeholder: "e.g. my-gateway",
-                required: true,
-              },
-            ]),
-      ]
+      const hasAccountId =
+        hasBaseURL || Boolean(process.env.CLOUDFLARE_ACCOUNT_ID || stringOption(configured ?? {}, "accountId"))
+      const hasGatewayId =
+        hasBaseURL ||
+        Boolean(
+          process.env.CLOUDFLARE_GATEWAY_ID ||
+            stringOption(configured ?? {}, "gatewayId") ||
+            stringOption(configured ?? {}, "gateway"),
+        )
+      const accountIdForm = {
+        type: "string" as const,
+        key: "accountId",
+        title: "Enter your Cloudflare Account ID",
+        placeholder: "e.g. 1234567890abcdef1234567890abcdef",
+        required: true,
+      }
+      const gatewayIdForm = {
+        type: "string" as const,
+        key: "gatewayId",
+        title: "Enter your Cloudflare AI Gateway ID",
+        placeholder: "e.g. my-gateway",
+        required: true,
+      }
       draft.method.update({
         integrationID: providerID,
         method: {
           type: "key",
           label: "Gateway API token",
-          ...(forms[0] ? { forms: [forms[0], ...forms.slice(1)] } : {}),
+          forms:
+            !hasAccountId && !hasGatewayId
+              ? [accountIdForm, gatewayIdForm]
+              : !hasAccountId
+                ? [accountIdForm]
+                : !hasGatewayId
+                  ? [gatewayIdForm]
+                  : undefined,
         },
       })
     })

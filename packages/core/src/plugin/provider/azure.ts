@@ -21,10 +21,10 @@ export const AzurePlugin = define({
         method: {
           type: "key",
           label: "API key",
-          ...(resolveResourceName(configured) || typeof configured?.baseURL === "string"
-            ? {}
-            : {
-                forms: [
+          forms:
+            resolveResourceName(configured) || typeof configured?.baseURL === "string"
+              ? undefined
+              : [
                   {
                     type: "string",
                     key: "resourceName",
@@ -33,7 +33,6 @@ export const AzurePlugin = define({
                     required: true,
                   },
                 ],
-              }),
         },
       })
     })

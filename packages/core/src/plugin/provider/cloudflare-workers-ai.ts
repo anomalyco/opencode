@@ -17,10 +17,10 @@ export const CloudflareWorkersAIPlugin = define({
         method: {
           type: "key",
           label: "API key",
-          ...(typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})
-            ? {}
-            : {
-                forms: [
+          forms:
+            typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})
+              ? undefined
+              : [
                   {
                     type: "string",
                     key: "accountId",
@@ -29,7 +29,6 @@ export const CloudflareWorkersAIPlugin = define({
                     required: true,
                   },
                 ],
-              }),
         },
       })
     })
