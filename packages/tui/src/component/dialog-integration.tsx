@@ -100,7 +100,7 @@ export function DialogIntegration(
 
   return (
     <DialogSelect
-      title="Connect a service"
+      title="Connect an integration"
       options={options()}
       emptyView={
         <box paddingLeft={4} paddingRight={4}>

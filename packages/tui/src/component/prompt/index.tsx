@@ -259,7 +259,7 @@ export function Prompt(props: PromptProps) {
   function promptModelWarning() {
     toast.show({
       variant: "warning",
-      message: "Connect a provider to send prompts",
+      message: "Connect an integration to send prompts",
       duration: 3000,
     })
     if (!connected()) {

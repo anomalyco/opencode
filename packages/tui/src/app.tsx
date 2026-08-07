@@ -832,7 +832,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "provider.connect",
-        title: "Connect integration",
+        title: "Connect an integration",
         suggested: !connected(),
         slash: { name: "connect" },
         run: () => {
