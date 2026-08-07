@@ -33,9 +33,10 @@ const model = OpenAI.configure({
 //
 //   - `generation`: common controls such as max tokens, temperature, topP/topK,
 //     penalties, seed, and stop sequences.
+//   - `promptCacheKey`: stable cache affinity for protocols that support it.
 //   - `providerOptions`: namespaced provider-native behavior. For example,
-//     OpenAI cache keys and store behavior, Anthropic thinking, Gemini thinking
-//     config, or OpenRouter routing/reasoning.
+//     OpenAI store behavior, Anthropic thinking, Gemini thinking config, or
+//     OpenRouter routing/reasoning.
 //   - `http`: last-resort serializable overlays for final request body, headers,
 //     and query params. Prefer typed `providerOptions` when a field is stable.
 //
@@ -45,9 +46,7 @@ const request = LLM.request({
   system: "You are concise and practical.",
   prompt: "Tell me a joke",
   generation: { maxTokens: 80, temperature: 0.7 },
-  providerOptions: {
-    openai: { promptCacheKey: "tutorial-joke" },
-  },
+  promptCacheKey: "tutorial-joke",
 })
 
 // 3. `generate` sends the request and collects the event stream into one
