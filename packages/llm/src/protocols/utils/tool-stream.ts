@@ -112,7 +112,9 @@ export const start = <K extends StreamKey>(
  * Append a streamed argument delta, starting the tool if this provider encodes
  * identity on the first delta instead of a separate start event. OpenAI Chat has
  * this shape: `tool_calls[].index` is the stream key, and `id` / `name` may only
- * appear on the first delta for that index.
+ * appear on the first delta for that index. Some OpenAI-compatible providers
+ * (Alibaba DashScope) send them as empty strings on continuation deltas, so
+ * empty identity falls back to the accumulated tool the same as an absent one.
  */
 export const appendOrStart = <K extends StreamKey>(
   route: string,
@@ -122,8 +124,8 @@ export const appendOrStart = <K extends StreamKey>(
   missingToolMessage: string,
 ): AppendOutcome<K> | LLMError => {
   const current = tools[key]
-  const id = delta.id ?? current?.id
-  const name = delta.name ?? current?.name
+  const id = delta.id || current?.id
+  const name = delta.name || current?.name
   if (!id || !name) return eventError(route, missingToolMessage)
 
   const tool = {
