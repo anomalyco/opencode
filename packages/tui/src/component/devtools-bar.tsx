@@ -13,7 +13,7 @@ import { useRoute } from "../context/route"
 import { Keymap } from "../context/keymap"
 import { useTheme, useThemes } from "../context/theme"
 import { DevTools } from "../devtools"
-import { usePlugin } from "../plugin/context"
+import { usePlugin } from "../plugin/use-plugin"
 import { errorMessage } from "../util/error"
 
 const graphWidth = 23

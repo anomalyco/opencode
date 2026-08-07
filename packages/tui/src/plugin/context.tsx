@@ -1,9 +1,9 @@
 import type { Plugin } from "@opencode-ai/plugin/tui"
-import { batch, createContext, createEffect, on, onCleanup, onMount, useContext, type ParentProps } from "solid-js"
+import { batch, createEffect, on, onCleanup, onMount, type ParentProps } from "solid-js"
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import type { Page, Slot, SlotName } from "@opencode-ai/plugin/tui/context"
+import type { Page, Slot } from "@opencode-ai/plugin/tui/context"
 import { createStore, produce, reconcile as reconcileStore } from "solid-js/store"
 import { isDeepEqual } from "remeda"
 import "#runtime-plugin-support"
@@ -14,30 +14,10 @@ import { builtins } from "./builtins"
 import { createPluginContext, usePluginHost, type Dispose } from "./api"
 import { createSourceWatcher } from "./watch"
 import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
+import { PluginContext, type PluginState, type RegisteredPlugin } from "./use-plugin"
 
 export interface PackageResolver {
   readonly resolve: (spec: string) => Promise<string | undefined>
-}
-
-type State =
-  | { readonly target: string; readonly id: string; readonly status: "active" | "inactive" }
-  | { readonly target: string; readonly status: "unsupported" }
-  | { readonly target: string; readonly status: "failed"; readonly error: string }
-
-type RegisteredPlugin = {
-  readonly id: string
-  readonly source: "builtin" | "external"
-  readonly active: boolean
-}
-
-type Value = {
-  readonly ready: () => boolean
-  readonly list: () => ReadonlyArray<State>
-  readonly registered: () => ReadonlyArray<RegisteredPlugin>
-  readonly route: (id: string, name: string) => Page["render"] | undefined
-  readonly slot: <Name extends SlotName>(name: Name) => ReadonlyArray<{ readonly id: string; readonly render: Slot<Name> }>
-  readonly activate: (id: string) => Promise<boolean>
-  readonly deactivate: (id: string) => Promise<boolean>
 }
 
 type Registration = {
@@ -55,8 +35,6 @@ type Registration = {
 // One entry of the desired plugin generation produced by the resolve phase.
 type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "options"> & { enabled: boolean }
 
-const PluginContext = createContext<Value>()
-
 export function PluginProvider(props: ParentProps<{ packages: PackageResolver; directories: string[] }>) {
   const host = usePluginHost()
   const config = useConfig()
@@ -64,7 +42,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   const directory = config.path ? path.dirname(config.path) : process.cwd()
   const [store, setStore] = createStore({
     ready: false,
-    states: [] as ReadonlyArray<State>,
+    states: [] as ReadonlyArray<PluginState>,
     registrations: {} as Record<string, Registration>,
   })
 
@@ -194,7 +172,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     // to import keeps its running previous version and only reports failure.
     const desired = new Map<string, Desired>()
     for (const plugin of builtins) desired.set(plugin.id, { plugin, source: "builtin", version: "builtin", enabled: true })
-    const failures: State[] = []
+    const failures: PluginState[] = []
     for (const entry of entries) {
       const target = typeof entry === "string" ? entry : entry.package
       if (target.startsWith("-")) {
@@ -326,8 +304,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     }
 
     const failedTargets = new Set(failures.map((failure) => failure.target))
-    const states: State[] = [
-      ...[...desired.values()].flatMap((item): State[] => {
+    const states: PluginState[] = [
+      ...[...desired.values()].flatMap((item): PluginState[] => {
         if (item.target === undefined) return []
         // A failed reload keeps this item running; the failure entry covers it.
         if (failedTargets.has(item.target)) return []
@@ -501,10 +479,4 @@ function isPlugin(value: unknown): value is Plugin.Definition {
     "setup" in value &&
     typeof value.setup === "function"
   )
-}
-
-export function usePlugin() {
-  const value = useContext(PluginContext)
-  if (!value) throw new Error("PluginProvider is missing")
-  return value
 }

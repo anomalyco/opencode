@@ -1,6 +1,6 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, createSignal } from "solid-js"
-import { usePlugin } from "../../plugin/context"
+import { usePlugin } from "../../plugin/use-plugin"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 
 const id = "opencode.plugins"

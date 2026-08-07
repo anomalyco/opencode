@@ -3,7 +3,7 @@ import type { SlotMap, SlotName } from "@opencode-ai/plugin/tui/context"
 import { useRoute } from "../context/route"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
-import { usePlugin } from "./context"
+import { usePlugin } from "./use-plugin"
 
 // Contain render-time plugin crashes: a throwing slot or route must not take
 // down the app or the other plugins. The crash surfaces as one error toast.
