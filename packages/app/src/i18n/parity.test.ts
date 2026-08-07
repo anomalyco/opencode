@@ -63,7 +63,7 @@ const domains = [
   },
 ] as const
 
-describe.skipIf(!!process.env.CI)("i18n parity", () => {
+describe("i18n parity", () => {
   test("non-English locales have every English key and required plural variants", async () => {
     for (const domain of domains) {
       const source = await dictionary(domain.source)
