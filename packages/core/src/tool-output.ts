@@ -55,17 +55,24 @@ const layer = Layer.effect(
       const maxBytes = configured?.max_bytes ?? MAX_BYTES
       const lines = text.split("\n")
       if (text.endsWith("\n")) lines.pop()
-      if (lines.length <= maxLines && Buffer.byteLength(text, "utf-8") <= maxBytes)
+      const totalBytes = Buffer.byteLength(text, "utf-8")
+      if (lines.length <= maxLines && totalBytes <= maxBytes)
         return { ...result, metadata: { ...result.metadata, truncated: false } }
 
       const kept: string[] = []
       let bytes = 0
+      let hitBytes = false
       for (const line of lines.slice(0, maxLines)) {
         const size = Buffer.byteLength(line, "utf-8") + (kept.length > 0 ? 1 : 0)
-        if (bytes + size > maxBytes) break
+        if (bytes + size > maxBytes) {
+          hitBytes = true
+          break
+        }
         kept.push(line)
         bytes += size
       }
+      const removed = hitBytes ? totalBytes - bytes : lines.length - kept.length
+      const unit = hitBytes ? "bytes" : removed === 1 ? "line" : "lines"
       const file = path.join(directory, `tool_${Identifier.ascending()}`)
       yield* fs.ensureDir(directory).pipe(Effect.orDie)
       yield* fs.writeFileString(file, text).pipe(Effect.orDie)
@@ -74,7 +81,7 @@ const layer = Layer.effect(
         content: [
           {
             type: "text" as const,
-            text: `${kept.join("\n")}\n\n... output truncated; full content saved to ${file} ...`,
+            text: `${kept.join("\n")}\n\n... ${removed} ${unit} truncated; full content saved to ${file} ...`,
           },
           ...content.filter((item) => item.type === "file"),
         ],
