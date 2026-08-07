@@ -4,9 +4,9 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Environment } from "@opencode-ai/core/environment"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Formatter } from "@opencode-ai/core/formatter"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { Permission } from "@opencode-ai/core/permission"
@@ -23,7 +23,15 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const editToolNode = makeLocationNode({
   name: "test/edit-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(EditTool.Plugin)),
-  deps: [Tool.node, LocationMutation.node, FileMutation.node, Formatter.node, FSUtil.node, Location.node, Permission.node],
+  deps: [
+    Tool.node,
+    LocationMutation.node,
+    FileMutation.node,
+    Environment.node,
+    Formatter.node,
+    Location.node,
+    Permission.node,
+  ],
 })
 
 const sessionID = Session.ID.make("ses_edit_tool_test")
@@ -72,29 +80,28 @@ const reset = () => {
   formatFile = () => Effect.succeed(false)
 }
 
-const filesystem = Layer.effect(
-  FSUtil.Service,
+const environment = Layer.effect(
+  Environment.Service,
   Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    return FSUtil.Service.of({
-      ...fs,
-      readFile: (target) =>
-        fs
-          .readFile(target)
-          .pipe(
-            Effect.tap((content) =>
-              Effect.sync(() => reads++).pipe(Effect.andThen(Effect.suspend(() => afterRead(target, content)))),
+    const current = yield* Environment.Service
+    return Environment.Service.of({
+      ...current,
+      files: {
+        ...current.files,
+        read: (target, range) =>
+          current.files
+            .read(target, range)
+            .pipe(
+              Effect.tap((result) =>
+                Effect.sync(() => reads++).pipe(Effect.andThen(Effect.suspend(() => afterRead(target, result.bytes)))),
+              ),
             ),
-          ),
-      writeWithDirs: (target, content, mode) =>
-        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeWithDirs(target, content, mode))),
-      writeFile: (target, content, options) =>
-        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeFile(target, content, options))),
-      writeFileString: (target, content, options) =>
-        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeFileString(target, content, options))),
+        write: (target, content) =>
+          Effect.sync(() => writes.push(target)).pipe(Effect.andThen(current.files.write(target, content))),
+      },
     })
   }),
-).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+).pipe(Layer.provide(LayerNode.compile(Environment.node)))
 
 const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) => Effect.Effect<A, E, R>) => {
   const activeLocation = Layer.succeed(
@@ -106,15 +113,9 @@ const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) =
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(
-        LayerNode.group([
-          Tool.node,
-          Tool.node,
-          LocationMutation.node,
-          FileMutation.node,
-          editToolNode,
-        ]),
+        LayerNode.group([Tool.node, Tool.node, LocationMutation.node, FileMutation.node, editToolNode]),
         [
-          [FSUtil.node, filesystem],
+          [Environment.node, environment],
           [Location.node, activeLocation],
           [Formatter.node, formatter],
           [Permission.node, permission],
@@ -471,10 +472,7 @@ describe("EditTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* executeTool(
-                    registry,
-                    call({ path: "missing.ts", oldString: "before", newString: "after" }),
-                  ),
+                  yield* executeTool(registry, call({ path: "missing.ts", oldString: "before", newString: "after" })),
                 ).toEqual({
                   status: "error",
                   error: { type: "tool.execution", message: "File not found: missing.ts" },

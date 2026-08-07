@@ -20,17 +20,25 @@ export function has(content: Uint8Array) {
   return content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf
 }
 
+export function decodeBytes(content: Uint8Array) {
+  return split(decode(content))
+}
+
+export function syncBytes(content: Uint8Array, bom: boolean) {
+  const decoded = decode(content)
+  const current = split(decoded)
+  const canonical = join(current.text, bom)
+  return { text: current.text, bytes: decoded === canonical ? undefined : new TextEncoder().encode(canonical) }
+}
+
 export const readFile = Effect.fn("Bom.readFile")(function* (fs: FSUtil.Interface, filepath: string) {
-  return split(decode(yield* fs.readFile(filepath)))
+  return decodeBytes(yield* fs.readFile(filepath))
 })
 
 export const syncFile = Effect.fn("Bom.syncFile")(function* (fs: FSUtil.Interface, filepath: string, bom: boolean) {
-  const decoded = decode(yield* fs.readFile(filepath))
-  const current = split(decoded)
-  const canonical = join(current.text, bom)
-  if (decoded === canonical) return current.text
-  yield* fs.writeWithDirs(filepath, canonical)
-  return current.text
+  const synced = syncBytes(yield* fs.readFile(filepath), bom)
+  if (synced.bytes) yield* fs.writeWithDirs(filepath, synced.bytes)
+  return synced.text
 })
 
 function decode(content: Uint8Array) {

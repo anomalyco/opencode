@@ -2,9 +2,9 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Schema } from "effect"
-import { systemError } from "effect/PlatformError"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Environment } from "@opencode-ai/core/environment"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Formatter } from "@opencode-ai/core/formatter"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
@@ -23,7 +23,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
-  deps: [Tool.node, FileMutation.node, Formatter.node, FSUtil.node, Location.node, Permission.node],
+  deps: [Tool.node, FileMutation.node, Environment.node, Formatter.node, Location.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_patch_tool_test")
@@ -82,48 +82,33 @@ const reset = () => {
   formatFile = () => Effect.succeed(false)
 }
 
-const filesystem = Layer.effect(
-  FSUtil.Service,
+const environment = Layer.effect(
+  Environment.Service,
   Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    return FSUtil.Service.of({
-      ...fs,
-      readFile: (target) =>
-        Effect.sync(() => {
-          if (!editApproved) readsBeforeEditApproval++
-        }).pipe(Effect.andThen(fs.readFile(target))),
-      remove: (target, options) => {
-        if (failRemoveTarget && path.basename(target) === failRemoveTarget) return Effect.die("forced remove failure")
-        if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget) {
-          return Effect.fail(
-            systemError({
-              _tag: "Unknown",
-              module: "FileSystem",
-              method: "remove",
-              description: "forced remove failure",
-              pathOrDescriptor: target,
-            }),
-          )
-        }
-        return fs.remove(target, options)
-      },
-      writeWithDirs: (target, content, mode) => {
-        if (failWriteTarget && path.basename(target) === failWriteTarget) {
-          return Effect.fail(
-            systemError({
-              _tag: "Unknown",
-              module: "FileSystem",
-              method: "writeWithDirs",
-              description: "forced write failure",
-              pathOrDescriptor: target,
-            }),
-          )
-        }
-        return fs.writeWithDirs(target, content, mode)
+    const current = yield* Environment.Service
+    return Environment.Service.of({
+      ...current,
+      files: {
+        ...current.files,
+        read: (target, range) =>
+          Effect.sync(() => {
+            if (!editApproved) readsBeforeEditApproval++
+          }).pipe(Effect.andThen(current.files.read(target, range))),
+        remove: (target) => {
+          if (failRemoveTarget && path.basename(target) === failRemoveTarget) return Effect.die("forced remove failure")
+          if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
+            return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced remove failure") }))
+          return current.files.remove(target)
+        },
+        write: (target, content) => {
+          if (failWriteTarget && path.basename(target) === failWriteTarget)
+            return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
+          return current.files.write(target, content)
+        },
       },
     })
   }),
-).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+).pipe(Layer.provide(LayerNode.compile(Environment.node)))
 
 const withTool = <A, E, R>(
   directory: string,
@@ -141,7 +126,7 @@ const withTool = <A, E, R>(
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, FileMutation.node, patchToolNode]), [
-        [FSUtil.node, filesystem],
+        [Environment.node, environment],
         [Location.node, activeLocation],
         [Formatter.node, formatter],
         [Permission.node, permission],
@@ -267,9 +252,7 @@ describe("PatchTool", () => {
     withTempTool((directory, registry) => {
       const target = path.join(directory, "concurrent.txt")
       afterEditApproval = () =>
-        assertions.filter((input) => input.action === "edit").length === 1
-          ? Effect.sleep("50 millis")
-          : Effect.void
+        assertions.filter((input) => input.action === "edit").length === 1 ? Effect.sleep("50 millis") : Effect.void
       return Effect.promise(() => fs.writeFile(target, "one\ntwo\n")).pipe(
         Effect.andThen(
           Effect.all(

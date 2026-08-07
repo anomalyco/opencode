@@ -14,6 +14,7 @@ import { Credential } from "../credential"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { Bus } from "../bus"
+import { Environment } from "../environment"
 import { FileMutation } from "../file-mutation"
 import { Formatter } from "../formatter"
 import { FileSystem } from "../filesystem"
@@ -282,7 +283,9 @@ const layer = Layer.effect(
     })
     const updates = Stream.merge(
       config.changes().pipe(
-        Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path))),
+        Stream.filterEffect((update) =>
+          Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path)),
+        ),
         Stream.merge(Stream.fromPubSub(configuredChanges)),
       ),
       bus.subscribe([Event.Updated, SdkPlugins.Updated]),
@@ -320,6 +323,7 @@ export const node = makeLocationNode({
     Config.node,
     Credential.node,
     Bus.node,
+    Environment.node,
     FileMutation.node,
     Formatter.node,
     FileSystem.node,

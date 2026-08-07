@@ -6,7 +6,7 @@ import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Formatter } from "@opencode-ai/core/formatter"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Environment } from "@opencode-ai/core/environment"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { Permission } from "@opencode-ai/core/permission"
@@ -23,7 +23,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const writeToolNode = makeLocationNode({
   name: "test/write-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WriteTool.Plugin)),
-  deps: [Tool.node, LocationMutation.node, FileMutation.node, Formatter.node, FSUtil.node, Permission.node],
+  deps: [Tool.node, LocationMutation.node, FileMutation.node, Environment.node, Formatter.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_write_tool_test")
@@ -68,17 +68,20 @@ const reset = () => {
   denyAction = undefined
 }
 
-const filesystem = Layer.effect(
-  FSUtil.Service,
+const environment = Layer.effect(
+  Environment.Service,
   Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    return FSUtil.Service.of({
-      ...fs,
-      writeWithDirs: (target, content, mode) =>
-        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeWithDirs(target, content, mode))),
+    const current = yield* Environment.Service
+    return Environment.Service.of({
+      ...current,
+      files: {
+        ...current.files,
+        write: (target, content) =>
+          Effect.sync(() => writes.push(target)).pipe(Effect.andThen(current.files.write(target, content))),
+      },
     })
   }),
-).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+).pipe(Layer.provide(LayerNode.compile(Environment.node)))
 
 const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) => Effect.Effect<A, E, R>) => {
   const activeLocation = Layer.succeed(
@@ -92,7 +95,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) =
       AppNodeBuilder.build(
         LayerNode.group([Tool.node, Tool.node, LocationMutation.node, FileMutation.node, writeToolNode]),
         [
-          [FSUtil.node, filesystem],
+          [Environment.node, environment],
           [Location.node, activeLocation],
           [Formatter.node, formatter],
           [Permission.node, permission],

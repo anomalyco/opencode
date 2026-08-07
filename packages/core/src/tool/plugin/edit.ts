@@ -12,9 +12,9 @@ import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Bom } from "@opencode-ai/util/bom"
 import { Effect, Schema } from "effect"
 import path from "path"
+import { Environment } from "../../environment"
 import { FileMutation } from "../../file-mutation"
 import { Formatter } from "../../formatter"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../../location"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
@@ -111,9 +111,9 @@ export const Plugin = {
   id: "opencode.tool.edit",
   effect: Effect.fn("EditTool.Plugin")(function* (ctx: PluginContext) {
     const mutation = yield* LocationMutation.Service
-    const files = yield* FileMutation.Service
+    const fileMutation = yield* FileMutation.Service
+    const environment = yield* Environment.Service
     const formatter = yield* Formatter.Service
-    const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
 
@@ -155,17 +155,17 @@ export const Plugin = {
                 })
               }
 
-              const info = yield* fs
+              const info = yield* environment.files
                 .stat(target.absolute)
                 .pipe(
-                  Effect.catchReason("PlatformError", "NotFound", () =>
+                  Effect.catchTag("Environment.NotFound", () =>
                     Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
                   ),
                 )
-              if (info.type === "Directory") {
+              if (info.type === "directory") {
                 return yield* new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` })
               }
-              const original = yield* Bom.readFile(fs, target.absolute)
+              const original = Bom.decodeBytes((yield* environment.files.read(target.absolute)).bytes)
               const source = original.text
               const ending = source.includes(crlf) ? crlf : "\n"
               const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
@@ -207,20 +207,27 @@ export const Plugin = {
                 })
               }
               const replacementBom = replaced.startsWith("\uFEFF")
-              const result = yield* files.write({
+              const result = yield* fileMutation.write({
                 target,
                 content: Bom.join(replaced, original.bom || replacementBom),
               })
               const bom = original.bom || replacementBom
-              const formatted = (yield* formatter.file(target.absolute))
-                ? yield* Bom.syncFile(fs, target.absolute, bom)
-                : (yield* Bom.readFile(fs, target.absolute)).text
+              const formatted = yield* formatter.file(target.absolute)
+              const formattedContent = yield* environment.files.read(target.absolute)
+              if (!formatted) {
+                return {
+                  files: [fileDiff(result.resource, source, Bom.decodeBytes(formattedContent.bytes).text)],
+                  replacements,
+                } satisfies Output
+              }
+              const synced = Bom.syncBytes(formattedContent.bytes, bom)
+              if (synced.bytes) yield* environment.files.write(target.absolute, synced.bytes)
               return {
-                files: [fileDiff(result.resource, source, formatted)],
+                files: [fileDiff(result.resource, source, synced.text)],
                 replacements,
               } satisfies Output
             }).pipe(
-              files.withLock([path.resolve(location.directory, input.path)]),
+              fileMutation.withLock([path.resolve(location.directory, input.path)]),
               Effect.map((output) => ({
                 output,
                 content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,
