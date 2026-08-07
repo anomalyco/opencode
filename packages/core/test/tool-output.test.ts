@@ -77,6 +77,19 @@ describe("ToolOutput", () => {
     ),
   )
 
+  it.live("does not count a trailing newline as another line", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          expect(yield* output.truncate({ content: "one\ntwo\n" })).toEqual({
+            content: "one\ntwo\n",
+            metadata: { truncated: false },
+          })
+        }),
+      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
+    ),
+  )
+
   it.live("removes expired managed files", () =>
     withStore((output, fs, root) =>
       Effect.gen(function* () {

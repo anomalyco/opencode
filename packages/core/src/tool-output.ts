@@ -54,6 +54,7 @@ const layer = Layer.effect(
       const maxLines = configured?.max_lines ?? MAX_LINES
       const maxBytes = configured?.max_bytes ?? MAX_BYTES
       const lines = text.split("\n")
+      if (text.endsWith("\n")) lines.pop()
       if (lines.length <= maxLines && Buffer.byteLength(text, "utf-8") <= maxBytes)
         return { ...result, metadata: { ...result.metadata, truncated: false } }
 
