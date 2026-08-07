@@ -1,5 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "path"
+import { basename, dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "path"
+import { randomUUID } from "crypto"
 import { realpathSync } from "fs"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
@@ -152,9 +153,20 @@ export namespace FSUtil {
         // The multipart file part streams chunks as they arrive; write each
         // chunk through a sink that opens a file handle instead of buffering
         // the whole upload in memory.
+        //
+        // Stream into a temp file in the same directory and atomically rename
+        // it into place only once the whole stream succeeded, so a failed or
+        // interrupted upload never truncates or deletes an existing file at
+        // `path`. On failure the temp file is removed instead.
         yield* ensureDir(dirname(path))
-        yield* Stream.run(stream, fs.sink(path)).pipe(
+        const tempPath = join(dirname(path), `.${basename(path)}.${randomUUID()}.part`)
+        yield* Stream.run(stream, fs.sink(tempPath)).pipe(
           Effect.mapError((cause) => new FileSystemError({ method: "writeStream", cause })),
+          Effect.onError(() => fs.remove(tempPath, { force: true, recursive: true }).pipe(Effect.orDie)),
+        )
+        yield* fs.rename(tempPath, path).pipe(
+          Effect.mapError((cause) => new FileSystemError({ method: "writeStream", cause })),
+          Effect.onError(() => fs.remove(tempPath, { force: true, recursive: true }).pipe(Effect.orDie)),
         )
       })
 

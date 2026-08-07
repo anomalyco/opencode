@@ -133,6 +133,21 @@ describe("FileSystem.write", () => {
       expect(Exit.isFailure(readExit)).toBe(true)
     }),
   )
+
+  it.effect("writeStream preserves an existing file when the stream fails", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.Service
+      yield* fs.write({ path: "keep.txt", content: new TextEncoder().encode("original") })
+      const failing = Stream.concat(
+        Stream.fromIterable([new TextEncoder().encode("partial")]),
+        Stream.fail(new Error("stream aborted")),
+      )
+      const exit = yield* fs.writeStream({ path: "keep.txt", stream: failing }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      const file = yield* fs.read({ path: RelativePath.make("keep.txt") })
+      expect(new TextDecoder().decode(file.content)).toBe("original")
+    }),
+  )
 })
 
 describe("FileSystem.remove", () => {

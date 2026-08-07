@@ -12,6 +12,7 @@ playground
 tmp
 dist
 ts-dist
+/bin
 .turbo
 **/.serena
 .serena/

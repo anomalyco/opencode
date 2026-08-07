@@ -117,12 +117,11 @@ const baseLayer = Layer.effect(
         const target = yield* resolveTarget(input.path)
         // Upload streams can fail while being read (e.g. a multipart part that
         // exceeds the configured size limit), so surface the error instead of
-        // dying so the caller can map it to a client error. When that happens
-        // the target file may be partially written, so remove it to avoid
-        // leaving a truncated file behind.
-        yield* fs.writeStream(target.absolute, input.stream).pipe(
-          Effect.onError(() => fs.remove(target.absolute, { recursive: true, force: true }).pipe(Effect.orDie)),
-        )
+        // dying so the caller can map it to a client error. fs-util.writeStream
+        // streams into a temp file and renames it into place only on success,
+        // so a failure never truncates or deletes an existing file at the
+        // target path.
+        yield* fs.writeStream(target.absolute, input.stream)
       }),
       remove: Effect.fn("FileSystem.remove")(function* (input) {
         const target = yield* resolveTarget(input.path)

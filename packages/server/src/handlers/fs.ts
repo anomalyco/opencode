@@ -1,4 +1,5 @@
 import { FileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { Effect, Stream } from "effect"
 import { HttpServerResponse, Multipart } from "effect/unstable/http"
@@ -10,6 +11,18 @@ import { response } from "../location"
 
 function invalidPath(path: string) {
   return new InvalidRequestError({ message: `Invalid file path: ${path}` })
+}
+
+// Multipart errors describe a malformed request body (client's fault) and map
+// to 400. Any other failure is a real filesystem error and must surface as 500
+// rather than being mislabeled as an invalid upload. writeStream wraps stream
+// errors in FileSystemError, so a MultipartError raised while reading the part
+// arrives wrapped in a FileSystemError cause.
+function isInvalidUploadBody(cause: unknown): cause is Multipart.MultipartError | FSUtil.FileSystemError {
+  return (
+    cause instanceof Multipart.MultipartError ||
+    (cause instanceof FSUtil.FileSystemError && cause.cause instanceof Multipart.MultipartError)
+  )
 }
 
 export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handlers) =>
@@ -72,6 +85,7 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
               maxParts: 1,
               maxFileSize: MaxUploadBytes,
               maxTotalSize: MaxUploadRequestBytes,
+              fieldMimeTypes: [],
             }),
           )
           const fs = yield* FileSystem.Service
@@ -84,26 +98,24 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
           // only because `maxParts: 1` guarantees at most one part, so no other
           // part's content can be left undrained. If multi-file uploads are ever
           // supported, every file part's content must be consumed here instead.
-          // Only remove the target when we actually streamed content to it: an
-          // upload that fails before writing (e.g. a malformed body) must not
-          // delete a pre-existing file with the same name. The core writeStream
-          // already removes the partial file on write-time errors; this handles
-          // rejections that surface after the content was streamed (e.g.
-          // FileTooLarge), which would otherwise leave an orphaned file behind.
-          let wrote = false
+          // The core writeStream streams into a temp file and only renames it
+          // into place on success, so a failed upload never truncates or deletes
+          // an existing file at the target path.
           const written = yield* Stream.runFoldEffect(
             () => false,
             (acc, part) => {
               if (acc) return Effect.succeed(true)
               if (Multipart.isFile(part) && part.key === "file") {
-                wrote = true
                 return fs.writeStream({ path: ctx.query.path, stream: part.content }).pipe(Effect.as(true))
               }
               return Effect.succeed(false)
             },
           )(parts).pipe(
-            Effect.tapError(() => (wrote ? fs.remove({ path: ctx.query.path }).pipe(Effect.orDie) : Effect.void)),
-            Effect.mapError((cause) => new InvalidRequestError({ message: `Invalid upload body: ${cause.message}` })),
+            Effect.catch((cause) =>
+              isInvalidUploadBody(cause)
+                ? Effect.fail(new InvalidRequestError({ message: `Invalid upload body: ${cause.message}` }))
+                : Effect.die(cause),
+            ),
           )
           if (!written) return yield* Effect.fail(new InvalidRequestError({ message: "Missing file part" }))
         }),
