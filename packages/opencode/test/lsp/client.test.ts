@@ -5,12 +5,16 @@ import { tmpdir, withTestInstance } from "../fixture/fixture"
 import { LSPClient } from "@/lsp/client"
 import * as LSPServer from "@/lsp/server"
 
-function spawnFakeServer() {
+function spawnFakeServer(options: { staticWorkspaceDiagnostics?: boolean } = {}) {
   const { spawn } = require("child_process")
   const serverPath = path.join(__dirname, "../fixture/lsp/fake-lsp-server.js")
   return {
     process: spawn(process.execPath, [serverPath], {
       stdio: "pipe",
+      env: {
+        ...process.env,
+        ...(options.staticWorkspaceDiagnostics ? { OPENCODE_FAKE_LSP_STATIC_WORKSPACE_DIAGNOSTICS: "1" } : {}),
+      },
     }),
   }
 }
@@ -485,4 +489,49 @@ describe("LSPClient interop", () => {
       },
     })
   })
+
+  test("full mode uses static workspace pull diagnostics capability", async () => {
+    const handle = spawnFakeServer({ staticWorkspaceDiagnostics: true }) as any
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "client.cs")
+    await Bun.write(file, "class C {}\n")
+
+    await withTestInstance({
+      directory: tmp.path,
+      fn: async (ctx) => {
+        const client = await LSPClient.create({
+          serverID: "fake",
+          server: handle as unknown as LSPServer.Handle,
+          root: tmp.path,
+          directory: tmp.path,
+          instance: ctx,
+        })
+
+        await client.connection.sendRequest("test/configure-pull-diagnostics", {
+          workspaceDiagnostics: [
+            {
+              uri: pathToFileURL(file).href,
+              items: [
+                {
+                  range: {
+                    start: { line: 0, character: 0 },
+                    end: { line: 0, character: 5 },
+                  },
+                  message: "static workspace file",
+                  severity: 1,
+                },
+              ],
+            },
+          ],
+        })
+
+        const version = await client.notify.open({ path: file })
+        await client.waitForDiagnostics({ path: file, version, mode: "full" })
+
+        expect(client.diagnostics.get(file)?.[0]?.message).toBe("static workspace file")
+
+        await client.shutdown()
+      },
+    })
+  }, 30_000)
 })

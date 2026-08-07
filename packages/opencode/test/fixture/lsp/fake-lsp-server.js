@@ -18,6 +18,7 @@ let pullConfig = {
   workspaceDiagnosticsByIdentifier: {},
   workspaceDelayMsByIdentifier: {},
 }
+const staticWorkspaceDiagnostics = process.env.OPENCODE_FAKE_LSP_STATIC_WORKSPACE_DIAGNOSTICS === "1"
 
 function encode(message) {
   const json = JSON.stringify(message)
@@ -118,6 +119,9 @@ function handle(raw) {
         textDocumentSync: {
           change: 2,
         },
+        ...(staticWorkspaceDiagnostics
+          ? { diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: true } }
+          : {}),
       },
     })
     return
