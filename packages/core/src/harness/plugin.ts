@@ -26,7 +26,7 @@ function parseRecord(text: string | null | undefined): Record<string, unknown> {
 }
 
 import { Database } from "../database/database"
-import { harness_task, harness_subtask_feedback } from "../../../opencode/src/config/db"
+import { harness_task, harness_subtask_feedback } from "./schema"
 import { eq } from "drizzle-orm"
 
 const layer = Layer.effect(

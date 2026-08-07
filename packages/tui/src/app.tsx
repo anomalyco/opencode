@@ -405,13 +405,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     }),
   )
   const [ready, setReady] = createSignal(false)
-  props.pluginHost
-    .start({
+  Promise.race([
+    props.pluginHost.start({
       api,
       config: tuiConfig,
       runtime: pluginRuntime,
       dispose: () => attention.dispose(),
-    })
+    }),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ])
     .catch((error) => {
       console.error("Failed to load TUI plugins", error)
     })
