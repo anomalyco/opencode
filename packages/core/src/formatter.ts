@@ -1,6 +1,6 @@
 export * as Formatter from "./formatter"
 
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import path from "path"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -11,16 +11,7 @@ import { Config } from "./config"
 import { Location } from "./location"
 import { make, type Info } from "./formatter/builtins"
 
-export const Status = Schema.Struct({
-  name: Schema.String,
-  extensions: Schema.Array(Schema.String),
-  enabled: Schema.Boolean,
-}).annotate({ identifier: "FormatterStatus" })
-export type Status = typeof Status.Type
-
 export interface Interface {
-  readonly init: () => Effect.Effect<void>
-  readonly status: () => Effect.Effect<Status[]>
   readonly file: (filepath: string) => Effect.Effect<boolean>
 }
 
@@ -84,23 +75,6 @@ const layer = Layer.effect(
       return result
     })
 
-    const init = Effect.fn("Formatter.init")(function* () {
-      yield* load
-    })
-
-    const status = Effect.fn("Formatter.status")(function* () {
-      yield* load
-      return yield* Effect.forEach(formatters, (formatter) =>
-        command(formatter).pipe(
-          Effect.map((enabled) => ({
-            name: formatter.name,
-            extensions: [...formatter.extensions],
-            enabled: enabled !== false,
-          })),
-        ),
-      )
-    })
-
     const file = Effect.fn("Formatter.file")(function* (filepath: string) {
       yield* load
       const matching = formatters.filter((formatter) =>
@@ -143,7 +117,7 @@ const layer = Layer.effect(
       return false
     })
 
-    return Service.of({ init, status, file })
+    return Service.of({ file })
   }),
 )
 

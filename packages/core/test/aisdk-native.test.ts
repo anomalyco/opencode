@@ -16,6 +16,31 @@ describe("AISDKNative", () => {
     })
   })
 
+  test("maps Azure deployments and settings to native routes", () => {
+    const settings = {
+      apiKey: "secret",
+      resourceName: "resource",
+      apiVersion: "2025-01-01-preview",
+      queryParams: { feature: "enabled" },
+      useDeploymentBasedUrls: true,
+      reasoningEffort: "high",
+    }
+    expect(map("@ai-sdk/azure", settings, "deployment")).toEqual({
+      package: "@opencode-ai/ai/providers/azure/responses",
+      settings: {
+        apiKey: "secret",
+        resourceName: "resource",
+        apiVersion: "2025-01-01-preview",
+        queryParams: { feature: "enabled" },
+        useDeploymentBasedUrls: true,
+        providerOptions: { openai: { reasoningEffort: "high" } },
+      },
+    })
+    expect(map("@ai-sdk/azure", { ...settings, useCompletionUrls: true }, "custom-deployment")?.package).toBe(
+      "@opencode-ai/ai/providers/azure/chat",
+    )
+  })
+
   test("maps Bedrock provider and request options", () => {
     expect(
       map(

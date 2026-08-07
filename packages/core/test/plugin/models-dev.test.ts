@@ -11,6 +11,7 @@ import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { ModelsDevPlugin } from "@opencode-ai/core/plugin/models-dev"
+import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
@@ -220,6 +221,61 @@ describe("ModelsDevPlugin", () => {
     }).pipe(Effect.provide(models(path.join(import.meta.dir, "fixtures", "models-dev.json")))),
   )
 
+  it.effect("omits legacy provider aliases", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const catalog = yield* Catalog.Service
+      const snapshots = [
+        ["azure", "Azure", "AZURE_API_KEY", "@ai-sdk/azure"],
+        ["azure-cognitive-services", "Azure Cognitive Services", "AZURE_COGNITIVE_SERVICES_API_KEY", "@ai-sdk/azure"],
+        ["google-vertex", "Google Vertex", "GOOGLE_APPLICATION_CREDENTIALS", "@ai-sdk/google-vertex"],
+        [
+          "google-vertex-anthropic",
+          "Google Vertex Anthropic",
+          "GOOGLE_APPLICATION_CREDENTIALS",
+          "@ai-sdk/google-vertex/anthropic",
+        ],
+      ].map(([id, name, environment, packageName]) => ({
+        info: {
+          id: Provider.ID.make(id),
+          name,
+          package: Provider.aisdk(packageName),
+        },
+        environment: id === "azure" ? ["AZURE_RESOURCE_NAME", environment] : [environment],
+        models: [],
+      })) satisfies readonly ModelsDev.Snapshot[]
+
+      yield* ModelsDevPlugin.effect(
+        host({
+          catalog: catalogHost(catalog),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({
+            get: () => Effect.succeed(snapshots),
+            refresh: () => Effect.void,
+          }),
+        ),
+      )
+
+      expect(yield* catalog.provider.get(Provider.ID.azure)).toBeDefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("google-vertex"))).toBeDefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("azure-cognitive-services"))).toBeUndefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
+      expect(yield* integrations.get(Integration.ID.make("azure"))).toBeDefined()
+      expect(yield* integrations.get(Integration.ID.make("azure"))).toMatchObject({
+        methods: [{ type: "key" }, { type: "env", names: ["AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_API_KEY"] }],
+      })
+      expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toBeDefined()
+      expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
+      expect(yield* integrations.get(Integration.ID.make("google-vertex-anthropic"))).toBeUndefined()
+      expect(ProviderPlugins.map((plugin) => plugin.id)).not.toContain("opencode.provider.azure-cognitive-services")
+      expect(ProviderPlugins.map((plugin) => plugin.id)).not.toContain("opencode.provider.google-vertex-anthropic")
+    }),
+  )
+
   it.effect("converts reasoning options into settings variants", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
@@ -389,10 +445,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const openrouter = yield* catalog.model.get(
-        Provider.ID.make("openrouter"),
-        Model.ID.make("openrouter-toggle"),
-      )
+      const openrouter = yield* catalog.model.get(Provider.ID.make("openrouter"), Model.ID.make("openrouter-toggle"))
       expect(openrouter?.variants).toEqual([
         { id: Model.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
         { id: Model.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
@@ -414,10 +467,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const vertex = yield* catalog.model.get(
-        Provider.ID.make("google-vertex"),
-        Model.ID.make("gemini-2.5-flash-lite"),
-      )
+      const vertex = yield* catalog.model.get(Provider.ID.make("google-vertex"), Model.ID.make("gemini-2.5-flash-lite"))
       expect(vertex?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),

@@ -3,7 +3,6 @@ import type {
   Path,
   Project,
   ProviderAuthResponse,
-  SessionStatus,
 } from "@/types"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
@@ -55,11 +54,11 @@ import type {
   McpResourceCatalogOutput,
   McpServer,
   SessionActiveOutput,
+  SessionStatus,
 } from "@opencode-ai/client/promise"
 import { toggleMcp } from "./global-sync/mcp"
 import { createServerSession, type ServerSession } from "./server-session"
 import { usePlatform } from "./platform"
-import type { LegacyCapabilities } from "@/utils/server-compat"
 
 type GlobalStore = {
   ready: boolean
@@ -132,11 +131,11 @@ export const loadMcpResourcesQuery = (
     placeholderData: {},
   })
 
-export const loadLspQuery = (scope: ServerScope, directory: string, legacy: LegacyCapabilities, enabled = true) =>
+export const loadLspQuery = (scope: ServerScope, directory: string) =>
   queryOptions({
     queryKey: [scope, directory, "lsp"] as const,
-    queryFn: () => legacy.lsp.status(directory),
-    enabled,
+    // TODO: Restore LSP status when the V2 client exposes an LSP API.
+    queryFn: async () => [],
   })
 
 export const loadActiveSessionsQuery = (
@@ -168,19 +167,18 @@ export function seedActiveSessionStatuses(
 function makeQueryOptionsApi(
   scope: ServerScope,
   serverAPI: ServerApi,
-  protocolKind: Accessor<"v1" | "v2" | undefined>,
-  legacy: LegacyCapabilities,
 ) {
   return {
-    globalConfig: () => loadGlobalConfigQuery(scope, legacy, protocolKind() === "v1"),
+    globalConfig: () => loadGlobalConfigQuery(scope),
     projects: () => loadProjectsQuery(scope, serverAPI.project),
-    providers: (directory: PathKey | null) => loadProvidersQuery(scope, directory, serverAPI),
+    providers: (directory: PathKey | null) =>
+      loadProvidersQuery(scope, directory, serverAPI),
     path: (directory: PathKey | null) => loadPathQuery(scope, directory, serverAPI.location),
     agents: (directory: PathKey) => loadAgentsQuery(scope, directory, serverAPI.agent),
     references: (directory: PathKey) => loadReferencesQuery(scope, directory, serverAPI.reference),
     mcp: (directory: PathKey) => loadMcpQuery(scope, directory, serverAPI.mcp),
     mcpResources: (directory: PathKey) => loadMcpResourcesQuery(scope, directory, serverAPI.mcp),
-    lsp: (directory: PathKey) => loadLspQuery(scope, directory, legacy, protocolKind() === "v1"),
+    lsp: (directory: PathKey) => loadLspQuery(scope, directory),
     sessions: (directory: PathKey) => ({ queryKey: [scope, directory, "loadSessions"] as const }),
   }
 }
@@ -196,21 +194,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
 
-  const session = createServerSession(
-    { session: serverSDK.legacy.session },
-    serverSDK.currentApi.session,
-    serverSDK.currentApi.message,
-    {
-      protocol: serverSDK.protocol,
-      legacy: serverSDK.legacy,
-    },
-  )
-  const queryOptionsApi = makeQueryOptionsApi(
-    serverSDK.scope,
-    serverSDK.currentApi,
-    serverSDK.protocolKind,
-    serverSDK.legacy,
-  )
+  const session = createServerSession(serverSDK.api.session, serverSDK.api.message)
+  const queryOptionsApi = makeQueryOptionsApi(serverSDK.scope, serverSDK.api)
 
   const [configQuery, providerQuery, pathQuery] = useQueries(() => ({
     queries: [queryOptionsApi.globalConfig(), queryOptionsApi.providers(null), queryOptionsApi.path(null)],
@@ -218,7 +203,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   const activeSessionsQuery = useQuery(() =>
     loadActiveSessionsQuery(serverSDK.scope, {
       active: async () => {
-        const active = await serverSDK.currentApi.session.active()
+        const active = await serverSDK.api.session.active()
         seedActiveSessionStatuses(session, active)
         for (const sessionID of Object.keys(active)) {
           void session.resolve(sessionID).catch(() => undefined)
@@ -286,9 +271,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     queryKey: [serverSDK.scope, "bootstrap"],
     queryFn: async () => {
       await bootstrapGlobal({
-        legacy: serverSDK.legacy,
-        serverAPI: serverSDK.currentApi,
-        protocol: serverSDK.protocol,
+        serverAPI: serverSDK.api,
         scope: serverSDK.scope,
         requestFailedTitle: language.t("common.requestFailed"),
         translate: language.t,
@@ -328,7 +311,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       void bootstrapInstance(directory)
     },
     onMcp: (directory, setStore) => {
-      void loadCommands(directory, serverSDK.currentApi.command)
+      void loadCommands(directory, serverSDK.api.command)
         .then((commands) => setStore("command", commands))
         .catch((err) => {
           showToast({
@@ -380,7 +363,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       .fetchQuery({
         ...queryOptionsApi.sessions(key),
         queryFn: () =>
-          loadRootSessions({ api: serverSDK.currentApi.session, directory, limit })
+          loadRootSessions({ api: serverSDK.api.session, directory, limit })
             .then((x) => {
               const nonArchived = (x.data ?? [])
                 .filter((s) => !!s?.id)
@@ -448,8 +431,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
           project: globalStore.project,
           provider: globalStore.provider,
         },
-        legacy: serverSDK.legacy,
-        api: serverSDK.currentApi,
+        api: serverSDK.api,
         store: child[0],
         setStore: child[1],
         vcsCache: cache,
@@ -457,7 +439,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         translate: language.t,
         queryClient,
         session,
-        protocol: serverSDK.protocol,
       })
     })
 
@@ -470,7 +451,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   }
 
   const indexSession = (info: Parameters<typeof session.remember>[0]) => {
-    const key = directoryKey(info.directory)
+    const key = directoryKey(info.location.directory)
     const existing = children.children[key]
     if (!existing) return
     applyDirectoryEvent({
@@ -495,8 +476,25 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
 
     if (event.current) session.applyV2(event.current)
     session.apply(event)
-    if (event.type === "session.created" || event.type === "session.updated" || event.type === "session.deleted") {
-      homeSessions.apply(event)
+    if (event.current?.type === "session.created")
+      void session
+        .resolve(event.current.data.sessionID, { force: true })
+        .then((info) => {
+          if (!session.get(info.id)) return
+          indexSession(info)
+          homeSessions.apply({
+            type: "session.created",
+            properties: { sessionID: info.id, info },
+          })
+        })
+        .catch(() => {})
+    if (event.current?.type === "session.deleted")
+      homeSessions.apply({
+        type: "session.deleted",
+        properties: { sessionID: event.current.data.sessionID },
+      })
+    if (event.type === "session.created" || event.type === "session.deleted") {
+      if ("info" in event.properties) homeSessions.apply(event as Parameters<typeof homeSessions.apply>[0])
     }
     homeSessions.refresh(event.type)
     if (eventType === "integration.connection.updated") void refreshProviders()
@@ -568,7 +566,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       permission: session.data.permission,
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
-        if (serverSDK.protocolKind() !== "v1") return
         if (!children.active(key)) return
         void queryClient.fetchQuery(queryOptionsApi.lsp(key))
       },
@@ -617,7 +614,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   }
 
   const updateConfigMutation = useMutation(() => ({
-    mutationFn: (config: Config) => serverSDK.legacy.config.update(config),
+    mutationFn: async (config: Config) => {
+      // TODO: Restore config updates when the V2 client exposes a config API.
+      // await serverSDK.api.config.update({ config })
+      throw new Error(`Config updates are unavailable: ${Object.keys(config).length} fields were not saved`)
+    },
     onSuccess: () => {
       bootstrap.refetch()
       // Invalidate all provider queries so newly configured custom providers
@@ -656,24 +657,24 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         await toggleMcp({
           status,
           connect: async () => {
-            await serverSDK.currentApi.mcp.connect({ server: name, location: { directory: key } })
+            await serverSDK.api.mcp.connect({ server: name, location: { directory: key } })
           },
           disconnect: async () => {
-            await serverSDK.currentApi.mcp.disconnect({ server: name, location: { directory: key } })
+            await serverSDK.api.mcp.disconnect({ server: name, location: { directory: key } })
           },
           authenticate: async () => {
-            const server = (await serverSDK.currentApi.mcp.list({ location: { directory: key } })).data.find(
+            const server = (await serverSDK.api.mcp.list({ location: { directory: key } })).data.find(
               (item) => item.name === name,
             )
             if (!server?.integrationID) throw new Error(`MCP server ${name} has no authentication integration`)
-            const integration = await serverSDK.currentApi.integration.get({
+            const integration = await serverSDK.api.integration.get({
               integrationID: server.integrationID,
               location: { directory: key },
             })
             const method = integration.data?.methods.find((item) => item.type === "oauth" && !item.prompts?.length)
             if (!method || method.type !== "oauth")
               throw new Error(`MCP server ${name} requires an interactive authentication form`)
-            const attempt = await serverSDK.currentApi.integration.oauth.connect({
+            const attempt = await serverSDK.api.integration.oauth.connect({
               integrationID: server.integrationID,
               methodID: method.id,
               inputs: {},

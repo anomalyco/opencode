@@ -6,6 +6,7 @@ import type {
   IntegrationOauthConnectOutput,
   IntegrationOAuthMethod,
 } from "@opencode-ai/client"
+import open from "open"
 import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
@@ -446,6 +447,19 @@ function OAuthAuto(props: {
     mode: "modal",
     commands: [
       {
+        bind: "o",
+        title: "Open authorization URL",
+        group: "Dialog",
+        run: () => {
+          open(props.attempt.url).catch(() =>
+            toast.show({
+              message: "Could not open the browser. Copy the URL and continue manually.",
+              variant: "error",
+            }),
+          )
+        },
+      },
+      {
         bind: "c",
         title: "Copy authorization details",
         group: "Dialog",
@@ -502,6 +516,7 @@ function OAuthAuto(props: {
       instructions={props.attempt.instructions}
       message="Waiting for authorization..."
       copy
+      open
     />
   )
 }
@@ -559,7 +574,14 @@ function OAuthCode(props: {
   )
 }
 
-function OAuthView(props: { title: string; url?: string; instructions?: string; message: string; copy?: boolean }) {
+function OAuthView(props: {
+  title: string
+  url?: string
+  instructions?: string
+  message: string
+  copy?: boolean
+  open?: boolean
+}) {
   const dialog = useDialog()
   const theme = useTheme("elevated")
   return (
@@ -583,11 +605,18 @@ function OAuthView(props: { title: string; url?: string; instructions?: string; 
         )}
       </Show>
       <text fg={theme.text.subdued}>{props.message}</text>
-      <Show when={props.copy}>
-        <text fg={theme.text.default}>
-          c <span style={{ fg: theme.text.subdued }}>copy</span>
-        </text>
-      </Show>
+      <box flexDirection="row" gap={2}>
+        <Show when={props.open}>
+          <text fg={theme.text.default}>
+            o <span style={{ fg: theme.text.subdued }}>open</span>
+          </text>
+        </Show>
+        <Show when={props.copy}>
+          <text fg={theme.text.default}>
+            c <span style={{ fg: theme.text.subdued }}>copy</span>
+          </text>
+        </Show>
+      </box>
     </box>
   )
 }

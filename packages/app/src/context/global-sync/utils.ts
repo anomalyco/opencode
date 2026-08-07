@@ -2,10 +2,9 @@ import type {
   AgentListOutput,
   ModelDefaultOutput,
   ModelListOutput,
-  PermissionRequest,
   ProviderListOutput,
 } from "@opencode-ai/client/promise"
-import type { Agent, Event, Project, Provider, ProviderListResponse } from "@/types"
+import type { Agent, Project, Provider, ProviderListResponse } from "@/types"
 import type { Project as CurrentProject } from "@opencode-ai/client/promise"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/utils/path-key"
@@ -36,42 +35,13 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ag
   }))
 }
 
-type LegacyPermissionRequest = Extract<Event, { type: "permission.asked" }>["properties"]
-
-export function normalizePermissionRequest(input: PermissionRequest | LegacyPermissionRequest): LegacyPermissionRequest {
-  if ("permission" in input) return input
-  return {
-    id: input.id,
-    sessionID: input.sessionID,
-    permission: input.action,
-    patterns: input.resources,
-    always: input.save ?? [],
-    metadata: input.metadata ?? {},
-    tool:
-      input.source?.type === "tool" ? { messageID: input.source.messageID, callID: input.source.id } : undefined,
-  }
-}
-
 export function normalizeProviderList(
   providers: ProviderListOutput["data"] | ProviderListResponse,
   models?: ModelListOutput["data"],
   defaultModel?: ModelDefaultOutput["data"],
 ): NormalizedProviderListResponse {
   if (!Array.isArray(providers)) {
-    return {
-      ...providers,
-      all: new Map(
-        providers.all.map((provider) => [
-          provider.id,
-          {
-            ...provider,
-            models: Object.fromEntries(
-              Object.entries(provider.models).filter(([, model]) => model.status !== "deprecated"),
-            ),
-          },
-        ]),
-      ),
-    }
+    return providers
   }
   const all = new Map<string, Provider>()
 
@@ -150,18 +120,6 @@ export function normalizeProviderList(
         return model ? [[provider.id, model.id]] : []
       }),
     ),
-  }
-}
-
-export function sanitizeProject(project: Project) {
-  if (!project.icon?.url && !project.icon?.override) return project
-  return {
-    ...project,
-    icon: {
-      ...project.icon,
-      url: undefined,
-      override: undefined,
-    },
   }
 }
 

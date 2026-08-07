@@ -68,7 +68,10 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     }),
     Spec.make("debug", {
       description: "Debugging and troubleshooting tools",
-      commands: [Spec.make("agents", { description: "List all agents" })],
+      commands: [
+        Spec.make("agents", { description: "List all agents" }),
+        Spec.make("config", { description: "Show resolved configuration" }),
+      ],
     }),
     Spec.make("console", {
       description: "Manage OpenCode Console access",
@@ -84,10 +87,10 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     Spec.make("auth", {
       description: "Manage authentication",
       commands: [
-        Spec.make("connect", {
-          description: "Connect to a wellknown authentication provider",
+        Spec.make("login", {
+          description: "Log in to a well-known authentication provider",
           params: {
-            url: Argument.string("url").pipe(Argument.withDescription("Wellknown provider URL")),
+            url: Argument.string("url").pipe(Argument.withDescription("Well-known provider URL")),
           },
         }),
       ],
@@ -132,6 +135,36 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     Spec.make("plugin", {
       description: "Manage plugins",
       commands: [Spec.make("list", { description: "List active plugins" })],
+    }),
+    Spec.make("models", {
+      description: "List all available models",
+      params: ServerParams,
+    }),
+    Spec.make("export", {
+      description: "Export session data as JSON",
+      params: {
+        ...ServerParams,
+        session: Flag.string("session").pipe(
+          Flag.withAlias("s"),
+          Flag.withDescription("Session ID to export to stdout"),
+          Flag.optional,
+        ),
+        sanitize: Flag.boolean("sanitize").pipe(
+          Flag.withDescription("Redact sensitive transcript and file data"),
+          Flag.withDefault(false),
+        ),
+      },
+    }),
+    Spec.make("import", {
+      description: "Import session data from a JSON file or URL",
+      params: {
+        ...ServerParams,
+        file: Argument.string("file").pipe(Argument.withDescription("JSON file or URL to import")),
+        directory: Flag.string("directory").pipe(
+          Flag.withDescription("Directory in which to import the session"),
+          Flag.optional,
+        ),
+      },
     }),
     Spec.make("mini", {
       description: "Start the minimal interactive interface",

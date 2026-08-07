@@ -15,17 +15,24 @@ import { useConfig } from "../config"
 import { getScrollAcceleration } from "../util/scroll"
 
 function statusError(status: McpServer["status"]) {
-  if (status.status === "failed" || status.status === "needs_client_registration") return status.error
+  if (status.status === "failed") return status.error
   return undefined
 }
 
-function Status(props: { enabled: boolean; loading: boolean }) {
-  const theme = useTheme("elevated")
-  if (props.loading) return <span style={{ fg: theme.text.subdued }}>⋯ Loading</span>
-  if (props.enabled) {
-    return <span style={{ fg: theme.text.feedback.success.default, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
+function Status(props: { status: McpServer["status"]; loading: boolean }) {
+  if (props.loading || props.status.status === "pending") {
+    return <>Connecting …</>
   }
-  return <span style={{ fg: theme.text.subdued }}>○ Disabled</span>
+  if (props.status.status === "connected") {
+    return <span style={{ attributes: TextAttributes.BOLD }}>Connected ✓</span>
+  }
+  if (props.status.status === "failed") {
+    return <>Failed !</>
+  }
+  if (props.status.status === "needs_auth") {
+    return <>Sign in required →</>
+  }
+  return <>Disabled ○</>
 }
 
 export function DialogMcp() {
@@ -37,6 +44,13 @@ export function DialogMcp() {
   const [focused, setFocused] = createSignal<string>()
   const [detail, setDetail] = createSignal<McpServer>()
   const [loading, setLoading] = createSignal<string | null>(null)
+
+  const statusColor = (status: McpServer["status"]) => {
+    if (status.status === "connected") return theme.text.feedback.success.default
+    if (status.status === "failed") return theme.text.feedback.error.default
+    if (status.status === "needs_auth") return theme.text.feedback.warning.default
+    return theme.text.subdued
+  }
 
   const servers = createMemo(() =>
     pipe(
@@ -53,17 +67,29 @@ export function DialogMcp() {
 
   const options = createMemo(() => {
     const loadingMcp = loading()
-    return servers().map((server) => ({
-      value: server.name,
-      title: server.name,
-      description: server.status.status,
-      footer: <Status enabled={server.status.status === "connected"} loading={loadingMcp === server.name} />,
-    }))
+    return servers().map((server) => {
+      const pending = loadingMcp === server.name || server.status.status === "pending"
+      return {
+        value: server.name,
+        title: server.name,
+        footer: <Status status={server.status} loading={pending} />,
+        footerColor: pending ? theme.text.subdued : statusColor(server.status),
+      }
+    })
+  })
+
+  const focusedServer = createMemo(() => servers().find((server) => server.name === focused()))
+
+  const toggleTitle = createMemo(() => {
+    const status = focusedServer()?.status.status
+    if (status === "connected") return "disconnect"
+    if (status === "failed") return "retry"
+    if (status === "needs_auth") return "sign in"
+    return "connect"
   })
 
   const focusedError = createMemo(() => {
-    const name = focused()
-    const server = servers().find((entry) => entry.name === name)
+    const server = focusedServer()
     return server ? statusError(server.status) : undefined
   })
 
@@ -100,7 +126,7 @@ export function DialogMcp() {
             onSelect={(option) => open(option.value as string)}
             actions={[
               {
-                title: "toggle",
+                title: toggleTitle(),
                 command: "dialog.mcp.toggle",
                 onTrigger: (option) => {
                   setFocused(option.value as string)

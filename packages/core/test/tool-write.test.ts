@@ -90,13 +90,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) =
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(
-        LayerNode.group([
-          Tool.node,
-          Tool.node,
-          LocationMutation.node,
-          FileMutation.node,
-          writeToolNode,
-        ]),
+        LayerNode.group([Tool.node, Tool.node, LocationMutation.node, FileMutation.node, writeToolNode]),
         [
           [FSUtil.node, filesystem],
           [Location.node, activeLocation],
@@ -230,7 +224,10 @@ describe("WriteTool", () => {
         const deduplicated = path.join(tmp.path, "deduplicated.txt")
         formatFile = (target) =>
           Effect.promise(async () => {
-            await fs.writeFile(target, `\uFEFF\uFEFF\uFEFF${(await fs.readFile(target, "utf8")).replace(/^\uFEFF+/, "")}`)
+            await fs.writeFile(
+              target,
+              `\uFEFF\uFEFF\uFEFF${(await fs.readFile(target, "utf8")).replace(/^\uFEFF+/, "")}`,
+            )
             return true
           })
         return Effect.promise(() =>
@@ -323,24 +320,22 @@ describe("WriteTool", () => {
         ).pipe(
           Effect.andThen((settled) =>
             Effect.gen(function* () {
-              const canonicalTarget = path.join(yield* Effect.promise(() => fs.realpath(outside.path)), "external.txt")
+              const absoluteTarget = target
               expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
               expect(assertions[0]).toMatchObject({
-                resources: [
-                  path.join(yield* Effect.promise(() => fs.realpath(outside.path)), "*").replaceAll("\\", "/"),
-                ],
+                resources: [path.join(outside.path, "*").replaceAll("\\", "/")],
               })
-              expect(assertions[1]).toMatchObject({ resources: [canonicalTarget.replaceAll("\\", "/")], save: ["*"] })
+              expect(assertions[1]).toMatchObject({ resources: [absoluteTarget.replaceAll("\\", "/")], save: ["*"] })
               expect(settled).toMatchObject({
                 status: "completed",
                 output: {
-                  target: canonicalTarget,
-                  resource: canonicalTarget.replaceAll("\\", "/"),
+                  target: absoluteTarget,
+                  resource: absoluteTarget.replaceAll("\\", "/"),
                   existed: false,
                 },
               })
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("external")
-              expect(writes).toEqual([canonicalTarget])
+              expect(writes).toEqual([absoluteTarget])
             }),
           ),
         )
@@ -368,12 +363,10 @@ describe("WriteTool", () => {
           ),
           Effect.andThen(
             Effect.gen(function* () {
-              const canonicalRepo = yield* Effect.promise(() => fs.realpath(repo))
-              const canonicalNested = yield* Effect.promise(() => fs.realpath(nested))
               expect(assertions[0]).toMatchObject({
                 action: "external_directory",
-                resources: [path.join(canonicalNested, "*").replaceAll("\\", "/")],
-                save: [path.join(canonicalRepo, "*").replaceAll("\\", "/")],
+                resources: [path.join(nested, "*").replaceAll("\\", "/")],
+                save: [path.join(repo, "*").replaceAll("\\", "/")],
               })
             }),
           ),

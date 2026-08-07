@@ -2,6 +2,7 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
+import { AgentsDirectory, ClaudeDirectory, Directory, Document, Info } from "@opencode-ai/schema/config"
 import { ConfigSkillPlugin } from "@opencode-ai/core/config/plugin/skill"
 import { Global } from "@opencode-ai/util/global"
 import { Location } from "@opencode-ai/core/location"
@@ -12,7 +13,7 @@ import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
 
 const it = testEffect(Layer.empty)
-const decode = Schema.decodeUnknownSync(Config.Info)
+const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigSkillPlugin.Plugin", () => {
   it.effect("registers configured skill directories and URLs", () =>
@@ -43,10 +44,10 @@ describe("ConfigSkillPlugin.Plugin", () => {
         Effect.provideService(Location.Service, Location.Service.of(location({ directory }))),
         Effect.provide(
           Config.testLayer([
-            new Config.ClaudeDirectory({ type: "claude", path: AbsolutePath.make("/repo/.claude") }),
-            new Config.AgentsDirectory({ type: "agents", path: AbsolutePath.make("/repo/.agents") }),
-            new Config.Directory({ type: "directory", path: AbsolutePath.make("/repo/.opencode") }),
-            new Config.Document({
+            new ClaudeDirectory({ type: "claude", path: AbsolutePath.make("/repo/.claude") }),
+            new AgentsDirectory({ type: "agents", path: AbsolutePath.make("/repo/.agents") }),
+            new Directory({ type: "directory", path: AbsolutePath.make("/repo/.opencode") }),
+            new Document({
               type: "document",
               info: decode({
                 skills: ["./skills", "~/shared-skills", "/opt/skills", "https://example.test/skills/"],

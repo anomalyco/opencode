@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Permission } from "@opencode-ai/core/permission"
@@ -39,6 +39,8 @@ const providers = [
 let providerRequired = false
 let formResponse: Form.TerminalState = { status: "cancelled" }
 const formResponses: Form.TerminalState[] = []
+let queryBarrier: Deferred.Deferred<void> | undefined
+let synchronizedQueries = 0
 let result = new WebSearch.Response({
   providerID: WebSearch.ID.make("exa"),
   results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
@@ -52,6 +54,8 @@ beforeEach(() => {
   providerRequired = false
   formResponse = { status: "cancelled" }
   formResponses.length = 0
+  queryBarrier = undefined
+  synchronizedQueries = 0
   result = new WebSearch.Response({
     providerID: WebSearch.ID.make("exa"),
     results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
@@ -75,11 +79,21 @@ const websearch = Layer.succeed(
     transform: () => Effect.die("unused"),
     reload: () => Effect.die("unused"),
     providers: () => Effect.succeed(providers),
-    default: () => Effect.succeed(undefined),
+    default: () =>
+      Effect.gen(function* () {
+        const stored = values.get("websearch:provider")
+        if (stored === false) return yield* new WebSearch.DisabledError()
+        return typeof stored === "string" ? providers.find((provider) => provider.id === stored) : undefined
+      }),
     query: (input) =>
       Effect.gen(function* () {
         queries.push(input)
         const stored = values.get("websearch:provider")
+        if (queryBarrier && synchronizedQueries < 5) {
+          synchronizedQueries++
+          if (synchronizedQueries === 5) yield* Deferred.succeed(queryBarrier, undefined)
+          yield* Deferred.await(queryBarrier)
+        }
         if (providerRequired && typeof stored !== "string") return yield* new WebSearch.ProviderRequiredError()
         if (typeof stored === "string")
           return new WebSearch.Response({ providerID: WebSearch.ID.make(stored), results: result.results })
@@ -313,6 +327,35 @@ describe("WebSearchTool registration", () => {
           },
         ],
       })
+    }),
+  )
+
+  it.effect("shares provider consent across concurrent searches", () =>
+    Effect.gen(function* () {
+      providerRequired = true
+      formResponse = { status: "answered", answer: { choice: "allow" } }
+      queryBarrier = yield* Deferred.make<void>()
+      const registry = yield* Tool.Service
+
+      const results = yield* Effect.all(
+        Array.from({ length: 5 }, (_, index) =>
+          executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: `call-concurrent-${index}`,
+              name: "websearch",
+              input: { query: `effect ${index}` },
+            },
+          }),
+        ),
+        { concurrency: "unbounded" },
+      )
+
+      expect(results.every((item) => item.status === "completed")).toBe(true)
+      expect(formRequests).toHaveLength(1)
+      expect(values.get("websearch:provider")).toBe("exa")
     }),
   )
 

@@ -34,14 +34,6 @@ export class MediaIngestLimitError extends Schema.TaggedErrorClass<MediaIngestLi
   }
 }
 
-export class MalformedUtf8Error extends Schema.TaggedErrorClass<MalformedUtf8Error>()("ReadTool.MalformedUtf8Error", {
-  resource: Schema.String,
-}) {
-  override get message() {
-    return `File is not valid UTF-8: ${this.resource}`
-  }
-}
-
 export class OffsetOutOfRangeError extends Schema.TaggedErrorClass<OffsetOutOfRangeError>()(
   "ReadTool.OffsetOutOfRangeError",
   { offset: Schema.Number },
@@ -61,13 +53,7 @@ export class PathKindError extends Schema.TaggedErrorClass<PathKindError>()("Rea
 }
 
 export type InspectError = FSUtil.Error | PathKindError
-export type ReadError =
-  | FSUtil.Error
-  | BinaryFileError
-  | MediaIngestLimitError
-  | MalformedUtf8Error
-  | OffsetOutOfRangeError
-  | PathKindError
+export type ReadError = FSUtil.Error | BinaryFileError | MediaIngestLimitError | OffsetOutOfRangeError | PathKindError
 
 export const PageInput = Schema.Struct({
   offset: Schema.optionalKey(NonNegativeInt),
@@ -90,9 +76,15 @@ export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
   next: Schema.optionalKey(PositiveInt),
 }) {}
 
+export interface ListEntry extends Schema.Schema.Type<typeof ListEntry> {}
+export const ListEntry = Schema.Struct({
+  path: RelativePath,
+  type: Schema.Literals(["file", "directory", "symlink"]),
+}).annotate({ identifier: "ReadTool.ListEntry" })
+
 export class ListPage extends Schema.Class<ListPage>("ReadTool.ListPage")({
   type: Schema.Literal("list-page"),
-  entries: Schema.Array(FileSystem.Entry),
+  entries: Schema.Array(ListEntry),
   truncated: Schema.Boolean,
   next: Schema.optionalKey(PositiveInt),
 }) {}
@@ -109,36 +101,6 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ReadToolFileSystem") {}
 
-const extensions = new Set([
-  ".zip",
-  ".tar",
-  ".gz",
-  ".exe",
-  ".dll",
-  ".so",
-  ".class",
-  ".jar",
-  ".war",
-  ".7z",
-  ".doc",
-  ".docx",
-  ".xls",
-  ".xlsx",
-  ".ppt",
-  ".pptx",
-  ".odt",
-  ".ods",
-  ".odp",
-  ".bin",
-  ".dat",
-  ".obj",
-  ".o",
-  ".a",
-  ".lib",
-  ".wasm",
-  ".pyc",
-  ".pyo",
-])
 const startsWith = (bytes: Uint8Array, prefix: number[]) => prefix.every((value, index) => bytes[index] === value)
 const mediaMime = (bytes: Uint8Array) => {
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png"
@@ -148,8 +110,7 @@ const mediaMime = (bytes: Uint8Array) => {
     return "image/webp"
   if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return "application/pdf"
 }
-const binary = (resource: string, bytes: Uint8Array) => {
-  if (extensions.has(path.extname(resource).toLowerCase())) return true
+const binary = (bytes: Uint8Array) => {
   if (bytes.length === 0) return false
   let nonPrintable = 0
   for (const byte of bytes) {
@@ -158,16 +119,9 @@ const binary = (resource: string, bytes: Uint8Array) => {
   }
   return nonPrintable / bytes.length > 0.3
 }
-const decodeUtf8 = (resource: string, decoder: TextDecoder, bytes?: Uint8Array) =>
-  Effect.try({
-    try: () => decoder.decode(bytes, { stream: bytes !== undefined }),
-    catch: (error) => {
-      if (error instanceof TypeError) return new MalformedUtf8Error({ resource })
-      throw error
-    },
-  })
+const decodeUtf8 = (decoder: TextDecoder, bytes?: Uint8Array) => decoder.decode(bytes, { stream: bytes !== undefined })
 const decodeChunk = (resource: string, decoder: TextDecoder, bytes: Uint8Array) =>
-  bytes.includes(0) ? Effect.fail(new BinaryFileError({ resource })) : decodeUtf8(resource, decoder, bytes)
+  bytes.includes(0) ? Effect.fail(new BinaryFileError({ resource })) : Effect.succeed(decodeUtf8(decoder, bytes))
 
 export const inspect = Effect.fn("ReadTool.inspect")(function* (fs: FSUtil.Interface, input: string) {
   const info = yield* fs.stat(input)
@@ -218,19 +172,17 @@ export const read = Effect.fn("ReadTool.read")(function* (
           mime,
         }
       }
-      if (extensions.has(path.extname(resource).toLowerCase()))
-        return yield* Effect.fail(new BinaryFileError({ resource }))
       const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
       if (!paged) {
-        if (binary(resource, first)) return yield* Effect.fail(new BinaryFileError({ resource }))
-        const decoder = new TextDecoder("utf-8", { fatal: true })
-        const text = [yield* decodeUtf8(resource, decoder, first)]
+        if (binary(first)) return yield* Effect.fail(new BinaryFileError({ resource }))
+        const decoder = new TextDecoder()
+        const text = [decodeUtf8(decoder, first)]
         while (true) {
           const chunk = yield* file.readAlloc(64 * 1024)
           if (Option.isNone(chunk)) break
           text.push(yield* decodeChunk(resource, decoder, chunk.value))
         }
-        text.push(yield* decodeUtf8(resource, decoder))
+        text.push(decodeUtf8(decoder))
         return {
           type: "file" as const,
           uri: pathToFileURL(real).href,
@@ -243,7 +195,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
       const offset = page.offset || 1
       const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
       const lines: string[] = []
-      const decoder = new TextDecoder("utf-8", { fatal: true })
+      const decoder = new TextDecoder()
       let pending = ""
       let discard = false
       let line = 1
@@ -301,8 +253,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
           const newline = chunk.indexOf(10, start)
           const end = newline === -1 ? chunk.length : newline + 1
           const segment = chunk.subarray(start, end)
-          if (binary(resource, segment)) return yield* Effect.fail(new BinaryFileError({ resource }))
-          if (!consume(yield* decodeUtf8(resource, decoder, segment))) return false
+          if (binary(segment)) return yield* Effect.fail(new BinaryFileError({ resource }))
+          if (!consume(decodeUtf8(decoder, segment))) return false
           start = end
         }
         return true
@@ -314,7 +266,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
         done = !(yield* consumeChunk(chunk.value))
       }
       if (!done) {
-        const tail = yield* decodeUtf8(resource, decoder)
+        const tail = decodeUtf8(decoder)
         if (!discard) pending += tail
         if (pending) append(pending.endsWith("\r") ? pending.slice(0, -1) : pending)
       }
@@ -336,26 +288,26 @@ export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, 
   const items = yield* fs.readDirectoryEntries(real)
   const offset = page.offset || 1
   const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
-  const entries = yield* Effect.forEach(
-    items,
-    (item) =>
-      Effect.gen(function* () {
-        const absolute = path.join(real, item.name)
-        const target = yield* fs.realPath(absolute).pipe(Effect.catch(() => Effect.void))
-        if (!target || !FSUtil.contains(real, target)) return
-        const info = yield* fs.stat(target).pipe(Effect.catch(() => Effect.void))
-        const type = info?.type === "Directory" ? "directory" : info?.type === "File" ? "file" : undefined
-        if (!type) return
-        return FileSystem.Entry.make({
-          path: RelativePath.make(item.name + (type === "directory" ? path.sep : "")),
-          type,
-        })
-      }),
-    { concurrency: 16 },
-  )
-  const visible = entries
-    .filter((item): item is FileSystem.Entry => item !== undefined)
-    .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1))
+  const visible = items
+    .flatMap((item) =>
+      item.type === "other"
+        ? []
+        : [
+            ListEntry.make({
+              path: RelativePath.make(item.name + (item.type === "directory" ? path.sep : "")),
+              type: item.type,
+            }),
+          ],
+    )
+    .sort((a, b) =>
+      a.type === "directory"
+        ? b.type === "directory"
+          ? a.path.localeCompare(b.path)
+          : -1
+        : b.type === "directory"
+          ? 1
+          : a.path.localeCompare(b.path),
+    )
   const selected = visible.slice(offset - 1, offset - 1 + limit)
   const truncated = offset - 1 + selected.length < visible.length
   return new ListPage({

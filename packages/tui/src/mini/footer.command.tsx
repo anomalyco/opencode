@@ -3,7 +3,9 @@ import { TextAttributes, type InputRenderable, type KeyEvent } from "@opentui/co
 import { useKeyboard, type JSX } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
+import { Keymap } from "../context/keymap"
 import { RunFooterMenu, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
+import { monoShortcut } from "./mono"
 import type { RunFooterTheme } from "./theme"
 import type {
   FooterQueuedPrompt,
@@ -54,6 +56,10 @@ type VariantEntry = PanelEntry & {
 
 type SkillEntry = PanelEntry & {
   name: string
+}
+
+type QueuedPromptEntry = PanelEntry & {
+  prompt: FooterQueuedPrompt
 }
 
 type SubagentEntry = PanelEntry & {
@@ -442,7 +448,7 @@ export function RunCommandMenuBody(props: {
           {
             action: "queued" as const,
             category: "Agent",
-            display: "View pending work",
+            display: "View queued prompts",
             footer: `${props.queued().length} pending`,
             keywords: props
               .queued()
@@ -837,28 +843,48 @@ export function RunQueuedPromptSelectBody(props: {
   theme: Accessor<RunFooterTheme>
   prompts: Accessor<FooterQueuedPrompt[]>
   onClose: () => void
+  onSteer: (prompt: FooterQueuedPrompt) => void
+  onDelete: (prompt: FooterQueuedPrompt) => void
   onRows?: (rows: number) => void
   mono?: boolean
 }) {
-  const entries = createMemo(() =>
+  const entries = createMemo<QueuedPromptEntry[]>(() =>
     props.prompts().map((prompt) => ({
       category: "",
       display: prompt.prompt.text.replaceAll("\n", " "),
-      footer: prompt.delivery,
+      footer: "queued",
       keywords: prompt.prompt.text,
+      prompt,
     })),
   )
   const controller = createSearchablePanelController({
     entries,
     limit: SUBAGENT_LIST_ROWS,
     onClose: props.onClose,
-    onSelect: props.onClose,
+    onSelect: (item) => props.onSteer(item.prompt),
     onRows: props.onRows,
   })
+  const shortcuts = Keymap.useShortcuts()
+  const deleteShortcut = () => monoShortcut(shortcuts.get("queued_prompt.delete") ?? "", props.mono ?? false)
+  Keymap.createLayer(() => ({
+    priority: 1,
+    commands: [
+      {
+        id: "queued_prompt.delete",
+        title: "Delete queued prompt",
+        group: "Prompt",
+        run() {
+          const item = controller.items()[controller.menu.selected()]
+          if (!item) return false
+          props.onDelete(item.prompt)
+        },
+      },
+    ],
+  }))
 
   return (
     <PanelShell
-      title="Pending work"
+      title="Queued prompts"
       query={controller.query()}
       count={controller.items().length}
       total={entries().length}
@@ -866,6 +892,7 @@ export function RunQueuedPromptSelectBody(props: {
       theme={props.theme}
       inputRef={controller.inputRef}
       onQuery={controller.setQuery}
+      hint={["enter steer", deleteShortcut() ? `${deleteShortcut()} delete` : undefined].filter(Boolean).join(" · ")}
       mono={props.mono}
     >
       <RunFooterMenu
@@ -875,7 +902,7 @@ export function RunQueuedPromptSelectBody(props: {
         offset={controller.menu.offset}
         rows={controller.menu.rows}
         limit={SUBAGENT_LIST_ROWS}
-        empty="No pending work"
+        empty="No queued prompts"
         border={false}
         paddingLeft={panelPad(props.mono)}
         paddingRight={panelPad(props.mono)}

@@ -55,3 +55,17 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+test("service options only require a matching version when requested", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-options-"))
+  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  const runPromise = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem | Scope.Scope>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer), Effect.scoped))
+
+  try {
+    expect((await runPromise(ServiceConfig.options())).version).toBeUndefined()
+    expect((await runPromise(ServiceConfig.options({ checkVersion: true }))).version).toBe(OPENCODE_VERSION)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})

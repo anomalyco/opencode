@@ -34,7 +34,6 @@ function icon(status: McpServer["status"]) {
     case "needs_auth":
       return "⚠"
     case "failed":
-    case "needs_client_registration":
       return "✗"
     default:
       return "○"
@@ -45,8 +44,6 @@ function describe(status: McpServer["status"]) {
   switch (status.status) {
     case "needs_auth":
       return "needs authentication"
-    case "needs_client_registration":
-      return `needs client registration: ${status.error}`
     case "failed":
       return `failed: ${status.error}`
     default:

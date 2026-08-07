@@ -144,7 +144,7 @@ describe("persist localStorage resilience", () => {
       current,
       legacyStore,
       stores: [],
-      keys: target.legacy!,
+      keys: target["legacy"]!,
       key: target.key,
       defaults: { value: 1 },
     })

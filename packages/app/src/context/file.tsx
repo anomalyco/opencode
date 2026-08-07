@@ -81,7 +81,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       normalizeDir: path.normalizeDir,
       list: (dir) =>
         sdk()
-          .currentApi.file.list({ path: dir, location: { directory: scope() } })
+          .api.file.list({ path: dir, location: { directory: scope() } })
           .then((x) =>
             x.data.map((entry) => ({
               ...entry,
@@ -188,7 +188,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setLoading(file)
 
       const promise = sdk()
-        .currentApi.file.read({ path: file, location: { directory } })
+        .api.file.read({ path: file, location: { directory } })
         .then((data) => {
           if (scope() !== directory) return
           const content = { type: "text" as const, content: new TextDecoder().decode(data) }
@@ -212,7 +212,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     const search = (query: string, dirs: "true" | "false", options?: { limit?: number; signal?: AbortSignal }) =>
       serverSDK()
-        .currentApi.file.find(
+        .api.file.find(
           {
             location: { directory: sdk().directory },
             query,
@@ -286,13 +286,6 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         children: tree.children,
         expand: tree.expandDir,
         collapse: tree.collapseDir,
-        toggle(input: string) {
-          if (tree.dirState(input)?.expanded) {
-            tree.collapseDir(input)
-            return
-          }
-          tree.expandDir(input)
-        },
       },
       get,
       load,

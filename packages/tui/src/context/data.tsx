@@ -15,6 +15,7 @@ import type {
   ModelInfo,
   PermissionSavedInfo,
   PermissionRequest,
+  PermissionReplyInput,
   Project,
   ProviderInfo,
   ReferenceInfo,
@@ -31,11 +32,13 @@ import type {
   OpenCodeEvent,
   WebSearchProvider,
 } from "@opencode-ai/client"
+import { isPermissionNotFoundError } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { nonEmptyToolContent } from "../util/tool-display"
+import type { SessionPending } from "@opencode-ai/schema/session-pending"
 import { createEffect, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
@@ -168,12 +171,38 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     function removePending(sessionID: string, inputID?: string) {
       if (!inputID) return
+      if (store.session.pending[sessionID]?.some((item) => item.id === inputID))
+        setStore(
+          "session",
+          "pending",
+          sessionID,
+          (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inputID),
+        )
+      if (store.session.input[sessionID]?.includes(inputID))
+        setStore(
+          "session",
+          "input",
+          sessionID,
+          (store.session.input[sessionID] ?? []).filter((id) => id !== inputID),
+        )
+    }
+
+    function removePermission(sessionID: string, requestID: string) {
+      const requests = store.session.permission[sessionID]
+      if (!requests?.some((request) => request.id === requestID)) return
       setStore(
         "session",
-        "pending",
+        "permission",
         sessionID,
-        (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inputID),
+        requests.filter((request) => request.id !== requestID),
       )
+    }
+
+    function updatePending(sessionID: string, inputID: string, delivery: SessionPending.Delivery) {
+      const index = store.session.pending[sessionID]?.findIndex((item) => item.id === inputID) ?? -1
+      const item = store.session.pending[sessionID]?.[index]
+      if (index < 0 || !item || item.type === "compaction" || item.delivery === delivery) return
+      setStore("session", "pending", sessionID, index, { ...item, delivery })
     }
 
     const message = {
@@ -221,6 +250,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         return assistant?.content.findLast(
           (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && !item.time?.completed,
         )
+      },
+      reindex(messages: SessionMessageInfo[], index: Map<string, number>, start: number) {
+        for (let position = start; position < messages.length; position++) {
+          const item = messages[position]
+          if (item) index.set(item.id, position)
+        }
       },
     }
 
@@ -403,24 +438,36 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           }
           break
         case "session.input.promoted": {
+          const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inputID) ?? false
           removePending(event.data.sessionID, event.data.inputID)
           message.update(event.data.sessionID, (draft, index) => {
             const position = index.get(event.data.inputID)
             if (position === undefined) return
             const existing = draft[position]
-            if (!existing || !store.session.input[event.data.sessionID]?.includes(event.data.inputID)) return
+            if (!existing || !admitted) return
             existing.time.created = event.created
             draft.splice(position, 1)
             draft.push(existing)
-            index.clear()
-            draft.forEach((message, indexValue) => index.set(message.id, indexValue))
+            message.reindex(draft, index, position)
           })
-          setStore(
-            "session",
-            "input",
-            event.data.sessionID,
-            (store.session.input[event.data.sessionID] ?? []).filter((id) => id !== event.data.inputID),
-          )
+          break
+        }
+        case "session.input.steered":
+          updatePending(event.data.sessionID, event.data.inputID, "steer")
+          break
+        case "session.input.queued":
+          updatePending(event.data.sessionID, event.data.inputID, "queue")
+          break
+        case "session.input.cancelled": {
+          removePending(event.data.sessionID, event.data.inputID)
+          if (messageIndex.get(event.data.sessionID)?.has(event.data.inputID))
+            message.update(event.data.sessionID, (draft, index) => {
+              const position = index.get(event.data.inputID)
+              if (position === undefined) return
+              draft.splice(position, 1)
+              index.delete(event.data.inputID)
+              message.reindex(draft, index, position)
+            })
           break
         }
         case "session.input.admitted":
@@ -840,14 +887,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           ])
           break
         case "permission.replied":
-          setStore(
-            "session",
-            "permission",
-            event.data.sessionID,
-            (store.session.permission[event.data.sessionID] ?? []).filter(
-              (request) => request.id !== event.data.requestID,
-            ),
-          )
+          removePermission(event.data.sessionID, event.data.requestID)
           break
         case "form.created":
           if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
@@ -1035,6 +1075,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           invalidate(sessionID: string) {
             sync.invalidate(`session.permission:${sessionID}`)
+          },
+          async reply(input: PermissionReplyInput) {
+            await client.api.permission.reply(input).catch((error: unknown) => {
+              if (!isPermissionNotFoundError(error)) throw error
+            })
+            removePermission(input.sessionID, input.requestID)
           },
         },
         form: {

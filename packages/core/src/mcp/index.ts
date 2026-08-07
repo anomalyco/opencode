@@ -3,16 +3,16 @@ export * as MCP from "./index"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Command } from "@opencode-ai/schema/command"
+import { Document } from "@opencode-ai/schema/config"
+import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { createHash } from "node:crypto"
 import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Stream } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Config } from "../config"
-import { ConfigMCP } from "../config/mcp"
 import { Credential } from "../credential"
 import { Bus } from "../bus"
 import { Form } from "../form"
 import { Integration } from "../integration"
-import { IntegrationConnection } from "../integration/connection"
 import { KeyedMutex } from "../effect/keyed-mutex"
 import { Location } from "../location"
 import { waitForAbort } from "@opencode-ai/util/process"
@@ -31,7 +31,6 @@ export class ServerInfo extends Schema.Class<ServerInfo>("MCP.ServerInfo")({
   name: ServerName,
   status: Status,
   integrationID: Integration.ID.pipe(Schema.optional),
-  connection: IntegrationConnection.Info.pipe(Schema.optional),
 }) {}
 
 export class ServerInstructions extends Schema.Class<ServerInstructions>("MCP.ServerInstructions")({
@@ -180,7 +179,7 @@ export const layer = (options?: Options) => Layer.effect(
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
     yield* Effect.addFinalizer((exit) => Scope.close(root, exit))
 
-    const documents = (yield* config.entries()).filter((entry): entry is Config.Document => entry.type === "document")
+    const documents = (yield* config.entries()).filter((entry): entry is Document => entry.type === "document")
     // Global MCP timeout defaults, later config files overriding earlier ones.
     const timeout = Object.assign(
       {},
@@ -246,14 +245,6 @@ export const layer = (options?: Options) => Layer.effect(
       if (!entry) return yield* new NotFoundError({ server: name })
       return { name, entry }
     })
-
-    const info = (name: ServerName, entry: ServerEntry, connection: IntegrationConnection.Info | undefined) =>
-      new ServerInfo({
-        name,
-        status: entry.status,
-        integrationID: entry.integrationID,
-        connection,
-      })
 
     // Builds the connect-time auth provider for a remote OAuth-integration server. The SDK presents and
     // refreshes stored tokens, persisting refreshes back to the same credential row. The provider never
@@ -603,15 +594,12 @@ export const layer = (options?: Options) => Layer.effect(
     )
     return Service.of({
       servers: Effect.fn("MCP.servers")(function* () {
-        const entries = Array.from(runtime).toSorted(([a], [b]) => a.localeCompare(b))
-        return yield* Effect.forEach(entries, ([name, entry]) =>
-          Effect.gen(function* () {
-            const connection = entry.integrationID
-              ? yield* integration.connection.active(entry.integrationID)
-              : undefined
-            return info(name, entry, connection)
-          }),
-        )
+        return Array.from(runtime)
+          .toSorted(([a], [b]) => a.localeCompare(b))
+          .map(
+            ([name, entry]) =>
+              new ServerInfo({ name, status: entry.status, integrationID: entry.integrationID }),
+          )
       }),
       add: Effect.fn("MCP.add")(function* (server, config) {
         const name = ServerName.make(server)

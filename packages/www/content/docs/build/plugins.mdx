@@ -246,19 +246,27 @@ Runtime hooks intercept live operations:
 | `ctx.aisdk.hook("sdk", callback)`           | `sdk`, after inspecting `model`, `package`, and `options`                      |
 | `ctx.aisdk.hook("language", callback)`      | `language`, after inspecting `model`, `sdk`, and `options`                     |
 | `ctx.session.hook("context", callback)`     | `system`, `messages`, and the `tools` record immediately before model dispatch |
-| `ctx.session.hook("http", callback)`       | `use`, registering request and response handling                               |
+| `ctx.session.hook("http.request", callback)` | `request`, immediately before provider dispatch                                |
+| `ctx.session.hook("http.response", callback)` | `response`, immediately after the provider responds                            |
 | `ctx.tool.hook("execute.before", callback)` | `input`, before the selected tool executes                                     |
 | `ctx.tool.hook("execute.after", callback)`  | Terminal `result` on success or `error` on failure                             |
 
-HTTP hooks can modify requests, inspect responses, retry, or return a
-response without calling the provider. It applies to native models; AI SDK
-models do not currently pass through this hook.
+HTTP hooks can modify requests and responses. They apply to native models; AI
+SDK models do not currently pass through these hooks. Request and response
+bodies are one-shot streams. Use `clone()` when you intentionally need a
+separate reader, but be aware that its slower branch may buffer data. To inspect
+or modify chunks while preserving streaming, replace the body with one piped
+through a `TransformStream`.
 
 ```ts
-await ctx.session.hook("http", (event) => {
-  event.use((request, next) => {
-    request.headers.set("x-session-id", event.sessionID)
-    return next(request)
+await ctx.session.hook("http.request", (event) => {
+  event.request.headers.set("x-session-id", event.sessionID)
+})
+
+await ctx.session.hook("http.response", (event) => {
+  event.response = new Response(event.response.body, {
+    status: event.response.status,
+    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "enabled" },
   })
 })
 ```

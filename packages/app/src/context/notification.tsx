@@ -360,7 +360,7 @@ function createServerNotificationState(input: {
 
   const handleSessionError = (
     directory: string,
-    event: { properties: { sessionID?: string; error?: EventSessionError["properties"]["error"] } },
+    event: { properties: EventSessionError["properties"] },
     time: number,
   ) => {
     const sessionID = event.properties.sessionID
@@ -372,7 +372,7 @@ function createServerNotificationState(input: {
         void playSoundById(settings.sounds.errors())
       }
 
-      const error = "error" in event.properties ? event.properties.error : undefined
+      const error = event.properties.error
       append({
         directory,
         time,
@@ -393,7 +393,7 @@ function createServerNotificationState(input: {
 
   const unsub = serverSDK().event.listen((e) => {
     const event = e.details
-    if (event.type !== "session.idle" && event.type !== "session.error") return
+    if (event.type !== "session.idle" && event.type !== "session.execution.failed") return
 
     const directory = e.name
     const time = Date.now()

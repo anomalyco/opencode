@@ -390,6 +390,15 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       log?.write("send.background", { sessionID: state.sessionID })
       void state.sdk.session.background({ sessionID: state.sessionID }).catch(() => {})
     },
+    onQueuedPromptAction: async (action, inputID) => {
+      if (!state.sessionID) return
+      log?.write(`send.pending.${action}`, { sessionID: state.sessionID, inputID })
+      if (action === "steer") {
+        await state.sdk.session.pending.steer({ sessionID: state.sessionID, inputID })
+        return
+      }
+      await state.sdk.session.pending.cancel({ sessionID: state.sessionID, inputID })
+    },
     onSubagentInterrupt: (sessionID) => {
       log?.write("send.subagent.interrupt", { sessionID })
       void state.sdk.session.interrupt({ sessionID }).catch(() => {})
@@ -892,7 +901,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       trace: log,
       onSend: (prompt, delivery) => {
         state.shown = true
-        state.history.push(prompt)
+        state.history.push({ ...prompt, delivery: undefined })
         if (prompt.mode !== "shell" && delivery === "steer") {
           rememberLocal({
             kind: "user",
@@ -903,18 +912,21 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
           })
         }
       },
-      admit: async (prompt, signal) => {
+      admit: async (prompt, delivery, signal) => {
         await state.switching?.catch(() => {})
         const next = await ensureStream()
-        await next.handle.queuePromptTurn({
-          agent: state.agent,
-          model: state.model,
-          variant: state.activeVariant,
-          prompt,
-          files: input.files,
-          includeFiles: false,
-          signal,
-        })
+        await next.handle.admitPromptTurn(
+          {
+            agent: state.agent,
+            model: state.model,
+            variant: state.activeVariant,
+            prompt,
+            files: input.files,
+            includeFiles: false,
+            signal,
+          },
+          delivery,
+        )
       },
       onAdmissionError: renderPromptError,
       onCompact: async () => {

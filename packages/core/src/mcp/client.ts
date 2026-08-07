@@ -29,7 +29,7 @@ import {
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit, Schema } from "effect"
-import { ConfigMCP } from "../config/mcp"
+import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000

@@ -5,7 +5,7 @@ import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprot
 import { createServer } from "node:http"
 import { Deferred, Effect } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
-import { ConfigMCP } from "../config/mcp"
+import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { OauthCallbackPage } from "../oauth/page"
 import type { Integration } from "../integration"
 

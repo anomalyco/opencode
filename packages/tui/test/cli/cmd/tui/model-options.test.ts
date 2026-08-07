@@ -2,13 +2,16 @@ import { describe, expect, test } from "bun:test"
 import { prioritizeFavorites, sortModelOptions } from "../../../../src/component/dialog-model"
 
 describe("prioritizeFavorites", () => {
-  test("moves favorites first while preserving fuzzy result order", () => {
-    const prioritized = prioritizeFavorites([
-      { title: "Best match", favorite: false },
-      { title: "Favorite match", favorite: true },
-      { title: "Second best match", favorite: false },
-      { title: "Second favorite match", favorite: true },
-    ])
+  test("uses the favorite order captured when the dialog opened", () => {
+    const prioritized = prioritizeFavorites(
+      [
+        { title: "Best match", value: { providerID: "test", modelID: "best" } },
+        { title: "Favorite match", value: { providerID: "test", modelID: "favorite" } },
+        { title: "Second best match", value: { providerID: "test", modelID: "second-best" } },
+        { title: "Second favorite match", value: { providerID: "test", modelID: "second-favorite" } },
+      ],
+      new Set(["test/favorite", "test/second-favorite"]),
+    )
 
     expect(prioritized.map((model) => model.title)).toEqual([
       "Favorite match",

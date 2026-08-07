@@ -2,7 +2,8 @@ import { beforeEach, describe, expect } from "bun:test"
 import path from "path"
 import { Effect, Exit, Layer, PlatformError, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
-import { ConfigMedia } from "@opencode-ai/core/config/media"
+import { Document, Info } from "@opencode-ai/schema/config"
+import { ConfigMedia } from "@opencode-ai/schema/config/media"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -147,13 +148,13 @@ const mutation = Layer.succeed(
   LocationMutation.Service,
   LocationMutation.Service.of({
     resolve: (input) => {
-      const canonical = path.resolve(process.cwd(), input.path)
-      const external = path.isAbsolute(input.path) && !FSUtil.contains(process.cwd(), canonical)
-      const resource = external ? canonical.replaceAll("\\", "/") : path.relative(process.cwd(), canonical) || "."
-      const directory = path.dirname(canonical)
+      const absolute = path.resolve(process.cwd(), input.path)
+      const external = path.isAbsolute(input.path) && !FSUtil.contains(process.cwd(), absolute)
+      const resource = external ? absolute.replaceAll("\\", "/") : path.relative(process.cwd(), absolute) || "."
+      const directory = path.dirname(absolute)
       const externalResource = path.join(directory, "*").replaceAll("\\", "/")
       return Effect.succeed({
-        canonical,
+        absolute,
         resource,
         externalDirectory: external
           ? {
@@ -310,9 +311,7 @@ describe("ReadTool", () => {
       })
       expect(settled.status).toBe("completed")
       if (settled.status !== "completed") return
-      // Image base64 is carried by the content file item only; read produces no
-      // metadata, so the original bytes are never persisted twice.
-      expect(settled.metadata).toBeUndefined()
+      expect(settled.metadata).toEqual({ truncated: false })
       expect(settled.content).toMatchObject([
         { type: "text", text: "Image read successfully" },
         { type: "file", mime: "image/png", uri: `data:image/png;base64,${png}` },
@@ -429,9 +428,9 @@ describe("ReadTool", () => {
       }
       const configTest = yield* Config.Test
       yield* configTest.setEntries([
-        new Config.Document({
+        new Document({
           type: "document",
-          info: new Config.Info({
+          info: new Info({
             media: new ConfigMedia.Info({
               image: new ConfigMedia.Image({ auto_resize: false, max_width: 4 }),
             }),
@@ -472,9 +471,9 @@ describe("ReadTool", () => {
       }
       const configTest = yield* Config.Test
       yield* configTest.setEntries([
-        new Config.Document({
+        new Document({
           type: "document",
-          info: new Config.Info({
+          info: new Info({
             media: new ConfigMedia.Info({ image: new ConfigMedia.Image({ max_width: 4 }) }),
           }),
         }),
@@ -511,9 +510,9 @@ describe("ReadTool", () => {
       }
       const configTest = yield* Config.Test
       yield* configTest.setEntries([
-        new Config.Document({
+        new Document({
           type: "document",
-          info: new Config.Info({
+          info: new Info({
             media: new ConfigMedia.Info({
               image: new ConfigMedia.Image({ max_base64_bytes: 1 }),
             }),
@@ -620,10 +619,6 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const registry = yield* Tool.Service
       for (const [error, message] of [
-        [
-          new ReadToolFileSystem.MalformedUtf8Error({ resource: "invalid.txt" }),
-          "File is not valid UTF-8: invalid.txt",
-        ],
         [new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 10 }), "Offset 10 is out of range"],
         [
           new ReadToolFileSystem.PathKindError({ resource: "socket", expected: "a file" }),
@@ -720,17 +715,21 @@ describe("ReadTool", () => {
       const registry = yield* Tool.Service
 
       const result = yield* executeTool(registry, {
-          sessionID,
-          ...toolIdentity,
-          call: {
-            type: "tool-call",
-            id: "call-read-directory",
-            name: "read",
-            input: { path: "src", offset: 2, limit: 10 },
-          },
-        })
-      expect(result).toMatchObject({ status: "completed", output: { entries: listResult.entries, truncated: true, next: 4 } })
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call-read-directory",
+          name: "read",
+          input: { path: "src", offset: 2, limit: 10 },
+        },
+      })
+      expect(result).toMatchObject({
+        status: "completed",
+        output: { entries: listResult.entries, truncated: true, next: 4 },
+      })
       if (result.status !== "completed") return
+      expect(result.metadata).toEqual({ truncated: true })
       expect(result.content).toEqual([
         {
           type: "text",
@@ -805,6 +804,7 @@ describe("ReadTool", () => {
         output: { type: "text-page", content: "hello", mime: "text/plain", offset: 2, truncated: true, next: 3 },
       })
       if (result.status !== "completed") return
+      expect(result.metadata).toEqual({ truncated: true })
       expect(result.content).toEqual([
         {
           type: "text",

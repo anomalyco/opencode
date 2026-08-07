@@ -8,7 +8,7 @@ import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode-ai/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import path from "node:path"
-import { Effect, FileSystem, Logger, Option, Redacted, Schedule, Schema } from "effect"
+import { Effect, FileSystem, Option, Redacted, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
@@ -81,7 +81,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           database: {
             path:
               process.env.OPENCODE_DB ??
-              (["latest", "beta", "prod"].includes(OPENCODE_CHANNEL) ||
+              (["latest", "beta", "next", "prod"].includes(OPENCODE_CHANNEL) ||
               process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
               process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
                 ? "opencode.db"
@@ -108,9 +108,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             gitbash: process.env.OPENCODE_GIT_BASH_PATH,
           },
           fs: {
-            filewatcher: !truthy(
-              process.env.OPENCODE_FILEWATCHER_DISABLE ?? process.env.OPENCODE_DISABLE_FILEWATCHER,
-            ),
+            filewatcher: !truthy(process.env.OPENCODE_FILEWATCHER_DISABLE ?? process.env.OPENCODE_DISABLE_FILEWATCHER),
             fff:
               process.env.OPENCODE_DISABLE_FFF === undefined
                 ? process.platform !== "win32"
@@ -128,7 +126,6 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                 }),
             },
       ).pipe(
-        Effect.provide(Logger.layer([], { mergeWithExisting: false })),
         Effect.catch((error) => {
           if (serviceOptions === undefined || port === undefined || !addressInUse(error)) return Effect.fail(error)
           return recognizeIncumbent(serviceOptions, hostname, port).pipe(

@@ -1,14 +1,13 @@
 export * as FileMutation from "./file-mutation"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Effect, Layer, Schema } from "effect"
-import { dirname } from "path"
+import { Context, Effect, Layer } from "effect"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bom } from "@opencode-ai/util/bom"
 
 export interface Target {
-  readonly canonical: string
+  readonly absolute: string
   readonly resource: string
 }
 
@@ -22,22 +21,6 @@ export interface TextWriteInput {
   readonly content: string
 }
 
-export interface ConditionalWriteInput extends WriteInput {
-  readonly expected: Uint8Array
-}
-
-export interface RemoveInput {
-  readonly target: Target
-}
-
-export class StaleContentError extends Schema.TaggedErrorClass<StaleContentError>()("FileMutation.StaleContentError", {
-  path: Schema.String,
-}) {}
-
-export class TargetExistsError extends Schema.TaggedErrorClass<TargetExistsError>()("FileMutation.TargetExistsError", {
-  path: Schema.String,
-}) {}
-
 export interface WriteResult {
   readonly operation: "write"
   readonly target: string
@@ -45,28 +28,14 @@ export interface WriteResult {
   readonly existed: boolean
 }
 
-export interface RemoveResult {
-  readonly operation: "remove"
-  readonly target: string
-  readonly resource: string
-  readonly existed: boolean
-}
-
 export interface Interface {
-  /** Serialize a complete read/prepare/write mutation transaction by canonical target. */
+  /** Serialize a complete read/prepare/write mutation transaction by resolved path. */
   readonly withLock: (
-    targets: ReadonlyArray<Target>,
+    targets: ReadonlyArray<string>,
   ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
-  /** Create without replacing an existing target. */
-  readonly create: (input: WriteInput) => Effect.Effect<WriteResult, TargetExistsError | FSUtil.Error>
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, FSUtil.Error>
   /** Write text while retaining an existing UTF-8 BOM and emitting at most one BOM. */
   readonly writeTextPreservingBom: (input: TextWriteInput) => Effect.Effect<WriteResult, FSUtil.Error>
-  /** Commit only if an existing target still has the expected bytes. */
-  readonly writeIfUnchanged: (
-    input: ConditionalWriteInput,
-  ) => Effect.Effect<WriteResult, StaleContentError | FSUtil.Error>
-  readonly remove: (input: RemoveInput) => Effect.Effect<RemoveResult, FSUtil.Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileMutation") {}
@@ -75,7 +44,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fi
 const transactionLocks = KeyedMutex.makeUnsafe<string>()
 
 /**
- * Serialize file changes by canonical target. Conditional writes compare and
+ * Serialize file changes by absolute target. Conditional writes compare and
  * write under the same process-local lock so cooperating OpenCode mutations do
  * not overwrite changes made from the same stale content.
  */
@@ -85,24 +54,17 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const locks = KeyedMutex.makeUnsafe<string>()
     const withLock: Interface["withLock"] = (targets) => (effect) =>
-      [...new Set(targets.map((target) => target.canonical))]
+      [...new Set(targets.map(FSUtil.resolve))]
         .sort()
         .reduceRight((result, target) => transactionLocks.withLock(target)(result), effect)
     const withTargetLock =
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        locks.withLock(target.canonical)(Effect.uninterruptible(effect))
+        locks.withLock(target.absolute)(Effect.uninterruptible(effect))
 
     const writeResult = (target: Target, existed: boolean): WriteResult => ({
       operation: "write",
-      target: target.canonical,
-      resource: target.resource,
-      existed,
-    })
-
-    const removeResult = (target: Target, existed: boolean): RemoveResult => ({
-      operation: "remove",
-      target: target.canonical,
+      target: target.absolute,
       resource: target.resource,
       existed,
     })
@@ -110,8 +72,8 @@ const layer = Layer.effect(
     const write = Effect.fn("FileMutation.write")((input: WriteInput) =>
       withTargetLock(input.target)(
         Effect.gen(function* () {
-          const existed = yield* fs.exists(input.target.canonical)
-          yield* fs.writeWithDirs(input.target.canonical, input.content)
+          const existed = yield* fs.exists(input.target.absolute)
+          yield* fs.writeWithDirs(input.target.absolute, input.content)
           return writeResult(input.target, existed)
         }),
       ),
@@ -122,10 +84,10 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const next = Bom.split(input.content)
           const current = yield* fs
-            .readFile(input.target.canonical)
+            .readFile(input.target.absolute)
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
           yield* fs.writeWithDirs(
-            input.target.canonical,
+            input.target.absolute,
             Bom.join(next.text, Boolean(current && Bom.has(current)) || next.bom),
           )
           return writeResult(input.target, current !== undefined)
@@ -133,61 +95,9 @@ const layer = Layer.effect(
       ),
     )
 
-    const create = Effect.fn("FileMutation.create")((input: WriteInput) =>
-      withTargetLock(input.target)(
-        Effect.gen(function* () {
-          const write =
-            typeof input.content === "string"
-              ? fs.writeFileString(input.target.canonical, input.content, { flag: "wx" })
-              : fs.writeFile(input.target.canonical, input.content, { flag: "wx" })
-          yield* write.pipe(
-            Effect.catchReason("PlatformError", "NotFound", () =>
-              fs.ensureDir(dirname(input.target.canonical)).pipe(Effect.andThen(write)),
-            ),
-            Effect.catchReason("PlatformError", "AlreadyExists", () =>
-              Effect.fail(new TargetExistsError({ path: input.target.canonical })),
-            ),
-          )
-          return writeResult(input.target, false)
-        }),
-      ),
-    )
-
-    const writeIfUnchanged = Effect.fn("FileMutation.writeIfUnchanged")((input: ConditionalWriteInput) =>
-      withTargetLock(input.target)(
-        Effect.gen(function* () {
-          const current = yield* fs.readFile(input.target.canonical)
-          if (!sameBytes(current, input.expected)) {
-            return yield* new StaleContentError({ path: input.target.canonical })
-          }
-          yield* typeof input.content === "string"
-            ? fs.writeFileString(input.target.canonical, input.content)
-            : fs.writeFile(input.target.canonical, input.content)
-          return writeResult(input.target, true)
-        }),
-      ),
-    )
-
-    const remove = Effect.fn("FileMutation.remove")((input: RemoveInput) =>
-      withTargetLock(input.target)(
-        Effect.gen(function* () {
-          const existed = yield* fs.remove(input.target.canonical).pipe(
-            Effect.as(true),
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(false)),
-          )
-          return removeResult(input.target, existed)
-        }),
-      ),
-    )
-
-    return Service.of({ withLock, create, write, writeTextPreservingBom, writeIfUnchanged, remove })
+    return Service.of({ withLock, write, writeTextPreservingBom })
   }),
 )
-
-function sameBytes(left: Uint8Array, right: Uint8Array) {
-  if (left.length !== right.length) return false
-  return left.every((byte, index) => byte === right[index])
-}
 
 export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node] })
 

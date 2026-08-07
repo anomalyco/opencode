@@ -3,9 +3,6 @@ import {
   type DirItem,
   type DirSearchResult,
   type FileItem,
-  type GrepCursor,
-  type GrepMatch,
-  type GrepResult,
   type InitOptions,
   type MixedItem,
   type MixedSearchResult,
@@ -45,19 +42,6 @@ export interface MixedSearch {
 export type File = FileItem
 export type Directory = DirItem
 export type Mixed = MixedItem
-export type Cursor = GrepCursor | null
-export type Hit = GrepMatch
-
-export interface Grep {
-  items: GrepResult["items"]
-  totalMatched: number
-  totalFilesSearched: number
-  totalFiles: number
-  filteredFileCount: number
-  nextCursor: Cursor
-  regexFallbackError?: string
-}
-
 export interface Picker {
   destroy(): void
   isScanning(): boolean
@@ -65,14 +49,6 @@ export interface Picker {
   refreshGitStatus(): Result<number>
   fileSearch(
     query: string,
-    opts?: {
-      currentFile?: string
-      pageIndex?: number
-      pageSize?: number
-    },
-  ): Result<Search>
-  glob(
-    pattern: string,
     opts?: {
       currentFile?: string
       pageIndex?: number
@@ -95,18 +71,6 @@ export interface Picker {
       pageSize?: number
     },
   ): Result<MixedSearch>
-  grep(
-    query: string,
-    opts?: {
-      mode?: "plain" | "regex" | "fuzzy"
-      maxMatchesPerFile?: number
-      timeBudgetMs?: number
-      beforeContext?: number
-      afterContext?: number
-      cursor?: Cursor
-      pageSize?: number
-    },
-  ): Result<Grep>
   trackQuery(query: string, file: string): Result<boolean>
   getHistoricalQuery(offset: number): Result<string | null>
 }
@@ -127,10 +91,8 @@ export function create(opts: Init): Result<Picker> {
       waitForScan: (timeoutMs) => pick.waitForScan(timeoutMs),
       refreshGitStatus: () => pick.refreshGitStatus(),
       fileSearch: (query, next) => pick.fileSearch(query, next),
-      glob: (pattern, next) => pick.glob(pattern, next),
       directorySearch: (query, next) => pick.directorySearch(query, next),
       mixedSearch: (query, next) => pick.mixedSearch(query, next),
-      grep: (query, next) => pick.grep(query, next),
       trackQuery: (query, file) => pick.trackQuery(query, file),
       getHistoricalQuery: (offset) => pick.getHistoricalQuery(offset),
     },

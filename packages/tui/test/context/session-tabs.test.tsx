@@ -1,9 +1,8 @@
 /** @jsxImportSource @opentui/solid */
-import { afterAll, expect, test } from "bun:test"
+import { expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode-ai/client"
 import { testRender } from "@opentui/solid"
-import { mkdtempSync, readdirSync, rmSync, watch } from "fs"
-import { tmpdir } from "os"
+import { mkdirSync, watch } from "fs"
 import path from "path"
 import { ConfigProvider } from "../../src/config"
 import { ClientProvider, useClient } from "../../src/context/client"
@@ -12,9 +11,10 @@ import { RouteProvider, useRoute } from "../../src/context/route"
 import { TuiAppProvider } from "../../src/context/runtime"
 import { SessionTabsProvider, useSessionTabs } from "../../src/context/session-tabs"
 import { NEW_SESSION_TAB_TITLE } from "../../src/context/session-tabs-model"
-import { StorageProvider } from "../../src/context/storage"
+import { StorageProvider, useStorage } from "../../src/context/storage"
 import { createApi, createEventStream, createFetch, directory, json } from "../fixture/tui-client"
 import { TestTuiContexts } from "../fixture/tui-environment"
+import { tmpdir } from "../fixture/fixture"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 async function wait(fn: () => boolean | Promise<boolean>, timeout = 2_000) {
@@ -25,39 +25,34 @@ async function wait(fn: () => boolean | Promise<boolean>, timeout = 2_000) {
   }
 }
 
-// State directories are removed after the whole suite instead of per test: persistence writes are
-// fire-and-forget behind a file lock, so a teardown-time removal races any still-queued write.
-const stateDirs: string[] = []
-
-afterAll(async () => {
-  for (const dir of stateDirs) {
-    // Drain any lock still held by a late write before deleting the tree beneath it.
-    await wait(() => {
-      try {
-        return readdirSync(path.join(dir, "test", "locks")).length === 0
-      } catch {
-        return true
-      }
-    }).catch(() => undefined)
-    rmSync(dir, { recursive: true, force: true })
+async function renderSessionTabs(
+  initialSessionID: string,
+  options?: { state?: string; title?: string; home?: boolean; persisted?: string[]; sessionGate?: Promise<void> },
+) {
+  const temporary = options?.state ? undefined : await tmpdir()
+  const state = options?.state ?? temporary!.path
+  if (options?.persisted) {
+    const file = path.join(state, "test", "tui", "tabs.json")
+    mkdirSync(path.dirname(file), { recursive: true })
+    await Bun.write(
+      file,
+      JSON.stringify({
+        global: { tabs: [], unread: {} },
+        cwd: { [directory]: { tabs: options.persisted.map((sessionID) => ({ sessionID })), unread: {} } },
+      }),
+    )
   }
-})
-
-function stateDir(prefix: string) {
-  const dir = mkdtempSync(path.join(tmpdir(), prefix))
-  stateDirs.push(dir)
-  return dir
-}
-
-async function renderSessionTabs(initialSessionID: string, options?: { state?: string; title?: string }) {
-  const state = options?.state ?? stateDir("opencode-session-tabs-")
   const events = createEventStream()
-  const calls = createFetch((url) => {
-    if (url.pathname !== `/api/session/${initialSessionID}`) return
+  const sessions: string[] = []
+  const calls = createFetch(async (url) => {
+    const sessionID = url.pathname.match(/^\/api\/session\/([^/]+)$/)?.[1]
+    if (!sessionID) return undefined
+    sessions.push(sessionID)
+    await options?.sessionGate
     return json({
       data: {
-        id: initialSessionID,
-        title: options?.title,
+        id: sessionID,
+        title: sessionID === initialSessionID ? options?.title : undefined,
         projectID: "project",
         location: { directory },
         cost: 0,
@@ -70,12 +65,14 @@ async function renderSessionTabs(initialSessionID: string, options?: { state?: s
   let route!: ReturnType<typeof useRoute>
   let client!: ReturnType<typeof useClient>
   let data!: ReturnType<typeof useData>
+  let storage!: ReturnType<typeof useStorage>
 
   function Probe() {
     tabs = useSessionTabs()
     route = useRoute()
     client = useClient()
     data = useData()
+    storage = useStorage()
     return <box />
   }
 
@@ -84,7 +81,9 @@ async function renderSessionTabs(initialSessionID: string, options?: { state?: s
       <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
         <StorageProvider>
           <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
-            <RouteProvider initialRoute={{ type: "session", sessionID: initialSessionID }}>
+            <RouteProvider
+              initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
+            >
               <ClientProvider api={createApi(calls.fetch)}>
                 <DataProvider>
                   <SessionTabsProvider>
@@ -104,31 +103,56 @@ async function renderSessionTabs(initialSessionID: string, options?: { state?: s
     tabs,
     route,
     data,
+    sessions,
     state,
     emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
-    destroy() {
+    async destroy() {
       app.renderer.destroy()
+      await storage.flush()
+      await temporary?.[Symbol.asyncDispose]()
     },
   }
 }
 
-test("stores session tabs globally by default", async () => {
+test("loads persisted tab metadata concurrently on connect", async () => {
+  let release!: () => void
+  const sessionGate = new Promise<void>((resolve) => (release = resolve))
+  const setup = await renderSessionTabs("first", {
+    home: true,
+    persisted: ["first", "second"],
+    sessionGate,
+  })
+
+  try {
+    await wait(() => setup.sessions.length === 2)
+    expect(setup.sessions.toSorted()).toEqual(["first", "second"])
+    release()
+    await wait(() => setup.data.session.get("first") !== undefined && setup.data.session.get("second") !== undefined)
+  } finally {
+    release()
+    await setup.destroy()
+  }
+})
+
+test("stores session tabs for the current working directory by default", async () => {
   const setup = await renderSessionTabs("first")
 
   try {
     const file = path.join(setup.state, "test", "tui", "tabs.json")
     await wait(() => Bun.file(file).size > 0)
-    expect(await Bun.file(file).json()).toEqual({
-      global: { tabs: [{ sessionID: "first" }], unread: {} },
-      cwd: {},
-    })
+    const stored = await Bun.file(file).json()
+    expect(stored.global).toEqual({ tabs: [], unread: {} })
+    expect(Object.keys(stored.cwd)).toEqual([directory])
+    expect(stored.cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID)).toEqual(["first"])
+    expect(stored.cwd[directory].unread).toEqual({})
   } finally {
-    setup.destroy()
+    await setup.destroy()
   }
 })
 
 test("concurrent TUIs do not alternate shared tab titles from divergent session caches", async () => {
-  const state = stateDir("opencode-session-tabs-shared-")
+  await using temporary = await tmpdir()
+  const state = temporary.path
   let titled: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
   let untitled: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
 
@@ -139,7 +163,7 @@ test("concurrent TUIs do not alternate shared tab titles from divergent session 
     await titled.data.session.sync("shared")
     await wait(async () => {
       if (!(await Bun.file(file).exists())) return false
-      return (await Bun.file(file).json()).global.tabs[0]?.title === "Generated title"
+      return (await Bun.file(file).json()).cwd[directory]?.tabs[0]?.title === "Generated title"
     })
     const observed = ["Generated title"]
     const pending = new Set<Promise<void>>()
@@ -148,7 +172,7 @@ test("concurrent TUIs do not alternate shared tab titles from divergent session 
       const read = Bun.file(file)
         .json()
         .then((value) => {
-          const title = value.global.tabs[0]?.title
+          const title = value.cwd[directory]?.tabs[0]?.title
           if (title && observed.at(-1) !== title) observed.push(title)
         })
         .catch(() => undefined)
@@ -165,8 +189,8 @@ test("concurrent TUIs do not alternate shared tab titles from divergent session 
 
     expect(observed).toEqual(["Generated title"])
   } finally {
-    titled?.destroy()
-    untitled?.destroy()
+    if (titled) await titled.destroy()
+    if (untitled) await untitled.destroy()
   }
 })
 
@@ -214,7 +238,7 @@ test("user prompt admissions pulse an already-busy background tab", async () => 
     expect(setup.tabs.status("active").promptPulse).toBe(0)
     expect(setup.tabs.status("background")).toMatchObject({ promptPulse: 2, busy: true })
   } finally {
-    setup.destroy()
+    await setup.destroy()
   }
 })
 
@@ -245,6 +269,6 @@ test("tracks a temporary new session tab across close and creation", async () =>
     expect(setup.tabs.newTab()).toBe(false)
     expect(setup.tabs.tabs().find((tab) => tab.sessionID === "third")?.title).toBe(NEW_SESSION_TAB_TITLE)
   } finally {
-    setup.destroy()
+    await setup.destroy()
   }
 })

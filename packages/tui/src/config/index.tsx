@@ -132,8 +132,8 @@ export const Info = Schema.Struct({
       scope: Schema.optional(Schema.Literals(["global", "cwd"])).annotate({
         description: "Share tabs globally or keep a separate set for each working directory",
       }),
-      vertical: Schema.optional(Schema.Boolean).annotate({
-        description: "Show tabs in a left sidebar instead of a horizontal strip",
+      layout: Schema.optional(Schema.Literals(["horizontal", "vertical"])).annotate({
+        description: "Show tabs in a horizontal strip or vertical sidebar",
       }),
     }),
   ).annotate({ description: "Tab strip settings" }),
@@ -179,7 +179,7 @@ export const Info = Schema.Struct({
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader" | "mouse"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader" | "mouse" | "tabs"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -191,6 +191,11 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader" | "mouse">
   keybinds: TuiKeybind.BindingLookupView
   leader: { timeout: number }
   mouse: boolean
+  tabs: {
+    enabled: boolean
+    scope: "global" | "cwd"
+    layout: "horizontal" | "vertical"
+  }
 }
 
 export function resolve(input: Info, options: { terminalSuspend: boolean }): Resolved {
@@ -221,6 +226,12 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },
     mouse: input.mouse ?? true,
+    tabs: {
+      ...input.tabs,
+      enabled: input.tabs?.enabled ?? true,
+      scope: input.tabs?.scope ?? "cwd",
+      layout: input.tabs?.layout ?? "horizontal",
+    },
   }
 }
 

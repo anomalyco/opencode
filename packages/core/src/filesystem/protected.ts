@@ -3,6 +3,10 @@ import path from "path"
 
 const home = os.homedir()
 
+export function isHome(directory: string) {
+  return path.resolve(directory) === path.resolve(home)
+}
+
 const DARWIN_HOME = [
   "Music",
   "Pictures",

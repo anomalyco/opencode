@@ -21,7 +21,6 @@ const projectLayer = Layer.succeed(
         canonical: AbsolutePath.make("/main/repo"),
         vcs: { type: "git", store: AbsolutePath.make("/repo/.git") },
       }),
-    commit: () => Effect.void,
   }),
 )
 const it = testEffect(AppNodeBuilder.build(Location.boundNode(ref), [[Project.node, projectLayer]]))

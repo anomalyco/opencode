@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "アップデートを確認...",
-  "desktop.menu.installCli": "CLI をインストール...",
   "desktop.menu.reloadWebview": "Webview を再読み込み",
   "desktop.menu.restart": "再起動",
 
@@ -19,10 +18,4 @@ export const dict = {
     "OpenCode のバージョン {{version}} がダウンロードされました。インストールして再起動しますか？",
   "desktop.updater.installFailed.title": "アップデートに失敗しました",
   "desktop.updater.installFailed.message": "アップデートをインストールできませんでした",
-
-  "desktop.cli.installed.title": "CLI をインストールしました",
-  "desktop.cli.installed.message":
-    "CLI を {{path}} にインストールしました\n\nターミナルを再起動して 'opencode' コマンドを使用してください。",
-  "desktop.cli.failed.title": "インストールに失敗しました",
-  "desktop.cli.failed.message": "CLI のインストールに失敗しました: {{error}}",
 }

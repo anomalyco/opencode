@@ -18,6 +18,11 @@ export const ServerOptions = Schema.Struct({
   password: Schema.optional(Schema.String),
   simulation: Schema.optional(Schema.Boolean),
   database: Schema.optional(Database.Options),
+  events: Schema.optional(
+    Schema.Struct({
+      persist: Schema.optional(Schema.Boolean),
+    }),
+  ),
   models: Schema.optional(ModelsDev.Options),
   observability: Schema.optional(Observability.Options),
   config: Schema.optional(

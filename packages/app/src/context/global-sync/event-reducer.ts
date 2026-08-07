@@ -3,14 +3,10 @@ import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/
 import type {
   Message,
   Part,
-  PermissionRequest,
   Project,
-  QuestionRequest,
-  Session,
-  SessionStatus,
   Todo,
 } from "@/types"
-import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import type { FileDiffInfo, PermissionRequest, QuestionRequest, SessionInfo, SessionStatus } from "@opencode-ai/client/promise"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
@@ -79,7 +75,7 @@ function cleanupSessionCaches(
 export function cleanupDroppedSessionCaches(
   store: Store<State>,
   setStore: SetStoreFunction<State>,
-  next: Session[],
+  next: SessionInfo[],
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void,
 ) {
   const keep = new Set(next.map((item) => item.id))
@@ -128,7 +124,7 @@ export function applyDirectoryEvent(input: {
       return
     }
     case "session.created": {
-      const info = (event.properties as { info: Session }).info
+      const info = (event.properties as { info: SessionInfo }).info
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (result.found) {
         input.setStore("session", result.index, reconcile(info))
@@ -143,7 +139,7 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "session.updated": {
-      const info = (event.properties as { info: Session }).info
+      const info = (event.properties as { info: SessionInfo }).info
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (info.time.archived) {
         if (!result.found) break
@@ -171,7 +167,7 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "session.deleted": {
-      const properties = event.properties as { sessionID?: string; info?: Session }
+      const properties = event.properties as { sessionID?: string; info?: SessionInfo }
       const sessionID = properties.info?.id ?? properties.sessionID
       if (!sessionID) break
       const result = Binary.search(input.store.session, sessionID, (s) => s.id)
@@ -201,7 +197,7 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "session.usage.updated": {
-      const properties = event.properties as Pick<Session, "cost" | "tokens"> & { sessionID: string }
+      const properties = event.properties as Pick<SessionInfo, "cost" | "tokens"> & { sessionID: string }
       const result = Binary.search(input.store.session, properties.sessionID, (session) => session.id)
       if (!result.found) break
       input.setStore("session", result.index, (session) => ({
@@ -237,9 +233,8 @@ export function applyDirectoryEvent(input: {
         input.setStore("session", result.index, (session) => ({
           ...session,
           projectID: properties.projectID ?? session.projectID,
-          workspaceID: properties.location.workspaceID,
-          directory: properties.location.directory,
-          path: properties.subpath,
+          location: properties.location,
+          subpath: properties.subpath,
           time: { ...session.time, updated: Date.now() },
         }))
         break

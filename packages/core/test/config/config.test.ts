@@ -1,12 +1,12 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, PubSub, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Logger, PubSub, Schema, Stream } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
-import { ConfigModel } from "@opencode-ai/core/config/model"
-import { Config as ConfigSchema } from "@opencode-ai/schema/config"
-import { ConfigProvider } from "@opencode-ai/core/config/provider"
+import { AgentsDirectory, Directory, Document, Event, Info } from "@opencode-ai/schema/config"
+import { ConfigModel } from "@opencode-ai/schema/config/model"
+import { ConfigProvider } from "@opencode-ai/schema/config/provider"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -161,7 +161,7 @@ describe("Config", () => {
             const bus = yield* Bus.Service
             const watcher = yield* Watcher.Test
             const changed = yield* bus
-              .subscribe(ConfigSchema.Event.Updated)
+              .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
             yield* Effect.sleep("10 millis")
 
@@ -234,14 +234,14 @@ describe("Config", () => {
             yield* Effect.sleep("10 millis")
 
             const removed = yield* bus
-              .subscribe(ConfigSchema.Event.Updated)
+              .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
             yield* Effect.promise(() => fs.rm(file))
             yield* Fiber.join(removed).pipe(Effect.timeout("5 seconds"))
             expect(Config.latest(yield* config.entries(), "shell")).toBeUndefined()
 
             const recreated = yield* bus
-              .subscribe(ConfigSchema.Event.Updated)
+              .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
             yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "two" })))
             yield* Fiber.join(recreated).pipe(Effect.timeout("5 seconds"))
@@ -273,7 +273,7 @@ describe("Config", () => {
       const test = yield* Config.Test
       expect(yield* config.entries()).toEqual([])
 
-      const entry = new Config.Document({ type: "document", info: new Config.Info({}) })
+      const entry = new Document({ type: "document", info: new Info({}) })
       yield* test.setEntries([entry])
       expect(yield* config.entries()).toEqual([entry])
 
@@ -289,16 +289,16 @@ describe("Config", () => {
   it.effect("returns the latest defined scalar from priority-ordered documents", () =>
     Effect.sync(() => {
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
-          info: new Config.Info({ model: selection("openrouter/openai/gpt-5") }),
+          info: new Info({ model: selection("openrouter/openai/gpt-5") }),
         }),
-        new Config.Directory({ type: "directory", path: AbsolutePath.make("/skills") }),
-        new Config.AgentsDirectory({ type: "agents", path: AbsolutePath.make("/agents") }),
-        new Config.Document({ type: "document", info: new Config.Info({}) }),
-        new Config.Document({
+        new Directory({ type: "directory", path: AbsolutePath.make("/skills") }),
+        new AgentsDirectory({ type: "agents", path: AbsolutePath.make("/agents") }),
+        new Document({ type: "document", info: new Info({}) }),
+        new Document({
           type: "document",
-          info: new Config.Info({ model: selection("openrouter/openai/gpt-5.5") }),
+          info: new Info({ model: selection("openrouter/openai/gpt-5.5") }),
         }),
       ]
 
@@ -307,7 +307,7 @@ describe("Config", () => {
     }),
   )
 
-  it.live("loads authenticated wellknown config at highest priority", () =>
+  it.live("loads authenticated wellknown config before user configuration", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -370,15 +370,27 @@ describe("Config", () => {
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
             const bus = yield* Bus.Service
-            expect(Config.latest(yield* config.entries(), "shell")).toBe("secret")
+            const initial = yield* config.entries()
+            expect(Config.latest(initial, "shell")).toBe("project")
+            expect(
+              initial.flatMap((entry) =>
+                entry.type === "document" && entry.info.shell ? [entry.info.shell] : [],
+              ),
+            ).toEqual(["secret", "global", "project"])
             const updated = yield* bus
-              .subscribe(ConfigSchema.Event.Updated)
+              .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
             yield* Effect.yieldNow
             key = "next"
             yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID })
             expect(yield* Fiber.join(updated)).toHaveLength(1)
-            expect(Config.latest(yield* config.entries(), "shell")).toBe("next")
+            const refreshed = yield* config.entries()
+            expect(Config.latest(refreshed, "shell")).toBe("project")
+            expect(
+              refreshed.flatMap((entry) =>
+                entry.type === "document" && entry.info.shell ? [entry.info.shell] : [],
+              ),
+            ).toEqual(["next", "global", "project"])
           }).pipe(
             Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
           )
@@ -387,27 +399,96 @@ describe("Config", () => {
     ),
   )
 
-  it.effect("detects v1 configuration from any v1-only top-level key", () =>
-    Effect.sync(() => {
-      expect(ConfigMigrateV1.isV1({ snapshot: false })).toBe(true)
-      expect(ConfigMigrateV1.isV1({ snapshot: false, agents: {} })).toBe(true)
-      expect(ConfigMigrateV1.isV1({ reference: {} })).toBe(true)
-      expect(ConfigMigrateV1.isV1({ shell: "/bin/zsh", model: "anthropic/claude" })).toBe(false)
-      expect(ConfigMigrateV1.isV1({ references: {} })).toBe(false)
-    }),
-  )
+  it.live("logs redacted source-aware diagnostics for every config source", () => {
+    const output: Array<Record<string, unknown>> = []
+    const logger = Logger.map(Logger.formatStructured, (entry) => {
+      if (!Array.isArray(entry.message) || entry.message[0] !== "configuration normalization diagnostic") return
+      const details = entry.message[1]
+      if (typeof details === "object" && details !== null) output.push(details as Record<string, unknown>)
+    })
+    return Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const malformed = path.join(tmp.path, "malformed.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(path.join(global, "opencode.json"), "null")
+            await fs.writeFile(path.join(project, "opencode.json"), "")
+            await fs.writeFile(malformed, '{ "credential": "file-secret"')
+          })
+          const integrationID = Integration.ID.make("https://invalid.example.com")
+          const entry: WellKnown.Entry = {
+            origin: "https://invalid.example.com",
+            integrationID,
+            manifest: { auth: { command: ["login"], env: "TOKEN" } },
+          }
+          const credentialNode = makeGlobalNode({
+            service: Credential.Service,
+            layer: Layer.succeed(
+              Credential.Service,
+              Credential.Service.of({
+                all: () => Effect.die("unused Credential.all"),
+                list: () =>
+                  Effect.succeed([
+                    new Credential.Info({
+                      id: Credential.ID.create(),
+                      integrationID,
+                      label: "default",
+                      value: Credential.Key.make({ type: "key", key: "wellknown-secret" }),
+                    }),
+                  ]),
+                get: () => Effect.die("unused Credential.get"),
+                create: () => Effect.die("unused Credential.create"),
+                update: () => Effect.die("unused Credential.update"),
+                remove: () => Effect.die("unused Credential.remove"),
+              }),
+            ),
+            deps: [],
+          })
+          const wellknownNode = makeGlobalNode({
+            service: WellKnown.Service,
+            layer: Layer.succeed(
+              WellKnown.Service,
+              WellKnown.Service.of({
+                entries: () => Effect.succeed([entry]),
+                snapshot: () => [entry],
+                refresh: () => Effect.succeed(false),
+                add: () => Effect.die("unused Wellknown.add"),
+                remove: () => Effect.die("unused Wellknown.remove"),
+                // Exercise the loader boundary against a malformed implementation response.
+                resolve: () => Effect.succeed([null as unknown as WellKnown.Config]),
+              }),
+            ),
+            deps: [],
+          })
 
-  it.effect("detects a bare v1-shaped mcp block while leaving v2 mcp config alone", () =>
-    Effect.sync(() => {
-      // V1 lists servers directly under `mcp`, so a file with only `$schema` + `mcp` still migrates.
-      expect(ConfigMigrateV1.isV1({ mcp: { context7: { type: "local", command: ["npx"] } } })).toBe(true)
-      expect(ConfigMigrateV1.isV1({ $schema: "x", mcp: { executor: { type: "remote", url: "https://x" } } })).toBe(true)
-      // Current config nests under `mcp.servers`, so it must not be misdetected and re-migrated.
-      expect(ConfigMigrateV1.isV1({ mcp: { servers: { context7: { type: "local", command: ["npx"] } } } })).toBe(false)
-      expect(ConfigMigrateV1.isV1({ mcp: {} })).toBe(false)
-      expect(ConfigMigrateV1.isV1({ mcp: { timeout: { execution: 1000 } } })).toBe(false)
-    }),
-  )
+          yield* Config.Service.use((config) => config.entries()).pipe(
+            Effect.provide(
+              testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode, {
+                file: malformed,
+                content: "",
+              }),
+            ),
+          )
+
+          expect(output.map((item) => `${item.source}:${item.path}:${item.kind}`).toSorted()).toEqual(
+            [
+              `${path.join(global, "opencode.json")}:$:invalid`,
+              `${path.join(project, "opencode.json")}:$:invalid`,
+              `${malformed}:$:invalid`,
+              "https://invalid.example.com:$:invalid",
+              "OPENCODE_CONFIG_CONTENT:$:invalid",
+            ].toSorted(),
+          )
+          expect(JSON.stringify(output)).not.toContain("secret")
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(Effect.provide(Logger.layer([logger])))
+  })
 
   it.effect("migrates arbitrary v1 configuration into valid v2 configuration", () =>
     Effect.sync(() => {
@@ -418,7 +499,7 @@ describe("Config", () => {
               Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(info),
             ),
           )
-          Schema.decodeUnknownSync(Config.Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
+          Schema.decodeUnknownSync(Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
         }),
         { numRuns: 100 },
       )
@@ -428,6 +509,20 @@ describe("Config", () => {
   it.effect("migrates the v1 experimental subagent depth", () =>
     Effect.sync(() => {
       expect(ConfigMigrateV1.migrate({ experimental: { subagent_depth: 2 } }).experimental?.subagent_depth).toBe(2)
+    }),
+  )
+
+  it.effect("migrates the v1 small model to the title agent", () =>
+    Effect.sync(() => {
+      expect(
+        ConfigMigrateV1.migrate({
+          small_model: "anthropic/claude-haiku-4-5",
+          agent: { title: { prompt: "Custom title prompt" } },
+        }).agents?.title,
+      ).toEqual({
+        model: { providerID: "anthropic", model: "claude-haiku-4-5" },
+        system: "Custom title prompt",
+      })
     }),
   )
 
@@ -472,6 +567,111 @@ describe("Config", () => {
         headers: { "x-test": "1" },
         body: { trace: true },
       })
+    }),
+  )
+
+  it.effect("renames old provider IDs while migrating v1 configuration", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        model: "azure-cognitive-services/deployment",
+        enabled_providers: ["google-vertex-anthropic"],
+        disabled_providers: ["azure-cognitive-services"],
+        agent: {
+          reviewer: { model: "google-vertex-anthropic/claude-sonnet" },
+        },
+        command: {
+          review: { template: "Review", model: "azure-cognitive-services/deployment" },
+        },
+        provider: {
+          "azure-cognitive-services": {
+            npm: "@ai-sdk/azure",
+            env: ["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "AZURE_COGNITIVE_SERVICES_API_KEY"],
+            models: { deployment: {} },
+          },
+          "google-vertex-anthropic": {
+            npm: "@ai-sdk/google-vertex/anthropic",
+            options: { project: "test-project", location: "us-central1" },
+            models: { "claude-sonnet": {} },
+          },
+        },
+      })
+
+      expect(migrated.model).toEqual({ providerID: "azure", model: "deployment" })
+      expect(migrated.agents?.reviewer?.model).toEqual({ providerID: "google-vertex", model: "claude-sonnet" })
+      expect(migrated.commands?.review?.model).toEqual({ providerID: "azure", model: "deployment" })
+      expect(migrated.experimental?.policies).toEqual([
+        { action: "provider.use", resource: "*", effect: "deny" },
+        { action: "provider.use", resource: "google-vertex", effect: "allow" },
+        { action: "provider.use", resource: "azure", effect: "deny" },
+      ])
+      expect(migrated.providers?.azure).toMatchObject({
+        env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
+        package: Provider.aisdk("@ai-sdk/azure"),
+        models: { deployment: {} },
+      })
+      expect(migrated.providers?.["azure-cognitive-services"]).toBeUndefined()
+      expect(migrated.providers?.["google-vertex"]).toMatchObject({
+        settings: { project: "test-project", location: "us-central1" },
+        models: {
+          "claude-sonnet": { package: Provider.aisdk("@ai-sdk/google-vertex/anthropic") },
+        },
+      })
+      expect(migrated.providers?.["google-vertex"]).not.toHaveProperty("package")
+      expect(migrated.providers?.["google-vertex-anthropic"]).toBeUndefined()
+    }),
+  )
+
+  it.effect("preserves the generated base URL for v1 Azure OpenAI-compatible providers", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        provider: {
+          "azure-cognitive-services": {
+            npm: "@ai-sdk/openai-compatible",
+            env: ["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "AZURE_COGNITIVE_SERVICES_API_KEY"],
+          },
+        },
+      })
+
+      expect(migrated.providers?.azure).toMatchObject({
+        env: ["AZURE_COGNITIVE_SERVICES_API_KEY"],
+        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+        settings: {
+          baseURL: "https://${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
+        },
+      })
+    }),
+  )
+
+  it.effect("ignores old provider IDs when the current provider ID is configured", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        provider: {
+          azure: { models: { current: {} } },
+          "azure-cognitive-services": { models: { legacy: {} } },
+          "google-vertex": { models: { gemini: {} } },
+          "google-vertex-anthropic": { models: { claude: {} } },
+        },
+      })
+
+      expect(migrated.providers?.azure?.models).toEqual({ current: expect.anything() })
+      expect(migrated.providers?.["google-vertex"]?.models).toEqual({ gemini: expect.anything() })
+    }),
+  )
+
+  it.effect("preserves the built-in package for v1 Vertex Anthropic custom models", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        provider: {
+          "google-vertex-anthropic": {
+            models: { claude: {} },
+          },
+        },
+      })
+
+      expect(migrated.providers?.["google-vertex"]?.package).toBeUndefined()
+      expect(migrated.providers?.["google-vertex"]?.models?.claude?.package).toBe(
+        Provider.aisdk("@ai-sdk/google-vertex/anthropic"),
+      )
     }),
   )
 
@@ -556,9 +756,41 @@ describe("Config", () => {
           const entries = yield* config.entries()
 
           expect(entries).toEqual([
-            new Config.Directory({ type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) }),
+            new Directory({ type: "directory", path: AbsolutePath.make(path.join(tmp.path, "global")) }),
           ])
         }).pipe(Effect.provide(testLayer(tmp.path))),
+      ),
+    ),
+  )
+
+  it.live("deduplicates global ecosystem directories found during upward discovery", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const home = path.join(global, "home")
+          const project = path.join(home, "project")
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.mkdir(path.join(home, ".claude"), { recursive: true }),
+              fs.mkdir(path.join(home, ".agents"), { recursive: true }),
+              fs.mkdir(project, { recursive: true }),
+            ]),
+          )
+          const entries = yield* Config.Service.use((config) => config.entries()).pipe(
+            Effect.provide(testLayer(project, global)),
+          )
+
+          expect(entries.filter((entry) => entry.type === "claude").map((entry) => entry.path)).toEqual([
+            AbsolutePath.make(path.join(home, ".claude")),
+          ])
+          expect(entries.filter((entry) => entry.type === "agents").map((entry) => entry.path)).toEqual([
+            AbsolutePath.make(path.join(home, ".agents")),
+          ])
+        }),
       ),
     ),
   )
@@ -624,7 +856,7 @@ describe("Config", () => {
             expect(documents).toHaveLength(2)
             expect(documents.map((document) => document.type)).toEqual(["document", "document"])
             expect(documents.map((document) => document.info.$schema)).toEqual(["base", "last"])
-            expect(documents[0]).toBeInstanceOf(Config.Document)
+            expect(documents[0]).toBeInstanceOf(Document)
             expect(documents[0]?.path).toBe(path.join(tmp.path, "opencode.json"))
             expect(documents[1]?.info.providers?.last).toBeInstanceOf(ConfigProvider.Info)
 
@@ -1072,7 +1304,7 @@ describe("Config", () => {
             const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
 
             expect(documents).toHaveLength(1)
-            expect(documents[0]?.info).toBeInstanceOf(Config.Info)
+            expect(documents[0]?.info).toBeInstanceOf(Info)
             expect(documents[0]?.info.shell).toBe("/bin/zsh")
             expect(documents[0]?.info.default_agent).toBe("reviewer")
             expect(documents[0]?.info.snapshots).toBe(false)

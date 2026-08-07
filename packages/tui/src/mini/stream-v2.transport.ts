@@ -26,6 +26,7 @@ import type {
   FooterQueuedPrompt,
   RunFilePart,
   RunInput,
+  RunDelivery,
   RunPrompt,
   RunPromptPart,
   StreamCommit,
@@ -71,7 +72,7 @@ export type SessionResizeReplayInput = {
 
 export type SessionTransport = {
   runPromptTurn(input: SessionTurnInput, admitted?: () => void): Promise<void>
-  queuePromptTurn(input: SessionTurnInput): Promise<void>
+  admitPromptTurn(input: SessionTurnInput, delivery: RunDelivery): Promise<void>
   waitForIdle(): Promise<void>
   interruptActiveTurn(): Promise<void>
   selectSubagent(sessionID: string | undefined): void
@@ -515,8 +516,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     )
   }
 
+  let syncedPending: string[] | undefined
   const syncPending = () => {
-    const prompts = [...state.pending.values()]
+    const prompts = [...state.pending.values()].filter((item) => item.delivery === "queue")
+    const ids = prompts.map((item) => item.messageID)
+    if (syncedPending?.length === ids.length && syncedPending.every((id, index) => id === ids[index])) return
+    syncedPending = ids
     input.trace?.write("ui.patch", { pending: prompts.length })
     input.footer.event({ type: "queued.prompts", prompts })
   }
@@ -932,6 +937,36 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         ])
       }
       write([], { phase: "running", status: "waiting for assistant" })
+      return
+    }
+    if (event.type === "session.input.steered") {
+      const pending = state.pending.get(event.data.inputID)
+      if (!pending) return
+      state.pending.set(event.data.inputID, { ...pending, delivery: "steer" })
+      syncPending()
+      if (state.messageIDs.has(event.data.inputID)) return
+      state.messageIDs.add(event.data.inputID)
+      write([
+        {
+          kind: "user",
+          source: "system",
+          text: pending.prompt.text,
+          phase: "start",
+          messageID: event.data.inputID,
+        },
+      ])
+      return
+    }
+    if (event.type === "session.input.queued") {
+      const pending = state.pending.get(event.data.inputID)
+      if (!pending) return
+      state.pending.set(event.data.inputID, { ...pending, delivery: "queue" })
+      syncPending()
+      return
+    }
+    if (event.type === "session.input.cancelled") {
+      state.admitted.delete(event.data.inputID)
+      if (state.pending.delete(event.data.inputID)) syncPending()
       return
     }
     if (event.type === "session.step.started") {
@@ -1577,7 +1612,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   let queuedResizeReplay: SessionResizeReplayInput | undefined
   let closing: Promise<void> | undefined
 
-  const admitPrompt = async (next: SessionTurnInput, client: OpenCodeClient, delivery: "steer" | "queue") => {
+  const admitPrompt = async (next: SessionTurnInput, client: OpenCodeClient, delivery: RunDelivery) => {
     const messageID = next.prompt.messageID
     if (!messageID) throw new Error("Prompt message ID is required")
     const command = next.prompt.command
@@ -1643,14 +1678,20 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   }
 
   return {
-    async queuePromptTurn(next) {
+    async admitPromptTurn(next, delivery) {
       if (next.prompt.mode === "shell" || next.prompt.command?.source === "skill")
         throw new Error("This prompt cannot be queued")
       if (!state.connected) throw new Error("Event stream is reconnecting")
       const client = sdk
       if (next.agent)
         await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
-      mergePending(await admitPrompt(next, client, "queue"))
+      if (!next.prompt.command) {
+        const selected = await resolveSelectedModel(input, client, next)
+        if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
+        if (selected)
+          await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
+      }
+      mergePending(await admitPrompt(next, client, delivery))
       settlementClient = client
     },
     async waitForIdle() {
@@ -1688,7 +1729,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (command) {
-        await runTurnWait(next, messageID, client, () => admitPrompt(next, client, "steer"), admitted)
+        await runTurnWait(next, messageID, client, () => admitPrompt(next, client, next.prompt.delivery ?? "steer"), admitted)
         return
       }
 
@@ -1700,7 +1741,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (selected)
         await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
 
-      await runTurnWait(next, messageID, client, () => admitPrompt(next, client, "steer"), admitted)
+      await runTurnWait(next, messageID, client, () => admitPrompt(next, client, next.prompt.delivery ?? "steer"), admitted)
     },
     async interruptActiveTurn() {
       // A running shell holds no drain, so session.interrupt cannot reach it;

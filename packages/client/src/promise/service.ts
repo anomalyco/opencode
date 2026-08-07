@@ -34,6 +34,7 @@ async function discoverLocal(options: DiscoverOptions) {
 export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const deadline = Date.now() + 120_000
   const contenders = new Set<Contender>()
+  let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
   let lastSpawn = 0
   let spawnDelay = 5_000
@@ -62,6 +63,19 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   while (true) {
     if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
     const registration = await registered(options.file, true)
+    if (registration.timedOut && registration.info !== undefined) {
+      timeouts = {
+        info: registration.info,
+        count:
+          timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
+      }
+      if (timeouts.count >= 3) {
+        announce("missing")
+        await evict(registration.info, options)
+        timeouts = undefined
+        lastSpawn = Date.now() - spawnDelay
+      }
+    } else timeouts = undefined
 
     if (registration.service !== undefined) {
       spawnDelay = 5_000
@@ -145,6 +159,10 @@ type LocalService = {
 }
 
 async function probe(info: Info, allowLegacy = false): Promise<LocalService | undefined> {
+  return (await probeResult(info, allowLegacy)).service
+}
+
+async function probeResult(info: Info, allowLegacy = false) {
   const endpoint = {
     url: info.url,
     auth:
@@ -152,30 +170,48 @@ async function probe(info: Info, allowLegacy = false): Promise<LocalService | un
         ? undefined
         : { type: "basic" as const, username: "opencode", password: info.password },
   } satisfies Endpoint
-  const response = await fetch(new URL("/api/health", info.url), {
+  const signal = AbortSignal.timeout(2_000)
+  const result = await fetch(new URL("/api/health", info.url), {
     headers: headers(endpoint),
-    signal: AbortSignal.timeout(2_000),
-  }).catch(() => undefined)
-  const body = (await response?.json().catch(() => undefined)) as ServiceHealth | { readonly healthy: true } | undefined
+    signal,
+  })
+    .then(async (response) => ({
+      response,
+      body: (await response.json()) as ServiceHealth | { readonly healthy: true },
+    }))
+    .then(
+      (value) => ({ value }),
+      (cause: unknown) => ({ cause }),
+    )
+  if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
+  const response = result.value.response
+  const body = result.value.body
   if (body !== undefined && "version" in body && "pid" in body) {
-    if (body.pid !== info.pid) return undefined
-    if (info.version !== undefined && body.version !== info.version) return undefined
+    if (body.pid !== info.pid) return { service: undefined, timedOut: false }
+    if (info.version !== undefined && body.version !== info.version)
+      return { service: undefined, timedOut: false }
     return {
-      info,
-      endpoint,
-      version: body.version,
-      state: response?.ok ? "ready" : response?.status === 500 ? "failed" : "waiting",
-      legacy: false,
+      service: {
+        info,
+        endpoint,
+        version: body.version,
+        state: response.ok ? "ready" : response.status === 500 ? "failed" : "waiting",
+        legacy: false,
+      } satisfies LocalService,
+      timedOut: false,
     }
   }
-  if (!allowLegacy || body?.healthy !== true) return undefined
-  return { info, endpoint, state: "ready", legacy: true }
+  if (!allowLegacy || body?.healthy !== true) return { service: undefined, timedOut: false }
+  return {
+    service: { info, endpoint, state: "ready", legacy: true } satisfies LocalService,
+    timedOut: false,
+  }
 }
 
 async function registered(file?: string, allowLegacy = false) {
   const info = await read(file)
-  if (info === undefined) return { info: undefined, service: undefined }
-  return { info, service: await probe(info, allowLegacy) }
+  if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
+  return { info, ...(await probeResult(info, allowLegacy)) }
 }
 
 async function find(options: { readonly file?: string }) {
@@ -207,6 +243,18 @@ async function waitUntilStopped(pid: number) {
 
 function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
+}
+
+async function evict(info: Info, options: { readonly file?: string }) {
+  const current = await read(options.file)
+  if (current === undefined || !same(current, info)) return
+  signal(info.pid, "SIGTERM")
+  if (await waitUntilStopped(info.pid)) return
+
+  const latest = await read(options.file)
+  if (latest === undefined || !same(latest, info)) return
+  signal(info.pid, "SIGKILL")
+  if (!(await waitUntilStopped(info.pid))) throw new Error(`Server process ${info.pid} is still running`)
 }
 
 async function kill(service: LocalService, options: { readonly file?: string }) {

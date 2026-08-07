@@ -45,10 +45,6 @@ describe("timeline fixture validation", () => {
     expect(first.payload.id).toMatch(/^evt_timeline_\d{4}$/)
     expect(Number(second.payload.id.slice(-4))).toBe(Number(first.payload.id.slice(-4)) + 1)
   })
-
-  test("uses the projected tool ID as its call ID", () => {
-    expect(toolPart("call_1", "read", "running", {})).toMatchObject({ id: "call_1", callID: "call_1" })
-  })
 })
 
 if (false) {

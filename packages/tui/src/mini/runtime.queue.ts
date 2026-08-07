@@ -11,7 +11,7 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Locale } from "../util/locale"
 import { isCompactCommand, isExitCommand, isNewCommand } from "./prompt.shared"
-import type { FooterApi, FooterEvent, RunPrompt } from "./types"
+import type { FooterApi, FooterEvent, RunDelivery, RunPrompt } from "./types"
 
 type Trace = {
   write(type: string, data?: unknown): void
@@ -21,11 +21,11 @@ export type QueueInput = {
   footer: FooterApi
   initialInput?: string
   trace?: Trace
-  onSend?: (prompt: RunPrompt, delivery: "steer" | "queue") => void
+  onSend?: (prompt: RunPrompt, delivery: RunDelivery) => void
   onAdmissionError?: (prompt: RunPrompt, error: unknown) => void | Promise<void>
   onNewSession?: () => void | Promise<void>
   onCompact?: () => void | Promise<void>
-  admit: (prompt: RunPrompt, signal: AbortSignal) => Promise<void>
+  admit: (prompt: RunPrompt, delivery: RunDelivery, signal: AbortSignal) => Promise<void>
   settle: () => Promise<void>
   run: (prompt: RunPrompt, signal: AbortSignal, admitted: () => void) => Promise<void>
 }
@@ -183,7 +183,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               input.trace?.write("ui.commit", commit)
               input.footer.append(commit)
             }
-            input.onSend?.(sent, "steer")
+            input.onSend?.(sent, sent.delivery ?? "steer")
 
             if (state.closed) {
               break
@@ -276,10 +276,11 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       const sent = { ...prompt, messageID: SessionMessage.ID.create() }
       const admission = state.admission
       admissionVersion += 1
-      input.onSend?.(sent, "queue")
+      const delivery = prompt.delivery ?? "queue"
+      input.onSend?.(sent, delivery)
       admissions = admissions
         .then(() => admission)
-        .then(() => input.admit(sent, admissionController.signal))
+        .then(() => input.admit(sent, delivery, admissionController.signal))
         .catch((error) => (state.closed ? undefined : input.onAdmissionError?.(sent, error)))
       return
     }

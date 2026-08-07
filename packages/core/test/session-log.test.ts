@@ -23,13 +23,13 @@ const projects = Layer.succeed(
     list: () => Effect.succeed([]),
     resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
     directories: () => Effect.succeed([]),
-    commit: () => Effect.void,
   }),
 )
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
+      [Bus.node, Bus.configured({ persist: true })],
       [Project.node, projects],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
@@ -41,17 +41,13 @@ describe("Session.log", () => {
   it.effect("replays public session events and marks synced at the aggregate watermark", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
-      const bus = yield* Bus.Service
       const created = yield* session.create({ location })
       yield* session.rename({ sessionID: created.id, title: "session.renamed" })
 
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID: created.id })))
-      const watermark = (yield* bus.sequences([created.id])).get(created.id)
 
-      // Session creation commits a non-public durable event, so the marker's
-      // seq covers more of the aggregate than the public events emitted.
-      expect(items.map((item) => item.type)).toEqual(["session.renamed", "log.synced"])
-      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: watermark })
+      expect(items.map((item) => item.type)).toEqual(["session.created", "session.renamed", "log.synced"])
+      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(1) })
     }),
   )
 
@@ -60,7 +56,7 @@ describe("Session.log", () => {
       const session = yield* Session.Service
       const created = yield* session.create({ location })
       const fiber = yield* session
-        .log({ sessionID: created.id, follow: true })
+        .log({ sessionID: created.id, after: Event.Seq.make(0), follow: true })
         .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 

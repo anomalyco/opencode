@@ -4,12 +4,12 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMutation } from "@tanstack/solid-query"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { displayLabel } from "@opencode-ai/util/session-title-fallback"
 import { useGlobal } from "@/context/global"
 import { ServerConnection, serverName } from "@/context/server"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
-import type { Session } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
+import { sessionLabel } from "@/utils/session-title"
 import { canOpenTabRename, forwardTabRef } from "./titlebar-tab-gesture"
 import { TabPreviewPopover } from "./titlebar-tab-popover"
 import "./titlebar-tab-nav.css"
@@ -21,7 +21,7 @@ export function TabNavItem(props: {
   ref?: Ref<HTMLDivElement>
   href: string
   server: ServerConnection.Key
-  session: () => Session | undefined
+  session: () => SessionInfo | undefined
   fallbackTitle?: string
   onRename: (title: string) => Promise<void>
   onClose: () => void
@@ -57,19 +57,19 @@ export function TabNavItem(props: {
   })
   const title = createMemo(() => {
     const session = props.session()
-    return session ? displayLabel(session) : props.fallbackTitle
+    return session ? sessionLabel(session) : props.fallbackTitle
   })
 
   const projectName = createMemo(() => {
     const session = props.session()
     if (!session) return
-    return displayName(project() ?? { worktree: session.directory })
+    return displayName(project() ?? { worktree: session.location.directory })
   })
   const previewPath = createMemo(() => {
     const session = props.session()
     if (!session) return
     const home = serverCtx()?.sync.data.path.home
-    return home ? session.directory.replace(home, "~") : session.directory
+    return home ? session.location.directory.replace(home, "~") : session.location.directory
   })
   // Only label the server when multiple servers are connected.
   const serverLabel = createMemo(() => {
@@ -235,7 +235,7 @@ export function TabNavItem(props: {
             {(session) => (
               <SessionTabAvatar
                 project={project()}
-                directory={session().directory}
+                directory={session().location.directory}
                 sessionId={session().id}
                 server={props.server}
               />
@@ -306,7 +306,7 @@ export function TabNavItem(props: {
       }}
       data={{
         projectName: projectName(),
-        title: title(),
+        title: props.session()?.title,
         path: previewPath(),
         serverName: serverLabel(),
       }}

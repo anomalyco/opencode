@@ -153,4 +153,88 @@ describe("v2 session reducer", () => {
 
     expect(result).toMatchObject({ sessionID: "ses_1", missing: "msg_user", touched: [] })
   })
+
+  test("removes cancelled input from the pending promotion fold", () => {
+    const reducer = createV2SessionReducer()
+    reducer.reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_admitted",
+        type: "session.input.admitted",
+        data: {
+          sessionID: "ses_1",
+          inputID: "msg_user",
+          input: { type: "user", delivery: "queue", data: { text: "cancel me" } },
+        },
+      }),
+    )
+    reducer.reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_cancelled",
+        type: "session.input.cancelled",
+        data: { sessionID: "ses_1", inputID: "msg_user" },
+      }),
+    )
+    const result = reducer.reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_promoted",
+        type: "session.input.promoted",
+        data: { sessionID: "ses_1", inputID: "msg_user" },
+      }),
+    )
+
+    expect(result).toMatchObject({ missing: "msg_user" })
+  })
+
+  test("keeps steered input available to the promotion fold", () => {
+    const reducer = createV2SessionReducer()
+    reducer.reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_admitted",
+        type: "session.input.admitted",
+        data: {
+          sessionID: "ses_1",
+          inputID: "msg_user",
+          input: { type: "user", delivery: "queue", data: { text: "steer me" } },
+        },
+      }),
+    )
+    reducer.reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_steered",
+        type: "session.input.steered",
+        data: { sessionID: "ses_1", inputID: "msg_user" },
+      }),
+    )
+    reducer.reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_queued",
+        type: "session.input.queued",
+        data: { sessionID: "ses_1", inputID: "msg_user" },
+      }),
+    )
+
+    const result = reducer.reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_promoted",
+        type: "session.input.promoted",
+        data: { sessionID: "ses_1", inputID: "msg_user" },
+      }),
+    )
+
+    expect(result?.messages).toMatchObject([{ id: "msg_user", type: "user", text: "steer me" }])
+  })
 })

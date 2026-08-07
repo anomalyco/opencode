@@ -57,23 +57,21 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const [filter, setFilter] = createSignal("")
   let list: ListRef | undefined
 
-  const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
-    () => (missingBase() ? true : undefined),
-    async (): Promise<Path | undefined> => {
-      if ((await sdk.protocol) === "v1")
-        return sdk.legacy.path.get().catch(() => undefined)
-      return sdk.api.location
+    () => (!(sync.data.path.home || sync.data.path.directory) ? true : undefined),
+    () =>
+      sdk.api.location
         .get()
-        .then((location) => ({
-          state: "",
-          config: "",
-          worktree: location.project.directory,
-          directory: location.directory,
-          home: "",
-        }))
-        .catch(() => undefined)
-    },
+        .then(
+          (location): Path => ({
+            state: "",
+            config: "",
+            worktree: location.project.directory,
+            directory: location.directory,
+            home: "",
+          }),
+        )
+        .catch(() => undefined),
     { initialValue: undefined },
   )
 

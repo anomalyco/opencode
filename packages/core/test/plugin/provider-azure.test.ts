@@ -75,6 +75,56 @@ describe("AzurePlugin", () => {
     ),
   )
 
+  it.effect("resolves resourceName from the legacy env", () =>
+    withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: "legacy-resource" }, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Catalog.Service
+        yield* catalog.transform((catalog) => {
+          catalog.provider.update(Provider.ID.azure, (item) => {
+            item.package = Provider.aisdk("@ai-sdk/azure")
+          })
+        })
+        yield* addPlugin()
+        expect(required(yield* catalog.provider.get(Provider.ID.azure)).settings?.resourceName).toBe("legacy-resource")
+      }),
+    ),
+  )
+
+  it.effect("expands provider and model resource URLs", () =>
+    withEnv({ AZURE_RESOURCE_NAME: "from-env", AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: "legacy-env" }, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Catalog.Service
+        yield* catalog.transform((catalog) => {
+          catalog.provider.update(Provider.ID.azure, (provider) => {
+            provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+            provider.settings = {
+              baseURL: "https://${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
+            }
+          })
+          catalog.model.update(Provider.ID.azure, Model.ID.make("anthropic"), (model) => {
+            model.package = Provider.aisdk("@ai-sdk/anthropic")
+            model.settings = {
+              resourceName: "model-resource",
+              baseURL: "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1",
+            }
+          })
+        })
+        yield* addPlugin()
+
+        expect(required(yield* catalog.provider.get(Provider.ID.azure)).settings).toMatchObject({
+          resourceName: "from-env",
+          baseURL: "https://from-env.cognitiveservices.azure.com/openai",
+        })
+        expect(
+          required(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("anthropic"))).settings,
+        ).toMatchObject({
+          resourceName: "model-resource",
+          baseURL: "https://model-resource.services.ai.azure.com/anthropic/v1",
+        })
+      }),
+    ),
+  )
+
   it.effect("keeps explicit resourceName over env and ignores other providers", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env" }, () =>
       Effect.gen(function* () {

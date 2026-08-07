@@ -5,12 +5,14 @@ import { Effect, Fiber, Schema, Stream } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
 import { Config } from "@opencode-ai/core/config"
+import { Directory, Document, Info } from "@opencode-ai/schema/config"
 import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Permission } from "@opencode-ai/core/permission"
+import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
 import { advance, drain } from "../lib/clock"
@@ -19,7 +21,7 @@ import { testEffect } from "../lib/effect"
 import { agentHost, host } from "../plugin/host"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Agent.node, Bus.node, FSUtil.node, Global.node])))
-const decode = Schema.decodeUnknownSync(Config.Info)
+const decode = Schema.decodeUnknownSync(Info)
 const defaultPermissions = (global: Global.Interface): Permission.Ruleset => [
   ...Agent.Info.default(Agent.ID.make("test")).permissions,
   { action: "external_directory", resource: path.join(global.data, "shell", "*", "*"), effect: "allow" },
@@ -49,12 +51,107 @@ describe("ConfigAgentPlugin.Plugin", () => {
   it.effect("matches Windows paths against home-relative permissions", () =>
     Effect.gen(function* () {
       const permissions = yield* loadHomePermissions("C:\\Users\\test")
+      expect(permissions).toContainEqual({
+        action: "external_directory",
+        resource: "C:\\Users\\test\\p\\**",
+        effect: "allow",
+      })
       expect(
         Permission.evaluate("external_directory", "C:\\Users\\test\\p\\opencode\\src\\*", permissions).effect,
       ).toBe("allow")
       expect(Permission.evaluate("external_directory", "C:\\Users\\test\\cache\\files\\*", permissions).effect).toBe(
         "deny",
       )
+    }),
+  )
+
+  it.effect("applies remote permission defaults before explicit global and build rules", () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      const global = yield* Global.Service
+      yield* AgentPlugin.Plugin.effect(host({ agent: agentHost(agents) }))
+
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode(
+            ConfigMigrateV1.migrate({
+              permission: {
+                bash: "ask",
+                edit: "ask",
+                webfetch: "ask",
+                read: {
+                  "*": "allow",
+                  "*.env": "deny",
+                  "*.env.*": "deny",
+                  "*.env.example": "allow",
+                  "*.dev.vars": "deny",
+                  "~/.local/share/opencode/mcp-auth.json": "deny",
+                  "$HOME/.local/share/opencode/mcp-auth.json": "deny",
+                },
+                external_directory: {
+                  "*": "ask",
+                  "~/.local/share/opencode/*": "deny",
+                },
+              },
+            }),
+          ),
+        }),
+        new Document({
+          type: "document",
+          info: decode({
+            permissions: [{ action: "*", resource: "*", effect: "allow" }],
+            agents: {
+              build: {
+                permissions: [
+                  { action: "external_directory", resource: "*", effect: "allow" },
+                  {
+                    action: "external_directory",
+                    resource: "~/.local/share/opencode/*",
+                    effect: "deny",
+                  },
+                  { action: "read", resource: "*.env", effect: "deny" },
+                ],
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+        Effect.provide(Config.testLayer(entries)),
+      )
+
+      const build = yield* agents.get(Agent.defaultID)
+      if (!build) throw new Error("expected configured build agent")
+      const opencodeData = path.join(global.home, ".local", "share", "opencode", "*")
+      const mcpAuth = path.join(global.home, ".local", "share", "opencode", "mcp-auth.json")
+      expect(build.permissions).toEqual([
+        ...defaultPermissions(global),
+        { action: "question", resource: "*", effect: "allow" },
+        { action: "shell", resource: "*", effect: "ask" },
+        { action: "edit", resource: "*", effect: "ask" },
+        { action: "webfetch", resource: "*", effect: "ask" },
+        { action: "read", resource: "*", effect: "allow" },
+        { action: "read", resource: "*.env", effect: "deny" },
+        { action: "read", resource: "*.env.*", effect: "deny" },
+        { action: "read", resource: "*.env.example", effect: "allow" },
+        { action: "read", resource: "*.dev.vars", effect: "deny" },
+        { action: "read", resource: mcpAuth, effect: "deny" },
+        { action: "read", resource: mcpAuth, effect: "deny" },
+        { action: "external_directory", resource: "*", effect: "ask" },
+        { action: "external_directory", resource: opencodeData, effect: "deny" },
+        { action: "*", resource: "*", effect: "allow" },
+        { action: "external_directory", resource: "*", effect: "allow" },
+        { action: "external_directory", resource: opencodeData, effect: "deny" },
+        { action: "read", resource: "*.env", effect: "deny" },
+      ])
+      expect(Permission.evaluate("shell", "bun test", build.permissions).effect).toBe("allow")
+      expect(Permission.evaluate("edit", "src/index.ts", build.permissions).effect).toBe("allow")
+      expect(Permission.evaluate("webfetch", "https://example.com", build.permissions).effect).toBe("allow")
+      expect(Permission.evaluate("read", ".env", build.permissions).effect).toBe("deny")
+      expect(Permission.evaluate("external_directory", opencodeData, build.permissions).effect).toBe("deny")
+      expect(Permission.evaluate("external_directory", "/outside/*", build.permissions).effect).toBe("allow")
     }),
   )
 
@@ -71,7 +168,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       )
 
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             permissions: [{ action: "bash", resource: "*", effect: "ask" }],
@@ -92,7 +189,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
             },
           }),
         }),
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             permissions: [{ action: "read", resource: "*", effect: "allow" }],
@@ -153,7 +250,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
     Effect.gen(function* () {
       const agents = yield* Agent.Service
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             agents: {
@@ -173,7 +270,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
             },
           }),
         }),
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({
             agents: {
@@ -218,7 +315,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       yield* agents.transform((editor) => editor.update(build, () => {}))
 
       const entries = [
-        new Config.Document({
+        new Document({
           type: "document",
           info: decode({ agents: { build: { disabled: true } } }),
         }),
@@ -276,7 +373,7 @@ Use native v2 fields.`,
           const agents = yield* Agent.Service
           const global = yield* Global.Service
           const entries = [
-            new Config.Document({
+            new Document({
               type: "document",
               info: decode({ agents: { reviewer: { description: "JSON description" } } }),
             }),
@@ -425,7 +522,7 @@ Use native v2 fields.`,
 })
 
 function directoryEntry(directory: string) {
-  return new Config.Directory({ type: "directory", path: AbsolutePath.make(directory) })
+  return new Directory({ type: "directory", path: AbsolutePath.make(directory) })
 }
 
 function sourceCases() {
@@ -522,7 +619,7 @@ function loadHomePermissions(home: string) {
     const build = Agent.ID.make("build")
     yield* agents.transform((editor) => editor.update(build, () => {}))
     const entries = [
-      new Config.Document({
+      new Document({
         type: "document",
         info: decode(
           ConfigMigrateV1.migrate({

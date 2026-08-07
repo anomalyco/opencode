@@ -8,6 +8,7 @@ export type {
   AppApi,
   CatalogApi,
   CommandApi,
+  ConfigApi,
   EventApi,
   IntegrationApi,
   ModelApi,
@@ -20,6 +21,7 @@ export type {
 } from "./api.js"
 export { Agent } from "@opencode-ai/schema/agent"
 export { Command } from "@opencode-ai/schema/command"
+export { Config } from "@opencode-ai/schema/config"
 export { Credential } from "@opencode-ai/schema/credential"
 export { Event } from "@opencode-ai/schema/event"
 export { EventLog } from "@opencode-ai/schema/event-log"
