@@ -30,8 +30,6 @@ export default Runtime.handler(
     )
     if (!method)
       return yield* Effect.fail(new Error(`MCP server "${input.name}" is not an OAuth-capable remote server`))
-    if (method.forms)
-      return yield* Effect.fail(new Error(`MCP server "${input.name}" requires an interactive authentication form`))
 
     const started = yield* Effect.promise(() =>
       client.integration.oauth.connect({ integrationID: integration.id, methodID: method.id, answers: {}, location }),
