@@ -7,6 +7,7 @@ import {
   nextServerAfterRemoval,
   resolveServerList,
   ServerConnection,
+  visibleProjectEntries,
 } from "./server"
 import { ServerScope } from "@/utils/server-scope"
 
@@ -241,5 +242,19 @@ describe("migrateCanonicalLocalServerState", () => {
       },
       lastProject: { local: "/local" },
     })
+  })
+})
+
+describe("visibleProjectEntries", () => {
+  test("shows server projects until the first bookmark exists", () => {
+    expect(visibleProjectEntries([], [{ worktree: "/repo/a" }, { worktree: "/repo/b" }])).toEqual([
+      { worktree: "/repo/a", expanded: false },
+      { worktree: "/repo/b", expanded: false },
+    ])
+  })
+
+  test("prefers bookmarks over server projects once any exist", () => {
+    const bookmarked = [{ worktree: "/repo/a", expanded: true }]
+    expect(visibleProjectEntries(bookmarked, [{ worktree: "/repo/b" }])).toEqual(bookmarked)
   })
 })

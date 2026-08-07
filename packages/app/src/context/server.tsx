@@ -145,6 +145,14 @@ export function createServerProjects<T extends ServerProjectState>(input: {
   }
 }
 
+export function visibleProjectEntries(
+  bookmarked: ReadonlyArray<StoredProject>,
+  server: ReadonlyArray<{ worktree: string }>,
+) {
+  if (bookmarked.length > 0) return [...bookmarked]
+  return server.map((project) => ({ worktree: project.worktree, expanded: false }))
+}
+
 export function resolveServerList(input: {
   props?: Array<ServerConnection.Any>
   stored: StoredServer[]
