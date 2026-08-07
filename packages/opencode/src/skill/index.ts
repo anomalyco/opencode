@@ -164,9 +164,16 @@ const scan = Effect.fnUntraced(function* (
     }),
   )
 
+  const realpath = (p: string) =>
+    Effect.tryPromise({
+      try: () => import("fs/promises").then((m) => m.realpath(p)),
+      catch: () => p,
+    })
+
   for (const match of matches) {
-    state.matches.add(match)
-    state.dirs.add(path.dirname(match))
+    const real = yield* realpath(match)
+    state.matches.add(real)
+    state.dirs.add(path.dirname(real))
   }
 })
 
