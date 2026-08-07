@@ -6,6 +6,7 @@ import type { Content } from "@opencode-ai/schema/tool"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { Deferred, Effect, Schema, Scope } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Config } from "../../config"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
 import { PluginRuntime } from "../../plugin/runtime"
@@ -13,10 +14,10 @@ import { NonNegativeInt } from "../../schema"
 import { SessionSchema } from "../../session/schema"
 import { Shell } from "../../shell"
 import { ShellParse } from "../../shell/parse"
+import { ToolOutput } from "../../tool-output"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
-export const MAX_CAPTURE_BYTES = 1024 * 1024
 
 const BACKGROUND_STARTED = "The command was moved to the background."
 const BACKGROUND_INSTRUCTION =
@@ -86,6 +87,7 @@ export const Plugin = {
     const mutation = yield* LocationMutation.Service
     const shell = yield* Shell.Service
     const permission = yield* Permission.Service
+    const config = yield* Config.Service
 
     const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(function* (
       sessionID: SessionSchema.ID,
@@ -191,15 +193,21 @@ export const Plugin = {
               yield* context.progress({ shellID: info.id })
 
               const captureShell = Effect.fn("ShellTool.captureShell")(function* () {
+                const configured = Config.latest(yield* config.entries(), "tool_output")
+                const maxLines = configured?.max_lines ?? ToolOutput.MAX_LINES
+                const maxBytes = configured?.max_bytes ?? ToolOutput.MAX_BYTES
                 const latest = yield* shell.output(info.id, { cursor: Number.MAX_SAFE_INTEGER })
-                const truncated = latest.size > MAX_CAPTURE_BYTES
                 const page = yield* shell.output(info.id, {
-                  cursor: Math.max(0, latest.size - MAX_CAPTURE_BYTES),
-                  limit: MAX_CAPTURE_BYTES,
+                  cursor: Math.max(0, latest.size - maxBytes),
+                  limit: maxBytes,
                 })
+                const lines = page.output.split("\n")
+                if (page.output.endsWith("\n")) lines.pop()
+                const truncated = latest.size > maxBytes || lines.length > maxLines
+                const output = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
                 const notice = truncated ? `\n\n[output truncated; full output saved to: ${info.file}]` : ""
                 return {
-                  output: `${page.output || "(no output)"}${notice}`,
+                  output: `${output || "(no output)"}${notice}`,
                   truncated,
                 }
               })

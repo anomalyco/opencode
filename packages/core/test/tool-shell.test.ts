@@ -30,6 +30,7 @@ import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Shell } from "@opencode-ai/core/shell"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { ShellTool } from "@opencode-ai/core/tool/plugin/shell"
+import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -171,6 +172,9 @@ const overflowCommand = (bytes: number) =>
   isWindows
     ? `[Console]::Out.Write('output-start' + ('x' * ${bytes}) + 'output-end'); Start-Sleep -Milliseconds 100`
     : `printf output-start; head -c ${bytes} /dev/zero | tr '\\0' 'x'; printf output-end`
+const lineOverflowCommand = isWindows
+  ? "[Console]::Out.Write('one' + [Environment]::NewLine + 'two' + [Environment]::NewLine + 'three')"
+  : "printf 'one\\ntwo\\nthree'"
 const progressOverflowCommand = (bytes: number, release: string) =>
   isWindows
     ? `[Console]::Out.Write(('x' * ${bytes})); while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }`
@@ -477,7 +481,7 @@ describe("ShellTool", () => {
       Effect.promise(() => tmpdir()),
       (tmp) => {
         reset()
-        const bytes = ShellTool.MAX_CAPTURE_BYTES + 1024
+        const bytes = ToolOutput.MAX_BYTES + 1024
         return withSession(tmp.path, (registry) =>
           executeTool(registry, call({ command: overflowCommand(bytes) }, "call-overflow")),
         ).pipe(
@@ -501,6 +505,33 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  it.live("uses configured line limits", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({ tool_output: { max_lines: 2, max_bytes: 1_000 } }),
+            ),
+          )
+          const settled = yield* withSession(tmp.path, (registry) =>
+            executeTool(registry, call({ command: lineOverflowCommand }, "call-line-overflow")),
+          )
+          expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
+          const content = settled.content?.[0]
+          if (!content || content.type !== "text") throw new Error("Expected text content")
+          expect(content.text).not.toContain("one")
+          expect(content.text).toStartWith("two\nthree")
+          expect(content.text).toContain("output truncated; full output saved to:")
+        })
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   it.live(
     "reports the shell ID for a running command",
     () =>
@@ -515,7 +546,7 @@ describe("ShellTool", () => {
               const observed = yield* Deferred.make<string>()
               yield* executeTool(registry, {
                 ...call(
-                  { command: progressOverflowCommand(ShellTool.MAX_CAPTURE_BYTES + 1024, release) },
+                  { command: progressOverflowCommand(ToolOutput.MAX_BYTES + 1024, release) },
                   "call-progress",
                 ),
                 progress: (update) =>
