@@ -315,6 +315,7 @@ function RejectPrompt(props: {
       },
       { bind: "escape", title: "Cancel permission rejection", group: "Permission", run: () => props.onCancel() },
       {
+        id: "permission.action",
         bind: "return",
         title: "Confirm permission rejection",
         group: "Permission",
@@ -465,7 +466,8 @@ function Prompt<const T extends Record<string, string>>(props: {
         },
       },
       {
-        bind: "left",
+        id: "permission.option.previous",
+        bind: "left,h",
         title: "Previous permission option",
         group: "Permission",
         run: () => {
@@ -475,17 +477,8 @@ function Prompt<const T extends Record<string, string>>(props: {
         },
       },
       {
-        bind: "h",
-        title: "Previous permission option",
-        group: "Permission",
-        run: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx - 1 + keys.length) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        bind: "right",
+        id: "permission.option.next",
+        bind: "right,l",
         title: "Next permission option",
         group: "Permission",
         run: () => {
@@ -495,16 +488,7 @@ function Prompt<const T extends Record<string, string>>(props: {
         },
       },
       {
-        bind: "l",
-        title: "Next permission option",
-        group: "Permission",
-        run: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx + 1) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
+        id: "permission.action",
         bind: "return",
         title: "Select permission option",
         group: "Permission",

@@ -479,6 +479,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         },
       },
       {
+        id: "form.action",
         bind: "return",
         title: "Submit answer edit",
         group: "Form",
@@ -546,6 +547,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         ...(external
           ? [
               {
+                id: "form.action",
                 bind: "return",
                 title:
                   store.answers[external.key] === true
@@ -562,6 +564,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           : confirm()
             ? [
                 {
+                  id: "form.action",
                   bind: "return",
                   title: "Submit form",
                   group: "Form",
@@ -589,30 +592,20 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   },
                 })),
                 {
-                  bind: "up",
+                  id: "form.option.previous",
+                  bind: "up,k",
                   title: "Previous answer",
                   group: "Form",
                   run: () => setStore("selected", (store.selected - 1 + total) % total),
                 },
                 {
-                  bind: "k",
-                  title: "Previous answer",
-                  group: "Form",
-                  run: () => setStore("selected", (store.selected - 1 + total) % total),
-                },
-                {
-                  bind: "down",
+                  id: "form.option.next",
+                  bind: "down,j",
                   title: "Next answer",
                   group: "Form",
                   run: () => setStore("selected", (store.selected + 1) % total),
                 },
-                {
-                  bind: "j",
-                  title: "Next answer",
-                  group: "Form",
-                  run: () => setStore("selected", (store.selected + 1) % total),
-                },
-                { bind: "return", title: "Select answer", group: "Form", run: () => selectOption() },
+                { id: "form.action", bind: "return", title: "Select answer", group: "Form", run: () => selectOption() },
                 {
                   bind: "escape",
                   title: "Dismiss form",
