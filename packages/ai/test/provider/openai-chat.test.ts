@@ -15,6 +15,8 @@ import {
 } from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
+import * as OpenAICompatible from "../../src/providers/openai-compatible"
+import * as XAI from "../../src/providers/xai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
 import { ProviderShared } from "../../src/protocols/shared"
 import { Auth, LLMClient } from "../../src/route"
@@ -152,6 +154,47 @@ describe("OpenAI Chat route", () => {
       expect(prepared.body.store).toBe(false)
       expect(prepared.body.reasoning_effort).toBe("max")
     }),
+  )
+
+  it.effect("maps the request prompt cache key", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAICompatible.configure({
+            baseURL: "https://api.compatible.test/v1",
+            apiKey: "test",
+          }).model("compatible-model"),
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+        }),
+      )
+
+      expect(prepared.body.prompt_cache_key).toBe("session_123")
+    }),
+  )
+
+  it.effect("maps the xAI Chat prompt cache key to conversation affinity", () =>
+    LLMClient.generate(
+      LLM.request({
+        model: XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).chat("grok-4.5"),
+        prompt: "Hello",
+        promptCacheKey: "session_123",
+      }),
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+            expect(web.headers.get("x-grok-conv-id")).toBe("session_123")
+            const body = decodeJson(yield* Effect.promise(() => web.text()))
+            expect(ProviderShared.isRecord(body) ? body.prompt_cache_key : undefined).toBe("session_123")
+            return input.respond(sseEvents(deltaChunk({}, "stop")), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
+        ),
+      ),
+    ),
   )
 
   it.effect("passes through custom OpenAI-compatible reasoning effort strings", () =>

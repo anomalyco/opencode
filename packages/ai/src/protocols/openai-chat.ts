@@ -132,6 +132,7 @@ export const bodyFields = {
   stream: Schema.Literal(true),
   stream_options: Schema.optional(Schema.Struct({ include_usage: Schema.Boolean })),
   store: Schema.optional(Schema.Boolean),
+  prompt_cache_key: Schema.optional(Schema.String),
   reasoning_effort: Schema.optional(OpenAIOptions.OpenAIReasoningEffort),
   max_completion_tokens: Schema.optional(Schema.Number),
   max_tokens: Schema.optional(Schema.Number),
@@ -509,6 +510,7 @@ const lowerOptions = (request: LLMRequest) => {
   const options = OpenAIOptions.resolve(request)
   return {
     ...(options.store !== undefined ? { store: options.store } : {}),
+    ...(request.promptCacheKey ? { prompt_cache_key: request.promptCacheKey } : {}),
     ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
   }
 }
