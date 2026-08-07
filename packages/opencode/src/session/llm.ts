@@ -29,6 +29,7 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+import { SystemPrompt } from "./system"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
@@ -39,6 +40,7 @@ export type StreamInput = {
   model: Provider.Model
   agent: Agent.Info
   permission?: PermissionV1.Ruleset
+  /** Final system prompt for this request. Callers own system assembly and chat system-transform hooks. */
   system: string[]
   messages: ModelMessage[]
   small?: boolean
@@ -50,6 +52,35 @@ export type StreamInput = {
 export type StreamRequest = StreamInput & {
   abort: AbortSignal
 }
+
+
+/** Assemble final system prompt from agent/provider prompt, custom parts, and user override. */
+export function buildSystem(input: {
+  agent: Agent.Info
+  model: Provider.Model
+  parts: string[]
+  user?: { system?: string }
+}): string[] {
+  return [
+    [
+      ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+      ...input.parts,
+      ...(input.user?.system ? [input.user.system] : []),
+    ]
+      .filter((x) => x)
+      .join("\n"),
+  ]
+}
+
+/** Rejoin system prompt into 2-part structure for prompt-prefix caching if header unchanged. */
+export function rejoinSystemForCaching(system: string[], header: string) {
+  if (system.length > 2 && system[0] === header) {
+    const rest = system.slice(1)
+    system.length = 0
+    system.push(header, rest.join("\n"))
+  }
+}
+
 
 export interface Interface {
   readonly stream: (input: StreamInput) => Stream.Stream<LLMEvent, unknown>

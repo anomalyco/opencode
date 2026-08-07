@@ -136,6 +136,84 @@ function makeMcp(instructions: MCP.ServerInstructions[] = []) {
   )
 }
 
+function isMessageTransformOutput(output: unknown): output is { messages: SessionV1.WithParts[] } {
+  if (!output || typeof output !== "object" || !("messages" in output)) return false
+  return Array.isArray(output.messages)
+}
+
+function messagesTransformPlugin(marker: string) {
+  return Layer.succeed(
+    Plugin.Service,
+    Plugin.Service.of({
+      init: () => Effect.void,
+      list: () => Effect.succeed([]),
+      trigger: (name, _input, output) =>
+        Effect.sync(() => {
+          if (name !== "experimental.chat.messages.transform" || !isMessageTransformOutput(output)) return output
+          const part = output.messages.flatMap((message) => message.parts).find((part) => part.type === "text")
+          if (part) part.text = `${part.text}\n${marker}`
+          return output
+        }),
+    }),
+  )
+}
+
+function hookOrderPlugin(order: string[], inputs?: Array<{ name: string; input: unknown }>) {
+  return Layer.succeed(
+    Plugin.Service,
+    Plugin.Service.of({
+      init: () => Effect.void,
+      list: () => Effect.succeed([]),
+      trigger: (name, input, output) =>
+        Effect.sync(() => {
+          if (name === "experimental.chat.system.transform") order.push("system")
+          if (name === "experimental.chat.messages.transform") order.push("messages")
+          inputs?.push({ name, input })
+          return output
+        }),
+    }),
+  )
+}
+
+function failingSystemTransformPlugin() {
+  return Layer.mock(Plugin.Service)({
+    trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) =>
+      Effect.sync(() => {
+        if (name === "experimental.chat.system.transform") throw new Error("system transform failed")
+        return output
+      }),
+    list: () => Effect.succeed([]),
+    init: () => Effect.void,
+  })
+}
+
+function failingMessagesTransformPlugin() {
+  return Layer.mock(Plugin.Service)({
+    trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) =>
+      Effect.sync(() => {
+        if (name === "experimental.chat.messages.transform") throw new Error("messages transform failed")
+        return output
+      }),
+    list: () => Effect.succeed([]),
+    init: () => Effect.void,
+  })
+}
+
+function failingCompactingPlugin() {
+  return Layer.mock(Plugin.Service)({
+    trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) =>
+      Effect.sync(() => {
+        if (name === "experimental.session.compacting") throw new Error("session compacting failed")
+        return output
+      }),
+    list: () => Effect.succeed([]),
+    init: () => Effect.void,
+  })
+}
+
+const hookOrder: string[] = []
+const hookOrderInputs: Array<{ name: string; input: unknown }> = []
+
 const lsp = Layer.succeed(
   LSP.Service,
   LSP.Service.of({
@@ -161,6 +239,14 @@ const blockingProcessor = Layer.succeed(
   SessionProcessor.Service,
   SessionProcessor.Service.of({
     create: () => Effect.sync(() => processorCreateStarted.shift()?.()).pipe(Effect.andThen(Effect.never)),
+  }),
+)
+const failingProcessor = Layer.succeed(
+  SessionProcessor.Service,
+  SessionProcessor.Service.of({
+    create: () => Effect.sync(() => {
+      throw new Error("processor create failed")
+    }),
   }),
 )
 
@@ -208,34 +294,37 @@ const promptRoot = LayerNode.group([
   RuntimeFlags.node,
 ])
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+type PromptTestInput = {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking" | "failing"
+  plugin?: Layer.Layer<Plugin.Service>
+}
+
+function promptReplacements(input?: PromptTestInput): LayerNode.Replacements {
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
     [MCP.node, makeMcp(input?.mcpInstructions)],
     [RuntimeFlags.node, runtimeFlags],
   ] as const
-  if (input?.processor === "blocking") {
-    return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, blockingProcessor]])
-  }
-  return LayerNode.compile(promptRoot, replacements)
+  const processor = input?.processor === "blocking" ? blockingProcessor : input?.processor === "failing" ? failingProcessor : undefined
+  return [
+    ...replacements,
+    ...(processor ? ([[SessionProcessor.node, processor]] as const) : []),
+    ...(input?.plugin ? ([[Plugin.node, input.plugin]] as const) : []),
+  ]
 }
 
-function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: PromptTestInput) {
+  return LayerNode.compile(promptRoot, promptReplacements(input))
+}
+
+function makeHttp(input?: PromptTestInput) {
   const root = LayerNode.group([promptRoot, testLLMServerNode])
-  const replacements = [
-    [SessionSummary.node, summary],
-    [LSP.node, lsp],
-    [MCP.node, makeMcp(input?.mcpInstructions)],
-    [RuntimeFlags.node, runtimeFlags],
-  ] as const
-  if (input?.processor === "blocking") {
-    return LayerNode.compile(root, [...replacements, [SessionProcessor.node, blockingProcessor]])
-  }
-  return LayerNode.compile(root, replacements)
+  return LayerNode.compile(root, promptReplacements(input))
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: PromptTestInput) {
   return makePrompt(input)
 }
 
@@ -255,6 +344,12 @@ const withMcpInstructions = testEffect(
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
+const transformIt = testEffect(makeHttp({ plugin: messagesTransformPlugin("plugin-injected-context") }))
+const hookOrderIt = testEffect(makeHttp({ plugin: hookOrderPlugin(hookOrder, hookOrderInputs) }))
+const failingSystemIt = testEffect(makeHttp({ plugin: failingSystemTransformPlugin() }))
+const failingMessagesIt = testEffect(makeHttp({ plugin: failingMessagesTransformPlugin() }))
+const failingCompactingIt = testEffect(makeHttp({ plugin: failingCompactingPlugin() }))
+const failingProcessorIt = testEffect(makeHttp({ processor: "failing" }))
 
 // Config that registers a custom "test" provider with a "test-model" model
 // so provider model lookup succeeds inside the loop.
@@ -662,6 +757,316 @@ it.instance("loop stops provider overflow instead of auto-compacting when disabl
     }
     expect(messages.some((message) => message.parts.some((part) => part.type === "compaction"))).toBe(false)
   }),
+)
+
+transformIt.instance(
+  "serializes messages after plugin transform mutations",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Plugin transform",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.text("world")
+
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const inputs = yield* llm.inputs
+      expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("plugin-injected-context")
+    }),
+  { git: true },
+)
+
+hookOrderIt.instance(
+  "fires system transform before messages transform in prompt loop",
+  () =>
+    Effect.gen(function* () {
+      hookOrder.length = 0
+      hookOrderInputs.length = 0
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.text("world")
+
+      yield* prompt.loop({ sessionID: chat.id })
+
+      expect(hookOrder).toEqual(["system", "messages"])
+      expect(hookOrderInputs.find((item) => item.name === "experimental.chat.messages.transform")?.input).toMatchObject({
+        sessionID: chat.id,
+        model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+      })
+    }),
+  { git: true },
+)
+
+failingSystemIt.instance(
+  "records assistant error when system transform fails before stream",
+  () =>
+    Effect.gen(function* () {
+      yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const status = yield* SessionStatus.Service
+      const chat = yield* sessions.create({
+        title: "System transform failure",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(JSON.stringify(result.info.error)).toContain("system transform failed")
+        expect(result.info.finish).toBe("error")
+        expect(result.info.time.completed).toBeNumber()
+      }
+      const retry = yield* prompt.loop({ sessionID: chat.id })
+      expect(retry.info.id).toBe(result.info.id)
+      expect((yield* sessions.messages({ sessionID: chat.id })).filter((msg) => msg.info.role === "assistant")).toHaveLength(
+        1,
+      )
+      expect((yield* status.get(chat.id)).type).toBe("idle")
+    }),
+  { git: true },
+)
+
+failingMessagesIt.instance(
+  "records assistant error when messages transform fails before stream",
+  () =>
+    Effect.gen(function* () {
+      yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const status = yield* SessionStatus.Service
+      const chat = yield* sessions.create({
+        title: "Messages transform failure",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(JSON.stringify(result.info.error)).toContain("messages transform failed")
+        expect(result.info.finish).toBe("error")
+        expect(result.info.time.completed).toBeNumber()
+      }
+      const retry = yield* prompt.loop({ sessionID: chat.id })
+      expect(retry.info.id).toBe(result.info.id)
+      expect((yield* sessions.messages({ sessionID: chat.id })).filter((msg) => msg.info.role === "assistant")).toHaveLength(
+        1,
+      )
+      expect((yield* status.get(chat.id)).type).toBe("idle")
+    }),
+  { git: true },
+)
+
+failingProcessorIt.instance(
+  "records assistant error when processor creation fails before stream",
+  () =>
+    Effect.gen(function* () {
+      yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const status = yield* SessionStatus.Service
+      const chat = yield* sessions.create({
+        title: "Processor create failure",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(JSON.stringify(result.info.error)).toContain("processor create failed")
+        expect(result.info.finish).toBe("error")
+        expect(result.info.time.completed).toBeNumber()
+      }
+      const retry = yield* prompt.loop({ sessionID: chat.id })
+      expect(retry.info.id).toBe(result.info.id)
+      expect((yield* sessions.messages({ sessionID: chat.id })).filter((msg) => msg.info.role === "assistant")).toHaveLength(
+        1,
+      )
+      expect((yield* status.get(chat.id)).type).toBe("idle")
+    }),
+  { git: true },
+)
+
+failingCompactingIt.instance(
+  "does not retry failed pre-stream compaction summaries",
+  () =>
+    Effect.gen(function* () {
+      yield* useServerConfig(providerCfg)
+      const compact = yield* SessionCompaction.Service
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const status = yield* SessionStatus.Service
+      const chat = yield* sessions.create({
+        title: "Compaction pre-stream failure",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* compact.create({ sessionID: chat.id, agent: "build", model: ref, auto: false })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(result.info.summary).toBe(true)
+        expect(JSON.stringify(result.info.error)).toContain("session compacting failed")
+        expect(result.info.finish).toBe("error")
+      }
+      const retry = yield* prompt.loop({ sessionID: chat.id })
+      const summaries = (yield* sessions.messages({ sessionID: chat.id })).filter(
+        (msg) => msg.info.role === "assistant" && msg.info.summary,
+      )
+      expect(retry.info.id).toBe(result.info.id)
+      expect(summaries).toHaveLength(1)
+      expect((yield* status.get(chat.id)).type).toBe("idle")
+    }),
+  { git: true },
+)
+
+it.instance(
+  "keeps structured output instructions before user system override",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Structured output system order",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        system: "USER SYSTEM OVERRIDE",
+        format: new SessionV1.OutputFormatJsonSchema({
+          type: "json_schema",
+          schema: {
+            type: "object",
+            properties: { answer: { type: "string" } },
+            required: ["answer"],
+          },
+          retryCount: 0,
+        }),
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.tool("StructuredOutput", { answer: "ok" })
+
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const request = (yield* llm.inputs).find((input) => JSON.stringify(input).includes("StructuredOutput tool"))
+      expect(request).toBeDefined()
+      const serialized = JSON.stringify(request ?? {})
+      expect(serialized.indexOf("StructuredOutput tool")).toBeGreaterThanOrEqual(0)
+      expect(serialized.indexOf("USER SYSTEM OVERRIDE")).toBeGreaterThan(serialized.indexOf("StructuredOutput tool"))
+    }),
+  { git: true },
+)
+
+hookOrderIt.instance(
+  "builds system prompt for direct title generation streams without extra chat hooks",
+  () =>
+    Effect.gen(function* () {
+      hookOrder.length = 0
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        system: "TITLE USER SYSTEM",
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.text("world")
+
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const titleRequest = yield* pollWithTimeout(
+        llm.inputs.pipe(Effect.map((inputs) => inputs.find((input) => JSON.stringify(input).includes("Generate a title")))),
+        "title request was not sent",
+      )
+      expect(JSON.stringify(titleRequest)).toContain("TITLE USER SYSTEM")
+      expect(hookOrder).toEqual(["system", "messages"])
+    }),
+  { git: true },
+)
+
+transformIt.instance(
+  "does not leak prompt message-transform mutations into title generation streams",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.text("world")
+
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const titleRequest = yield* pollWithTimeout(
+        llm.inputs.pipe(Effect.map((inputs) => inputs.find((input) => JSON.stringify(input).includes("Generate a title")))),
+        "title request was not sent",
+      )
+      expect(JSON.stringify(titleRequest)).not.toContain("plugin-injected-context")
+    }),
+  { git: true },
 )
 
 noLLMServer.instance.skip(
