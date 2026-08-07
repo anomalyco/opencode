@@ -12,7 +12,18 @@
       "description": "Contains opencode logs and data",
     },
   },
-  "mcp": {},
+  // Scoped to this repo on purpose: the global config has this same server at
+  // `enabled: false`, and project config is merged after it, so this turns it on
+  // HERE only. If 36 extra tools turn out to be prompt noise, no other repo is
+  // affected. skein is the fleet supervisor — models, providers, the knowledge
+  // graph, the cross-repo board — and this is how an agent reaches it.
+  "mcp": {
+    "skein": {
+      "type": "local",
+      "command": ["/Users/andreas/bin/skein", "mcp", "serve"],
+      "enabled": true,
+    },
+  },
   "tools": {
     "github-triage": false,
     "github-pr-search": false,
