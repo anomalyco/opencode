@@ -129,6 +129,13 @@ export async function create(input: {
 }) {
   const instance = input.instance
 
+  // Servers parsing very large translation units (e.g. clangd on an Unreal
+  // Engine codebase) can take far longer than the defaults to publish
+  // diagnostics. When the wait expires the client reports nothing, which is
+  // indistinguishable from a clean file, so allow per-server overrides.
+  const documentWaitTimeout = input.server.timeout?.document ?? DIAGNOSTICS_DOCUMENT_WAIT_TIMEOUT_MS
+  const fullWaitTimeout = input.server.timeout?.full ?? DIAGNOSTICS_FULL_WAIT_TIMEOUT_MS
+
   const connection = createMessageConnection(
     new StreamMessageReader(input.server.process.stdout as any),
     new StreamMessageWriter(input.server.process.stdin as any),
@@ -502,13 +509,13 @@ export async function create(input: {
       path: request.path,
       version: request.version,
       after: startedAt,
-      timeout: DIAGNOSTICS_DOCUMENT_WAIT_TIMEOUT_MS,
+      timeout: documentWaitTimeout,
     })
 
-    while (Date.now() - startedAt < DIAGNOSTICS_DOCUMENT_WAIT_TIMEOUT_MS) {
+    while (Date.now() - startedAt < documentWaitTimeout) {
       const result = await requestDocumentDiagnostics(request.path)
       if (result.matched) return
-      const remaining = DIAGNOSTICS_DOCUMENT_WAIT_TIMEOUT_MS - (Date.now() - startedAt)
+      const remaining = documentWaitTimeout - (Date.now() - startedAt)
       if (remaining <= 0) return
       const next = await Promise.race([
         pushWait.then((ready) => (ready ? "push" : ("timeout" as const))),
@@ -524,13 +531,13 @@ export async function create(input: {
       path: request.path,
       version: request.version,
       after: startedAt,
-      timeout: DIAGNOSTICS_FULL_WAIT_TIMEOUT_MS,
+      timeout: fullWaitTimeout,
     })
 
-    while (Date.now() - startedAt < DIAGNOSTICS_FULL_WAIT_TIMEOUT_MS) {
+    while (Date.now() - startedAt < fullWaitTimeout) {
       const result = await requestFullDiagnostics(request.path)
       if (result.handled || result.matched) return
-      const remaining = DIAGNOSTICS_FULL_WAIT_TIMEOUT_MS - (Date.now() - startedAt)
+      const remaining = fullWaitTimeout - (Date.now() - startedAt)
       if (remaining <= 0) return
       const next = await Promise.race([
         pushWait.then((ready) => (ready ? "push" : ("timeout" as const))),

@@ -14,6 +14,15 @@ export const Entry = Schema.Union([
     disabled: Schema.optional(Schema.Boolean),
     env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
     initialization: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+    // Must mirror the v2 schema. A v1 config is decoded against this struct
+    // before migrate.ts passes `lsp` through untouched, so any field absent
+    // here is silently stripped and never reaches the LSP client.
+    timeout: Schema.optional(
+      Schema.Struct({
+        document: Schema.optional(Schema.Number),
+        full: Schema.optional(Schema.Number),
+      }),
+    ),
   }),
 ]).pipe((schema) => schema)
 

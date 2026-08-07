@@ -12,6 +12,14 @@ export class Server extends Schema.Class<Server>("ConfigV2.LSP.Server")({
   disabled: Schema.Boolean.pipe(Schema.optional),
   env: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   initialization: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+  // How long to wait for diagnostics, in milliseconds. Defaults suit servers
+  // that respond quickly; a large C++ translation unit can take far longer to
+  // parse than the default wait, in which case the client gives up and reports
+  // no diagnostics at all — indistinguishable from a clean file.
+  timeout: Schema.Struct({
+    document: Schema.Number.pipe(Schema.optional),
+    full: Schema.Number.pipe(Schema.optional),
+  }).pipe(Schema.optional),
 }) {}
 
 export const Entry = Schema.Union([Disabled, Server])
