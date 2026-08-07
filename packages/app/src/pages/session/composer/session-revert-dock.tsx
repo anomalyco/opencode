@@ -29,11 +29,7 @@ export function SessionRevertDock(props: {
 
   const toggle = () => setStore("collapsed", (value) => !value)
   const total = createMemo(() => props.items.length)
-  const label = createMemo(() =>
-    language.t(total() === 1 ? "session.revertDock.summary.one" : "session.revertDock.summary.other", {
-      count: total(),
-    }),
-  )
+  const label = createMemo(() => language.plural("session.revertDock.summary", total()))
   const preview = createMemo(() => props.items[0]?.text ?? "")
 
   const onHeaderKeyDown = (event: KeyboardEvent) => {
