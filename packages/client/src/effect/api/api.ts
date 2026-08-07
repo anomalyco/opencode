@@ -23,9 +23,9 @@ import type { Shell } from "@opencode-ai/schema/shell"
 import type { DateTime } from "effect"
 import type { Provider } from "@opencode-ai/schema/provider"
 import type { Integration } from "@opencode-ai/schema/integration"
+import type { Form } from "@opencode-ai/schema/form"
 import type { Mcp } from "@opencode-ai/schema/mcp"
 import type { Credential } from "@opencode-ai/schema/credential"
-import type { Form } from "@opencode-ai/schema/form"
 import type { Permission } from "@opencode-ai/schema/permission"
 import type { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 import type { FileSystem } from "@opencode-ai/schema/filesystem"
@@ -1054,6 +1054,7 @@ export type Endpoint10_3Input = {
   readonly integrationID: Integration.ID
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly key: string
+  readonly answers: Form.Answer
   readonly label?: string | undefined
 }
 export type Endpoint10_3Output = void
@@ -1065,7 +1066,7 @@ export type Endpoint10_4Input = {
   readonly integrationID: Integration.ID
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly methodID: Integration.MethodID
-  readonly inputs: { readonly [x: string]: string }
+  readonly answers: Form.Answer
   readonly label?: string | undefined
 }
 export type Endpoint10_4Output = { readonly location: Location.Info; readonly data: Integration.Attempt }

@@ -9,6 +9,28 @@ const providerID = Provider.ID.make("cloudflare-workers-ai")
 export const CloudflareWorkersAIPlugin = define({
   id: "opencode.provider.cloudflare-workers-ai",
   effect: Effect.fn(function* (ctx) {
+    yield* ctx.integration.transform((draft) => {
+      draft.method.update({
+        integrationID: providerID,
+        method: {
+          type: "key",
+          label: "API key",
+          ...(process.env.CLOUDFLARE_ACCOUNT_ID
+            ? {}
+            : {
+                forms: [
+                  {
+                    type: "string",
+                    key: "accountId",
+                    title: "Enter your Cloudflare Account ID",
+                    placeholder: "e.g. 1234567890abcdef1234567890abcdef",
+                    required: true,
+                  },
+                ],
+              }),
+        },
+      })
+    })
     yield* ctx.catalog.transform((evt) => {
       const item = evt.provider.get(providerID)
       if (!item) return

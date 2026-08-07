@@ -8,9 +8,9 @@ import type {
 } from "@opencode-ai/client"
 import type { IntegrationApi } from "@opencode-ai/client/promise/api"
 import { Credential } from "@opencode-ai/schema/credential"
+import { Form } from "@opencode-ai/schema/form"
 import type { Transform } from "./registration.js"
 
-type IntegrationInputs = Record<string, string>
 type IntegrationRef = { id: string; name: string }
 
 export type IntegrationOAuthAuthorization = {
@@ -31,7 +31,7 @@ export type IntegrationOAuthAuthorization = {
 export type IntegrationOAuthMethodRegistration = {
   readonly integrationID: string
   readonly method: IntegrationOAuthMethod
-  readonly authorize: (inputs: IntegrationInputs) => Promise<IntegrationOAuthAuthorization>
+  readonly authorize: (answers: Form.Answer) => Promise<IntegrationOAuthAuthorization>
   readonly refresh?: (credential: Credential.OAuth) => Promise<Credential.OAuth>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }

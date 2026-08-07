@@ -10,7 +10,7 @@ import { Project } from "@opencode-ai/core/project"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WebSearch } from "@opencode-ai/core/websearch"
-import { Effect, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 
 type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
   readonly session?: Partial<Plugin.Context["session"]>
@@ -285,9 +285,9 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 const refresh = input.refresh
                 draft.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
-                  method: { ...input.method, id: methodID },
-                  authorize: (inputs) =>
-                    input.authorize(inputs).pipe(
+                  method: oauthMethod(input.method, methodID),
+                  authorize: (answers) =>
+                    input.authorize(answers).pipe(
                       Effect.map((authorization) => {
                         if (authorization.mode === "auto") {
                           return {
@@ -353,7 +353,7 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
               }
               draft.method.update({
                 integrationID: Integration.ID.make(input.integrationID),
-                method: input.method,
+                method: keyMethod(input.method),
               })
             },
             remove: (id, item) => draft.method.remove(Integration.ID.make(id), internalMethod(item)),
@@ -401,24 +401,21 @@ function oauthCredential(value: Credential.OAuth) {
   return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }
 
-function method(value: Integration.Method) {
+function method(value: Integration.Method): IntegrationMethodRegistration["method"] {
   if (value.type === "env") return { type: value.type, names: [...value.names] }
-  if (value.type === "key") return { type: value.type, label: value.label }
+  if (value.type === "key") return { type: value.type, label: value.label, forms: mutable(value.forms) }
   if (value.type === "command") return { ...value, command: [...value.command] }
   return {
     type: value.type,
     id: value.id,
     label: value.label,
-    prompts: value.prompts?.map((prompt) => {
-      if (prompt.type === "text") return { ...prompt }
-      return { ...prompt, options: prompt.options.map((option) => ({ ...option })) }
-    }),
+    forms: mutable(value.forms),
   }
 }
 
 function internalMethod(value: IntegrationMethodRegistration["method"]): Integration.Method {
   if (value.type === "env") return value
-  if (value.type === "key") return value
+  if (value.type === "key") return keyMethod(value)
   if (value.type === "command") {
     return {
       ...value,
@@ -426,10 +423,41 @@ function internalMethod(value: IntegrationMethodRegistration["method"]): Integra
       command: [...value.command],
     }
   }
-  return {
-    ...value,
-    id: Integration.MethodID.make(value.id),
-  }
+  return oauthMethod(value, Integration.MethodID.make(value.id))
+}
+
+type Mutable<Value> = Value extends readonly [infer Head, ...infer Tail]
+  ? [Mutable<Head>, ...MutableTuple<Tail>]
+  : Value extends ReadonlyArray<infer Item>
+    ? Array<Mutable<Item>>
+    : Value extends object
+      ? { -readonly [Key in keyof Value]: Mutable<Value[Key]> }
+      : Value
+
+type MutableTuple<Value extends ReadonlyArray<unknown>> = {
+  -readonly [Key in keyof Value]: Mutable<Value[Key]>
+}
+
+function mutable<Value>(value: Value): Mutable<Value>
+function mutable(value: unknown): unknown {
+  return structuredClone(value)
+}
+
+function keyMethod(value: IntegrationMethodRegistration["method"] & { type: "key" }) {
+  return Schema.decodeUnknownSync(Integration.KeyMethod)({
+    type: "key",
+    ...(value.label === undefined ? {} : { label: value.label }),
+    ...(value.forms === undefined ? {} : { forms: value.forms }),
+  })
+}
+
+function oauthMethod(value: IntegrationMethodRegistration["method"] & { type: "oauth" }, id: Integration.MethodID) {
+  return Schema.decodeUnknownSync(Integration.OAuthMethod)({
+    id,
+    type: "oauth",
+    label: value.label,
+    ...(value.forms === undefined ? {} : { forms: value.forms }),
+  })
 }
 
 function agentInfo(value: Agent.Info) {

@@ -195,11 +195,17 @@ export type ProviderInfo = {
   body?: { [x: string]: any }
 }
 
-export type IntegrationWhen = { key: string; op: "eq" | "neq"; value: string }
+export type FormWhen = {
+  key: string
+  op: "eq" | "neq"
+  value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
+}
+
+export type FormOption = { value: string; label: string; description?: string }
+
+export type FormExternalField = { key: string; type: "external"; url: string; title?: string; description?: string }
 
 export type IntegrationCommandMethod = { id: string; type: "command"; label: string; command: Array<string> }
-
-export type IntegrationKeyMethod = { type: "key"; label?: string }
 
 export type IntegrationEnvMethod = { type: "env"; names: Array<string> }
 
@@ -284,16 +290,6 @@ export type ProjectCurrent = { id: string; directory: string; canonical: string 
 export type ProjectDirectory = { directory: string; strategy?: string }
 
 export type FormMetadata = { [x: string]: JsonValue }
-
-export type FormWhen = {
-  key: string
-  op: "eq" | "neq"
-  value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
-}
-
-export type FormOption = { value: string; label: string; description?: string }
-
-export type FormExternalField = { key: string; type: "external"; url: string; title?: string; description?: string }
 
 export type FormValue = string | number | boolean | Array<string>
 
@@ -1277,45 +1273,6 @@ export type ModelCost = {
   cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
 }
 
-export type IntegrationTextPrompt = {
-  type: "text"
-  key: string
-  message: string
-  placeholder?: string
-  when?: IntegrationWhen
-}
-
-export type IntegrationSelectPrompt = {
-  type: "select"
-  key: string
-  message: string
-  options: Array<{ label: string; value: string; hint?: string }>
-  when?: IntegrationWhen
-}
-
-export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
-
-export type McpServer = {
-  name: string
-  status: McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth
-  integrationID?: string
-}
-
-export type McpResourceCatalog = { resources: Array<McpResource>; templates: Array<McpResourceTemplate> }
-
-export type Project = {
-  id: string
-  canonical: string
-  vcs?: ProjectVcs
-  name?: string
-  icon?: ProjectIcon
-  commands?: ProjectCommands
-  time: ProjectTime
-  sandboxes: Array<string>
-}
-
-export type ProjectDirectories = Array<ProjectDirectory>
-
 export type FormNumberField = {
   key: string
   title?: string
@@ -1380,6 +1337,29 @@ export type FormMultiselectField = {
   custom?: boolean
   default?: Array<string>
 }
+
+export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
+
+export type McpServer = {
+  name: string
+  status: McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth
+  integrationID?: string
+}
+
+export type McpResourceCatalog = { resources: Array<McpResource>; templates: Array<McpResourceTemplate> }
+
+export type Project = {
+  id: string
+  canonical: string
+  vcs?: ProjectVcs
+  name?: string
+  icon?: ProjectIcon
+  commands?: ProjectCommands
+  time: ProjectTime
+  sandboxes: Array<string>
+}
+
+export type ProjectDirectories = Array<ProjectDirectory>
 
 export type FormAnswer = { [x: string]: FormValue }
 
@@ -1664,13 +1644,6 @@ export type ModelInfo = {
   limit: { context: number; input?: number; output: number }
 }
 
-export type IntegrationOAuthMethod = {
-  id: string
-  type: "oauth"
-  label: string
-  prompts?: Array<IntegrationTextPrompt | IntegrationSelectPrompt>
-}
-
 export type FormField =
   | FormStringField
   | FormNumberField
@@ -1924,15 +1897,9 @@ export type SessionMessageAssistantTool = {
   time: { created: number; ran?: number; completed?: number }
 }
 
-export type IntegrationMethod =
-  | IntegrationOAuthMethod
-  | IntegrationCommandMethod
-  | IntegrationKeyMethod
-  | IntegrationEnvMethod
-
 export type FormFields = [FormField, ...Array<FormField>]
 
-export type FormFields1 = [FormField1, ...Array<FormField1>]
+export type FormFields3 = [FormField1, ...Array<FormField1>]
 
 export type SessionPendingInfo = SessionPendingUser | SessionPendingSynthetic | SessionPendingCompaction
 
@@ -1954,16 +1921,13 @@ export type SessionMessageAssistant = {
   retry?: SessionMessageAssistantRetry
 }
 
-export type IntegrationInfo = {
-  id: string
-  name: string
-  methods: Array<IntegrationMethod>
-  connections: Array<ConnectionInfo>
-}
+export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string; forms?: FormFields }
+
+export type IntegrationKeyMethod = { type: "key"; label?: string; forms?: FormFields }
 
 export type FormInfo = { id: string; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
 
-export type FormInfo1 = { id: string; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields1 }
+export type FormInfo1 = { id: string; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields3 }
 
 export type SessionInputAdmitted = {
   id: string
@@ -1985,6 +1949,12 @@ export type SessionMessageInfo =
   | SessionMessageShell
   | SessionMessageAssistant
   | SessionMessageCompaction
+
+export type IntegrationMethod =
+  | IntegrationOAuthMethod
+  | IntegrationCommandMethod
+  | IntegrationKeyMethod
+  | IntegrationEnvMethod
 
 export type FormCreated = {
   id: string
@@ -2044,6 +2014,13 @@ export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMe
 export type SessionMessagesResponse = {
   data: Array<SessionMessageInfo>
   cursor: { previous?: string | null; next?: string | null }
+}
+
+export type IntegrationInfo = {
+  id: string
+  name: string
+  methods: Array<IntegrationMethod>
+  connections: Array<ConnectionInfo>
 }
 
 export type V2Event =
@@ -4045,8 +4022,21 @@ export type IntegrationConnectKeyInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   }["location"]
-  readonly key: { readonly key: string; readonly label?: string | undefined }["key"]
-  readonly label?: { readonly key: string; readonly label?: string | undefined }["label"]
+  readonly key: {
+    readonly key: string
+    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly label?: string | undefined
+  }["key"]
+  readonly answers: {
+    readonly key: string
+    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly label?: string | undefined
+  }["answers"]
+  readonly label?: {
+    readonly key: string
+    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly label?: string | undefined
+  }["label"]
 }
 
 export type IntegrationConnectKeyOutput = void
@@ -4058,17 +4048,17 @@ export type IntegrationOauthConnectInput = {
   }["location"]
   readonly methodID: {
     readonly methodID: string
-    readonly inputs: { readonly [x: string]: string }
+    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
     readonly label?: string | undefined
   }["methodID"]
-  readonly inputs: {
+  readonly answers: {
     readonly methodID: string
-    readonly inputs: { readonly [x: string]: string }
+    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
     readonly label?: string | undefined
-  }["inputs"]
+  }["answers"]
   readonly label?: {
     readonly methodID: string
-    readonly inputs: { readonly [x: string]: string }
+    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
     readonly label?: string | undefined
   }["label"]
 }

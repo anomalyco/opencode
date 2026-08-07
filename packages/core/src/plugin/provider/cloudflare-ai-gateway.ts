@@ -6,6 +6,40 @@ import { define } from "@opencode-ai/plugin/effect/plugin"
 export const CloudflareAIGatewayPlugin = define({
   id: "opencode.provider.cloudflare-ai-gateway",
   effect: Effect.fn(function* (ctx) {
+    yield* ctx.integration.transform((draft) => {
+      const forms = [
+        ...(process.env.CLOUDFLARE_ACCOUNT_ID
+          ? []
+          : [
+              {
+                type: "string" as const,
+                key: "accountId",
+                title: "Enter your Cloudflare Account ID",
+                placeholder: "e.g. 1234567890abcdef1234567890abcdef",
+                required: true,
+              },
+            ]),
+        ...(process.env.CLOUDFLARE_GATEWAY_ID
+          ? []
+          : [
+              {
+                type: "string" as const,
+                key: "gatewayId",
+                title: "Enter your Cloudflare AI Gateway ID",
+                placeholder: "e.g. my-gateway",
+                required: true,
+              },
+            ]),
+      ]
+      draft.method.update({
+        integrationID: "cloudflare-ai-gateway",
+        method: {
+          type: "key",
+          label: "Gateway API token",
+          ...(forms[0] ? { forms: [forms[0], ...forms.slice(1)] } : {}),
+        },
+      })
+    })
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
@@ -46,7 +80,7 @@ const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
 function gatewayConfig(options: Record<string, unknown>): GatewayConfig | undefined {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID ?? stringOption(options, "accountId")
-  // Credential projection copies key metadata into options. The prompt stores the
+  // Credential projection copies key metadata into options. The form stores the
   // gateway as gatewayId, while older config examples may use gateway.
   const gatewayId =
     process.env.CLOUDFLARE_GATEWAY_ID ?? stringOption(options, "gatewayId") ?? stringOption(options, "gateway")

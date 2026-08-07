@@ -1,11 +1,10 @@
 import { Integration } from "@opencode-ai/schema/integration"
 import { Location } from "@opencode-ai/schema/location"
+import { Form } from "@opencode-ai/schema/form"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { InvalidRequestError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
-
-const Inputs = Schema.Record(Schema.String, Schema.String)
 
 export const IntegrationGroup = HttpApiGroup.make("server.integration")
   .add(
@@ -59,6 +58,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       query: LocationQuery,
       payload: Schema.Struct({
         key: Schema.String,
+        answers: Form.Answer,
         label: Schema.optional(Schema.String),
       }),
       success: HttpApiSchema.NoContent,
@@ -79,7 +79,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       query: LocationQuery,
       payload: Schema.Struct({
         methodID: Integration.MethodID,
-        inputs: Inputs,
+        answers: Form.Answer,
         label: Schema.optional(Schema.String),
       }),
       success: Location.response(Integration.Attempt),

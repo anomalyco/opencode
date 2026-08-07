@@ -5,6 +5,8 @@ import type {
   IntegrationInfo,
   IntegrationOauthConnectOutput,
   IntegrationOAuthMethod,
+  FormAnswer,
+  FormFields,
 } from "@opencode-ai/client"
 import open from "open"
 import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
@@ -18,6 +20,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect } from "../ui/dialog-select"
 import { Link } from "../ui/link"
 import { useToast } from "../ui/toast"
+import { FormInput } from "../routes/session/form"
 
 const INTEGRATION_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -181,7 +184,7 @@ function openMethod(
   onConnected?: OnIntegrationConnected,
 ) {
   if (method.type === "key") {
-    dialog.replace(() => <KeyMethod integration={integration} method={method} onConnected={onConnected} />)
+    void beginKey(integration, method, dialog, onConnected)
     return
   }
   if (method.type === "command") {
@@ -189,6 +192,21 @@ function openMethod(
     return
   }
   void beginOAuth(integration, method, dialog, onConnected)
+}
+
+async function beginKey(
+  integration: IntegrationInfo,
+  method: Extract<ConnectMethod, { type: "key" }>,
+  dialog: ReturnType<typeof useDialog>,
+  onConnected?: OnIntegrationConnected,
+) {
+  const answers = method.forms
+    ? await formAnswers(dialog, method.label ?? `Connect ${integration.name}`, method.forms)
+    : {}
+  if (answers === null) return
+  dialog.replace(() => (
+    <KeyMethod integration={integration} method={method} answers={answers} onConnected={onConnected} />
+  ))
 }
 
 function CommandStarting(props: {
@@ -336,6 +354,7 @@ function CommandView(props: { title: string; output: string; message: string }) 
 function KeyMethod(props: {
   integration: IntegrationInfo
   method: Extract<ConnectMethod, { type: "key" }>
+  answers: FormAnswer
   onConnected?: OnIntegrationConnected
 }) {
   const data = useData()
@@ -356,6 +375,7 @@ function KeyMethod(props: {
             integrationID: props.integration.id,
             location: location(data),
             key,
+            answers: props.answers,
           })
           .then(() => connected(props.integration, data, dialog, toast, props.onConnected))
           .catch((cause) => setError(message(cause)))
@@ -373,17 +393,17 @@ async function beginOAuth(
   dialog: ReturnType<typeof useDialog>,
   onConnected?: OnIntegrationConnected,
 ) {
-  const inputs = method.prompts?.length ? await promptInputs(dialog, method.prompts) : {}
-  if (inputs === null) return
+  const answers = method.forms ? await formAnswers(dialog, method.label, method.forms) : {}
+  if (answers === null) return
   dialog.replace(() => (
-    <OAuthStarting integration={integration} method={method} inputs={inputs} onConnected={onConnected} />
+    <OAuthStarting integration={integration} method={method} answers={answers} onConnected={onConnected} />
   ))
 }
 
 function OAuthStarting(props: {
   integration: IntegrationInfo
   method: IntegrationOAuthMethod
-  inputs: Record<string, string>
+  answers: FormAnswer
   onConnected?: OnIntegrationConnected
 }) {
   const data = useData()
@@ -397,7 +417,7 @@ function OAuthStarting(props: {
         integrationID: props.integration.id,
         location: location(data),
         methodID: props.method.id,
-        inputs: props.inputs,
+        answers: props.answers,
       })
       .then((result) => {
         if (result.data.mode === "code") {
@@ -621,49 +641,23 @@ function OAuthView(props: {
   )
 }
 
-async function promptInputs(
-  dialog: ReturnType<typeof useDialog>,
-  prompts: NonNullable<IntegrationOAuthMethod["prompts"]>,
-) {
-  const inputs: Record<string, string> = {}
-  for (const prompt of prompts) {
-    if (prompt.when) {
-      const value = inputs[prompt.when.key]
-      if (value === undefined) continue
-      const matches = prompt.when.op === "eq" ? value === prompt.when.value : value !== prompt.when.value
-      if (!matches) continue
-    }
-    if (prompt.type === "select") {
-      const value = await new Promise<string | null>((resolve) => {
-        dialog.replace(
-          () => (
-            <DialogSelect
-              title={prompt.message}
-              options={prompt.options.map((option) => ({
-                title: option.label,
-                value: option.value,
-                description: option.hint,
-              }))}
-              onSelect={(option) => resolve(option.value)}
-            />
-          ),
-          () => resolve(null),
-        )
-      })
-      if (value === null) return null
-      inputs[prompt.key] = value
-      continue
-    }
-    const value = await new Promise<string | null>((resolve) => {
-      dialog.replace(
-        () => <DialogPrompt title={prompt.message} placeholder={prompt.placeholder} onConfirm={resolve} />,
-        () => resolve(null),
-      )
-    })
-    if (value === null) return null
-    inputs[prompt.key] = value
-  }
-  return inputs
+async function formAnswers(dialog: ReturnType<typeof useDialog>, title: string, forms: FormFields) {
+  dialog.setSize("large")
+  return new Promise<FormAnswer | null>((resolve) => {
+    dialog.replace(
+      () => (
+        <FormInput
+          form={{ title, fields: forms }}
+          onSubmit={resolve}
+          onCancel={() => {
+            dialog.clear()
+            resolve(null)
+          }}
+        />
+      ),
+      () => resolve(null),
+    )
+  })
 }
 
 async function connected(

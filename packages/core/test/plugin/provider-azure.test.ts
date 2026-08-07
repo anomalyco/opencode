@@ -8,6 +8,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { AzurePlugin } from "@opencode-ai/core/plugin/provider/azure"
 import { Provider } from "@opencode-ai/core/provider"
+import { Integration } from "@opencode-ai/core/integration"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -60,6 +61,27 @@ function fakeSelectorSdk(calls: string[]) {
 }
 
 describe("AzurePlugin", () => {
+  it.effect("registers a resource name form when the environment does not provide one", () =>
+    withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
+      Effect.gen(function* () {
+        yield* addPlugin()
+        expect((yield* (yield* Integration.Service).get(Integration.ID.make("azure")))?.methods).toContainEqual({
+          type: "key",
+          label: "API key",
+          forms: [
+            {
+              type: "string",
+              key: "resourceName",
+              title: "Enter Azure Resource Name",
+              placeholder: "e.g. my-models",
+              required: true,
+            },
+          ],
+        })
+      }),
+    ),
+  )
+
   it.effect("resolves resourceName from env", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env" }, () =>
       Effect.gen(function* () {

@@ -24,6 +24,7 @@ import { Bus } from "./bus"
 import { IntegrationConnection } from "./integration/connection"
 import { AppProcess } from "@opencode-ai/util/process"
 import { ChildProcess } from "effect/unstable/process"
+import { Form } from "./form"
 
 export const ID = Integration.ID
 export type ID = Integration.ID
@@ -33,18 +34,6 @@ export type MethodID = Integration.MethodID
 
 export const AttemptID = Integration.AttemptID
 export type AttemptID = typeof AttemptID.Type
-
-export const When = Integration.When
-export type When = Integration.When
-
-export const TextPrompt = Integration.TextPrompt
-export type TextPrompt = Integration.TextPrompt
-
-export const SelectPrompt = Integration.SelectPrompt
-export type SelectPrompt = Integration.SelectPrompt
-
-export const Prompt = Integration.Prompt
-export type Prompt = Integration.Prompt
 
 export const OAuthMethod = Integration.OAuthMethod
 export type OAuthMethod = Integration.OAuthMethod
@@ -64,9 +53,6 @@ export type Method = Integration.Method
 export const Info = Integration.Info
 export type Info = Integration.Info
 
-export const Inputs = Integration.Inputs
-export type Inputs = Integration.Inputs
-
 export type OAuthAuthorization = {
   readonly url: string
   readonly instructions: string
@@ -85,7 +71,7 @@ export type OAuthAuthorization = {
 export interface OAuthImplementation {
   readonly integrationID: ID
   readonly method: OAuthMethod
-  readonly authorize: (inputs: Inputs) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
+  readonly authorize: (answers: Form.Answer) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
@@ -175,6 +161,8 @@ export interface Interface extends State.Transformable<Draft> {
       readonly integrationID: ID
       /** Secret entered by the user. */
       readonly key: string
+      /** Values collected from the method's form fields. */
+      readonly answers: Form.Answer
       /** User-facing label for the stored credential. */
       readonly label?: string
     }) => Effect.Effect<void, AuthorizationError>
@@ -191,7 +179,7 @@ export interface Interface extends State.Transformable<Draft> {
     readonly connect: (input: {
       readonly integrationID: ID
       readonly methodID: MethodID
-      readonly inputs: Inputs
+      readonly answers: Form.Answer
       readonly label?: string
     }) => Effect.Effect<Attempt, AuthorizationError>
     /** Returns the current state of an OAuth attempt. */
@@ -356,7 +344,7 @@ const layer = Layer.effect(
       return [...credentials, ...env]
     }
 
-    const project = (entry: Entry, connections: IntegrationConnection.Info[]) =>
+    const project = (entry: Entry, connections: IntegrationConnection.Info[]): Info =>
       Info.make({
         id: entry.ref.id,
         name: entry.ref.name,
@@ -547,15 +535,20 @@ const layer = Layer.effect(
     const connectOAuth = Effect.fn("Integration.oauth.connect")(function* (input: {
       readonly integrationID: ID
       readonly methodID: MethodID
-      readonly inputs: Inputs
+      readonly answers: Form.Answer
       readonly label?: string
     }) {
       const method = state.get().integrations.get(input.integrationID)?.implementations.get(input.methodID)
       if (!method) {
         return yield* Effect.die(new Error(`OAuth method not found: ${input.integrationID}/${input.methodID}`))
       }
+      if (method.method.forms) {
+        const invalid =
+          Form.validateFields(method.method.forms) ?? Form.validateAnswer(method.method.forms, input.answers)
+        if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
+      }
       const attemptScope = yield* Scope.fork(scope)
-      const authorization = yield* authorize(method.authorize(input.inputs)).pipe(
+      const authorization = yield* authorize(method.authorize(input.answers)).pipe(
         Scope.provide(attemptScope),
         Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(attemptScope, exit) : Effect.void)),
       )
@@ -699,12 +692,23 @@ const layer = Layer.effect(
           const method = state
             .get()
             .integrations.get(input.integrationID)
-            ?.methods.some((method) => method.type === "key")
+            ?.methods.find((method) => method.type === "key")
           if (!method) return yield* Effect.die(new Error(`Key method not found: ${input.integrationID}`))
+          if (method.type === "key" && method.forms) {
+            const invalid = Form.validateFields(method.forms) ?? Form.validateAnswer(method.forms, input.answers)
+            if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
+          }
+          if (method.type === "key" && !method.forms && Object.keys(input.answers).length > 0) {
+            return yield* new AuthorizationError({ cause: new Error("Key method does not accept form answers") })
+          }
           yield* credentials.create({
             integrationID: input.integrationID,
             label: input.label,
-            value: Credential.Key.make({ type: "key", key: input.key }),
+            value: Credential.Key.make({
+              type: "key",
+              key: input.key,
+              metadata: Object.keys(input.answers).length > 0 ? input.answers : undefined,
+            }),
           })
           yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: input.integrationID })
           yield* bus.publish(Integration.Event.Updated, {})

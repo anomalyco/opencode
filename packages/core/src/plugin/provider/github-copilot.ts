@@ -47,30 +47,33 @@ const oauth = (app: App.Info) =>
       id: methodID,
       type: "oauth",
       label: "Login with GitHub Copilot",
-      prompts: [
+      forms: [
         {
-          type: "select",
+          type: "string",
           key: "deploymentType",
-          message: "Select GitHub deployment type",
+          title: "Select GitHub deployment type",
+          required: true,
           options: [
-            { label: "GitHub.com", value: "github.com", hint: "Public" },
-            { label: "GitHub Enterprise", value: "enterprise", hint: "Data residency or self-hosted" },
+            { label: "GitHub.com", value: "github.com", description: "Public" },
+            { label: "GitHub Enterprise", value: "enterprise", description: "Data residency or self-hosted" },
           ],
         },
         {
-          type: "text",
+          type: "string",
           key: "enterpriseUrl",
-          message: "Enter your GitHub Enterprise URL or domain",
+          title: "Enter your GitHub Enterprise URL or domain",
           placeholder: "company.ghe.com or https://company.ghe.com",
-          when: { key: "deploymentType", op: "eq", value: "enterprise" },
+          required: true,
+          when: [{ key: "deploymentType", op: "eq", value: "enterprise" }],
         },
       ],
     },
-    authorize: (inputs) =>
+    authorize: (answers) =>
       Effect.gen(function* () {
-        const enterprise = inputs.deploymentType === "enterprise"
-        if (enterprise && !inputs.enterpriseUrl) return yield* Effect.fail(new Error("Enterprise URL is required"))
-        const domain = enterprise ? normalizeDomain(inputs.enterpriseUrl ?? "") : "github.com"
+        const enterprise = answers.deploymentType === "enterprise"
+        const enterpriseUrl = typeof answers.enterpriseUrl === "string" ? answers.enterpriseUrl : undefined
+        if (enterprise && !enterpriseUrl) return yield* Effect.fail(new Error("Enterprise URL is required"))
+        const domain = enterprise ? normalizeDomain(enterpriseUrl ?? "") : "github.com"
         const urls = oauthURLs(domain)
         const device = yield* request(urls.device, {
           method: "POST",

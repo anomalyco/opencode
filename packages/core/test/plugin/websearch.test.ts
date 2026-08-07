@@ -67,7 +67,7 @@ describe("built-in web search providers", () => {
         name: "Exa",
         methods: [{ type: "key" }, { type: "env", names: ["EXA_API_KEY"] }],
       })
-      yield* integrations.connection.key({ integrationID: Integration.ID.make("exa"), key: "exa secret" })
+      yield* integrations.connection.key({ integrationID: Integration.ID.make("exa"), key: "exa secret", answers: {} })
       expect(yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("exa") })).toEqual(
         new WebSearch.Response({
           providerID: WebSearch.ID.make("exa"),
@@ -129,7 +129,11 @@ describe("built-in web search providers", () => {
       yield* WebSearchParallel.Plugin.effect(
         host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
       )
-      yield* integrations.connection.key({ integrationID: Integration.ID.make("parallel"), key: "parallel-secret" })
+      yield* integrations.connection.key({
+        integrationID: Integration.ID.make("parallel"),
+        key: "parallel-secret",
+        answers: {},
+      })
 
       const output = yield* websearch.query({
         query: "effect layers",

@@ -180,8 +180,8 @@ export function fromPromise(plugin: Plugin) {
                         const refresh = input.refresh
                         draft.method.update({
                           ...input,
-                          authorize: (inputs) =>
-                            Effect.promise(() => input.authorize(inputs)).pipe(
+                          authorize: (answers) =>
+                            Effect.promise(() => input.authorize(answers)).pipe(
                               Effect.map((authorization) =>
                                 authorization.mode === "auto"
                                   ? {
@@ -362,11 +362,17 @@ type Wire<Value> = unknown extends Value
     ? Value
     : Value extends DateTime.DateTime
       ? number
-      : Value extends ReadonlyArray<infer Item>
-        ? Array<Wire<Item>>
-        : Value extends object
-          ? { -readonly [Key in keyof Value]: Wire<Value[Key]> }
-          : Value
+      : Value extends readonly [infer Head, ...infer Tail]
+        ? [Wire<Head>, ...WireTuple<Tail>]
+        : Value extends ReadonlyArray<infer Item>
+          ? Array<Wire<Item>>
+          : Value extends object
+            ? { -readonly [Key in keyof Value]: Wire<Value[Key]> }
+            : Value
+
+type WireTuple<Value extends ReadonlyArray<unknown>> = {
+  -readonly [Key in keyof Value]: Wire<Value[Key]>
+}
 
 function wire<Value>(value: Value): Wire<Value>
 function wire(value: unknown): unknown {

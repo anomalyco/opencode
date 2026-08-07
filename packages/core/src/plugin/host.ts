@@ -190,6 +190,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
           integration.connection.key({
             integrationID: Integration.ID.make(input.integrationID),
             key: input.key,
+            answers: input.answers,
             label: input.label,
           }),
       },
@@ -199,7 +200,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
             integration.oauth.connect({
               integrationID: Integration.ID.make(input.integrationID),
               methodID: Integration.MethodID.make(input.methodID),
-              inputs: input.inputs,
+              answers: input.answers,
               label: input.label,
             }),
           ),
@@ -362,9 +363,14 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
     const refresh = input.refresh
     return {
       integrationID: Integration.ID.make(input.integrationID),
-      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
-      authorize: (inputs) =>
-        input.authorize(inputs).pipe(
+      method: Schema.decodeUnknownSync(Integration.OAuthMethod)({
+        id: Integration.MethodID.make(input.method.id),
+        type: "oauth",
+        label: input.method.label,
+        ...(input.method.forms === undefined ? {} : { forms: input.method.forms }),
+      }),
+      authorize: (answers) =>
+        input.authorize(answers).pipe(
           Effect.map((authorization) => {
             if (authorization.mode === "auto") {
               return {
@@ -396,7 +402,11 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
   }
   return {
     integrationID: Integration.ID.make(input.integrationID),
-    method: { type: "key", label: input.method.label },
+    method: Schema.decodeUnknownSync(Integration.KeyMethod)({
+      type: "key",
+      ...(input.method.label === undefined ? {} : { label: input.method.label }),
+      ...(input.method.forms === undefined ? {} : { forms: input.method.forms }),
+    }),
   }
 }
 

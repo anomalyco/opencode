@@ -58,6 +58,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
             service.connection.key({
               integrationID: ctx.params.integrationID,
               key: ctx.payload.key,
+              answers: ctx.payload.answers,
               label: ctx.payload.label,
             }),
           )
@@ -73,7 +74,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
               service.oauth.connect({
                 integrationID: ctx.params.integrationID,
                 methodID: ctx.payload.methodID,
-                inputs: ctx.payload.inputs,
+                answers: ctx.payload.answers,
                 label: ctx.payload.label,
               }),
             ),

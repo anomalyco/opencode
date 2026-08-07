@@ -148,6 +148,45 @@ test("experimental wellknown integration add uses the public HTTP contract", asy
   expect(await request?.json()).toEqual({ url: "https://example.com" })
 })
 
+test("integration connections submit form answers", async () => {
+  const requests: Request[] = []
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(request)
+      if (request.url.endsWith("/connect/key")) return new Response(null, { status: 204 })
+      return Response.json({
+        location: { directory: "/tmp/project", project: { id: "proj_test", directory: "/tmp/project" } },
+        data: {
+          attemptID: "con_test",
+          url: "https://example.com/authorize",
+          instructions: "Authorize",
+          mode: "auto",
+          time: { created: 1, expires: 2 },
+        },
+      })
+    },
+  })
+
+  await client.integration.connect.key({
+    integrationID: "cloudflare-workers-ai",
+    key: "secret",
+    answers: { accountId: "account" },
+  })
+  await client.integration.oauth.connect({
+    integrationID: "github-copilot",
+    methodID: "device",
+    answers: { deploymentType: "enterprise", enabled: true, scopes: ["read:user"] },
+  })
+
+  expect(await requests[0].json()).toEqual({ key: "secret", answers: { accountId: "account" } })
+  expect(await requests[1].json()).toEqual({
+    methodID: "device",
+    answers: { deploymentType: "enterprise", enabled: true, scopes: ["read:user"] },
+  })
+})
+
 test("health.stop sends exact replacement identity", async () => {
   let request: Request | undefined
   const client = OpenCode.make({

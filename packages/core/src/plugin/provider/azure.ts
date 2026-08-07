@@ -13,6 +13,28 @@ function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
 export const AzurePlugin = define({
   id: "opencode.provider.azure",
   effect: Effect.fn(function* (ctx) {
+    yield* ctx.integration.transform((draft) => {
+      draft.method.update({
+        integrationID: Provider.ID.azure,
+        method: {
+          type: "key",
+          label: "API key",
+          ...(resolveResourceName(undefined)
+            ? {}
+            : {
+                forms: [
+                  {
+                    type: "string",
+                    key: "resourceName",
+                    title: "Enter Azure Resource Name",
+                    placeholder: "e.g. my-models",
+                    required: true,
+                  },
+                ],
+              }),
+        },
+      })
+    })
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
         if (item.provider.id !== Provider.ID.azure && Provider.packageName(item.provider.package) !== "@ai-sdk/azure")
