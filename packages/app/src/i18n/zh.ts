@@ -218,6 +218,9 @@ export const dict = {
   "command.session.unshare": "取消分享会话",
   "command.session.unshare.description": "停止分享此会话",
 
+  "command.session.export": "导出会话",
+  "command.session.export.description": "将完整会话记录导出为 JSON",
+
   "palette.search.placeholder": "搜索文件、命令和会话",
   "palette.search.placeholder.home": "搜索命令和会话",
   "palette.empty": "未找到结果",
@@ -577,6 +580,8 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "创建新工作区 (worktree) 后运行。",
   "dialog.project.edit.worktree.startup.placeholder": "例如 bun install",
 
+  "dialog.usageExceeded.dontShowAgain": "不再显示",
+
   "context.breakdown.title": "上下文细分",
   "context.breakdown.note": "输入令牌的大致细分。“其他”包含工具定义和开销。",
   "context.breakdown.system": "系统",
@@ -586,6 +591,8 @@ export const dict = {
   "context.breakdown.other": "其他",
   "context.systemPrompt.title": "系统提示词",
   "context.rawMessages.title": "原始消息",
+  "context.export.session": "导出会话",
+
   "context.stats.session": "会话",
   "context.stats.messages": "消息数",
   "context.stats.provider": "提供商",
@@ -654,6 +661,11 @@ export const dict = {
   "toast.session.unshare.success.description": "会话已成功取消分享",
   "toast.session.unshare.failed.title": "取消分享失败",
   "toast.session.unshare.failed.description": "取消分享会话时发生错误",
+  "toast.session.export.success.title": "会话已导出",
+  "toast.session.export.success.description": "已将会话保存到 {{filename}}",
+  "toast.session.export.failed.title": "导出会话失败",
+  "toast.session.export.failed.description": "导出会话时发生错误",
+
   "toast.session.listFailed.title": "无法加载 {{project}} 的会话",
   "toast.update.title": "有可用更新",
   "toast.update.description": "OpenCode 有新版本 ({{version}}) 可安装。",
@@ -839,6 +851,7 @@ export const dict = {
   "common.moreOptions": "更多选项",
   "common.learnMore": "了解更多",
   "common.rename": "重命名",
+  "common.export": "导出",
   "common.reset": "重置",
   "common.archive": "归档",
   "common.delete": "删除",

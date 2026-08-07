@@ -15,7 +15,7 @@ import type { LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
-import { displayName, errorMessage, projectForSession } from "@/pages/layout/helpers"
+import { compareSessionTime, displayName, errorMessage, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { pathKey } from "@/utils/path-key"
 import { showToast } from "@/utils/toast"
@@ -254,7 +254,7 @@ function buildHomeSessionRecords(input: {
   const directories = new Set(input.projectDirectories().map(pathKey))
   const sessions = input.sessions().filter((session) => directories.has(pathKey(session.directory)))
   return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
-    .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+    .sort(compareSessionTime)
     .flatMap((session) => {
       const directory = pathKey(session.directory)
       const project =
