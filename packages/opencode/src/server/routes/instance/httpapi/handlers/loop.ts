@@ -44,6 +44,15 @@ export const loopHandlers = HttpApiBuilder.group(InstanceHttpApi, "loop", (handl
       return ok
     })
 
+    const nudge = Effect.fn("LoopHttpApi.nudge")(function* (ctx: {
+      params: { loopID: Loop.LoopID }
+      payload: { text: string }
+    }) {
+      const ok = yield* loop.nudge(ctx.params.loopID, ctx.payload.text)
+      if (!ok) return yield* notFound(`No running loop to steer: ${ctx.params.loopID}`)
+      return ok
+    })
+
     return handlers
       .handle("list", list)
       .handle("get", get)
@@ -51,5 +60,6 @@ export const loopHandlers = HttpApiBuilder.group(InstanceHttpApi, "loop", (handl
       .handle("pause", pause)
       .handle("resume", resume)
       .handle("cancel", cancel)
+      .handle("nudge", nudge)
   }),
 )

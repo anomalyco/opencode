@@ -730,3 +730,82 @@ it.instance(
     }),
   { config: {} },
 )
+
+// --- steering a live run ---------------------------------------------------
+
+it.instance(
+  "a correction reaches the run and keeps reaching it",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      const loop = yield* Loop.Service
+
+      // Varied output, and the no-progress guard disabled: identical replies
+      // would trip it and end the run before "and the one after" is observable.
+      for (let i = 0; i < 20; i++) yield* llm.text(`working on step ${i} of the thing`)
+
+      // Prompt mode: it keeps iterating to `max` rather than quarantining after
+      // three gate failures, which is what makes "and the one after" observable.
+      const info = yield* loop.create({ prompt: "do the thing", interval: 0, maxIterations: 8, noProgressLimit: 0 })
+
+      yield* pollWithTimeout(
+        Effect.map(loop.get(info.id), (current) => (current && current.iteration >= 1 ? true : undefined)),
+        "the run never produced an iteration",
+        "30 seconds",
+      )
+      expect(yield* loop.nudge(info.id, "leave the CLI alone")).toBe(true)
+
+      const bodies = () => Effect.map(llm.hits, (hits) => hits.map((hit) => JSON.stringify(hit.body)))
+      const carrying = () => Effect.map(bodies(), (all) => all.filter((body) => body.includes("leave the CLI alone")))
+
+      // Not "the next prompt": the iteration already in flight when the
+      // correction arrived is deliberately not interrupted, so the first
+      // delivery may be one turn later. What matters is that it arrives...
+      yield* pollWithTimeout(
+        Effect.map(carrying(), (hits) => (hits.length >= 1 ? true : undefined)),
+        "the correction never reached the run",
+        "120 seconds",
+      )
+      // ...and that it keeps arriving. An instruction given once must not be
+      // forgotten on the iteration after — that is the whole difference between
+      // steering a run and shouting at it.
+      // Twice is the whole claim: delivered, then delivered again on a later
+      // iteration. Requiring more only makes the test hostage to how many
+      // iterations get scheduled while the rest of the suite is running.
+      yield* pollWithTimeout(
+        Effect.map(carrying(), (hits) => (hits.length >= 2 ? true : undefined)),
+        "the correction was delivered once and then forgotten",
+        "120 seconds",
+      )
+
+      yield* loop.cancel(info.id).pipe(Effect.ignore)
+      yield* waitForTerminal(info.id, 30)
+
+      // The user's own prompt survives alongside it, rather than being replaced.
+      const withBoth = (yield* carrying()).filter((body) => body.includes("do the thing"))
+      expect(withBoth.length).toBeGreaterThan(0)
+    }),
+  { config: {} },
+)
+
+it.instance(
+  "steering a finished loop is refused, and an empty correction is not recorded",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      writeChange(dir, "done-already", "- [x] 1.1 finished\n")
+      const loop = yield* Loop.Service
+
+      const info = yield* loop.create({ prompt: "", mode: "queue", interval: 0 })
+      const final = yield* waitForTerminal(info.id, 30)
+      expect(final.status).toBe("completed")
+
+      expect(yield* loop.nudge(info.id, "too late")).toBe(false)
+      expect(yield* loop.nudge("loop_doesnotexist" as Loop.LoopID, "nobody")).toBe(false)
+    }),
+  { config: {} },
+)

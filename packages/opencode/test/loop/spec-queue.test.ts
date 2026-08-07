@@ -202,6 +202,33 @@ describe("buildBrief", () => {
   })
 
   // A collision warning that fires constantly stops being read.
+  test("corrections are rendered, in order, after the standing guidance", () => {
+    const brief = buildBrief({
+      change: fixtureChange(),
+      gate: "implement",
+      idlePeers: [],
+      guidance: "prefer small commits",
+      steers: ["leave the CLI alone", "and do not touch the TUI"],
+    })
+    expect(brief).toContain("prefer small commits")
+    expect(brief).toContain("leave the CLI alone")
+    expect(brief).toContain("and do not touch the TUI")
+    // Corrections arrived after the operator watched the run go wrong, so they
+    // must be able to override what it started with — which means coming after.
+    expect(brief.indexOf("leave the CLI alone")).toBeGreaterThan(brief.indexOf("prefer small commits"))
+    expect(brief.indexOf("and do not touch the TUI")).toBeGreaterThan(brief.indexOf("leave the CLI alone"))
+    expect(brief).toContain("override the standing instruction")
+  })
+
+  test("no corrections produces no corrections section", () => {
+    expect(buildBrief({ change: fixtureChange(), gate: "implement", idlePeers: [], steers: [] })).not.toContain(
+      "Corrections from the operator",
+    )
+    expect(buildBrief({ change: fixtureChange(), gate: "implement", idlePeers: [] })).not.toContain(
+      "Corrections from the operator",
+    )
+  })
+
   test("a quiet repo produces no neighbour warning", () => {
     const brief = buildBrief({ change: fixtureChange(), gate: "implement", idlePeers: [], peers: [] })
     expect(brief).not.toContain("not alone in this checkout")

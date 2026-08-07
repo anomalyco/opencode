@@ -115,6 +115,8 @@ import type {
   LocationRef,
   LoopCancelErrors,
   LoopCancelResponses,
+  LoopNudgeErrors,
+  LoopNudgeResponses,
   LoopCreateErrors,
   LoopCreateResponses,
   LoopGetErrors,
@@ -2774,6 +2776,40 @@ export class Loop extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<LoopResumeResponses, LoopResumeErrors, ThrowOnError>({
       url: "/loop/{loopID}/resume",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Steer loop
+   *
+   * Give a running or paused loop a correction carried into every subsequent iteration.
+   */
+  public nudge<ThrowOnError extends boolean = false>(
+    parameters: {
+      loopID: string
+      directory?: string
+      workspace?: string
+      text: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "loopID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LoopNudgeResponses, LoopNudgeErrors, ThrowOnError>({
+      url: "/loop/{loopID}/nudge",
       ...options,
       ...params,
     })

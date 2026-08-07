@@ -18,6 +18,7 @@ export const LoopPaths = {
   pause: `${root}/:loopID/pause`,
   resume: `${root}/:loopID/resume`,
   cancel: `${root}/:loopID/cancel`,
+  nudge: `${root}/:loopID/nudge`,
 } as const
 
 export const LoopApi = HttpApi.make("loop").add(
@@ -80,6 +81,21 @@ export const LoopApi = HttpApi.make("loop").add(
           identifier: "loop.resume",
           summary: "Resume loop",
           description: "Resume a paused loop.",
+        }),
+      ),
+      HttpApiEndpoint.post("nudge", LoopPaths.nudge, {
+        params: { loopID: Loop.LoopID },
+        query: WorkspaceRoutingQuery,
+        payload: Schema.Struct({ text: Schema.String }),
+        success: described(Schema.Boolean, "Correction accepted"),
+        error: [HttpApiError.BadRequest, ApiNotFoundError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "loop.nudge",
+          summary: "Steer loop",
+          description:
+            "Give a running or paused loop a correction carried into every subsequent iteration. " +
+            "The in-flight iteration is not interrupted.",
         }),
       ),
       HttpApiEndpoint.post("cancel", LoopPaths.cancel, {

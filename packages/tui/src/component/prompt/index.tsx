@@ -276,12 +276,30 @@ function isLoopCommand(input: string): boolean {
 }
 
 /**
- * Inputs that must NOT cancel a running loop: the run-management verbs, and
- * `/btw`, whose whole purpose is asking something without disturbing the work
- * in progress.
+ * `/nudge <text>` corrects a running loop without stopping it.
+ *
+ * Deliberately NOT merged with `/btw`, which is the other "type something that
+ * does not blow up the run" verb. The test that separates them is whether what
+ * you typed leaves a trace: `/btw` asks a question, is answered from context,
+ * and never joins the conversation — that is its whole value. A correction has
+ * to persist, or the next iteration forgets it.
+ *
+ * One verb doing both would make that property flip invisibly depending on what
+ * is running, and typing "what was that file called?" would inject it into the
+ * run's standing instructions.
+ */
+function isNudgeCommand(input: string): boolean {
+  return matchesVerb(input, "/nudge")
+}
+
+/**
+ * Inputs that must NOT cancel a running loop: the run-management verbs, `/btw`,
+ * whose whole purpose is asking something without disturbing the work in
+ * progress, and `/nudge`, which exists precisely so a correction does not cost
+ * you the run.
  */
 function isRunControlInput(input: string): boolean {
-  return isLoopCommand(input) || matchesVerb(input, "/btw")
+  return isLoopCommand(input) || matchesVerb(input, "/btw") || isNudgeCommand(input)
 }
 
   const isLoopLive = (status: string) => status === "running" || status === "paused"
@@ -1190,6 +1208,30 @@ function isRunControlInput(input: string): boolean {
         },
         command: inputText,
       })
+      setStore("mode", "normal")
+    } else if (isNudgeCommand(inputText)) {
+      const text = inputText.slice(inputText.indexOf("/nudge") + "/nudge".length).trim()
+      const loop = activeLoop()
+      if (!text) {
+        toast.show({ variant: "error", message: "/nudge needs something to say — e.g. /nudge leave the CLI alone" })
+      } else if (!loop) {
+        // Never fall back to sending it as a normal message: that would cancel
+        // the very run the correction was meant to preserve.
+        toast.show({ variant: "error", message: "No running loop in this session to steer" })
+      } else {
+        move.startSubmit()
+        sdk.client.loop
+          .nudge({ loopID: loop.id, text })
+          .then((result) => {
+            if (result.error || !result.data) {
+              toast.show({ title: "Nudge not delivered", message: errorMessage(result.error), variant: "error" })
+              return
+            }
+            toast.show({ variant: "success", message: "Noted — applies from the next iteration" })
+          })
+          .catch((err) => toast.show({ title: "Nudge failed", message: String(err), variant: "error" }))
+        store.prompt.input = ""
+      }
       setStore("mode", "normal")
     } else if (isLoopCommand(inputText)) {
       // /loop and /queue are imperative TUI commands (start a background run),

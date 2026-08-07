@@ -7158,6 +7158,42 @@ export type LoopResumeResponses = {
 
 export type LoopResumeResponse = LoopResumeResponses[keyof LoopResumeResponses]
 
+export type LoopNudgeData = {
+  body: {
+    text: string
+  }
+  path: {
+    loopID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/loop/{loopID}/nudge"
+}
+
+export type LoopNudgeErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type LoopNudgeError = LoopNudgeErrors[keyof LoopNudgeErrors]
+
+export type LoopNudgeResponses = {
+  /**
+   * Correction accepted
+   */
+  200: boolean
+}
+
+export type LoopNudgeResponse = LoopNudgeResponses[keyof LoopNudgeResponses]
+
 export type LoopCancelData = {
   body?: never
   path: {

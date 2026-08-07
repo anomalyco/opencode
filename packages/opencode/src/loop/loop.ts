@@ -193,6 +193,8 @@ export interface Interface {
   readonly pause: (id: LoopID) => Effect.Effect<boolean>
   readonly resume: (id: LoopID) => Effect.Effect<boolean>
   readonly cancel: (id: LoopID) => Effect.Effect<boolean>
+  /** Append a correction carried into every subsequent iteration. */
+  readonly nudge: (id: LoopID, text: string) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Loop") {}
@@ -251,6 +253,15 @@ type Record_ = {
   // of a verbatim re-send of the same prompt it just failed to act on.
   lastOutcome?: PreviousOutcome
   noProgressStreak: number
+  // Corrections given while the run is live (`/nudge`). Distinct from the
+  // run's initial `--guidance`: guidance is the standing instruction it
+  // started with, these arrived later because it was going the wrong way, and
+  // they outrank it where the two conflict.
+  //
+  // Delivery is "append here". Both modes rebuild their prompt from this
+  // record every iteration, so there is nothing to inject into a running turn
+  // and nothing to race.
+  steers: string[]
   // Present while paused. The run fiber blocks on it at zero cost instead of
   // polling; resume (or cancel) resolves it to wake the fiber immediately.
   pauseGate?: Deferred.Deferred<void>
@@ -340,7 +351,22 @@ export const layer = Layer.effect(
         // the token it is expected to emit. Injected per iteration rather
         // than into the system prompt so the iteration counter stays
         // accurate and no non-loop session ever sees it.
-        const promptText = override?.promptText ?? continuationPrompt(record.info.prompt, record.lastOutcome)
+        // Prompt mode gets the same corrections, appended rather than woven
+        // in: the user's own prompt must stay recognisable as theirs, and a
+        // correction that silently rewrote it would be impossible to audit.
+        // `override` is the queue's brief, which already carries them.
+        const base = override?.promptText ?? continuationPrompt(record.info.prompt, record.lastOutcome)
+        const promptText =
+          override || record.steers.length === 0
+            ? base
+            : [
+                base,
+                "",
+                "Corrections from the operator, given while this run was already going.",
+                "They override the instruction above wherever the two disagree:",
+                "",
+                ...record.steers.map((steer) => `- ${steer}`),
+              ].join("\n")
         const outcome = yield* promptSvc
           .prompt({
             sessionID: targetSessionID,
@@ -742,6 +768,7 @@ export const layer = Layer.effect(
           idlePeers: peers,
           peers: neighbours,
           guidance: record.queue?.guidance,
+          steers: record.steers,
           persona,
         })
         const result = yield* runIteration(record, { promptText: brief, sessionID: changeSessionID })
@@ -1371,6 +1398,7 @@ export const layer = Layer.effect(
           new Map(map).set(id, {
             info,
             noProgressStreak: 0,
+            steers: [],
             queue:
               mode === "queue"
                 ? {
@@ -1507,7 +1535,25 @@ export const layer = Layer.effect(
         return true
       })
 
-    return Service.of({ create, list, get, pause, resume, cancel })
+    // Delivery is an append to the record. Both modes rebuild their prompt
+    // from it every iteration, so there is no turn to inject into and no race
+    // to lose — the correction is picked up by whichever iteration builds its
+    // prompt next, and by every one after that.
+    const nudge = (id: LoopID, text: string) =>
+      Effect.gen(function* () {
+        const trimmed = text.trim()
+        if (trimmed === "") return false
+        const record = (yield* Ref.get(state)).get(id)
+        if (!record) return false
+        // A paused loop is steerable — correcting it before resuming is the
+        // obvious thing to want. A terminal one is not.
+        if (record.info.status !== "running" && record.info.status !== "paused") return false
+        yield* patch(id, (current) => ({ ...current, steers: [...current.steers, trimmed] }))
+        yield* Effect.logInfo("loop steered", { "loop.id": id, "loop.steers": record.steers.length + 1 })
+        return true
+      })
+
+    return Service.of({ create, list, get, pause, resume, cancel, nudge })
   }),
 )
 

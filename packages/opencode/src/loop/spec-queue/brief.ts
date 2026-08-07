@@ -32,6 +32,12 @@ export interface BriefInput {
    */
   persona?: string
   /**
+   * Corrections given while the run was already going (`/nudge`), in the order
+   * given. They outrank `guidance`: guidance is what the run started with,
+   * these arrived because it was going the wrong way.
+   */
+  steers?: readonly string[]
+  /**
    * Optional standing instruction from the operator, repeated on every
    * iteration of the run. Steers HOW the work is done ("prefer small commits",
    * "leave the CLI alone"); it never decides WHAT is worked, because that is
@@ -111,6 +117,20 @@ export function buildBrief(input: BriefInput): string {
   // with no memory of the last.
   if (input.guidance?.trim()) {
     parts.push(`Standing instruction from the operator, applies to every iteration:\n${input.guidance.trim()}`)
+  }
+
+  // After the standing instruction, because these are corrections TO it: the
+  // operator said them after watching the run go wrong, so where the two
+  // conflict these win.
+  if (input.steers && input.steers.length > 0) {
+    parts.push(
+      [
+        "Corrections from the operator, given while this run was already going.",
+        "They override the standing instruction above wherever the two disagree:",
+        "",
+        ...input.steers.map((steer) => `- ${steer}`),
+      ].join("\n"),
+    )
   }
 
   const next = uncheckedTasks(change.tasks)[0]
