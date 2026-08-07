@@ -67,28 +67,31 @@ const layer = Layer.effect(
 
     const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {
       const absolute = path.resolve(location.directory, input.path)
-      const lexicallyInternal = FSUtil.contains(location.directory, absolute)
-      const external = !lexicallyInternal
-      const resource = external ? slash(absolute) : slash(path.relative(location.directory, absolute) || ".")
-      const info = yield* fs
-        .stat(absolute)
-        .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
-      const externalDirectory =
-        input.kind === "directory" || info?.type === "Directory" ? absolute : path.dirname(absolute)
+      if (FSUtil.contains(location.directory, absolute)) {
+        return {
+          absolute,
+          resource: slash(path.relative(location.directory, absolute) || "."),
+        } satisfies Target
+      }
+      const type =
+        input.kind === "directory"
+          ? "Directory"
+          : (yield* fs
+              .stat(absolute)
+              .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined))))?.type
+      const externalDirectory = type === "Directory" ? absolute : path.dirname(absolute)
       const externalResource = slash(path.join(externalDirectory, "*"))
       return {
         absolute,
-        resource,
-        externalDirectory: external
-          ? {
-              action: "external_directory",
-              directory: externalDirectory,
-              resource: externalResource,
-              save: slash(
-                path.join((yield* Project.root(fs, AbsolutePath.make(externalDirectory))) ?? externalDirectory, "*"),
-              ),
-            }
-          : undefined,
+        resource: slash(absolute),
+        externalDirectory: {
+          action: "external_directory",
+          directory: externalDirectory,
+          resource: externalResource,
+          save: slash(
+            path.join((yield* Project.root(fs, AbsolutePath.make(externalDirectory))) ?? externalDirectory, "*"),
+          ),
+        },
       } satisfies Target
     })
 
