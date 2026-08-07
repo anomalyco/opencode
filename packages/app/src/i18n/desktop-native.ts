@@ -31,6 +31,37 @@ export const DESKTOP_NATIVE_LOCALES = [
 
 export type DesktopNativeLocale = (typeof DESKTOP_NATIVE_LOCALES)[number]
 
+export const DESKTOP_NATIVE_LABELS: Record<DesktopNativeLocale, string> = {
+  en: "English",
+  zh: "简体中文",
+  zht: "繁體中文",
+  ko: "한국어",
+  de: "Deutsch",
+  es: "Español",
+  fr: "Français",
+  da: "Dansk",
+  ja: "日本語",
+  pl: "Polski",
+  ru: "Русский",
+  uk: "Українська",
+  bs: "Bosanski",
+  ar: "العربية",
+  no: "Norsk",
+  br: "Português (Brasil)",
+  th: "ไทย",
+  tr: "Türkçe",
+  hi: "हिन्दी",
+  nl: "Nederlands",
+  id: "Bahasa Indonesia",
+  vi: "Tiếng Việt",
+  it: "Italiano",
+  ur: "اردو",
+  pa: "پنجابی",
+  az: "Azərbaycanca",
+  fi: "Suomi",
+  sv: "Svenska",
+}
+
 export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "File",
