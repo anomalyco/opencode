@@ -1,4 +1,4 @@
-import type { BorderStyle, ColorInput, TextBufferOptions } from "@opentui/core"
+import type { BorderStyle } from "@opentui/core"
 
 export interface SequenceParticipant {
   id: string
@@ -62,17 +62,6 @@ export type SequenceDiagramAnsiTheme = Partial<Record<AnsiSequenceCellStyle, str
 
 export interface SequenceDiagramAnsiOptions extends SequenceDiagramRenderOptions {
   theme?: SequenceDiagramAnsiTheme
-}
-
-export interface SequenceDiagramOptions extends TextBufferOptions, SequenceDiagramRenderOptions {
-  content?: string
-  participantColor?: ColorInput
-  lifelineColor?: ColorInput
-  groupColor?: ColorInput
-  requestColor?: ColorInput
-  responseColor?: ColorInput
-  noteColor?: ColorInput
-  noteBackgroundColor?: ColorInput
 }
 
 export type MessageStyle = "request" | "response"

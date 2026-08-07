@@ -3,7 +3,6 @@ import type { FlowchartDiagramAnsiOptions, FlowchartDiagramRenderOptions } from 
 
 export type {
   FlowchartDiagram as Diagram,
-  FlowchartActiveEdgeSelection as ActiveEdgeSelection,
   FlowchartDirection as Direction,
   FlowchartEdge as Edge,
   FlowchartEdgeDirection as EdgeDirection,
@@ -17,13 +16,10 @@ export type {
 } from "./types.js"
 export type {
   FlowchartDiagramAnsiOptions as AnsiRenderOptions,
-  FlowchartDiagramOptions as RenderableOptions,
   FlowchartDiagramRenderOptions as PlainRenderOptions,
 } from "./options.js"
-export type { FlowchartDiagramAnsiTheme as Theme, FlowchartNodeColors as NodeColors } from "./style.js"
-export { flowchartNodeColorKey as nodeColorKey } from "./style.js"
+export type { FlowchartDiagramAnsiTheme as Theme } from "./style.js"
 export { isMermaidFlowchartDiagram as is, parseMermaidFlowchartDiagram as parse } from "./parser.js"
-export { FlowchartDiagramRenderable as Renderable } from "./renderable.js"
 
 export interface RenderOptions extends FlowchartDiagramAnsiOptions {
   /** Emit ANSI color escapes. Default: `true`. Pass `false` for plain text. */

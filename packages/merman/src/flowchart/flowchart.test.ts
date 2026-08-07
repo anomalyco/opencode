@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { parseColor } from "@opentui/core"
-import { createTestRenderer } from "@opentui/core/testing"
 import stringWidth from "string-width"
-import { blendColor, colorsEqual, DIAGRAM_FADE_STEPS } from "../core/color/style.js"
+import { colorsEqual } from "../core/color/style.js"
 import { expectDiagram } from "../test/diagram.js"
 import { drawFlowchartDiagramGrid as drawParsedFlowchartDiagramGrid } from "./drawing.js"
 import {
@@ -12,8 +11,7 @@ import {
 } from "./layout.js"
 import { parseMermaidFlowchartDiagram } from "./parser.js"
 import { renderFlowchartDiagram, renderFlowchartDiagramAnsi } from "./render.js"
-import { FlowchartDiagramRenderable } from "./renderable.js"
-import { flowchartNodeColorKey, renderGridStyledText, resolveFlowchartStyleColors } from "./style.js"
+import { renderGridStyledText, resolveFlowchartStyleColors } from "./style.js"
 
 function drawFlowchartDiagramGrid(content: string, options?: Parameters<typeof drawParsedFlowchartDiagramGrid>[1]) {
   return drawParsedFlowchartDiagramGrid(parseMermaidFlowchartDiagram(content), options)
@@ -21,10 +19,6 @@ function drawFlowchartDiagramGrid(content: string, options?: Parameters<typeof d
 
 function layoutFlowchartDiagram(content: string, options?: Parameters<typeof layoutParsedFlowchartDiagram>[1]) {
   return layoutParsedFlowchartDiagram(parseMermaidFlowchartDiagram(content), options)
-}
-
-function flowchartTextSize(content: string): { width: number; height: number } {
-  return drawFlowchartDiagramGrid(content).getTextSize({ trimTop: true, trimBottom: true })
 }
 
 function routeRunsAlongHorizontalBorder(
@@ -219,15 +213,11 @@ describe("FlowchartDiagram", () => {
   A[Source] -->|first| B[Target]
   A -->|second| B`
     const output = renderFlowchartDiagram(content)
-    const active = drawParsedFlowchartDiagramGrid(parseMermaidFlowchartDiagram(content), {
-      activeEdge: { from: "A", to: "B", index: 0 },
-    }).toString({ trimTop: true, trimBottom: true })
 
     expect(output).toContain("first")
     expect(output).toContain("second")
     expect(output.match(/▶/g)).toHaveLength(1)
     expect(output.match(/▲/g)).toHaveLength(1)
-    expect(active).not.toContain("firstd")
   })
 
   test("keeps three parallel multiline edges legible in both orientations", () => {
@@ -574,25 +564,6 @@ flowchart LR
     expect(output).toContain("try")
     expect(output).toContain("again")
     expect(output).not.toContain("<br")
-  })
-
-  test("applies active-edge styling to each multiline label row", () => {
-    const grid = drawParsedFlowchartDiagramGrid(
-      parseMermaidFlowchartDiagram(`flowchart LR
-  A -->|first<br/>second| B`),
-      { activeEdge: { from: "A", to: "B" } },
-    )
-    const styledText = new Map(
-      grid.rows.map((row) => [
-        row.map((cell) => cell.char).join(""),
-        row.filter((cell) => cell.char !== " ").map((cell) => cell.style),
-      ]),
-    )
-
-    for (const label of ["first", "second"]) {
-      const styles = [...styledText.entries()].find(([line]) => line.includes(label))?.[1]
-      expect(styles).toContain("activeEdge")
-    }
   })
 
   test("only expands horizontal rank gaps for labeled edges", () => {
@@ -984,182 +955,11 @@ flowchart LR
     expect(output).toContain("Web App")
   })
 
-  test("renders active flowchart nodes and selected connections", () => {
-    const output = renderFlowchartDiagramAnsi(
-      `
-flowchart LR
-  A[A] --> B[B]
-`,
-      {
-        activeNode: "A",
-        activeEdge: { from: "A", to: "B" },
-        theme: { activeNode: "[active-node]", activeEdge: "[active-edge]" },
-      },
-    )
-
-    expect(output).toContain("[active-node]")
-    expect(output).toContain("[active-edge]")
-  })
-
-  test("styles idle active flowchart edges without changing route geometry", () => {
-    const content = `
-flowchart TD
-  A[A] --> B[B]
-  A --> C[C]
-`
-
-    expect(renderFlowchartDiagram(content, { activeEdge: { from: "A", to: "B" } })).toBe(
-      renderFlowchartDiagram(content),
-    )
-  })
-
-  test("styles active flowchart junctions and node connectors", () => {
-    const grid = drawFlowchartDiagramGrid(
-      `
-flowchart TD
-  A[A] --> B[B]
-  A --> C[C]
-`,
-      { activeEdge: { from: "A", to: "B" } },
-    )
-    const cells = grid.rows.flat()
-
-    expect(cells.some((cell) => cell.char === "┬" && cell.style === "activeEdge")).toBe(true)
-    expect(cells.some((cell) => cell.char === "┴" && cell.style === "activeEdge")).toBe(true)
-  })
-
-  test("applies flowchart node foreground and background color maps", () => {
+  test("applies the global flowchart StyledText theme", () => {
     const grid = drawFlowchartDiagramGrid("flowchart LR\n  A[Alpha] --> B[Beta]")
-    const fg = parseColor("#ff0000")
-    const bg = parseColor("#001122")
-    const styled = renderGridStyledText(
-      grid,
-      resolveFlowchartStyleColors(),
-      new Map([["A", fg]]),
-      new Map([[flowchartNodeColorKey("A", 1), bg]]),
-    )
+    const node = parseColor("#ff0000")
+    const styled = renderGridStyledText(grid, resolveFlowchartStyleColors({ node }))
 
-    expect(styled.chunks.some((chunk) => chunk.text === "A" && colorsEqual(chunk.fg, fg))).toBe(true)
-    expect(styled.chunks.some((chunk) => colorsEqual(chunk.bg, bg))).toBe(true)
-  })
-
-  test("navigates selected flowchart connections from the renderable", async () => {
-    const { renderer } = await createTestRenderer({ width: 80, height: 12 })
-    const diagram = new FlowchartDiagramRenderable(renderer, {
-      content: `flowchart LR
-  A[A] --> B[B]
-  A --> C[C]
-  B --> D[D]`,
-    })
-
-    expect(diagram.activateFirstNode()).toBe("A")
-    expect(diagram.selectedConnection).toEqual({ from: "A", to: "B", index: 0 })
-    expect(diagram.selectNextConnection()).toEqual({ from: "A", to: "C", index: 1 })
-    const traversed = diagram.selectedConnection
-    expect(diagram.followSelectedConnection()).toBe("C")
-    expect(diagram.activeNode).toBe("C")
-    expect(diagram.selectedConnection).toBeUndefined()
-    diagram.activeEdge = traversed
-    expect(diagram.activeEdge).toEqual({ from: "A", to: "C", index: 1 })
-    diagram.activeEdge = undefined
-
-    diagram.content = "flowchart LR\n  X[X] --> Y[Y]"
-    expect(diagram.activeNode).toBeUndefined()
-    expect(diagram.activateFirstNode()).toBe("X")
-
-    renderer.destroy()
-  })
-
-  test("applies and updates renderable layoutMaxWidth", async () => {
-    const { renderer, renderOnce } = await createTestRenderer({ width: 240, height: 40 })
-    const diagram = new FlowchartDiagramRenderable(renderer, {
-      content: `flowchart LR
-  C[ReceiveInput] --> P[Persist ActivityRequested]
-  P --> S[Self RunPendingActivity]
-  S --> O[OpenCode async task]
-  O --> M[Self OutputObserved]
-  M --> E[Persist OutputObserved]`,
-      layoutMaxWidth: 120,
-    })
-
-    renderer.root.add(diagram)
-    await renderOnce()
-    expect(diagram.layoutMaxWidth).toBe(120)
-    const foldedWidth = diagram.renderedWidth
-
-    diagram.layoutMaxWidth = undefined
-    await renderOnce()
-    expect(diagram.layoutMaxWidth).toBeUndefined()
-    expect(diagram.renderedWidth).toBeGreaterThan(foldedWidth)
-
-    renderer.destroy()
-  })
-
-  test("applies renderable group color separately from edges", async () => {
-    const { renderer, renderOnce, captureSpans } = await createTestRenderer({
-      width: 80,
-      height: 12,
-    })
-    const groupColor = parseColor("#123456")
-    const edgeColor = parseColor("#abcdef")
-    const diagram = new FlowchartDiagramRenderable(renderer, {
-      id: "flowchart-group-style",
-      content: `flowchart LR
-  subgraph Web [Web App]
-    UI[UI] --> API[API]
-  end`,
-      groupColor,
-      edgeColor,
-    })
-
-    renderer.root.add(diagram)
-    await renderOnce()
-
-    const frame = captureSpans()
-    const groupLabel = frame.lines.flatMap((line) => line.spans).find((span) => span.text.includes("Web App"))
-    const edge = frame.lines.flatMap((line) => line.spans).find((span) => span.text.includes("▶"))
-    expect(groupLabel?.fg.equals(groupColor)).toBe(true)
-    expect(edge?.fg.equals(edgeColor)).toBe(true)
-
-    renderer.destroy()
-  })
-
-  test("updates renderable content and colors", async () => {
-    const { renderer, renderOnce, captureCharFrame, captureSpans } = await createTestRenderer({
-      width: 60,
-      height: 16,
-    })
-    const initialContent = "flowchart LR\n  A --> B"
-    const diagram = new FlowchartDiagramRenderable(renderer, {
-      id: "flowchart",
-      content: initialContent,
-      nodeColor: "#ff0000",
-    })
-    const initialSize = flowchartTextSize(initialContent)
-
-    expect({ width: diagram.renderedWidth, height: diagram.renderedHeight }).toEqual(initialSize)
-    expect(diagram.scrollHeight).toBe(initialSize.height)
-
-    renderer.root.add(diagram)
-    await renderOnce()
-    expect(captureCharFrame()).toContain("A")
-
-    const updatedContent = "flowchart LR\n  A --> C"
-    diagram.content = updatedContent
-    const nodeColor = parseColor("#00ff00")
-    const edgeColor = parseColor("#0000ff")
-    diagram.nodeColor = nodeColor
-    diagram.edgeColor = edgeColor
-    expect({ width: diagram.renderedWidth, height: diagram.renderedHeight }).toEqual(flowchartTextSize(updatedContent))
-    await renderOnce()
-
-    expect(captureCharFrame()).toContain("C")
-    const frame = captureSpans()
-    const sourceConnector = frame.lines.flatMap((line) => line.spans).find((span) => span.text.includes("├"))
-    expect(frame.lines.some((line) => line.spans.some((span) => span.fg.equals(parseColor("#00ff00"))))).toBe(true)
-    expect(sourceConnector?.fg.equals(blendColor(nodeColor, edgeColor, 1 / (DIAGRAM_FADE_STEPS.length + 1)))).toBe(true)
-    expect(sourceConnector?.fg.equals(edgeColor)).toBe(false)
-
-    renderer.destroy()
+    expect(styled.chunks.some((chunk) => chunk.text.includes("Alpha") && colorsEqual(chunk.fg, node))).toBe(true)
   })
 })

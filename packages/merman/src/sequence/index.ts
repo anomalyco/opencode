@@ -14,11 +14,9 @@ export type {
   SequenceDiagramRenderOptions as PlainRenderOptions,
   SequenceDiagramAnsiTheme as Theme,
   SequenceDiagramAnsiOptions as AnsiRenderOptions,
-  SequenceDiagramOptions as RenderableOptions,
 } from "./types.js"
 
 export { isMermaidSequenceDiagram as is, parseMermaidSequenceDiagram as parse } from "./parser.js"
-export { SequenceDiagramRenderable as Renderable } from "./renderable.js"
 
 export interface RenderOptions extends SequenceDiagramAnsiOptions {
   /** Emit ANSI color escapes. Default: `true`. Pass `false` for plain text. */

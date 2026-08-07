@@ -3,7 +3,7 @@ import { parseMermaidStateDiagram } from "./parser.js"
 import { prepareVisibleStateDiagram } from "./visible-model.js"
 
 describe("prepareVisibleStateDiagram", () => {
-  test("collapses composite marker transitions while preserving their source path", () => {
+  test("collapses composite marker transitions", () => {
     const parsed = parseMermaidStateDiagram(`stateDiagram-v2
   [*] --> Authenticated: login
   state Authenticated {
@@ -20,14 +20,6 @@ describe("prepareVisibleStateDiagram", () => {
     expect(visible.states.some((state) => state.id === "Authenticated.__start")).toBe(false)
     expect(visible.states.some((state) => state.id === "Authenticated.__end")).toBe(false)
     expect(entry).toMatchObject({ from: "__start", to: "Idle", label: "login" })
-    expect(entry?.sourceTransitions).toEqual([
-      { from: "__start", to: "Authenticated.__start", label: "login" },
-      { from: "Authenticated.__start", to: "Idle", label: "" },
-    ])
     expect(exit).toMatchObject({ from: "Editing", to: "__end", label: "save" })
-    expect(exit?.sourceTransitions).toEqual([
-      { from: "Editing", to: "Authenticated.__end", label: "save" },
-      { from: "Authenticated.__end", to: "__end", label: "logout" },
-    ])
   })
 })

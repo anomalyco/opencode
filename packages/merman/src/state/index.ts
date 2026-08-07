@@ -3,23 +3,17 @@ import type { StateDiagramAnsiOptions, StateDiagramRenderOptions } from "./types
 
 export type {
   StateDiagram as Diagram,
-  StateDiagramActiveTransition as ActiveTransition,
-  StateDiagramActiveTransitionSelection as ActiveTransitionSelection,
   StateDiagramAnsiOptions as AnsiRenderOptions,
   StateDiagramAnsiTheme as Theme,
   StateDiagramArrowHeadStyle as ArrowHeadStyle,
   StateDiagramCompositeState as CompositeState,
   StateDiagramDirection as Direction,
   StateDiagramNote as Note,
-  StateDiagramOptions as RenderableOptions,
   StateDiagramRenderOptions as PlainRenderOptions,
   StateDiagramState as State,
-  StateDiagramStateColors as StateColors,
   StateDiagramTransition as Transition,
 } from "./types.js"
 export { isMermaidStateDiagram as is, parseMermaidStateDiagram as parse } from "./parser.js"
-export { StateDiagramRenderable as Renderable } from "./renderable.js"
-export { stateDiagramStateColorKey as stateColorKey } from "./style.js"
 
 export interface RenderOptions extends StateDiagramAnsiOptions {
   /** Emit ANSI color escapes. Default: `true`. Pass `false` for plain text. */

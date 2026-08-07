@@ -1,18 +1,27 @@
 import {
+  TextBufferRenderable,
   createMarkdownCodeBlockRenderer,
+  parseColor,
   type ColorInput,
   type MarkdownOptions,
   type MouseEvent,
   type RenderContext,
+  type RGBA,
+  type StyledText,
 } from "@opentui/core"
 import { MermaidSyntaxError } from "./diagnostics.js"
 import { detectMermaidDiagram } from "./detect.js"
-import { FlowchartDiagramRenderable } from "./flowchart/renderable.js"
+import { drawFlowchartDiagramGrid } from "./flowchart/drawing.js"
 import { parseMermaidFlowchartDiagram } from "./flowchart/parser.js"
+import { renderGridStyledText, resolveFlowchartStyleColors } from "./flowchart/style.js"
+import { drawSequenceDiagramGrid } from "./sequence/drawing.js"
 import { parseMermaidSequenceDiagram } from "./sequence/parser.js"
-import { SequenceDiagramRenderable } from "./sequence/renderable.js"
+import { renderSequenceGridStyledText } from "./sequence/render-grid.js"
+import { resolveSequenceStyleColors } from "./sequence/style.js"
+import { drawStateDiagramGrid } from "./state/drawing.js"
 import { parseMermaidStateDiagram } from "./state/parser.js"
-import { StateDiagramRenderable } from "./state/renderable.js"
+import { renderStateGridStyledText } from "./state/render-grid.js"
+import { resolveStateStyleColors } from "./state/style.js"
 
 export interface MermaidMarkdownRendererOptions {
   compact?: boolean
@@ -21,9 +30,45 @@ export interface MermaidMarkdownRendererOptions {
     primary?: ColorInput
     secondary?: ColorInput
     muted?: ColorInput
-    accent?: ColorInput
     warning?: ColorInput
     background?: ColorInput
+  }
+}
+
+function color(value: ColorInput | undefined): RGBA | undefined {
+  return value === undefined ? undefined : parseColor(value)
+}
+
+class StaticDiagramRenderable extends TextBufferRenderable {
+  constructor(ctx: RenderContext, text: StyledText, height: number) {
+    super(ctx, { width: "100%", height, wrapMode: "none", selectable: false, marginTop: 1 })
+    this.textBuffer.setStyledText(text)
+    this.updateTextInfo()
+
+    let dragX: number | undefined
+    this.onMouseDown = (event: MouseEvent) => {
+      if (event.button !== 0) return
+      dragX = event.x
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    this.onMouseDrag = (event: MouseEvent) => {
+      if (dragX === undefined) return
+      const dx = event.x - dragX
+      dragX = event.x
+      if (dx) this.scrollX -= dx
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    this.onMouseDragEnd = () => {
+      dragX = undefined
+    }
+    this.onMouseUp = (event: MouseEvent) => {
+      if (event.button !== 0) return
+      dragX = undefined
+      event.preventDefault()
+      event.stopPropagation()
+    }
   }
 }
 
@@ -38,90 +83,77 @@ export function createMermaidMarkdownRenderer(
       if (!kind) return undefined
 
       try {
-        switch (kind) {
-          case "flowchart":
-            parseMermaidFlowchartDiagram(token.text)
-            break
-          case "sequence":
-            parseMermaidSequenceDiagram(token.text)
-            break
-          case "state":
-            parseMermaidStateDiagram(token.text)
-            break
-        }
         const options = typeof input === "function" ? input() : input
         const colors = options.colors ?? {}
-        const diagram = (() => {
-          switch (kind) {
-            case "flowchart":
-              return new FlowchartDiagramRenderable(ctx, {
-                content: token.text,
-                compact: options.compact,
-              nodeColor: colors.primary,
-              databaseColor: colors.secondary,
-              edgeColor: colors.secondary,
-              labelColor: colors.text,
-              groupColor: colors.muted,
-              })
-            case "sequence":
-              return new SequenceDiagramRenderable(ctx, {
-                content: token.text,
-                compact: options.compact,
-                participantColor: colors.primary,
-                lifelineColor: colors.muted,
-              groupColor: colors.secondary,
-              requestColor: colors.primary,
-              responseColor: colors.primary,
-                noteColor: colors.warning,
-                noteBackgroundColor: colors.background,
-              })
-            case "state":
-              return new StateDiagramRenderable(ctx, {
-              content: token.text,
-              stateColor: colors.primary,
-              compositeColor: colors.muted,
-              transitionColor: colors.secondary,
-                labelColor: colors.text,
-                noteBorderColor: colors.warning,
-                noteTextColor: colors.warning,
-                noteConnectorColor: colors.muted,
-              activeStateColor: colors.accent,
-              activeTransitionColor: colors.accent,
-              startColor: colors.muted,
-              endColor: colors.muted,
-              choiceColor: colors.primary,
-              })
+        switch (kind) {
+          case "flowchart": {
+            const grid = drawFlowchartDiagramGrid(parseMermaidFlowchartDiagram(token.text), {
+              compact: options.compact,
+            })
+            const size = grid.getTextSize({ trimTop: true, trimBottom: true })
+            return new StaticDiagramRenderable(
+              ctx,
+              renderGridStyledText(
+                grid,
+                resolveFlowchartStyleColors({
+                  node: color(colors.primary),
+                  database: color(colors.secondary),
+                  edge: color(colors.secondary),
+                  label: color(colors.text),
+                  group: color(colors.muted),
+                }),
+              ),
+              size.height,
+            )
           }
-        })()
-        diagram.width = "100%"
-        diagram.height = diagram.renderedHeight
-        diagram.marginTop = 1
-        diagram.selectable = false
-        let drag: { x: number; y: number } | undefined
-        diagram.onMouseDown = (event: MouseEvent) => {
-          if (event.button !== 0) return
-          drag = { x: event.x, y: event.y }
-          event.preventDefault()
-          event.stopPropagation()
+          case "sequence": {
+            const grid = drawSequenceDiagramGrid(parseMermaidSequenceDiagram(token.text), {
+              compact: options.compact,
+            })
+            const size = grid.getTextSize()
+            return new StaticDiagramRenderable(
+              ctx,
+              renderSequenceGridStyledText(
+                grid,
+                resolveSequenceStyleColors({
+                  participant: color(colors.primary),
+                  lifeline: color(colors.muted),
+                  group: color(colors.secondary),
+                  request: color(colors.primary),
+                  response: color(colors.primary),
+                  fragment: color(colors.secondary),
+                  fragmentLabelBg: color(colors.background),
+                  note: color(colors.warning),
+                  noteBg: color(colors.background),
+                }),
+              ),
+              size.height,
+            )
+          }
+          case "state": {
+            const grid = drawStateDiagramGrid(parseMermaidStateDiagram(token.text))
+            const size = grid.getTextSize({ trimBottom: true })
+            return new StaticDiagramRenderable(
+              ctx,
+              renderStateGridStyledText(
+                grid,
+                resolveStateStyleColors({
+                  state: color(colors.primary),
+                  composite: color(colors.muted),
+                  transition: color(colors.secondary),
+                  label: color(colors.text),
+                  noteBorder: color(colors.warning),
+                  noteText: color(colors.warning),
+                  noteConnector: color(colors.muted),
+                  start: color(colors.muted),
+                  end: color(colors.muted),
+                  choice: color(colors.primary),
+                }),
+              ),
+              size.height,
+            )
+          }
         }
-        diagram.onMouseDrag = (event: MouseEvent) => {
-          if (!drag) return
-          const dx = event.x - drag.x
-          drag = { x: event.x, y: event.y }
-          if (dx) diagram.scrollX -= dx
-          event.preventDefault()
-          event.stopPropagation()
-        }
-        diagram.onMouseDragEnd = () => {
-          drag = undefined
-        }
-        diagram.onMouseUp = (event: MouseEvent) => {
-          if (event.button !== 0) return
-          drag = undefined
-          event.preventDefault()
-          event.stopPropagation()
-        }
-        return diagram
       } catch (error) {
         if (error instanceof MermaidSyntaxError) return undefined
         throw error

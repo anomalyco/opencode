@@ -1,8 +1,6 @@
 import type { StateDiagram, StateDiagramState, StateDiagramTransition } from "./types.js"
 
-export interface StateVisibleTransition extends StateDiagramTransition {
-  sourceTransitions?: readonly StateDiagramTransition[]
-}
+export type StateVisibleTransition = StateDiagramTransition
 
 export interface StateVisibleDiagram extends Omit<StateDiagram, "transitions"> {
   transitions: StateVisibleTransition[]
@@ -10,10 +8,6 @@ export interface StateVisibleDiagram extends Omit<StateDiagram, "transitions"> {
 
 export function isHiddenCompositeMarker(state: StateDiagramState | undefined): boolean {
   return Boolean(state?.parentId && (state.kind === "start" || state.kind === "end"))
-}
-
-function sourceTransitionsOf(transition: StateVisibleTransition): readonly StateDiagramTransition[] {
-  return transition.sourceTransitions ?? [transition]
 }
 
 function composeTransitionLabel(incoming: StateDiagramTransition, outgoing: StateDiagramTransition): string {
@@ -47,7 +41,6 @@ function collapseHiddenCompositeMarkerTransitionsOnce(
           from: incomingTransition.from,
           to: outgoingTransition.to,
           label: composeTransitionLabel(incomingTransition, outgoingTransition),
-          sourceTransitions: [...sourceTransitionsOf(incomingTransition), ...sourceTransitionsOf(outgoingTransition)],
         })
       }
     }
@@ -61,10 +54,7 @@ function collapseHiddenCompositeMarkerTransitionsOnce(
 
 function collapseHiddenCompositeMarkerTransitions(diagram: StateDiagram): StateVisibleTransition[] {
   const statesById = new Map(diagram.states.map((state) => [state.id, state]))
-  let transitions: StateVisibleTransition[] = diagram.transitions.map((transition) => ({
-    ...transition,
-    sourceTransitions: [transition],
-  }))
+  let transitions: StateVisibleTransition[] = diagram.transitions.map((transition) => ({ ...transition }))
 
   while (true) {
     const result = collapseHiddenCompositeMarkerTransitionsOnce(transitions, statesById)

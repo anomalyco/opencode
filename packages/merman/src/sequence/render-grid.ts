@@ -15,11 +15,14 @@ export function renderSequenceGridText(grid: SequenceGrid): string {
   return grid.toString()
 }
 
-export function renderSequenceGridStyledText(grid: SequenceGrid, colors: SequenceStyleColors): StyledText {
+export function renderSequenceGridStyledText(
+  grid: SequenceGrid,
+  colors: Parameters<typeof sequenceStyleColor>[1],
+): StyledText {
   return renderDiagramGridStyledText(
     grid,
     (run) => sequenceStyleColor(run.style, colors),
-    (run) => sequenceStyleBackgroundColor(run.style, colors),
+    (run) => sequenceStyleBackgroundColor(run.style, colors as Required<SequenceStyleColors>),
   )
 }
 

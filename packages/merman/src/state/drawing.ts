@@ -1,8 +1,6 @@
 import { BorderChars, type BorderCharacters, type BorderStyle } from "@opentui/core"
 import { DiagramCanvas, type DiagramCanvasCell } from "../core/canvas.js"
-import { diagramRadialCellColorLevel } from "../core/color/map.js"
 import { diagramArrowHead, diagramLineGlyph, drawDiagramFrame, mergeDiagramLineGlyph } from "../core/drawing.js"
-import { activeTransitionIndex, isActiveTransition, normalizeActiveTransitions } from "./active-transition.js"
 import {
   createStateDiagramLayout,
   expandCompositeBoundsForFeedback,
@@ -11,24 +9,18 @@ import {
   type StateDiagramNoteBounds as StateNoteBounds,
 } from "./layout.js"
 import { DEFAULT_STATE_ARROW_HEAD_STYLE, DEFAULT_STATE_BORDER_STYLE, normalizeStateMinStateGap } from "./options.js"
-import type { StateCellMetadata, StateGrid } from "./render-grid.js"
+import type { StateGrid } from "./render-grid.js"
 import {
   createStateTransitionJunctionPlans,
   createStateTransitionRenderPlans,
   measureStateTransitionLabel,
   type StateTransitionRenderPlan,
 } from "./routing.js"
-import {
-  isStateActiveTransitionStyle,
-  isStateTransitionFadeStyle,
-  stateDiagramStateColorKey,
-  stateTransitionFadeStyle,
-} from "./style.js"
+import { isStateTransitionFadeStyle, stateTransitionFadeStyle } from "./style.js"
 import type {
   FadeSourceStyle,
   StateCellStyle,
   StateDiagram,
-  StateDiagramActiveTransition,
   StateDiagramArrowHeadStyle,
   StateDiagramRenderOptions,
   StateDiagramState,
@@ -36,13 +28,10 @@ import type {
 } from "./types.js"
 import { isHiddenCompositeMarker, prepareVisibleStateDiagram } from "./visible-model.js"
 
-type StateCell = DiagramCanvasCell<StateCellStyle, StateCellMetadata>
+type StateCell = DiagramCanvasCell<StateCellStyle>
 
 interface TransitionDrawContext {
   fadeSource: FadeSourceStyle
-  active: boolean
-  fadeFromSource: boolean
-  sourceStateId: string
 }
 
 function translateTransitionPlans(
@@ -72,36 +61,15 @@ function makeGrid(width: number, height: number): StateGrid {
 }
 
 function isTransitionDrawingStyle(style: StateCellStyle | undefined): boolean {
-  return (
-    style === "transition" ||
-    style === "activeTransition" ||
-    isStateActiveTransitionStyle(style) ||
-    isStateTransitionFadeStyle(style)
-  )
+  return style === "transition" || isStateTransitionFadeStyle(style)
 }
 
-function setCell(
-  grid: StateGrid,
-  x: number,
-  y: number,
-  char: string,
-  style?: StateCellStyle,
-  stateId?: string,
-  bgStateId?: string,
-): void {
-  grid.setCell(x, y, char, style, { stateId, bgStateId })
+function setCell(grid: StateGrid, x: number, y: number, char: string, style?: StateCellStyle): void {
+  grid.setCell(x, y, char, style)
 }
 
-function setText(
-  grid: StateGrid,
-  x: number,
-  y: number,
-  text: string,
-  style?: StateCellStyle,
-  stateId?: string,
-  bgStateId?: string,
-): void {
-  grid.setText(x, y, text, style, { stateId, bgStateId })
+function setText(grid: StateGrid, x: number, y: number, text: string, style?: StateCellStyle): void {
+  grid.setText(x, y, text, style)
 }
 
 function setTransitionLabel(
@@ -119,63 +87,32 @@ function drawBox(
   state: StateDiagramState,
   bounds: BoxBounds,
   lines: string[],
-  active: boolean,
   borderStyle: BorderStyle,
 ): void {
   if (isHiddenCompositeMarker(state)) return
 
   if (state.kind !== "state") {
-    setCell(grid, bounds.left, bounds.top, state.label, active ? "activeState" : state.kind, state.id)
+    setCell(grid, bounds.left, bounds.top, state.label, state.kind)
     return
   }
-  const style: StateCellStyle = active ? "activeState" : "state"
-  fillBoxInterior(grid, bounds, style, state.id)
-  drawStateFrame(grid, bounds, BorderChars[borderStyle], style, state.id)
+  const style: StateCellStyle = "state"
+  fillBoxInterior(grid, bounds, style)
+  drawStateFrame(grid, bounds, BorderChars[borderStyle], style)
   lines.forEach((line, index) => {
-    setStateText(grid, bounds, bounds.left + 2, bounds.top + 1 + index, line, style, state.id)
+    setText(grid, bounds.left + 2, bounds.top + 1 + index, line, style)
   })
 }
 
-function stateColorKeyForCell(bounds: BoxBounds, stateId: string, x: number, y: number, border = false): string {
-  return stateDiagramStateColorKey(stateId, diagramRadialCellColorLevel(bounds, x, y, border))
-}
-
-function fillBoxInterior(grid: StateGrid, bounds: BoxBounds, style: StateCellStyle, stateId: string): void {
+function fillBoxInterior(grid: StateGrid, bounds: BoxBounds, style: StateCellStyle): void {
   for (let y = bounds.top + 1; y < bounds.top + bounds.height - 1; y++) {
     for (let x = bounds.left + 1; x < bounds.left + bounds.width - 1; x++) {
-      const colorKey = stateColorKeyForCell(bounds, stateId, x, y)
-      setCell(grid, x, y, " ", style, colorKey, colorKey)
+      setCell(grid, x, y, " ", style)
     }
   }
 }
 
-function drawStateFrame(
-  grid: StateGrid,
-  bounds: BoxBounds,
-  chars: BorderCharacters,
-  style: StateCellStyle,
-  stateId: string,
-): void {
-  const setBorderCell = (x: number, y: number, char: string) => {
-    setCell(grid, x, y, char, style, stateColorKeyForCell(bounds, stateId, x, y, true))
-  }
-
-  drawDiagramFrame(bounds, chars, setBorderCell)
-}
-
-function setStateText(
-  grid: StateGrid,
-  bounds: BoxBounds,
-  x: number,
-  y: number,
-  text: string,
-  style: StateCellStyle,
-  stateId: string,
-): void {
-  grid.setText(x, y, text, style, (cellX, cellY) => {
-    const colorKey = stateColorKeyForCell(bounds, stateId, cellX, cellY)
-    return { stateId: colorKey, bgStateId: colorKey }
-  })
+function drawStateFrame(grid: StateGrid, bounds: BoxBounds, chars: BorderCharacters, style: StateCellStyle): void {
+  drawDiagramFrame(bounds, chars, (x, y, char) => setCell(grid, x, y, char, style))
 }
 
 function drawContainerFrame(
@@ -184,10 +121,9 @@ function drawContainerFrame(
   label: string,
   chars: BorderCharacters,
   style: StateCellStyle,
-  stateId?: string,
 ): void {
-  drawDiagramFrame(bounds, chars, (x, y, char) => setCell(grid, x, y, char, style, stateId))
-  if (label) setText(grid, bounds.left + 2, bounds.top, ` ${label} `, style, stateId)
+  drawDiagramFrame(bounds, chars, (x, y, char) => setCell(grid, x, y, char, style))
+  if (label) setText(grid, bounds.left + 2, bounds.top, ` ${label} `, style)
 }
 
 function drawHorizontalNoteConnector(grid: StateGrid, fromX: number, toX: number, y: number, char: string): void {
@@ -243,16 +179,8 @@ function drawNote(grid: StateGrid, bounds: StateNoteBounds, target: BoxBounds): 
   bounds.lines.forEach((line, index) => setText(grid, bounds.left + 2, bounds.top + 1 + index, line, "noteText"))
 }
 
-function transitionLineStyle(active: boolean): StateCellStyle {
-  return active ? "activeTransition" : "transition"
-}
-
-function transitionLabelStyle(active: boolean): StateCellStyle {
-  return active ? "activeTransition" : "label"
-}
-
 function transitionFadeCellStyle(context: TransitionDrawContext, distance: number): StateCellStyle {
-  return stateTransitionFadeStyle(context.fadeSource, context.active, distance, context.fadeFromSource)
+  return stateTransitionFadeStyle(context.fadeSource, distance)
 }
 
 function drawTransitionRenderPlan(
@@ -261,14 +189,13 @@ function drawTransitionRenderPlan(
   arrowHeadStyle: StateDiagramArrowHeadStyle,
   context: TransitionDrawContext,
 ): void {
-  const lineStyle = transitionLineStyle(context.active)
   for (const cell of plan.cells) {
     const char = cell.arrowDirection ? diagramArrowHead(cell.arrowDirection, arrowHeadStyle) : cell.char
-    const style = cell.fadeDistance === undefined ? lineStyle : transitionFadeCellStyle(context, cell.fadeDistance)
-    setCell(grid, cell.x, cell.y, char, style, cell.fadeDistance === undefined ? undefined : context.sourceStateId)
+    const style = cell.fadeDistance === undefined ? "transition" : transitionFadeCellStyle(context, cell.fadeDistance)
+    setCell(grid, cell.x, cell.y, char, style)
   }
   if (plan.label) {
-    setTransitionLabel(grid, plan.label.x, plan.label.y, plan.label.lines, transitionLabelStyle(context.active))
+    setTransitionLabel(grid, plan.label.x, plan.label.y, plan.label.lines, "label")
   }
 }
 
@@ -277,19 +204,9 @@ function drawTransitionJunctionPlans(
   diagram: StateDiagram,
   bounds: Map<string, BoxBounds>,
   renderPlans: readonly StateTransitionRenderPlan[],
-  activeState: string | undefined,
-  activeTransitions: readonly StateDiagramActiveTransition[],
 ): void {
   for (const plan of createStateTransitionJunctionPlans(diagram, bounds, renderPlans)) {
-    const active = plan.transitions.some((transition) => isActiveTransition(transition, activeTransitions))
-    const style =
-      plan.state.id === activeState
-        ? "activeState"
-        : active
-          ? "activeTransition"
-          : plan.kind === "choice"
-            ? "choice"
-            : "transition"
+    const style = plan.kind === "choice" ? "choice" : "transition"
     setCell(grid, plan.bounds.left, plan.bounds.top, diagramLineGlyph(plan.connections, "rounded"), style)
   }
 }
@@ -297,9 +214,7 @@ function drawTransitionJunctionPlans(
 function transitionFadeSource(
   statesById: Map<string, StateDiagramState>,
   transition: StateDiagramTransition,
-  activeState: string | undefined,
 ): FadeSourceStyle {
-  if (transition.from === activeState) return "activeState"
   const source = statesById.get(transition.from)
   if (isHiddenCompositeMarker(source)) return "composite"
   if (source?.kind === "start") return "start"
@@ -314,7 +229,6 @@ export function drawStateDiagramGrid(sourceDiagram: StateDiagram, options: State
   const borderStyle = options.borderStyle ?? DEFAULT_STATE_BORDER_STYLE
   const arrowHeadStyle = options.arrowHeadStyle ?? DEFAULT_STATE_ARROW_HEAD_STYLE
   const minStateGap = normalizeStateMinStateGap(options.minStateGap)
-  const activeTransitions = normalizeActiveTransitions(options.activeTransition)
   const { bounds, sizes, compositeBounds, noteBounds } = createStateDiagramLayout(diagram, {
     minStateGap,
   })
@@ -380,38 +294,26 @@ export function drawStateDiagramGrid(sourceDiagram: StateDiagram, options: State
   for (const composite of diagram.composites) {
     const bound = compositeBounds.get(composite.id)
     if (!bound) continue
-    drawContainerFrame(
-      grid,
-      bound,
-      composite.label,
-      BorderChars[borderStyle],
-      options.activeState === composite.id ? "activeState" : "composite",
-    )
+    drawContainerFrame(grid, bound, composite.label, BorderChars[borderStyle], "composite")
   }
 
   for (const state of diagram.states) {
     const bound = bounds.get(state.id)
     const size = sizes.get(state.id)
     if (!bound || !size) continue
-    drawBox(grid, state, bound, size.lines, options.activeState === state.id, borderStyle)
+    drawBox(grid, state, bound, size.lines, borderStyle)
   }
 
   for (const plan of transitionPlans) {
     const transition = plan.route.transition
-    const fadeSource = transitionFadeSource(statesById, transition, options.activeState)
-    const activeIndex = activeTransitionIndex(transition, activeTransitions)
-    const active = activeIndex !== -1
-    const fadeFromSource = activeIndex <= 0
+    const fadeSource = transitionFadeSource(statesById, transition)
     const drawContext: TransitionDrawContext = {
       fadeSource,
-      active,
-      fadeFromSource,
-      sourceStateId: transition.from,
     }
     drawTransitionRenderPlan(grid, plan, arrowHeadStyle, drawContext)
   }
 
-  drawTransitionJunctionPlans(grid, diagram, bounds, transitionPlans, options.activeState, activeTransitions)
+  drawTransitionJunctionPlans(grid, diagram, bounds, transitionPlans)
 
   for (const noteBound of noteBounds) {
     const target = bounds.get(noteBound.note.target)

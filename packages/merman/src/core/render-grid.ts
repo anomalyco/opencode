@@ -2,10 +2,8 @@ import { StyledText, type TextChunk } from "@opentui/core"
 import type { DiagramCanvas, DiagramCanvasRun, DiagramCanvasRunOptions } from "./canvas.js"
 import { ANSI } from "./terminal/ansi.js"
 
-export interface RenderDiagramGridAnsiOptions<
-  Style extends string,
-  Metadata extends object = object,
-> extends DiagramCanvasRunOptions<Style, Metadata> {
+export interface RenderDiagramGridAnsiOptions<Style extends string, Metadata extends object = object>
+  extends DiagramCanvasRunOptions<Style, Metadata> {
   trimOutputEnd?: boolean
 }
 

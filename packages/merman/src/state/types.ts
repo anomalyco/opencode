@@ -1,5 +1,4 @@
-import type { BorderStyle, ColorInput, TextBufferOptions } from "@opentui/core"
-import type { DiagramColorMapInput } from "../core/color/map.js"
+import type { BorderStyle } from "@opentui/core"
 import type { DiagramFadeStep } from "../core/color/style.js"
 
 export type StateDiagramDirection = "TB" | "TD" | "LR" | "RL"
@@ -18,12 +17,6 @@ export interface StateDiagramTransition {
   label: string
 }
 
-export interface StateDiagramActiveTransition {
-  from: string
-  to: string
-  label?: string
-}
-
 export interface StateDiagramCompositeState {
   id: string
   label: string
@@ -35,11 +28,6 @@ export interface StateDiagramNote {
   position: "left" | "right"
   lines: string[]
 }
-
-export type StateDiagramActiveTransitionSelection =
-  | StateDiagramActiveTransition
-  | readonly StateDiagramActiveTransition[]
-export type StateDiagramStateColors = DiagramColorMapInput
 
 export interface StateDiagram {
   direction: StateDiagramDirection
@@ -54,43 +42,20 @@ export interface StateDiagramRenderOptions {
   borderStyle?: BorderStyle
   arrowHeadStyle?: StateDiagramArrowHeadStyle
   minStateGap?: number
-  activeState?: string
-  activeTransition?: StateDiagramActiveTransitionSelection
 }
 
 export interface StateDiagramAnsiOptions extends StateDiagramRenderOptions {
   theme?: StateDiagramAnsiTheme
 }
 
-export interface StateDiagramOptions extends TextBufferOptions, StateDiagramRenderOptions {
-  content?: string
-  stateColor?: ColorInput
-  activeStateColor?: ColorInput
-  compositeColor?: ColorInput
-  transitionColor?: ColorInput
-  labelColor?: ColorInput
-  noteBorderColor?: ColorInput
-  noteTextColor?: ColorInput
-  noteConnectorColor?: ColorInput
-  startColor?: ColorInput
-  endColor?: ColorInput
-  choiceColor?: ColorInput
-  activeTransitionColor?: ColorInput
-  stateColors?: StateDiagramStateColors
-  stateBgColors?: StateDiagramStateColors
-}
-
 export type StateDiagramAnsiTheme = Partial<Record<StateCellStyle, string>>
 
-export type FadeSourceStyle = "state" | "activeState" | "composite" | "start" | "end" | "choice"
+export type FadeSourceStyle = "state" | "composite" | "start" | "end" | "choice"
 export type TransitionFadeStyle = `${FadeSourceStyle}TransitionFade${DiagramFadeStep}`
-export type ActiveTransitionFadeStyle = `${FadeSourceStyle}ActiveTransitionFade${DiagramFadeStep}`
 export type BaseStateCellStyle =
   | "state"
-  | "activeState"
   | "composite"
   | "transition"
-  | "activeTransition"
   | "label"
   | "noteBorder"
   | "noteText"
@@ -98,4 +63,4 @@ export type BaseStateCellStyle =
   | "start"
   | "end"
   | "choice"
-export type StateCellStyle = BaseStateCellStyle | TransitionFadeStyle | ActiveTransitionFadeStyle
+export type StateCellStyle = BaseStateCellStyle | TransitionFadeStyle
