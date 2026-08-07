@@ -105,7 +105,7 @@ const layer = Layer.effect(
               add,
               dir: input.dir,
             }),
-        }).pipe(Effect.timeout("2 seconds"), Effect.orElseSucceed(() => ({}) as ArboristTree)) as Effect.Effect<ArboristTree, InstallFailedError>
+        }) as Effect.Effect<ArboristTree, InstallFailedError>
       }).pipe(
         Effect.withSpan("Npm.reify", {
           attributes: input,
