@@ -571,6 +571,20 @@
         "@typescript/native-preview": "catalog:",
       },
     },
+    "packages/merman": {
+      "name": "@opencode-ai/merman",
+      "version": "0.0.0",
+      "dependencies": {
+        "@opencode-ai/plugin": "workspace:*",
+        "@opentui/core": "catalog:",
+        "string-width": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+      },
+    },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
       "version": "1.18.8",
@@ -881,6 +895,7 @@
       "dependencies": {
         "@opencode-ai/client": "workspace:*",
         "@opencode-ai/core": "workspace:*",
+        "@opencode-ai/merman": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/schema": "workspace:*",
         "@opencode-ai/simulation": "workspace:*",
@@ -2063,6 +2078,8 @@
     "@opencode-ai/http-recorder": ["@opencode-ai/http-recorder@workspace:packages/http-recorder"],
 
     "@opencode-ai/httpapi-codegen": ["@opencode-ai/httpapi-codegen@workspace:packages/httpapi-codegen"],
+
+    "@opencode-ai/merman": ["@opencode-ai/merman@workspace:packages/merman"],
 
     "@opencode-ai/plugin": ["@opencode-ai/plugin@workspace:packages/plugin"],
 

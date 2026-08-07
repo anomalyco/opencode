@@ -83,6 +83,7 @@ import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { PluginSlot } from "../../plugin/render"
+import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
   createSessionRows,
@@ -1739,6 +1740,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
+  const plugins = usePlugin()
   const status = () => props.message.status
   const cancelled = () => props.message.status === "failed" && props.message.error.type === "aborted"
   const text = () =>
@@ -1779,6 +1781,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             conceal={ctx.markdownMode() === "rendered"}
             fg={theme.markdown.text}
             bg={theme.background.default}
+            renderNode={plugins.markdown()}
           />
         </box>
       </Show>
@@ -2186,6 +2189,7 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
+  const plugins = usePlugin()
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
@@ -2198,6 +2202,7 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
           bg={theme.background.default}
+          renderNode={plugins.markdown()}
         />
       </box>
     </Show>
