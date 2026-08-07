@@ -76,9 +76,15 @@ export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
   next: Schema.optionalKey(PositiveInt),
 }) {}
 
+export interface ListEntry extends Schema.Schema.Type<typeof ListEntry> {}
+export const ListEntry = Schema.Struct({
+  path: RelativePath,
+  type: Schema.Literals(["file", "directory", "symlink"]),
+}).annotate({ identifier: "ReadTool.ListEntry" })
+
 export class ListPage extends Schema.Class<ListPage>("ReadTool.ListPage")({
   type: Schema.Literal("list-page"),
-  entries: Schema.Array(FileSystem.Entry),
+  entries: Schema.Array(ListEntry),
   truncated: Schema.Boolean,
   next: Schema.optionalKey(PositiveInt),
 }) {}
@@ -287,7 +293,7 @@ export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, 
       item.type === "other"
         ? []
         : [
-            FileSystem.Entry.make({
+            ListEntry.make({
               path: RelativePath.make(item.name + (item.type === "directory" ? path.sep : "")),
               type: item.type,
             }),

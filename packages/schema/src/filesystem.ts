@@ -17,7 +17,7 @@ export const Event = { Changed, Definitions: inventory(Changed) }
 export interface Entry extends Schema.Schema.Type<typeof Entry> {}
 export const Entry = Schema.Struct({
   path: RelativePath,
-  type: Schema.Literals(["file", "directory", "symlink"]),
+  type: Schema.Literals(["file", "directory"]),
 }).annotate({ identifier: "FileSystem.Entry" })
 
 export interface Submatch extends Schema.Schema.Type<typeof Submatch> {}
