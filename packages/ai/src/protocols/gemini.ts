@@ -29,8 +29,10 @@ const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
 const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
-// Model IDs are open-ended, so unknown Gemini aliases inherit the newest supported request behavior.
-const usesGemini3Features = (modelID: string) => {
+// Gemini 3 rejects replayed function calls without a thought signature. Google's SDKs avoid that in normal chats by
+// retaining complete model responses, but OpenCode reconstructs durable history and may encounter an unsigned call
+// from an older or external session. Model IDs are open-ended, so unknown Gemini aliases inherit current behavior.
+const requiresThoughtSignatureFallback = (modelID: string) => {
   if (!/(^|\/)gemini-/i.test(modelID)) return false
   if (/(^|\/)gemini-(?:1|2)(?:[.-]|$)/i.test(modelID)) return false
   if (/(^|\/)gemini-pro(?:-vision)?$/i.test(modelID)) return false
@@ -295,6 +297,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
 
     if (message.role === "assistant") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
+      // Parallel Gemini 3 calls may carry one signature on the first call; unsigned sibling calls are valid.
       let hasSignedToolCall = false
       for (const part of message.content) {
         if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
@@ -314,7 +317,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
             ...lowered,
             thoughtSignature:
               signature ??
-              (usesGemini3Features(request.model.id) && !hasSignedToolCall
+              (requiresThoughtSignatureFallback(request.model.id) && !hasSignedToolCall
                 ? SKIP_THOUGHT_SIGNATURE_VALIDATOR
                 : undefined),
           })
