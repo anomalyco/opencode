@@ -98,7 +98,7 @@ export const Plugin = {
                 agent: context.agent,
                 source,
               })
-              const root = path.resolve(location.directory, input.path ?? ".")
+              const root = target.absolute
               const type = yield* environment.files.stat(root).pipe(
                 Effect.flatMap((info) =>
                   info.type === "symlink"

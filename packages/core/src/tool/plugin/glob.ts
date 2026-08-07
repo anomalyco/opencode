@@ -99,11 +99,11 @@ export const Plugin = {
                 return yield* Effect.fail(
                   new ToolFailure({ message: `Search path is not a directory: ${searchPath ?? "."}` }),
                 )
-              const root = path.resolve(location.directory, searchPath ?? ".")
+              const root = target.absolute
               const limit = input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT
               const entries = yield* ripgrep
                 .glob({
-                  cwd: target.absolute,
+                  cwd: root,
                   pattern: input.pattern,
                   limit: limit + 1,
                 })
