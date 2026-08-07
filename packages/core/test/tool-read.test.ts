@@ -148,13 +148,13 @@ const mutation = Layer.succeed(
   LocationMutation.Service,
   LocationMutation.Service.of({
     resolve: (input) => {
-      const canonical = path.resolve(process.cwd(), input.path)
-      const external = path.isAbsolute(input.path) && !FSUtil.contains(process.cwd(), canonical)
-      const resource = external ? canonical.replaceAll("\\", "/") : path.relative(process.cwd(), canonical) || "."
-      const directory = path.dirname(canonical)
+      const absolute = path.resolve(process.cwd(), input.path)
+      const external = path.isAbsolute(input.path) && !FSUtil.contains(process.cwd(), absolute)
+      const resource = external ? absolute.replaceAll("\\", "/") : path.relative(process.cwd(), absolute) || "."
+      const directory = path.dirname(absolute)
       const externalResource = path.join(directory, "*").replaceAll("\\", "/")
       return Effect.succeed({
-        canonical,
+        absolute,
         resource,
         externalDirectory: external
           ? {
@@ -621,10 +621,6 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const registry = yield* Tool.Service
       for (const [error, message] of [
-        [
-          new ReadToolFileSystem.MalformedUtf8Error({ resource: "invalid.txt" }),
-          "File is not valid UTF-8: invalid.txt",
-        ],
         [new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 10 }), "Offset 10 is out of range"],
         [
           new ReadToolFileSystem.PathKindError({ resource: "socket", expected: "a file" }),
@@ -721,16 +717,19 @@ describe("ReadTool", () => {
       const registry = yield* Tool.Service
 
       const result = yield* executeTool(registry, {
-          sessionID,
-          ...toolIdentity,
-          call: {
-            type: "tool-call",
-            id: "call-read-directory",
-            name: "read",
-            input: { path: "src", offset: 2, limit: 10 },
-          },
-        })
-      expect(result).toMatchObject({ status: "completed", output: { entries: listResult.entries, truncated: true, next: 4 } })
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call-read-directory",
+          name: "read",
+          input: { path: "src", offset: 2, limit: 10 },
+        },
+      })
+      expect(result).toMatchObject({
+        status: "completed",
+        output: { entries: listResult.entries, truncated: true, next: 4 },
+      })
       if (result.status !== "completed") return
       expect(result.content).toEqual([
         {

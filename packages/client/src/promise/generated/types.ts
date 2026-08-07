@@ -301,7 +301,7 @@ export type PermissionSource = { type: "tool"; messageID: string; id: string }
 
 export type PermissionSavedInfo = { id: string; projectID: string; action: string; resource: string }
 
-export type FileSystemEntry = { path: string; type: "file" | "directory" }
+export type FileSystemEntry = { path: string; type: "file" | "directory" | "symlink" }
 
 export type SkillInfo = {
   id: string
