@@ -175,6 +175,36 @@ test("searches from an absolute root without a default base", async () => {
   expect(directories).toEqual(["/"])
 })
 
+test("lists the base directory instead of fuzzy matching an empty query", async () => {
+  const listed: string[] = []
+  const found: string[] = []
+  const sdk = {
+    api: {
+      file: {
+        list: (input: { location?: { directory?: string } }) => {
+          listed.push(input.location?.directory ?? "")
+          return Promise.resolve({
+            data: [
+              { path: "src/", type: "directory" },
+              { path: "tests/", type: "directory" },
+              { path: "README.md", type: "file" },
+            ],
+          })
+        },
+        find: (input: { query?: string }) => {
+          found.push(input.query ?? "")
+          return Promise.resolve({ data: [] })
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/repo" })
+
+  expect(await search("")).toEqual(["/repo/src", "/repo/tests"])
+  expect(found).toEqual([])
+  expect(listed).toEqual(["/repo"])
+})
+
 test("identifies the next directory level to preload", () => {
   expect(
     preloadTreeDirectories("src/", [
