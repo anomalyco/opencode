@@ -4,6 +4,8 @@ import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import type { CredentialOAuth } from "@opencode-ai/sdk/v2/types"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
+import { SessionMessagesCursor } from "@opencode-ai/schema/session-messages-cursor"
+import { SessionsQuery } from "@opencode-ai/schema/sessions-query"
 import { App } from "../app"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent"
@@ -348,6 +350,40 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
             input?.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
         }),
       get: (input) => runtime.session.get(input.sessionID),
+      list: (input) =>
+        Effect.gen(function* () {
+          const query =
+            input?.cursor !== undefined
+              ? yield* SessionsQuery.Cursor.parse(input.cursor).pipe(
+                  Effect.mapError(() => new Error("Invalid cursor")),
+                )
+              : (input ?? {})
+          const page = yield* runtime.session.list({
+            ...query,
+            workspaceID: query.workspace,
+            limit: input?.limit ?? SessionsQuery.DefaultLimit,
+          })
+          return { data: page.data, cursor: SessionsQuery.Cursor.page(query, page.data) }
+        }),
+      messages: (input) =>
+        Effect.gen(function* () {
+          if (input.cursor !== undefined && input.order !== undefined)
+            return yield* Effect.fail(new Error("Cursor cannot be combined with order"))
+          const decoded =
+            input.cursor !== undefined
+              ? yield* SessionMessagesCursor.parse(input.cursor).pipe(
+                  Effect.mapError(() => new Error("Invalid cursor")),
+                )
+              : undefined
+          const order = decoded?.order ?? input.order ?? "desc"
+          const data = yield* runtime.session.messages({
+            sessionID: input.sessionID,
+            limit: input.limit ?? SessionMessagesCursor.DefaultLimit,
+            order,
+            cursor: decoded ? { id: decoded.id, direction: decoded.direction } : undefined,
+          })
+          return { data, cursor: SessionMessagesCursor.page(data, order) }
+        }),
       prompt: runtime.session.prompt,
       generate: (input) => runtime.session.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: runtime.session.command,

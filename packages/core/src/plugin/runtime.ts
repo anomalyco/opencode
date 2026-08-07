@@ -13,6 +13,7 @@ export interface Interface {
     Session.Interface,
     | "get"
     | "create"
+    | "list"
     | "messages"
     | "prompt"
     | "generate"
@@ -58,6 +59,7 @@ export const layerWithCell = (cell: Cell) =>
       session: {
         get: (sessionID) => require(cell, (runtime) => runtime.session.get(sessionID)),
         create: (input) => require(cell, (runtime) => runtime.session.create(input)),
+        list: (input) => require(cell, (runtime) => runtime.session.list(input)),
         messages: (input) => require(cell, (runtime) => runtime.session.messages(input)),
         prompt: (input) => require(cell, (runtime) => runtime.session.prompt(input)),
         generate: (input) => require(cell, (runtime) => runtime.session.generate(input)),

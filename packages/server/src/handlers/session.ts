@@ -4,7 +4,7 @@ import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
+import { SessionsQuery } from "@opencode-ai/schema/sessions-query"
 import {
   ConflictError,
   CommandEvaluationError,
@@ -19,8 +19,6 @@ import {
   UnknownError,
 } from "@opencode-ai/protocol/errors"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-
-const DefaultSessionsLimit = 50
 
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
@@ -49,42 +47,18 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         Effect.fn(function* (ctx) {
           const query =
             ctx.query.cursor !== undefined
-              ? yield* SessionsCursor.parse(ctx.query.cursor).pipe(
+              ? yield* SessionsQuery.Cursor.parse(ctx.query.cursor).pipe(
                   Effect.mapError(() => new InvalidCursorError({ message: "Invalid cursor" })),
                 )
               : ctx.query
           const page = yield* session.list({
             ...query,
             workspaceID: query.workspace,
-            limit: ctx.query.limit ?? DefaultSessionsLimit,
+            limit: ctx.query.limit ?? SessionsQuery.DefaultLimit,
           })
-          const sessions = page.data
-          const first = sessions[0]
-          const last = sessions.at(-1)
           return {
-            data: sessions,
-            cursor: {
-              previous: first
-                ? SessionsCursor.make({
-                    ...query,
-                    anchor: {
-                      id: first.id,
-                      time: DateTime.toEpochMillis(first.time.updated),
-                      direction: "previous",
-                    },
-                  })
-                : undefined,
-              next: last
-                ? SessionsCursor.make({
-                    ...query,
-                    anchor: {
-                      id: last.id,
-                      time: DateTime.toEpochMillis(last.time.updated),
-                      direction: "next",
-                    },
-                  })
-                : undefined,
-            },
+            data: page.data,
+            cursor: SessionsQuery.Cursor.page(query, page.data),
           }
         }),
       )
