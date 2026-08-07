@@ -57,7 +57,7 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
 }
 
 export interface Interface {
-  readonly load: (agent: Agent.Selection) => Effect.Effect<Instructions.Sources>
+  readonly load: (agent: Agent.Selection) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SkillInstructions") {}
