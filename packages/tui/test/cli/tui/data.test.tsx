@@ -377,6 +377,257 @@ test("refreshes resources into reactive getters", async () => {
   }
 })
 
+test("loads older session messages through a private cursor", async () => {
+  const events = createEventStream()
+  const sessionID = "ses_paged"
+  const requests: URL[] = []
+  const item = (value: number) => ({
+    id: `msg_${value.toString().padStart(3, "0")}`,
+    type: "user" as const,
+    text: `Message ${value}`,
+    time: { created: value },
+  })
+  const switched = (value: number) => ({
+    id: `msg_${value.toString().padStart(3, "0")}`,
+    type: "model-switched" as const,
+    model: { id: "model", providerID: "provider" },
+    time: { created: value },
+  })
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/pending`) return json({ data: [] })
+    if (url.pathname !== `/api/session/${sessionID}/message`) return undefined
+    requests.push(url)
+    if (url.searchParams.get("cursor") === "older-page") {
+      return json({
+        data: [item(21), item(20), item(19), item(18), switched(17)],
+        cursor: { next: "unused" },
+      })
+    }
+    return json({
+      data: Array.from({ length: 20 }, (_, index) => item(40 - index)),
+      cursor: { next: "older-page" },
+    })
+  }, events)
+  let data!: ReturnType<typeof useData>
+  let rows!: ReturnType<typeof createSessionRows>
+
+  function Probe() {
+    data = useData()
+    rows = createSessionRows(() => sessionID)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await data.session.message.sync(sessionID)
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
+      Array.from({ length: 20 }, (_, index) => item(index + 21).id),
+    )
+    await wait(() => rows.length === 20)
+
+    const loaded = await Promise.all([
+      data.session.message.older(sessionID, 10),
+      data.session.message.older(sessionID, 10),
+    ])
+    expect(loaded).toEqual([4, 4])
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
+      Array.from({ length: 24 }, (_, index) => item(index + 17).id),
+    )
+    expect(data.session.message.get(sessionID, "msg_017")?.id).toBe("msg_017")
+    expect(data.session.message.get(sessionID, "msg_040")?.id).toBe("msg_040")
+    await wait(() => rows.length === 24)
+    expect(rows[0]).toEqual({ type: "message", messageID: "msg_017" })
+
+    expect(await data.session.message.older(sessionID, 10)).toBe(0)
+    expect(requests).toHaveLength(2)
+    expect(requests[0]?.searchParams.get("limit")).toBe("20")
+    expect(requests[0]?.searchParams.get("order")).toBe("desc")
+    expect(requests[1]?.searchParams.get("limit")).toBe("10")
+    expect(requests[1]?.searchParams.get("cursor")).toBe("older-page")
+    expect(requests[1]?.searchParams.has("order")).toBeFalse()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("extends message pages until they start at a turn root", async () => {
+  const events = createEventStream()
+  const sessionID = "ses_turn_root"
+  const requests: URL[] = []
+  const id = (value: number) => `msg_${value.toString().padStart(3, "0")}`
+  const item = (value: number) => ({
+    id: id(value),
+    type: "user" as const,
+    text: `Message ${value}`,
+    time: { created: value },
+  })
+  const assistant = (value: number) => ({
+    id: id(value),
+    type: "assistant" as const,
+    agent: "build",
+    model: { id: "model", providerID: "provider" },
+    content: [],
+    time: { created: value },
+  })
+  const shell = (value: number) => ({
+    id: id(value),
+    type: "shell" as const,
+    shellID: "sh_test",
+    command: "ls",
+    status: "exited" as const,
+    time: { created: value },
+  })
+  const synthetic = (value: number) => ({
+    id: id(value),
+    type: "synthetic" as const,
+    text: "note",
+    time: { created: value },
+  })
+  const described = (value: number) => ({ ...synthetic(value), description: "Reverted" })
+  const range = (newest: number, oldest: number) =>
+    Array.from({ length: newest - oldest + 1 }, (_, index) => item(newest - index))
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/pending`) return json({ data: [] })
+    if (url.pathname !== `/api/session/${sessionID}/message`) return undefined
+    requests.push(url)
+    const cursor = url.searchParams.get("cursor")
+    // Initial window ends on a description-less synthetic (not turn-significant) below an
+    // assistant reply whose prompt is on the next page.
+    if (cursor === null) return json({ data: [...range(60, 43), assistant(42), synthetic(41)], cursor: { next: "c1" } })
+    // A described synthetic is a valid turn root, so this extension stops here.
+    if (cursor === "c1") return json({ data: [...range(40, 22), described(21)], cursor: { next: "c2" } })
+    // Older page also ends on an assistant reply.
+    if (cursor === "c2") return json({ data: [...range(20, 13), shell(12), assistant(11)], cursor: { next: "c3" } })
+    // A shell message is a valid turn root, so the extension stops here.
+    if (cursor === "c3") return json({ data: [shell(10)], cursor: { next: "c4" } })
+    throw new Error(`unexpected cursor: ${cursor}`)
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await data.session.message.sync(sessionID)
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
+      Array.from({ length: 40 }, (_, index) => id(index + 21)),
+    )
+    expect(requests).toHaveLength(2)
+    expect(requests[1]?.searchParams.get("cursor")).toBe("c1")
+    expect(requests[1]?.searchParams.get("limit")).toBe("20")
+
+    expect(await data.session.message.older(sessionID, 10)).toBe(11)
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
+      Array.from({ length: 51 }, (_, index) => id(index + 10)),
+    )
+    expect(requests).toHaveLength(4)
+    expect(requests[2]?.searchParams.get("cursor")).toBe("c2")
+    expect(requests[3]?.searchParams.get("cursor")).toBe("c3")
+    expect(requests[3]?.searchParams.get("limit")).toBe("10")
+
+    // The short extension page exhausted history despite the returned cursor.
+    expect(await data.session.message.older(sessionID, 10)).toBe(0)
+    expect(requests).toHaveLength(4)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("drops a stale older page when the window is replaced mid-flight", async () => {
+  const events = createEventStream()
+  const sessionID = "ses_stale_page"
+  const id = (value: number) => `msg_${value.toString().padStart(3, "0")}`
+  const item = (value: number) => ({
+    id: id(value),
+    type: "user" as const,
+    text: `Message ${value}`,
+    time: { created: value },
+  })
+  const window = Array.from({ length: 20 }, (_, index) => item(40 - index))
+  let release: ((response: Response) => void) | undefined
+  let initialLoads = 0
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/pending`) return json({ data: [] })
+    if (url.pathname !== `/api/session/${sessionID}/message`) return undefined
+    const cursor = url.searchParams.get("cursor")
+    // The stale continuation stays in flight until the test releases it.
+    if (cursor === "stale") return new Promise<Response>((resolve) => (release = resolve))
+    if (cursor === "fresh")
+      return json({ data: Array.from({ length: 10 }, (_, index) => item(20 - index)), cursor: { next: "unused" } })
+    // A request with the poisoned (or any unexpected) cursor must fail loudly.
+    if (cursor !== null) throw new Error(`unexpected cursor: ${cursor}`)
+    initialLoads += 1
+    return json({ data: window, cursor: { next: initialLoads === 1 ? "stale" : "fresh" } })
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await data.session.message.sync(sessionID)
+    const stale = data.session.message.older(sessionID, 10)
+    await wait(() => release !== undefined)
+
+    // The window is replaced while the older page is still in flight.
+    data.session.message.invalidate(sessionID)
+    await data.session.message.sync(sessionID)
+
+    // Invalidate cleared the paging slot, so a fresh page can start before the stale one lands.
+    const fresh = data.session.message.older(sessionID, 10)
+    release!(json({ data: Array.from({ length: 10 }, (_, index) => item(20 - index)), cursor: { next: "poison" } }))
+
+    // The stale continuation no longer extends the current window edge and must be dropped;
+    // the fresh page applies from the fresh cursor, not the poisoned one.
+    expect(await fresh).toBe(10)
+    expect(await stale).toBe(0)
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(
+      Array.from({ length: 30 }, (_, index) => id(index + 11)),
+    )
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("applies absolute usage events to session info", async () => {
   const events = createEventStream()
   const sessionID = "ses_usage_refresh"

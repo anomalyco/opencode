@@ -2,6 +2,9 @@
 // Prefer straightforward projection. Do not add generation counters, stale-response
 // merges, live/history overlays, or other race machinery here—last write wins.
 // Reconnect invalidates cached reads; active UI owners decide what to sync again.
+// One sanctioned exception: message.older drops a continuation whose cursor no longer
+// matches the current window edge, because applying it would poison the cursor and
+// leave a permanent unfetchable gap rather than a recoverable stale view.
 
 import type {
   AgentInfo,
@@ -43,6 +46,23 @@ import { createEffect, createSignal, onCleanup } from "solid-js"
 export type DataSessionStatus = "idle" | "running"
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
+
+const initialMessagePageSize = 20
+
+// A window whose oldest turn-significant message is an assistant reply starts mid-turn:
+// its user or shell prompt sits on an older page. Input is descending (newest first) as
+// served, so the oldest boundary is found from the end. Matches the desktop client's
+// invariant in packages/app/src/context/server-session.ts.
+function needsOlderTurnRoot(descending: readonly SessionMessageInfo[]) {
+  const boundary = descending.findLast(
+    (message) =>
+      message.type === "user" ||
+      message.type === "shell" ||
+      message.type === "assistant" ||
+      (message.type === "synthetic" && message.description?.trim()),
+  )
+  return boundary?.type === "assistant"
+}
 
 // Global MCP elicitations temporarily use "global" instead of a real session ID, so the
 // server cannot recover their Location when settling them. Preserve the event Location
@@ -157,6 +177,26 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       directory: process.cwd(),
     })
     const messageIndex = new Map<string, Map<string, number>>()
+    // Continuation cursor per session; absence means no older history is known to remain.
+    const messageCursor = new Map<string, string>()
+    const messagePaging = new Map<string, Promise<number>>()
+    // Fetch one descending page, following the cursor while the window would open on a
+    // dangling assistant reply, so the oldest loaded message always starts its turn.
+    const fetchMessagePage = async (sessionID: string, limit: number, cursor?: string) => {
+      const request = (cursor?: string) =>
+        client.api.message.list(cursor ? { sessionID, limit, cursor } : { sessionID, limit, order: "desc" })
+      let response = await request(cursor)
+      const descending = [...response.data]
+      while (response.data.length > 0 && response.cursor.next && needsOlderTurnRoot(descending)) {
+        response = await request(response.cursor.next)
+        descending.push(...response.data)
+      }
+      return {
+        messages: descending.toReversed(),
+        // The server returns a cursor even on the final page; a short page is the exhaustion signal.
+        cursor: response.data.length < limit ? undefined : (response.cursor.next ?? undefined),
+      }
+    }
     const sync = createSync()
 
     function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -291,6 +331,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     function removeSession(sessionID: string) {
       messageIndex.delete(sessionID)
+      messageCursor.delete(sessionID)
+      messagePaging.delete(sessionID)
       sync.invalidate(`session:${sessionID}`)
       sync.invalidate(`session.pending:${sessionID}`)
       sync.invalidate(`session.message:${sessionID}`)
@@ -779,11 +821,22 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             event.data.sessionID,
             (store.session.input[event.data.sessionID] ?? []).filter((id) => id < event.data.to),
           )
-          message.update(event.data.sessionID, (draft, index) => {
-            const position = draft.findIndex((item) => item.id >= event.data.to)
-            if (position === -1) return
-            for (const item of draft.splice(position)) index.delete(item.id)
-          })
+          {
+            let emptied = false
+            message.update(event.data.sessionID, (draft, index) => {
+              const position = draft.findIndex((item) => item.id >= event.data.to)
+              if (position === -1) return
+              emptied = position === 0
+              for (const item of draft.splice(position)) index.delete(item.id)
+            })
+            // A fully reverted window keeps no anchor for older paging, so refetch to make
+            // history below the revert point the new tail. Only a window that actually held
+            // messages needs this; never-loaded sessions must not start speculative fetches.
+            if (emptied) {
+              result.session.message.invalidate(event.data.sessionID)
+              void result.session.message.sync(event.data.sessionID).catch(() => {})
+            }
+          }
           break
         case "session.compaction.delta":
           message.update(event.data.sessionID, (draft) => {
@@ -1019,14 +1072,51 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           sync(sessionID: string) {
             return sync.run(`session.message:${sessionID}`, async () => {
-              const messages = (
-                await client.api.message.list({ sessionID, limit: 200, order: "desc" })
-              ).data.toReversed()
-              messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
-              setStore("session", "message", sessionID, reconcile(messages))
+              const page = await fetchMessagePage(sessionID, initialMessagePageSize)
+              if (page.cursor) messageCursor.set(sessionID, page.cursor)
+              else messageCursor.delete(sessionID)
+              messageIndex.set(sessionID, new Map(page.messages.map((message, index) => [message.id, index])))
+              setStore("session", "message", sessionID, reconcile(page.messages))
             })
           },
+          hasOlder(sessionID: string) {
+            return messageCursor.has(sessionID)
+          },
+          paging(sessionID: string) {
+            return messagePaging.has(sessionID)
+          },
+          /** Resolves with the number of messages prepended, which can exceed the limit (turn-root extension) or undershoot it (dedupe). */
+          older(sessionID: string, limit: number) {
+            const cursor = messageCursor.get(sessionID)
+            if (!cursor) return Promise.resolve(0)
+            const active = messagePaging.get(sessionID)
+            if (active) return active
+            const pending = (async () => {
+              const page = await fetchMessagePage(sessionID, limit, cursor)
+              // Invalidate or a fresh sync may have replaced the window mid-flight. Apply the
+              // continuation only while it still extends the current window edge; prepending it
+              // onto a replaced window would leave a permanent unfetchable gap in the transcript.
+              if (messageCursor.get(sessionID) !== cursor) return 0
+              if (page.cursor) messageCursor.set(sessionID, page.cursor)
+              else messageCursor.delete(sessionID)
+              const loaded = index(sessionID)
+              const older = page.messages.filter((item) => !loaded.has(item.id))
+              if (older.length === 0) return 0
+              message.update(sessionID, (draft, index) => {
+                draft.unshift(...older)
+                index.clear()
+                draft.forEach((item, position) => index.set(item.id, position))
+              })
+              return older.length
+            })().finally(() => {
+              if (messagePaging.get(sessionID) === pending) messagePaging.delete(sessionID)
+            })
+            messagePaging.set(sessionID, pending)
+            return pending
+          },
           invalidate(sessionID: string) {
+            messageCursor.delete(sessionID)
+            messagePaging.delete(sessionID)
             sync.invalidate(`session.message:${sessionID}`)
           },
         },
