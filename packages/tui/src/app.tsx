@@ -242,6 +242,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
         if (renderer.isDestroyed) return
 
+        console.log("🎨 Initializing TUI Root Component Render...")
         await render(() => {
           return (
             <ExitProvider

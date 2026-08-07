@@ -42,6 +42,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
 
   const message = props.error.message || "An unknown error occurred."
   const stack = props.error.stack || "No stack trace available."
+  console.error("🔥 TUI Frontend Render Crash Catch:", message, "\nStack:", stack)
   const issueURL = buildIssueURL(message, stack)
 
   const copyReport = () => {
