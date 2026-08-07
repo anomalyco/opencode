@@ -70,14 +70,9 @@ export function Autocomplete(props: {
     visible: false as AutocompleteRef["visible"],
     input: "keyboard" as "keyboard" | "mouse",
   })
+  let popMode: (() => void) | undefined
 
   const [positionTick, setPositionTick] = createSignal(0)
-
-  createEffect(() => {
-    if (!store.visible) return
-    const popMode = keymap.mode.push("autocomplete")
-    onCleanup(popMode)
-  })
 
   createEffect(() => {
     if (store.visible) {
@@ -272,7 +267,7 @@ export function Autocomplete(props: {
     const { filename, part } = createFilePart({ path: item, type: "file" }, input.filePath, lineRange)
     const index = store.visible === "@" ? store.index : props.input().cursorOffset
 
-    setStore("visible", false)
+    hide(false)
     setStore("index", index)
     insertPart(filename, part)
   }
@@ -501,6 +496,7 @@ export function Autocomplete(props: {
 
   function move(direction: -1 | 1) {
     if (!store.visible) return
+    syncSearch()
     if (!options().length) return
     moveTo(moveSelection(store.selected, { count: options().length, delta: direction, policy: "wrap" }))
   }
@@ -518,6 +514,7 @@ export function Autocomplete(props: {
   }
 
   function select() {
+    syncSearch()
     const selected = options()[store.selected]
     if (!selected) return
     hide()
@@ -589,6 +586,7 @@ export function Autocomplete(props: {
         title: "Complete autocomplete item",
         group: "Autocomplete",
         run() {
+          syncSearch()
           const selected = options()[store.selected]
           if (selected?.isDirectory) {
             expandDirectory()
@@ -602,15 +600,16 @@ export function Autocomplete(props: {
   }))
 
   function show(mode: "@" | "/") {
+    popMode ??= keymap.mode.push("autocomplete")
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
     })
   }
 
-  function hide() {
+  function hide(clear = true) {
     const text = props.input().plainText
-    if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
+    if (clear && store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
       // Sync the prompt store immediately since onContentChange is async
@@ -619,6 +618,8 @@ export function Autocomplete(props: {
       })
     }
     setStore("visible", false)
+    popMode?.()
+    popMode = undefined
   }
 
   onMount(() => {
@@ -630,35 +631,33 @@ export function Autocomplete(props: {
       unsubscribeMention()
     })
 
-    props.ref({
+    const ref = {
       get visible() {
         return store.visible
       },
-      onInput(value) {
+      onInput(value?: string) {
+        if (!props.input().focused) return
         if (store.visible) {
           if (
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
             // There is a space between the trigger and the cursor
-            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
-            // "/<command>" is not the sole content
-            (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
+            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/)
           ) {
-            hide()
+            hide(false)
           }
           return
         }
 
-        // Check if autocomplete should reopen (e.g., after backspace deleted a space)
         const offset = props.input().cursorOffset
         if (offset === 0) return
-
-        // Check for "/" at position 0 - reopen slash commands
-        if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
+        const text = value ?? (props.input().getTextRange(0, 1) === "/" ? props.input().getTextRange(0, offset) : "")
+        if (text.startsWith("/") && !text.slice(0, offset).match(/\s/)) {
           show("/")
           setStore("index", 0)
           return
         }
+        if (value === undefined) return
 
         // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
         const idx = mentionTriggerIndex(value, offset)
@@ -667,8 +666,21 @@ export function Autocomplete(props: {
           setStore("index", idx)
         }
       },
+    }
+    props.ref(ref)
+    const stopInputSync = keymap.intercept("key", () => ref.onInput())
+    onCleanup(() => {
+      stopInputSync()
+      popMode?.()
     })
   })
+
+  function syncSearch() {
+    const next = props.input().getTextRange(store.index + 1, props.input().cursorOffset)
+    if (next === search()) return
+    setSearch(next)
+    setStore("selected", 0)
+  }
 
   const height = createMemo(() => {
     const count = options().length || 1

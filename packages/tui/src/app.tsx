@@ -15,6 +15,7 @@ import {
   MouseButton,
   type CliRenderer,
   type CliRendererConfig,
+  type KeyEvent,
   type ThemeMode,
 } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
@@ -955,7 +956,11 @@ function App(props: { pair?: DialogPairCredentials }) {
         name: "app.exit",
         title: "Exit the app",
         slash: { name: "exit", aliases: ["quit", "q"] },
-        run: () => exit(),
+        run: (_input: string | undefined, event?: KeyEvent) => {
+          const current = promptRef.current
+          if (event?.sequence && current?.focused && !current.empty) return false
+          exit()
+        },
         category: "System",
       },
       {
@@ -1111,14 +1116,7 @@ function App(props: { pair?: DialogPairCredentials }) {
     bindings: pinnedSessionBindingCommands,
   }))
 
-  Keymap.createLayer(() => ({
-    enabled: () => {
-      const current = promptRef.current
-      if (!current?.focused) return true
-      return current.current.text === ""
-    },
-    bindings: ["app.exit"],
-  }))
+  Keymap.createLayer(() => ({ bindings: ["app.exit"] }))
 
   event.on("tui.command.execute", (evt, { workspace }) => {
     if (workspace !== (location.current?.workspaceID ?? data.location.default().workspaceID)) return

@@ -82,6 +82,7 @@ function pastedFilepath(value: string, platform: string) {
 
 export type PromptRef = {
   focused: boolean
+  empty: boolean
   current: PromptInfo
   set(prompt: PromptInfo): void
   reset(): void
@@ -144,6 +145,7 @@ function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
+  let promptSyncQueued = false
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable | undefined>()
 
   const leader = Keymap.useLeaderActive()
@@ -338,6 +340,7 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         palette: undefined,
         run: () => {
+          if (input.getTextRange(0, 1) === "") return false
           clearPrompt()
           dialog.clear()
         },
@@ -442,6 +445,7 @@ export function Prompt(props: PromptProps) {
         name: "prompt.editor",
         slash: { name: "editor" },
         run: async () => {
+          if (promptSyncQueued) await flushPromptSync()
           dialog.clear()
 
           const editorPrompt = expandPromptInputPastedText(store.prompt, store.prompt.pasted)
@@ -534,6 +538,9 @@ export function Prompt(props: PromptProps) {
     get focused() {
       return input.focused
     },
+    get empty() {
+      return input.getTextRange(0, 1) === ""
+    },
     get current() {
       return store.prompt
     },
@@ -573,6 +580,7 @@ export function Prompt(props: PromptProps) {
   })
 
   onCleanup(() => {
+    if (promptSyncQueued) void flushPromptSync()
     if (store.prompt.text) {
       stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
     }
@@ -698,9 +706,9 @@ export function Prompt(props: PromptProps) {
         title: "Stash prompt",
         name: "prompt.stash",
         category: "Prompt",
-        enabled: !!store.prompt.text,
         run: () => {
-          if (!store.prompt.text) return
+          if (input.getTextRange(0, 1) === "") return false
+          void flushPromptSync()
           stash.push({ prompt: store.prompt })
           input.extmarks.clear()
           input.clear()
@@ -771,7 +779,7 @@ export function Prompt(props: PromptProps) {
   Keymap.createLayer(() => {
     return {
       target: inputTarget,
-      enabled: inputTarget() !== undefined && !props.disabled && store.prompt.text !== "",
+      enabled: () => inputTarget() !== undefined && !props.disabled,
       bindings: ["prompt.clear"],
     }
   })
@@ -795,6 +803,10 @@ export function Prompt(props: PromptProps) {
           title: "Shell mode",
           group: "Prompt",
           run: () => {
+            if (input.visualCursor.offset !== 0) {
+              input.insertText("!")
+              return
+            }
             setStore("placeholder", randomIndex(shell().length))
             setStore("mode", "shell")
           },
@@ -917,6 +929,7 @@ export function Prompt(props: PromptProps) {
   }
 
   async function submitInner() {
+    if (promptSyncQueued) await flushPromptSync()
     // IME: double-defer may fire before onContentChange flushes the last
     // composed character (e.g. Korean hangul) to the store, so read
     // plainText directly and sync before any downstream reads.
@@ -1225,6 +1238,22 @@ export function Prompt(props: PromptProps) {
     }, 0)
   }
 
+  async function flushPromptSync() {
+    promptSyncQueued = false
+    renderer.removeFrameCallback(flushPromptSync)
+    if (!input || input.isDestroyed) return
+    const value = input.plainText
+    setStore("prompt", "text", value)
+    auto()?.onInput(value)
+    syncExtmarksWithPromptParts()
+  }
+
+  function queuePromptSync() {
+    if (promptSyncQueued) return
+    promptSyncQueued = true
+    renderer.setFrameCallback(flushPromptSync)
+  }
+
   async function pasteAttachment(file: { filename?: string; uri: string }) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
@@ -1266,6 +1295,7 @@ export function Prompt(props: PromptProps) {
   }
 
   function clearPrompt() {
+    if (promptSyncQueued) void flushPromptSync()
     if (
       store.prompt.text.trim().length >= DRAFT_RETENTION_MIN_CHARS ||
       store.prompt.pasted.length > 0 ||
@@ -1394,13 +1424,7 @@ export function Prompt(props: PromptProps) {
               focusedTextColor={leader() ? theme.text.subdued : theme.text.default}
               minHeight={1}
               maxHeight={maxHeight()}
-              onContentChange={() => {
-                const value = input.plainText
-                setStore("prompt", "text", value)
-                auto()?.onInput(value)
-                syncExtmarksWithPromptParts()
-                setCursorVersion((value) => value + 1)
-              }}
+              onContentChange={queuePromptSync}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
               onKeyDown={(e: { preventDefault(): void }) => {
                 if (props.disabled) {

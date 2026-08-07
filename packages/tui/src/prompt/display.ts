@@ -37,8 +37,9 @@ export function displayCharAt(value: string, offset: number) {
   }
 }
 
-export function mentionTriggerIndex(value: string, offset = promptOffsetWidth(value)) {
-  const text = displaySlice(value, 0, offset)
+export function mentionTriggerIndex(value: string, offset?: number) {
+  if (!value.includes("@")) return
+  const text = displaySlice(value, 0, offset ?? promptOffsetWidth(value))
   const index = text.lastIndexOf("@")
   if (index === -1) return
 
