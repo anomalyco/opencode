@@ -26,6 +26,7 @@ import type {
   FooterQueuedPrompt,
   RunFilePart,
   RunInput,
+  RunDelivery,
   RunPrompt,
   RunPromptPart,
   StreamCommit,
@@ -71,7 +72,7 @@ export type SessionResizeReplayInput = {
 
 export type SessionTransport = {
   runPromptTurn(input: SessionTurnInput, admitted?: () => void): Promise<void>
-  admitPromptTurn(input: SessionTurnInput, delivery: "steer" | "queue"): Promise<void>
+  admitPromptTurn(input: SessionTurnInput, delivery: RunDelivery): Promise<void>
   waitForIdle(): Promise<void>
   interruptActiveTurn(): Promise<void>
   selectSubagent(sessionID: string | undefined): void
@@ -1611,7 +1612,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   let queuedResizeReplay: SessionResizeReplayInput | undefined
   let closing: Promise<void> | undefined
 
-  const admitPrompt = async (next: SessionTurnInput, client: OpenCodeClient, delivery: "steer" | "queue") => {
+  const admitPrompt = async (next: SessionTurnInput, client: OpenCodeClient, delivery: RunDelivery) => {
     const messageID = next.prompt.messageID
     if (!messageID) throw new Error("Prompt message ID is required")
     const command = next.prompt.command

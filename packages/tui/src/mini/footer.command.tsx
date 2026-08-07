@@ -448,7 +448,7 @@ export function RunCommandMenuBody(props: {
           {
             action: "queued" as const,
             category: "Agent",
-            display: "View pending work",
+            display: "View queued prompts",
             footer: `${props.queued().length} pending`,
             keywords: props
               .queued()

@@ -103,7 +103,7 @@ export const Definitions = {
   session_interrupt: keybind("escape", "Interrupt current session"),
   session_background: keybind("ctrl+b", "Background blocking session tools"),
   session_compact: keybind("<leader>c", "Compact the session"),
-  session_queued_prompts: keybind("<leader>q", "View pending work"),
+  session_queued_prompts: keybind("<leader>q", "View queued prompts"),
   queued_prompt_delete: keybind("ctrl+d", "Delete queued prompt"),
   session_child_first: keybind("down", "Toggle subagent picker"),
   session_parent: keybind("up", "Go to parent session"),

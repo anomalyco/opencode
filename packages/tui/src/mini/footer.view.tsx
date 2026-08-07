@@ -35,6 +35,7 @@ import { modelInfo } from "./variant.shared"
 import { monoShortcut } from "./mono"
 import { stringWidth } from "../util/string-width"
 import { errorMessage } from "../util/error"
+import { createSingleFlight } from "../util/single-flight"
 
 import type {
   FooterPromptRoute,
@@ -322,21 +323,20 @@ export function RunFooterView(props: RunFooterViewProps) {
     setRoute({ type: "composer" })
   }
 
-  const pendingQueueActions = new Set<string>()
+  const runQueuedAction = createSingleFlight<string>()
   const queuedPromptAction = async (action: QueuedPromptAction, inputID: string) => {
-    if (pendingQueueActions.has(inputID)) return false
     const run = props.onQueuedPromptAction
     if (!run) return false
-    pendingQueueActions.add(inputID)
-    const error = await run(action, inputID)
-      .then(
+    const result = await runQueuedAction(inputID, async () => {
+      const error = await run(action, inputID).then(
         () => undefined,
         (error) => error,
       )
-      .finally(() => pendingQueueActions.delete(inputID))
-    if (!error) return true
-    props.onStatus(`failed to ${action === "cancel" ? "delete" : action} queued prompt: ${errorMessage(error)}`)
-    return false
+      if (!error) return true
+      props.onStatus(`failed to ${action === "cancel" ? "delete" : action} queued prompt: ${errorMessage(error)}`)
+      return false
+    })
+    return result ?? false
   }
 
   const openTab = (sessionID: string) => {
@@ -594,7 +594,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     commands: [
       {
         id: "session.queued_prompts",
-        title: "View pending work",
+        title: "View queued prompts",
         group: "Session",
         run: openQueuedMenu,
       },

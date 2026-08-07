@@ -339,11 +339,12 @@ const layer = Layer.effect(
     ) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          yield* result.get(input.sessionID)
           yield* mutation(bus, { sessionID: input.sessionID, id: input.inputID }).pipe(
             Effect.catchDefect((defect) =>
               defect instanceof SessionPending.LifecycleConflict
-                ? new PendingInputConflictError(input)
+                ? result
+                    .get(input.sessionID)
+                    .pipe(Effect.andThen(Effect.fail(new PendingInputConflictError(input))))
                 : Effect.die(defect),
             ),
           )

@@ -1087,7 +1087,7 @@ describe("Session.pending", () => {
     }),
   )
 
-  it.effect("cancels only queued input and allows its ID to be admitted again", () =>
+  it.effect("cancels pending input and allows its ID to be admitted again", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service

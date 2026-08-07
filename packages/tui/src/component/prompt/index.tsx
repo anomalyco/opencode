@@ -53,6 +53,7 @@ import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
 import { PluginSlot } from "../../plugin/render"
+import type { SessionPending } from "@opencode-ai/schema/session-pending"
 
 export type PromptProps = {
   sessionID?: string
@@ -920,7 +921,7 @@ export function Prompt(props: PromptProps) {
   })
 
   let submitting = false
-  async function submit(delivery: "steer" | "queue" = "steer") {
+  async function submit(delivery: SessionPending.Delivery = "steer") {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
     // input's native onSubmit racing another dispatch). Without this guard,
     // a second call slips past the empty-input check before the first call
@@ -936,7 +937,7 @@ export function Prompt(props: PromptProps) {
     }
   }
 
-  async function submitInner(delivery: "steer" | "queue") {
+  async function submitInner(delivery: SessionPending.Delivery) {
     // IME: double-defer may fire before onContentChange flushes the last
     // composed character (e.g. Korean hangul) to the store, so read
     // plainText directly and sync before any downstream reads.
@@ -1085,7 +1086,7 @@ export function Prompt(props: PromptProps) {
       move.startSubmit()
       void client.api.session.skill({
         sessionID,
-        skill: slashHead!.name,
+        skill: slashHead.name,
       })
     } else {
       move.startSubmit()

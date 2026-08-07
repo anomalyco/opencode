@@ -37,6 +37,7 @@ import type {
   FooterState,
   RunAgent,
   RunCommand,
+  RunDelivery,
   RunPrompt,
   RunPromptPart,
   RunReference,
@@ -1138,7 +1139,7 @@ export function createPromptState(input: PromptInput): PromptState {
   }
 
   let submitting = false
-  const submitPrompt = (next: RunPrompt, delivery: "steer" | "queue" = "steer") => {
+  const submitPrompt = (next: RunPrompt, delivery: RunDelivery = "steer") => {
     if (!area || area.isDestroyed) {
       draft = promptCopy(next)
     }

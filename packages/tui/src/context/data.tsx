@@ -38,6 +38,7 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { nonEmptyToolContent } from "../util/tool-display"
+import type { SessionPending } from "@opencode-ai/schema/session-pending"
 import { createEffect, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
@@ -197,7 +198,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       )
     }
 
-    function updatePending(sessionID: string, inputID: string, delivery: "steer" | "queue") {
+    function updatePending(sessionID: string, inputID: string, delivery: SessionPending.Delivery) {
       const index = store.session.pending[sessionID]?.findIndex((item) => item.id === inputID) ?? -1
       const item = store.session.pending[sessionID]?.[index]
       if (index < 0 || !item || item.type === "compaction" || item.delivery === delivery) return

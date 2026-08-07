@@ -98,6 +98,8 @@ import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { useSessionTabs } from "../../context/session-tabs"
+import { createSingleFlight } from "../../util/single-flight"
+import type { SessionPending } from "@opencode-ai/schema/session-pending"
 
 addDefaultParsers(parsers.parsers)
 
@@ -123,6 +125,7 @@ const context = createContext<{
   models: () => ModelInfo[]
   config: ReturnType<typeof useConfig>["data"]
   mutatePending: (action: PendingAction, inputID: string) => Promise<boolean>
+  pendingDelivery: (inputID: string) => SessionPending.Delivery | undefined
 }>()
 
 function use() {
@@ -178,10 +181,12 @@ export function Session() {
       .flatMap((sessionID) => data.session.form.list(sessionID) ?? [])
       .concat(global)
   })
+  const pendingUsers = createMemo(() =>
+    data.session.pending.list(route.sessionID).flatMap((item) => (item.type === "user" ? [item] : [])),
+  )
+  const pendingDeliveries = createMemo(() => new Map(pendingUsers().map((item) => [item.id, item.delivery])))
   const queuedPrompts = createMemo(() =>
-    data.session.pending.list(route.sessionID).flatMap((item) =>
-      item.type === "user" && item.delivery === "queue" ? [{ id: item.id, text: item.data.text }] : [],
-    ),
+    pendingUsers().flatMap((item) => (item.delivery === "queue" ? [{ id: item.id, text: item.data.text }] : [])),
   )
   const [composer, setComposer] = createStore({
     open: false,
@@ -377,26 +382,25 @@ export function Session() {
   })
   const dialog = useDialog()
   const renderer = useRenderer()
-  const pendingQueueActions = new Set<string>()
+  const runPendingAction = createSingleFlight<string>()
   const mutatePending = async (action: PendingAction, inputID: string) => {
-    if (pendingQueueActions.has(inputID)) return false
-    pendingQueueActions.add(inputID)
-    const request =
-      action === "steer"
-        ? client.api.session.pending.steer({ sessionID: route.sessionID, inputID })
-        : action === "queue"
-          ? client.api.session.pending.queue({ sessionID: route.sessionID, inputID })
-          : client.api.session.pending.cancel({ sessionID: route.sessionID, inputID })
-    const error = await request
-      .then(
+    const result = await runPendingAction(inputID, async () => {
+      const request =
+        action === "steer"
+          ? client.api.session.pending.steer({ sessionID: route.sessionID, inputID })
+          : action === "queue"
+            ? client.api.session.pending.queue({ sessionID: route.sessionID, inputID })
+            : client.api.session.pending.cancel({ sessionID: route.sessionID, inputID })
+      const error = await request.then(
         () => undefined,
         (error) => error,
       )
-      .finally(() => pendingQueueActions.delete(inputID))
-    if (!error) return true
-    const label = action === "cancel" ? "delete" : action
-    toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
-    return false
+      if (!error) return true
+      const label = action === "cancel" ? "delete" : action
+      toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
+      return false
+    })
+    return result ?? false
   }
   const openQueuedPrompts = () =>
     dialog.replace(() => (
@@ -1007,6 +1011,7 @@ export function Session() {
         models,
         config,
         mutatePending,
+        pendingDelivery: (inputID) => pendingDeliveries().get(inputID),
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1914,10 +1919,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const mode = themes.mode
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
-  const delivery = createMemo(() => {
-    const pending = data.session.pending.list(ctx.sessionID).find((item) => item.id === props.message.id)
-    return pending?.type === "user" ? pending.delivery : undefined
-  })
+  const delivery = createMemo(() => ctx.pendingDelivery(props.message.id))
   const dialog = useDialog()
   const renderer = useRenderer()
   const promptRef = usePromptRef()
