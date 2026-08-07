@@ -25,7 +25,7 @@
     "./v2/prompt-input/types": "./src/v2/components/prompt-input/types.ts"
   },
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsgo -b",
     "test": "bun test src --only-failures"
   },
   "devDependencies": {

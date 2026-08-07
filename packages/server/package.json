@@ -10,7 +10,7 @@
   },
   "scripts": {
     "test": "bun test --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo -b"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
