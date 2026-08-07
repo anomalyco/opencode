@@ -91,10 +91,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       return {
         ...config,
         plugin: yield* Effect.forEach(plugins, (plugin) =>
-          Effect.promise(() => ConfigPlugin.resolvePluginSpec(plugin as ConfigPlugin.Origin["spec"], configFilepath)).pipe(
-            Effect.timeout("1 second"),
-            Effect.orElseSucceed(() => plugin as ConfigPlugin.Origin["spec"]),
-          ),
+          Effect.promise(() => ConfigPlugin.resolvePluginSpec(plugin as ConfigPlugin.Origin["spec"], configFilepath)),
         ),
       }
     })
