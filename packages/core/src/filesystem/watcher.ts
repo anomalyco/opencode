@@ -5,7 +5,7 @@ import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Cause, Context, Effect, Layer, PubSub, RcMap, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, PubSub, RcMap, Schema, Scope, Stream } from "effect"
 import { lazy } from "../util/lazy"
 import { watch as watchFileSystem } from "node:fs"
 import path from "path"
@@ -60,6 +60,7 @@ export class Native extends Context.Service<Native, NativeInterface>()("@opencod
 
 export interface Interface {
   readonly subscribe: (input: WatchInput) => Effect.Effect<Stream.Stream<Update>>
+  readonly acquire: (input: WatchInput) => Effect.Effect<Stream.Stream<Update>, never, Scope.Scope>
 }
 
 export const Options = Schema.Struct({
@@ -83,7 +84,10 @@ export const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       if (options?.enabled === false) {
-        return Service.of({ subscribe: () => Effect.succeed(Stream.empty) })
+        return Service.of({
+          subscribe: () => Effect.succeed(Stream.empty),
+          acquire: () => Effect.succeed(Stream.empty),
+        })
       }
       const native = yield* Native
 
@@ -92,9 +96,7 @@ export const layer = (options?: Options) =>
       const watchers = yield* RcMap.make({
         lookup: (key: Key) =>
           Effect.gen(function* () {
-            const pubsub = yield* Effect.acquireRelease(PubSub.unbounded<Update>(), (pubsub) =>
-              PubSub.shutdown(pubsub),
-            )
+            const pubsub = yield* Effect.acquireRelease(PubSub.unbounded<Update>(), (pubsub) => PubSub.shutdown(pubsub))
             const subscription = yield* Effect.acquireRelease(
               native.subscribe({
                 type: key.type,
@@ -146,7 +148,21 @@ export const layer = (options?: Options) =>
         })
       }
 
-      return Service.of({ subscribe })
+      const acquire = (input: WatchInput) => {
+        const target = path.resolve(input.path)
+        const ignore = [...new Set(input.type === "directory" ? (input.ignore ?? []) : [])].toSorted()
+        return Effect.gen(function* () {
+          yield* Effect.logInfo("watcher acquire", {
+            path: target,
+            type: input.type,
+            ignores: ignore.length,
+          })
+          const pubsub = yield* RcMap.get(watchers, { type: input.type, target, ignore })
+          return Stream.fromPubSub(pubsub)
+        })
+      }
+
+      return Service.of({ subscribe, acquire })
     }),
   )
 
@@ -180,6 +196,7 @@ export const testLayer = Layer.effectContext(
     const context = yield* Layer.build(layer().pipe(Layer.provide(Layer.succeed(Native, native))))
     const test = Test.of({
       subscribe: Context.get(context, Service).subscribe,
+      acquire: Context.get(context, Service).acquire,
       emit: (update) => Effect.sync(() => active.forEach((publish) => publish(update))),
       subscriptions: () => Effect.sync(() => [...subscriptions]),
     })

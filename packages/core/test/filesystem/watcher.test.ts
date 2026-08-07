@@ -69,16 +69,28 @@ function countingNative() {
 }
 
 describe("Watcher lifecycle", () => {
+  it.effect("acquires a ready subscription before returning", () => {
+    const { native, counts } = countingNative()
+    return Effect.gen(function* () {
+      yield* Effect.gen(function* () {
+        const watcher = yield* Watcher.Service
+        yield* watcher.acquire({ path: "/ready", type: "directory" })
+        expect(counts.subscribes).toBe(1)
+        expect(counts.unsubscribes).toBe(0)
+      }).pipe(withNative(native))
+      expect(counts.unsubscribes).toBe(1)
+    })
+  })
+
   it.effect("interrupting a consumer interrupts a pending acquisition", () =>
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>()
       const interrupted = yield* Deferred.make<void>()
       yield* Effect.gen(function* () {
         const watcher = yield* Watcher.Service
-        const consumer = yield* watcher.subscribe({ path: "/pending", type: "directory" }).pipe(
-          Effect.flatMap(Stream.runDrain),
-          Effect.forkScoped({ startImmediately: true }),
-        )
+        const consumer = yield* watcher
+          .subscribe({ path: "/pending", type: "directory" })
+          .pipe(Effect.flatMap(Stream.runDrain), Effect.forkScoped({ startImmediately: true }))
         yield* Deferred.await(started)
         yield* Fiber.interrupt(consumer)
         expect(yield* Deferred.isDone(interrupted)).toBe(true)
@@ -99,10 +111,9 @@ describe("Watcher lifecycle", () => {
     return Effect.gen(function* () {
       const watcher = yield* Watcher.Service
       const consume = () =>
-        watcher.subscribe({ path: "/shared", type: "directory" }).pipe(
-          Effect.flatMap(Stream.runDrain),
-          Effect.forkScoped({ startImmediately: true }),
-        )
+        watcher
+          .subscribe({ path: "/shared", type: "directory" })
+          .pipe(Effect.flatMap(Stream.runDrain), Effect.forkScoped({ startImmediately: true }))
       const first = yield* consume()
       const second = yield* consume()
       yield* Effect.yieldNow

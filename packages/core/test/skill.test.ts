@@ -6,11 +6,11 @@ import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Skill } from "@opencode-ai/core/skill"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -25,8 +25,15 @@ const discovery = Layer.succeed(
     },
   }),
 )
+const watcherLayer = Watcher.testLayer
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Skill.node, Agent.node, Bus.node]), [[SkillDiscovery.node, discovery]]),
+  Layer.mergeAll(
+    AppNodeBuilder.build(LayerNode.group([Skill.node, Agent.node, Bus.node]), [
+      [SkillDiscovery.node, discovery],
+      [Watcher.node, watcherLayer],
+    ]),
+    watcherLayer,
+  ),
 )
 
 function write(directory: string, name: string, description: string) {
@@ -51,6 +58,13 @@ function waitForSkillUpdate() {
     yield* Effect.yieldNow
     return { deferred, fiber }
   })
+}
+
+function waitForSubscription(check: (input: Watcher.WatchInput) => boolean) {
+  return Effect.gen(function* () {
+    const watcher = yield* Watcher.Test
+    while (!(yield* watcher.subscriptions()).some(check)) yield* Effect.yieldNow
+  }).pipe(Effect.timeout("1 second"))
 }
 
 describe("Skill", () => {
@@ -230,6 +244,177 @@ metadata:
           )
 
           expect((yield* skill.list()).find((item) => item.name === "deploy")?.description).toBe("Updated deploy")
+        }),
+      ),
+    ),
+  )
+
+  it.live("clears cached skills when sources reload", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "deploy"), { recursive: true })
+            await write(tmp.path, "deploy", "Initial deploy")
+          })
+
+          const skill = yield* Skill.Service
+          yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(tmp.path) }))
+          expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Initial deploy")
+
+          yield* Effect.promise(() => write(tmp.path, "deploy", "Updated deploy"))
+          yield* skill.reload()
+
+          expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Updated deploy")
+        }),
+      ),
+    ),
+  )
+
+  it.live("watches directory sources for added and changed skills", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "deploy"), { recursive: true })
+            await write(tmp.path, "deploy", "Initial deploy")
+          })
+
+          const skill = yield* Skill.Service
+          const watcher = yield* Watcher.Test
+          yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(tmp.path) }))
+          expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("deploy")])
+          yield* waitForSubscription((input) => input.type === "directory" && input.path === tmp.path)
+
+          const deploy = path.join(tmp.path, "deploy", "SKILL.md")
+          yield* Effect.promise(() => write(tmp.path, "deploy", "Updated deploy"))
+          yield* Effect.acquireUseRelease(
+            waitForSkillUpdate(),
+            ({ deferred }) =>
+              watcher
+                .emit({ type: "update", path: deploy })
+                .pipe(Effect.andThen(Deferred.await(deferred)), Effect.timeout("1 second")),
+            ({ fiber }) => Fiber.interrupt(fiber),
+          )
+          expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Updated deploy")
+
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "review"), { recursive: true })
+            await write(tmp.path, "review", "Review changes")
+          })
+          const review = path.join(tmp.path, "review", "SKILL.md")
+          yield* Effect.acquireUseRelease(
+            waitForSkillUpdate(),
+            ({ deferred }) =>
+              watcher
+                .emit({ type: "create", path: review })
+                .pipe(Effect.andThen(Deferred.await(deferred)), Effect.timeout("1 second")),
+            ({ fiber }) => Fiber.interrupt(fiber),
+          )
+          expect((yield* skill.list()).map((item) => item.id)).toEqual([
+            Skill.ID.make("deploy"),
+            Skill.ID.make("review"),
+          ])
+
+          yield* Effect.promise(() => fs.rm(path.join(tmp.path, "review"), { recursive: true }))
+          yield* Effect.acquireUseRelease(
+            waitForSkillUpdate(),
+            ({ deferred }) =>
+              watcher
+                .emit({ type: "delete", path: review })
+                .pipe(Effect.andThen(Deferred.await(deferred)), Effect.timeout("1 second")),
+            ({ fiber }) => Fiber.interrupt(fiber),
+          )
+          expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("deploy")])
+        }),
+      ),
+    ),
+  )
+
+  it.live("watches canonical directories behind symlinked skills", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const source = path.join(tmp.path, "source")
+          const target = path.join(tmp.path, "target", "bro")
+          const file = path.join(target, "SKILL.md")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(source, { recursive: true })
+            await fs.mkdir(target, { recursive: true })
+            await fs.writeFile(file, "---\nname: bro\ndescription: Initial\n---\n# bro")
+            await fs.symlink(target, path.join(source, "bro"))
+          })
+
+          const skill = yield* Skill.Service
+          const watcher = yield* Watcher.Test
+          yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(source) }))
+          expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Initial")
+          yield* waitForSubscription((input) => input.type === "directory" && input.path === target)
+
+          yield* Effect.promise(() => fs.writeFile(file, "---\nname: bro\ndescription: Updated\n---\n# bro"))
+          yield* Effect.acquireUseRelease(
+            waitForSkillUpdate(),
+            ({ deferred }) =>
+              watcher
+                .emit({ type: "update", path: file })
+                .pipe(Effect.andThen(Deferred.await(deferred)), Effect.timeout("1 second")),
+            ({ fiber }) => Fiber.interrupt(fiber),
+          )
+          expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Updated")
+        }),
+      ),
+    ),
+  )
+
+  it.live("invalidates symlinked sources when their target changes", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const source = path.join(tmp.path, "source")
+          const first = path.join(tmp.path, "first")
+          const second = path.join(tmp.path, "second")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(first, "bro"), { recursive: true })
+            await fs.mkdir(path.join(second, "bro"), { recursive: true })
+            await write(first, "bro", "First")
+            await write(second, "bro", "Second")
+            await fs.symlink(first, source)
+          })
+
+          const skill = yield* Skill.Service
+          const watcher = yield* Watcher.Test
+          yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(source) }))
+          expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("First")
+          yield* waitForSubscription((input) => input.type === "directory" && input.path === first)
+          yield* waitForSubscription((input) => input.type === "directory" && input.path === tmp.path)
+
+          yield* Effect.promise(async () => {
+            await fs.unlink(source)
+            await fs.symlink(second, source)
+          })
+          yield* Effect.acquireUseRelease(
+            waitForSkillUpdate(),
+            ({ deferred }) =>
+              watcher
+                .emit({ type: "update", path: source })
+                .pipe(Effect.andThen(Deferred.await(deferred)), Effect.timeout("1 second")),
+            ({ fiber }) => Fiber.interrupt(fiber),
+          )
+
+          expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Second")
+          yield* waitForSubscription((input) => input.type === "directory" && input.path === second)
         }),
       ),
     ),
