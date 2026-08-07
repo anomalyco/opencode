@@ -221,8 +221,9 @@ interface ParserState {
 //    expand type arrays into `anyOf`, derive `nullable: true` from null members,
 //    coerce `const` to `[const]` enum, recurse properties/items, and propagate
 //    only an allowlisted set of keys (description, required, format, type,
-//    properties, items, allOf, anyOf, oneOf, minLength). Anything outside the
-//    allowlist (e.g. `additionalProperties`, `$ref`) is silently dropped.
+//    nullable, enum, properties, items, allOf, anyOf, oneOf, minLength).
+//    Anything outside the allowlist (e.g. `additionalProperties`, `$ref`) is
+//    silently dropped.
 //
 // Sanitize runs first, then project. The implementation lives in
 // `utils/gemini-tool-schema` so this protocol keeps the same shape as the other

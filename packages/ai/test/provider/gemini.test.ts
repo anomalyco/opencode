@@ -448,6 +448,8 @@ describe("Gemini route", () => {
                   status: { type: ["number", "string"], description: "Status filter" },
                   maybe: { type: ["string", "null"] },
                   nothing: { type: ["null"] },
+                  explicit: { anyOf: [{ type: "string" }, { type: "null" }] },
+                  choice: { anyOf: [{ type: "string" }, { type: "number" }, { type: "null" }] },
                 },
               },
             },
@@ -468,6 +470,13 @@ describe("Gemini route", () => {
           },
           nothing: {
             type: "null",
+          },
+          explicit: {
+            type: "string",
+            nullable: true,
+          },
+          choice: {
+            anyOf: [{ type: "string" }, { type: "number" }],
             nullable: true,
           },
         },
