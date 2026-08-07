@@ -232,7 +232,16 @@ export const layer = (options?: Options) => Layer.effect(
           draft.method.update({
             integrationID,
             method: { id: methodID, type: "oauth", label: name },
-            authorize: () => MCPOAuth.authorize({ name, config: remote, methodID }),
+            authorize: () =>
+              Effect.gen(function* () {
+                // Reuse the DCR client stashed in the stored credential: without it every re-login
+                // registers a brand-new dynamic client on the authorization server.
+                const stored = yield* credentials.list(integrationID)
+                const found = stored.find((credential) => credential.value.type === "oauth")
+                const client =
+                  found && found.value.type === "oauth" ? MCPOAuth.clientFromCredential(found.value) : undefined
+                return yield* MCPOAuth.authorize({ name, config: remote, methodID, client })
+              }),
           })
         })
         .pipe(Scope.provide(scope))

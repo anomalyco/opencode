@@ -144,10 +144,13 @@ export const authorize = (input: {
   readonly name: string
   readonly config: typeof ConfigMCP.Remote.Type
   readonly methodID: Integration.MethodID
+  /** Previously registered DCR client to reuse, so a re-login does not register a new dynamic client. */
+  readonly client?: OAuthClientInformationMixed
 }) =>
   Effect.gen(function* () {
     const oauth = input.config.oauth || undefined
     const store = memoryStore()
+    if (input.client) yield* Effect.promise(() => store.saveClientInformation(input.client!))
     const code = yield* Deferred.make<string, Error>()
     const redirectPath = oauth?.redirect_uri ? new URL(oauth.redirect_uri).pathname : "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
