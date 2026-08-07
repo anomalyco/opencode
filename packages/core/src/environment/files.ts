@@ -41,6 +41,7 @@ export interface FilesImpl {
   readonly write: (path: string, bytes: Uint8Array) => Effect.Effect<void, Failed>
   /** Describes the path entry itself, so a final symlink is reported as `symlink` rather than followed. */
   readonly stat: (path: string) => Effect.Effect<FileInfo, NotFound | Failed>
+  /** Lists a directory entry without following a final symlink; intermediate symlinks are traversed. */
   readonly list: (path: string) => Effect.Effect<ReadonlyArray<DirEntry>, NotFound | WrongKind | Failed>
   readonly remove: (path: string) => Effect.Effect<void, Failed>
   readonly move: (from: string, to: string) => Effect.Effect<void, NotFound | Failed>

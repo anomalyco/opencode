@@ -6,6 +6,7 @@ export interface EnvironmentHarness {
   readonly files: Files
   readonly root: string
   readonly symlink?: (target: string, path: string) => Effect.Effect<void, Failed>
+  readonly dispose?: () => Promise<void>
 }
 
 export const environmentConformance = (
@@ -16,11 +17,15 @@ export const environmentConformance = (
   const check = (title: string, body: (harness: EnvironmentHarness) => Promise<void>) =>
     test(title, async () => {
       const harness = await makeHarness()
-      await Effect.runPromise(harness.files.mkdir(harness.root))
       try {
+        await Effect.runPromise(harness.files.mkdir(harness.root))
         await body(harness)
       } finally {
-        await Effect.runPromise(harness.files.remove(harness.root))
+        try {
+          await Effect.runPromise(harness.files.remove(harness.root))
+        } finally {
+          await harness.dispose?.()
+        }
       }
     })
 
@@ -104,6 +109,9 @@ export const environmentConformance = (
       expect(text((await Effect.runPromise(harness.files.read(`${harness.root}/link-dir/file`))).bytes)).toBe(
         "through link",
       )
+      const listError = await failure(harness.files.list(`${harness.root}/link-dir`))
+      expect(listError).toBeInstanceOf(WrongKind)
+      expect((listError as WrongKind).actual).toBe("symlink")
     })
 
     check("follows symlinks when reading", async (harness) => {
