@@ -197,12 +197,6 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
-  skills: Schema.optional(
-    Schema.Struct({
-      paths: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-      urls: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-    }),
-  ),
 }).annotate({ identifier: "Config" })
 
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
