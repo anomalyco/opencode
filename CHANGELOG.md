@@ -8,6 +8,16 @@ in [`skein.json`](skein.json); the file-level inventory in
 
 ## [Unreleased]
 
+### Removed
+- **auto-reply and pattern detection** — deleted 2026-08-07. Both were advertised as
+  working and neither ever was: the services were never registered in the layer graph,
+  had no call site in the turn loop, and their CLI commands provided a fresh service
+  instance per invocation, so `auto-reply on` and `pattern-detection --enable` printed
+  success and configured nothing that survived the process. Use `/loop` for
+  iterate-until-done and `/auto` for working an openspec backlog. Agent repetition is
+  already detected live in the turn loop (`prompt.ts`) and by the loop engine's
+  no-progress guard — neither used the deleted pattern-detection service.
+
 ### Added
 - **Self-maintaining fork tooling**: `fork/manifest.json` inventory + `bun run
   fork:verify` (proves no fork feature was dropped after a sync) and `bun run
@@ -34,9 +44,8 @@ Synced to upstream `8716c4309` (238 commits). Baseline recorded in the manifest.
 - **/loop scheduling** — run a prompt/command on a schedule or until done
   (ralph-style iterate-until-complete, or interval/cron), with
   list/cancel/pause/resume.
-- **Intelligent auto-reply** — auto-answer input prompts via static phrases,
-  AI-to-AI continuation, or external webhook/CLI hooks.
-- **Pattern detection** — detect and break agent repetition loops.
+- ~~**Intelligent auto-reply**~~ — never functional; removed 2026-08-07, see below.
+- ~~**Pattern detection**~~ — never functional; removed 2026-08-07, see below.
 
 ## Earlier (pre-changelog) fork features
 Captured retroactively from git history; see `skein.json` for current status.

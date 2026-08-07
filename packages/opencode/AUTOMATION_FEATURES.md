@@ -1,334 +1,112 @@
-# OpenCode Advanced Automation Features
+# Unattended work in opencode-skein
 
-This document describes the advanced automation features implemented for OpenCode: loop scheduling, intelligent auto-reply, and pattern detection with webhook support.
+Two things run work without you sitting there: **`/loop`** repeats one prompt, and
+**`/auto`** works a backlog of openspec changes to completion.
 
-## Features Overview
+> **Removed 2026-08-07.** This document previously described auto-reply, pattern
+> detection, a webhook auto-reply hook system, and cron-style `/loop` scheduling
+> (`/loop every 5 minutes`, `/loop-pause <task-id>`). None of it existed. The services were
+> never registered in the layer graph and had no call site in the turn loop; the CLI
+> commands built a fresh service instance per invocation, mutated it, printed a success
+> message, and exited, so `pattern-detection --enable` configured nothing that outlived the
+> process. The code is deleted (`retire-auto-reply`) and this file now describes only what
+> is actually there.
 
-### 1. Loop Scheduling (`/loop` command)
-Schedule recurring or one-time commands with cron-based timing, similar to Claude Code's `/loop` feature.
+## `/loop` — repeat one prompt until it is done
 
-### 2. Intelligent Auto-Reply with Webhook Support
-Smart auto-reply system that can use static phrases, AI-to-AI conversation continuation, or external webhooks.
-
-### 3. Pattern Detection & Loop Prevention
-Automatically detects when agents get stuck in repetitive loops and intervenes to unstuck them.
-
-### 4. Hook System
-Extensible system for executing external handlers (CLI, HTTP, file, function) as auto-reply sources.
-
-## Installation
-
-The features are automatically integrated into OpenCode. No additional installation is required.
-
-## Usage
-
-### Loop Scheduling
-
-#### Basic Usage
 ```bash
-# Schedule a command to run every 5 minutes
-/loop 5m "check git status and summarize changes"
-
-# Schedule a daily digest
-/loop 1d "summarize commits from the last 24 hours"
-
-# One-time reminder
-/loop --once "remind me to push the release at 3 PM"
+opencode loop "keep fixing the failing tests"
 ```
 
-#### Advanced Usage
+It re-sends the prompt each iteration and stops when the model emits
+`<promise>COMPLETE</promise>`, which is disclosed to it every iteration, or when it runs
+out of iterations, or when several consecutive iterations make no progress.
+
+| flag | meaning |
+| --- | --- |
+| `-n, --max` | iterations before giving up (default 50) |
+| `-i, --interval` | seconds between iterations (default 2) |
+| `--completion-token` | the stop word (default `<promise>COMPLETE</promise>`) |
+| `--no-progress-limit` | consecutive no-progress iterations before stopping (default 3, 0 disables) |
+
 ```bash
-# With custom scheduling using cron expressions
-/loop "*/15 * * * *" "check deployment health"
-
-# With metadata and custom ID
-/loop --id "health-check" --cron "*/5 * * * *" --meta '{"env": "staging"}' "run smoke tests"
-
-# Nested commands (call other slash commands)
-/loop 10m "/review-pr 1234"
+opencode loop list
+opencode loop pause <id>
+opencode loop resume <id>
+opencode loop cancel <id>
 ```
 
-#### Loop Commands
+In the TUI: `/loop <prompt>`, and `/loop` alone lists running loops.
+
+## `/auto` — work the openspec backlog to completion
+
 ```bash
-# List all scheduled tasks
-/loop-list
-
-# Cancel a task
-/loop-cancel <task-id>
-
-# Pause/Resume tasks
-/loop-pause <task-id>
-/loop-resume <task-id>
+opencode loop --queue                    # every eligible change
+opencode loop --queue my-change other    # these, in this order
 ```
 
-### Auto-Reply with Webhook Support
+The unit of work is an openspec change, not a prompt. Each change goes through
+`implement → test → verify → commit`, then its branch is pushed.
 
-#### Basic Auto-Reply
-```bash
-# Enable auto-reply with default phrases
-auto-reply on
+**Done comes from disk, not from the model.** A change is complete when every checkbox in
+its `tasks.md` is checked. The run ends when nothing under `openspec/changes/` is left
+eligible — everything is complete or quarantined. A change that fails the same gate three
+times is quarantined with a `.skein/blocker.md` and the queue moves on; the model can also
+emit `<promise>BLOCKED</promise>` to quarantine a change it genuinely cannot do. `--max` is
+per change, not per run.
 
-# Enable with custom phrases
-auto-reply on --phrases "continue,go on,proceed,do it"
+| flag | meaning |
+| --- | --- |
+| `--gate-cwd` | where gate commands run (default: repo root) |
+| `--test-command` | the test gate (default `bun test`) |
+| `--verify-command` | the verify gate (default `bun run typecheck`) |
+| `--guidance <text>` | standing instruction repeated every iteration; takes the rest of the line |
+| `--no-push` | leave completed branches local |
+| `--sync` | run specsync for each completed change (a dry run goes first) |
 
-# Check status
-auto-reply status
+In the TUI: `/auto` (or `/queue`). Note that `/auto foo bar` reads `foo` and `bar` as change
+**slugs** — use `--guidance` for prose.
 
-# Disable
-auto-reply off
-```
+### Authority
 
-#### Webhook-Enhanced Auto-Reply
-```bash
-# Enable hook-based auto-reply
-auto-reply on --use-hooks --primary-hook "ai-enhanced"
+Every session in a queue run denies `git push`, tag, publish, release, deploy, and ssh, by
+permission rule rather than by prompt instruction. The **driver** pushes the completed
+branch — one ref it computed itself, after gates it evaluated itself, never the default
+branch, never a merge or a tag. That distinction is the point: the model cannot push
+whatever it constructs.
 
-# Configure a CLI hook (spawns new opencode instance)
-hook add ai-enhanced --type cli --command "opencode run --cli" --fallback "continue" --instruction-file "~/.opencode/hook-instructions.txt"
+### Gate personas
 
-# Configure an HTTP hook
-hook add external-api --type http --url "https://api.example.com/autoreply" --fallback "go on" --headers '{"Authorization": "Bearer token"}'
+`verify` is decided by a `reviewer` subagent returning `LGTM` or `NEEDS_WORK`, not by a
+command exit code. Anything else — an error, a timeout, no recognisable verdict — fails the
+gate, because this is the last step before commit. Configure with
+`experimental.queue_personas` (`{"verify": false}` restores the plain command).
 
-# Test a hook
-hook test ai-enhanced
+Gate subagents are denied `bash`, `write`, `edit`, and `patch` outright. A shell that can
+run `git diff` can also run `git diff > f`, so a reviewer with a shell is a reviewer that
+can rewrite what it is judging.
 
-# List all configured hooks
-hook list
-```
+## Related
 
-#### Hook Configuration Examples
+- `/btw <question>` — ask a side question without disturbing a running loop; answered from
+  context, uses no tools, never joins the conversation.
+- `peers` — a tool an agent can call to see which other sessions are working in this
+  directory. Two agents in one checkout is a real failure mode here.
+- `opencode hook` — hooks are configured in your opencode config file under `hooks`.
 
-**CLI Hook** - Spawn OpenCode instances for AI-to-AI conversation:
-```bash
-hook add ai-assistant --type cli \
-  --command "opencode run --cli" \
-  --instruction-file "~/.opencode/hook-instructions.txt" \
-  --fallback "continue" \
-  --timeout 15000
-```
+## Repo defaults
 
-**HTTP Hook** - Call external AI service:
-```bash
-hook add openai-assistant --type http \
-  --url "https://api.openai.com/v1/chat/completions" \
-  --fallback "go on" \
-  --headers '{"Authorization": "Bearer YOUR_API_KEY", "Content-Type": "application/json"}' \
-  --timeout 10000
-```
+Set once per repo in `opencode.json` so you do not retype flags:
 
-**File Hook** - Execute external script:
-```bash
-hook add custom-responder --type file \
-  --command "/path/to/script.sh" \
-  --fallback "proceed"
-```
-
-### Pattern Detection
-
-#### Configuration
-```bash
-# Check pattern detection status
-pattern-detection status
-
-# Configure pattern detection
-pattern-detection --threshold 0.8 --repetitions 5 --window "10m" --enable
-
-# Reset pattern detection state
-pattern-detection reset
-
-# Test pattern detection
-pattern-detection test
-```
-
-## Configuration Files
-
-### Hook Configuration
-Hooks are stored in `~/.opencode/hooks.json`. Example:
-
-```json
+```jsonc
 {
-  "hooks": {
-    "ai-enhanced": {
-      "type": "cli",
-      "command": "opencode run --cli",
-      "instructionFile": "~/.opencode/hook-instructions.txt",
-      "fallback": "continue",
-      "timeout": 15000,
-      "maxRetries": 2
-    },
-    "external-api": {
-      "type": "http",
-      "url": "https://api.example.com/autoreply",
-      "fallback": "go on",
-      "timeout": 10000,
-      "headers": {
-        "Authorization": "Bearer token"
-      }
+  "experimental": {
+    "queue_gate": {
+      "cwd": "packages/opencode",
+      "test_command": "bun test",
+      "verify_command": "bun run typecheck",
+      "default_branch": "dev"
     }
   }
 }
 ```
-
-### Auto-Reply Configuration
-Auto-reply settings are stored in `~/.opencode/auto-reply.json`. Example:
-
-```json
-{
-  "enabled": true,
-  "useHooks": true,
-  "primaryHook": "ai-enhanced",
-  "fallbackToPhrases": true,
-  "phrases": ["continue", "go on", "proceed", "do it"],
-  "triggerPhrases": ["next steps", "what next", "continue with"],
-  "responseDelay": 1000,
-  "cooldownPeriod": 30000
-}
-```
-
-## Advanced Features
-
-### Hook Instruction Files
-Create custom instruction files for CLI hooks:
-
-```text
-You are an auto-reply assistant. Analyze the following text and provide a brief, helpful response to continue the conversation.
-
-{{original_text}}
-
-{{conversation_history}}
-
-Provide a concise, natural response that moves the conversation forward.
-```
-
-### Pattern Detection Algorithm
-The pattern detection system uses:
-- **Text similarity**: Jaccard similarity algorithm to detect similar text
-- **Tool usage tracking**: Monitors repeated tool calls with similar inputs
-- **Time window**: Only considers recent activity (configurable)
-- **Threshold-based**: Configurable similarity threshold and repetition count
-
-### Error Handling & Fallbacks
-All hook systems include comprehensive error handling:
-- Retry logic with configurable attempts and delays
-- Fallback responses when hooks fail
-- Timeout protection
-- Graceful degradation
-
-## Examples
-
-### Use Case 1: Continuous Monitoring
-```bash
-# Monitor deployment every 2 minutes
-/loop 2m "check if staging deployment is healthy and report status"
-
-# Enable auto-reply to handle any "next steps" interruptions
-auto-reply on --use-hooks --primary-hook "deployment-monitor"
-
-# Configure hook for intelligent responses
-hook add deployment-monitor --type cli --command "opencode run --cli" --fallback "continue"
-```
-
-### Use Case 2: AI-Powered Conversation Continuation
-```bash
-# Enable enhanced auto-reply
-auto-reply on --use-hooks --primary-hook "ai-assistant"
-
-# Configure OpenAI-powered hook
-hook add ai-assistant --type http \
-  --url "https://api.openai.com/v1/chat/completions" \
-  --headers '{"Authorization": "Bearer YOUR_KEY"}' \
-  --fallback "continue"
-
-# Start a complex conversation that never gets interrupted
-/loop "write a complex feature and implement it step by step"
-```
-
-### Use Case 3: Development Workflow
-```bash
-# Schedule daily code review
-/loop 1d "review new commits and provide feedback"
-
-# Enable pattern detection to avoid infinite loops
-pattern-detection --enable --repetitions 3
-
-# Configure auto-reply for development context
-auto-reply on --phrases "continue,fix this,proceed" --trigger-phrases "next steps,fix this"
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**Hooks not working:**
-1. Check if the hook service is enabled
-2. Verify hook configuration with `hook test <name>`
-3. Check permissions for file/CLI hooks
-4. Review logs for error messages
-
-**Pattern detection too sensitive:**
-1. Adjust similarity threshold with `--threshold 0.5-0.9`
-2. Increase repetition count with `--repetitions 5-10`
-3. Extend time window with `--window "5m-1h"`
-
-**Auto-reply not triggering:**
-1. Check if auto-reply is enabled: `auto-reply status`
-2. Verify trigger phrases are appropriate
-3. Check cooldown period settings
-
-### Debug Commands
-```bash
-# Check all service statuses
-auto-reply status
-pattern-detection status
-hook list
-
-# Test individual components
-pattern-detection test
-hook test <hook-name>
-
-# Reset state
-auto-reply off --reset
-pattern-detection reset
-```
-
-## Integration with Existing Workflows
-
-### Session Management
-All features integrate seamlessly with OpenCode's session management:
-- Pattern detection works across session continuations
-- Auto-reply respects session boundaries
-- Scheduled tasks persist across sessions (in memory)
-
-### Agent Compatibility
-Features work with all OpenCode agent types:
-- Local agents
-- Remote agents (via attach)
-- Subagents
-- Custom agents
-
-### Performance Considerations
-- Pattern detection has minimal performance impact
-- Hook execution is asynchronous with timeouts
-- Memory usage is optimized with time-based cleanup
-
-## Future Enhancements
-
-Planned improvements:
-- Persistent storage for scheduled tasks
-- Advanced hook types (database, message queues, etc.)
-- Machine learning for pattern detection
-- Integration with external monitoring systems
-- Advanced scheduling features (timezones, calendars)
-
-## Contributing
-
-To contribute to these features:
-1. Review the source code in:
-   - `src/scheduler/` - Loop scheduling
-   - `src/auto-reply/` - Auto-reply system
-   - `src/pattern-detection/` - Loop prevention
-   - `src/hook/` - Hook system
-   - `src/cli/cmd/` - CLI commands
-2. Test with various configurations
-3. Report issues and suggest improvements
-4. Add new hook types and integrations

@@ -56,22 +56,6 @@
       "tags": ["automation", "cli"]
     },
     {
-      "id": "auto-reply",
-      "title": "Intelligent auto-reply",
-      "summary": "Keeps long sessions moving by auto-answering input prompts — static phrases, AI-to-AI continuation, or an external webhook/CLI hook.",
-      "status": "beta",
-      "upstreamable": "yes",
-      "tags": ["automation"]
-    },
-    {
-      "id": "pattern-detection",
-      "title": "Loop / repetition detection",
-      "summary": "Detects when the agent is stuck repeating itself (string-similarity over a time window) and intervenes to break the loop.",
-      "status": "beta",
-      "upstreamable": "yes",
-      "tags": ["automation", "safety"]
-    },
-    {
       "id": "themed-loading",
       "title": "Themed local-backend loading screens",
       "summary": "Bridges your active TUI theme to the local backend via an X-Loading-Theme header (e.g. pip-boy → vault-boy) for matching loading visuals.",
