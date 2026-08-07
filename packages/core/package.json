@@ -17,6 +17,7 @@
     "opencode": "./bin/opencode"
   },
   "exports": {
+    "./environment": "./src/environment/index.ts",
     "./session/runner": "./src/session/runner/index.ts",
     "./instructions": "./src/instructions/index.ts",
     "./*": "./src/*.ts"
