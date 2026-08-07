@@ -204,7 +204,7 @@ export function Session() {
   const availableWidth = createMemo(
     () =>
       dimensions().width -
-      (config.tabs?.enabled && config.tabs.vertical && sessionTabsFitVertically(dimensions().width)
+      (config.tabs?.enabled && config.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width)
         ? SESSION_SIDEBAR_WIDTH
         : 0),
   )
