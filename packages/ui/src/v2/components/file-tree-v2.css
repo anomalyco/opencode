@@ -63,6 +63,14 @@
   background-color: var(--v2-overlay-simple-overlay-pressed);
 }
 
+[data-component="file-tree-v2"]
+  [data-slot="file-tree-v2-context-trigger"][data-context-menu-open]
+  [data-slot="file-tree-v2-row"]:not([data-selected]) {
+  --file-tree-v2-row-overlay: var(--v2-overlay-simple-overlay-hover);
+
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-guide"] {
   position: absolute;
   top: 0;
@@ -149,8 +157,7 @@
     "tnum" on,
     "lnum" on;
   background:
-    linear-gradient(var(--file-tree-v2-row-overlay), var(--file-tree-v2-row-overlay)),
-    var(--v2-background-bg-base);
+    linear-gradient(var(--file-tree-v2-row-overlay), var(--file-tree-v2-row-overlay)), var(--v2-background-bg-base);
 }
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-change"]::before {
@@ -179,8 +186,7 @@
   width: 16px;
   pointer-events: none;
   background:
-    linear-gradient(var(--file-tree-v2-row-overlay), var(--file-tree-v2-row-overlay)),
-    var(--v2-background-bg-base);
+    linear-gradient(var(--file-tree-v2-row-overlay), var(--file-tree-v2-row-overlay)), var(--v2-background-bg-base);
 }
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-change"][data-change="modified"] {

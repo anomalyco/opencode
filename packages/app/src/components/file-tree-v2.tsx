@@ -24,6 +24,11 @@ import {
   type FileTreeV2Node,
 } from "@/components/file-tree-v2-model"
 import { virtualScrollElement } from "@/components/virtual-scroll-element"
+import { useSDK } from "@/context/sdk"
+import { useOpenInApp } from "@/components/session/open-in-app"
+import { OpenInAppContextMenuV2 } from "@/components/session/open-in-app-v2"
+import { resolveOpenInAppPath } from "@/components/session/open-in-app-path"
+import { usePlatform } from "@/context/platform"
 
 export type { Kind } from "@/components/file-tree"
 
@@ -132,6 +137,9 @@ export default function FileTreeV2(props: {
   onFileDoubleClick?: (file: FileNode) => void
 }) {
   const file = useFile()
+  const sdk = useSDK()
+  const platform = usePlatform()
+  const openIn = platform.platform === "desktop" ? useOpenInApp({ path: () => sdk().directory }) : undefined
   const live = () => props.allowed === undefined
   const draggable = () => props.draggable ?? true
   const active = () => normalizeFileTreeV2Path(props.active ?? "")
@@ -254,29 +262,36 @@ export default function FileTreeV2(props: {
                     <Show
                       when={row().node.type === "directory"}
                       fallback={
-                        <FileTreeNodeV2
-                          node={row().node}
-                          level={row().level}
-                          active={active()}
-                          draggable={draggable()}
-                          kinds={props.kinds}
-                          as="button"
-                          type="button"
-                          class="relative"
-                          onFocus={() => setFocused(row().node.path)}
-                          onBlur={() => setFocused(undefined)}
-                          onClick={() => selectFile(row().node, props.onFileClick)}
-                          onDblClick={() => selectFile(row().node, props.onFileDoubleClick)}
+                        <OpenInAppContextMenuV2
+                          state={openIn}
+                          path={() =>
+                            resolveOpenInAppPath(sdk().directory, row().node.absolute || row().node.originalPath)
+                          }
                         >
-                          <GuideLines level={row().level} />
-                          <Show when={row().level > 0}>
-                            <div class="w-4 shrink-0" />
-                          </Show>
-                          <span class="filetree-iconpair size-4">
-                            <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--color" />
-                            <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--mono" mono />
-                          </span>
-                        </FileTreeNodeV2>
+                          <FileTreeNodeV2
+                            node={row().node}
+                            level={row().level}
+                            active={active()}
+                            draggable={draggable()}
+                            kinds={props.kinds}
+                            as="button"
+                            type="button"
+                            class="relative"
+                            onFocus={() => setFocused(row().node.path)}
+                            onBlur={() => setFocused(undefined)}
+                            onClick={() => selectFile(row().node, props.onFileClick)}
+                            onDblClick={() => selectFile(row().node, props.onFileDoubleClick)}
+                          >
+                            <GuideLines level={row().level} />
+                            <Show when={row().level > 0}>
+                              <div class="w-4 shrink-0" />
+                            </Show>
+                            <span class="filetree-iconpair size-4">
+                              <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--color" />
+                              <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--mono" mono />
+                            </span>
+                          </FileTreeNodeV2>
+                        </OpenInAppContextMenuV2>
                       }
                     >
                       <FileTreeNodeV2
