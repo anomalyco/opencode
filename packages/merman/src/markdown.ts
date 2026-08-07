@@ -57,11 +57,11 @@ export function createMermaidMarkdownRenderer(
               return new FlowchartDiagramRenderable(ctx, {
                 content: token.text,
                 compact: options.compact,
-                nodeColor: colors.primary,
-                databaseColor: colors.secondary,
-                edgeColor: colors.muted,
-                labelColor: colors.text,
-                groupColor: colors.secondary,
+              nodeColor: colors.primary,
+              databaseColor: colors.secondary,
+              edgeColor: colors.secondary,
+              labelColor: colors.text,
+              groupColor: colors.muted,
               })
             case "sequence":
               return new SequenceDiagramRenderable(ctx, {
@@ -69,24 +69,27 @@ export function createMermaidMarkdownRenderer(
                 compact: options.compact,
                 participantColor: colors.primary,
                 lifelineColor: colors.muted,
-                groupColor: colors.secondary,
-                requestColor: colors.primary,
-                responseColor: colors.secondary,
+              groupColor: colors.secondary,
+              requestColor: colors.primary,
+              responseColor: colors.primary,
                 noteColor: colors.warning,
                 noteBackgroundColor: colors.background,
               })
             case "state":
               return new StateDiagramRenderable(ctx, {
-                content: token.text,
-                stateColor: colors.primary,
-                compositeColor: colors.secondary,
-                transitionColor: colors.muted,
+              content: token.text,
+              stateColor: colors.primary,
+              compositeColor: colors.muted,
+              transitionColor: colors.secondary,
                 labelColor: colors.text,
                 noteBorderColor: colors.warning,
                 noteTextColor: colors.warning,
                 noteConnectorColor: colors.muted,
-                activeStateColor: colors.accent,
-                activeTransitionColor: colors.accent,
+              activeStateColor: colors.accent,
+              activeTransitionColor: colors.accent,
+              startColor: colors.muted,
+              endColor: colors.muted,
+              choiceColor: colors.primary,
               })
           }
         })()
