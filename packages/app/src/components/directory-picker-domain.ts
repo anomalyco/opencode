@@ -343,7 +343,7 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const existing = cache.get(key)
     if (existing) return existing
     const request = args.sdk.api.file
-      .list({ location: { directory: key } })
+      .list({ location: { directory: key }, path: "" })
       .then((result) => result.data)
       .catch(() => [])
       .then((nodes) =>
