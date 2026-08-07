@@ -53,7 +53,7 @@ export declare namespace Source {
 }
 
 /** Ordered sources; identical values render identical bytes. */
-export type Instructions = ReadonlyArray<Source>
+export type Sources = ReadonlyArray<Source>
 
 export type ReadResult = ReadonlyArray<{
   readonly key: Key
@@ -82,10 +82,10 @@ export class DuplicateKeyError extends Schema.TaggedErrorClass<DuplicateKeyError
   }
 }
 
-export const empty: ReadonlyArray<Source> = []
+export const empty: Sources = []
 
 /** Closes a typed definition into one `Source`, so differently typed sources compose. */
-export function make<A>(source: Source.Definition<A>): ReadonlyArray<Source> {
+export function make<A>(source: Source.Definition<A>): Sources {
   const decode = Schema.decodeUnknownOption(source.codec)
   const encode = Schema.encodeSync(source.codec)
   const initial = (value: A) => requireText(source.key, "initial", source.render.initial(value))
@@ -121,7 +121,7 @@ export function make<A>(source: Source.Definition<A>): ReadonlyArray<Source> {
   ]
 }
 
-export function combine(values: ReadonlyArray<ReadonlyArray<Source>>): ReadonlyArray<Source> {
+export function combine(values: ReadonlyArray<Sources>): Sources {
   const sources = values.flat()
   const keys = new Set<Key>()
   for (const source of sources) {
@@ -131,7 +131,7 @@ export function combine(values: ReadonlyArray<ReadonlyArray<Source>>): ReadonlyA
   return sources
 }
 
-export function read(value: ReadonlyArray<Source>): Effect.Effect<ReadResult> {
+export function read(value: Sources): Effect.Effect<ReadResult> {
   return Effect.forEach(
     value,
     (source) => source.read.pipe(Effect.map((observed) => ({ key: source.key, value: observed }))),
@@ -158,7 +158,7 @@ export function diff(observed: ReadResult, previous?: Values): Effect.Effect<Adm
   return Effect.succeed({ delta, blobs })
 }
 
-export function renderInitial(value: ReadonlyArray<Source>, values: Readonly<Record<string, Schema.Json>>) {
+export function renderInitial(value: Sources, values: Readonly<Record<string, Schema.Json>>) {
   return render(
     value.flatMap((source) => {
       if (!Object.hasOwn(values, source.key)) return []
@@ -169,7 +169,7 @@ export function renderInitial(value: ReadonlyArray<Source>, values: Readonly<Rec
 }
 
 export function renderUpdate(
-  value: ReadonlyArray<Source>,
+  value: Sources,
   previous: Readonly<Record<string, Schema.Json>>,
   delta: Readonly<Record<string, Option.Option<Schema.Json>>>,
 ) {

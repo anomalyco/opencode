@@ -18,7 +18,7 @@ const Files = Schema.Array(File)
 const key = Instructions.Key.make("core/instructions")
 
 export interface Interface {
-  readonly load: () => Effect.Effect<Instructions.Instructions>
+  readonly load: () => Effect.Effect<Instructions.Sources>
 }
 
 export const Options = Schema.Struct({

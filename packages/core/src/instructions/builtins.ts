@@ -8,7 +8,7 @@ import { SessionSchema } from "../session/schema"
 import { Instructions } from "./index"
 
 export interface Interface {
-  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.Instructions>
+  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.Sources>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionBuiltIns") {}

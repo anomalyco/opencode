@@ -68,7 +68,7 @@ const instructionEvents = (db: Database.Interface["db"], sessionID: SessionSchem
     .all()
     .pipe(Effect.orDie)
 
-const preview = (db: Database.Interface["db"], sessionID: SessionSchema.ID, instructions: Instructions.Instructions) =>
+const preview = (db: Database.Interface["db"], sessionID: SessionSchema.ID, instructions: Instructions.Sources) =>
   Instructions.read(instructions).pipe(
     Effect.flatMap((observed) => InstructionState.preview(db, sessionID, instructions, observed)),
   )
