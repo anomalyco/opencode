@@ -254,7 +254,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "følgende undtagelser",
 
   "go.title": "OpenCode Go | Kodningsmodeller til lav pris for alle",
-  "go.banner.text": "GPT 5.6 Luna får fordoblet brugsgrænse i en begrænset periode",
+  "go.banner.text": "DeepSeek V4 Flash får fordoblet brugsgrænse i en begrænset periode",
   "go.meta.description":
     "Go starter ved $5 for den første måned, derefter $10/måned, med generøse brugsgrænser og pålidelig adgang til førende kodningsmodeller.",
   "go.hero.title": "Kodningsmodeller til lav pris for alle",
