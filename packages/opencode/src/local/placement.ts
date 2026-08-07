@@ -88,6 +88,25 @@ const FIT_RANK: Record<NonNullable<ModelFit["fit_level"]>, number> = {
   unknown: 0,
 }
 
+// A model placed hybrid GPU + system-RAM runs its expert layers out of host
+// memory, and host bandwidth — not the GPU — then paces every token. Measured
+// on z4: the same host serves a full-GPU model at 70 tok/s and a
+// cpu-bound-hybrid one at 0.81 tok/s. Both report themselves ready, and a
+// hybrid model earns a perfectly respectable fit_level ("tight" in that run),
+// so without this it wins on residency alone (+100_000) and a subagent
+// silently lands on a model ~90x slower.
+//
+// This is a penalty, not a filter: a model that only runs hybrid is the only
+// way to run that model at all, so it stays selectable when nothing better is
+// eligible. The penalty only has to outweigh the residency tier, so a loaded
+// hybrid model never beats an unloaded GPU-resident one.
+const HOST_PACED_PENALTY = 200_000
+
+function isHostPaced(fit: ModelFit): boolean {
+  const perf = fit.placement?.perf_class
+  return perf === "cpu-bound-hybrid" || perf === "cpu-only"
+}
+
 function normalizeBaseURL(url: string): string {
   return url.replace(/\/+$/, "").replace(/\/v1$/, "")
 }
@@ -179,7 +198,10 @@ export function bestModel(input: {
       // Among models that would need a load, prefer the parent's own model:
       // proven behavior beats an arbitrary pick.
       (fit.model === input.parentModelID ? 5_000 : 0) +
-      Math.min(fit.est_tokens_per_sec ?? 0, 500)
+      Math.min(fit.est_tokens_per_sec ?? 0, 500) -
+      // Host-bandwidth-paced placements rank below every GPU-resident
+      // candidate, residency tier included — see HOST_PACED_PENALTY.
+      (isHostPaced(fit) ? HOST_PACED_PENALTY : 0)
     if (!best || score > best.score) best = { modelID: model.id, score }
   }
   return best

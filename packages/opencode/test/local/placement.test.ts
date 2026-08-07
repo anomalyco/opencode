@@ -193,3 +193,72 @@ describe("parent capacity gate", () => {
     // task.ts checks `capacity !== "free"` — unknown blocks inheritance.
   })
 })
+
+describe("bestModel host-paced placement (hybrid GPU + system RAM)", () => {
+  const requiredCtx = 9_000
+
+  // Measured on z4: the same host serves a full-GPU model at 70 tok/s and a
+  // cpu-bound-hybrid one at 0.81 tok/s. Both report ready, and the hybrid
+  // model scored fit_level "tight" — so residency alone used to hand a
+  // subagent the ~90x slower model.
+  test("a resident host-paced model loses to a non-resident GPU model", () => {
+    const p = probe(
+      [
+        fitModel("hybrid", {
+          fit_level: "tight",
+          max_safe_ctx: 26_050,
+          est_tokens_per_sec: 1,
+          placement: { mode: "hybrid", perf_class: "cpu-bound-hybrid" },
+        }),
+        fitModel("gpu", { fit_level: "good", max_safe_ctx: 32_768, est_tokens_per_sec: 70 }),
+      ],
+      "hybrid", // the slow one is the resident one
+    )
+    const result = bestModel({ probe: p, info: info("hybrid", "gpu"), parentModelID: "cloud", requiredCtx })
+    expect(result?.modelID as string | undefined).toBe("gpu")
+  })
+
+  // Degrade preference, not availability: a model that only runs hybrid is
+  // the only way to run that model at all.
+  test("a host-paced model is still chosen when it is the only candidate", () => {
+    const p = probe([
+      fitModel("hybrid", {
+        fit_level: "tight",
+        max_safe_ctx: 26_050,
+        placement: { mode: "hybrid", perf_class: "cpu-bound-hybrid" },
+      }),
+    ])
+    const result = bestModel({ probe: p, info: info("hybrid"), parentModelID: "cloud", requiredCtx })
+    expect(result?.modelID as string | undefined).toBe("hybrid")
+  })
+
+  // fast-hybrid keeps most weights on the card and is not bandwidth-paced,
+  // so it must not be penalised.
+  test("a fast-hybrid placement is not penalised", () => {
+    const p = probe([
+      fitModel("fast", {
+        fit_level: "good",
+        max_safe_ctx: 32_768,
+        est_tokens_per_sec: 50,
+        placement: { mode: "hybrid", perf_class: "fast-hybrid" },
+      }),
+      fitModel("plain", { fit_level: "good", max_safe_ctx: 32_768, est_tokens_per_sec: 10 }),
+    ])
+    const result = bestModel({ probe: p, info: info("fast", "plain"), parentModelID: "cloud", requiredCtx })
+    expect(result?.modelID as string | undefined).toBe("fast")
+  })
+
+  // Models with no placement data at all (an older llama-skein) behave
+  // exactly as before.
+  test("absent placement data changes nothing", () => {
+    const p = probe(
+      [
+        fitModel("resident", { fit_level: "good", max_safe_ctx: 32_768, est_tokens_per_sec: 40 }),
+        fitModel("faster", { fit_level: "perfect", max_safe_ctx: 32_768, est_tokens_per_sec: 400 }),
+      ],
+      "resident",
+    )
+    const result = bestModel({ probe: p, info: info("resident", "faster"), parentModelID: "cloud", requiredCtx })
+    expect(result?.modelID as string | undefined).toBe("resident")
+  })
+})

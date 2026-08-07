@@ -103,6 +103,22 @@ export type MemoryInfo = {
     total_mb?: number;
     used_mb?: number;
     free_mb?: number;
+    /**
+     * Memory available for new allocations without paging (reclaimable included).
+     */
+    available_mb?: number;
+    /**
+     * Process-visible memory limit: total_mb clamped by an applicable cgroup limit (Docker/LXC). Equals total_mb when no limit applies. Budget consumers use this, never total_mb.
+     */
+    effective_total_mb?: number;
+    /**
+     * available_mb additionally capped by the cgroup limit minus current cgroup usage.
+     */
+    effective_available_mb?: number;
+    /**
+     * Where the effective limit came from.
+     */
+    limit_source?: 'none' | 'cgroup-v2' | 'cgroup-v1';
     swap_total?: number;
     swap_used?: number;
     type?: string;
@@ -532,6 +548,14 @@ export type HypotheticalVariantFit = {
      */
     fit_level: FitLevel;
     /**
+     * How this variant could run here: gpu = fits fully in VRAM; hybrid = larger than VRAM but loadable with host RAM under safe reserves (fit_level then describes the GPU-side fit, and ranking should treat the variant as loadable-with-caveats, not unloadable); cpu = host RAM only; refuse = exceeds every safe budget; unknown = budgets unknown. Descriptor-based (no tensor table), so MoE expert placement is approximated as a dense spill.
+     */
+    placement?: 'gpu' | 'hybrid' | 'cpu' | 'refuse' | 'unknown';
+    /**
+     * Estimated host-RAM weight share for a hybrid/cpu placement, MB.
+     */
+    est_host_mb?: number;
+    /**
      * Prompt budget at the scored context; 0 when the variant does not fit.
      */
     max_safe_ctx: number;
@@ -633,6 +657,14 @@ export type ModelFit = {
      */
     model_mb?: number;
     /**
+     * Weight share resident in VRAM, MB. Equals model_mb unless the command offloads weights to the CPU.
+     */
+    gpu_resident_mb?: number;
+    /**
+     * Weight share resident in host/system RAM, MB (CPU-offloaded experts and layers).
+     */
+    host_resident_mb?: number;
+    /**
      * KV-cache size (MB) at max_safe_ctx, given the host's cache-type quantization.
      */
     kv_mb_at_max_safe_ctx?: number;
@@ -653,6 +685,7 @@ export type ModelFit = {
      * Human-readable explanation of the fit verdict.
      */
     reason?: string;
+    placement?: PlacementDecision;
 };
 
 /**
@@ -820,6 +853,10 @@ export type LastError = {
      * Consecutive failures; reset on a successful start.
      */
     attempts?: number;
+    /**
+     * Why the backend failed, distinct from category (when). Only gpu-oom and host-oom are eligible for an adaptive placement retry; crash-other means the failure was not recognized and must never be treated as a memory problem.
+     */
+    class?: 'gpu-oom' | 'host-oom' | 'unsupported-arch' | 'missing-shard' | 'invalid-flag' | 'backend-error' | 'crash-other';
 };
 
 /**
@@ -1144,6 +1181,70 @@ export type ModelOperationList = {
      * Most recent first.
      */
     operations: Array<ModelOperation>;
+};
+
+/**
+ * The automatic placement decision for a model: whether llama-skein rewrote its launch flags (in memory only) to run it hybrid GPU + system-RAM, refused it, or left it untouched.
+ */
+export type PlacementDecision = {
+    /**
+     * gpu: fits fully, untouched. hybrid: flags rewritten to place weights in host RAM. cpu: planned CPU-only. refuse: exceeds safe budgets, load is refused. custom: operator pinned placement flags, automation stays out. unknown: could not plan confidently, untouched.
+     */
+    mode?: 'gpu' | 'hybrid' | 'cpu' | 'refuse' | 'custom' | 'unknown';
+    /**
+     * Qualitative performance expectation; never a tokens-per-second prediction.
+     */
+    perf_class?: 'native-gpu' | 'fast-hybrid' | 'cpu-bound-hybrid' | 'cpu-only';
+    /**
+     * Human-readable explanation of the placement decision.
+     */
+    reason?: string;
+    /**
+     * Layers whose MoE experts were planned onto the CPU (hybrid MoE plans only).
+     */
+    n_cpu_moe?: number;
+    /**
+     * Planned GPU memory footprint (weights share + KV + overhead), MB.
+     */
+    est_gpu_mb?: number;
+    /**
+     * Planned host-RAM weight footprint, MB.
+     */
+    est_host_mb?: number;
+    /**
+     * True when the plan rewrote the model's in-memory command (the config file is never touched).
+     */
+    applied?: boolean;
+    /**
+     * llama-fit-params preflight output (the engine's own fitted arguments) when the tool is available; advisory.
+     */
+    effective_args?: string;
+    /**
+     * Adaptive retry ladder history, oldest first. Empty when the model has never failed for a memory reason.
+     */
+    retry_attempts?: Array<PlacementAttempt>;
+};
+
+/**
+ * One rung of the adaptive placement retry ladder and how it ended.
+ */
+export type PlacementAttempt = {
+    /**
+     * Which escalation step was applied.
+     */
+    rung?: 'widen-gpu-reserve' | 'shrink-batch' | 'shrink-context' | 'full-cpu-moe';
+    /**
+     * Placement mode of the retried plan.
+     */
+    mode?: string;
+    /**
+     * What the retried plan changed and why.
+     */
+    reason?: string;
+    /**
+     * The failure this rung was a response to.
+     */
+    failure?: string;
 };
 
 export type GetSystemVersionData = {
