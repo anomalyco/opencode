@@ -179,20 +179,18 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
               </Match>
               <Match when={true}>
-                <box paddingLeft={1} gap={1} flexGrow={1} minHeight={0}>
-                  <text fg={theme.textMuted} flexShrink={0}>
-                    This will allow the following patterns until OpenCode is restarted
-                  </text>
-                  <ScrollableBody>
+                <box paddingLeft={1} gap={1}>
+                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
+                  <box>
                     <For each={props.request.always}>
                       {(pattern) => (
-                        <text fg={theme.text} wrapMode="word" width="100%">
+                        <text fg={theme.text}>
                           {"- "}
                           {pattern}
                         </text>
                       )}
                     </For>
-                  </ScrollableBody>
+                  </box>
                 </box>
               </Match>
             </Switch>
@@ -335,19 +333,11 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 title: `Access external directory ${dir}`,
                 body: (
                   <Show when={patterns.length > 0}>
-                    <box paddingLeft={1} gap={1} flexGrow={1} minHeight={0}>
-                      <text fg={theme.textMuted} flexShrink={0}>
-                        Patterns
-                      </text>
-                      <ScrollableBody>
-                        <For each={patterns}>
-                          {(p) => (
-                            <text fg={theme.text} wrapMode="word" width="100%">
-                              {"- " + p}
-                            </text>
-                          )}
-                        </For>
-                      </ScrollableBody>
+                    <box paddingLeft={1} gap={1}>
+                      <text fg={theme.textMuted}>Patterns</text>
+                      <box>
+                        <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + p}</text>}</For>
+                      </box>
                     </box>
                   </Show>
                 ),

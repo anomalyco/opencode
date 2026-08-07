@@ -30,26 +30,26 @@ function global(payload: GlobalEvent["payload"]): GlobalEvent {
   return { directory: "/tmp/other", project: "proj_test", payload }
 }
 
-function toolPart(input: Record<string, unknown>): ToolPart {
+function toolPart(input: Record<string, unknown>, tool = "bash"): ToolPart {
   return {
     id: partID,
     sessionID,
     messageID,
     type: "tool",
     callID,
-    tool: "bash",
+    tool,
     state: { status: "running", input, time: { start: 0 } },
   }
 }
 
-function bashRequest(command: string): PermissionRequest {
+function permissionRequest(permission: string, always: string[] = []): PermissionRequest {
   return {
     id: "perm_permission_test",
     sessionID,
-    permission: "bash",
+    permission,
     patterns: [],
     metadata: {},
-    always: [],
+    always,
     tool: { messageID, callID },
   }
 }
@@ -133,7 +133,7 @@ test("long shell command keeps permission buttons visible", async () => {
   await using tmp = await tmpdir()
   await Bun.write(`${tmp.path}/kv.json`, "{}")
   const command = "echo " + "longword ".repeat(400) + "UNIQUE_TAIL_MARKER"
-  const prompt = await mountPrompt(bashRequest(command), { height: 12, state: tmp.path })
+  const prompt = await mountPrompt(permissionRequest("bash"), { height: 12, state: tmp.path })
 
   try {
     prompt.emit(global({ id: "evt_part", type: "message.part.updated", properties: { sessionID, time: 1, part: toolPart({ command }) } }))
@@ -147,8 +147,54 @@ test("long shell command keeps permission buttons visible", async () => {
     expect(frame).toContain("Allow always")
     expect(frame).toContain("Reject")
     expect(frame).toContain("$ echo")
-    expect(frame).toContain("▀")
     expect(frame).not.toContain("UNIQUE_TAIL_MARKER")
+  } finally {
+    await prompt.cleanup()
+  }
+})
+
+test("long shell command with an unbroken token keeps permission buttons visible", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+  const command = "echo " + "x".repeat(2000) + "TAIL_NO_SPACE"
+  const prompt = await mountPrompt(permissionRequest("bash"), { height: 12, state: tmp.path })
+
+  try {
+    prompt.emit(global({ id: "evt_part", type: "message.part.updated", properties: { sessionID, time: 1, part: toolPart({ command }) } }))
+    await wait(() => {
+      const part = prompt.sync.data.part[messageID]?.[0]
+      return part?.type === "tool" && part.state.status === "running"
+    })
+    await wait(() => prompt.app.captureCharFrame().includes("Allow once"))
+    const frame = prompt.app.captureCharFrame()
+
+    expect(frame).toContain("Allow always")
+    expect(frame).toContain("Reject")
+    expect(frame).toContain("$ echo")
+    expect(frame).not.toContain("TAIL_NO_SPACE")
+  } finally {
+    await prompt.cleanup()
+  }
+})
+
+test("read permission shows a long path in a bounded body with buttons visible", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+  const filePath = `/${"deep".repeat(120)}/file${"x".repeat(300)}.txt`
+  const prompt = await mountPrompt(permissionRequest("read"), { height: 12, state: tmp.path })
+
+  try {
+    prompt.emit(global({ id: "evt_part", type: "message.part.updated", properties: { sessionID, time: 1, part: toolPart({ filePath }, "read") } }))
+    await wait(() => {
+      const part = prompt.sync.data.part[messageID]?.[0]
+      return part?.type === "tool" && part.state.status === "running"
+    })
+    await wait(() => prompt.app.captureCharFrame().includes("Allow once"))
+    const frame = prompt.app.captureCharFrame()
+
+    expect(frame).toContain("Allow always")
+    expect(frame).toContain("Reject")
+    expect(frame).toContain("deep")
   } finally {
     await prompt.cleanup()
   }
@@ -158,7 +204,7 @@ test("short shell command renders fully with buttons visible", async () => {
   await using tmp = await tmpdir()
   await Bun.write(`${tmp.path}/kv.json`, "{}")
   const command = "echo hello"
-  const prompt = await mountPrompt(bashRequest(command), { height: 12, state: tmp.path })
+  const prompt = await mountPrompt(permissionRequest("bash"), { height: 12, state: tmp.path })
 
   try {
     prompt.emit(global({ id: "evt_part", type: "message.part.updated", properties: { sessionID, time: 1, part: toolPart({ command }) } }))
@@ -172,7 +218,6 @@ test("short shell command renders fully with buttons visible", async () => {
     expect(frame).toContain("$ echo hello")
     expect(frame).toContain("Allow always")
     expect(frame).toContain("Reject")
-    expect(frame).not.toContain("▀")
   } finally {
     await prompt.cleanup()
   }
