@@ -2,7 +2,7 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import "@opencode-ai/ui/file-tree.css"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
-import { kindChange, kindLabel, type Kind } from "@/session/files/file-tree-v2"
+import { kindChange, kindLabel, syncFileTreeV2Width, type Kind } from "@/session/files/file-tree-v2"
 import { normalizePath } from "@/session/review/review-diff-kinds"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
 import { virtualScrollElement } from "@/session/files/virtual-scroll"
@@ -89,6 +89,19 @@ export function SessionFileList(props: {
   )
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key))
 
+  createEffect(() => {
+    normalized()
+    const element = root()
+    if (!element) return
+    element.style.removeProperty("width")
+    syncFileTreeV2Width(element)
+  })
+
+  createEffect(() => {
+    virtualRowKeys()
+    syncFileTreeV2Width(root())
+  })
+
   return (
     <div
       ref={setRoot}
@@ -114,8 +127,9 @@ export function SessionFileList(props: {
                   style={{
                     position: "absolute",
                     top: "0",
-                    left: "0",
+                    "inset-inline-start": "0",
                     width: "100%",
+                    "min-width": "max-content",
                     height: `${item().size}px`,
                     transform: `translateY(${item().start}px)`,
                   }}
@@ -129,7 +143,7 @@ export function SessionFileList(props: {
                     data-path={path}
                     data-selected={selected() ? "" : undefined}
                     data-highlighted={highlightedRow() ? "" : undefined}
-                    style="padding-left: 8px"
+                    style="padding-inline-start: 8px"
                     onFocus={() => setFocused(path)}
                     onBlur={() => setFocused(undefined)}
                     onClick={() => props.onFileClick(path)}
@@ -139,13 +153,11 @@ export function SessionFileList(props: {
                       <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--color" />
                       <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--mono" mono />
                     </span>
-                    <span class="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap">
+                    <span data-slot="file-tree-v2-label" class="flex flex-1 shrink-0 items-center whitespace-nowrap">
                       <Show when={directory()}>
-                        {(value) => (
-                          <span class="text-12-medium text-text-muted truncate min-w-0 shrink">{value()}</span>
-                        )}
+                        {(value) => <span class="text-12-medium text-text-muted shrink-0">{value()}</span>}
                       </Show>
-                      <span class="text-12-medium text-text-base truncate min-w-0 shrink-0">{filename()}</span>
+                      <span class="text-12-medium text-text-base shrink-0">{filename()}</span>
                     </span>
                     <Show when={kind()}>
                       {(value) => (
