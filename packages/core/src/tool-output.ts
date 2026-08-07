@@ -46,7 +46,7 @@ const layer = Layer.effect(
     const directory = path.join(global.data, DIRECTORY)
 
     const truncate = Effect.fn("ToolOutput.truncate")(function* (result: Result) {
-      if (result.metadata?.truncated === true) return result
+      if (result.metadata?.truncated !== undefined) return result
       const content =
         typeof result.content === "string" ? [{ type: "text" as const, text: result.content }] : (result.content ?? [])
       const text = content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n")

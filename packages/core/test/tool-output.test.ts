@@ -99,8 +99,10 @@ describe("ToolOutput", () => {
   it.live("skips results that report a truncation state", () =>
     withStore((output) =>
       Effect.gen(function* () {
-        const result = { content: "one\ntwo", metadata: { truncated: true, source: "tool" } }
-        expect(yield* output.truncate(result)).toBe(result)
+        const truncated = { content: "one\ntwo", metadata: { truncated: true, source: "tool" } }
+        const retained = { content: "one\ntwo", metadata: { truncated: false, source: "tool" } }
+        expect(yield* output.truncate(truncated)).toBe(truncated)
+        expect(yield* output.truncate(retained)).toBe(retained)
       }),
     ),
   )
