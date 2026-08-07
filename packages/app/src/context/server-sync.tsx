@@ -662,13 +662,13 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
               integrationID: server.integrationID,
               location: { directory: key },
             })
-            const method = integration.data?.methods.find((item) => item.type === "oauth" && !item.prompts?.length)
+            const method = integration.data?.methods.find((item) => item.type === "oauth" && !item.forms?.length)
             if (!method || method.type !== "oauth")
               throw new Error(`MCP server ${name} requires an interactive authentication form`)
             const attempt = await serverSDK.api.integration.oauth.connect({
               integrationID: server.integrationID,
               methodID: method.id,
-              inputs: {},
+              answers: {},
               location: { directory: key },
             })
             platform.openLink(attempt.data.url)

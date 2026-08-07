@@ -1,4 +1,4 @@
-import type { IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode-ai/client/promise"
+import type { FormAnswer, IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode-ai/client/promise"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -40,6 +40,8 @@ import { decode64 } from "@/utils/base64"
 
 const CUSTOM_ID = "_custom"
 type ConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
+type IntegrationForm = NonNullable<ConnectMethod["forms"]>[number]
+type StringForm = Extract<IntegrationForm, { type: "string" }>
 
 export function useProviderConnectController(options: { onBack?: () => void } = {}) {
   const [store, setStore] = createStore({ selected: undefined as string | undefined })
@@ -434,16 +436,16 @@ function ProviderConnection(props: {
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | IntegrationOauthConnectOutput["data"],
-    promptInputs: undefined as undefined | Record<string, string>,
-    state: "pending" as undefined | "pending" | "complete" | "error" | "prompt",
+    formAnswers: undefined as FormAnswer | undefined,
+    state: "pending" as undefined | "pending" | "complete" | "error" | "form",
     error: undefined as string | undefined,
   })
 
   type Action =
     | { type: "method.select"; index: number }
     | { type: "method.reset" }
-    | { type: "auth.prompt" }
-    | { type: "auth.inputs"; inputs: Record<string, string> }
+    | { type: "auth.form" }
+    | { type: "auth.answers"; answers: FormAnswer }
     | { type: "auth.pending" }
     | { type: "auth.complete"; authorization: IntegrationOauthConnectOutput["data"] }
     | { type: "auth.error"; error: string }
@@ -454,7 +456,7 @@ function ProviderConnection(props: {
         if (action.type === "method.select") {
           draft.methodIndex = action.index
           draft.authorization = undefined
-          draft.promptInputs = undefined
+          draft.formAnswers = undefined
           draft.state = undefined
           draft.error = undefined
           return
@@ -462,18 +464,18 @@ function ProviderConnection(props: {
         if (action.type === "method.reset") {
           draft.methodIndex = undefined
           draft.authorization = undefined
-          draft.promptInputs = undefined
+          draft.formAnswers = undefined
           draft.state = undefined
           draft.error = undefined
           return
         }
-        if (action.type === "auth.prompt") {
-          draft.state = "prompt"
+        if (action.type === "auth.form") {
+          draft.state = "form"
           draft.error = undefined
           return
         }
-        if (action.type === "auth.inputs") {
-          draft.promptInputs = action.inputs
+        if (action.type === "auth.answers") {
+          draft.formAnswers = action.answers
           draft.state = undefined
           draft.error = undefined
           return
@@ -531,7 +533,7 @@ function ProviderConnection(props: {
     return fallback
   }
 
-  async function selectMethod(index: number, inputs?: Record<string, string>) {
+  async function selectMethod(index: number, answers?: FormAnswer) {
     if (timer.current !== undefined) {
       clearTimeout(timer.current)
       timer.current = undefined
@@ -540,9 +542,17 @@ function ProviderConnection(props: {
     const method = methods()[index]
     dispatch({ type: "method.select", index })
 
+    if (method.forms?.length && !answers) {
+      dispatch({ type: "auth.form" })
+      return
+    }
+    if (method.type === "key") {
+      dispatch({ type: "auth.answers", answers: answers ?? {} })
+      return
+    }
     if (method.type === "oauth") {
-      if (method.prompts?.length && !inputs) {
-        dispatch({ type: "auth.prompt" })
+      if (method.forms?.some((field) => field.type !== "string")) {
+        dispatch({ type: "auth.error", error: "This authentication form contains unsupported fields" })
         return
       }
       dispatch({ type: "auth.pending" })
@@ -550,7 +560,7 @@ function ProviderConnection(props: {
         .api.integration.oauth.connect({
           integrationID: props.provider,
           methodID: method.id,
-          inputs: inputs ?? {},
+          answers: answers ?? {},
           location: location(),
         })
         .then((x) => {
@@ -564,41 +574,42 @@ function ProviderConnection(props: {
     }
   }
 
-  function AuthPromptsView() {
+  function AuthFormsView() {
     const [formStore, setFormStore] = createStore({
       value: {} as Record<string, string>,
       index: 0,
     })
 
-    const prompts = createMemo(() => {
+    const forms = createMemo<StringForm[]>(() => {
       const value = method()
-      return value?.type === "oauth" ? (value.prompts ?? []) : []
+      return (value?.forms ?? []).flatMap((field) => (field.type === "string" ? [field] : []))
     })
-    const matches = (prompt: NonNullable<ReturnType<typeof prompts>[number]>, value: Record<string, string>) => {
-      if (!prompt.when) return true
-      const actual = value[prompt.when.key]
-      if (actual === undefined) return false
-      return prompt.when.op === "eq" ? actual === prompt.when.value : actual !== prompt.when.value
+    const matches = (field: StringForm, value: Record<string, string>) => {
+      return (field.when ?? []).every((condition) => {
+        const actual = value[condition.key]
+        if (actual === undefined) return false
+        return condition.op === "eq" ? actual === condition.value : actual !== condition.value
+      })
     }
     const current = createMemo(() => {
-      const all = prompts()
-      const index = all.findIndex((prompt, index) => index >= formStore.index && matches(prompt, formStore.value))
+      const all = forms()
+      const index = all.findIndex((field, index) => index >= formStore.index && matches(field, formStore.value))
       if (index === -1) return
       return {
         index,
-        prompt: all[index],
+        field: all[index],
       }
     })
     const valid = createMemo(() => {
       const item = current()
-      if (!item || item.prompt.type !== "text") return false
-      const value = formStore.value[item.prompt.key] ?? ""
-      return value.trim().length > 0
+      if (!item || item.field.options) return false
+      if (!item.field.required) return true
+      return (formStore.value[item.field.key] ?? "").trim().length > 0
     })
 
     async function next(index: number, value: Record<string, string>) {
       if (store.methodIndex === undefined) return
-      const next = prompts().findIndex((prompt, i) => i > index && matches(prompt, value))
+      const next = forms().findIndex((field, i) => i > index && matches(field, value))
       if (next !== -1) {
         setFormStore("index", next)
         return
@@ -609,60 +620,60 @@ function ProviderConnection(props: {
     async function handleSubmit(e: SubmitEvent) {
       e.preventDefault()
       const item = current()
-      if (!item || item.prompt.type !== "text") return
+      if (!item || item.field.options) return
       if (!valid()) return
       await next(item.index, formStore.value)
     }
 
     const item = () => current()
     const text = createMemo(() => {
-      const prompt = item()?.prompt
-      if (!prompt || prompt.type !== "text") return
-      return prompt
+      const field = item()?.field
+      if (!field || field.options) return
+      return field
     })
     const select = createMemo(() => {
-      const prompt = item()?.prompt
-      if (!prompt || prompt.type !== "select") return
-      return prompt
+      const field = item()?.field
+      if (!field?.options) return
+      return field
     })
 
     return (
       <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
         <Switch>
-          <Match when={item()?.prompt.type === "text"}>
+          <Match when={item()?.field.options === undefined}>
             <TextField
               type="text"
-              label={text()?.message ?? ""}
+              label={text()?.title ?? ""}
               placeholder={text()?.placeholder}
               value={text() ? (formStore.value[text()!.key] ?? "") : ""}
               onChange={(value) => {
-                const prompt = text()
-                if (!prompt) return
-                setFormStore("value", prompt.key, value)
+                const field = text()
+                if (!field) return
+                setFormStore("value", field.key, value)
               }}
             />
             <Button class="w-auto" type="submit" size="large" variant="primary" disabled={!valid()}>
               {language.t("common.continue")}
             </Button>
           </Match>
-          <Match when={item()?.prompt.type === "select"}>
+          <Match when={item()?.field.options !== undefined}>
             <div class="w-full flex flex-col gap-1.5">
-              <div class="text-14-regular text-text-base">{select()?.message}</div>
+              <div class="text-14-regular text-text-base">{select()?.title}</div>
               <div>
                 <List
                   class="px-3"
                   items={select()?.options ?? []}
                   key={(x) => x.value}
-                  current={select()?.options.find((x) => x.value === formStore.value[select()!.key])}
+                  current={select()?.options?.find((x) => x.value === formStore.value[select()!.key])}
                   onSelect={(value) => {
                     if (!value) return
-                    const prompt = select()
-                    if (!prompt) return
+                    const field = select()
+                    if (!field) return
                     const nextValue = {
                       ...formStore.value,
-                      [prompt.key]: value.value,
+                      [field.key]: value.value,
                     }
-                    setFormStore("value", prompt.key, value.value)
+                    setFormStore("value", field.key, value.value)
                     void next(item()!.index, nextValue)
                   }}
                 >
@@ -672,7 +683,7 @@ function ProviderConnection(props: {
                         <div class="w-2.5 h-0.5 ml-0 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
                       </div>
                       <span>{option.label}</span>
-                      <span class="text-14-regular text-text-weak">{option.hint}</span>
+                      <span class="text-14-regular text-text-weak">{option.description}</span>
                     </div>
                   )}
                 </List>
@@ -820,6 +831,7 @@ function ProviderConnection(props: {
         integrationID: props.provider,
         location: location(),
         key: apiKey,
+        answers: store.formAnswers ?? {},
       })
       await complete()
     }
@@ -1143,8 +1155,8 @@ function ProviderConnection(props: {
                 </div>
               </div>
             </Match>
-            <Match when={store.state === "prompt"}>
-              <AuthPromptsView />
+            <Match when={store.state === "form"}>
+              <AuthFormsView />
             </Match>
             <Match when={store.state === "error"}>
               <div class="text-14-regular text-text-base">
