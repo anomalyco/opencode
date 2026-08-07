@@ -18,6 +18,7 @@
   },
   "exports": {
     "./environment": "./src/environment/index.ts",
+    "./testing/environment-conformance": "./test/lib/environment-conformance.ts",
     "./session/runner": "./src/session/runner/index.ts",
     "./instructions": "./src/instructions/index.ts",
     "./*": "./src/*.ts"
