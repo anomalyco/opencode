@@ -82,6 +82,7 @@ import {
   sessionPanelWidthMax,
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { SideChatPanel } from "@/pages/session/side-chat-panel"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
@@ -533,6 +534,123 @@ export default function Page() {
 
   const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
+  const [sideChat, setSideChat] = createStore({
+    opened: false,
+    creating: false,
+    id: undefined as string | undefined,
+    parentID: undefined as string | undefined,
+    initialMessageIDs: [] as string[],
+  })
+  const sideChatInitialMessageIDs = createMemo(() => new Set(sideChat.initialMessageIDs))
+  let sideChatGeneration = 0
+
+  const discardSideChat = async (sessionID: string) => {
+    const api = sdk().api.session
+    await api.interrupt({ sessionID }).catch(() => undefined)
+    await api.remove({ sessionID })
+    sync().session.evict(sessionID)
+  }
+
+  const closeSideChat = () => {
+    sideChatGeneration++
+    const sessionID = sideChat.id
+    setSideChat({
+      opened: false,
+      creating: false,
+      id: undefined,
+      parentID: undefined,
+      initialMessageIDs: [],
+    })
+    if (!sessionID) return
+    void discardSideChat(sessionID).catch((error) => {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
+
+  const openSideChat = async () => {
+    const parentID = params.id
+    if (!parentID || info()?.parentID || sideChat.creating) return
+    if (sideChat.id && sideChat.parentID === parentID) {
+      setSideChat("opened", true)
+      return
+    }
+
+    const generation = ++sideChatGeneration
+    setSideChat({
+      opened: true,
+      creating: true,
+      id: undefined,
+      parentID,
+      initialMessageIDs: [],
+    })
+
+    let forkedID: string | undefined
+    try {
+      const forked = await sdk()
+        .client.session.fork({ sessionID: parentID, parentID })
+        .then((response) => response.data)
+      if (!forked) throw new Error(language.t("common.requestFailed"))
+      forkedID = forked.id
+      sync().session.remember(forked)
+      await sync().session.sync(forked.id, { force: true })
+      const initialMessageIDs = (sync().data.message[forked.id] ?? []).map((message) => message.id)
+
+      if (generation !== sideChatGeneration || params.id !== parentID) {
+        await discardSideChat(forked.id).catch(() => undefined)
+        return
+      }
+
+      setSideChat({
+        opened: true,
+        creating: false,
+        id: forked.id,
+        parentID,
+        initialMessageIDs,
+      })
+    } catch (error) {
+      if (forkedID) void discardSideChat(forkedID).catch(() => undefined)
+      if (generation !== sideChatGeneration) return
+      setSideChat({
+        opened: false,
+        creating: false,
+        id: undefined,
+        parentID: undefined,
+        initialMessageIDs: [],
+      })
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  const toggleSideChat = () => {
+    if (sideChat.opened) {
+      closeSideChat()
+      return
+    }
+    void openSideChat()
+  }
+
+  createEffect(
+    on(
+      () => params.id,
+      (sessionID) => {
+        if (!sideChat.parentID || sideChat.parentID === sessionID) return
+        closeSideChat()
+      },
+      { defer: true },
+    ),
+  )
+
+  onCleanup(() => {
+    sideChatGeneration++
+    const sessionID = sideChat.id
+    if (sessionID) void discardSideChat(sessionID).catch(() => undefined)
+  })
   const canReview = createMemo(() => !!sync().project)
   const reviewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
@@ -1141,6 +1259,7 @@ export default function Page() {
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,
+    openSideChat,
     review: reviewTab,
     fileBrowser: () => newSessionDesign() && isDesktop() && !!params.id,
   })
@@ -2248,7 +2367,13 @@ export default function Page() {
 
   return (
     <SessionRouteFrame>
-      <SessionHeader />
+      <SessionHeader
+        sideChat={{
+          visible: isDesktop() && !!params.id && !isChildSession(),
+          opened: sideChat.opened,
+          onToggle: toggleSideChat,
+        }}
+      />
       <div
         ref={panelRow}
         class="flex-1 min-h-0 flex flex-col md:flex-row"
@@ -2261,11 +2386,12 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
+            "md:!flex-1 md:!min-w-0": sideChat.opened,
             "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap && !desktopInlineTerminalOnlyOpen(),
           }}
           style={{
-            width: sessionPanelWidth(),
+            width: sideChat.opened ? undefined : sessionPanelWidth(),
           }}
         >
           {settings.general.newLayoutDesigns() ? (
@@ -2300,6 +2426,30 @@ export default function Page() {
             </div>
           </Show>
         </div>
+
+        <Show when={isDesktop() && sideChat.opened}>
+          <div class="relative h-full shrink-0">
+            <Show
+              when={!sideChat.creating && sideChat.id && sideChat.parentID}
+              fallback={
+                <aside
+                  id="side-chat-panel"
+                  aria-label={language.t("session.sideChat.title")}
+                  class="w-[min(420px,40vw)] min-w-80 h-full shrink-0 flex items-center justify-center rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] text-13-regular text-text-weak"
+                >
+                  {language.t("common.loading")}
+                </aside>
+              }
+            >
+              <SideChatPanel
+                sessionID={sideChat.id!}
+                parentID={sideChat.parentID!}
+                initialMessageIDs={sideChatInitialMessageIDs()}
+                onClose={closeSideChat}
+              />
+            </Show>
+          </div>
+        </Show>
 
         <Show when={!newSessionDesign() && desktopSidePanelOpen()}>
           <Suspense>

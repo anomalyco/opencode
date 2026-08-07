@@ -198,6 +198,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   const submission = createPromptSubmit({
     prompt,
     info,
+    sessionID: () => props.controls.session.id,
     imageAttachments: attachments,
     commentCount,
     autoAccept: accepting,

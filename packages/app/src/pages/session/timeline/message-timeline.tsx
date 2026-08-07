@@ -77,6 +77,7 @@ import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
+import { excludeSideChatHistory } from "../side-chat"
 
 const emptyMessages: MessageType[] = []
 const emptyParts: PartType[] = []
@@ -236,6 +237,10 @@ function TimelineDiffView(props: { diff: SummaryDiff }) {
 }
 
 export function MessageTimeline(props: {
+  sessionID?: Accessor<string | undefined>
+  sessionKey?: Accessor<string>
+  excludeMessageIDs?: ReadonlySet<string>
+  header?: boolean
   actions?: UserActions
   scroll: { overflow: boolean; bottom: boolean; jump: boolean }
   onResumeScroll: () => void
@@ -266,7 +271,8 @@ export function MessageTimeline(props: {
   const tabs = useTabs()
   const dialog = useDialog()
   const language = useLanguage()
-  const { params, sessionKey } = useSessionKey()
+  const { params, sessionKey: routeSessionKey } = useSessionKey()
+  const sessionKey = createMemo(() => props.sessionKey?.() ?? routeSessionKey())
   const ownerSessionKey = sessionKey()
   const cached = timelineCache.get(ownerSessionKey)
   const initialMeasurements = cached?.measurements
@@ -274,19 +280,23 @@ export function MessageTimeline(props: {
   const platform = usePlatform()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
-  const sessionID = createMemo(() => params.id)
+  const sessionID = createMemo(() => props.sessionID?.() ?? params.id)
   const sessionStatus = createMemo(() => {
     const id = sessionID()
     if (!id) return idle
     return sync().data.session_status[id] ?? idle
   })
-  const sessionMessages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
+  const sessionMessages = createMemo(() => {
+    const id = sessionID()
+    const messages = id ? (sync().data.message[id] ?? []) : []
+    return excludeSideChatHistory(messages, props.excludeMessageIDs)
+  })
   const projectedMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return []
     const visible = new Set(props.userMessages.map((message) => message.id))
     const boundary = sessionMessages().find((message) => message.role === "user" && !visible.has(message.id))?.id
-    const messages = sync().data.session_message[id] ?? []
+    const messages = excludeSideChatHistory(sync().data.session_message[id] ?? [], props.excludeMessageIDs)
     if (!boundary) return messages
     const index = messages.findIndex((message) => message.id === boundary)
     return index < 0 ? messages : messages.slice(0, index)
@@ -329,7 +339,7 @@ export function MessageTimeline(props: {
     if (value) return value
     return language.t("command.session.new")
   })
-  const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const showHeader = createMemo(() => props.header !== false && !!(titleValue() || parentID()))
   const projection = createTimelineProjection({
     messages: sessionMessages,
     userMessages: () => props.userMessages,

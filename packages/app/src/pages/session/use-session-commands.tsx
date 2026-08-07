@@ -25,6 +25,7 @@ export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
+  openSideChat: () => void
   review?: () => boolean
   fileBrowser?: () => boolean
 }
@@ -488,6 +489,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: fork,
+    }),
+    sessionCommand({
+      id: "session.sideChat",
+      title: language.t("command.session.sideChat"),
+      description: language.t("command.session.sideChat.description"),
+      slash: "side",
+      disabled: !params.id || !!info()?.parentID,
+      onSelect: actions.openSideChat,
     }),
     sessionCommand({
       id: "session.export",
