@@ -159,13 +159,16 @@ const layer = Layer.effect(
 
       const taskSubTypeFormatted = JSON.stringify(subTypes)
 
+      const cfg = configOption._tag === "Some" ? yield* configOption.value.get() : undefined
+      const selectedModel = cfg?.model || "local-tpu/zai-org/GLM-5.2"
+
       yield* db
         .insert(harness_task)
         .values({
           task_id: taskID,
           task_prompt: input.prompt,
           task_type: input.taskType || "general",
-          task_model: input.taskModel || "local-tpu/zai-org/GLM-5.2",
+          task_model: input.taskModel || selectedModel,
           task_sub_type: taskSubTypeFormatted,
           task_status: "running",
           task_sub_status: "in_progress",
