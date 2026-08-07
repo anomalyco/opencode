@@ -5,7 +5,7 @@ export default {
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`
-        CREATE TABLE \`workspace\` (
+        CREATE TABLE IF NOT EXISTS \`workspace\` (
           \`id\` text PRIMARY KEY,
           \`type\` text NOT NULL,
           \`name\` text DEFAULT '' NOT NULL,
@@ -18,13 +18,13 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`data_migration\` (
+        CREATE TABLE IF NOT EXISTS \`data_migration\` (
           \`name\` text PRIMARY KEY,
           \`time_completed\` integer NOT NULL
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`account_state\` (
+        CREATE TABLE IF NOT EXISTS \`account_state\` (
           \`id\` integer PRIMARY KEY,
           \`active_account_id\` text,
           \`active_org_id\` text,
@@ -32,7 +32,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`account\` (
+        CREATE TABLE IF NOT EXISTS \`account\` (
           \`id\` text PRIMARY KEY,
           \`email\` text NOT NULL,
           \`url\` text NOT NULL,
@@ -44,7 +44,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`control_account\` (
+        CREATE TABLE IF NOT EXISTS \`control_account\` (
           \`email\` text NOT NULL,
           \`url\` text NOT NULL,
           \`access_token\` text NOT NULL,
@@ -57,7 +57,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`credential\` (
+        CREATE TABLE IF NOT EXISTS \`credential\` (
           \`id\` text PRIMARY KEY,
           \`integration_id\` text,
           \`label\` text NOT NULL,
@@ -70,14 +70,14 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`event_sequence\` (
+        CREATE TABLE IF NOT EXISTS \`event_sequence\` (
           \`aggregate_id\` text PRIMARY KEY,
           \`seq\` integer NOT NULL,
           \`owner_id\` text
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`event\` (
+        CREATE TABLE IF NOT EXISTS \`event\` (
           \`id\` text PRIMARY KEY,
           \`aggregate_id\` text NOT NULL,
           \`seq\` integer NOT NULL,
@@ -87,7 +87,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`permission\` (
+        CREATE TABLE IF NOT EXISTS \`permission\` (
           \`id\` text PRIMARY KEY,
           \`project_id\` text NOT NULL,
           \`action\` text NOT NULL,
@@ -98,7 +98,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`project_directory\` (
+        CREATE TABLE IF NOT EXISTS \`project_directory\` (
           \`project_id\` text NOT NULL,
           \`directory\` text NOT NULL,
           \`type\` text,
@@ -109,7 +109,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`project\` (
+        CREATE TABLE IF NOT EXISTS \`project\` (
           \`id\` text PRIMARY KEY,
           \`worktree\` text NOT NULL,
           \`vcs\` text,
@@ -125,7 +125,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`message\` (
+        CREATE TABLE IF NOT EXISTS \`message\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
           \`time_created\` integer NOT NULL,
@@ -135,7 +135,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`part\` (
+        CREATE TABLE IF NOT EXISTS \`part\` (
           \`id\` text PRIMARY KEY,
           \`message_id\` text NOT NULL,
           \`session_id\` text NOT NULL,
@@ -146,7 +146,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`session_context_epoch\` (
+        CREATE TABLE IF NOT EXISTS \`session_context_epoch\` (
           \`session_id\` text PRIMARY KEY,
           \`baseline\` text NOT NULL,
           \`snapshot\` text NOT NULL,
@@ -155,7 +155,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`session_input\` (
+        CREATE TABLE IF NOT EXISTS \`session_input\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
           \`prompt\` text NOT NULL,
@@ -167,7 +167,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`session_message\` (
+        CREATE TABLE IF NOT EXISTS \`session_message\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
           \`type\` text NOT NULL,
@@ -179,7 +179,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`session\` (
+        CREATE TABLE IF NOT EXISTS \`session\` (
           \`id\` text PRIMARY KEY,
           \`project_id\` text NOT NULL,
           \`workspace_id\` text,
@@ -213,7 +213,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`todo\` (
+        CREATE TABLE IF NOT EXISTS \`todo\` (
           \`session_id\` text NOT NULL,
           \`content\` text NOT NULL,
           \`status\` text NOT NULL,
@@ -226,7 +226,7 @@ export default {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`session_share\` (
+        CREATE TABLE IF NOT EXISTS \`session_share\` (
           \`session_id\` text PRIMARY KEY,
           \`id\` text NOT NULL,
           \`secret\` text NOT NULL,
@@ -236,39 +236,39 @@ export default {
           CONSTRAINT \`fk_session_share_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
-      yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
-      yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
+      yield* tx.run(`CREATE UNIQUE INDEX IF NOT EXISTS \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(
-        `CREATE UNIQUE INDEX \`permission_project_action_resource_idx\` ON \`permission\` (\`project_id\`,\`action\`,\`resource\`);`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS \`permission_project_action_resource_idx\` ON \`permission\` (\`project_id\`,\`action\`,\`resource\`);`,
       )
       yield* tx.run(
-        `CREATE INDEX \`message_session_time_created_id_idx\` ON \`message\` (\`session_id\`,\`time_created\`,\`id\`);`,
+        `CREATE INDEX IF NOT EXISTS \`message_session_time_created_id_idx\` ON \`message\` (\`session_id\`,\`time_created\`,\`id\`);`,
       )
-      yield* tx.run(`CREATE INDEX \`part_message_id_id_idx\` ON \`part\` (\`message_id\`,\`id\`);`)
-      yield* tx.run(`CREATE INDEX \`part_session_idx\` ON \`part\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`part_message_id_id_idx\` ON \`part\` (\`message_id\`,\`id\`);`)
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`part_session_idx\` ON \`part\` (\`session_id\`);`)
       yield* tx.run(
-        `CREATE INDEX \`session_input_session_pending_delivery_seq_idx\` ON \`session_input\` (\`session_id\`,\`promoted_seq\`,\`delivery\`,\`admitted_seq\`);`,
-      )
-      yield* tx.run(
-        `CREATE UNIQUE INDEX \`session_input_session_admitted_seq_idx\` ON \`session_input\` (\`session_id\`,\`admitted_seq\`);`,
+        `CREATE INDEX IF NOT EXISTS \`session_input_session_pending_delivery_seq_idx\` ON \`session_input\` (\`session_id\`,\`promoted_seq\`,\`delivery\`,\`admitted_seq\`);`,
       )
       yield* tx.run(
-        `CREATE UNIQUE INDEX \`session_input_session_promoted_seq_idx\` ON \`session_input\` (\`session_id\`,\`promoted_seq\`);`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS \`session_input_session_admitted_seq_idx\` ON \`session_input\` (\`session_id\`,\`admitted_seq\`);`,
       )
       yield* tx.run(
-        `CREATE UNIQUE INDEX \`session_message_session_seq_idx\` ON \`session_message\` (\`session_id\`,\`seq\`);`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS \`session_input_session_promoted_seq_idx\` ON \`session_input\` (\`session_id\`,\`promoted_seq\`);`,
       )
       yield* tx.run(
-        `CREATE INDEX \`session_message_session_type_seq_idx\` ON \`session_message\` (\`session_id\`,\`type\`,\`seq\`);`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS \`session_message_session_seq_idx\` ON \`session_message\` (\`session_id\`,\`seq\`);`,
       )
       yield* tx.run(
-        `CREATE INDEX \`session_message_session_time_created_id_idx\` ON \`session_message\` (\`session_id\`,\`time_created\`,\`id\`);`,
+        `CREATE INDEX IF NOT EXISTS \`session_message_session_type_seq_idx\` ON \`session_message\` (\`session_id\`,\`type\`,\`seq\`);`,
       )
-      yield* tx.run(`CREATE INDEX \`session_message_time_created_idx\` ON \`session_message\` (\`time_created\`);`)
-      yield* tx.run(`CREATE INDEX \`session_project_idx\` ON \`session\` (\`project_id\`);`)
-      yield* tx.run(`CREATE INDEX \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
-      yield* tx.run(`CREATE INDEX \`session_parent_idx\` ON \`session\` (\`parent_id\`);`)
-      yield* tx.run(`CREATE INDEX \`todo_session_idx\` ON \`todo\` (\`session_id\`);`)
+      yield* tx.run(
+        `CREATE INDEX IF NOT EXISTS \`session_message_session_time_created_id_idx\` ON \`session_message\` (\`session_id\`,\`time_created\`,\`id\`);`,
+      )
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`session_message_time_created_idx\` ON \`session_message\` (\`time_created\`);`)
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`session_project_idx\` ON \`session\` (\`project_id\`);`)
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`session_parent_idx\` ON \`session\` (\`parent_id\`);`)
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`todo_session_idx\` ON \`todo\` (\`session_id\`);`)
 
       yield* tx.run(`
         CREATE TABLE IF NOT EXISTS \`harness_task\` (

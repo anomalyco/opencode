@@ -6,7 +6,7 @@ export default {
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`
-        CREATE TABLE \`workspace\` (
+        CREATE TABLE IF NOT EXISTS \`workspace\` (
           \`id\` text PRIMARY KEY,
           \`branch\` text,
           \`project_id\` text NOT NULL,
