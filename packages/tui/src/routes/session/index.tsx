@@ -2604,6 +2604,8 @@ function Shell(props: ToolProps) {
     if (expanded() || !collapsed().overflow) return content()
     return collapsed().output
   })
+  const limitedInput = createMemo(() => limited().slice(0, input().length))
+  const limitedOutput = createMemo(() => limited().slice(Math.min(limited().length, input().length + 2)))
   const expandable = createMemo(() => Boolean(shellID()) || collapsed().overflow)
   const toggle = () => {
     const next = !expanded()
@@ -2628,15 +2630,15 @@ function Shell(props: ToolProps) {
             when={isRunning()}
             fallback={
               <text>
-                <span style={{ fg: theme.text.default }}>{limited().slice(0, input().length)}</span>
+                <span style={{ fg: theme.text.default }}>{limitedInput()}</span>
                 <span style={{ fg: theme.text.subdued }}>{limited().slice(input().length)}</span>
               </text>
             }
           >
-            <Spinner color={color()}>
-              <span style={{ fg: theme.text.default }}>{limited().slice(0, input().length)}</span>
-              <span style={{ fg: theme.text.subdued }}>{limited().slice(input().length)}</span>
-            </Spinner>
+            <Spinner color={color()}>{limitedInput()}</Spinner>
+            <Show when={limitedOutput()}>
+              <text fg={theme.text.subdued}>{limitedOutput()}</text>
+            </Show>
           </Show>
         </Show>
         <Show when={background()}>
