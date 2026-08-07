@@ -1710,6 +1710,104 @@ describe("session.llm.stream", () => {
   )
 
   it.instance(
+    "keeps the original error when a registered tool fails validation",
+    () =>
+      Effect.gen(function* () {
+        const model = loadFixture("openai", "gpt-5.2").model
+        const badCall = [
+          {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "function_call", id: "item-bad", call_id: "call-bad", name: "echo", arguments: "" },
+          },
+          {
+            type: "response.function_call_arguments.delta",
+            item_id: "item-bad",
+            delta: '{"text": 42}',
+          },
+          {
+            type: "response.output_item.done",
+            output_index: 0,
+            item: {
+              type: "function_call",
+              id: "item-bad",
+              call_id: "call-bad",
+              name: "echo",
+              arguments: '{"text": 42}',
+              status: "completed",
+            },
+          },
+          {
+            type: "response.completed",
+            response: { incomplete_details: null, usage: { input_tokens: 1, output_tokens: 1 } },
+          },
+        ]
+        const request = waitRequest("/responses", createEventResponse(badCall, true))
+
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ModelV2.ID.make(model.id))
+        const sessionID = SessionID.make("session-test-bad-args")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const toolResults: string[] = []
+        yield* LLM.Service.use((svc) =>
+          svc
+            .stream({
+              user: {
+                id: MessageID.make("msg_user-bad-args"),
+                sessionID,
+                role: "user",
+                time: { created: Date.now() },
+                agent: agent.name,
+                model: { providerID: ProviderV2.ID.make("openai"), modelID: resolved.id },
+              } satisfies SessionV1.User,
+              sessionID,
+              model: resolved,
+              agent,
+              system: [],
+              messages: [{ role: "user", content: "Call echo" }],
+              tools: {
+                echo: tool({
+                  description: "Echo text",
+                  inputSchema: z.object({ text: z.string() }),
+                  execute: async ({ text }) => ({ output: text, metadata: {} }),
+                }),
+                invalid: tool({
+                  description: "Do not use",
+                  inputSchema: z.object({ tool: z.string(), error: z.string() }),
+                  execute: async ({ error }) => ({
+                    output: `The arguments provided to the tool are invalid: ${error}`,
+                    metadata: {},
+                  }),
+                }),
+              },
+            })
+            .pipe(
+              Stream.tap((event) =>
+                Effect.sync(() => {
+                  if (event.type !== "tool-result") return
+                  const result = event.result
+                  if (result.type !== "json") return
+                  toolResults.push(JSON.stringify(result.value))
+                }),
+              ),
+              Stream.runDrain,
+            ),
+        )
+
+        yield* Effect.promise(() => request)
+        expect(toolResults).toHaveLength(1)
+        expect(toolResults[0]).not.toContain("Tool 'echo' is not available")
+        expect(toolResults[0]).toContain("invalid")
+      }),
+    { config: () => openAIConfig(loadFixture("openai", "gpt-5.2").model, `${state.server!.url.origin}/v1`) },
+  )
+
+  it.instance(
     "accepts user image attachments as data URLs for OpenAI models",
     () =>
       Effect.gen(function* () {

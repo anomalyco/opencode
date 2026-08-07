@@ -295,13 +295,13 @@ const live: Layer.Layer<
           includeRawChunks: input.model.providerID.includes("github-copilot"),
           async experimental_repairToolCall(failed) {
             const lower = failed.toolCall.toolName.toLowerCase()
-            if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
+            if (lower !== failed.toolCall.toolName && Object.hasOwn(prepared.tools, lower)) {
               return {
                 ...failed.toolCall,
                 toolName: lower,
               }
             }
-            const error = prepared.tools[failed.toolCall.toolName]
+            const error = Object.hasOwn(prepared.tools, failed.toolCall.toolName)
               ? failed.error.message
               : `Tool '${failed.toolCall.toolName}' is not available`
             return {
