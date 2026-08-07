@@ -25,7 +25,17 @@ import { ToolSchemaProjection } from "./utils/tool-schema"
 
 const ADAPTER = "gemini"
 const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
+// Google documents this sentinel for replaying Gemini 3 function calls after their original signature was lost.
+const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+// Model IDs are open-ended, so unknown Gemini aliases inherit the newest supported request behavior.
+const usesGemini3Features = (modelID: string) => {
+  if (!/(^|\/)gemini-/i.test(modelID)) return false
+  if (/(^|\/)gemini-(?:1|2)(?:[.-]|$)/i.test(modelID)) return false
+  if (/(^|\/)gemini-pro(?:-vision)?$/i.test(modelID)) return false
+  return !/(^|\/)gemini-robotics-er-1\.5(?:[.-]|$)/i.test(modelID)
+}
 
 export interface OptionsInput {
   readonly [key: string]: unknown
@@ -145,6 +155,9 @@ const GeminiGenerationConfig = Schema.Struct({
   temperature: Schema.optional(Schema.Number),
   topP: Schema.optional(Schema.Number),
   topK: Schema.optional(Schema.Number),
+  frequencyPenalty: Schema.optional(Schema.Number),
+  presencePenalty: Schema.optional(Schema.Number),
+  seed: Schema.optional(Schema.Number),
   stopSequences: optionalArray(Schema.String),
   thinkingConfig: Schema.optional(GeminiThinkingConfig),
 })
@@ -282,6 +295,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
 
     if (message.role === "assistant") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
+      let hasSignedToolCall = false
       for (const part of message.content) {
         if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
@@ -294,7 +308,17 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
           continue
         }
         if (part.type === "tool-call") {
-          parts.push(lowerToolCall(part))
+          const lowered = lowerToolCall(part)
+          const signature = lowered.thoughtSignature
+          parts.push({
+            ...lowered,
+            thoughtSignature:
+              signature ??
+              (usesGemini3Features(request.model.id) && !hasSignedToolCall
+                ? SKIP_THOUGHT_SIGNATURE_VALIDATOR
+                : undefined),
+          })
+          if (signature !== undefined) hasSignedToolCall = true
           continue
         }
       }
@@ -388,6 +412,9 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     temperature: generation?.temperature,
     topP: generation?.topP,
     topK: generation?.topK,
+    frequencyPenalty: generation?.frequencyPenalty,
+    presencePenalty: generation?.presencePenalty,
+    seed: generation?.seed,
     stopSequences: generation?.stop,
     thinkingConfig: options.thinkingConfig,
   }
