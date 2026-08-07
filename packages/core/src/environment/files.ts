@@ -51,4 +51,20 @@ export interface FilesImpl {
 
 export interface Files extends FilesImpl {}
 
+/**
+ * Derives a follow-stat kind from the lstat-like Files contract. A dangling
+ * symlink fails with `NotFound`.
+ */
+export const typeFollowing = (files: Files, path: string) =>
+  files.stat(path).pipe(
+    Effect.flatMap((info) =>
+      info.type === "symlink"
+        ? files.read(path, { offset: 0, length: 0 }).pipe(
+            Effect.map((result) => result.info.type),
+            Effect.catchTag("Environment.WrongKind", (error) => Effect.succeed(error.actual)),
+          )
+        : Effect.succeed(info.type),
+    ),
+  )
+
 export * as EnvironmentFiles from "./files"

@@ -99,15 +99,7 @@ export const Plugin = {
                 source,
               })
               const root = target.absolute
-              const type = yield* environment.files.stat(root).pipe(
-                Effect.flatMap((info) =>
-                  info.type === "symlink"
-                    ? environment.files.read(root, { offset: 0, length: 0 }).pipe(
-                        Effect.map((result) => result.info.type),
-                        Effect.catchTag("Environment.WrongKind", (error) => Effect.succeed(error.actual)),
-                      )
-                    : Effect.succeed(info.type),
-                ),
+              const type = yield* Environment.typeFollowing(environment.files, root).pipe(
                 Effect.catchTag("Environment.NotFound", () =>
                   Effect.fail(new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })),
                 ),

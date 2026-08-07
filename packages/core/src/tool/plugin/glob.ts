@@ -82,15 +82,7 @@ export const Plugin = {
                 agent: context.agent,
                 source,
               })
-              const type = yield* environment.files.stat(target.absolute).pipe(
-                Effect.flatMap((info) =>
-                  info.type === "symlink"
-                    ? environment.files.list(target.absolute).pipe(
-                        Effect.as("directory" as const),
-                        Effect.catchTag("Environment.WrongKind", (error) => Effect.succeed(error.actual)),
-                      )
-                    : Effect.succeed(info.type),
-                ),
+              const type = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () =>
                   Effect.fail(new ToolFailure({ message: `Search path does not exist: ${searchPath ?? "."}` })),
                 ),

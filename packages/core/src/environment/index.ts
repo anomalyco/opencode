@@ -9,6 +9,7 @@ export {
   type FilesImpl,
   type FileType,
   NotFound,
+  typeFollowing,
   WrongKind,
 } from "./files"
 export { execDefaults } from "./exec-defaults"

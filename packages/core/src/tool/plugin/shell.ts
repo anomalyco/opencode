@@ -179,15 +179,7 @@ export const Plugin = {
                         agent: context.agent,
                         source,
                       })
-                    const workdir = yield* environment.files.stat(target.absolute).pipe(
-                      Effect.flatMap((info) =>
-                        info.type === "symlink"
-                          ? environment.files.list(target.absolute).pipe(
-                              Effect.as("directory" as const),
-                              Effect.catchTag("Environment.WrongKind", (error) => Effect.succeed(error.actual)),
-                            )
-                          : Effect.succeed(info.type),
-                      ),
+                    const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
                       Effect.catchTag("Environment.NotFound", () =>
                         Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
                       ),

@@ -1,11 +1,39 @@
 import fs from "node:fs/promises"
+import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { execDefaults, Failed, makeFiles, makeLocalDriver, makeMemoryDriver } from "../src/environment/index"
+import {
+  execDefaults,
+  Failed,
+  makeFiles,
+  makeLocalDriver,
+  makeMemoryDriver,
+  NotFound,
+  typeFollowing,
+} from "../src/environment/index"
 import { tmpdir } from "./fixture/tmpdir"
 import { environmentConformance } from "./lib/environment-conformance"
+import { it } from "./lib/effect"
+
+describe("typeFollowing", () => {
+  it.effect("follows symlinks without changing stat semantics", () =>
+    Effect.gen(function* () {
+      const driver = makeMemoryDriver()
+      const files = makeFiles(driver)
+      yield* files.mkdir("/directory")
+      yield* files.write("/file", new Uint8Array())
+      yield* driver.symlink("/directory", "/directory-link")
+      yield* driver.symlink("/file", "/file-link")
+      yield* driver.symlink("/missing", "/dangling-link")
+
+      expect(yield* typeFollowing(files, "/directory-link")).toBe("directory")
+      expect(yield* typeFollowing(files, "/file-link")).toBe("file")
+      expect(yield* typeFollowing(files, "/dangling-link").pipe(Effect.flip)).toBeInstanceOf(NotFound)
+    }),
+  )
+})
 
 environmentConformance("memory environment", () =>
   Effect.sync(() => {
