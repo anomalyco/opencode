@@ -56,6 +56,32 @@ test("handles a skein_loading event split across stream chunks", async () => {
   expect(seen).toEqual(["Coaxing the GPU awake…"])
 })
 
+// Genuine model thinking arrives as reasoning_content WITHOUT the skein_loading
+// tag (llama-skein only tags its load-time flavor chatter — see loadingWriter in
+// llama-skein internal/router/loading.go). The filter must never touch it, even
+// when the reasoning text itself happens to mention "skein_loading" (defeating
+// the cheap includes() pre-filter and forcing the JSON.parse path).
+test("passes genuine untagged reasoning_content through untouched", async () => {
+  const seen: string[] = []
+  const reasoningChunk = (text: string) =>
+    `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: text } }] })}\n\n`
+  const res = sseResponse([
+    loadingChunk("Warming the tensors…"),
+    reasoningChunk("Let me think about the skein_loading filter here."),
+    reasoningChunk("Step 2: therefore the answer is 42."),
+    realChunk("The answer is 42."),
+    "data: [DONE]\n\n",
+  ])
+  const out = await readAll(stripSkeinLoading(res, (t) => seen.push(t)))
+
+  expect(out).toContain("Let me think about the skein_loading filter here.")
+  expect(out).toContain("Step 2: therefore the answer is 42.")
+  expect(out).toContain(JSON.stringify({ choices: [{ delta: { content: "The answer is 42." } }] }))
+  // only the tagged loading chunk was diverted
+  expect(seen).toEqual(["Warming the tensors…"])
+  expect(out).not.toContain("Warming the tensors")
+})
+
 test("passes a non-SSE response through unchanged", async () => {
   const res = new Response("not a stream", { headers: { "content-type": "application/json" } })
   expect(await readAll(stripSkeinLoading(res))).toBe("not a stream")

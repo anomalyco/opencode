@@ -1666,7 +1666,14 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           <box paddingLeft={inMinimal() ? 2 : 0} marginTop={1}>
             <code
               filetype="markdown"
-              drawUnstyledText={false}
+              // fork: draw unstyled text immediately (the @opentui default) instead
+              // of waiting for tree-sitter. With drawUnstyledText={false} the body
+              // renders zero pixels until highlightOnce() resolves — and on the huge
+              // reasoning dumps local models produce (hundreds of KB, with fenced
+              // code blocks that trigger grammar downloads with no timeout), that
+              // can take minutes or never happen. Symptom: "Thought: 9m 55s" header
+              // whose expansion reveals nothing. Highlighting still layers in when
+              // (if) it completes.
               streaming={true}
               syntaxStyle={syntax()}
               content={summary().body}

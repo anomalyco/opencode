@@ -33,6 +33,11 @@ import { LLMRequestPrep } from "./llm/request"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
+// Inactivity floor for host-bandwidth-paced models. Sized off the measured
+// worst case (254s to first token on a small prompt) with room for a large
+// agent prompt and a long hidden reasoning phase on top.
+const HOST_PACED_STREAM_DEADLINE_SECONDS = 1800
+
 export type StreamInput = {
   user: SessionV1.User
   sessionID: string
@@ -371,7 +376,19 @@ const live: Layer.Layer<
             // any event resets it — so slow-but-live streams are unaffected.
             // 0 disables. Applied at this seam so both runtimes are covered.
             const cfg = yield* config.get()
-            const deadline = cfg.experimental?.stream_inactivity_seconds ?? 300
+            const configured = cfg.experimental?.stream_inactivity_seconds ?? 300
+            // A model placed hybrid GPU + system-RAM is legitimately silent
+            // for far longer than a flat deadline allows: measured on z4, 254s
+            // passed before the FIRST token of any kind (faulting ~50 GB of
+            // expert weights back in, then prefill), after which it generates
+            // at ~0.8 tok/s. The 300s default fired mid-generation and
+            // abandoned a working turn. Give such a model a longer floor —
+            // the watchdog still catches a genuinely dead stream, just later.
+            // An explicit 0 still disables it entirely.
+            const deadline =
+              configured > 0 && Provider.isHostPaced(input.model.providerID, input.model.id)
+                ? Math.max(configured, HOST_PACED_STREAM_DEADLINE_SECONDS)
+                : configured
             const watchdog = <A, E, R>(self: Stream.Stream<A, E, R>): Stream.Stream<A, E | StreamStalledError, R> =>
               deadline <= 0
                 ? self

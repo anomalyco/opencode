@@ -1468,11 +1468,25 @@ export async function adjustLocalContextOnOverflow(
  * non-llama-skein backend `/api/fit` simply errors → empty map → callers fall
  * back to the existing context_length behaviour. Never throws.
  */
+// Local models whose llama-skein placement is paced by host memory bandwidth
+// (hybrid GPU + system RAM), keyed "providerID/modelID". Such a model can
+// legitimately emit nothing for minutes — faulting expert weights in, then
+// generating at well under 1 tok/s — which a flat inactivity deadline reads
+// as a dead connection. Kept out of the model record itself because
+// ModelV2.options is forwarded to the provider SDK and must not carry our
+// own metadata.
+const hostPacedModels = new Set<string>()
+
+/** Reports whether a model's placement is host-bandwidth-paced. */
+export function isHostPaced(providerID: string, modelID: string): boolean {
+  return hostPacedModels.has(`${providerID}/${modelID}`)
+}
+
 async function fetchLocalModelFit(
   controlBase: string,
   signal?: AbortSignal,
-): Promise<Map<string, { maxSafeCtx: number; configuredCtx?: number; modelMb?: number }>> {
-  const out = new Map<string, { maxSafeCtx: number; configuredCtx?: number; modelMb?: number }>()
+): Promise<Map<string, { maxSafeCtx: number; configuredCtx?: number; modelMb?: number; hostPaced?: boolean }>> {
+  const out = new Map<string, { maxSafeCtx: number; configuredCtx?: number; modelMb?: number; hostPaced?: boolean }>()
   try {
     const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: controlBase })) })
     // fork: bounded by the caller's discovery abort budget — a host that
@@ -1492,10 +1506,17 @@ async function fetchLocalModelFit(
       // can't-compute yields max_safe_ctx 0, caught below → fall back.
       const safe = numberFrom(fit.max_safe_ctx)
       if (!safe) continue
+      // Host-bandwidth-paced placements (hybrid GPU + system RAM) generate
+      // orders of magnitude slower — measured 0.8 tok/s vs 70 tok/s on the
+      // same host — and can emit nothing at all for minutes while faulting
+      // expert weights in. Carry that forward so the stream watchdog can tell
+      // "slow" from "dead".
+      const perf = fit.placement?.perf_class
       out.set(fit.model, {
         maxSafeCtx: safe,
         configuredCtx: numberFrom(fit.configured_ctx),
         modelMb: numberFrom(fit.model_mb),
+        hostPaced: perf === "cpu-bound-hybrid" || perf === "cpu-only",
       })
     }
   } catch {
@@ -1620,6 +1641,10 @@ async function discoverOpenAICompatibleModels(input: {
           numberFrom(item.size_bytes) ??
           (fit?.modelMb ? fit.modelMb * 1024 * 1024 : undefined) ??
           existingModel?.sizeBytes
+        const hostPacedKey = `${input.providerID}/${modelID}`
+        if (fit?.hostPaced) hostPacedModels.add(hostPacedKey)
+        else hostPacedModels.delete(hostPacedKey)
+
         discovered[modelID] = {
           id: ModelV2.ID.make(modelID),
           providerID: input.providerID,
