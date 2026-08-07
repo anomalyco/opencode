@@ -43,6 +43,7 @@ The suite contains:
 - home-session click timing split between content and titlebar-tab paint
 - single-session tab close timing through stable home restoration
 - cached session repaint and mutation tracing
+- large-session search scan, first-result reveal, and highlight stabilization
 - streaming timeline throughput, RAF-gap, long-task, geometry, and remount diagnostics
 - retained renderer heap with a large model catalog across repeated session navigation
 

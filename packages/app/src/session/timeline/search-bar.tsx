@@ -49,7 +49,10 @@ export function TimelineSearchBar(props: { controller: TimelineSearchController 
             />
           </div>
           <Show when={c.query.value()}>
-            <span class="shrink-0 self-center text-[11px] text-v2-text-text-muted [font-weight:440] tabular-nums">
+            <span
+              data-slot="timeline-search-count"
+              class="shrink-0 self-center text-[11px] text-v2-text-text-muted [font-weight:440] tabular-nums"
+            >
               {c.result.count() > 0 ? c.result.activeIndex() + 1 : 0}/{c.result.count()}
             </span>
           </Show>
