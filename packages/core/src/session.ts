@@ -329,6 +329,10 @@ const layer = Layer.effect(
         ),
       )
 
+    const pendingConflict = Effect.fn("Session.pendingConflict")(function* (input: PendingInputRef) {
+      yield* result.get(input.sessionID)
+      return yield* new PendingInputConflictError(input)
+    })
     const mutatePending = (
       input: PendingInputRef,
       mutation: (
@@ -342,9 +346,7 @@ const layer = Layer.effect(
           yield* mutation(bus, { sessionID: input.sessionID, id: input.inputID }).pipe(
             Effect.catchDefect((defect) =>
               defect instanceof SessionPending.LifecycleConflict
-                ? result
-                    .get(input.sessionID)
-                    .pipe(Effect.andThen(Effect.fail(new PendingInputConflictError(input))))
+                ? pendingConflict(input)
                 : Effect.die(defect),
             ),
           )

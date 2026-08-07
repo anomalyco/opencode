@@ -446,41 +446,39 @@ export const equivalent = (
   return false
 }
 
-export const cancel = Effect.fn("SessionPending.cancel")(function* (
-  bus: Bus.Interface,
-  input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID },
-) {
-  yield* inboxLocks.withLock(input.sessionID)(
+type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
+const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
+  inboxLocks.withLock(input.sessionID)(effect).pipe(Effect.asVoid)
+
+export const cancel = Effect.fn("SessionPending.cancel")((bus: Bus.Interface, input: PendingRef) =>
+  publishMutation(
+    input,
     bus.publish(SessionEvent.InputCancelled, {
       sessionID: input.sessionID,
       inputID: input.id,
     }),
-  )
-})
+  ),
+)
 
-export const steer = Effect.fn("SessionPending.steer")(function* (
-  bus: Bus.Interface,
-  input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID },
-) {
-  yield* inboxLocks.withLock(input.sessionID)(
+export const steer = Effect.fn("SessionPending.steer")((bus: Bus.Interface, input: PendingRef) =>
+  publishMutation(
+    input,
     bus.publish(SessionEvent.InputSteered, {
       sessionID: input.sessionID,
       inputID: input.id,
     }),
-  )
-})
+  ),
+)
 
-export const queue = Effect.fn("SessionPending.queue")(function* (
-  bus: Bus.Interface,
-  input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID },
-) {
-  yield* inboxLocks.withLock(input.sessionID)(
+export const queue = Effect.fn("SessionPending.queue")((bus: Bus.Interface, input: PendingRef) =>
+  publishMutation(
+    input,
     bus.publish(SessionEvent.InputQueued, {
       sessionID: input.sessionID,
       inputID: input.id,
     }),
-  )
-})
+  ),
+)
 
 const publish = Effect.fn("SessionPending.publish")(function* (
   db: DatabaseService,
