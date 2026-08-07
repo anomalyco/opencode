@@ -432,6 +432,49 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("projects Gemini type arrays without narrowing their allowed values", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Use the tool.",
+          tools: [
+            {
+              name: "filter",
+              description: "Filter values",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  status: { type: ["number", "string"], description: "Status filter" },
+                  maybe: { type: ["string", "null"] },
+                  nothing: { type: ["null"] },
+                },
+              },
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools?.[0]?.functionDeclarations[0]?.parameters).toEqual({
+        type: "object",
+        properties: {
+          status: {
+            description: "Status filter",
+            anyOf: [{ type: "number" }, { type: "string" }],
+          },
+          maybe: {
+            nullable: true,
+            anyOf: [{ type: "string" }],
+          },
+          nothing: {
+            type: "null",
+            nullable: true,
+          },
+        },
+      })
+    }),
+  )
+
   it.effect("parses text, reasoning, and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(

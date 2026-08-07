@@ -217,8 +217,9 @@ interface ParserState {
 //    keys on non-object scalars. Mirrors OpenCode's historical Gemini rules.
 //
 // 2. Project — lossy mapping from JSON Schema to Gemini's schema dialect:
-//    drop empty objects, derive `nullable: true` from `type: [..., "null"]`,
-//    coerce `const` to `[const]` enum, recurse properties/items, propagate
+//    drop empty root parameter schemas while preserving nested empty objects,
+//    expand type arrays into `anyOf`, derive `nullable: true` from null members,
+//    coerce `const` to `[const]` enum, recurse properties/items, and propagate
 //    only an allowlisted set of keys (description, required, format, type,
 //    properties, items, allOf, anyOf, oneOf, minLength). Anything outside the
 //    allowlist (e.g. `additionalProperties`, `$ref`) is silently dropped.

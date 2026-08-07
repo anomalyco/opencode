@@ -64,12 +64,13 @@ const emptyObjectSchema = (schema: Record<string, unknown>) =>
 const projectNode = (schema: unknown, nested = false): Record<string, unknown> | undefined => {
   if (!isRecord(schema)) return undefined
   if (!nested && emptyObjectSchema(schema)) return undefined
+  const types = Array.isArray(schema.type) ? schema.type.filter((type) => type !== "null") : undefined
   return Object.fromEntries(
     [
       ["description", schema.description],
       ["required", schema.required],
       ["format", schema.format],
-      ["type", Array.isArray(schema.type) ? schema.type.filter((type) => type !== "null")[0] : schema.type],
+      ["type", types ? (types.length === 0 ? "null" : undefined) : schema.type],
       ["nullable", Array.isArray(schema.type) && schema.type.includes("null") ? true : undefined],
       ["enum", schema.const !== undefined ? [schema.const] : schema.enum],
       [
@@ -87,7 +88,14 @@ const projectNode = (schema: unknown, nested = false): Record<string, unknown> |
             : projectNode(schema.items, true),
       ],
       ["allOf", Array.isArray(schema.allOf) ? schema.allOf.map((item) => projectNode(item, true)) : undefined],
-      ["anyOf", Array.isArray(schema.anyOf) ? schema.anyOf.map((item) => projectNode(item, true)) : undefined],
+      [
+        "anyOf",
+        Array.isArray(schema.anyOf)
+          ? schema.anyOf.map((item) => projectNode(item, true))
+          : types && types.length > 0
+            ? types.map((type) => ({ type }))
+            : undefined,
+      ],
       ["oneOf", Array.isArray(schema.oneOf) ? schema.oneOf.map((item) => projectNode(item, true)) : undefined],
       ["minLength", schema.minLength],
     ].filter((entry) => entry[1] !== undefined),
