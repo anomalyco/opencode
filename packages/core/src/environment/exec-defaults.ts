@@ -4,14 +4,24 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import { collectStream } from "@opencode-ai/util/process"
 import { Failed, NotFound, WrongKind, type FileInfo, type FileType, type FilesImpl } from "./files"
 
+/**
+ * Files derived from spawning processes: one process per intent, "$1" is
+ * always the target path. Scripts report classification through an exit-code
+ * protocol (44/45/46) so failures never require parsing localized error text;
+ * LC_ALL=C pins the one stderr match that remains. Requires GNU coreutils and
+ * findutils in the target image — BSD and busybox userlands will not work.
+ * Malformed output from these scripts is our own bug and dies as a defect.
+ */
+
 const MAX_DATA_BYTES = 64 * 1024 * 1024
 const MAX_ERROR_BYTES = 64 * 1024
 const NOT_FOUND = 44
 const WRONG_KIND = 45
 const FAILED = 46
+const TAB = "\t"
 
 const loadMetadata = (flags = "") => `
-metadata=$(stat ${flags} -c '%F\t%s\t%Y' -- "$1" 2>&1) || {
+metadata=$(stat ${flags} -c '%F${TAB}%s${TAB}%Y' -- "$1" 2>&1) || {
   case "$metadata" in
     *'No such file or directory'*|*'Not a directory'*) exit ${NOT_FOUND} ;;
     *) printf '%s' "$metadata" >&2; exit ${FAILED} ;;
@@ -26,7 +36,7 @@ printf '%s\n' "$metadata"
 
 const readScript = `
 ${loadMetadata("-L")}
-kind=\${metadata%%	*}
+kind=\${metadata%%${TAB}*}
 if [ "$kind" != 'regular file' ] && [ "$kind" != 'regular empty file' ]; then
   printf '%s' "$kind" >&2
   exit ${WRONG_KIND}
@@ -41,12 +51,17 @@ fi
 
 const listScript = `
 ${loadMetadata()}
-kind=\${metadata%%	*}
+kind=\${metadata%%${TAB}*}
 if [ "$kind" != directory ]; then
   printf '%s' "$kind" >&2
   exit ${WRONG_KIND}
 fi
 find "$1" -mindepth 1 -maxdepth 1 -printf '%y\\0%f\\0'
+`
+
+const moveScript = `
+${loadMetadata()}
+mv -- "$1" "$2"
 `
 
 interface Result {
@@ -98,14 +113,11 @@ export const execDefaults = (spawner: ChildProcessSpawner["Service"]): FilesImpl
     return Effect.fail(processFailure(path, result))
   }
 
-  const stat: FilesImpl["stat"] = (path) =>
-    run(path, statScript).pipe(Effect.flatMap((result) => classifyStat(path, result)))
-
   const complete = (path: string, result: Result) =>
     result.exitCode === 0 ? Effect.void : Effect.fail(processFailure(path, result))
 
   return {
-    stat,
+    stat: (path) => run(path, statScript).pipe(Effect.flatMap((result) => classifyPlain(path, result, parseInfo))),
     read: (path, range) =>
       run(
         path,
@@ -130,24 +142,18 @@ export const execDefaults = (spawner: ChildProcessSpawner["Service"]): FilesImpl
     list: (path) => run(path, listScript).pipe(Effect.flatMap((result) => classify(path, result, parseList))),
     remove: (path) => run(path, `rm -rf -- "$1"`).pipe(Effect.flatMap((result) => complete(path, result))),
     move: (from, to) =>
-      run(
-        from,
-        `${loadMetadata()}
-mv -- "$1" "$2"`,
-        [to],
-      ).pipe(Effect.flatMap((result) => classifyMove(from, result))),
+      run(from, moveScript, [to]).pipe(Effect.flatMap((result) => classifyPlain(from, result, () => undefined))),
     mkdir: (path) => run(path, `mkdir -p -- "$1"`).pipe(Effect.flatMap((result) => complete(path, result))),
   }
 }
 
-const classifyStat = (path: string, result: Result): Effect.Effect<FileInfo, NotFound | Failed> => {
-  if (result.exitCode === 0) return Effect.sync(() => parseInfo(result.stdout))
-  if (result.exitCode === NOT_FOUND) return Effect.fail(new NotFound({ path }))
-  return Effect.fail(processFailure(path, result))
-}
-
-const classifyMove = (path: string, result: Result): Effect.Effect<void, NotFound | Failed> => {
-  if (result.exitCode === 0) return Effect.void
+/** `classify` for scripts whose protocol never reports WrongKind. */
+const classifyPlain = <A>(
+  path: string,
+  result: Result,
+  success: (stdout: Uint8Array) => A,
+): Effect.Effect<A, NotFound | Failed> => {
+  if (result.exitCode === 0) return Effect.sync(() => success(result.stdout))
   if (result.exitCode === NOT_FOUND) return Effect.fail(new NotFound({ path }))
   return Effect.fail(processFailure(path, result))
 }
@@ -159,7 +165,7 @@ const processFailure = (path: string, result: Result) =>
   })
 
 const parseInfo = (bytes: Uint8Array): FileInfo => {
-  const [rawType, rawSize, rawMtime] = new TextDecoder().decode(bytes).trim().split("\t")
+  const [rawType, rawSize, rawMtime] = new TextDecoder().decode(bytes).trim().split(TAB)
   const size = Number(rawSize)
   const mtimeMs = Number(rawMtime) * 1_000
   if (!rawType || !Number.isFinite(size) || !Number.isFinite(mtimeMs)) throw new Error("Invalid stat output")
@@ -177,9 +183,10 @@ const parseList = (bytes: Uint8Array) => {
   const fields = new TextDecoder().decode(bytes).split("\0")
   fields.pop()
   if (fields.length % 2 !== 0) throw new Error("Invalid find output")
-  return fields
-    .filter((_, index) => index % 2 === 0)
-    .map((type, index) => ({ name: fields[index * 2 + 1], type: parseType(type) }))
+  return Array.from({ length: fields.length / 2 }, (_, index) => ({
+    name: fields[index * 2 + 1],
+    type: parseType(fields[index * 2]),
+  }))
 }
 
 export * as EnvironmentExecDefaults from "./exec-defaults"
