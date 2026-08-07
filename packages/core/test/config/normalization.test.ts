@@ -149,6 +149,28 @@ describe("ConfigNormalize", () => {
     expect(() => Schema.decodeUnknownSync(Info)(result.encoded)).not.toThrow()
   })
 
+  test("migrates the legacy small model to the title agent", () => {
+    const result = normalized({
+      small_model: "anthropic/claude-haiku-4-5",
+      agent: { title: { prompt: "Custom title prompt" } },
+    })
+    expect(result.encoded.agents).toEqual({
+      title: {
+        model: { providerID: "anthropic", model: "claude-haiku-4-5" },
+        system: "Custom title prompt",
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
+  test("omits an invalid legacy small model without exposing its value", () => {
+    const secret = "do-not-log-this-value"
+    const result = normalized({ small_model: secret })
+    expect(result.encoded.agents).toBeUndefined()
+    expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([["unsupported", ["small_model"]]])
+    expect(JSON.stringify(result.diagnostics)).not.toContain(secret)
+  })
+
   test("recovers malformed named entries and retains a valid legacy collision", () => {
     const result = normalized({
       command: { fallback: { template: "legacy" } },
@@ -390,7 +412,6 @@ describe("ConfigNormalize", () => {
     const secret = "do-not-log-this-value"
     const result = normalized({
       logLevel: "DEBUG",
-      small_model: secret,
       agent: { reviewer: { name: secret, prompt: "review" } },
       provider: {
         custom: {
@@ -409,7 +430,6 @@ describe("ConfigNormalize", () => {
     })
     expect(result.diagnostics.filter((item) => item.kind === "unsupported").map((item) => item.path)).toEqual([
       ["logLevel"],
-      ["small_model"],
       ["agent", "reviewer", "name"],
       ["provider", "custom", "id"],
       ["provider", "custom", "whitelist"],

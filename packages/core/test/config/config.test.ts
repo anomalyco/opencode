@@ -512,6 +512,20 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("migrates the v1 small model to the title agent", () =>
+    Effect.sync(() => {
+      expect(
+        ConfigMigrateV1.migrate({
+          small_model: "anthropic/claude-haiku-4-5",
+          agent: { title: { prompt: "Custom title prompt" } },
+        }).agents?.title,
+      ).toEqual({
+        model: { providerID: "anthropic", model: "claude-haiku-4-5" },
+        system: "Custom title prompt",
+      })
+    }),
+  )
+
   it.effect("migrates v1 provider lists to policies", () =>
     Effect.sync(() => {
       expect(

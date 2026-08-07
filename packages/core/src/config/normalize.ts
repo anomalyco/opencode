@@ -41,7 +41,7 @@ export type Result =
   | { readonly type: "rejected"; readonly diagnostics: readonly Diagnostic[] }
 
 const options = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
-const unsupportedTopLevel = ["logLevel", "server", "small_model", "subagent_depth", "layout"] as const
+const unsupportedTopLevel = ["logLevel", "server", "subagent_depth", "layout"] as const
 const unsupportedExperimental = [
   "disable_paste_summary",
   "batch_tool",
@@ -113,6 +113,23 @@ export function normalize(input: unknown): Result {
   const legacyAgents = mapValues(decodeMap(input.agent, ConfigAgentV1.Info, ["agent"], diagnostics), (value) =>
     canonical(ConfigAgent.Info, ConfigMigrateV1.migrateAgent(value)),
   )
+  const legacySmallModel = own(input, "small_model")
+    ? decodeValue(Schema.String, input.small_model, ["small_model"], diagnostics)
+    : undefined
+  const migratedSmallModel = legacySmallModel
+    ? ConfigMigrateV1.migrate({ small_model: legacySmallModel }).agents?.title?.model
+    : undefined
+  if (legacySmallModel && !migratedSmallModel)
+    diagnostics.push({
+      kind: "unsupported",
+      path: ["small_model"],
+      message: "omitted unsupported legacy model reference",
+    })
+  if (migratedSmallModel)
+    legacyAgents.title = {
+      model: migratedSmallModel,
+      ...legacyAgents.title,
+    }
   const modeAgents = mapValues(decodeMap(input.mode, ConfigAgentV1.Info, ["mode"], diagnostics), (value) =>
     canonical(ConfigAgent.Info, ConfigMigrateV1.migrateAgent({ ...value, mode: "primary" })),
   )

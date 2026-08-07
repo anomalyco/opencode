@@ -419,6 +419,8 @@ The V1 provider filters do not have one-to-one native V2 config fields, but thei
 
 - `enabled_providers` becomes an internal deny-by-default provider policy followed by allows for the listed providers.
 - `disabled_providers` becomes internal deny policies for the listed providers.
+- `small_model` becomes the `model` selection for the built-in `title` agent. Native V2 configuration should use
+  `agents.title.model` instead.
 
 You may keep these fields in V1 syntax. OpenCode normalizes them without warning.
 
@@ -430,7 +432,6 @@ they are not mistaken for active configuration:
 - `logLevel`: use `OPENCODE_LOG_LEVEL` when starting OpenCode.
 - `server`: use the V2 service and explicit server options; the server API is an intentional breaking change.
 - `layout`: remove it; V1 already treated it as deprecated and always used stretch layout.
-- `small_model`: V2 selects models for internal maintenance agents without a separate top-level field.
 - Top-level `subagent_depth`: use `experimental.subagent_depth` instead.
 - `compaction.tail_turns` and `compaction.prune`: V2 uses `compaction.keep.tokens` and checkpoint-based compaction instead.
 - Agent `name` inside V1 JSON configuration.
