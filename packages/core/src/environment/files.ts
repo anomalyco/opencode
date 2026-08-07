@@ -29,11 +29,17 @@ export class Failed extends Schema.TaggedErrorClass<Failed>()("Environment.Faile
 }) {}
 
 export interface FilesImpl {
+  /**
+   * Reads a file, following a final symlink so `info` describes the target whose bytes are returned.
+   * The process-backed default caps collected output at 64 MiB; larger whole-file reads fail with
+   * `Failed`, so callers must use ranges for larger files.
+   */
   readonly read: (
     path: string,
     range?: { readonly offset: number; readonly length: number },
   ) => Effect.Effect<{ readonly info: FileInfo; readonly bytes: Uint8Array }, NotFound | WrongKind | Failed>
   readonly write: (path: string, bytes: Uint8Array) => Effect.Effect<void, Failed>
+  /** Describes the path entry itself, so a final symlink is reported as `symlink` rather than followed. */
   readonly stat: (path: string) => Effect.Effect<FileInfo, NotFound | Failed>
   readonly list: (path: string) => Effect.Effect<ReadonlyArray<DirEntry>, NotFound | WrongKind | Failed>
   readonly remove: (path: string) => Effect.Effect<void, Failed>

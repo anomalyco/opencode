@@ -10,8 +10,8 @@ const NOT_FOUND = 44
 const WRONG_KIND = 45
 const FAILED = 46
 
-const loadMetadata = `
-metadata=$(stat -c '%F\t%s\t%Y' -- "$1" 2>&1) || {
+const loadMetadata = (flags = "") => `
+metadata=$(stat ${flags} -c '%F\t%s\t%Y' -- "$1" 2>&1) || {
   case "$metadata" in
     *'No such file or directory'*|*'Not a directory'*) exit ${NOT_FOUND} ;;
     *) printf '%s' "$metadata" >&2; exit ${FAILED} ;;
@@ -20,18 +20,14 @@ metadata=$(stat -c '%F\t%s\t%Y' -- "$1" 2>&1) || {
 `
 
 const statScript = `
-${loadMetadata}
+${loadMetadata()}
 printf '%s\n' "$metadata"
 `
 
 const readScript = `
-${loadMetadata}
+${loadMetadata("-L")}
 kind=\${metadata%%	*}
-if [ "$kind" != 'regular file' ] && [ "$kind" != 'regular empty file' ] && [ "$kind" != 'symbolic link' ]; then
-  printf '%s' "$kind" >&2
-  exit ${WRONG_KIND}
-fi
-if [ "$kind" = 'symbolic link' ] && ! [ -f "$1" ]; then
+if [ "$kind" != 'regular file' ] && [ "$kind" != 'regular empty file' ]; then
   printf '%s' "$kind" >&2
   exit ${WRONG_KIND}
 fi
@@ -44,7 +40,7 @@ fi
 `
 
 const listScript = `
-${loadMetadata}
+${loadMetadata()}
 kind=\${metadata%%	*}
 if [ "$kind" != directory ]; then
   printf '%s' "$kind" >&2
@@ -103,14 +99,7 @@ export const execDefaults = (spawner: ChildProcessSpawner["Service"]): FilesImpl
   }
 
   const stat: FilesImpl["stat"] = (path) =>
-    run(path, statScript).pipe(
-      Effect.flatMap((result) => classifyStat(path, result)),
-      Effect.catch((cause) =>
-        cause instanceof NotFound || cause instanceof Failed
-          ? Effect.fail(cause)
-          : Effect.fail(new Failed({ path, cause })),
-      ),
-    )
+    run(path, statScript).pipe(Effect.flatMap((result) => classifyStat(path, result)))
 
   const complete = (path: string, result: Result) =>
     result.exitCode === 0 ? Effect.void : Effect.fail(processFailure(path, result))
@@ -133,30 +122,17 @@ export const execDefaults = (spawner: ChildProcessSpawner["Service"]): FilesImpl
             }
           }),
         ),
-        Effect.catch((cause) =>
-          cause instanceof NotFound || cause instanceof WrongKind || cause instanceof Failed
-            ? Effect.fail(cause)
-            : Effect.fail(new Failed({ path, cause })),
-        ),
       ),
     write: (path, bytes) =>
       run(path, `mkdir -p "$(dirname "$1")" && cat > "$1"`, [], bytes).pipe(
         Effect.flatMap((result) => complete(path, result)),
       ),
-    list: (path) =>
-      run(path, listScript).pipe(
-        Effect.flatMap((result) => classify(path, result, parseList)),
-        Effect.catch((cause) =>
-          cause instanceof NotFound || cause instanceof WrongKind || cause instanceof Failed
-            ? Effect.fail(cause)
-            : Effect.fail(new Failed({ path, cause })),
-        ),
-      ),
+    list: (path) => run(path, listScript).pipe(Effect.flatMap((result) => classify(path, result, parseList))),
     remove: (path) => run(path, `rm -rf -- "$1"`).pipe(Effect.flatMap((result) => complete(path, result))),
     move: (from, to) =>
       run(
         from,
-        `${loadMetadata}
+        `${loadMetadata()}
 mv -- "$1" "$2"`,
         [to],
       ).pipe(Effect.flatMap((result) => classifyMove(from, result))),

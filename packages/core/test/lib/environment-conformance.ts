@@ -106,6 +106,25 @@ export const environmentConformance = (
       )
     })
 
+    check("follows symlinks when reading", async (harness) => {
+      if (!harness.symlink) return
+      await Effect.runPromise(harness.files.write(`${harness.root}/target`, bytes("target content")))
+      await Effect.runPromise(harness.files.mkdir(`${harness.root}/directory`))
+      await Effect.runPromise(harness.symlink("target", `${harness.root}/file-link`))
+      await Effect.runPromise(harness.symlink("directory", `${harness.root}/directory-link`))
+      await Effect.runPromise(harness.symlink("missing", `${harness.root}/dangling-link`))
+
+      const result = await Effect.runPromise(harness.files.read(`${harness.root}/file-link`))
+      expect(text(result.bytes)).toBe("target content")
+      expect(result.info.type).toBe("file")
+      expect(result.info.size).toBe(bytes("target content").length)
+
+      const directoryError = await failure(harness.files.read(`${harness.root}/directory-link`))
+      expect(directoryError).toBeInstanceOf(WrongKind)
+      expect((directoryError as WrongKind).actual).toBe("directory")
+      expect(await failure(harness.files.read(`${harness.root}/dangling-link`))).toBeInstanceOf(NotFound)
+    })
+
     check("moves files and removes trees idempotently", async ({ files, root }) => {
       const source = `${root}/source/file`
       const destination = `${root}/destination`

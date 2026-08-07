@@ -71,13 +71,10 @@ export const makeMemoryDriver = (): MemoryDriver => {
       if (original.type === "directory") return Effect.fail(new WrongKind({ path: value, actual: "directory" }))
       const resolved = resolveKey(value, true)
       const node = resolved === undefined ? undefined : nodes.get(resolved)
-      if (!node && original.type === "symlink") {
-        return Effect.fail(new WrongKind({ path: value, actual: "symlink" }))
-      }
       if (!node) return Effect.fail(new NotFound({ path: value }))
-      if (node.type !== "file") return Effect.fail(new WrongKind({ path: value, actual: original.type }))
+      if (node.type !== "file") return Effect.fail(new WrongKind({ path: value, actual: node.type }))
       const bytes = range === undefined ? node.bytes : node.bytes.subarray(range.offset, range.offset + range.length)
-      return Effect.succeed({ info: info(original), bytes: bytes.slice() })
+      return Effect.succeed({ info: info(node), bytes: bytes.slice() })
     },
     write: (value, bytes) =>
       Effect.try({
