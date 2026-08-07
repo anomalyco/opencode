@@ -132,9 +132,31 @@ export function fromOaCompatibleRequest(body: any): CommonRequest {
     stop: body.stop,
     messages: msgsOut,
     stream: !!body.stream,
-    tools: Array.isArray(body.tools) ? body.tools : undefined,
+    tools: Array.isArray(body.tools) ? body.tools.map(normalizeOaCompatibleTool) : undefined,
     tool_choice: body.tool_choice,
   }
+}
+
+function normalizeOaCompatibleTool(tool: any) {
+  if (!tool || typeof tool !== "object" || tool.type !== "function" || !tool.function) return tool
+  return {
+    ...tool,
+    function: {
+      ...tool.function,
+      parameters: normalizeObjectCompositionParameters(tool.function.parameters),
+    },
+  }
+}
+
+function normalizeObjectCompositionParameters(parameters: any) {
+  if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) return parameters
+  if (parameters.type !== undefined) return parameters
+  const branches = [parameters.oneOf, parameters.anyOf, parameters.allOf].filter(Array.isArray).flat()
+  if (!branches.length) return parameters
+  if (!branches.every((branch) => branch && typeof branch === "object" && !Array.isArray(branch) && branch.type === "object")) {
+    return parameters
+  }
+  return { ...parameters, type: "object" }
 }
 
 export function toOaCompatibleRequest(body: CommonRequest) {
@@ -201,7 +223,7 @@ export function toOaCompatibleRequest(body: CommonRequest) {
         function: {
           name: tool.name,
           description: tool.description,
-          parameters: tool.parameters,
+          parameters: normalizeObjectCompositionParameters(tool.parameters),
         },
       }))
     : undefined
