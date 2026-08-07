@@ -113,6 +113,7 @@ export type LocationGetOutput = {
   readonly directory: string
   readonly workspaceID?: string
   readonly project: { readonly id: string; readonly directory: string }
+  readonly home: string
 }
 
 export type AgentsListInput = {

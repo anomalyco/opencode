@@ -20,6 +20,11 @@ export class Info extends Schema.Class<Info>("Location.Info")({
   }),
 }) {}
 
+export class Details extends Schema.Class<Details>("Location.Details")({
+  ...Info.fields,
+  home: AbsolutePath,
+}) {}
+
 export function response<S extends Schema.Top>(data: S) {
   return Schema.Struct({ location: Info, data })
 }

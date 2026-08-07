@@ -45,6 +45,7 @@ import { ScopedKey, type ServerScope } from "@/utils/server-scope"
 import { normalizeSessionInfo } from "@/utils/session"
 import type { ServerProtocol } from "@/utils/server-protocol"
 import type { ServerApi } from "@/utils/server"
+import { locationPath } from "@/utils/location-path"
 
 type GlobalStore = {
   ready: boolean
@@ -119,6 +120,11 @@ type ProjectApi = {
   readonly current: (input?: ProjectCurrentInput) => Promise<ProjectCurrentOutput>
 }
 
+type LocationApi = {
+  readonly get: (input?: {
+    readonly location?: { readonly directory?: string; readonly workspace?: string }
+  }) => Promise<unknown>
+}
 type McpApi = ServerApi["mcp"]
 type PermissionApi = ServerApi["permission"]
 type QuestionApi = ServerApi["question"]
@@ -142,7 +148,7 @@ export const loadProjectsQuery = (scope: ServerScope, api: ProjectApi) =>
 
 export async function bootstrapGlobal(input: {
   serverSDK: OpencodeClient
-  serverAPI: CatalogApi & { readonly project: ProjectApi }
+  serverAPI: CatalogApi & { readonly location: LocationApi; readonly project: ProjectApi }
   protocol?: Promise<ServerProtocol>
   scope: ServerScope
   requestFailedTitle: string
@@ -157,7 +163,10 @@ export async function bootstrapGlobal(input: {
       input.queryClient.fetchQuery(
         loadProvidersQuery(input.scope, null, input.serverAPI, input.serverSDK, input.protocol),
       ),
-    () => input.queryClient.fetchQuery(loadPathQuery(input.scope, null, input.serverSDK, input.protocol)),
+    () =>
+      input.queryClient.fetchQuery(
+        loadPathQuery(input.scope, null, input.serverAPI.location, input.serverSDK, input.protocol),
+      ),
     () =>
       input.queryClient
         .fetchQuery(loadProjectsQuery(input.scope, input.serverAPI.project))
@@ -298,15 +307,17 @@ export const loadCommands = (
 export const loadPathQuery = (
   scope: ServerScope,
   directory: string | null,
+  api: LocationApi,
   sdk: OpencodeClient,
   protocol?: Promise<ServerProtocol>,
 ) =>
   queryOptions<Path>({
     queryKey: [scope, directory, "path"],
     queryFn: async () => {
-      if ((await protocol) !== "v1")
-        return { state: "", config: "", worktree: "", directory: directory ?? "", home: "" }
-      return retry(() => sdk.path.get({ directory: directory ?? undefined }).then((result) => result.data!))
+      if ((await protocol) === "v1") {
+        return retry(() => sdk.path.get({ directory: directory ?? undefined }).then((result) => result.data!))
+      }
+      return retry(() => api.get({ location: directory ? { directory } : undefined })).then(locationPath)
     },
   })
 
@@ -336,6 +347,7 @@ export async function bootstrapDirectory(input: {
     readonly agent: AgentListApi
     readonly command: CommandListApi
     readonly mcp: McpApi
+    readonly location: LocationApi
     readonly permission: PermissionApi
     readonly project: ProjectApi
     readonly question: QuestionApi
@@ -418,7 +430,7 @@ export async function bootstrapDirectory(input: {
       !seededPath &&
         (() =>
           input.queryClient
-            .ensureQueryData(loadPathQuery(input.scope, input.directory, input.sdk, input.protocol))
+            .ensureQueryData(loadPathQuery(input.scope, input.directory, input.api.location, input.sdk, input.protocol))
             .then((data) => {
               const next = projectID(data.directory ?? input.directory, input.global.project)
               if (next) input.setStore("project", next)
