@@ -14,7 +14,7 @@ export default Plugin.define({
           secondary: context.theme.text.subdued,
           muted: context.theme.border.default,
           accent: context.theme.text.action.primary.focused,
-          warning: context.theme.text.default,
+          warning: context.theme.text.feedback.info.default,
           background: context.theme.background.default,
         },
       })),
