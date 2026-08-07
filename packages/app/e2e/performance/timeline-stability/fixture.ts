@@ -197,7 +197,9 @@ export async function setupTimeline(
       )
     },
     async waitForPart(partID: string) {
-      await expect(page.locator(`[data-timeline-part-id="${partID}"]`).first()).toBeVisible()
+      const part = page.locator(`[data-timeline-part-id="${partID}"]`)
+      await expect(part).toHaveCount(1)
+      await expect(part).toBeVisible()
     },
   }
 }
