@@ -523,6 +523,36 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.delete("session.pending.cancel", "/api/session/:sessionID/pending/:inputID", {
+        params: { sessionID: Session.ID, inputID: SessionMessage.ID },
+        success: HttpApiSchema.NoContent,
+        error: [ConflictError, SessionNotFoundError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.pending.cancel",
+            summary: "Cancel queued input",
+            description: "Cancel an input that is still queued for delivery.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.pending.steer", "/api/session/:sessionID/pending/:inputID/steer", {
+        params: { sessionID: Session.ID, inputID: SessionMessage.ID },
+        success: HttpApiSchema.NoContent,
+        error: [ConflictError, SessionNotFoundError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.pending.steer",
+            summary: "Steer queued input",
+            description: "Change a queued input to steer delivery and wake session execution.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.get("session.instructions.entry.list", "/api/session/:sessionID/instructions/entries", {
         params: { sessionID: Session.ID },
         success: Schema.Struct({ data: Schema.Array(InstructionEntry.Info) }),

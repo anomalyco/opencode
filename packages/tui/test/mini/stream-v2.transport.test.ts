@@ -669,6 +669,14 @@ describe("V2 mini transport", () => {
             data: { text: "follow up" },
             delivery: "queue",
           },
+          {
+            id: "msg_cancelled",
+            sessionID: "ses_1",
+            timeCreated: 2,
+            type: "user",
+            data: { text: "remove me" },
+            delivery: "queue",
+          },
         ],
       },
     })
@@ -684,11 +692,14 @@ describe("V2 mini transport", () => {
         .findLast((item) => item.type === "queued.prompts")
         ?.prompts.map((item) => [item.messageID, item.delivery])
 
-    expect(pending()).toEqual([["msg_queued", "queue"]])
+    expect(pending()).toEqual([
+      ["msg_queued", "queue"],
+      ["msg_cancelled", "queue"],
+    ])
     events.push({
-      id: "evt_promoted",
-      created: 2,
-      type: "session.input.promoted",
+      id: "evt_steered",
+      created: 3,
+      type: "session.input.steered",
       durable: durable("ses_1", 2),
       data: { sessionID: "ses_1", inputID: "msg_queued" },
     })
@@ -697,7 +708,28 @@ describe("V2 mini transport", () => {
     expect(ui.commits).toContainEqual(
       expect.objectContaining({ kind: "user", messageID: "msg_queued", text: "follow up" }),
     )
-    expect(pending()).toEqual([])
+    expect(pending()).toEqual([
+      ["msg_queued", "steer"],
+      ["msg_cancelled", "queue"],
+    ])
+    events.push({
+      id: "evt_cancelled",
+      created: 4,
+      type: "session.input.cancelled",
+      durable: durable("ses_1", 3),
+      data: { sessionID: "ses_1", inputID: "msg_cancelled" },
+    })
+    while (pending()?.length !== 1) await Bun.sleep(0)
+    expect(pending()).toEqual([["msg_queued", "steer"]])
+    events.push({
+      id: "evt_promoted",
+      created: 5,
+      type: "session.input.promoted",
+      durable: durable("ses_1", 4),
+      data: { sessionID: "ses_1", inputID: "msg_queued" },
+    })
+    while (pending()?.length !== 0) await Bun.sleep(0)
+    expect(ui.commits.filter((item) => item.messageID === "msg_queued")).toHaveLength(1)
     const prompt = spyOn(client.session, "prompt").mockImplementation(
       (request) => ok(promptAdmission(request)) as never,
     )

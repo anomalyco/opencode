@@ -21,6 +21,7 @@ import { RunFooterView } from "../../src/mini/footer.view"
 import { RunEntryContent } from "../../src/mini/scrollback.writer"
 import { RUN_THEME_FALLBACK, type RunTheme } from "../../src/mini/theme"
 import type {
+  FooterQueuedPrompt,
   FooterState,
   FooterSubagentState,
   FooterSubagentTab,
@@ -120,13 +121,16 @@ async function renderFooter(
     height?: number
     state?: Partial<FooterState>
     onCycle?: () => void
-    onSubmit?: (prompt: RunPrompt) => boolean
+    onSubmit?: (prompt: RunPrompt) => boolean | Promise<boolean>
     view?: FooterView
     onFormReply?: (input: unknown) => void
     miniSettings?: MiniSettings
     mono?: boolean
     onStatus?: (status: string) => void
     onMiniSettingChange?: (change: MiniSettingChange) => void
+    queuedPrompts?: FooterQueuedPrompt[]
+    onQueuedPromptSteer?: (inputID: string) => Promise<void>
+    onQueuedPromptCancel?: (inputID: string) => Promise<void>
   } = {},
 ) {
   const [view, setView] = createSignal<FooterView>(input.view ?? { type: "prompt" })
@@ -164,6 +168,7 @@ async function renderFooter(
           state={state}
           view={view}
           subagent={subagents}
+          queuedPrompts={() => input.queuedPrompts ?? []}
           theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
           mono={input.mono ?? false}
           miniSettings={miniSettings}
@@ -173,6 +178,8 @@ async function renderFooter(
           onFormCancel={() => {}}
           onCycle={input.onCycle ?? (() => {})}
           onInterrupt={() => false}
+          onQueuedPromptSteer={input.onQueuedPromptSteer}
+          onQueuedPromptCancel={input.onQueuedPromptCancel}
           onEditorOpen={async () => undefined}
           onInputClear={() => {}}
           onExit={() => {}}
@@ -913,7 +920,7 @@ test("direct subagent panel closes when moving up from the first item", async ()
   }
 })
 
-test("direct pending panel shows durable delivery without edit actions", async () => {
+test("direct queued panel steers and deletes selected prompts", async () => {
   const [prompts] = createSignal([
     {
       messageID: "m-1",
@@ -921,16 +928,22 @@ test("direct pending panel shows durable delivery without edit actions", async (
       delivery: "queue" as const,
     },
   ])
+  const steered: string[] = []
+  const deleted: string[] = []
 
   const app = await testRender(
     () => (
-      <box width={100} height={RUN_SUBAGENT_PANEL_ROWS}>
-        <RunQueuedPromptSelectBody
-          theme={() => RUN_THEME_FALLBACK.footer}
-          prompts={prompts}
-          onClose={() => {}}
-        />
-      </box>
+      <Keymap.Provider config={tuiConfig}>
+        <box width={100} height={RUN_SUBAGENT_PANEL_ROWS}>
+          <RunQueuedPromptSelectBody
+            theme={() => RUN_THEME_FALLBACK.footer}
+            prompts={prompts}
+            onClose={() => {}}
+            onSteer={(prompt) => steered.push(prompt.messageID)}
+            onDelete={(prompt) => deleted.push(prompt.messageID)}
+          />
+        </box>
+      </Keymap.Provider>
     ),
     { width: 100, height: RUN_SUBAGENT_PANEL_ROWS },
   )
@@ -940,16 +953,72 @@ test("direct pending panel shows durable delivery without edit actions", async (
     const frame = app.captureCharFrame()
     const list = panelMenu(app.renderer.root)
 
-    expect(frame).toContain("Pending work")
+    expect(frame).toContain("Queued prompts")
     expect(frame).toContain("fix the auth test")
-    expect(frame).toContain("queue")
+    expect(frame).toContain("queued")
+    expect(frame).toContain("enter steer · ctrl+d delete")
     expect(frame).not.toContain("┌")
     expect(frame).not.toContain("┃")
     expectPaletteList(list, 0)
-    expect(frame).not.toContain("edit")
-    expect(frame).not.toContain("remove")
+    app.mockInput.pressEnter()
+    app.mockInput.pressKey("d", { ctrl: true })
+    expect(steered).toEqual(["m-1"])
+    expect(deleted).toEqual(["m-1"])
   } finally {
     app.renderer.destroy()
+  }
+})
+
+test("direct footer steers the oldest queued prompt from an empty composer", async () => {
+  const steered: string[] = []
+  const app = await renderFooter({
+    queuedPrompts: [
+      { messageID: "m-1", prompt: { text: "first", parts: [] }, delivery: "queue" },
+      { messageID: "m-2", prompt: { text: "second", parts: [] }, delivery: "queue" },
+    ],
+    onQueuedPromptSteer: async (inputID) => {
+      steered.push(inputID)
+    },
+  })
+
+  try {
+    await app.renderOnce()
+    app.mockInput.pressEnter({ meta: true })
+    await Bun.sleep(0)
+    expect(steered).toEqual([])
+    app.mockInput.pressEnter()
+    await Bun.sleep(0)
+    expect(steered).toEqual(["m-1"])
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer does not steer queued work on a double submit", async () => {
+  const submitted: RunPrompt[] = []
+  const steered: string[] = []
+  const app = await renderFooter({
+    queuedPrompts: [{ messageID: "m-1", prompt: { text: "queued", parts: [] }, delivery: "queue" }],
+    onSubmit: async (prompt) => {
+      submitted.push(prompt)
+      await Bun.sleep(10)
+      return true
+    },
+    onQueuedPromptSteer: async (inputID) => {
+      steered.push(inputID)
+    },
+  })
+
+  try {
+    await app.renderOnce()
+    await app.mockInput.typeText("send once")
+    app.mockInput.pressEnter()
+    app.mockInput.pressEnter()
+    await Bun.sleep(20)
+    expect(submitted).toHaveLength(1)
+    expect(steered).toEqual([])
+  } finally {
+    app.cleanup()
   }
 })
 
@@ -1245,7 +1314,7 @@ test.skip("direct footer clears the synthetic skills draft when the panel closes
   }
 })
 
-test("direct footer shows authoritative pending work while running", async () => {
+test("direct footer shows authoritative queued work while running", async () => {
   const [state] = createSignal<FooterState>({
     phase: "running",
     status: "",
@@ -1349,9 +1418,9 @@ test("direct footer shows authoritative pending work while running", async () =>
     const hint = statusItems.at(-1)!
 
     expect(spinner).toBeDefined()
-    expect(frame).toContain("1 pending")
+    expect(frame).toContain("1 queued")
     expect(frame).toContain("ctrl+b background")
-    expect(frame).toContain("ctrl+x q 1 pending")
+    expect(frame).toContain("ctrl+x q 1 queued")
     expect(frame).toContain("↓ subagents")
     expect(frame).toContain("ctrl+p cmd")
     expect(frame).toContain("subagents · ctrl+p cmd")

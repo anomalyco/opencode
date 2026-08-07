@@ -59,6 +59,7 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
+  onEmptySubmit?: () => boolean | Promise<boolean>
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
   right?: JSX.Element
@@ -946,9 +947,12 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return false
     if (move.creating()) return false
     if (auto()?.visible) return false
-    if (!store.prompt.text) return false
     const trimmed = store.prompt.text.trim()
-    if (delivery === "queue" && (store.mode === "shell" || trimmed === "exit" || trimmed === "quit" || trimmed === ":q")) {
+    if (!trimmed) return delivery === "steer" ? (await props.onEmptySubmit?.()) === true : false
+    if (
+      delivery === "queue" &&
+      (store.mode === "shell" || trimmed === "exit" || trimmed === "quit" || trimmed === ":q")
+    ) {
       toast.show({ message: "This prompt cannot be queued", variant: "warning" })
       return false
     }

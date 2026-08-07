@@ -32,7 +32,15 @@ import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.edit
 import { monoTruncateMiddle } from "./mono"
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
-import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunReference } from "./types"
+import type {
+  FooterQueuedPrompt,
+  FooterState,
+  RunAgent,
+  RunCommand,
+  RunPrompt,
+  RunPromptPart,
+  RunReference,
+} from "./types"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 const AUTOCOMPLETE_BOTTOM_ROWS = 1
@@ -73,6 +81,8 @@ type PromptInput = {
   theme: Accessor<RunFooterTheme>
   mono: Accessor<boolean>
   history?: Accessor<RunPrompt[]>
+  queuedPrompts: Accessor<FooterQueuedPrompt[]>
+  onQueuedPromptSteer: (inputID: string) => Promise<boolean>
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onCycle: () => void
   onInterrupt: () => boolean
@@ -1127,6 +1137,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
   }
 
+  let submitting = false
   const submitPrompt = (next: RunPrompt, delivery: "steer" | "queue" = "steer") => {
     if (!area || area.isDestroyed) {
       draft = promptCopy(next)
@@ -1141,7 +1152,17 @@ export function createPromptState(input: PromptInput): PromptState {
       hide()
     }
 
+    if (submitting) return
+
     if (!next.text.trim()) {
+      const queued = delivery === "steer" ? input.queuedPrompts()[0] : undefined
+      if (queued) {
+        submitting = true
+        void input.onQueuedPromptSteer(queued.messageID).finally(() => {
+          submitting = false
+        })
+        return
+      }
       input.onStatus(input.state().phase === "running" ? "waiting for current response" : "empty prompt ignored")
       return
     }
@@ -1181,18 +1202,22 @@ export function createPromptState(input: PromptInput): PromptState {
         : { ...next, delivery }
     const shellMode = next.mode === "shell"
 
+    submitting = true
     resetDraft()
     queueMicrotask(async () => {
-      if (await input.onSubmit(submit)) {
-        push(next)
-        if (shellMode) {
-          setShellMode(false)
-          draft = emptyPrompt(false)
+      try {
+        if (await input.onSubmit(submit)) {
+          push(next)
+          if (shellMode) {
+            setShellMode(false)
+            draft = emptyPrompt(false)
+          }
+          return
         }
-        return
+        restore(next)
+      } finally {
+        submitting = false
       }
-
-      restore(next)
     })
   }
 

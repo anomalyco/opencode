@@ -173,6 +173,26 @@ export const InputAdmitted = Event.durable({
 })
 export type InputAdmitted = typeof InputAdmitted.Type
 
+export const InputCancelled = Event.durable({
+  type: "session.input.cancelled",
+  ...options,
+  schema: {
+    sessionID: SessionID,
+    inputID: SessionMessage.ID,
+  },
+})
+export type InputCancelled = typeof InputCancelled.Type
+
+export const InputSteered = Event.durable({
+  type: "session.input.steered",
+  ...options,
+  schema: {
+    sessionID: SessionID,
+    inputID: SessionMessage.ID,
+  },
+})
+export type InputSteered = typeof InputSteered.Type
+
 export namespace Execution {
   export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
   export type Started = typeof Started.Type
@@ -580,6 +600,8 @@ export const Definitions = Event.inventory(
   Forked,
   InputPromoted,
   InputAdmitted,
+  InputCancelled,
+  InputSteered,
   Execution.Started,
   Execution.Succeeded,
   Execution.Failed,
@@ -621,13 +643,16 @@ export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
 )
+export const EphemeralDefinitions = Event.inventory(
+  ...Definitions.filter((definition) => definition.durability === "ephemeral"),
+)
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Session.Event.Durable" })
 export type DurableEvent = typeof Durable.Type
 
-export const All = Schema.Union(Event.inventory(...Definitions, UsageRecorded), { mode: "oneOf" }).pipe(
+export const All = Schema.Union([Durable, ...EphemeralDefinitions], { mode: "oneOf" }).pipe(
   Schema.toTaggedUnion("type"),
 )
 export type Event = typeof All.Type

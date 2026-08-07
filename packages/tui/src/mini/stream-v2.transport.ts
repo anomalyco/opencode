@@ -934,6 +934,29 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       write([], { phase: "running", status: "waiting for assistant" })
       return
     }
+    if (event.type === "session.input.steered") {
+      const pending = state.pending.get(event.data.inputID)
+      if (!pending) return
+      state.pending.set(event.data.inputID, { ...pending, delivery: "steer" })
+      syncPending()
+      if (state.messageIDs.has(event.data.inputID)) return
+      state.messageIDs.add(event.data.inputID)
+      write([
+        {
+          kind: "user",
+          source: "system",
+          text: pending.prompt.text,
+          phase: "start",
+          messageID: event.data.inputID,
+        },
+      ])
+      return
+    }
+    if (event.type === "session.input.cancelled") {
+      state.admitted.delete(event.data.inputID)
+      if (state.pending.delete(event.data.inputID)) syncPending()
+      return
+    }
     if (event.type === "session.step.started") {
       state.stepModel = { providerID: event.data.model.providerID, modelID: event.data.model.id }
       write([], { phase: "running", status: "assistant responding" })

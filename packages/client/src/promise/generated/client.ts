@@ -58,6 +58,10 @@ import type {
   SessionContextOutput,
   SessionPendingListInput,
   SessionPendingListOutput,
+  SessionPendingCancelInput,
+  SessionPendingCancelOutput,
+  SessionPendingSteerInput,
+  SessionPendingSteerOutput,
   SessionInstructionsEntryListInput,
   SessionInstructionsEntryListOutput,
   SessionInstructionsEntryPutInput,
@@ -766,6 +770,28 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+        cancel: (input: SessionPendingCancelInput, requestOptions?: RequestOptions) =>
+          request<SessionPendingCancelOutput>(
+            {
+              method: "DELETE",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/pending/${encodeURIComponent(input.inputID)}`,
+              successStatus: 204,
+              declaredStatuses: [409, 404, 400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        steer: (input: SessionPendingSteerInput, requestOptions?: RequestOptions) =>
+          request<SessionPendingSteerOutput>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/pending/${encodeURIComponent(input.inputID)}/steer`,
+              successStatus: 204,
+              declaredStatuses: [409, 404, 400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
       },
       instructions: {
         entry: {

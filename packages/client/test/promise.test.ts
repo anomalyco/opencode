@@ -32,6 +32,7 @@ test("exposes every standard HTTP API group", () => {
     "projectCopy",
     "vcs",
     "debug",
+    "migration",
     "websearch",
     "config",
   ])
@@ -354,6 +355,26 @@ test("session.pending.list uses the public HTTP contract", async () => {
 
   expect(result).toEqual(pending)
   expect(requests).toEqual([{ method: "GET", url: "http://localhost:3000/api/session/ses_test/pending" }])
+})
+
+test("session.pending mutations use the public HTTP contract", async () => {
+  const requests: Array<{ method: string; url: string }> = []
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push({ method: request.method, url: request.url })
+      return new Response(null, { status: 204 })
+    },
+  })
+
+  await client.session.pending.cancel({ sessionID: "ses_test", inputID: "msg_cancel" })
+  await client.session.pending.steer({ sessionID: "ses_test", inputID: "msg_steer" })
+
+  expect(requests).toEqual([
+    { method: "DELETE", url: "http://localhost:3000/api/session/ses_test/pending/msg_cancel" },
+    { method: "POST", url: "http://localhost:3000/api/session/ses_test/pending/msg_steer/steer" },
+  ])
 })
 
 test("event.subscribe exposes the Promise event stream wire projection", async () => {

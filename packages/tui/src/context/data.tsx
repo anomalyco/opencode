@@ -170,6 +170,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     function removePending(sessionID: string, inputID?: string) {
       if (!inputID) return
+      if (!store.session.pending[sessionID]?.some((item) => item.id === inputID)) return
       setStore(
         "session",
         "pending",
@@ -186,6 +187,23 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         "permission",
         sessionID,
         requests.filter((request) => request.id !== requestID),
+      )
+    }
+
+    function updatePending(sessionID: string, inputID: string, delivery: "steer" | "queue") {
+      if (
+        !store.session.pending[sessionID]?.some(
+          (item) => item.id === inputID && item.type !== "compaction" && item.delivery !== delivery,
+        )
+      )
+        return
+      setStore(
+        "session",
+        "pending",
+        sessionID,
+        (store.session.pending[sessionID] ?? []).map((item) =>
+          item.id === inputID && item.type !== "compaction" ? { ...item, delivery } : item,
+        ),
       )
     }
 
@@ -234,6 +252,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         return assistant?.content.findLast(
           (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && !item.time?.completed,
         )
+      },
+      reindex(messages: SessionMessageInfo[], index: Map<string, number>, start: number) {
+        for (let position = start; position < messages.length; position++) {
+          const item = messages[position]
+          if (item) index.set(item.id, position)
+        }
       },
     }
 
@@ -425,15 +449,37 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             existing.time.created = event.created
             draft.splice(position, 1)
             draft.push(existing)
-            index.clear()
-            draft.forEach((message, indexValue) => index.set(message.id, indexValue))
+            message.reindex(draft, index, position)
           })
-          setStore(
-            "session",
-            "input",
-            event.data.sessionID,
-            (store.session.input[event.data.sessionID] ?? []).filter((id) => id !== event.data.inputID),
-          )
+          if (store.session.input[event.data.sessionID]?.includes(event.data.inputID))
+            setStore(
+              "session",
+              "input",
+              event.data.sessionID,
+              (store.session.input[event.data.sessionID] ?? []).filter((id) => id !== event.data.inputID),
+            )
+          break
+        }
+        case "session.input.steered":
+          updatePending(event.data.sessionID, event.data.inputID, "steer")
+          break
+        case "session.input.cancelled": {
+          removePending(event.data.sessionID, event.data.inputID)
+          if (messageIndex.get(event.data.sessionID)?.has(event.data.inputID))
+            message.update(event.data.sessionID, (draft, index) => {
+              const position = index.get(event.data.inputID)
+              if (position === undefined) return
+              draft.splice(position, 1)
+              index.delete(event.data.inputID)
+              message.reindex(draft, index, position)
+            })
+          if (store.session.input[event.data.sessionID]?.includes(event.data.inputID))
+            setStore(
+              "session",
+              "input",
+              event.data.sessionID,
+              (store.session.input[event.data.sessionID] ?? []).filter((id) => id !== event.data.inputID),
+            )
           break
         }
         case "session.input.admitted":

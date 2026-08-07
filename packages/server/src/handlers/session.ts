@@ -662,6 +662,58 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.pending.cancel",
+        Effect.fn(function* (ctx) {
+          yield* session
+            .cancelPending({ sessionID: ctx.params.sessionID, inputID: ctx.params.inputID })
+            .pipe(
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+              Effect.catchTag(
+                "Session.PendingInputConflictError",
+                (error) =>
+                  new ConflictError({
+                    resource: error.inputID,
+                    message: `Pending input is no longer queued: ${error.inputID}`,
+                  }),
+              ),
+            )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.pending.steer",
+        Effect.fn(function* (ctx) {
+          yield* session
+            .steerPending({ sessionID: ctx.params.sessionID, inputID: ctx.params.inputID })
+            .pipe(
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+              Effect.catchTag(
+                "Session.PendingInputConflictError",
+                (error) =>
+                  new ConflictError({
+                    resource: error.inputID,
+                    message: `Pending input is no longer queued: ${error.inputID}`,
+                  }),
+              ),
+            )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "session.instructions.entry.list",
         Effect.fn(function* (ctx) {
           const instructions = yield* InstructionEntry.Service

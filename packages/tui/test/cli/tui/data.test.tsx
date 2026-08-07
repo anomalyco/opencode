@@ -914,6 +914,92 @@ test("completes exploration when a queued prompt is promoted", async () => {
   }
 })
 
+test("updates and removes queued inputs from durable lifecycle events", async () => {
+  const events = createEventStream()
+  const sessionID = "session-queue-management"
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+  }, events)
+  let data!: ReturnType<typeof useData>
+  let rows!: ReturnType<typeof createSessionRows>
+  let client!: ReturnType<typeof useClient>
+
+  function Probe() {
+    client = useClient()
+    data = useData()
+    rows = createSessionRows(() => sessionID)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => client.connection.status() === "connected")
+    emitEvent(events, {
+      id: "evt_queue_admitted",
+      created: 1,
+      type: "session.input.admitted",
+      durable: durable(sessionID),
+      data: {
+        sessionID,
+        inputID: "message-queued",
+        input: { type: "user", data: { text: "Steer me" }, delivery: "queue" },
+      },
+    })
+    await wait(() => data.session.pending.list(sessionID).length === 1)
+    expect(rows).not.toContainEqual({ type: "message", messageID: "message-queued" })
+
+    emitEvent(events, {
+      id: "evt_queue_steered",
+      created: 2,
+      type: "session.input.steered",
+      durable: durable(sessionID, 1),
+      data: { sessionID, inputID: "message-queued" },
+    })
+    await wait(() =>
+      data.session.pending
+        .list(sessionID)
+        .some((item) => item.id === "message-queued" && item.type !== "compaction" && item.delivery === "steer"),
+    )
+    expect(rows).toContainEqual({ type: "message", messageID: "message-queued" })
+
+    emitEvent(events, {
+      id: "evt_cancel_admitted",
+      created: 3,
+      type: "session.input.admitted",
+      durable: durable(sessionID, 2),
+      data: {
+        sessionID,
+        inputID: "message-cancelled",
+        input: { type: "user", data: { text: "Delete me" }, delivery: "queue" },
+      },
+    })
+    await wait(() => data.session.pending.list(sessionID).length === 2)
+    emitEvent(events, {
+      id: "evt_queue_cancelled",
+      created: 4,
+      type: "session.input.cancelled",
+      durable: durable(sessionID, 3),
+      data: { sessionID, inputID: "message-cancelled" },
+    })
+    await wait(() => !data.session.input.has(sessionID, "message-cancelled"))
+    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["message-queued"])
+    expect(data.session.message.get(sessionID, "message-cancelled")).toBeUndefined()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("classifies live tool rows independently of their call ID", async () => {
   const events = createEventStream()
   const sessionID = "session-tool-call-id"

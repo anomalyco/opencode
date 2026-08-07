@@ -312,6 +312,51 @@ export const projectPromoted = Effect.fn("SessionPending.projectPromoted")(funct
   return stored
 })
 
+export const projectCancelled = Effect.fn("SessionPending.projectCancelled")(function* (
+  db: DatabaseService,
+  input: {
+    readonly id: SessionMessage.ID
+    readonly sessionID: SessionSchema.ID
+  },
+) {
+  const deleted = yield* db
+    .delete(SessionPendingTable)
+    .where(
+      and(
+        eq(SessionPendingTable.id, input.id),
+        eq(SessionPendingTable.session_id, input.sessionID),
+        eq(SessionPendingTable.delivery, "queue"),
+      ),
+    )
+    .returning({ id: SessionPendingTable.id })
+    .get()
+    .pipe(Effect.orDie)
+  if (!deleted) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+})
+
+export const projectSteered = Effect.fn("SessionPending.projectSteered")(function* (
+  db: DatabaseService,
+  input: {
+    readonly id: SessionMessage.ID
+    readonly sessionID: SessionSchema.ID
+  },
+) {
+  const updated = yield* db
+    .update(SessionPendingTable)
+    .set({ delivery: "steer" })
+    .where(
+      and(
+        eq(SessionPendingTable.id, input.id),
+        eq(SessionPendingTable.session_id, input.sessionID),
+        eq(SessionPendingTable.delivery, "queue"),
+      ),
+    )
+    .returning({ id: SessionPendingTable.id })
+    .get()
+    .pipe(Effect.orDie)
+  if (!updated) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+})
+
 export const settleCompaction = Effect.fn("SessionPending.settleCompaction")(function* (
   db: DatabaseService,
   input: { readonly sessionID: SessionSchema.ID },
@@ -388,6 +433,30 @@ export const equivalent = (
     return JSON.stringify(encodeSynthetic(input.data)) === JSON.stringify(encodeSynthetic(expected.input.data))
   return false
 }
+
+export const cancel = Effect.fn("SessionPending.cancel")(function* (
+  bus: Bus.Interface,
+  input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID },
+) {
+  yield* inboxLocks.withLock(input.sessionID)(
+    bus.publish(SessionEvent.InputCancelled, {
+      sessionID: input.sessionID,
+      inputID: input.id,
+    }),
+  )
+})
+
+export const steer = Effect.fn("SessionPending.steer")(function* (
+  bus: Bus.Interface,
+  input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID },
+) {
+  yield* inboxLocks.withLock(input.sessionID)(
+    bus.publish(SessionEvent.InputSteered, {
+      sessionID: input.sessionID,
+      inputID: input.id,
+    }),
+  )
+})
 
 const publish = Effect.fn("SessionPending.publish")(function* (
   db: DatabaseService,

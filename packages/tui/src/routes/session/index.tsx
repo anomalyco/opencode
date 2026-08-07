@@ -375,6 +375,24 @@ export function Session() {
   })
   const dialog = useDialog()
   const renderer = useRenderer()
+  const steerQueuedPrompt = async (inputID: string) => {
+    const error = await client.api.session.pending.steer({ sessionID: route.sessionID, inputID }).then(
+      () => undefined,
+      (error) => error,
+    )
+    if (!error) return true
+    toast.show({ title: "Failed to steer queued prompt", message: errorMessage(error), variant: "error" })
+    return false
+  }
+  const cancelQueuedPrompt = async (inputID: string) => {
+    const error = await client.api.session.pending.cancel({ sessionID: route.sessionID, inputID }).then(
+      () => undefined,
+      (error) => error,
+    )
+    if (!error) return true
+    toast.show({ title: "Failed to delete queued prompt", message: errorMessage(error), variant: "error" })
+    return false
+  }
   const openQueuedPrompts = () =>
     dialog.replace(() => (
       <DialogSelect
@@ -384,6 +402,23 @@ export function Session() {
           value: prompt.id,
           footer: `${index + 1} of ${queuedPrompts().length}`,
         }))}
+        onSelect={(option) => {
+          void steerQueuedPrompt(option.value).then((steered) => {
+            if (steered) dialog.clear()
+          })
+        }}
+        actions={[
+          {
+            command: "queued_prompt.delete",
+            title: "delete",
+            onTrigger: (option) => {
+              void cancelQueuedPrompt(option.value).then((cancelled) => {
+                if (cancelled && queuedPrompts().length <= 1) dialog.clear()
+              })
+            },
+          },
+        ]}
+        footerHints={[{ title: "steer", label: "enter" }]}
       />
     ))
   const unavailable = (feature: string) => {
@@ -890,7 +925,7 @@ export function Session() {
     },
     {
       title: "View queued prompts",
-      id: "session.queue.list",
+      id: "session.queued_prompts",
       group: "Session",
       enabled: queuedPrompts().length > 0,
       run: openQueuedPrompts,
@@ -1058,6 +1093,11 @@ export function Session() {
                     disabled={false}
                     onSubmit={() => {
                       toBottom()
+                    }}
+                    onEmptySubmit={async () => {
+                      const next = queuedPrompts()[0]
+                      if (!next) return false
+                      return steerQueuedPrompt(next.id)
                     }}
                     sessionID={route.sessionID}
                   />
