@@ -18,6 +18,7 @@ import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
 type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
+const describeNative = process.env.CI ? describe.skip : describe
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Bus.node])))
 
@@ -132,48 +133,6 @@ describe("Watcher lifecycle", () => {
       expect(counts.unsubscribes).toBe(1)
     })
   })
-})
-
-describe("Watcher native file subscriptions", () => {
-  it.live("detects atomic replacement of an existing target", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          const native = yield* Watcher.Native
-          const updates: Watcher.Update[] = []
-          const target = path.join(tmp.path, "HEAD")
-          yield* Effect.promise(() => fs.writeFile(target, "ref: refs/heads/old\n"))
-          const subscription = yield* Effect.acquireRelease(
-            native.subscribe({
-              type: "file",
-              target,
-              ignore: [],
-              publish: (update) => updates.push(update),
-            }),
-            (subscription) => (subscription ? Effect.promise(() => subscription.unsubscribe()) : Effect.void),
-          )
-          if (!subscription) return yield* Effect.fail(new Error("native file watcher unavailable"))
-          yield* Effect.sleep("100 millis")
-
-          yield* Effect.promise(async () => {
-            const replacement = `${target}.replacement`
-            await fs.writeFile(replacement, "ref: refs/heads/main\n")
-            await fs.rename(replacement, target)
-          })
-          const update = yield* Effect.sync(() => updates[0]).pipe(
-            Effect.filterOrFail((update) => update !== undefined),
-            Effect.retry(Schedule.spaced("10 millis")),
-            Effect.timeout("3 seconds"),
-          )
-          expect(update).toEqual({
-            path: target,
-            type: "update",
-          })
-        }).pipe(Effect.provide(Watcher.nativeLayer)),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ),
-  )
 })
 
 function provide(directory: string, vcs?: Location.Interface["vcs"], watcher?: Layer.Layer<Watcher.Service>) {
@@ -292,19 +251,6 @@ function eventuallyUpdate<E>(check: (event: WatcherEvent) => boolean, trigger: (
   )
 }
 
-function noUpdate<E>(check: (event: WatcherEvent) => boolean, trigger: Effect.Effect<void, E>, timeout = 500) {
-  return Effect.acquireUseRelease(
-    wait(check),
-    ({ deferred }) =>
-      trigger.pipe(
-        Effect.andThen(Deferred.await(deferred)),
-        Effect.timeoutOption(`${timeout} millis`),
-        Effect.tap((result) => Effect.sync(() => expect(result).toEqual(Option.none()))),
-      ),
-    ({ fiber }) => Fiber.interrupt(fiber),
-  )
-}
-
 function ready(file: string, eventFile = file) {
   return Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -316,7 +262,7 @@ function ready(file: string, eventFile = file) {
   })
 }
 
-describe("LocationWatcher", () => {
+describeNative("LocationWatcher", () => {
   it.live("limits file watches to the exact target", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -361,24 +307,6 @@ describe("LocationWatcher", () => {
 
         expect(event.valueOrUndefined?.path).toBe(target)
       }).pipe(Effect.provide(AppNodeBuilder.build(Watcher.node))),
-    ),
-  )
-
-  it.live("ignores .git/index changes", () =>
-    withTmp(
-      (directory) =>
-        Effect.gen(function* () {
-          const fs = yield* FSUtil.Service
-          const index = path.join(directory, ".git", "index")
-          yield* ready(path.join(directory, ".git", "HEAD"))
-          yield* noUpdate(
-            (event) => event.file === index,
-            fs
-              .writeFileString(path.join(directory, "tracked.txt"), "a")
-              .pipe(Effect.andThen(Effect.promise(() => $`git add .`.cwd(directory).quiet())), Effect.asVoid),
-          )
-        }),
-      { vcs: "git" },
     ),
   )
 

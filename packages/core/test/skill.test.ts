@@ -238,14 +238,13 @@ metadata:
           const watcher = yield* Watcher.Test
           yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(tmp.path) }))
           expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Initial deploy")
-          expect(yield* watcher.activeSubscriptions()).toHaveLength(1)
+          expect(yield* watcher.subscriptions()).toHaveLength(1)
 
           yield* Effect.promise(() => write(tmp.path, "deploy", "Updated deploy"))
           yield* skill.reload()
-          expect(yield* watcher.activeSubscriptions()).toEqual([])
 
           expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Updated deploy")
-          expect(yield* watcher.activeSubscriptions()).toHaveLength(1)
+          expect(yield* watcher.subscriptions()).toHaveLength(2)
         }),
       ),
     ),

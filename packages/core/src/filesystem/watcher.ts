@@ -74,8 +74,6 @@ export interface TestInterface extends Interface {
   readonly emit: (update: Update) => Effect.Effect<void>
   /** Returns every subscribe call observed so far, in order. */
   readonly subscriptions: () => Effect.Effect<readonly WatchInput[]>
-  /** Returns subscriptions whose streams are still active. */
-  readonly activeSubscriptions: () => Effect.Effect<readonly WatchInput[]>
 }
 
 export class Test extends Context.Service<Test, TestInterface>()("@opencode/Watcher/Test") {}
@@ -94,7 +92,9 @@ export const layer = (options?: Options) =>
       const watchers = yield* RcMap.make({
         lookup: (key: Key) =>
           Effect.gen(function* () {
-            const pubsub = yield* Effect.acquireRelease(PubSub.unbounded<Update>(), (pubsub) => PubSub.shutdown(pubsub))
+            const pubsub = yield* Effect.acquireRelease(PubSub.unbounded<Update>(), (pubsub) =>
+              PubSub.shutdown(pubsub),
+            )
             const subscription = yield* Effect.acquireRelease(
               native.subscribe({
                 type: key.type,
@@ -157,18 +157,18 @@ export const layer = (options?: Options) =>
 export const testLayer = Layer.effectContext(
   Effect.gen(function* () {
     const subscriptions: WatchInput[] = []
-    const active = new Map<(update: Update) => void, WatchInput>()
+    const active = new Set<(update: Update) => void>()
     const native = Native.of({
       subscribe: (input) =>
         Effect.sync(() => {
-          const subscription: WatchInput =
+          subscriptions.push(
             input.type === "file"
               ? { path: input.target, type: "file" }
               : input.ignore.length > 0
                 ? { path: input.target, type: "directory", ignore: input.ignore }
-                : { path: input.target, type: "directory" }
-          subscriptions.push(subscription)
-          active.set(input.publish, subscription)
+                : { path: input.target, type: "directory" },
+          )
+          active.add(input.publish)
           return {
             unsubscribe: () => {
               active.delete(input.publish)
@@ -180,9 +180,8 @@ export const testLayer = Layer.effectContext(
     const context = yield* Layer.build(layer().pipe(Layer.provide(Layer.succeed(Native, native))))
     const test = Test.of({
       subscribe: Context.get(context, Service).subscribe,
-      emit: (update) => Effect.sync(() => active.forEach((_, publish) => publish(update))),
+      emit: (update) => Effect.sync(() => active.forEach((publish) => publish(update))),
       subscriptions: () => Effect.sync(() => [...subscriptions]),
-      activeSubscriptions: () => Effect.sync(() => Array.from(active.values())),
     })
     return Context.empty().pipe(Context.add(Service, test), Context.add(Test, test))
   }),

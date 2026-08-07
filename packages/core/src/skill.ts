@@ -2,7 +2,7 @@ export * as Skill from "./skill"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Exit, Layer, Schema, Scope, Stream, Types } from "effect"
+import { Context, Effect, FiberMap, Layer, Schema, Semaphore, Stream, Types } from "effect"
 import { Skill } from "@opencode-ai/schema/skill"
 import { Agent } from "./agent"
 import { ConfigMarkdown } from "./config/markdown"
@@ -82,35 +82,41 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const bus = yield* Bus.Service
     const watcher = yield* Watcher.Service
-    const scope = yield* Scope.Scope
     const cache = new Map<string, { skills: Info[]; paths: readonly string[] }>()
-    const watched = { file: new Set<string>(), directory: new Set<string>() }
-    let watchScope = Scope.forkUnsafe(scope)
+    const watches = yield* FiberMap.make<string>()
+    const lock = Semaphore.makeUnsafe(1)
 
     const invalidate = Effect.fn("Skill.invalidateFromWatcher")(function* (file: string) {
-      const invalidated = Array.from(cache.entries()).filter(([, loaded]) =>
-        loaded.paths.some((item) => FSUtil.overlaps(item, file)),
+      yield* lock.withPermit(
+        Effect.gen(function* () {
+          const invalidated = Array.from(cache.entries()).filter(([, loaded]) =>
+            loaded.paths.some((item) => FSUtil.overlaps(item, file)),
+          )
+          if (invalidated.length === 0) return
+          for (const [key] of invalidated) cache.delete(key)
+          yield* Effect.logInfo("skill cache invalidated", {
+            file,
+            sources: invalidated.map(([key]) => key),
+            skills: invalidated.flatMap(([, loaded]) => loaded.skills.map((skill) => skill.id)),
+          })
+          yield* bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid)
+        }),
       )
-      if (invalidated.length === 0) return
-      for (const [key] of invalidated) cache.delete(key)
-      yield* Effect.logInfo("skill cache invalidated", {
-        file,
-        sources: invalidated.map(([key]) => key),
-        skills: invalidated.flatMap(([, loaded]) => loaded.skills.map((skill) => skill.id)),
-      })
-      yield* bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid)
     })
 
     const watch = Effect.fn("Skill.watch")(function* (directory: string, type: Watcher.WatchInput["type"]) {
       const target = path.resolve(directory)
-      if (watched[type].has(target)) return
-      watched[type].add(target)
       const updates = yield* watcher.subscribe(
         type === "file" ? { path: target, type: "file" } : { path: target, type: "directory" },
       )
-      yield* updates.pipe(
-        Stream.runForEach((update) => invalidate(update.path)),
-        Effect.forkIn(watchScope, { startImmediately: true }),
+      yield* FiberMap.run(
+        watches,
+        `${type}:${target}`,
+        updates.pipe(Stream.runForEach((update) => invalidate(update.path))),
+        {
+          onlyIfMissing: true,
+          startImmediately: true,
+        },
       )
     })
 
@@ -146,17 +152,12 @@ const layer = Layer.effect(
         list: () => draft.sources as Source[],
       }),
       finalize: () =>
-        Scope.close(watchScope, Exit.void).pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              cache.clear()
-              watched.file.clear()
-              watched.directory.clear()
-              watchScope = Scope.forkUnsafe(scope)
-            }),
+        lock.withPermit(
+          FiberMap.clear(watches).pipe(
+            Effect.andThen(Effect.sync(() => cache.clear())),
+            Effect.andThen(bus.publish(Skill.Event.Updated, {})),
+            Effect.asVoid,
           ),
-          Effect.andThen(bus.publish(Skill.Event.Updated, {})),
-          Effect.asVoid,
         ),
     })
 
@@ -216,14 +217,18 @@ const layer = Layer.effect(
     })
 
     const list = Effect.fn("Skill.list")(function* () {
-      const skills = new Map<ID, Info>()
-      for (const source of state.get().sources) {
-        const key = Source.key(source)
-        const loaded = cache.get(key) ?? (yield* load(source))
-        cache.set(key, loaded)
-        for (const skill of loaded.skills) skills.set(skill.id, skill)
-      }
-      return Array.from(skills.values())
+      return yield* lock.withPermit(
+        Effect.gen(function* () {
+          const skills = new Map<ID, Info>()
+          for (const source of state.get().sources) {
+            const key = Source.key(source)
+            const loaded = cache.get(key) ?? (yield* load(source))
+            cache.set(key, loaded)
+            for (const skill of loaded.skills) skills.set(skill.id, skill)
+          }
+          return Array.from(skills.values())
+        }),
+      )
     })
 
     return Service.of({

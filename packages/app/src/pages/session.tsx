@@ -707,7 +707,7 @@ export default function Page() {
     on(
       () => desktopReviewOpen() || mobileChanges(),
       (open, previous) => {
-        if (!open || previous || !desktopFileTreeOpen()) return
+        if (!open || previous || !desktopFileTreeOpen() || vcsQuery.isFetching) return
         refreshVcs()
       },
       { defer: true },
