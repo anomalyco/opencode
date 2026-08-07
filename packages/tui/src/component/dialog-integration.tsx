@@ -642,7 +642,6 @@ function OAuthView(props: {
 }
 
 async function formAnswers(dialog: ReturnType<typeof useDialog>, title: string, forms: FormFields) {
-  dialog.setSize("large")
   return new Promise<FormAnswer | null>((resolve) => {
     dialog.replace(
       () => (
@@ -657,6 +656,7 @@ async function formAnswers(dialog: ReturnType<typeof useDialog>, title: string, 
       ),
       () => resolve(null),
     )
+    dialog.setSize("large")
   })
 }
 

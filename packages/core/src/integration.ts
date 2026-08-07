@@ -707,7 +707,7 @@ const layer = Layer.effect(
             value: Credential.Key.make({
               type: "key",
               key: input.key,
-              metadata: Object.keys(input.answers).length > 0 ? input.answers : undefined,
+              ...(Object.keys(input.answers).length > 0 ? { configuration: input.answers } : {}),
             }),
           })
           yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: input.integrationID })

@@ -217,7 +217,17 @@ describe("AzurePlugin", () => {
       Effect.gen(function* () {
         const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
+        const catalog = yield* Catalog.Service
+        yield* catalog.transform((catalog) =>
+          catalog.provider.update(Provider.ID.azure, (provider) => {
+            provider.settings = { ...provider.settings, baseURL: "https://proxy.example.com/openai" }
+          }),
+        )
         yield* addPlugin()
+        expect((yield* (yield* Integration.Service).get(Integration.ID.make("azure")))?.methods).toContainEqual({
+          type: "key",
+          label: "API key",
+        })
         const result = yield* aisdk.runSDK({
           model: Model.Info.make({
             ...Model.Info.default(Provider.ID.azure, Model.ID.make("deployment")),

@@ -1,6 +1,7 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
@@ -376,7 +377,16 @@ describe("CloudflareAIGatewayPlugin", () => {
           resetCalls()
           const plugin = yield* Plugin.Service
           const aisdk = yield* AISDK.Service
+          const catalog = yield* Catalog.Service
+          yield* catalog.transform((catalog) =>
+            catalog.provider.update(Provider.ID.make("cloudflare-ai-gateway"), (provider) => {
+              provider.settings = { ...provider.settings, baseURL: "https://proxy.example/v1" }
+            }),
+          )
           yield* addPlugin()
+          expect(
+            (yield* (yield* Integration.Service).get(Integration.ID.make("cloudflare-ai-gateway")))?.methods,
+          ).toContainEqual({ type: "key", label: "Gateway API token" })
 
           const result = yield* aisdk.runSDK({
             model: Model.Info.make({

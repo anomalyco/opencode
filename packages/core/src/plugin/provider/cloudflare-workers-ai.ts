@@ -3,19 +3,21 @@ import { App } from "../../app"
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Provider } from "../../provider"
+import { configuredSettings } from "./configured"
 
 const providerID = Provider.ID.make("cloudflare-workers-ai")
 
 export const CloudflareWorkersAIPlugin = define({
   id: "opencode.provider.cloudflare-workers-ai",
   effect: Effect.fn(function* (ctx) {
+    const configured = yield* configuredSettings(providerID)
     yield* ctx.integration.transform((draft) => {
       draft.method.update({
         integrationID: providerID,
         method: {
           type: "key",
           label: "API key",
-          ...(process.env.CLOUDFLARE_ACCOUNT_ID
+          ...(typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})
             ? {}
             : {
                 forms: [

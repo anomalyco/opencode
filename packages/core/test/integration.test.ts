@@ -170,7 +170,7 @@ describe("Integration", () => {
         expect.objectContaining({
           integrationID,
           label: "Work",
-          value: Credential.Key.make({ type: "key", key: "secret", metadata: { accountId: "account" } }),
+          value: Credential.Key.make({ type: "key", key: "secret", configuration: { accountId: "account" } }),
         }),
       ])
       expect((yield* Fiber.join(updated)).length).toBe(1)

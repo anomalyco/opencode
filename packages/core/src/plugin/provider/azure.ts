@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Provider } from "../../provider"
+import { configuredSettings } from "./configured"
 
 function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
   if (useChat && sdk.chat) return sdk.chat(modelID)
@@ -13,13 +14,14 @@ function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
 export const AzurePlugin = define({
   id: "opencode.provider.azure",
   effect: Effect.fn(function* (ctx) {
+    const configured = yield* configuredSettings(Provider.ID.azure)
     yield* ctx.integration.transform((draft) => {
       draft.method.update({
         integrationID: Provider.ID.azure,
         method: {
           type: "key",
           label: "API key",
-          ...(resolveResourceName(undefined)
+          ...(resolveResourceName(configured) || typeof configured?.baseURL === "string"
             ? {}
             : {
                 forms: [

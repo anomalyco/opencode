@@ -2,13 +2,19 @@ import os from "os"
 import { App } from "../../app"
 import { Effect, Option, Schema } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Provider } from "../../provider"
+import { configuredSettings } from "./configured"
+
+const providerID = Provider.ID.make("cloudflare-ai-gateway")
 
 export const CloudflareAIGatewayPlugin = define({
   id: "opencode.provider.cloudflare-ai-gateway",
   effect: Effect.fn(function* (ctx) {
+    const configured = yield* configuredSettings(providerID)
+    const complete = typeof configured?.baseURL === "string"
     yield* ctx.integration.transform((draft) => {
       const forms = [
-        ...(process.env.CLOUDFLARE_ACCOUNT_ID
+        ...(complete || process.env.CLOUDFLARE_ACCOUNT_ID || stringOption(configured ?? {}, "accountId")
           ? []
           : [
               {
@@ -19,7 +25,10 @@ export const CloudflareAIGatewayPlugin = define({
                 required: true,
               },
             ]),
-        ...(process.env.CLOUDFLARE_GATEWAY_ID
+        ...(complete ||
+        process.env.CLOUDFLARE_GATEWAY_ID ||
+        stringOption(configured ?? {}, "gatewayId") ||
+        stringOption(configured ?? {}, "gateway")
           ? []
           : [
               {
@@ -32,7 +41,7 @@ export const CloudflareAIGatewayPlugin = define({
             ]),
       ]
       draft.method.update({
-        integrationID: "cloudflare-ai-gateway",
+        integrationID: providerID,
         method: {
           type: "key",
           label: "Gateway API token",

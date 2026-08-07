@@ -736,7 +736,11 @@ describe("ModelResolver", () => {
           headers: { "x-aisdk": "header" },
           body: { custom: true },
         }),
-        Credential.Key.make({ type: "key", key: "fallback-secret" }),
+        Credential.Key.make({
+          type: "key",
+          key: "fallback-secret",
+          configuration: { accountId: "account" },
+        }),
         {
           loadAISDK: (runtime) =>
             Effect.sync(() => {
@@ -745,7 +749,7 @@ describe("ModelResolver", () => {
                 modelID: "mistral-api-model",
                 providerID: "test-provider",
                 package: Provider.aisdk("@ai-sdk/mistral"),
-                settings: { project: "test", apiKey: "fallback-secret" },
+                settings: { project: "test", apiKey: "fallback-secret", accountId: "account" },
                 headers: { "x-aisdk": "header" },
                 body: { custom: true },
               })

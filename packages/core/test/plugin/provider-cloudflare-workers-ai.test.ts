@@ -115,6 +115,9 @@ describe("CloudflareWorkersAIPlugin", () => {
           }),
         )
         yield* addPlugin()
+        expect(
+          (yield* (yield* Integration.Service).get(Integration.ID.make("cloudflare-workers-ai")))?.methods,
+        ).toContainEqual({ type: "key", label: "API key" })
         const provider = required(yield* catalog.provider.get(Provider.ID.make("cloudflare-workers-ai")))
         const sdk = yield* aisdk.runSDK({
           model: Model.Info.make({
@@ -159,7 +162,16 @@ describe("CloudflareWorkersAIPlugin", () => {
       Effect.gen(function* () {
         const plugin = yield* Plugin.Service
         const aisdk = yield* AISDK.Service
+        const catalog = yield* Catalog.Service
+        yield* catalog.transform((catalog) =>
+          catalog.provider.update(Provider.ID.make("cloudflare-workers-ai"), (provider) => {
+            provider.settings = { ...provider.settings, baseURL: "https://proxy.example/v1" }
+          }),
+        )
         yield* addPlugin()
+        expect(
+          (yield* (yield* Integration.Service).get(Integration.ID.make("cloudflare-workers-ai")))?.methods,
+        ).toContainEqual({ type: "key", label: "API key" })
         const result = yield* aisdk.runSDK({
           model: Model.Info.make({
             ...Model.Info.default(Provider.ID.make("cloudflare-workers-ai"), Model.ID.make("@cf/model")),

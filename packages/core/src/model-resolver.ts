@@ -149,6 +149,7 @@ export const fromCatalogModel = (
   })
   const packageName = Provider.packageName(resolved.package)
   const key = apiKey(resolved, credential)
+  const configuration = credential?.type === "key" ? credential.configuration : undefined
 
   if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/openai") {
     return Effect.succeed(
@@ -175,7 +176,7 @@ export const fromCatalogModel = (
         .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
     )
   }
-  const configured = { ...resolved.settings, ...credential?.metadata }
+  const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
   const mapping = Provider.isAISDK(resolved.package)
     ? AISDKNative.map({
         packageName,
@@ -190,6 +191,7 @@ export const fromCatalogModel = (
       draft.settings = Provider.mergeOverlay(draft.settings, {
         ...nativeCredentialSettings(resolved.package ?? "", credential),
         ...credential?.metadata,
+        ...configuration,
       })
     })
     return dependencies.loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))
