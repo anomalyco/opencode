@@ -461,14 +461,18 @@ export const {
         .catch(() => emptyConsoleState)
       const agentsPromise = sdk.client.app.agents({ workspace }, { throwOnError: true })
       const configPromise = sdk.client.config.get({ workspace }, { throwOnError: true })
-      await Promise.all([
-        providersPromise,
-        providerListPromise,
-        capabilitiesPromise,
-        agentsPromise,
-        configPromise,
-        projectPromise,
-        ...(args.continue ? [sessionListPromise] : []),
+      const bootstrapTimeout = new Promise((resolve) => setTimeout(resolve, 3000))
+      await Promise.race([
+        Promise.all([
+          providersPromise,
+          providerListPromise,
+          capabilitiesPromise,
+          agentsPromise,
+          configPromise,
+          projectPromise,
+          ...(args.continue ? [sessionListPromise] : []),
+        ]),
+        bootstrapTimeout,
       ])
         .then(async () => {
           const providersResponse = providersPromise.then((x) => x.data!)
