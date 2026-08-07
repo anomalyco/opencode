@@ -5,6 +5,8 @@ import {
   DESKTOP_NATIVE_KEYS,
   DESKTOP_NATIVE_LABELS,
   DESKTOP_NATIVE_LOCALES,
+  DESKTOP_NATIVE_LOCALE_TAGS,
+  detectDesktopNativeLocale,
   DESKTOP_NATIVE_MAX_PAYLOAD_BYTES,
   formatDesktopNativeMessage,
   parseDesktopNativeBundle,
@@ -41,6 +43,40 @@ describe("desktop native translations", () => {
       "Azərbaycanca",
       "Suomi",
       "Svenska",
+      "አማርኛ",
+      "Български",
+      "বাংলা",
+      "Català",
+      "Čeština",
+      "ދިވެހި",
+      "རྫོང་ཁ",
+      "Ελληνικά",
+      "Eesti",
+      "فارسی",
+      "Føroyskt",
+      "Hrvatski",
+      "Magyar",
+      "Հայերեն",
+      "Íslenska",
+      "ქართული",
+      "ខ្មែរ",
+      "ລາວ",
+      "Lietuvių",
+      "Latviešu",
+      "Македонски",
+      "Монгол",
+      "Bahasa Melayu",
+      "မြန်မာ",
+      "नेपाली",
+      "Română",
+      "සිංහල",
+      "Slovenčina",
+      "Slovenščina",
+      "Shqip",
+      "Српски",
+      "Тоҷикӣ",
+      "Türkmençe",
+      "Oʻzbekcha",
     ])
   })
 
@@ -72,5 +108,44 @@ describe("desktop native translations", () => {
 
   test("interpolates native templates without changing unknown placeholders", () => {
     expect(formatDesktopNativeMessage("{{known}} {{unknown}}", { known: "yes" })).toBe("yes {{unknown}}")
+  })
+})
+
+describe("desktop native locale detection", () => {
+  test("follows preference order and skips invalid or unsupported tags", () => {
+    expect(detectDesktopNativeLocale(["not_a_locale", "fr-FR"])).toBe("fr")
+    expect(detectDesktopNativeLocale(["eo", "de-DE"])).toBe("de")
+  })
+
+  test("uses Unicode likely subtags for script-sensitive bundles", () => {
+    expect(detectDesktopNativeLocale(["zh-TW"])).toBe("zht")
+    expect(detectDesktopNativeLocale(["zh-SG"])).toBe("zh")
+    expect(detectDesktopNativeLocale(["pa-PK"])).toBe("pa")
+    expect(detectDesktopNativeLocale(["pa-IN", "fr"])).toBe("fr")
+    expect(detectDesktopNativeLocale(["az-Cyrl", "de"])).toBe("de")
+    expect(detectDesktopNativeLocale(["sr-Cyrl"])).toBe("sr")
+    expect(detectDesktopNativeLocale(["sr-Latn", "en"])).toBe("en")
+    expect(detectDesktopNativeLocale(["uz-Latn"])).toBe("uz")
+  })
+
+  test("recognizes Norwegian language tags", () => {
+    expect(detectDesktopNativeLocale(["no"])).toBe("no")
+    expect(detectDesktopNativeLocale(["nb-NO"])).toBe("no")
+    expect(detectDesktopNativeLocale(["nn-NO"])).toBe("no")
+  })
+})
+
+describe("desktop native ICU data", () => {
+  test("accepts every locale in standard Intl formatters", () => {
+    for (const locale of DESKTOP_NATIVE_LOCALES) {
+      const tag = DESKTOP_NATIVE_LOCALE_TAGS[locale]
+      expect(() => new Intl.Locale(tag), `${locale} locale`).not.toThrow()
+      expect(() => new Intl.NumberFormat(tag), `${locale} number`).not.toThrow()
+      expect(() => new Intl.DateTimeFormat(tag), `${locale} date`).not.toThrow()
+      expect(() => new Intl.PluralRules(tag), `${locale} plural`).not.toThrow()
+      expect(() => new Intl.ListFormat(tag), `${locale} list`).not.toThrow()
+      expect(() => new Intl.DisplayNames(tag, { type: "language" }), `${locale} names`).not.toThrow()
+      expect(() => new Intl.Segmenter(tag), `${locale} segmenter`).not.toThrow()
+    }
   })
 })
