@@ -125,7 +125,7 @@ const settings = (documents: readonly Config.Entry[]) => {
   )
 }
 
-const select = (
+export const select = (
   entries: readonly Entry[],
   tokens: number,
 ): { readonly head: string; readonly recent: string } | undefined => {
@@ -136,6 +136,10 @@ const select = (
   if (conversation.length === 0) return
   let total = 0
   let split = conversation.length
+  // `head` and `recent` need different boundaries: when a message straddles the token budget it
+  // is cut in two, so `recent` starts after it (`split`) while `head` stops before it (`headEnd`)
+  // and receives only `splitPrefix`.
+  let headEnd = conversation.length
   let splitPrefix = ""
   let splitSuffix = ""
   for (let index = conversation.length - 1; index >= 0; index--) {
@@ -146,14 +150,16 @@ const select = (
         splitPrefix = conversation[index].slice(0, -remaining)
         splitSuffix = conversation[index].slice(-remaining)
         split = index + 1
+        headEnd = index
       }
       break
     }
     total = next
     split = index
+    headEnd = index
   }
   return {
-    head: [...conversation.slice(0, split), splitPrefix].filter(Boolean).join("\n\n"),
+    head: [...conversation.slice(0, headEnd), splitPrefix].filter(Boolean).join("\n\n"),
     recent: [splitSuffix, ...conversation.slice(split)].filter(Boolean).join("\n\n"),
   }
 }
