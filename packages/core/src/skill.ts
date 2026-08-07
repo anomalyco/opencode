@@ -2,8 +2,7 @@ export * as Skill from "./skill"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, Schema, Scope, Stream, Types } from "effect"
-import { FileSystem } from "@opencode-ai/schema/filesystem"
+import { Context, Effect, Exit, Layer, Schema, Scope, Stream, Types } from "effect"
 import { Skill } from "@opencode-ai/schema/skill"
 import { Agent } from "./agent"
 import { ConfigMarkdown } from "./config/markdown"
@@ -85,7 +84,8 @@ const layer = Layer.effect(
     const watcher = yield* Watcher.Service
     const scope = yield* Scope.Scope
     const cache = new Map<string, { skills: Info[]; paths: readonly string[] }>()
-    const watched = new Set<string>()
+    const watched = { file: new Set<string>(), directory: new Set<string>() }
+    let watchScope = Scope.forkUnsafe(scope)
 
     const invalidate = Effect.fn("Skill.invalidateFromWatcher")(function* (file: string) {
       const invalidated = Array.from(cache.entries()).filter(([, loaded]) =>
@@ -101,30 +101,37 @@ const layer = Layer.effect(
       yield* bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid)
     })
 
-    const watch = Effect.fn("Skill.watch")(function* (directory: string) {
+    const watch = Effect.fn("Skill.watch")(function* (directory: string, type: Watcher.WatchInput["type"]) {
       const target = path.resolve(directory)
-      if (watched.has(target)) return
-      watched.add(target)
-      const updates = yield* watcher.subscribe({ path: target, type: "directory" })
+      if (watched[type].has(target)) return
+      watched[type].add(target)
+      const updates = yield* watcher.subscribe(
+        type === "file" ? { path: target, type: "file" } : { path: target, type: "directory" },
+      )
       yield* updates.pipe(
         Stream.runForEach((update) => invalidate(update.path)),
-        Effect.forkIn(scope, { startImmediately: true }),
+        Effect.forkIn(watchScope, { startImmediately: true }),
       )
     })
+
+    function firstMissing(target: string): Effect.Effect<string | undefined> {
+      const parent = path.dirname(target)
+      if (parent === target) return Effect.succeed(undefined)
+      return fs.isDir(parent).pipe(Effect.flatMap((exists) => (exists ? Effect.succeed(target) : firstMissing(parent))))
+    }
 
     const watchDirectory = Effect.fn("Skill.watchDirectory")(function* (directory: string) {
       const target = path.resolve(directory)
       const resolved = yield* fs.realPath(directory).pipe(Effect.catch(() => Effect.succeed(undefined)))
       if (resolved) {
-        yield* watch(resolved)
+        yield* watch(resolved, "directory")
         if (resolved !== target) {
-          yield* watch(path.dirname(target))
+          yield* watch(path.dirname(target), "directory")
         }
         return resolved === target ? [target] : [target, resolved]
       }
-      if (yield* fs.isDir(path.dirname(target))) {
-        yield* watch(path.dirname(target))
-      }
+      const missing = yield* firstMissing(target)
+      if (missing) yield* watch(missing, "file")
       return [target]
     })
 
@@ -139,7 +146,18 @@ const layer = Layer.effect(
         list: () => draft.sources as Source[],
       }),
       finalize: () =>
-        Effect.sync(() => cache.clear()).pipe(Effect.andThen(bus.publish(Skill.Event.Updated, {})), Effect.asVoid),
+        Scope.close(watchScope, Exit.void).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              cache.clear()
+              watched.file.clear()
+              watched.directory.clear()
+              watchScope = Scope.forkUnsafe(scope)
+            }),
+          ),
+          Effect.andThen(bus.publish(Skill.Event.Updated, {})),
+          Effect.asVoid,
+        ),
     })
 
     const load = Effect.fn("Skill.load")(function* (source: Source) {
@@ -165,7 +183,7 @@ const layer = Layer.effect(
           if (!roots.some((root) => FSUtil.contains(root, resolved))) {
             const external = path.dirname(resolved)
             paths.push(external)
-            yield* watch(external)
+            yield* watch(external, "directory")
           }
           const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
           if (!content) continue
@@ -196,11 +214,6 @@ const layer = Layer.effect(
       })
       return { skills, paths }
     })
-
-    yield* bus.subscribe(FileSystem.Event.Changed).pipe(
-      Stream.runForEach((event) => invalidate(event.data.file)),
-      Effect.forkScoped({ startImmediately: true }),
-    )
 
     const list = Effect.fn("Skill.list")(function* () {
       const skills = new Map<ID, Info>()

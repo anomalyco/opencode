@@ -9,7 +9,6 @@ import { Bus } from "@opencode-ai/core/bus"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Skill } from "@opencode-ai/core/skill"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
-import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -236,13 +235,17 @@ metadata:
           })
 
           const skill = yield* Skill.Service
+          const watcher = yield* Watcher.Test
           yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(tmp.path) }))
           expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Initial deploy")
+          expect(yield* watcher.activeSubscriptions()).toHaveLength(1)
 
           yield* Effect.promise(() => write(tmp.path, "deploy", "Updated deploy"))
           yield* skill.reload()
+          expect(yield* watcher.activeSubscriptions()).toEqual([])
 
           expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Updated deploy")
+          expect(yield* watcher.activeSubscriptions()).toHaveLength(1)
         }),
       ),
     ),
@@ -258,24 +261,18 @@ metadata:
           const source = path.join(tmp.path, "generated", "skills")
           const file = path.join(source, "deploy", "SKILL.md")
           const skill = yield* Skill.Service
-          const bus = yield* Bus.Service
           yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(source) }))
           expect(yield* skill.list()).toEqual([])
+          yield* expectSubscription((input) => input.type === "file" && input.path === path.join(tmp.path, "generated"))
 
           yield* Effect.promise(async () => {
             await fs.mkdir(path.dirname(file), { recursive: true })
             await write(source, "deploy", "Deploy production")
           })
-          yield* Effect.acquireUseRelease(
-            waitForSkillUpdate(),
-            ({ deferred }) =>
-              bus
-                .publish(FileSystem.Event.Changed, { file, event: "add" })
-                .pipe(Effect.andThen(Deferred.await(deferred)), Effect.timeout("1 second")),
-            ({ fiber }) => Fiber.interrupt(fiber),
-          )
+          yield* emitAndWait({ type: "create", path: path.join(tmp.path, "generated") })
 
           expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("deploy")])
+          yield* expectSubscription((input) => input.type === "directory" && input.path === source)
         }),
       ),
     ),

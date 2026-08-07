@@ -688,6 +688,8 @@ export default function Page() {
     return {
       queryKey: [...vcsKey(), mode] as const,
       enabled,
+      refetchOnMount: "always" as const,
+      refetchOnWindowFocus: true,
       queryFn: mode
         ? () =>
             sdk()
@@ -701,6 +703,16 @@ export default function Page() {
     }
   })
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
+  createEffect(
+    on(
+      () => desktopReviewOpen() || mobileChanges(),
+      (open, previous) => {
+        if (!open || previous || !desktopFileTreeOpen()) return
+        refreshVcs()
+      },
+      { defer: true },
+    ),
+  )
   const reviewDiffs = () => {
     if (reviewMode() === "git" || reviewMode() === "branch")
       // avoids suspense
@@ -946,19 +958,6 @@ export default function Page() {
       { defer: true },
     ),
   )
-
-  const stopVcs = sdk().event.listen((evt) => {
-    const details = evt.details as { type: string; properties?: unknown }
-    if (details.type !== "file.watcher.updated" && details.type !== "filesystem.changed") return
-    const props =
-      typeof details.properties === "object" && details.properties
-        ? (details.properties as Record<string, unknown>)
-        : undefined
-    const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
-    refreshVcs()
-  })
-  onCleanup(stopVcs)
 
   createEffect(
     on(
