@@ -130,37 +130,18 @@ export const layer = (options?: Options) =>
           }),
       })
 
-      const subscribe = (input: WatchInput) => {
+      const acquire = Effect.fn("Watcher.acquire")(function* (input: WatchInput) {
         const target = path.resolve(input.path)
         const ignore = [...new Set(input.type === "directory" ? (input.ignore ?? []) : [])].toSorted()
-        return Effect.gen(function* () {
-          yield* Effect.logInfo("watcher subscribe", {
-            path: target,
-            type: input.type,
-            ignores: ignore.length,
-          })
-          return Stream.unwrap(
-            Effect.gen(function* () {
-              const pubsub = yield* RcMap.get(watchers, { type: input.type, target, ignore })
-              return Stream.fromPubSub(pubsub)
-            }),
-          )
+        yield* Effect.logInfo("watcher subscribe", {
+          path: target,
+          type: input.type,
+          ignores: ignore.length,
         })
-      }
-
-      const acquire = (input: WatchInput) => {
-        const target = path.resolve(input.path)
-        const ignore = [...new Set(input.type === "directory" ? (input.ignore ?? []) : [])].toSorted()
-        return Effect.gen(function* () {
-          yield* Effect.logInfo("watcher acquire", {
-            path: target,
-            type: input.type,
-            ignores: ignore.length,
-          })
-          const pubsub = yield* RcMap.get(watchers, { type: input.type, target, ignore })
-          return Stream.fromPubSub(pubsub)
-        })
-      }
+        const pubsub = yield* RcMap.get(watchers, { type: input.type, target, ignore })
+        return Stream.fromPubSub(pubsub)
+      })
+      const subscribe = (input: WatchInput) => Effect.succeed(Stream.unwrap(acquire(input)))
 
       return Service.of({ subscribe, acquire })
     }),

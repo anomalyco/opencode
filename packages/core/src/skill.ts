@@ -107,22 +107,17 @@ const layer = Layer.effect(
       yield* bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid)
     })
 
-    const watch = Effect.fn("Skill.watch")(function* (
-      input: Watcher.WatchInput,
-      accepts: (update: Watcher.Update) => boolean = () => true,
-      suffix = "",
-    ) {
+    const watch = Effect.fn("Skill.watch")(function* (input: Watcher.WatchInput) {
       yield* Effect.uninterruptible(
         Effect.gen(function* () {
           const target = path.resolve(input.path)
-          const key = `${input.type}:${target}:${suffix}`
+          const key = `${input.type}:${target}`
           if (watched.has(key)) return
           watched.add(key)
           const updates = yield* watcher
             .acquire({ ...input, path: target })
             .pipe(Effect.provideService(Scope.Scope, scope))
           yield* updates.pipe(
-            Stream.filter(accepts),
             Stream.runForEach((update) => invalidate(update.path)),
             Effect.forkIn(scope, { startImmediately: true }),
           )
@@ -136,30 +131,17 @@ const layer = Layer.effect(
       if (resolved) {
         yield* watch({ path: resolved, type: "directory" })
         if (resolved !== target) {
-          yield* watch(
-            { path: path.dirname(target), type: "directory" },
-            (update) => FSUtil.overlaps(target, update.path),
-            target,
-          )
+          yield* watch({ path: path.dirname(target), type: "directory" })
         }
         return resolved === target ? [target] : [target, resolved]
       }
       if (yield* fs.isDir(path.dirname(target))) {
-        yield* watch(
-          { path: path.dirname(target), type: "directory" },
-          (update) => FSUtil.overlaps(target, update.path),
-          target,
-        )
+        yield* watch({ path: path.dirname(target), type: "directory" })
       }
       return [target]
     })
 
-    const refresh = Effect.fn("Skill.refresh")(function* (sources: readonly Source[]) {
-      yield* Effect.forEach(
-        sources,
-        (source) => (source.type === "directory" ? watchDirectory(source.path) : Effect.void),
-        { discard: true },
-      )
+    const refresh = Effect.fn("Skill.refresh")(function* () {
       yield* cacheLock.withPermit(Effect.sync(() => cache.clear()))
       yield* bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid)
     })
@@ -174,7 +156,7 @@ const layer = Layer.effect(
         },
         list: () => draft.sources as Source[],
       }),
-      finalize: (draft) => refresh(draft.list()),
+      finalize: refresh,
     })
 
     const load = Effect.fn("Skill.load")(function* (source: Source) {
