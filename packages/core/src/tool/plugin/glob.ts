@@ -4,8 +4,8 @@ import { ToolFailure } from "@opencode-ai/ai"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import path from "path"
+import { Environment } from "../../environment"
 import { FileSystem } from "../../filesystem"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "../../location"
 import { LocationMutation } from "../../location-mutation"
 import { Ripgrep } from "../../ripgrep"
@@ -42,7 +42,7 @@ export const toModelContent = (entries: EncodedOutput, truncated = false) => {
 export const Plugin = {
   id: "opencode.tool.glob",
   effect: Effect.fn("GlobTool.Plugin")(function* (ctx: PluginContext) {
-    const fs = yield* FSUtil.Service
+    const environment = yield* Environment.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
     const mutation = yield* LocationMutation.Service
@@ -82,14 +82,20 @@ export const Plugin = {
                 agent: context.agent,
                 source,
               })
-              const info = yield* fs
-                .stat(target.absolute)
-                .pipe(
-                  Effect.catchReason("PlatformError", "NotFound", () =>
-                    Effect.fail(new ToolFailure({ message: `Search path does not exist: ${searchPath ?? "."}` })),
-                  ),
-                )
-              if (info.type !== "Directory")
+              const type = yield* environment.files.stat(target.absolute).pipe(
+                Effect.flatMap((info) =>
+                  info.type === "symlink"
+                    ? environment.files.list(target.absolute).pipe(
+                        Effect.as("directory" as const),
+                        Effect.catchTag("Environment.WrongKind", (error) => Effect.succeed(error.actual)),
+                      )
+                    : Effect.succeed(info.type),
+                ),
+                Effect.catchTag("Environment.NotFound", () =>
+                  Effect.fail(new ToolFailure({ message: `Search path does not exist: ${searchPath ?? "."}` })),
+                ),
+              )
+              if (type !== "directory")
                 return yield* Effect.fail(
                   new ToolFailure({ message: `Search path is not a directory: ${searchPath ?? "."}` }),
                 )
