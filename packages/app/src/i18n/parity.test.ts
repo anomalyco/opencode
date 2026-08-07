@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { desktopNativePluralCategories } from "./desktop-native"
 
 const appLocales = [
   "ar",
@@ -28,19 +29,51 @@ const appLocales = [
   "az",
   "fi",
   "sv",
+  "am",
+  "bg",
+  "bn",
+  "ca",
+  "cs",
+  "dv",
+  "dz",
+  "el",
+  "et",
+  "fa",
+  "fo",
+  "hr",
+  "hu",
+  "hy",
+  "is",
+  "ka",
+  "km",
+  "lo",
+  "lt",
+  "lv",
+  "mk",
+  "mn",
+  "ms",
+  "my",
+  "ne",
+  "ro",
+  "si",
+  "sk",
+  "sl",
+  "sq",
+  "sr",
+  "tg",
+  "tk",
+  "uz",
 ] as const
 const desktopLocales = appLocales
-const pluralCategories: Partial<Record<(typeof appLocales)[number], readonly string[]>> = {
-  ar: ["zero", "two", "few", "many"],
-  br: ["many"],
-  bs: ["few"],
-  es: ["many"],
-  fr: ["many"],
-  it: ["many"],
-  pl: ["few", "many"],
-  ru: ["few", "many"],
-  uk: ["few", "many"],
-}
+const pluralCategories = new Map(
+  appLocales.map(
+    (locale) =>
+      [
+        locale,
+        desktopNativePluralCategories(locale).filter((category) => category !== "one" && category !== "other"),
+      ] as const,
+  ),
+)
 
 const domains = [
   {
@@ -63,7 +96,7 @@ const domains = [
   },
 ] as const
 
-describe.skipIf(!!process.env.CI)("i18n parity", () => {
+describe("i18n parity", () => {
   test("non-English locales have every English key and required plural variants", async () => {
     for (const domain of domains) {
       const source = await dictionary(domain.source)
@@ -74,7 +107,7 @@ describe.skipIf(!!process.env.CI)("i18n parity", () => {
           .filter((key) => !Object.hasOwn(source, key))
           .sort()
         const expected = pluralFamilies(source)
-          .flatMap((key) => (pluralCategories[locale] ?? []).map((category) => `${key}.${category}`))
+          .flatMap((key) => (pluralCategories.get(locale) ?? []).map((category) => `${key}.${category}`))
           .sort()
         expect({ domain: domain.name, locale, missing, extra }).toEqual({
           domain: domain.name,
@@ -95,7 +128,7 @@ describe.skipIf(!!process.env.CI)("i18n parity", () => {
           (key) => Object.hasOwn(target, key) && placeholders(source[key]).join() !== placeholders(target[key]).join(),
         )
         const pluralMismatched = pluralFamilies(source).flatMap((key) =>
-          (pluralCategories[locale] ?? [])
+          (pluralCategories.get(locale) ?? [])
             .map((category) => `${key}.${category}`)
             .filter((variant) => placeholders(source[`${key}.other`]).join() !== placeholders(target[variant]).join()),
         )
@@ -144,12 +177,12 @@ describe("i18n plural parity", () => {
       for (const locale of domain.locales) {
         const target = await dictionary(domain.target(locale))
         const missing = families.flatMap((key) =>
-          (pluralCategories[locale] ?? [])
+          (pluralCategories.get(locale) ?? [])
             .map((category) => `${key}.${category}`)
             .filter((variant) => !Object.hasOwn(target, variant)),
         )
         const mismatched = families.flatMap((key) =>
-          (pluralCategories[locale] ?? [])
+          (pluralCategories.get(locale) ?? [])
             .map((category) => `${key}.${category}`)
             .filter(
               (variant) =>

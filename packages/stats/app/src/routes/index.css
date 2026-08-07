@@ -55,7 +55,7 @@ body {
   --color-background-strong: #161616;
   --color-background-strong-hover: #242424;
   --color-text: #5c5c5c;
-  --color-text-weak: #808080;
+  --color-text-weak: #707070;
   --color-text-strong: #161616;
   --color-text-inverted: #ffffff;
   --color-border-weak: #0000001a;
@@ -66,10 +66,10 @@ body {
   --stats-line-strong: #00000033;
   --stats-text: #161616;
   --stats-muted: #5c5c5c;
-  --stats-faint: #808080;
+  --stats-faint: #707070;
   --stats-theme-icon-active: #3a3a3a;
   --stats-accent: #3b5cf6;
-  --stats-accent-text: #6c7dff;
+  --stats-accent-text: #3b5cf6;
   --stats-bar-idle: #d4d4d4;
   --stats-dot: #d4d4d4;
   --stats-hero-muted: #5c5c5c;
@@ -90,6 +90,18 @@ body {
 
 [data-page="stats"] [hidden] {
   display: none !important;
+}
+
+[data-page="stats"] [data-slot="visually-hidden"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 [data-page="stats"][data-layout="compare-detail"] {
@@ -7079,7 +7091,7 @@ body {
   --color-background-strong: #ffffff;
   --color-background-strong-hover: #eeeeee;
   --color-text: #d4d4d4;
-  --color-text-weak: #808080;
+  --color-text-weak: #a3a3a3;
   --color-text-strong: #ffffff;
   --color-text-inverted: #161616;
   --color-border-weak: #ffffff1a;
@@ -7090,11 +7102,12 @@ body {
   --stats-line-strong: #ffffff33;
   --stats-text: #ffffff;
   --stats-muted: #d4d4d4;
-  --stats-faint: #808080;
+  --stats-faint: #a3a3a3;
+  --stats-accent-text: #8190ff;
   --stats-theme-icon-active: #fafafa;
   --stats-bar-idle: #303030;
   --stats-dot: #303030;
-  --stats-hero-muted: #808080;
+  --stats-hero-muted: #a3a3a3;
   --stats-hero-pattern: #303030;
   --stats-logo-bg: #f1ecec;
   --stats-logo-fill: #b7b1b1;
@@ -7254,7 +7267,7 @@ body {
     --color-background-strong: #ffffff;
     --color-background-strong-hover: #eeeeee;
     --color-text: #d4d4d4;
-    --color-text-weak: #808080;
+    --color-text-weak: #a3a3a3;
     --color-text-strong: #ffffff;
     --color-text-inverted: #161616;
     --color-border-weak: #ffffff1a;
@@ -7265,11 +7278,12 @@ body {
     --stats-line-strong: #ffffff33;
     --stats-text: #ffffff;
     --stats-muted: #d4d4d4;
-    --stats-faint: #808080;
+    --stats-faint: #a3a3a3;
+    --stats-accent-text: #8190ff;
     --stats-theme-icon-active: #fafafa;
     --stats-bar-idle: #303030;
     --stats-dot: #303030;
-    --stats-hero-muted: #808080;
+    --stats-hero-muted: #a3a3a3;
     --stats-hero-pattern: #303030;
     --stats-logo-bg: #f1ecec;
     --stats-logo-fill: #b7b1b1;
@@ -8393,7 +8407,7 @@ body {
   }
 
   [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"] {
-    --top-models-mobile-bar-width: 12px;
+    --top-models-mobile-bar-width: 18px;
   }
 
   [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"] [data-slot="top-models-axis"],
@@ -8402,7 +8416,7 @@ body {
   }
 
   [data-page="stats"] [data-component="market-share"][data-dense-labels="true"] {
-    --market-mobile-bar-width: 12px;
+    --market-mobile-bar-width: 18px;
   }
 
   [data-page="stats"] [data-component="market-share"][data-dense-labels="true"] [data-slot="market-labels"],

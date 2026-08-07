@@ -475,6 +475,10 @@ function HomeProjectRow(
       ref={sortable.ref}
       class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]"
       classList={{ "z-10": sortable.isDragSource() }}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        props.onSetContextMenuOpen(contextMenuID(), true)
+      }}
     >
       <HomeProjectNavButton
         type="button"
