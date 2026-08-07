@@ -27,6 +27,8 @@ import { createSessionReview } from "./review/model"
 import { SessionDesktopReview, SessionMobileReview, SessionMobileViewTabs } from "./review/view"
 import { SessionContextTab } from "./files/session-context-tab"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
+import { createTimelineSearchController } from "./timeline/search-controller"
+import { TimelineSearchBar } from "./timeline/search-bar"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
@@ -47,6 +49,12 @@ export function SessionScreen(props: { session: SessionModel }) {
   const isDesktop = session.isDesktop
   const screen = createSessionScreenLayout(session)
   const timeline = createSessionTimelineInteraction(session)
+  const timelineSearch = createTimelineSearchController({
+    sessionID: session.identity.sessionID,
+    scrollRef: timeline.scroller,
+    revealMessage: timeline.actions.revealMessage,
+    pauseAutoScroll: timeline.view.unpin,
+  })
   const messagesReady = timeline.ready
   const [store, setStore] = createStore({
     deferRender: false,
@@ -322,6 +330,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                   anchor={timeline.view.anchor}
                   setRevealMessage={timeline.view.setRevealMessage}
                   setScrollToEnd={timeline.view.setScrollToEnd}
+                  search={<TimelineSearchBar controller={timelineSearch} />}
                 />
               )}
             </Show>

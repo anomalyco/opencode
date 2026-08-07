@@ -1,8 +1,7 @@
-import { useCommand } from "@/context/command"
-import { useLanguage } from "@/context/language"
-import { useSync } from "@/context/sync"
-import { readPartText } from "@opencode-ai/session-ui/message-part-text"
-import type { AssistantMessage, TextPart } from "@opencode-ai/sdk/v2"
+import { useCommand } from "@/shell/commands/command"
+import { useLanguage } from "@/runtime/i18n/language"
+import { useData } from "@/runtime/server/current"
+import { Timeline } from "@opencode-ai/session-ui/timeline/projection"
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 
@@ -79,38 +78,15 @@ function applyHighlights(
   CSS.highlights.set(HIGHLIGHT_ACTIVE, new Highlight(...active))
 }
 
-function closestMatchIndex(root: HTMLElement, matches: TimelineSearchMatch[]): number {
-  if (matches.length === 0) return 0
-  const rootRect = root.getBoundingClientRect()
-  const center = rootRect.top + rootRect.height / 2
-  const firstIndexByReveal = new Map<string, number>()
-  matches.forEach((match, index) => {
-    if (!firstIndexByReveal.has(match.revealID)) firstIndexByReveal.set(match.revealID, index)
-  })
-  let best = 0
-  let bestDist = Infinity
-  root.querySelectorAll<HTMLElement>("[data-message-id]").forEach((el) => {
-    const id = el.dataset.messageId
-    if (!id || !firstIndexByReveal.has(id)) return
-    const rect = el.getBoundingClientRect()
-    const dist = Math.abs(rect.top + rect.height / 2 - center)
-    if (dist < bestDist) {
-      bestDist = dist
-      best = firstIndexByReveal.get(id) ?? best
-    }
-  })
-  return best
-}
-
 export function createTimelineSearchController(input: {
   sessionID: () => string | undefined
   scrollRef: () => HTMLDivElement | undefined
-  revealMessage: (id: string) => void
+  revealMessage: (id: string, partID?: string) => void
   pauseAutoScroll: () => void
 }) {
   const command = useCommand()
   const language = useLanguage()
-  const sync = useSync()
+  const data = useData()
   const [state, setState] = createStore({ value: "", active: 0, visible: false })
   const [focusTick, setFocusTick] = createSignal(0)
   let inputEl: HTMLInputElement | undefined
@@ -122,21 +98,19 @@ export function createTimelineSearchController(input: {
     if (!value) return []
     const sessionID = input.sessionID()
     if (!sessionID) return []
-    const data = sync().data
-    const messages = data.message[sessionID]
-    if (!messages) return []
-    const accum = data.part_text_accum_delta
+    const messages = data.session.message.list(sessionID)
     const result: TimelineSearchMatch[] = []
+    let revealID = ""
     for (const message of messages) {
-      const parts = data.part[message.id]
-      if (!parts) continue
-      const textParts = parts.filter(
-        (part): part is TextPart => part.type === "text" && !(part as TextPart).synthetic,
-      )
-      // UserMessageDisplay only renders the first non-synthetic text part.
-      const visibleParts = message.role === "user" ? textParts.slice(0, 1) : textParts
+      if (message.type === "user" || message.type === "shell") revealID = message.id
+      if (message.type !== "user" && message.type !== "assistant") continue
+      const visibleParts =
+        message.type === "user"
+          ? [{ id: `${message.id}:text:0`, content: { type: "text" as const, text: message.text } }]
+          : Timeline.contentEntries(message)
       for (const textPart of visibleParts) {
-        const text = readPartText(accum, textPart)
+        if (textPart.content.type !== "text") continue
+        const text = textPart.content.text
         if (!text) continue
         const lower = text.toLowerCase()
         let from = 0
@@ -145,8 +119,8 @@ export function createTimelineSearchController(input: {
         while (at !== -1) {
           result.push({
             messageID: message.id,
-            role: message.role,
-            revealID: message.role === "assistant" ? (message as AssistantMessage).parentID : message.id,
+            role: message.type,
+            revealID,
             partID: textPart.id,
             occurrence,
             text,
@@ -199,7 +173,11 @@ export function createTimelineSearchController(input: {
 
   createEffect(
     on(focusTick, () => {
-      if (state.visible) requestAnimationFrame(() => inputEl?.focus())
+      if (!state.visible) return
+      requestAnimationFrame(() => {
+        inputEl?.focus()
+        inputEl?.select()
+      })
     }),
   )
 
@@ -225,13 +203,16 @@ export function createTimelineSearchController(input: {
 
   function setValue(value: string) {
     setState("value", value)
-    const root = input.scrollRef()
     const list = matches()
-    if (!root || !value.trim() || list.length === 0) {
+    const match = list[0]
+    if (!value.trim() || !match) {
       setState("active", 0)
       return
     }
-    setState("active", closestMatchIndex(root, list))
+    setState("active", 0)
+    input.pauseAutoScroll()
+    input.revealMessage(match.revealID, match.partID)
+    scrollToMatch(match)
   }
 
   function scrollToMatch(match: TimelineSearchMatch) {
@@ -263,7 +244,7 @@ export function createTimelineSearchController(input: {
     const match = list[next]
     if (!match) return
     input.pauseAutoScroll()
-    input.revealMessage(match.revealID)
+    input.revealMessage(match.revealID, match.partID)
     scrollToMatch(match)
   }
 

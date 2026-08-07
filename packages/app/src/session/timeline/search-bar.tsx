@@ -1,29 +1,24 @@
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { useLanguage } from "@/context/language"
+import { Icon } from "@opencode-ai/ui/icon"
+import "@opencode-ai/ui/text-input.css"
 import { Show } from "solid-js"
-import { Portal } from "solid-js/web"
-import { useTitlebarRightMount } from "@/components/titlebar"
 import type { TimelineSearchController } from "./search-controller"
+import "./search-bar.css"
 
 export function TimelineSearchBar(props: { controller: TimelineSearchController }) {
-  const language = useLanguage()
-  const rightMount = useTitlebarRightMount()
   const c = props.controller
 
   return (
-    <Show when={c.visible() && rightMount()} keyed>
-      {(mount) => (
-        <Portal mount={mount}>
-          <div
-            data-component="timeline-search-bar"
-            class="flex items-center gap-1 h-7 shrink-0 rounded-[6px] border n-border-border-base pl-2.5 pr-1 bg-v2-background-bg-layer-02/60 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02 focus-within:bg-v2-background-bg-layer-02 w-[200px]"
-          >
-            <IconV2 name="magnifying-glass" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+    <Show when={c.visible()}>
+      <div data-component="timeline-search-bar" class="h-7 w-[200px] max-w-[50vw] shrink-0">
+        <div data-component="text-input-v2" data-appearance="base" data-leading-icon class="!h-7 !w-full max-w-full">
+          <div data-slot="text-input-v2-value">
+            <span data-slot="text-input-v2-leading-icon">
+              <Icon name="magnifying-glass" size="small" />
+            </span>
             <input
               ref={c.element.setInput}
-              class="relative z-20 min-w-0 flex-1 border-0 bg-transparent outline-0 text-v2-text-text-base text-[13px] [font-weight:440] placeholder:text-v2-text-text-faint"
-              type="text"
+              data-slot="text-input-v2-input"
+              type="search"
               value={c.query.value()}
               placeholder={c.query.placeholder()}
               aria-label={c.query.placeholder()}
@@ -52,50 +47,23 @@ export function TimelineSearchBar(props: { controller: TimelineSearchController 
                 }
               }}
             />
-            <Show when={c.query.value()}>
-              <Show
-                when={c.result.count() > 0}
-                fallback={
-                  <span class="shrink-0 text-[12px] text-v2-text-text-muted [font-weight:440] tabular-nums">
-                    {c.query.noResults()}
-                  </span>
-                }
-              >
-                <span class="shrink-0 text-[12px] text-v2-text-text-muted [font-weight:440] tabular-nums">
-                  {c.result.activeIndex() + 1}/{c.result.count()}
-                </span>
-                <IconButtonV2
-                  type="button"
-                  variant="ghost-muted"
-                  size="small"
-                  class="relative z-20 shrink-0 !size-5"
-                  aria-label={language.t("command.message.previous")}
-                  onClick={() => c.result.move(-1)}
-                  icon={<IconV2 name="chevron-down" size="small" class="[transform:rotate(180deg)]" />}
-                />
-                <IconButtonV2
-                  type="button"
-                  variant="ghost-muted"
-                  size="small"
-                  class="relative z-20 shrink-0 !size-5"
-                  aria-label={language.t("command.message.next")}
-                  onClick={() => c.result.move(1)}
-                  icon={<IconV2 name="chevron-down" size="small" />}
-                />
-              </Show>
-              <IconButtonV2
-                type="button"
-                variant="ghost-muted"
-                size="small"
-                class="relative z-20 shrink-0 !size-5"
-                aria-label={c.query.placeholder()}
-                onClick={() => c.query.close()}
-                icon={<IconV2 name="close" size="large" class="text-v2-icon-icon-muted" />}
-              />
-            </Show>
           </div>
-        </Portal>
-      )}
+          <Show when={c.query.value()}>
+            <span class="shrink-0 self-center text-[11px] text-v2-text-text-muted [font-weight:440] tabular-nums">
+              {c.result.count() > 0 ? c.result.activeIndex() + 1 : 0}/{c.result.count()}
+            </span>
+          </Show>
+          <button
+            type="button"
+            class="-me-1 flex size-5 shrink-0 self-center items-center justify-center rounded-[2px] border-0 bg-transparent p-0 text-v2-icon-icon-muted outline outline-1 outline-transparent hover:bg-v2-overlay-simple-overlay-hover active:bg-v2-overlay-simple-overlay-pressed focus-visible:outline-v2-border-border-focus"
+            aria-label={c.query.placeholder()}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => c.query.close()}
+          >
+            <Icon name="xmark-small" />
+          </button>
+        </div>
+      </div>
     </Show>
   )
 }
