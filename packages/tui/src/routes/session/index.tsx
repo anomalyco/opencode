@@ -110,6 +110,7 @@ const NAVIGATION_SLACK_ID = "session-navigation-slack"
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
 const TRANSCRIPT_BACKFILL_DELAY = 120
+type PendingAction = "steer" | "queue" | "cancel"
 
 const context = createContext<{
   width: number
@@ -121,6 +122,7 @@ const context = createContext<{
   diffWrapMode: () => "word" | "none"
   models: () => ModelInfo[]
   config: ReturnType<typeof useConfig>["data"]
+  mutatePending: (action: PendingAction, inputID: string) => Promise<boolean>
 }>()
 
 function use() {
@@ -375,22 +377,25 @@ export function Session() {
   })
   const dialog = useDialog()
   const renderer = useRenderer()
-  const steerQueuedPrompt = async (inputID: string) => {
-    const error = await client.api.session.pending.steer({ sessionID: route.sessionID, inputID }).then(
-      () => undefined,
-      (error) => error,
-    )
+  const pendingQueueActions = new Set<string>()
+  const mutatePending = async (action: PendingAction, inputID: string) => {
+    if (pendingQueueActions.has(inputID)) return false
+    pendingQueueActions.add(inputID)
+    const request =
+      action === "steer"
+        ? client.api.session.pending.steer({ sessionID: route.sessionID, inputID })
+        : action === "queue"
+          ? client.api.session.pending.queue({ sessionID: route.sessionID, inputID })
+          : client.api.session.pending.cancel({ sessionID: route.sessionID, inputID })
+    const error = await request
+      .then(
+        () => undefined,
+        (error) => error,
+      )
+      .finally(() => pendingQueueActions.delete(inputID))
     if (!error) return true
-    toast.show({ title: "Failed to steer queued prompt", message: errorMessage(error), variant: "error" })
-    return false
-  }
-  const cancelQueuedPrompt = async (inputID: string) => {
-    const error = await client.api.session.pending.cancel({ sessionID: route.sessionID, inputID }).then(
-      () => undefined,
-      (error) => error,
-    )
-    if (!error) return true
-    toast.show({ title: "Failed to delete queued prompt", message: errorMessage(error), variant: "error" })
+    const label = action === "cancel" ? "delete" : action
+    toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
     return false
   }
   const openQueuedPrompts = () =>
@@ -403,7 +408,7 @@ export function Session() {
           footer: `${index + 1} of ${queuedPrompts().length}`,
         }))}
         onSelect={(option) => {
-          void steerQueuedPrompt(option.value).then((steered) => {
+          void mutatePending("steer", option.value).then((steered) => {
             if (steered) dialog.clear()
           })
         }}
@@ -412,7 +417,7 @@ export function Session() {
             command: "queued_prompt.delete",
             title: "delete",
             onTrigger: (option) => {
-              void cancelQueuedPrompt(option.value).then((cancelled) => {
+              void mutatePending("cancel", option.value).then((cancelled) => {
                 if (cancelled && queuedPrompts().length <= 1) dialog.clear()
               })
             },
@@ -1001,6 +1006,7 @@ export function Session() {
         diffWrapMode,
         models,
         config,
+        mutatePending,
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1097,7 +1103,7 @@ export function Session() {
                     onEmptySubmit={async () => {
                       const next = queuedPrompts()[0]
                       if (!next) return false
-                      return steerQueuedPrompt(next.id)
+                      return mutatePending("steer", next.id)
                     }}
                     sessionID={route.sessionID}
                   />
@@ -1916,6 +1922,10 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const renderer = useRenderer()
   const promptRef = usePromptRef()
 
+  const updatePendingSteer = async (action: "queue" | "cancel") => {
+    if (await ctx.mutatePending(action, props.message.id)) dialog.clear()
+  }
+
   return (
     <Show when={props.message.text.trim() || files().length}>
       <box
@@ -1932,6 +1942,21 @@ function UserMessage(props: { message: SessionMessageUser }) {
           }}
           onMouseUp={() => {
             if (renderer.getSelection()?.getSelectedText()) return
+            if (delivery() === "steer") {
+              dialog.replace(() => (
+                <DialogSelect
+                  title="Pending steer"
+                  options={[
+                    { title: "Move to queue", value: "queue" as const },
+                    { title: "Delete", value: "cancel" as const },
+                  ]}
+                  onSelect={(option) => {
+                    void updatePendingSteer(option.value)
+                  }}
+                />
+              ))
+              return
+            }
             dialog.replace(() => (
               <DialogMessage
                 messageID={props.message.id}

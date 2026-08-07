@@ -527,13 +527,11 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         params: { sessionID: Session.ID, inputID: SessionMessage.ID },
         success: HttpApiSchema.NoContent,
         error: [ConflictError, SessionNotFoundError],
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
+      }).annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.pending.cancel",
-            summary: "Cancel queued input",
-            description: "Cancel an input that is still queued for delivery.",
+            summary: "Cancel pending input",
+            description: "Cancel an input that has not yet been promoted into session history.",
           }),
         ),
     )
@@ -542,13 +540,24 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         params: { sessionID: Session.ID, inputID: SessionMessage.ID },
         success: HttpApiSchema.NoContent,
         error: [ConflictError, SessionNotFoundError],
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
+      }).annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.pending.steer",
             summary: "Steer queued input",
             description: "Change a queued input to steer delivery and wake session execution.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.pending.queue", "/api/session/:sessionID/pending/:inputID/queue", {
+        params: { sessionID: Session.ID, inputID: SessionMessage.ID },
+        success: HttpApiSchema.NoContent,
+        error: [ConflictError, SessionNotFoundError],
+      }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.pending.queue",
+            summary: "Queue pending steer",
+            description: "Change a pending steer to queued delivery.",
           }),
         ),
     )

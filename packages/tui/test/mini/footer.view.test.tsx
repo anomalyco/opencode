@@ -129,8 +129,7 @@ async function renderFooter(
     onStatus?: (status: string) => void
     onMiniSettingChange?: (change: MiniSettingChange) => void
     queuedPrompts?: FooterQueuedPrompt[]
-    onQueuedPromptSteer?: (inputID: string) => Promise<void>
-    onQueuedPromptCancel?: (inputID: string) => Promise<void>
+    onQueuedPromptAction?: (action: "steer" | "cancel", inputID: string) => Promise<void>
   } = {},
 ) {
   const [view, setView] = createSignal<FooterView>(input.view ?? { type: "prompt" })
@@ -178,8 +177,7 @@ async function renderFooter(
           onFormCancel={() => {}}
           onCycle={input.onCycle ?? (() => {})}
           onInterrupt={() => false}
-          onQueuedPromptSteer={input.onQueuedPromptSteer}
-          onQueuedPromptCancel={input.onQueuedPromptCancel}
+          onQueuedPromptAction={input.onQueuedPromptAction}
           onEditorOpen={async () => undefined}
           onInputClear={() => {}}
           onExit={() => {}}
@@ -976,8 +974,8 @@ test("direct footer steers the oldest queued prompt from an empty composer", asy
       { messageID: "m-1", prompt: { text: "first", parts: [] }, delivery: "queue" },
       { messageID: "m-2", prompt: { text: "second", parts: [] }, delivery: "queue" },
     ],
-    onQueuedPromptSteer: async (inputID) => {
-      steered.push(inputID)
+    onQueuedPromptAction: async (action, inputID) => {
+      if (action === "steer") steered.push(inputID)
     },
   })
 
@@ -1004,8 +1002,8 @@ test("direct footer does not steer queued work on a double submit", async () => 
       await Bun.sleep(10)
       return true
     },
-    onQueuedPromptSteer: async (inputID) => {
-      steered.push(inputID)
+    onQueuedPromptAction: async (action, inputID) => {
+      if (action === "steer") steered.push(inputID)
     },
   })
 

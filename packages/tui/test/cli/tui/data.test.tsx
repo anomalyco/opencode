@@ -974,10 +974,24 @@ test("updates and removes queued inputs from durable lifecycle events", async ()
     expect(rows).toContainEqual({ type: "message", messageID: "message-queued" })
 
     emitEvent(events, {
-      id: "evt_cancel_admitted",
+      id: "evt_queue_restored",
       created: 3,
-      type: "session.input.admitted",
+      type: "session.input.queued",
       durable: durable(sessionID, 2),
+      data: { sessionID, inputID: "message-queued" },
+    })
+    await wait(() =>
+      data.session.pending
+        .list(sessionID)
+        .some((item) => item.id === "message-queued" && item.type !== "compaction" && item.delivery === "queue"),
+    )
+    expect(rows).not.toContainEqual({ type: "message", messageID: "message-queued" })
+
+    emitEvent(events, {
+      id: "evt_cancel_admitted",
+      created: 4,
+      type: "session.input.admitted",
+      durable: durable(sessionID, 3),
       data: {
         sessionID,
         inputID: "message-cancelled",
@@ -987,9 +1001,9 @@ test("updates and removes queued inputs from durable lifecycle events", async ()
     await wait(() => data.session.pending.list(sessionID).length === 2)
     emitEvent(events, {
       id: "evt_queue_cancelled",
-      created: 4,
+      created: 5,
       type: "session.input.cancelled",
-      durable: durable(sessionID, 3),
+      durable: durable(sessionID, 4),
       data: { sessionID, inputID: "message-cancelled" },
     })
     await wait(() => !data.session.input.has(sessionID, "message-cancelled"))

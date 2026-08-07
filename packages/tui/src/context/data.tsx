@@ -170,13 +170,20 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     function removePending(sessionID: string, inputID?: string) {
       if (!inputID) return
-      if (!store.session.pending[sessionID]?.some((item) => item.id === inputID)) return
-      setStore(
-        "session",
-        "pending",
-        sessionID,
-        (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inputID),
-      )
+      if (store.session.pending[sessionID]?.some((item) => item.id === inputID))
+        setStore(
+          "session",
+          "pending",
+          sessionID,
+          (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inputID),
+        )
+      if (store.session.input[sessionID]?.includes(inputID))
+        setStore(
+          "session",
+          "input",
+          sessionID,
+          (store.session.input[sessionID] ?? []).filter((id) => id !== inputID),
+        )
     }
 
     function removePermission(sessionID: string, requestID: string) {
@@ -191,20 +198,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     }
 
     function updatePending(sessionID: string, inputID: string, delivery: "steer" | "queue") {
-      if (
-        !store.session.pending[sessionID]?.some(
-          (item) => item.id === inputID && item.type !== "compaction" && item.delivery !== delivery,
-        )
-      )
-        return
-      setStore(
-        "session",
-        "pending",
-        sessionID,
-        (store.session.pending[sessionID] ?? []).map((item) =>
-          item.id === inputID && item.type !== "compaction" ? { ...item, delivery } : item,
-        ),
-      )
+      const index = store.session.pending[sessionID]?.findIndex((item) => item.id === inputID) ?? -1
+      const item = store.session.pending[sessionID]?.[index]
+      if (index < 0 || !item || item.type === "compaction" || item.delivery === delivery) return
+      setStore("session", "pending", sessionID, index, { ...item, delivery })
     }
 
     const message = {
@@ -440,28 +437,25 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           }
           break
         case "session.input.promoted": {
+          const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inputID) ?? false
           removePending(event.data.sessionID, event.data.inputID)
           message.update(event.data.sessionID, (draft, index) => {
             const position = index.get(event.data.inputID)
             if (position === undefined) return
             const existing = draft[position]
-            if (!existing || !store.session.input[event.data.sessionID]?.includes(event.data.inputID)) return
+            if (!existing || !admitted) return
             existing.time.created = event.created
             draft.splice(position, 1)
             draft.push(existing)
             message.reindex(draft, index, position)
           })
-          if (store.session.input[event.data.sessionID]?.includes(event.data.inputID))
-            setStore(
-              "session",
-              "input",
-              event.data.sessionID,
-              (store.session.input[event.data.sessionID] ?? []).filter((id) => id !== event.data.inputID),
-            )
           break
         }
         case "session.input.steered":
           updatePending(event.data.sessionID, event.data.inputID, "steer")
+          break
+        case "session.input.queued":
+          updatePending(event.data.sessionID, event.data.inputID, "queue")
           break
         case "session.input.cancelled": {
           removePending(event.data.sessionID, event.data.inputID)
@@ -473,13 +467,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               index.delete(event.data.inputID)
               message.reindex(draft, index, position)
             })
-          if (store.session.input[event.data.sessionID]?.includes(event.data.inputID))
-            setStore(
-              "session",
-              "input",
-              event.data.sessionID,
-              (store.session.input[event.data.sessionID] ?? []).filter((id) => id !== event.data.inputID),
-            )
           break
         }
         case "session.input.admitted":

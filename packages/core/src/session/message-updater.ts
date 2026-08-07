@@ -92,6 +92,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.input.admitted": () => Effect.void,
       "session.input.cancelled": () => Effect.void,
       "session.input.steered": () => Effect.void,
+      "session.input.queued": () => Effect.void,
       "session.execution.started": () => Effect.void,
       "session.execution.succeeded": () => clearCurrentRetry,
       "session.execution.failed": () => clearCurrentRetry,

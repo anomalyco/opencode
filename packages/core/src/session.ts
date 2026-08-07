@@ -140,6 +140,7 @@ export class PendingInputConflictError extends Schema.TaggedErrorClass<PendingIn
     inputID: SessionMessage.ID,
   },
 ) {}
+type PendingInputRef = { readonly sessionID: SessionSchema.ID; readonly inputID: SessionMessage.ID }
 export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()("Session.SkillNotFoundError", {
   skill: Skill.ID,
 }) {}
@@ -188,14 +189,9 @@ export interface Interface {
    * unhandled compaction barriers.
    */
   readonly pending: (sessionID: SessionSchema.ID) => Effect.Effect<SessionPending.Info[], NotFoundError>
-  readonly cancelPending: (input: {
-    sessionID: SessionSchema.ID
-    inputID: SessionMessage.ID
-  }) => Effect.Effect<void, NotFoundError | PendingInputConflictError>
-  readonly steerPending: (input: {
-    sessionID: SessionSchema.ID
-    inputID: SessionMessage.ID
-  }) => Effect.Effect<void, NotFoundError | PendingInputConflictError>
+  readonly cancelPending: (input: PendingInputRef) => Effect.Effect<void, NotFoundError | PendingInputConflictError>
+  readonly steerPending: (input: PendingInputRef) => Effect.Effect<void, NotFoundError | PendingInputConflictError>
+  readonly queuePending: (input: PendingInputRef) => Effect.Effect<void, NotFoundError | PendingInputConflictError>
   /**
    * Durable, ordered session log read. Replays durable session bus after
    * the exclusive `after` cursor, emits a `Synced` marker at the captured
@@ -331,6 +327,28 @@ const layer = Layer.effect(
               messageID: SessionMessage.ID.make(row.id),
             }),
         ),
+      )
+
+    const mutatePending = (
+      input: PendingInputRef,
+      mutation: (
+        bus: Bus.Interface,
+        input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID },
+      ) => Effect.Effect<unknown>,
+      wake = false,
+    ) =>
+      Effect.uninterruptible(
+        Effect.gen(function* () {
+          yield* result.get(input.sessionID)
+          yield* mutation(bus, { sessionID: input.sessionID, id: input.inputID }).pipe(
+            Effect.catchDefect((defect) =>
+              defect instanceof SessionPending.LifecycleConflict
+                ? new PendingInputConflictError(input)
+                : Effect.die(defect),
+            ),
+          )
+          if (wake) yield* execution.wake(input.sessionID)
+        }),
       )
 
     const result = Service.of({
@@ -522,35 +540,9 @@ const layer = Layer.effect(
         yield* result.get(sessionID)
         return yield* SessionPending.list(db, sessionID)
       }),
-      cancelPending: Effect.fn("Session.cancelPending")((input) =>
-        Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* result.get(input.sessionID)
-            yield* SessionPending.cancel(bus, { sessionID: input.sessionID, id: input.inputID }).pipe(
-              Effect.catchDefect((defect) =>
-                defect instanceof SessionPending.LifecycleConflict
-                  ? new PendingInputConflictError(input)
-                  : Effect.die(defect),
-              ),
-            )
-          }),
-        ),
-      ),
-      steerPending: Effect.fn("Session.steerPending")((input) =>
-        Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* result.get(input.sessionID)
-            yield* SessionPending.steer(bus, { sessionID: input.sessionID, id: input.inputID }).pipe(
-              Effect.catchDefect((defect) =>
-                defect instanceof SessionPending.LifecycleConflict
-                  ? new PendingInputConflictError(input)
-                  : Effect.die(defect),
-              ),
-            )
-            yield* execution.wake(input.sessionID)
-          }),
-        ),
-      ),
+      cancelPending: Effect.fn("Session.cancelPending")((input) => mutatePending(input, SessionPending.cancel)),
+      steerPending: Effect.fn("Session.steerPending")((input) => mutatePending(input, SessionPending.steer, true)),
+      queuePending: Effect.fn("Session.queuePending")((input) => mutatePending(input, SessionPending.queue)),
       log: (input) =>
         Stream.unwrap(
           result

@@ -178,7 +178,6 @@ describe("v2 session reducer", () => {
         data: { sessionID: "ses_1", inputID: "msg_user" },
       }),
     )
-
     const result = reducer.reduce(
       [],
       event({
@@ -213,6 +212,15 @@ describe("v2 session reducer", () => {
         ...base,
         id: "evt_steered",
         type: "session.input.steered",
+        data: { sessionID: "ses_1", inputID: "msg_user" },
+      }),
+    )
+    reducer.reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_queued",
+        type: "session.input.queued",
         data: { sessionID: "ses_1", inputID: "msg_user" },
       }),
     )

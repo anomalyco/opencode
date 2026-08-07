@@ -1120,7 +1120,7 @@ describe("Session.pending", () => {
     }),
   )
 
-  it.effect("changes only queued input to steer and wakes after the durable mutation", () =>
+  it.effect("moves pending input between steer and queue delivery", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
@@ -1143,15 +1143,21 @@ describe("Session.pending", () => {
       expect(yield* eventCount(Bus.versionedType(SessionEvent.InputSteered.type, 1))).toBe(1)
 
       wakeCalls.length = 0
+      yield* session.queuePending({ sessionID, inputID: queued.id })
+      expect(yield* session.pending(sessionID)).toMatchObject([
+        { id: queued.id, delivery: "queue" },
+        { id: alreadySteered.id, delivery: "steer" },
+      ])
+      expect(wakeCalls).toEqual([])
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputQueued.type, 1))).toBe(1)
+
       expect(
         yield* session.steerPending({ sessionID, inputID: alreadySteered.id }).pipe(Effect.flip),
       ).toMatchObject({ _tag: "Session.PendingInputConflictError", sessionID, inputID: alreadySteered.id })
-      expect(
-        yield* session.cancelPending({ sessionID, inputID: alreadySteered.id }).pipe(Effect.flip),
-      ).toMatchObject({ _tag: "Session.PendingInputConflictError", sessionID, inputID: alreadySteered.id })
+      yield* session.cancelPending({ sessionID, inputID: alreadySteered.id })
       expect(wakeCalls).toEqual([])
       expect(yield* eventCount(Bus.versionedType(SessionEvent.InputSteered.type, 1))).toBe(1)
-      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputCancelled.type, 1))).toBe(0)
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputCancelled.type, 1))).toBe(1)
     }),
   )
 })

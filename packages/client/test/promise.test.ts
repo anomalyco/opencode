@@ -370,10 +370,12 @@ test("session.pending mutations use the public HTTP contract", async () => {
 
   await client.session.pending.cancel({ sessionID: "ses_test", inputID: "msg_cancel" })
   await client.session.pending.steer({ sessionID: "ses_test", inputID: "msg_steer" })
+  await client.session.pending.queue({ sessionID: "ses_test", inputID: "msg_queue" })
 
   expect(requests).toEqual([
     { method: "DELETE", url: "http://localhost:3000/api/session/ses_test/pending/msg_cancel" },
     { method: "POST", url: "http://localhost:3000/api/session/ses_test/pending/msg_steer/steer" },
+    { method: "POST", url: "http://localhost:3000/api/session/ses_test/pending/msg_queue/queue" },
   ])
 })
 

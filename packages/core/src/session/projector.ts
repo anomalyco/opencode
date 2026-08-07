@@ -497,6 +497,12 @@ const layer = Layer.effectDiscard(
         sessionID: event.data.sessionID,
       }),
     )
+    yield* bus.project(SessionEvent.InputQueued, (event) =>
+      SessionPending.projectQueued(db, {
+        id: event.data.inputID,
+        sessionID: event.data.sessionID,
+      }),
+    )
     yield* bus.project(SessionEvent.Compaction.Admitted, (event) =>
       Effect.gen(function* () {
         if (event.durable === undefined)

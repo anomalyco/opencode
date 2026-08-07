@@ -47,19 +47,17 @@ export function createSessionRows(sessionID: Accessor<string>) {
     const messages = data.session.message.list(sessionID())
     const inputs = new Set(data.session.input.list(sessionID()))
     const pending = data.session.pending.list(sessionID())
+    const queued = new Set(
+      pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),
+    )
+    const visible = queued.size === 0 ? messages : messages.filter((message) => !queued.has(message.id))
     const boundary = revertBoundary()
     const rows = reduceSessionRows(
-      boundary ? messages.filter((message) => message.id < boundary) : messages,
+      boundary ? visible.filter((message) => message.id < boundary) : visible,
       inputs,
       turnTokens(),
     )
     partitionPending(rows, pendingPermissions())
-    removeQueuedPrompts(
-      rows,
-      pending
-        .filter((item) => item.type === "user" && item.delivery === "queue")
-        .map((item) => item.id),
-    )
     const position = rows.findIndex((row) => row.type === "message" && inputs.has(row.messageID))
     rows.splice(
       position === -1 ? rows.length : position,
@@ -118,7 +116,11 @@ export function createSessionRows(sessionID: Accessor<string>) {
   createEffect(
     on(
       () =>
-        data.session.pending.list(sessionID()).map((item) => `${item.id}:${"delivery" in item ? item.delivery : item.type}`),
+        data.session.pending.list(sessionID()).flatMap((item) => {
+          if (item.type === "compaction") return [`${item.id}:compaction`]
+          if (item.type === "user" && item.delivery === "queue") return [`${item.id}:queue`]
+          return []
+        }),
       () => setRows(reconcile(reduce())),
       { defer: true },
     ),
@@ -284,12 +286,6 @@ export function createSessionRows(sessionID: Accessor<string>) {
   onCleanup(() => subscriptions.forEach((unsubscribe) => unsubscribe()))
 
   return rows
-}
-
-export function removeQueuedPrompts(rows: SessionRow[], messageIDs: string[]) {
-  const queued = new Set(messageIDs)
-  const visible = rows.filter((row) => row.type !== "message" || !queued.has(row.messageID))
-  rows.splice(0, rows.length, ...visible)
 }
 
 export function reduceSessionRows(

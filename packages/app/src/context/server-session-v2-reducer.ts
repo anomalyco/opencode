@@ -32,8 +32,6 @@ export function createV2SessionReducer() {
       case "session.input.cancelled":
         pending.delete(key(sessionID, event.data.inputID))
         return
-      case "session.input.steered":
-        return
       case "session.input.promoted": {
         const input = pending.get(key(sessionID, event.data.inputID))
         pending.delete(key(sessionID, event.data.inputID))

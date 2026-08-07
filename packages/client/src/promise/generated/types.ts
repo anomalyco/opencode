@@ -522,6 +522,16 @@ export type SessionInputSteered = {
   data: { sessionID: string; inputID: string }
 }
 
+export type SessionInputQueued = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.input.queued"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; inputID: string }
+}
+
 export type SessionExecutionStarted = {
   id: string
   created: number
@@ -1992,6 +2002,7 @@ export type SessionEventDurable =
   | SessionInputAdmitted
   | SessionInputCancelled
   | SessionInputSteered
+  | SessionInputQueued
   | SessionExecutionStarted
   | SessionExecutionSucceeded
   | SessionExecutionFailed
@@ -2048,6 +2059,7 @@ export type V2Event =
   | SessionInputAdmitted
   | SessionInputCancelled
   | SessionInputSteered
+  | SessionInputQueued
   | SessionExecutionStarted
   | SessionExecutionSucceeded
   | SessionExecutionFailed
@@ -3726,6 +3738,13 @@ export type SessionPendingSteerInput = {
 }
 
 export type SessionPendingSteerOutput = void
+
+export type SessionPendingQueueInput = {
+  readonly sessionID: { readonly sessionID: string; readonly inputID: string }["sessionID"]
+  readonly inputID: { readonly sessionID: string; readonly inputID: string }["inputID"]
+}
+
+export type SessionPendingQueueOutput = void
 
 export type SessionInstructionsEntryListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 

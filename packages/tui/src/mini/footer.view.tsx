@@ -34,6 +34,7 @@ import { Keymap } from "../context/keymap"
 import { modelInfo } from "./variant.shared"
 import { monoShortcut } from "./mono"
 import { stringWidth } from "../util/string-width"
+import { errorMessage } from "../util/error"
 
 import type {
   FooterPromptRoute,
@@ -46,6 +47,7 @@ import type {
   MiniSettingChange,
   MiniSettings,
   PermissionReply,
+  QueuedPromptAction,
   RunAgent,
   RunCommand,
   RunInput,
@@ -99,8 +101,7 @@ type RunFooterViewProps = {
   onCycle: () => void
   onInterrupt: () => boolean
   onBackground?: () => void
-  onQueuedPromptSteer?: (inputID: string) => Promise<void>
-  onQueuedPromptCancel?: (inputID: string) => Promise<void>
+  onQueuedPromptAction?: (action: QueuedPromptAction, inputID: string) => Promise<void>
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onInputClear: () => void
   onExitRequest?: () => boolean
@@ -321,15 +322,20 @@ export function RunFooterView(props: RunFooterViewProps) {
     setRoute({ type: "composer" })
   }
 
-  const queuedPromptAction = async (action: "steer" | "delete", inputID: string) => {
-    const run = action === "steer" ? props.onQueuedPromptSteer : props.onQueuedPromptCancel
+  const pendingQueueActions = new Set<string>()
+  const queuedPromptAction = async (action: QueuedPromptAction, inputID: string) => {
+    if (pendingQueueActions.has(inputID)) return false
+    const run = props.onQueuedPromptAction
     if (!run) return false
-    const error = await run(inputID).then(
-      () => undefined,
-      (error) => error,
-    )
+    pendingQueueActions.add(inputID)
+    const error = await run(action, inputID)
+      .then(
+        () => undefined,
+        (error) => error,
+      )
+      .finally(() => pendingQueueActions.delete(inputID))
     if (!error) return true
-    props.onStatus(`failed to ${action} queued prompt: ${error instanceof Error ? error.message : String(error)}`)
+    props.onStatus(`failed to ${action === "cancel" ? "delete" : action} queued prompt: ${errorMessage(error)}`)
     return false
   }
 
@@ -758,7 +764,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                               })
                             }}
                             onDelete={(item) => {
-                              void queuedPromptAction("delete", item.messageID)
+                              void queuedPromptAction("cancel", item.messageID)
                             }}
                             onRows={setSubagentMenuRows}
                             mono={props.mono}
@@ -769,7 +775,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             theme={theme}
                             commands={props.commands}
                             subagents={tabs}
-                            queued={queuedPrompts}
+                            queued={queue}
                             variants={props.variants}
                             variantCycle={variantCycle()}
                             onClose={closePanel}

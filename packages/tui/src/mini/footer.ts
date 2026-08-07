@@ -51,6 +51,7 @@ import type {
   MiniSettingChange,
   MiniSettings,
   PermissionReply,
+  QueuedPromptAction,
   RunAgent,
   RunCommand,
   RunInput,
@@ -96,8 +97,7 @@ type RunFooterOptions = {
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
   onInterrupt?: () => void
   onBackground?: () => void
-  onQueuedPromptSteer?: (inputID: string) => Promise<void>
-  onQueuedPromptCancel?: (inputID: string) => Promise<void>
+  onQueuedPromptAction?: (action: QueuedPromptAction, inputID: string) => Promise<void>
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
@@ -345,8 +345,7 @@ export class RunFooter implements FooterApi {
               onCycle: footer.handleCycle,
               onInterrupt: footer.handleInterrupt,
               onBackground: options.onBackground,
-              onQueuedPromptSteer: options.onQueuedPromptSteer,
-              onQueuedPromptCancel: options.onQueuedPromptCancel,
+              onQueuedPromptAction: options.onQueuedPromptAction,
               onEditorOpen: options.onEditorOpen,
               onInputClear: footer.handleInputClear,
               onExitRequest: footer.handleExit,

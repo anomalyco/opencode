@@ -91,6 +91,8 @@ export type FooterQueuedPrompt = {
   delivery: "steer" | "queue"
 }
 
+export type QueuedPromptAction = "steer" | "cancel"
+
 export type RunAgent = {
   id: string
   name: string

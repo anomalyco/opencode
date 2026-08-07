@@ -515,8 +515,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     )
   }
 
+  let syncedPending: string[] | undefined
   const syncPending = () => {
-    const prompts = [...state.pending.values()]
+    const prompts = [...state.pending.values()].filter((item) => item.delivery === "queue")
+    const ids = prompts.map((item) => item.messageID)
+    if (syncedPending?.length === ids.length && syncedPending.every((id, index) => id === ids[index])) return
+    syncedPending = ids
     input.trace?.write("ui.patch", { pending: prompts.length })
     input.footer.event({ type: "queued.prompts", prompts })
   }
@@ -950,6 +954,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           messageID: event.data.inputID,
         },
       ])
+      return
+    }
+    if (event.type === "session.input.queued") {
+      const pending = state.pending.get(event.data.inputID)
+      if (!pending) return
+      state.pending.set(event.data.inputID, { ...pending, delivery: "queue" })
+      syncPending()
       return
     }
     if (event.type === "session.input.cancelled") {

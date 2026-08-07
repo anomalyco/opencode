@@ -86,6 +86,7 @@ describe("public event manifest", () => {
         "session.input.admitted.1",
         "session.input.cancelled.1",
         "session.input.steered.1",
+        "session.input.queued.1",
         "session.execution.started.1",
         "session.execution.succeeded.1",
         "session.execution.failed.1",

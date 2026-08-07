@@ -193,6 +193,16 @@ export const InputSteered = Event.durable({
 })
 export type InputSteered = typeof InputSteered.Type
 
+export const InputQueued = Event.durable({
+  type: "session.input.queued",
+  ...options,
+  schema: {
+    sessionID: SessionID,
+    inputID: SessionMessage.ID,
+  },
+})
+export type InputQueued = typeof InputQueued.Type
+
 export namespace Execution {
   export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
   export type Started = typeof Started.Type
@@ -602,6 +612,7 @@ export const Definitions = Event.inventory(
   InputAdmitted,
   InputCancelled,
   InputSteered,
+  InputQueued,
   Execution.Started,
   Execution.Succeeded,
   Execution.Failed,

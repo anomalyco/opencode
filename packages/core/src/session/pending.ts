@@ -325,7 +325,7 @@ export const projectCancelled = Effect.fn("SessionPending.projectCancelled")(fun
       and(
         eq(SessionPendingTable.id, input.id),
         eq(SessionPendingTable.session_id, input.sessionID),
-        eq(SessionPendingTable.delivery, "queue"),
+        or(eq(SessionPendingTable.delivery, "queue"), eq(SessionPendingTable.delivery, "steer")),
       ),
     )
     .returning({ id: SessionPendingTable.id })
@@ -334,21 +334,23 @@ export const projectCancelled = Effect.fn("SessionPending.projectCancelled")(fun
   if (!deleted) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
 })
 
-export const projectSteered = Effect.fn("SessionPending.projectSteered")(function* (
+const projectDelivery = Effect.fn("SessionPending.projectDelivery")(function* (
   db: DatabaseService,
   input: {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
+    readonly from: Delivery
+    readonly to: Delivery
   },
 ) {
   const updated = yield* db
     .update(SessionPendingTable)
-    .set({ delivery: "steer" })
+    .set({ delivery: input.to })
     .where(
       and(
         eq(SessionPendingTable.id, input.id),
         eq(SessionPendingTable.session_id, input.sessionID),
-        eq(SessionPendingTable.delivery, "queue"),
+        eq(SessionPendingTable.delivery, input.from),
       ),
     )
     .returning({ id: SessionPendingTable.id })
@@ -356,6 +358,16 @@ export const projectSteered = Effect.fn("SessionPending.projectSteered")(functio
     .pipe(Effect.orDie)
   if (!updated) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
 })
+
+export const projectSteered = Effect.fn("SessionPending.projectSteered")(
+  (db: DatabaseService, input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }) =>
+    projectDelivery(db, { ...input, from: "queue", to: "steer" }),
+)
+
+export const projectQueued = Effect.fn("SessionPending.projectQueued")(
+  (db: DatabaseService, input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }) =>
+    projectDelivery(db, { ...input, from: "steer", to: "queue" }),
+)
 
 export const settleCompaction = Effect.fn("SessionPending.settleCompaction")(function* (
   db: DatabaseService,
@@ -452,6 +464,18 @@ export const steer = Effect.fn("SessionPending.steer")(function* (
 ) {
   yield* inboxLocks.withLock(input.sessionID)(
     bus.publish(SessionEvent.InputSteered, {
+      sessionID: input.sessionID,
+      inputID: input.id,
+    }),
+  )
+})
+
+export const queue = Effect.fn("SessionPending.queue")(function* (
+  bus: Bus.Interface,
+  input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID },
+) {
+  yield* inboxLocks.withLock(input.sessionID)(
+    bus.publish(SessionEvent.InputQueued, {
       sessionID: input.sessionID,
       inputID: input.id,
     }),

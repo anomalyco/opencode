@@ -708,24 +708,33 @@ describe("V2 mini transport", () => {
     expect(ui.commits).toContainEqual(
       expect.objectContaining({ kind: "user", messageID: "msg_queued", text: "follow up" }),
     )
+    expect(pending()).toEqual([["msg_cancelled", "queue"]])
+    events.push({
+      id: "evt_queued",
+      created: 4,
+      type: "session.input.queued",
+      durable: durable("ses_1", 3),
+      data: { sessionID: "ses_1", inputID: "msg_queued" },
+    })
+    while (pending()?.length !== 2) await Bun.sleep(0)
     expect(pending()).toEqual([
-      ["msg_queued", "steer"],
+      ["msg_queued", "queue"],
       ["msg_cancelled", "queue"],
     ])
     events.push({
       id: "evt_cancelled",
-      created: 4,
+      created: 5,
       type: "session.input.cancelled",
-      durable: durable("ses_1", 3),
+      durable: durable("ses_1", 4),
       data: { sessionID: "ses_1", inputID: "msg_cancelled" },
     })
     while (pending()?.length !== 1) await Bun.sleep(0)
-    expect(pending()).toEqual([["msg_queued", "steer"]])
+    expect(pending()).toEqual([["msg_queued", "queue"]])
     events.push({
       id: "evt_promoted",
-      created: 5,
+      created: 6,
       type: "session.input.promoted",
-      durable: durable("ses_1", 4),
+      durable: durable("ses_1", 5),
       data: { sessionID: "ses_1", inputID: "msg_queued" },
     })
     while (pending()?.length !== 0) await Bun.sleep(0)
@@ -754,15 +763,8 @@ describe("V2 mini transport", () => {
         input: { type: "user", data: { text: "earlier" }, delivery: "steer" },
       },
     })
-    while (true) {
-      const pending = ui.events.findLast((item) => item.type === "queued.prompts")
-      if (pending?.type === "queued.prompts" && pending.prompts.length >= 2) break
-      await Bun.sleep(0)
-    }
-    expect(pending()).toEqual([
-      ["msg_next", "queue"],
-      ["msg_earlier", "steer"],
-    ])
+    await Bun.sleep(10)
+    expect(pending()).toEqual([["msg_next", "queue"]])
     await transport.close()
   })
 

@@ -22,6 +22,7 @@ import type {
   MiniSettings,
   MiniHost,
   PermissionReply,
+  QueuedPromptAction,
   RunAgent,
   RunInput,
   RunPrompt,
@@ -70,8 +71,7 @@ export type LifecycleInput = {
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
   onInterrupt?: () => void
   onBackground?: () => void
-  onQueuedPromptSteer?: (inputID: string) => Promise<void>
-  onQueuedPromptCancel?: (inputID: string) => Promise<void>
+  onQueuedPromptAction?: (action: QueuedPromptAction, inputID: string) => Promise<void>
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
 }
@@ -245,8 +245,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     onVariantSelect: input.onVariantSelect,
     onInterrupt: input.onInterrupt,
     onBackground: input.onBackground,
-    onQueuedPromptSteer: input.onQueuedPromptSteer,
-    onQueuedPromptCancel: input.onQueuedPromptCancel,
+    onQueuedPromptAction: input.onQueuedPromptAction,
     onEditorOpen: async ({ value }) => {
       if (closed || renderer.isDestroyed) {
         return
