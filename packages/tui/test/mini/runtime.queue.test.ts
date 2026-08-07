@@ -80,7 +80,7 @@ describe("run runtime queue", () => {
     ])
   })
 
-  test.each(["/compact", "/summarize"])("treats %s as a local compaction command", async (command) => {
+  test("treats /compact as a local compaction command", async () => {
     const ui = createFooterApiFixture()
     const seen: string[] = []
     let compacted = 0
@@ -96,7 +96,7 @@ describe("run runtime queue", () => {
       },
     })
 
-    ui.submit(command)
+    ui.submit("/compact")
     ui.submit("hello")
     await task
 

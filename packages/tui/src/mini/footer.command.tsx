@@ -407,7 +407,7 @@ export function RunCommandMenuBody(props: {
         name: "compact",
         display: "Compact session",
         footer: "/compact",
-        keywords: "compact summarize session context",
+        keywords: "compact session context",
       },
       {
         action: "slash",

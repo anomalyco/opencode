@@ -635,7 +635,6 @@ export function Session() {
       group: "Session",
       slash: {
         name: "compact",
-        aliases: ["summarize"],
       },
       run: () => {
         void client.api.session.compact({ sessionID: route.sessionID })

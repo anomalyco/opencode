@@ -406,7 +406,7 @@ export function createPromptState(input: PromptInput): PromptState {
         kind: "slash",
         name: "compact",
         display: "/compact",
-        description: "summarize the session to reduce context usage",
+        description: "compact older session context to free space",
       } satisfies SlashOption,
       { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
     ]
