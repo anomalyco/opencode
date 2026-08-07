@@ -5,7 +5,7 @@ import { Deferred, Effect, Fiber, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Environment } from "@opencode-ai/core/environment"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -13,7 +13,7 @@ import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
-function provide(directory: string, filesystemLayer = LayerNode.compile(FSUtil.node)) {
+function provide(directory: string, environmentLayer = LayerNode.compile(Environment.node)) {
   const activeLocation = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
@@ -21,7 +21,7 @@ function provide(directory: string, filesystemLayer = LayerNode.compile(FSUtil.n
   return Effect.provide(
     AppNodeBuilder.build(LayerNode.group([LocationMutation.node, FileMutation.node]), [
       [Location.node, activeLocation],
-      [FSUtil.node, filesystemLayer],
+      [Environment.node, environmentLayer],
     ]),
   )
 }
@@ -242,16 +242,16 @@ describe("FileMutation", () => {
 
 function instrumentWrites(run: <E>(write: Effect.Effect<void, E>, target: string) => Effect.Effect<void, E>) {
   return Layer.effect(
-    FSUtil.Service,
+    Environment.Service,
     Effect.gen(function* () {
-      const filesystem = yield* FSUtil.Service
-      return FSUtil.Service.of({
-        ...filesystem,
-        writeWithDirs: (target, content, mode) => run(filesystem.writeWithDirs(target, content, mode), target),
-        writeFile: (target, content, options) => run(filesystem.writeFile(target, content, options), target),
-        writeFileString: (target, content, options) =>
-          run(filesystem.writeFileString(target, content, options), target),
+      const environment = yield* Environment.Service
+      return Environment.Service.of({
+        ...environment,
+        files: {
+          ...environment.files,
+          write: (target, content) => run(environment.files.write(target, content), target),
+        },
       })
     }),
-  ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+  ).pipe(Layer.provide(LayerNode.compile(Environment.node)))
 }
