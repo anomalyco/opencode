@@ -90,7 +90,7 @@ export const makeMemoryDriver = (): MemoryDriver => {
         catch: (cause) => failed(value, cause),
       }),
     list: (value) => {
-      const target = resolveKey(value, false) ?? key(value)
+      const target = resolveKey(value, true) ?? key(value)
       const node = nodes.get(target)
       if (!node) return Effect.fail(new NotFound({ path: value }))
       if (node.type !== "directory") return Effect.fail(new WrongKind({ path: value, actual: node.type }))

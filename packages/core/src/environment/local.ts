@@ -43,7 +43,7 @@ export const makeLocalDriver = (spawner: ChildProcessSpawner["Service"]): Driver
     stat: (value) => stat(value, false),
     list: (value) =>
       Effect.gen(function* () {
-        const info = yield* stat(value, false)
+        const info = yield* stat(value, true)
         if (info.type !== "directory") return yield* new WrongKind({ path: value, actual: info.type })
         const entries = yield* attempt(value, () => fs.readdir(value, { withFileTypes: true }), true)
         return entries.map((entry) => ({ name: entry.name, type: fileType(entry) }))

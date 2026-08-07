@@ -102,6 +102,25 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("reads a symlinked directory as a listing", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return
+      const { environment, files, directory } = yield* fixture
+      const target = path.join(directory, "target")
+      const link = path.join(directory, "link")
+      yield* files.makeDirectory(target)
+      yield* files.writeFileString(path.join(target, "file.txt"), "hello")
+      yield* Effect.promise(() => fs.symlink(target, link))
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(link), "link")
+
+      expect(result).toMatchObject({
+        type: "list-page",
+        entries: [{ path: "file.txt", type: "file" }],
+      })
+    }),
+  )
+
   it.effect("reports out-of-range pagination as a typed error", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture

@@ -50,13 +50,13 @@ fi
 `
 
 const listScript = `
-${loadMetadata()}
+${loadMetadata("-L")}
 kind=\${metadata%%${TAB}*}
 if [ "$kind" != directory ]; then
   printf '%s' "$kind" >&2
   exit ${WRONG_KIND}
 fi
-find "$1" -mindepth 1 -maxdepth 1 -printf '%y\\0%f\\0'
+find -H "$1" -mindepth 1 -maxdepth 1 -printf '%y\\0%f\\0'
 `
 
 const moveScript = `

@@ -149,18 +149,11 @@ export const read = Effect.fn("ReadTool.read")(function* (
   const paged = first.info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
   if (!paged) {
     if (first.bytes.includes(0)) return yield* new BinaryFileError({ resource })
-    const bytes =
-      first.bytes.length < first.info.size
-        ? Buffer.concat([
-            first.bytes,
-            (yield* readFile(files, input, resource, { offset: first.bytes.length, length: first.info.size })).bytes,
-          ])
-        : first.bytes
     return {
       type: "file" as const,
       uri: pathToFileURL(input).href,
       name: path.basename(input),
-      content: new TextDecoder().decode(bytes),
+      content: new TextDecoder().decode(first.bytes),
       encoding: "utf8" as const,
       mime: mimeType(input),
     }

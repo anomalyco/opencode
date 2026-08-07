@@ -30,7 +30,8 @@ export class Failed extends Schema.TaggedErrorClass<Failed>()("Environment.Faile
 
 export interface FilesImpl {
   /**
-   * Reads a file, following a final symlink so `info` describes the target whose bytes are returned.
+   * Content operations (`read`, `list`) follow final symlinks; metadata operations (`stat` and entry
+   * tags returned by `list`) do not. `info` describes the target file whose bytes are returned.
    * The process-backed default caps collected output at 64 MiB; larger whole-file reads fail with
    * `Failed`, so callers must use ranges for larger files.
    */
@@ -41,7 +42,7 @@ export interface FilesImpl {
   readonly write: (path: string, bytes: Uint8Array) => Effect.Effect<void, Failed>
   /** Describes the path entry itself, so a final symlink is reported as `symlink` rather than followed. */
   readonly stat: (path: string) => Effect.Effect<FileInfo, NotFound | Failed>
-  /** Lists a directory entry without following a final symlink; intermediate symlinks are traversed. */
+  /** Follows a final symlink to the listed directory while preserving each returned entry's own type. */
   readonly list: (path: string) => Effect.Effect<ReadonlyArray<DirEntry>, NotFound | WrongKind | Failed>
   readonly remove: (path: string) => Effect.Effect<void, Failed>
   readonly move: (from: string, to: string) => Effect.Effect<void, NotFound | Failed>

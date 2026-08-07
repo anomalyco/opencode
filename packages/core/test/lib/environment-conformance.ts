@@ -105,19 +105,29 @@ export const environmentConformance = <E>(
       }),
     )
 
-    check("reports symlinks without resolving them", (harness) =>
+    check("preserves symlink metadata while following symlinks for content", (harness) =>
       Effect.gen(function* () {
         if (!harness.symlink) return
         yield* harness.files.write(`${harness.root}/target`, bytes("target"))
         yield* harness.files.write(`${harness.root}/target-dir/file`, bytes("through link"))
+        yield* harness.symlink("../target", `${harness.root}/target-dir/entry-link`)
         yield* harness.symlink("target", `${harness.root}/link`)
         yield* harness.symlink("target-dir", `${harness.root}/link-dir`)
+        yield* harness.symlink("missing", `${harness.root}/dangling-link`)
         expect((yield* harness.files.stat(`${harness.root}/link`)).type).toBe("symlink")
         expect(yield* harness.files.list(harness.root)).toContainEqual({ name: "link", type: "symlink" })
         expect(text((yield* harness.files.read(`${harness.root}/link-dir/file`)).bytes)).toBe("through link")
-        const listError = yield* Effect.flip(harness.files.list(`${harness.root}/link-dir`))
-        expect(listError).toBeInstanceOf(WrongKind)
-        expect((listError as WrongKind).actual).toBe("symlink")
+        expect(
+          (yield* harness.files.list(`${harness.root}/link-dir`)).toSorted((a, b) => a.name.localeCompare(b.name)),
+        ).toEqual([
+          { name: "entry-link", type: "symlink" },
+          { name: "file", type: "file" },
+        ])
+
+        const fileError = yield* Effect.flip(harness.files.list(`${harness.root}/link`))
+        expect(fileError).toBeInstanceOf(WrongKind)
+        expect((fileError as WrongKind).actual).toBe("file")
+        expect(yield* Effect.flip(harness.files.list(`${harness.root}/dangling-link`))).toBeInstanceOf(NotFound)
       }),
     )
 
