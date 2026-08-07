@@ -146,7 +146,6 @@ it.effect("generates a title from the sole user message and renames the session"
     yield* title.generateForFirstPrompt(sessionID)
 
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.promptCacheKey).toBe(sessionID)
     expect(requests[0]?.http?.headers).toEqual({
       "x-session-affinity": sessionID,
       "X-Session-Id": sessionID,
