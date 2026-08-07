@@ -155,17 +155,16 @@ export const Plugin = {
                 })
               }
 
-              const info = yield* environment.files
-                .stat(target.absolute)
-                .pipe(
-                  Effect.catchTag("Environment.NotFound", () =>
-                    Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
-                  ),
-                )
-              if (info.type === "directory") {
-                return yield* new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` })
-              }
-              const original = Bom.decodeBytes((yield* environment.files.read(target.absolute)).bytes)
+              const original = yield* FileMutation.readText(environment.files, target.absolute).pipe(
+                Effect.catchTag("Environment.NotFound", () =>
+                  Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
+                ),
+                Effect.catchTag("Environment.WrongKind", (error) =>
+                  error.actual === "directory"
+                    ? Effect.fail(new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` }))
+                    : Effect.fail(new ToolFailure({ message: `Unable to edit ${input.path}`, error })),
+                ),
+              )
               const source = original.text
               const ending = source.includes(crlf) ? crlf : "\n"
               const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
@@ -212,18 +211,11 @@ export const Plugin = {
                 content: Bom.join(replaced, original.bom || replacementBom),
               })
               const bom = original.bom || replacementBom
-              const formatted = yield* formatter.file(target.absolute)
-              const formattedContent = yield* environment.files.read(target.absolute)
-              if (!formatted) {
-                return {
-                  files: [fileDiff(result.resource, source, Bom.decodeBytes(formattedContent.bytes).text)],
-                  replacements,
-                } satisfies Output
-              }
-              const synced = Bom.syncBytes(formattedContent.bytes, bom)
-              if (synced.bytes) yield* environment.files.write(target.absolute, synced.bytes)
+              const formatted = (yield* formatter.file(target.absolute))
+                ? yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
+                : (yield* FileMutation.readText(environment.files, target.absolute)).text
               return {
-                files: [fileDiff(result.resource, source, synced.text)],
+                files: [fileDiff(result.resource, source, formatted)],
                 replacements,
               } satisfies Output
             }).pipe(

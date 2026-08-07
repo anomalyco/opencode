@@ -77,8 +77,7 @@ export const Plugin = {
                   agent: context.agent,
                   source,
                 })
-              const current = yield* environment.files.read(target.absolute).pipe(
-                Effect.map((result) => Bom.decodeBytes(result.bytes)),
+              const current = yield* FileMutation.readText(environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () => Effect.succeed(undefined)),
               )
               const next = Bom.split(input.content)
@@ -93,10 +92,9 @@ export const Plugin = {
                 source,
               })
               const result = yield* fileMutation.writeTextPreservingBom({ target, content: input.content })
-              const bom = Bom.decodeBytes((yield* environment.files.read(target.absolute)).bytes).bom
+              const bom = (yield* FileMutation.readText(environment.files, target.absolute)).bom
               if (yield* formatter.file(target.absolute)) {
-                const synced = Bom.syncBytes((yield* environment.files.read(target.absolute)).bytes, bom)
-                if (synced.bytes) yield* environment.files.write(target.absolute, synced.bytes)
+                yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
               }
               return result
             }).pipe(

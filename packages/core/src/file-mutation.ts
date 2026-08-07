@@ -6,6 +6,7 @@ import { KeyedMutex } from "./effect/keyed-mutex"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bom } from "@opencode-ai/util/bom"
 import { Environment } from "./environment"
+import type { Files } from "./environment"
 
 export interface Target {
   readonly absolute: string
@@ -42,6 +43,20 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileMutation") {}
+
+export const readText = Effect.fn("FileMutation.readText")(function* (files: Files, target: string) {
+  return Bom.decodeBytes((yield* files.read(target)).bytes)
+})
+
+export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
+  files: Files,
+  target: string,
+  bom: boolean,
+) {
+  const synced = Bom.syncBytes((yield* files.read(target)).bytes, bom)
+  if (synced.bytes) yield* files.write(target, synced.bytes)
+  return synced.text
+})
 
 /** Share transaction locks across Location graphs that address the same file. */
 const transactionLocks = KeyedMutex.makeUnsafe<string>()
@@ -92,7 +107,7 @@ const layer = Layer.effect(
       withTargetLock(input.target)(
         Effect.gen(function* () {
           const next = Bom.split(input.content)
-          const current = yield* environment.files.read(input.target.absolute).pipe(
+          const current = yield* environment.files.read(input.target.absolute, { offset: 0, length: 3 }).pipe(
             Effect.map((result) => result.bytes),
             Effect.catchTag("Environment.NotFound", () => Effect.succeed(undefined)),
           )
