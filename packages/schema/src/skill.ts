@@ -4,6 +4,13 @@ import { Schema } from "effect"
 import { optional } from "./schema"
 import { AbsolutePath } from "./schema"
 
+export interface SkillScope extends Schema.Schema.Type<typeof SkillScope> {}
+export const SkillScope = Schema.Struct({
+  type: Schema.Literal("global", "department", "user"),
+  departmentCode: Schema.String.pipe(optional),
+  userID: Schema.String.pipe(optional),
+}).annotate({ identifier: "SkillV2.SkillScope" })
+
 export interface DirectorySource extends Schema.Schema.Type<typeof DirectorySource> {}
 export const DirectorySource = Schema.Struct({
   type: Schema.Literal("directory"),
@@ -23,6 +30,7 @@ export const Info = Schema.Struct({
   slash: Schema.Boolean.pipe(optional),
   location: AbsolutePath,
   content: Schema.String,
+  scope: SkillScope.pipe(optional),
 }).annotate({ identifier: "SkillV2.Info" })
 
 export interface EmbeddedSource extends Schema.Schema.Type<typeof EmbeddedSource> {}
