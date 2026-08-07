@@ -3,7 +3,7 @@ import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, useThemes } from "../../context/theme"
-import type { PermissionReplyInput, PermissionRequest } from "@opencode-ai/client"
+import type { PermissionReply, PermissionRequest } from "@opencode-ai/client"
 import { SplitBorder } from "../../ui/border"
 import { useData } from "../../context/data"
 import { filetype } from "../../util/filetype"
@@ -132,8 +132,10 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
   const theme = useTheme()
 
-  function reply(input: PermissionReplyInput) {
-    void data.session.permission.reply(input).catch((error: unknown) => toast.error(error))
+  function reply(value: PermissionReply, message?: string) {
+    void data.session.permission
+      .reply({ sessionID: props.request.sessionID, requestID: props.request.id, reply: value, message })
+      .catch((error: unknown) => toast.error(error))
   }
 
   return (
@@ -155,11 +157,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           onSelect={(option) => {
             setStore("stage", "permission")
             if (option === "cancel") return
-            reply({
-              sessionID: props.request.sessionID,
-              reply: "always",
-              requestID: props.request.id,
-            })
+            reply("always")
           }}
         />
       </Match>
@@ -168,12 +166,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           action={props.request.action}
           instance={props.request.id}
           onConfirm={(message) => {
-            reply({
-              sessionID: props.request.sessionID,
-              reply: "reject",
-              requestID: props.request.id,
-              message: message || undefined,
-            })
+            reply("reject", message || undefined)
           }}
           onCancel={() => {
             setStore("stage", "permission")
@@ -269,18 +262,10 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                     setStore("stage", "reject")
                     return
                   }
-                  reply({
-                    sessionID: props.request.sessionID,
-                    reply: "reject",
-                    requestID: props.request.id,
-                  })
+                  reply("reject")
                   return
                 }
-                reply({
-                  sessionID: props.request.sessionID,
-                  reply: "once",
-                  requestID: props.request.id,
-                })
+                reply("once")
               }}
             />
           )

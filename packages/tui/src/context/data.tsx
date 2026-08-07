@@ -178,6 +178,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       )
     }
 
+    function removePermission(sessionID: string, requestID: string) {
+      const requests = store.session.permission[sessionID]
+      if (!requests?.some((request) => request.id === requestID)) return
+      setStore(
+        "session",
+        "permission",
+        sessionID,
+        requests.filter((request) => request.id !== requestID),
+      )
+    }
+
     const message = {
       update(sessionID: string, fn: (messages: SessionMessageInfo[], index: Map<string, number>) => void) {
         setStore(
@@ -842,14 +853,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           ])
           break
         case "permission.replied":
-          setStore(
-            "session",
-            "permission",
-            event.data.sessionID,
-            (store.session.permission[event.data.sessionID] ?? []).filter(
-              (request) => request.id !== event.data.requestID,
-            ),
-          )
+          removePermission(event.data.sessionID, event.data.requestID)
           break
         case "form.created":
           if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
@@ -1042,12 +1046,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             await client.api.permission.reply(input).catch((error: unknown) => {
               if (!isPermissionNotFoundError(error)) throw error
             })
-            setStore(
-              "session",
-              "permission",
-              input.sessionID,
-              (requests = []) => requests.filter((request) => request.id !== input.requestID),
-            )
+            removePermission(input.sessionID, input.requestID)
           },
         },
         form: {

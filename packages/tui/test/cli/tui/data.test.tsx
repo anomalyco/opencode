@@ -2070,13 +2070,8 @@ test("reconciles active session permissions when the event stream reconnects", a
 test("dismisses a permission that expired before its reply", async () => {
   const events = createEventStream()
   const request = { id: "per_stale", sessionID: "ses_active", action: "read", resources: ["old.txt"] }
-  let lists = 0
   let replies = 0
   const calls = createFetch((url, init) => {
-    if (url.pathname === "/api/session/ses_active/permission" && init.method === "GET") {
-      lists++
-      return json({ data: [request] })
-    }
     if (url.pathname === "/api/session/ses_active/permission/per_stale/reply" && init.method === "POST") {
       replies++
       return json(
@@ -2109,8 +2104,13 @@ test("dismisses a permission that expired before its reply", async () => {
   ))
 
   try {
-    await data.session.permission.sync(request.sessionID)
-    expect(data.session.permission.list(request.sessionID)).toEqual([request])
+    emitEvent(events, {
+      id: "evt_permission_asked_stale",
+      created: 0,
+      type: "permission.asked",
+      data: request,
+    })
+    await wait(() => data.session.permission.list(request.sessionID)?.length === 1)
 
     await data.session.permission.reply({
       sessionID: request.sessionID,
@@ -2119,7 +2119,6 @@ test("dismisses a permission that expired before its reply", async () => {
     })
 
     expect(replies).toBe(1)
-    expect(lists).toBe(1)
     expect(data.session.permission.list(request.sessionID)).toEqual([])
   } finally {
     app.renderer.destroy()
