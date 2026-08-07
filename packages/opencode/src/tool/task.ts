@@ -191,6 +191,10 @@ export const TaskTool = Tool.define(
       // on the same (often single-slot) llama.cpp server — worse than useless.
       // Hop to an idle local peer instead. Resumed sessions keep the old
       // behavior so a running task isn't re-placed away from its warm cache.
+      // A role that declares where it wants to run makes placement worth
+      // attempting even from a cloud parent — see LocalPlacement.pick. The
+      // kill-switch and an explicit host argument both still win.
+      const rolePlacement = next.placement && next.placement !== "inherit" ? next.placement : undefined
       const placed =
         !provider || next.model || session || (cfg.experimental?.local_subagent_placement === false && !params.provider)
           ? null
@@ -203,6 +207,7 @@ export const TaskTool = Tool.define(
                     allowedModels: cfg.experimental?.local_subagent_placement_models,
                     promptText: params.prompt,
                     target: params.provider,
+                    prefer: rolePlacement,
                   }),
                 ),
               ),

@@ -1,5 +1,7 @@
 ---
 mode: subagent
+# Running suites is the definition of tedious heavy lifting — local.
+placement: local
 description: Writes and runs tests for a slice of work in this repo, and reports what actually passed
 permission:
   bash: allow

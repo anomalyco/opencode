@@ -262,6 +262,44 @@ export async function parentCapacity(input: {
   return capacityFromProbe(result, reservedFor(parentInfo.id))
 }
 
+/**
+ * Whether placement should be attempted at all.
+ *
+ * Placement normally requires a LOCAL parent: a cloud parent has no queue
+ * problem, and moving its subagents onto local weights unasked silently
+ * downgrades a model the user deliberately chose. Two things count as asking —
+ * an explicit target (this delegation, this host) and a role that declares
+ * where it wants to run (every delegation to this role). Either one makes the
+ * downgrade intended, which is the entire mechanism.
+ */
+export function shouldAttemptPlacement(input: {
+  parentIsLocal: boolean
+  target?: string
+  prefer?: "inherit" | "local" | readonly string[]
+}): boolean {
+  if (input.target) return true
+  // An empty list names nothing, so it authorizes nothing — otherwise a typo'd
+  // `placement: []` would quietly move a cloud parent's subagents onto local
+  // weights, which is the exact surprise the guard exists to prevent.
+  const declared = input.prefer === "local" || (Array.isArray(input.prefer) && input.prefer.length > 0)
+  if (declared) return true
+  return input.parentIsLocal
+}
+
+/**
+ * Score contribution for a role's preferred hosts.
+ *
+ * Ranking, never filtering — that is what makes a preference unable to fail a
+ * run. A named host that is unreachable, busy, or gone simply scores 0 and the
+ * other candidates remain eligible. Earlier in the list outranks later, and any
+ * named host outranks any unnamed one.
+ */
+export function hostRankFor(prefer: "inherit" | "local" | readonly string[] | undefined, providerID: string): number {
+  if (!Array.isArray(prefer)) return 0
+  const index = prefer.indexOf(providerID)
+  return index === -1 ? 0 : (prefer.length - index) * 1_000_000
+}
+
 export async function pick(input: {
   parent: Placement
   providers: Record<string, Provider.Info>
@@ -271,15 +309,35 @@ export async function pick(input: {
   timeoutMs?: number
   /** Explicitly requested provider id — restrict placement to this host only. */
   target?: string
+  /**
+   * The role's declared placement (`Agent.Info.placement`).
+   *
+   * Absent behaves as today. Present is the AUTHORIZATION the non-local-parent
+   * guard below was missing: a cloud parent's subagents are not placed locally
+   * unless the role has said that is what it wants, because doing it unasked
+   * silently downgrades a model the user deliberately chose.
+   *
+   * A host list is a preference, never a requirement — see the ordering below.
+   */
+  prefer?: "inherit" | "local" | readonly string[]
 }): Promise<{ placement: Placement; release: () => void } | null> {
   try {
     const requiredCtx = input.requiredCtx ?? estimateRequiredCtx(input.promptText)
     const parentInfo = input.providers[input.parent.providerID]
     // Only reroute when the parent itself runs locally: a cloud parent has no
     // queue problem, and silently downgrading it to a local model would be a
-    // quality surprise. An explicit target is exempt — the user asked for a
-    // specific host, so honor it regardless of where the parent runs.
-    if (!input.target && (!parentInfo || !baseURLOf(parentInfo))) return null
+    // quality surprise. Two exemptions, both of them someone asking for it:
+    // an explicit target (this delegation, this host), and a role that declares
+    // where it wants to run (every delegation to this role). Without one of
+    // those the guard stands, so nothing existing changes.
+    if (
+      !shouldAttemptPlacement({
+        parentIsLocal: !!parentInfo && !!baseURLOf(parentInfo),
+        target: input.target,
+        prefer: input.prefer,
+      })
+    )
+      return null
 
     const candidates = Object.values(input.providers)
       .filter((info) => (input.target ? info.id === input.target : info.id !== input.parent.providerID))
@@ -295,6 +353,11 @@ export async function pick(input: {
       candidates.map((candidate) => probe(candidate.info.id, candidate.baseURL, aborter.signal)),
     ).finally(() => clearTimeout(timer))
 
+    // A declared host list orders candidates; it does not filter them. Ranking
+    // rather than filtering is what makes the preference unable to fail a run:
+    // if every named host is unreachable or busy, the remaining candidates are
+    // still there to be picked, and pick() falls through to inherit only when
+    // genuinely nothing is eligible.
     let best: { placement: Placement; score: number } | null = null
     for (let i = 0; i < candidates.length; i++) {
       const result = probes[i]
@@ -314,7 +377,15 @@ export async function pick(input: {
       const freeMb = result.fit.vram_free_mb ?? result.hardware.vram?.free_mb ?? 0
       const placedAt = recentPlacements.get(result.providerID)
       const recent = placedAt !== undefined && Date.now() - placedAt < RECENT_PLACEMENT_WINDOW_MS
-      const score = model.score + Math.min(freeMb, 65_536) / 1_000 - (recent ? RECENT_PLACEMENT_PENALTY : 0)
+      // hostRank dominates every other term when the role named hosts, so the
+      // preference is honoured among ELIGIBLE candidates — eligibility (slot,
+      // context, fit, allowlist) is still enforced above and a named host that
+      // fails it simply never gets here.
+      const score =
+        hostRankFor(input.prefer, result.providerID) +
+        model.score +
+        Math.min(freeMb, 65_536) / 1_000 -
+        (recent ? RECENT_PLACEMENT_PENALTY : 0)
       if (!best || score > best.score) {
         best = { placement: { providerID: result.providerID, modelID: model.modelID }, score }
       }

@@ -1,5 +1,8 @@
 ---
 mode: subagent
+# Local also buys real model diversity: a second opinion from the same model
+# that wrote the code is barely a second opinion.
+placement: local
 description: Reads finished work and returns a verdict of LGTM or NEEDS_WORK, changing nothing
 permission:
   bash: deny

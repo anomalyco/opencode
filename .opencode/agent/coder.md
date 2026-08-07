@@ -1,5 +1,9 @@
 ---
 mode: subagent
+# Bulk implementation work — run it on the fleet, not on the cloud model that
+# is planning with the user. Declaring this is what lets a cloud parent delegate
+# here at all; without it, placement is skipped and this inherits the parent.
+placement: local
 description: Implements one named slice of an openspec change in this repo's TypeScript/Effect codebase
 permission:
   bash: allow

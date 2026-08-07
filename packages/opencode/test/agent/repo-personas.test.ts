@@ -112,3 +112,21 @@ describe("gate personas have no shell to mutate through", () => {
     expect(evaluate(rules, "bash")).toBe("allow")
   })
 })
+
+// The three gate roles do the bulk work, so they say where they want to run.
+// Declaring it is also the authorization that lets a CLOUD parent delegate to
+// them at all — without it, placement is skipped for a non-local parent and the
+// subagent inherits the expensive model that is planning with the user.
+describe("gate roles declare local placement, advisory roles inherit", () => {
+  test("coder, tester and reviewer ask for a local host", () => {
+    for (const name of ["coder", "tester", "reviewer"]) {
+      expect(loaded[name].placement, `${name} placement`).toBe("local")
+    }
+  })
+
+  test("researcher and persona-auditor inherit the parent's model", () => {
+    for (const name of ["researcher", "persona-auditor"]) {
+      expect(loaded[name].placement, `${name} placement`).toBeUndefined()
+    }
+  })
+})
