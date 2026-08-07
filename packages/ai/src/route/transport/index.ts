@@ -38,6 +38,7 @@ export interface TransportPrepareInput<Body> {
   readonly encodeBody: (body: Body) => string
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
   readonly middleware?: HttpMiddleware
+  readonly webSocket?: WebSocketChannelExecutor
 }
 
 export * as HttpTransport from "./http.js"

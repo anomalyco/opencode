@@ -4,6 +4,7 @@ import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
   LLM,
   AIError,
+  HttpOptions,
   LLMEvent,
   LLMRequest,
   Message,
@@ -217,19 +218,19 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("prepares OpenAI Responses WebSocket target", () =>
+  it.effect("prepares one OpenAI Responses route for either transport", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLMRequest.update(request, {
-          model: OpenAIResponses.webSocketRoute
+          model: OpenAIResponses.route
             .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
             .model({ id: "gpt-4.1-mini" }),
         }),
       )
 
-      expect(prepared.route).toBe("openai-responses-websocket")
+      expect(prepared.route).toBe("openai-responses")
       expect(prepared.protocol).toBe("openai-responses")
-      expect(prepared.metadata).toEqual({ transport: "websocket-json" })
+      expect(prepared.metadata).toEqual({ transport: "http-json" })
       expect(prepared.body).toMatchObject({ model: "gpt-4.1-mini", store: false, stream: true })
     }),
   )
@@ -264,9 +265,7 @@ describe("OpenAI Responses route", () => {
       })
       const response = yield* LLMClient.generate(
         LLM.request({
-          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responsesWebSocket(
-            "gpt-4.1-mini",
-          ),
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini"),
           prompt: "Say hello.",
         }),
         { webSocket },
@@ -282,6 +281,85 @@ describe("OpenAI Responses route", () => {
         input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
         store: false,
       })
+    }),
+  )
+
+  it.effect("builds WebSocket and HTTP fallback from the same final request", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0)
+      const message = yield* Ref.make("")
+      const body = yield* Ref.make("")
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini"),
+          prompt: "Say hello.",
+          http: {
+            body: { model: "overlaid-model", metadata: { source: "overlay" } },
+            headers: { "x-request": "request" },
+            query: { mode: "test" },
+          },
+        }),
+        {
+          webSocket: {
+            execute: (exchange) =>
+              Effect.gen(function* () {
+                yield* exchange.driver
+                  .create(undefined)
+                  .pipe(Effect.flatMap((create) => Ref.set(message, create.message)))
+                return { frames: exchange.fallback(), complete: Effect.void }
+              }),
+          },
+        },
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              yield* Ref.update(attempts, (value) => value + 1)
+              yield* Ref.set(body, input.text)
+              expect(input.request.url).toBe("https://api.openai.test/v1/responses?mode=test")
+              expect(input.request.headers.authorization).toBe("Bearer test")
+              expect(input.request.headers["x-request"]).toBe("request")
+              return input.respond(sseEvents({ type: "response.completed", response: {} }), {
+                headers: { "content-type": "text/event-stream" },
+              })
+            }),
+          ),
+        ),
+      )
+
+      const httpBody = JSON.parse(yield* Ref.get(body))
+      const { stream: _stream, ...shared } = httpBody
+      expect(response.finishReason?.normalized).toBe("stop")
+      expect(yield* Ref.get(attempts)).toBe(1)
+      expect(JSON.parse(yield* Ref.get(message))).toEqual({ type: "response.create", ...shared })
+      expect(httpBody).toMatchObject({
+        model: "overlaid-model",
+        metadata: { source: "overlay" },
+        stream: true,
+      })
+    }),
+  )
+
+  it.effect("uses exactly one HTTP request when no WebSocket executor is supplied", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0)
+      yield* LLMClient.generate(
+        LLMRequest.update(request, { http: new HttpOptions({ body: { input: "raw-http-input" } }) }),
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              yield* Ref.update(attempts, (value) => value + 1)
+              expect(JSON.parse(input.text).input).toBe("raw-http-input")
+              return input.respond(sseEvents({ type: "response.completed", response: {} }), {
+                headers: { "content-type": "text/event-stream" },
+              })
+            }),
+          ),
+        ),
+      )
+
+      expect(yield* Ref.get(attempts)).toBe(1)
     }),
   )
 
@@ -302,9 +380,7 @@ describe("OpenAI Responses route", () => {
 
       yield* LLMClient.stream(
         LLM.request({
-          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responsesWebSocket(
-            "gpt-4.1-mini",
-          ),
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini"),
           prompt: "Say hello.",
         }),
         { webSocket },
@@ -347,7 +423,7 @@ describe("OpenAI Responses route", () => {
       const errors = yield* Effect.forEach(events, (event) =>
         LLMClient.generate(
           LLM.request({
-            model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responsesWebSocket(
+            model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses(
               "gpt-4.1-mini",
             ),
             prompt: "Say hello.",
@@ -409,7 +485,7 @@ describe("OpenAI Responses route", () => {
             close: Effect.void,
           }),
       })
-      const model = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responsesWebSocket(
+      const model = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses(
         "gpt-4.1-mini",
       )
 

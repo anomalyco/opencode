@@ -233,7 +233,7 @@ export const WebSocketErrorEvent = Schema.StructWithRest(
 )
 const decodeWebSocketErrorEvent = Schema.decodeUnknownEffect(WebSocketErrorEvent)
 
-const decodeKnownErrorEvent = (event: Event) =>
+export const decodeKnownErrorEvent = (event: Event) =>
   decodeWebSocketErrorEvent({
     ...event,
     status: typeof event.status === "number" ? event.status : undefined,
@@ -1001,7 +1001,7 @@ const providerErrorMessage = (event: Event, fallback: string): string => {
   return message || code || fallback
 }
 
-const providerError = (state: ParserState, event: Event, fallback: string) => {
+export const providerFailure = (id: string, event: Event, fallback: string) => {
   const code = event.code || event.error?.code || event.response?.error?.code || undefined
   const message = providerErrorMessage(event, fallback)
   const status =
@@ -1011,11 +1011,13 @@ const providerError = (state: ParserState, event: Event, fallback: string) => {
         ? event.status_code
         : undefined
   return new AIError({
-    module: state.id,
+    module: id,
     method: "stream",
     reason: classifyProviderFailure({ message, code, status }),
   })
 }
+
+const providerError = (state: ParserState, event: Event, fallback: string) => providerFailure(state.id, event, fallback)
 
 export const step = (state: ParserState, event: Event) => {
   if (event.type === "response.output_text.delta" || event.type === "response.output_text.done") {

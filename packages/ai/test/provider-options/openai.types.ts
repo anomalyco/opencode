@@ -1,13 +1,18 @@
 import { LLM } from "../../src/index.js"
 import { OpenAI } from "../../src/providers.js"
 
-const model = OpenAI.responses("gpt-5")
+const selected = OpenAI.responses("gpt-5")
 
-LLM.request({ model, prompt: "Hello", providerOptions: { openai: { reasoningEffort: "high" } } })
+LLM.request({ model: selected, prompt: "Hello", providerOptions: { openai: { reasoningEffort: "high" } } })
 
 LLM.request({
-  model,
+  model: selected,
   prompt: "Hello",
   // @ts-expect-error OpenAI reasoning effort must be a string.
   providerOptions: { openai: { reasoningEffort: 1 } },
+})
+
+OpenAI.configure({
+  // @ts-expect-error Transport is execution policy, not provider configuration.
+  transport: "websocket",
 })

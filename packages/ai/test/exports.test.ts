@@ -44,7 +44,6 @@ describe("public exports", () => {
 
     expect(OpenAI.model).toBeFunction()
     expect(OpenAI.provider.responses).toBe(OpenAI.responses)
-    expect(OpenAI.provider.responsesWebSocket).toBe(OpenAI.responsesWebSocket)
     expect(OpenAI.configure({ apiKey: "fixture" }).responses).toBeFunction()
     expect(OpenAICompatible.deepseek.model).toBeFunction()
     expect(
@@ -69,7 +68,6 @@ describe("public exports", () => {
     expect(OpenAICompatibleResponses.route.id).toBe("openai-compatible-responses")
     expect(OpenAICompatibleResponses.route.protocol).toBe("open-responses")
     expect(OpenAIResponses.route.id).toBe("openai-responses")
-    expect(OpenAIResponses.webSocketRoute.id).toBe("openai-responses-websocket")
     expect(AnthropicMessages.route.id).toBe("anthropic-messages")
   })
 })

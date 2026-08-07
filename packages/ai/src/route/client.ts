@@ -319,6 +319,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           encodeBody,
           headers: routeInput.headers,
           middleware: options?.http,
+          webSocket: options?.webSocket,
         }),
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime, options?: StreamOptions) => {
         const route = `${request.model.provider}/${request.model.route.id}`
