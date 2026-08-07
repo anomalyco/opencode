@@ -336,6 +336,7 @@ export const {
 
         case "message.updated": {
           const sessionID = event.properties.info.sessionID
+          touchMessage(sessionID, event.properties.info.id)
           const messages = store.message[sessionID]
           if (!messages) {
             setStore("message", sessionID, [event.properties.info])
@@ -386,6 +387,7 @@ export const {
         case "message.part.updated": {
           const sessionID = event.properties.part.sessionID
           const messageID = event.properties.part.messageID
+          touchPart(sessionID, event.properties.part.id)
           const parts = store.part[messageID]
           // If the parent message isn't in our window AND the window's
           // bottom has been evicted, drop the part - it would otherwise
@@ -610,9 +612,12 @@ export const {
         },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
-          const hydration = { messages: new Set<string>(), parts: new Set<string>() }
-          hydratingSessions.set(sessionID, hydration)
-          try {
+          const syncing = syncingSessions.get(sessionID)
+          if (syncing) return syncing
+          const task = (async () => {
+            const hydration = { messages: new Set<string>(), parts: new Set<string>() }
+            hydratingSessions.set(sessionID, hydration)
+            try {
             const [session, messages, todo, diff] = await Promise.all([
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
               sdk.client.session.messages({ sessionID, limit: INITIAL_PAGE_SIZE }),
@@ -657,9 +662,15 @@ export const {
               }),
             )
             if (!olderCursor) fullSyncedSessions.add(sessionID)
-          } finally {
+            } finally {
+              hydratingSessions.delete(sessionID)
+            }
+          })().finally(() => {
+            syncingSessions.delete(sessionID)
             hydratingSessions.delete(sessionID)
-          }
+          })
+          syncingSessions.set(sessionID, task)
+          return task
         },
         async loadOlderMessages(sessionID: string) {
           const cursor = store.messageOlderCursor[sessionID]
