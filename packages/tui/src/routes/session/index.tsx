@@ -307,6 +307,7 @@ export function Session() {
   let seeded = false
   let sent = false
   let scroll: ScrollBoxRenderable
+  const [showJumpToBottom, setShowJumpToBottom] = createSignal(false)
   const [prompt, setPrompt] = createSignal<PromptRef>()
   const bind = (r: PromptRef | undefined) => {
     setPrompt(r)
@@ -326,6 +327,11 @@ export function Session() {
     })
   }
 
+  const updateJumpToBottom = () => {
+    if (!scroll || scroll.isDestroyed) return
+    setShowJumpToBottom(scroll.scrollTop + scroll.viewport.height < scroll.scrollHeight - 1)
+  }
+
   // Tail-first transcript mounting: only the newest rows mount when the session opens, and the
   // rest backfill in chunks shortly after, so switching to a long session costs the visible tail
   // instead of the whole transcript. Until backfill pins the count, the hidden span derives from
@@ -334,6 +340,10 @@ export function Session() {
   const [hiddenRows, setHiddenRows] = createSignal<number>()
   const hidden = createMemo(() => Math.max(0, Math.min(hiddenRows() ?? Infinity, rows.length - TRANSCRIPT_TAIL_ROWS)))
   const visibleRows = createMemo(() => (hidden() === 0 ? rows : rows.slice(hidden())))
+  createEffect(() => {
+    visibleRows().length
+    afterLayout(updateJumpToBottom)
+  })
   createEffect(() => {
     const current = hidden()
     if (current === 0) return
@@ -421,6 +431,7 @@ export function Session() {
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
+      updateJumpToBottom()
     }, 50)
   }
 
@@ -433,6 +444,7 @@ export function Session() {
       run: () => {
         clearMessageNavigation()
         scroll.scrollBy(-scroll.height / 2)
+        updateJumpToBottom()
         dialog.clear()
       },
     },
@@ -444,6 +456,7 @@ export function Session() {
       run: () => {
         clearMessageNavigation()
         scroll.scrollBy(scroll.height / 2)
+        updateJumpToBottom()
         dialog.clear()
       },
     },
@@ -455,6 +468,7 @@ export function Session() {
       run: () => {
         clearMessageNavigation()
         scroll.scrollBy(-1)
+        updateJumpToBottom()
         dialog.clear()
       },
     },
@@ -466,6 +480,7 @@ export function Session() {
       run: () => {
         clearMessageNavigation()
         scroll.scrollBy(1)
+        updateJumpToBottom()
         dialog.clear()
       },
     },
@@ -477,6 +492,7 @@ export function Session() {
       run: () => {
         clearMessageNavigation()
         scroll.scrollBy(-scroll.height / 4)
+        updateJumpToBottom()
         dialog.clear()
       },
     },
@@ -488,6 +504,7 @@ export function Session() {
       run: () => {
         clearMessageNavigation()
         scroll.scrollBy(scroll.height / 4)
+        updateJumpToBottom()
         dialog.clear()
       },
     },
@@ -502,6 +519,7 @@ export function Session() {
       run: () => {
         clearMessageNavigation()
         scroll.scrollTo(0)
+        updateJumpToBottom()
         dialog.clear()
       },
     },
@@ -513,6 +531,7 @@ export function Session() {
       run: () => {
         clearMessageNavigation()
         scroll.scrollTo(scroll.scrollHeight)
+        updateJumpToBottom()
         dialog.clear()
       },
     },
@@ -954,48 +973,67 @@ export function Session() {
           gap={1}
         >
           <Show when={session()}>
-            <scrollbox
-              ref={(r) => (scroll = r)}
-              viewportOptions={{
-                paddingRight: showScrollbar() ? 1 : 0,
-              }}
-              verticalScrollbarOptions={{
-                paddingLeft: 1,
-                visible: showScrollbar(),
-                trackOptions: {
-                  backgroundColor: theme.raise(theme.background.surface.offset),
-                  foregroundColor: theme.border.default,
-                },
-              }}
-              stickyScroll={!navigationMessage()}
-              stickyStart="bottom"
-              flexGrow={1}
-              scrollAcceleration={scrollAcceleration()}
-            >
-              <For each={visibleRows()}>
-                {(row, index) => (
-                  <SessionRowView
-                    row={row}
-                    message={(messageID) => data.session.message.get(route.sessionID, messageID)}
-                    boundaryID={boundaries()[index() + hidden()]}
+            <box flexGrow={1} minHeight={0}>
+              <scrollbox
+                id="session-transcript"
+                ref={(r) => (scroll = r)}
+                onMouseScroll={() => setTimeout(updateJumpToBottom, 0)}
+                viewportOptions={{
+                  paddingRight: showScrollbar() ? 1 : 0,
+                }}
+                verticalScrollbarOptions={{
+                  paddingLeft: 1,
+                  visible: showScrollbar(),
+                  trackOptions: {
+                    backgroundColor: theme.raise(theme.background.surface.offset),
+                    foregroundColor: theme.border.default,
+                  },
+                }}
+                stickyScroll={!navigationMessage()}
+                stickyStart="bottom"
+                flexGrow={1}
+                scrollAcceleration={scrollAcceleration()}
+              >
+                <For each={visibleRows()}>
+                  {(row, index) => (
+                    <SessionRowView
+                      row={row}
+                      message={(messageID) => data.session.message.get(route.sessionID, messageID)}
+                      boundaryID={boundaries()[index() + hidden()]}
+                    />
+                  )}
+                </For>
+                <BackgroundToolHint messages={messages()} />
+                <Show when={session()?.revert?.messageID}>
+                  <RevertMessage
+                    count={
+                      messages().filter(
+                        (message) => message.id >= session()!.revert!.messageID && message.type === "user",
+                      ).length
+                    }
+                    files={session()!.revert!.files ?? []}
                   />
-                )}
-              </For>
-              <BackgroundToolHint messages={messages()} />
-              <Show when={session()?.revert?.messageID}>
-                <RevertMessage
-                  count={
-                    messages().filter(
-                      (message) => message.id >= session()!.revert!.messageID && message.type === "user",
-                    ).length
-                  }
-                  files={session()!.revert!.files ?? []}
-                />
+                </Show>
+                <Show when={navigationSlack()}>
+                  {(height) => <box id={NAVIGATION_SLACK_ID} height={height()} flexShrink={0} />}
+                </Show>
+              </scrollbox>
+              <Show when={showJumpToBottom()}>
+                <box
+                  id="session-jump-to-bottom"
+                  position="absolute"
+                  zIndex={1000}
+                  right={showScrollbar() ? 2 : 0}
+                  bottom={0}
+                  backgroundColor={theme.raise(theme.background.default)}
+                  paddingLeft={1}
+                  paddingRight={1}
+                  onMouseUp={toBottom}
+                >
+                  <text fg={theme.text.default}>↓ jump to bottom</text>
+                </box>
               </Show>
-              <Show when={navigationSlack()}>
-                {(height) => <box id={NAVIGATION_SLACK_ID} height={height()} flexShrink={0} />}
-              </Show>
-            </scrollbox>
+            </box>
             <box flexShrink={0}>
               <PluginSlot name="session.composer.top" input={{ sessionID: route.sessionID }} mode="all" />
               <Composer
@@ -1029,9 +1067,6 @@ export function Session() {
                     visible={true}
                     ref={bind}
                     disabled={false}
-                    onSubmit={() => {
-                      toBottom()
-                    }}
                     sessionID={route.sessionID}
                   />
                 </Match>
