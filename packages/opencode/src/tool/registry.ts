@@ -54,9 +54,10 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
+import { Auth } from "@/auth"
 
-export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
-  return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
+export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false, synthetic: false }) {
+  return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel || flags.synthetic
 }
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
@@ -286,7 +287,7 @@ const layer = Layer.effect(
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
-          return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
+          return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel, synthetic: flags.enableSynthetic })
         }
 
         const usePatch =
@@ -444,6 +445,7 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
+    Auth.node,
   ],
 })
 
