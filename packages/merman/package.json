@@ -5,7 +5,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
     "./markdown": "./src/markdown.ts",
     "./plugin": "./src/plugin.ts"
   },

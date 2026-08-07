@@ -44,12 +44,6 @@ export interface StateDiagramRenderOptions {
   minStateGap?: number
 }
 
-export interface StateDiagramAnsiOptions extends StateDiagramRenderOptions {
-  theme?: StateDiagramAnsiTheme
-}
-
-export type StateDiagramAnsiTheme = Partial<Record<StateCellStyle, string>>
-
 export type FadeSourceStyle = "state" | "composite" | "start" | "end" | "choice"
 export type TransitionFadeStyle = `${FadeSourceStyle}TransitionFade${DiagramFadeStep}`
 export type BaseStateCellStyle =

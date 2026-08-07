@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CodeRenderable, MarkdownRenderable, RGBA, SyntaxStyle, TreeSitterClient } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
-import { createMermaidMarkdownRenderer } from "../index.js"
+import { createMermaidMarkdownRenderer } from "../markdown.js"
 
 const syntaxStyle = SyntaxStyle.fromStyles({
   default: { fg: RGBA.fromValues(1, 1, 1, 1) },

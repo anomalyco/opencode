@@ -58,15 +58,9 @@ export interface SequenceDiagramRenderOptions {
   fragmentBorderStyle?: BorderStyle
 }
 
-export type SequenceDiagramAnsiTheme = Partial<Record<AnsiSequenceCellStyle, string>>
-
-export interface SequenceDiagramAnsiOptions extends SequenceDiagramRenderOptions {
-  theme?: SequenceDiagramAnsiTheme
-}
-
 export type MessageStyle = "request" | "response"
 export type FadeStyle = `${MessageStyle}Fade${1 | 2 | 3 | 4 | 5}`
-export type AnsiSequenceCellStyle =
+export type SequenceCellStyle =
   | "participant"
   | "lifeline"
   | "group"
@@ -75,4 +69,4 @@ export type AnsiSequenceCellStyle =
   | "fragment"
   | "fragmentLabel"
   | "note"
-export type SequenceCellStyle = AnsiSequenceCellStyle | "noteBadge"
+  | "noteBadge"

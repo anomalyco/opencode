@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { expectDiagram } from "../test/diagram.js"
-import { renderSequenceDiagram, renderSequenceDiagramAnsi } from "./diagram.js"
+import { renderSequenceDiagram } from "./diagram.js"
 import { parseMermaidSequenceDiagram } from "./parser.js"
 
 describe("SequenceDiagram", () => {
@@ -644,24 +644,5 @@ sequenceDiagram
     expect(output).toContain("· Basic (cached by browser)")
     expect(output).toContain("· X-OpenCode-Ticket: 1")
     expect(output.indexOf("· X-OpenCode-Ticket: 1")).toBeLessThan(output.indexOf("├"))
-  })
-
-  test("prints ANSI colors for terminal dumps", () => {
-    const output = renderSequenceDiagramAnsi(`
-sequenceDiagram
-  Browser->>Server: request
-  Server-->>Browser: response
-`)
-
-    expect(output).toContain("\x1b[38;2;134;225;200m")
-    expect(output).toContain("\x1b[38;2;230;177;126m")
-    expect(output).toContain("\x1b[38;2;115;153;138m")
-    expect(output).toContain("\x1b[38;2;130;211;188m")
-    expect(output).toContain("\x1b[38;2;131;145;126m")
-    expect(output).toContain("\x1b[38;2;210;171;126m")
-    expect(output).toContain("request")
-    expect(output).toContain("response")
-    expect(output).toContain("◀")
-    expect(output).toContain("┤")
   })
 })

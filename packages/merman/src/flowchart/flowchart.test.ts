@@ -10,7 +10,7 @@ import {
   layoutFlowchartDiagram as layoutParsedFlowchartDiagram,
 } from "./layout.js"
 import { parseMermaidFlowchartDiagram } from "./parser.js"
-import { renderFlowchartDiagram, renderFlowchartDiagramAnsi } from "./render.js"
+import { renderFlowchartDiagram } from "./render.js"
 import { renderGridStyledText, resolveFlowchartStyleColors } from "./style.js"
 
 function drawFlowchartDiagramGrid(content: string, options?: Parameters<typeof drawParsedFlowchartDiagramGrid>[1]) {
@@ -924,35 +924,6 @@ flowchart LR
     expect(rollbackLine).toBeDefined()
     expect(rollbackLine).not.toContain("Canary")
     expect(rollbackLine).not.toContain("Fix Forward")
-  })
-
-  test("renders ANSI output with configurable styles", () => {
-    const output = renderFlowchartDiagramAnsi(
-      `
-flowchart LR
-  A --> B
-`,
-      { theme: { edge: "\x1b[31m" } },
-    )
-
-    expect(output).toContain("\x1b[31m")
-    expect(output).toContain("▶")
-    expect(output.endsWith("\n")).toBe(false)
-  })
-
-  test("renders subgraph frames with group styling", () => {
-    const output = renderFlowchartDiagramAnsi(
-      `
-flowchart LR
-  subgraph Web [Web App]
-    UI[UI] --> API[API]
-  end
-`,
-      { theme: { group: "\x1b[2m", edge: "\x1b[31m" } },
-    )
-
-    expect(output).toContain("\x1b[2m")
-    expect(output).toContain("Web App")
   })
 
   test("applies the global flowchart StyledText theme", () => {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import stringWidth from "string-width"
 import { expectDiagram } from "../test/diagram.js"
-import { renderStateDiagram, renderStateDiagramAnsi } from "./diagram.js"
+import { renderStateDiagram } from "./diagram.js"
 import { drawStateDiagramGrid } from "./drawing.js"
 import { parseMermaidStateDiagram } from "./parser.js"
 
@@ -511,36 +511,5 @@ stateDiagram-v2
       ●────────────▶│ Idle ├────────────▶│ Loading │════╣ waits for response ║
                     ╰──────╯             ╰─────────╯    ╚════════════════════╝"
     `)
-  })
-
-  test("renders ANSI styles", () => {
-    const output = renderStateDiagramAnsi(`
-stateDiagram-v2
-  [*] --> Idle
-`)
-
-    expect(output).toContain("\x1b[")
-    expect(output).toContain("●")
-  })
-
-  test("applies static ANSI theme styles", () => {
-    const output = renderStateDiagramAnsi(
-      `stateDiagram-v2
-  direction LR
-  [*] --> Idle: begin`,
-      {
-        theme: {
-          state: "[state]",
-          start: "[start]",
-          transition: "[transition]",
-          label: "[label]",
-        },
-      },
-    )
-
-    expect(output).toContain("[state]")
-    expect(output).toContain("[start]")
-    expect(output).toContain("[transition]")
-    expect(output).toContain("[label]")
   })
 })

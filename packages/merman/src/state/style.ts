@@ -1,12 +1,5 @@
 import { RGBA } from "@opentui/core"
-import {
-  ansiFg,
-  createColorRampTheme,
-  createAnsiRampTheme,
-  DIAGRAM_FADE_STEPS,
-  numberedStyleKeys,
-  type DiagramRgb,
-} from "../core/color/style.js"
+import { createColorRampTheme, DIAGRAM_FADE_STEPS, numberedStyleKeys, type DiagramRgb } from "../core/color/style.js"
 import type { BaseStateCellStyle, FadeSourceStyle, StateCellStyle, TransitionFadeStyle } from "./types.js"
 
 const DEFAULT_THEME_RGB = {
@@ -32,35 +25,6 @@ const FADE_SOURCE_STYLES = [
 const TRANSITION_FADE_STYLES = createTransitionFadeStyles()
 const TRANSITION_FADE_STYLES_SET = new Set<StateCellStyle>(Object.values(TRANSITION_FADE_STYLES).flat())
 export type StateStyleColors = Required<Record<StateCellStyle, RGBA>>
-
-let defaultAnsiTheme: Required<Record<StateCellStyle, string>> | undefined
-
-function stateDefaultAnsiTheme(): Required<Record<StateCellStyle, string>> {
-  defaultAnsiTheme ??= {
-    state: ansiFg(DEFAULT_THEME_RGB.state),
-    composite: ansiFg(DEFAULT_THEME_RGB.composite),
-    transition: ansiFg(DEFAULT_THEME_RGB.transition),
-    label: ansiFg(DEFAULT_THEME_RGB.label),
-    noteBorder: ansiFg(DEFAULT_THEME_RGB.noteBorder),
-    noteText: ansiFg(DEFAULT_THEME_RGB.noteText),
-    noteConnector: ansiFg(DEFAULT_THEME_RGB.noteConnector),
-    start: ansiFg(DEFAULT_THEME_RGB.start),
-    end: ansiFg(DEFAULT_THEME_RGB.end),
-    choice: ansiFg(DEFAULT_THEME_RGB.choice),
-    ...createAnsiFadeTheme("state", DEFAULT_THEME_RGB.state, DEFAULT_THEME_RGB.transition),
-    ...createAnsiFadeTheme("composite", DEFAULT_THEME_RGB.composite, DEFAULT_THEME_RGB.transition),
-    ...createAnsiFadeTheme("start", DEFAULT_THEME_RGB.start, DEFAULT_THEME_RGB.transition),
-    ...createAnsiFadeTheme("end", DEFAULT_THEME_RGB.end, DEFAULT_THEME_RGB.transition),
-    ...createAnsiFadeTheme("choice", DEFAULT_THEME_RGB.choice, DEFAULT_THEME_RGB.transition),
-  }
-  return defaultAnsiTheme
-}
-
-export function resolveStateAnsiTheme(
-  theme: Partial<Record<StateCellStyle, string>> = {},
-): Record<StateCellStyle, string> {
-  return { ...stateDefaultAnsiTheme(), ...theme }
-}
 
 export function resolveStateStyleColors(
   colors: Partial<Record<BaseStateCellStyle, RGBA | undefined>> = {},
@@ -93,14 +57,6 @@ function createTransitionFadeStyles(): Record<FadeSourceStyle, readonly Transiti
     styles[source] = numberedStyleKeys(`${source}TransitionFade`, FADE_STEPS)
   }
   return styles
-}
-
-function createAnsiFadeTheme(
-  source: FadeSourceStyle,
-  from: DiagramRgb,
-  to: DiagramRgb,
-): Record<TransitionFadeStyle, string> {
-  return createAnsiRampTheme(TRANSITION_FADE_STYLES[source], from, to) as Record<TransitionFadeStyle, string>
 }
 
 export function isStateTransitionFadeStyle(style: StateCellStyle | undefined): boolean {
