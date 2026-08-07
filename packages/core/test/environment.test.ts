@@ -20,9 +20,10 @@ environmentConformance("memory environment", () =>
 
 environmentConformance("local environment", () =>
   Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const tmp = yield* Effect.promise(() => tmpdir("opencode-local-environment-"))
     return {
-      files: makeFiles(makeLocalDriver()),
+      files: makeFiles(makeLocalDriver(spawner)),
       root: tmp.path,
       ...(process.platform === "win32"
         ? {}
@@ -35,7 +36,7 @@ environmentConformance("local environment", () =>
           }),
       dispose: Effect.promise(() => tmp[Symbol.asyncDispose]()),
     }
-  }),
+  }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
 environmentConformance(

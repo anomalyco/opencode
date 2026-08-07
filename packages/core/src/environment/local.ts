@@ -1,17 +1,11 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { Effect } from "effect"
-import { ChildProcessSpawner } from "effect/unstable/process"
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import type { Driver } from "./driver"
 import { Failed, NotFound, WrongKind, type FileInfo, type FilesImpl, type FileType } from "./files"
 
-export const makeLocalDriver = (): Driver => {
-  const spawner = Effect.runSync(
-    ChildProcessSpawner.ChildProcessSpawner.pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
-  )
-
+export const makeLocalDriver = (spawner: ChildProcessSpawner["Service"]): Driver => {
   const overrides: FilesImpl = {
     read: (value, range) =>
       Effect.gen(function* () {
