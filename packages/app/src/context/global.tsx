@@ -110,6 +110,22 @@ function createServerCtx(
   const sdk = createServerSdkContext(conn, scope)
   const sync = createServerSyncContext(sdk)
 
+  // Register the server's working directory as an open project so a fresh
+  // `opencode web`/`serve` in a folder surfaces that folder and its
+  // sessions in the UI without requiring a manual "Add project". Skip the
+  // user's home dir and the filesystem root, which the file finder cannot
+  // index and would otherwise appear empty.
+  createEffect(() => {
+    const directory = sync.data.path.directory
+    const home = sync.data.path.home
+    if (!directory || !home) return
+    const key = pathKey(directory)
+    if (key === pathKey(home) || key === "/") return
+    if (projects.list().some((project) => pathKey(project.worktree) === key)) return
+    projects.open(directory)
+    projects.touch(directory)
+  })
+
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })
     const projectID = childStore.project
