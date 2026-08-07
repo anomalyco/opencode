@@ -116,124 +116,120 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((draft) =>
-        draft.add(
-          ({
-              name,
-              options: { codemode: false, permission: "edit" },
-              description:
-                "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
-              input: Input,
-              output: Output,
-              execute: (input, context) => {
-                return Effect.gen(function* () {
-                  const permissionSource = {
-                    type: "tool" as const,
-                    messageID: context.messageID,
-                    id: context.id,
-                  }
-                  if (input.oldString === input.newString) {
-                    return yield* new ToolFailure({
-                      message: "No changes to apply: oldString and newString are identical.",
-                    })
-                  }
-                  if (input.oldString === "") {
-                    return yield* new ToolFailure({
-                      message: "oldString must not be empty. Use write to create or overwrite a file.",
-                    })
-                  }
+        draft.add({
+          name,
+          options: { codemode: false, permission: "edit" },
+          description:
+            "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
+          input: Input,
+          output: Output,
+          execute: (input, context) => {
+            return Effect.gen(function* () {
+              const permissionSource = {
+                type: "tool" as const,
+                messageID: context.messageID,
+                id: context.id,
+              }
+              if (input.oldString === input.newString) {
+                return yield* new ToolFailure({
+                  message: "No changes to apply: oldString and newString are identical.",
+                })
+              }
+              if (input.oldString === "") {
+                return yield* new ToolFailure({
+                  message: "oldString must not be empty. Use write to create or overwrite a file.",
+                })
+              }
 
-                  const target = yield* mutation.resolve({ path: input.path, kind: "file" })
-                  const external = target.externalDirectory
-                  if (external) {
-                    yield* permission.assert({
-                      ...LocationMutation.externalDirectoryPermission(external),
-                      sessionID: context.sessionID,
-                      agent: context.agent,
-                      source: permissionSource,
-                    })
-                  }
+              const target = yield* mutation.resolve({ path: input.path, kind: "file" })
+              const external = target.externalDirectory
+              if (external) {
+                yield* permission.assert({
+                  ...LocationMutation.externalDirectoryPermission(external),
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source: permissionSource,
+                })
+              }
 
-                  const info = yield* fs.stat(target.canonical).pipe(
-                    Effect.catchReason("PlatformError", "NotFound", () =>
-                      Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
-                    ),
-                  )
-                  if (info.type === "Directory") {
-                    return yield* new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` })
-                  }
-                  const original = yield* Bom.readFile(fs, target.canonical)
-                  const source = original.text
-                  const ending = source.includes(crlf) ? crlf : "\n"
-                  const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
-                  const newString = input.newString.replaceAll(crlf, "\n").replaceAll("\n", ending)
-                  const exact = findOccurrences(source, oldString)
-                  // These one-to-one mappings preserve offsets into the original source.
-                  const unicode =
-                    exact.length > 0 ? [] : findOccurrences(normalizeForMatch(source), normalizeForMatch(oldString))
-                  const trailing =
-                    exact.length > 0 || unicode.length > 0
-                      ? []
-                      : findLineOccurrences(source, oldString)
-                  const matches = exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing
-                  const replacements = matches.length
-                  const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
-                    .toReversed()
-                    .reduce(
-                      (content, match) =>
-                        `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`,
-                      source,
-                    )
-                  const preview =
-                    replacements > 0 && (replacements === 1 || input.replaceAll === true)
-                      ? fileDiff(target.resource, source, replaced)
-                      : undefined
-                  yield* permission.assert({
-                    action: "edit",
-                    resources: [target.resource],
-                    save: ["*"],
-                    metadata: preview ? { files: [preview] } : undefined,
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source: permissionSource,
-                  })
-                  if (replacements === 0) {
-                    return yield* new ToolFailure({
-                      message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.`,
-                    })
-                  }
-                  if (replacements > 1 && input.replaceAll !== true) {
-                    return yield* new ToolFailure({
-                      message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
-                    })
-                  }
-                  const replacementBom = replaced.startsWith("\uFEFF")
-                  const result = yield* files.write({
-                    target,
-                    content: Bom.join(replaced, original.bom || replacementBom),
-                  })
-                  const bom = original.bom || replacementBom
-                  const formatted = (yield* formatter.file(target.canonical))
-                    ? yield* Bom.syncFile(fs, target.canonical, bom)
-                    : (yield* Bom.readFile(fs, target.canonical)).text
-                  return {
-                    files: [fileDiff(result.resource, source, formatted)],
-                    replacements,
-                  } satisfies Output
-                }).pipe(
-                  Effect.map((output) => ({
-                    output,
-                    content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,
-                    metadata: { files: output.files },
-                  })),
-                  Effect.mapError((error) =>
-                    error instanceof ToolFailure
-                      ? error
-                      : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
+              const info = yield* fs
+                .stat(target.absolute)
+                .pipe(
+                  Effect.catchReason("PlatformError", "NotFound", () =>
+                    Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
                   ),
                 )
-              },
-            }),
-        ),
+              if (info.type === "Directory") {
+                return yield* new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` })
+              }
+              const original = yield* Bom.readFile(fs, target.absolute)
+              const source = original.text
+              const ending = source.includes(crlf) ? crlf : "\n"
+              const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
+              const newString = input.newString.replaceAll(crlf, "\n").replaceAll("\n", ending)
+              const exact = findOccurrences(source, oldString)
+              // These one-to-one mappings preserve offsets into the original source.
+              const unicode =
+                exact.length > 0 ? [] : findOccurrences(normalizeForMatch(source), normalizeForMatch(oldString))
+              const trailing = exact.length > 0 || unicode.length > 0 ? [] : findLineOccurrences(source, oldString)
+              const matches = exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing
+              const replacements = matches.length
+              const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
+                .toReversed()
+                .reduce(
+                  (content, match) => `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`,
+                  source,
+                )
+              const preview =
+                replacements > 0 && (replacements === 1 || input.replaceAll === true)
+                  ? fileDiff(target.resource, source, replaced)
+                  : undefined
+              yield* permission.assert({
+                action: "edit",
+                resources: [target.resource],
+                save: ["*"],
+                metadata: preview ? { files: [preview] } : undefined,
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: permissionSource,
+              })
+              if (replacements === 0) {
+                return yield* new ToolFailure({
+                  message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.`,
+                })
+              }
+              if (replacements > 1 && input.replaceAll !== true) {
+                return yield* new ToolFailure({
+                  message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
+                })
+              }
+              const replacementBom = replaced.startsWith("\uFEFF")
+              const result = yield* files.write({
+                target,
+                content: Bom.join(replaced, original.bom || replacementBom),
+              })
+              const bom = original.bom || replacementBom
+              const formatted = (yield* formatter.file(target.absolute))
+                ? yield* Bom.syncFile(fs, target.absolute, bom)
+                : (yield* Bom.readFile(fs, target.absolute)).text
+              return {
+                files: [fileDiff(result.resource, source, formatted)],
+                replacements,
+              } satisfies Output
+            }).pipe(
+              Effect.map((output) => ({
+                output,
+                content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,
+                metadata: { files: output.files },
+              })),
+              Effect.mapError((error) =>
+                error instanceof ToolFailure
+                  ? error
+                  : new ToolFailure({ message: `Unable to edit ${input.path}`, error }),
+              ),
+            )
+          },
+        }),
       )
       .pipe(Effect.orDie)
   }),

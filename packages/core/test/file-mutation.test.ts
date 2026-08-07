@@ -43,7 +43,7 @@ describe("FileMutation", () => {
 
         expect(yield* (yield* FileMutation.Service).write({ target, content: "after" })).toEqual({
           operation: "write",
-          target: target.canonical,
+          target: target.absolute,
           resource: "hello.txt",
           existed: true,
         })
@@ -62,11 +62,11 @@ describe("FileMutation", () => {
 
         expect(result).toEqual({
           operation: "write",
-          target: target.canonical,
+          target: target.absolute,
           resource: "src/nested/hello.txt",
           existed: false,
         })
-        expect(yield* Effect.promise(() => fs.readFile(result.target, "utf8"))).toBe("hello")
+        expect(yield* Effect.promise(() => fs.readFile(target.absolute, "utf8"))).toBe("hello")
       }).pipe(provide(directory)),
     ),
   )
@@ -84,7 +84,7 @@ describe("FileMutation", () => {
         yield* files.writeTextPreservingBom({ target: created, content: "\uFEFF\uFEFF\uFEFFcreated" })
 
         expect(yield* Effect.promise(() => fs.readFile(preservedPath, "utf8"))).toBe("\uFEFFafter")
-        expect(yield* Effect.promise(() => fs.readFile(created.canonical, "utf8"))).toBe("\uFEFFcreated")
+        expect(yield* Effect.promise(() => fs.readFile(created.absolute, "utf8"))).toBe("\uFEFFcreated")
       }).pipe(provide(directory)),
     ),
   )
@@ -99,7 +99,7 @@ describe("FileMutation", () => {
 
           expect(result).toEqual({
             operation: "write",
-            target: target.canonical,
+            target: target.absolute,
             resource: target.resource,
             existed: false,
           })
@@ -109,7 +109,7 @@ describe("FileMutation", () => {
     ),
   )
 
-  it.live("serializes concurrent writes to the same canonical target", () =>
+  it.live("serializes concurrent writes to the same absolute target", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const targetPath = path.join(directory, "shared.txt")
@@ -152,7 +152,7 @@ describe("FileMutation", () => {
     ),
   )
 
-  it.live("allows distinct canonical targets to proceed independently", () =>
+  it.live("allows distinct absolute targets to proceed independently", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
