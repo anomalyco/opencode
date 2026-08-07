@@ -313,6 +313,67 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("derives Snowflake Cortex base URL from OAuth account metadata", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({ type: "aisdk", package: "@ai-sdk/openai-compatible" }),
+          id: ModelV2.ID.make("claude-sonnet-4-6"),
+          providerID: ProviderV2.ID.make("snowflake-cortex"),
+          request: { headers: {}, body: {} },
+        }),
+        Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("snowflake-browser"),
+          access: "snowflake-access",
+          refresh: "snowflake-refresh",
+          expires: Date.now() + 60_000,
+          metadata: { accountId: "myorg-myaccount" },
+        }),
+      )
+      const headers = yield* resolved.route.auth.apply({
+        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        method: "POST",
+        url: "https://myorg-myaccount.snowflakecomputing.com/api/v2/cortex/v1/chat/completions",
+        body: "{}",
+        headers: Headers.empty,
+      })
+
+      expect(resolved.route).toMatchObject({
+        id: "openai-compatible-chat",
+        endpoint: { baseURL: "https://myorg-myaccount.snowflakecomputing.com/api/v2/cortex/v1" },
+      })
+      expect(headers.authorization).toBe("Bearer snowflake-access")
+      expect(resolved.route.defaults.http?.body).toEqual({})
+    }),
+  )
+
+  it.effect("prefers explicit OAuth baseURL metadata over account-derived Snowflake host", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({ type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://placeholder.example/v1" }),
+          id: ModelV2.ID.make("claude-sonnet-4-6"),
+          providerID: ProviderV2.ID.make("snowflake-cortex"),
+          request: { headers: {}, body: {} },
+        }),
+        Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("snowflake-browser"),
+          access: "snowflake-access",
+          refresh: "snowflake-refresh",
+          expires: Date.now() + 60_000,
+          metadata: {
+            accountId: "myorg-myaccount",
+            baseURL: "https://custom.example/cortex/v1",
+          },
+        }),
+      )
+
+      expect(resolved.route.endpoint).toMatchObject({ baseURL: "https://custom.example/cortex/v1" })
+    }),
+  )
+
   it.effect("rejects catalog APIs without a native route", () =>
     Effect.gen(function* () {
       const failure = yield* SessionRunnerModel.fromCatalogModel(
