@@ -31,7 +31,11 @@ import {
 import { testEffect } from "./lib/effect"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node])))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
+    [Bus.node, Bus.configured({ persist: true })],
+  ]),
+)
 const sessionsLayer = AppNodeBuilder.build(Session.node, [[SessionExecution.node, SessionExecution.noopLayer]])
 const sessionID = Session.ID.make("ses_projector_test")
 const created = DateTime.makeUnsafe(0)
@@ -113,7 +117,7 @@ describe("SessionProjector", () => {
         diff: "legacy patch",
         files: [{ path: "src/old.ts", status: "modified", additions: 1, deletions: 0, patch: "@@" }],
       })
-      yield* db.run(sql`update session set revert = ${legacy} where id = ${sessionID}`)
+      yield* db.run(sql`update session_v2 set revert = ${legacy} where id = ${sessionID}`)
       const stored = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()
       if (!stored) return yield* Effect.die("Session row missing")
       const storedRevert = fromRow(stored).revert

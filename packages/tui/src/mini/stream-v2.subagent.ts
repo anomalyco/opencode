@@ -653,6 +653,10 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       }
       return
     }
+    if (event.type === "session.input.cancelled") {
+      child.prompts.delete(event.data.inputID)
+      return
+    }
     if (event.type === "session.step.started") {
       touch(child, event.created)
       if (child.label === FALLBACK_LABEL && event.data.agent) child.label = Locale.titlecase(event.data.agent)

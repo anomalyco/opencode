@@ -669,6 +669,14 @@ describe("V2 mini transport", () => {
             data: { text: "follow up" },
             delivery: "queue",
           },
+          {
+            id: "msg_cancelled",
+            sessionID: "ses_1",
+            timeCreated: 2,
+            type: "user",
+            data: { text: "remove me" },
+            delivery: "queue",
+          },
         ],
       },
     })
@@ -684,11 +692,14 @@ describe("V2 mini transport", () => {
         .findLast((item) => item.type === "queued.prompts")
         ?.prompts.map((item) => [item.messageID, item.delivery])
 
-    expect(pending()).toEqual([["msg_queued", "queue"]])
+    expect(pending()).toEqual([
+      ["msg_queued", "queue"],
+      ["msg_cancelled", "queue"],
+    ])
     events.push({
-      id: "evt_promoted",
-      created: 2,
-      type: "session.input.promoted",
+      id: "evt_steered",
+      created: 3,
+      type: "session.input.steered",
       durable: durable("ses_1", 2),
       data: { sessionID: "ses_1", inputID: "msg_queued" },
     })
@@ -697,19 +708,53 @@ describe("V2 mini transport", () => {
     expect(ui.commits).toContainEqual(
       expect.objectContaining({ kind: "user", messageID: "msg_queued", text: "follow up" }),
     )
-    expect(pending()).toEqual([])
+    expect(pending()).toEqual([["msg_cancelled", "queue"]])
+    events.push({
+      id: "evt_queued",
+      created: 4,
+      type: "session.input.queued",
+      durable: durable("ses_1", 3),
+      data: { sessionID: "ses_1", inputID: "msg_queued" },
+    })
+    while (pending()?.length !== 2) await Bun.sleep(0)
+    expect(pending()).toEqual([
+      ["msg_queued", "queue"],
+      ["msg_cancelled", "queue"],
+    ])
+    events.push({
+      id: "evt_cancelled",
+      created: 5,
+      type: "session.input.cancelled",
+      durable: durable("ses_1", 4),
+      data: { sessionID: "ses_1", inputID: "msg_cancelled" },
+    })
+    while (pending()?.length !== 1) await Bun.sleep(0)
+    expect(pending()).toEqual([["msg_queued", "queue"]])
+    events.push({
+      id: "evt_promoted",
+      created: 6,
+      type: "session.input.promoted",
+      durable: durable("ses_1", 5),
+      data: { sessionID: "ses_1", inputID: "msg_queued" },
+    })
+    while (pending()?.length !== 0) await Bun.sleep(0)
+    expect(ui.commits.filter((item) => item.messageID === "msg_queued")).toHaveLength(1)
     const prompt = spyOn(client.session, "prompt").mockImplementation(
       (request) => ok(promptAdmission(request)) as never,
     )
-    await transport.queuePromptTurn({
+    await transport.admitPromptTurn({
       agent: "review",
-      model: undefined,
-      variant: undefined,
+      model: { providerID: "test", modelID: "next" },
+      variant: "high",
       prompt: { messageID: "msg_next", text: "another", parts: [] },
       files: [],
       includeFiles: false,
-    })
+    }, "queue")
     expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: "ses_1", agent: "review" }, expect.anything())
+    expect(client.session.switchModel).toHaveBeenCalledWith(
+      { sessionID: "ses_1", model: { providerID: "test", id: "next", variant: "high" } },
+      expect.anything(),
+    )
     expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ delivery: "queue" }), expect.anything())
     events.push({
       id: "evt_earlier_admission",
@@ -722,15 +767,8 @@ describe("V2 mini transport", () => {
         input: { type: "user", data: { text: "earlier" }, delivery: "steer" },
       },
     })
-    while (true) {
-      const pending = ui.events.findLast((item) => item.type === "queued.prompts")
-      if (pending?.type === "queued.prompts" && pending.prompts.length >= 2) break
-      await Bun.sleep(0)
-    }
-    expect(pending()).toEqual([
-      ["msg_next", "queue"],
-      ["msg_earlier", "steer"],
-    ])
+    await Bun.sleep(10)
+    expect(pending()).toEqual([["msg_next", "queue"]])
     await transport.close()
   })
 
@@ -813,14 +851,14 @@ describe("V2 mini transport", () => {
       durable: durable("ses_1", 2),
       data: { sessionID: "ses_1", inputID: "msg_prompt" },
     })
-    await transport.queuePromptTurn({
+    await transport.admitPromptTurn({
       agent: undefined,
       model: undefined,
       variant: undefined,
       prompt: { messageID: "msg_queued", text: "follow up", parts: [] },
       files: [],
       includeFiles: false,
-    })
+    }, "queue")
     events.push({
       id: "evt_queued_promoted",
       created: 3,

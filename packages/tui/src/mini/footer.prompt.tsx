@@ -19,6 +19,7 @@ import {
   displayCharAt,
   displaySlice,
   isExitCommand,
+  isCompactCommand,
   mentionTriggerIndex,
   isNewCommand,
   movePromptHistory,
@@ -31,7 +32,16 @@ import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.edit
 import { monoTruncateMiddle } from "./mono"
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
-import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunReference } from "./types"
+import type {
+  FooterQueuedPrompt,
+  FooterState,
+  RunAgent,
+  RunCommand,
+  RunDelivery,
+  RunPrompt,
+  RunPromptPart,
+  RunReference,
+} from "./types"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 const AUTOCOMPLETE_BOTTOM_ROWS = 1
@@ -72,6 +82,8 @@ type PromptInput = {
   theme: Accessor<RunFooterTheme>
   mono: Accessor<boolean>
   history?: Accessor<RunPrompt[]>
+  queuedPrompts: Accessor<FooterQueuedPrompt[]>
+  onQueuedPromptSteer: (inputID: string) => Promise<boolean>
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onCycle: () => void
   onInterrupt: () => boolean
@@ -980,8 +992,18 @@ export function createPromptState(input: PromptInput): PromptState {
   }))
 
   Keymap.createLayer(() => ({
+    priority: 1,
     enabled: input.prompt() && !visible(),
     commands: [
+      {
+        id: "prompt.queue",
+        title: "Queue prompt",
+        group: "Prompt",
+        run() {
+          syncDraft()
+          submitPrompt(promptCopy(draft), "queue")
+        },
+      },
       {
         id: "prompt.editor",
         title: "Open editor",
@@ -1116,7 +1138,8 @@ export function createPromptState(input: PromptInput): PromptState {
     }
   }
 
-  const submitPrompt = (next: RunPrompt) => {
+  let submitting = false
+  const submitPrompt = (next: RunPrompt, delivery: RunDelivery = "steer") => {
     if (!area || area.isDestroyed) {
       draft = promptCopy(next)
     }
@@ -1130,12 +1153,34 @@ export function createPromptState(input: PromptInput): PromptState {
       hide()
     }
 
+    if (submitting) return
+
     if (!next.text.trim()) {
+      const queued = delivery === "steer" ? input.queuedPrompts()[0] : undefined
+      if (queued) {
+        submitting = true
+        void input.onQueuedPromptSteer(queued.messageID).finally(() => {
+          submitting = false
+        })
+        return
+      }
       input.onStatus(input.state().phase === "running" ? "waiting for current response" : "empty prompt ignored")
       return
     }
 
     const command = next.mode === "shell" ? undefined : selectedCommand(next.text, next.command)
+    if (
+      delivery === "queue" &&
+      (next.mode === "shell" ||
+        command?.source === "skill" ||
+        isNewCommand(next.text) ||
+        isCompactCommand(next.text) ||
+        isExitCommand(next.text) ||
+        next.text.trim().toLowerCase() === "/settings")
+    ) {
+      input.onStatus("this prompt cannot be queued")
+      return
+    }
     if (!command && next.mode !== "shell" && isExitCommand(next.text)) {
       input.onExit()
       return
@@ -1157,24 +1202,28 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const submit = command
-      ? { ...next, command }
+      ? { ...next, command, delivery }
       : parsed?.type === "command"
-        ? { ...next, command: parsed.command }
-        : next
+        ? { ...next, command: parsed.command, delivery }
+        : { ...next, delivery }
     const shellMode = next.mode === "shell"
 
+    submitting = true
     resetDraft()
     queueMicrotask(async () => {
-      if (await input.onSubmit(submit)) {
-        push(next)
-        if (shellMode) {
-          setShellMode(false)
-          draft = emptyPrompt(false)
+      try {
+        if (await input.onSubmit(submit)) {
+          push(next)
+          if (shellMode) {
+            setShellMode(false)
+            draft = emptyPrompt(false)
+          }
+          return
         }
-        return
+        restore(next)
+      } finally {
+        submitting = false
       }
-
-      restore(next)
     })
   }
 

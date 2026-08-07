@@ -23,6 +23,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import type { Config } from "../config"
 import type { CliRenderer } from "@opentui/core"
+import type { SessionPending } from "@opencode-ai/schema/session-pending"
 
 export type RunFilePart = {
   type: "file"
@@ -71,10 +72,13 @@ export type RunProvider = {
   models: Record<string, RunProviderModel>
 }
 
+export type RunDelivery = SessionPending.Delivery
+
 export type RunPrompt = {
   messageID?: string
   text: string
   parts: RunPromptPart[]
+  delivery?: RunDelivery
   mode?: "shell"
   command?: {
     name: string
@@ -87,8 +91,10 @@ export type RunPrompt = {
 export type FooterQueuedPrompt = {
   messageID: string
   prompt: RunPrompt
-  delivery: "steer" | "queue"
+  delivery: RunDelivery
 }
+
+export type QueuedPromptAction = "steer" | "cancel"
 
 export type RunAgent = {
   id: string

@@ -7,6 +7,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Formatter } from "@opencode-ai/core/formatter"
+import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Location } from "@opencode-ai/core/location"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -22,7 +23,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
-  deps: [Tool.node, Formatter.node, FSUtil.node, Location.node, Permission.node],
+  deps: [Tool.node, FileMutation.node, Formatter.node, FSUtil.node, Location.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_patch_tool_test")
@@ -139,7 +140,7 @@ const withTool = <A, E, R>(
     return yield* body(yield* Tool.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, patchToolNode]), [
+      AppNodeBuilder.build(LayerNode.group([Tool.node, FileMutation.node, patchToolNode]), [
         [FSUtil.node, filesystem],
         [Location.node, activeLocation],
         [Formatter.node, formatter],
@@ -260,6 +261,45 @@ describe("PatchTool", () => {
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
+  )
+
+  it.live("serializes concurrent patch transactions", () =>
+    withTempTool((directory, registry) => {
+      const target = path.join(directory, "concurrent.txt")
+      afterEditApproval = () =>
+        assertions.filter((input) => input.action === "edit").length === 1
+          ? Effect.sleep("50 millis")
+          : Effect.void
+      return Effect.promise(() => fs.writeFile(target, "one\ntwo\n")).pipe(
+        Effect.andThen(
+          Effect.all(
+            [
+              executeTool(
+                registry,
+                call(
+                  "*** Begin Patch\n*** Update File: concurrent.txt\n@@\n-one\n+ONE\n*** End Patch",
+                  "call-patch-one",
+                ),
+              ),
+              executeTool(
+                registry,
+                call(
+                  "*** Begin Patch\n*** Update File: concurrent.txt\n@@\n-two\n+TWO\n*** End Patch",
+                  "call-patch-two",
+                ),
+              ),
+            ],
+            { concurrency: "unbounded" },
+          ),
+        ),
+        Effect.andThen((results) =>
+          Effect.gen(function* () {
+            expect(results.map((result) => result.status)).toEqual(["completed", "completed"])
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("ONE\nTWO\n")
+          }),
+        ),
+      )
+    }),
   )
 
   it.live("returns file diffs for final formatted content", () =>

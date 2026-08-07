@@ -3,11 +3,12 @@ export * as MCP from "./index"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Command } from "@opencode-ai/schema/command"
+import { Document } from "@opencode-ai/schema/config"
+import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { createHash } from "node:crypto"
 import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Stream } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Config } from "../config"
-import { ConfigMCP } from "../config/mcp"
 import { Credential } from "../credential"
 import { Bus } from "../bus"
 import { Form } from "../form"
@@ -178,7 +179,7 @@ export const layer = (options?: Options) => Layer.effect(
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
     yield* Effect.addFinalizer((exit) => Scope.close(root, exit))
 
-    const documents = (yield* config.entries()).filter((entry): entry is Config.Document => entry.type === "document")
+    const documents = (yield* config.entries()).filter((entry): entry is Document => entry.type === "document")
     // Global MCP timeout defaults, later config files overriding earlier ones.
     const timeout = Object.assign(
       {},

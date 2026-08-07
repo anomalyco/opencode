@@ -18,3 +18,7 @@ test("accepts optional app metadata", () => {
     Option.getOrThrow(decode({ app: { name: "sdk", version: "1.2.3", channel: "beta" } })).app,
   ).toEqual({ name: "sdk", version: "1.2.3", channel: "beta" })
 })
+
+test("accepts durable event persistence configuration", () => {
+  expect(Option.getOrThrow(decode({ events: { persist: true } })).events).toEqual({ persist: true })
+})

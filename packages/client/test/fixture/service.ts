@@ -47,6 +47,10 @@ const server = Bun.serve({
     }
     if (pathname !== "/api/health") return new Response(null, { status: 404 })
     requests += 1
+    if (mode === "hanging") {
+      await appendFile(registration + ".requests", process.pid + "\n")
+      return new Promise<Response>(() => {})
+    }
     if (mode === "modern" && requests === 1) {
       await writeFile(registration + ".first-request", "")
       while (!(await Bun.file(registration + ".release").exists())) await Bun.sleep(5)

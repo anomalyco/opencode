@@ -207,7 +207,7 @@ it.live(
   () =>
     withEmbedded("opencode-embedded-", (fixture) =>
       Effect.gen(function* () {
-        const opencode = yield* fixture.sdk.OpenCode.create()
+        const opencode = yield* fixture.sdk.OpenCode.create({ events: { persist: true } })
         const id = sessionID(fixture)
         const model = fixture.sdk.Model.Ref.make({
           id: fixture.sdk.Model.ID.make("embedded"),
@@ -266,7 +266,7 @@ it.live(
         const wakeContext = yield* opencode.sessions.context({ sessionID: id })
         const pendingAfterPromote = yield* opencode.sessions.pending.list({ sessionID: id })
         const event = yield* opencode.sessions.log({ sessionID: id }).pipe(
-          Stream.filter((item) => item.type !== "log.synced"),
+          Stream.filter((item) => item.type === "session.model.selected"),
           Stream.take(1),
           Stream.runHead,
           Effect.map(Option.getOrUndefined),

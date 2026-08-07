@@ -17,7 +17,11 @@ import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { InstructionBlobTable, InstructionStateTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node])))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
+    [Bus.node, Bus.configured({ persist: true })],
+  ]),
+)
 
 const source = (name: string, read: Effect.Effect<string | Instructions.Unavailable | Instructions.Removed>) =>
   Instructions.make({

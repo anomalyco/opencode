@@ -1,17 +1,17 @@
 import { getFilename } from "@opencode-ai/core/util/path"
-import type { Session } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { pathKey } from "@/utils/path-key"
 import type { ServerConnection } from "@/context/server"
 import type { HomeProjectSelection } from "@/context/layout"
 
 type SessionStore = {
-  session?: Session[]
+  session?: SessionInfo[]
   path: { directory: string }
 }
 
 function sortSessions(now: number) {
   const oneMinuteAgo = now - 60 * 1000
-  return (a: Session, b: Session) => {
+  return (a: SessionInfo, b: SessionInfo) => {
     const aUpdated = a.time.updated ?? a.time.created
     const bUpdated = b.time.updated ?? b.time.created
     const aRecent = aUpdated > oneMinuteAgo
@@ -23,8 +23,8 @@ function sortSessions(now: number) {
   }
 }
 
-const isRootVisibleSession = (session: Session, directory: string) =>
-  pathKey(session.directory) === pathKey(directory) && !session.parentID && !session.time?.archived
+const isRootVisibleSession = (session: SessionInfo, directory: string) =>
+  pathKey(session.location.directory) === pathKey(directory) && !session.parentID && !session.time.archived
 
 export const roots = (store: SessionStore) =>
   (store.session ?? []).filter((session) => isRootVisibleSession(session, store.path.directory))
@@ -41,7 +41,7 @@ export function hasProjectPermissions<T>(
   return Object.values(request ?? {}).some((list) => list?.some(include))
 }
 
-export const childSessionOnPath = (sessions: Session[] | undefined, rootID: string, activeID?: string) => {
+export const childSessionOnPath = (sessions: SessionInfo[] | undefined, rootID: string, activeID?: string) => {
   if (!activeID || activeID === rootID) return
   const map = new Map((sessions ?? []).map((session) => [session.id, session]))
   let id = activeID
@@ -102,13 +102,13 @@ export function getProjectAvatarSource(id?: string, icon?: { color?: string; url
 }
 
 export function projectForSession<T extends { id?: string; worktree: string; sandboxes?: string[] }>(
-  session: Session,
+  session: SessionInfo,
   projects: T[],
   byID: Map<string, T> = new Map(projects.flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
 ) {
   const direct = byID.get(session.projectID)
   if (direct) return direct
-  const directory = pathKey(session.directory)
+  const directory = pathKey(session.location.directory)
   return projects.find(
     (project) =>
       pathKey(project.worktree) === directory || project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),

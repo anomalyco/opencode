@@ -61,7 +61,7 @@ for (const item of targets) {
     name: "parcel-watcher-binding",
     setup(build) {
       build.onLoad({ filter: /filesystem\/watcher-binding\.ts$/ }, () => ({
-        contents: `import binding from ${JSON.stringify(parcelWatcherPackage)}; export default () => binding`,
+        contents: `export default () => require(${JSON.stringify(parcelWatcherPackage)})`,
         loader: "js",
       }))
     },

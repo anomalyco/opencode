@@ -46,6 +46,7 @@ import { SessionGenerateNode } from "./session/generate-node"
 import { McpTool } from "./tool/mcp"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { Tool } from "./tool"
+import { ToolOutput } from "./tool-output"
 import { Vcs } from "./vcs"
 
 export { LocationServiceMap } from "./location-service-map"
@@ -78,6 +79,7 @@ const locationServiceNodes = [
   MCP.node,
   Permission.node,
   Tool.node,
+  ToolOutput.node,
   Image.node,
   SkillInstructions.node,
   ReferenceInstructions.node,

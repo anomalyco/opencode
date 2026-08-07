@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Effect, FileSystem } from "effect"
 import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
@@ -50,22 +51,53 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
-  it.effect("reports binary and malformed UTF-8 content as typed errors", () =>
+  it.effect("reads malformed UTF-8 lossily and still rejects null-byte binary content", () =>
     Effect.gen(function* () {
       const { fs, files, directory } = yield* fixture
       const binary = path.join(directory, "archive.dat")
       const malformed = path.join(directory, "malformed.txt")
       yield* files.writeFile(binary, Uint8Array.of(0, 1, 2, 3))
-      const malformedContent = new Uint8Array(64 * 1024 + 1).fill(97)
-      malformedContent[64 * 1024] = 0x80
-      yield* files.writeFile(malformed, malformedContent)
+      yield* files.writeFile(malformed, Uint8Array.of(0x68, 0x69, 0x80))
 
       const binaryError = yield* ReadToolFileSystem.read(fs, binary, "archive.dat").pipe(Effect.flip)
-      const malformedError = yield* ReadToolFileSystem.read(fs, malformed, "malformed.txt").pipe(Effect.flip)
+      const malformedResult = yield* ReadToolFileSystem.read(fs, malformed, "malformed.txt")
 
       expect(binaryError).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
       expect(binaryError.message).toBe("Cannot read binary file: archive.dat")
-      expect(malformedError).toBeInstanceOf(ReadToolFileSystem.MalformedUtf8Error)
+      expect(malformedResult).toMatchObject({ type: "file", content: "hi\uFFFD", encoding: "utf8" })
+    }),
+  )
+
+  it.effect("reads text despite a binary-associated extension", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "notes.docx")
+      yield* files.writeFileString(file, "plain text")
+
+      const result = yield* ReadToolFileSystem.read(fs, file, "notes.docx")
+
+      expect(result).toMatchObject({ type: "file", content: "plain text", encoding: "utf8" })
+    }),
+  )
+
+  it.effect("lists unresolved symlinks, including broken and escaping links", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return
+      const { fs: service, files, directory } = yield* fixture
+      const outside = yield* files.makeTempDirectoryScoped()
+      yield* files.makeDirectory(path.join(directory, "folder"))
+      yield* files.writeFileString(path.join(directory, "file.txt"), "hello")
+      yield* Effect.promise(() => fs.symlink(path.join(outside, "target.txt"), path.join(directory, "escape")))
+      yield* Effect.promise(() => fs.symlink(path.join(directory, "missing.txt"), path.join(directory, "broken")))
+
+      const result = yield* ReadToolFileSystem.list(service, directory)
+
+      expect(result.entries.map((entry) => ({ ...entry, path: String(entry.path) }))).toEqual([
+        { path: `folder${path.sep}`, type: "directory" },
+        { path: "broken", type: "symlink" },
+        { path: "escape", type: "symlink" },
+        { path: "file.txt", type: "file" },
+      ])
     }),
   )
 

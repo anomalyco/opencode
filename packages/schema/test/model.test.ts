@@ -30,3 +30,22 @@ describe("Model.ReasoningField", () => {
       expect(decode(field)).toBe(field)
   })
 })
+
+describe("Model.Compatibility", () => {
+  test("decodes model compatibility overrides", () => {
+    const decode = Schema.decodeUnknownSync(Model.Compatibility)
+
+    expect(decode({})).toEqual({})
+    expect(
+      decode({
+        reasoningField: "vendor_reasoning",
+        maxTokensField: "max_completion_tokens",
+        requireFinishReason: false,
+      }),
+    ).toEqual({
+      reasoningField: "vendor_reasoning",
+      maxTokensField: "max_completion_tokens",
+      requireFinishReason: false,
+    })
+  })
+})

@@ -9,6 +9,7 @@ import { type LocalProject } from "@/context/layout"
 import { ServerConnection } from "@/context/server"
 
 export function createEditProjectModel(props: { project: LocalProject; server: ServerConnection.Any }) {
+  const supported = !props.project.id || props.project.id === "global"
   const dialog = useDialog()
   const global = useGlobal()
   const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
@@ -71,23 +72,9 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
       const start = store.startup.trim()
 
       if (props.project.id && props.project.id !== "global") {
-        if ((await serverCtx().sdk.protocol) !== "v1") return
-        const project = await serverCtx()
-          .sdk.legacy.project.update({
-            projectID: props.project.id,
-            directory: props.project.worktree,
-            name,
-            icon: { color: store.color || "", override: store.iconOverride || "" },
-            commands: { start },
-          })
-          .then((result) => result.data)
-        if (!project) return
-        serverCtx().sync.set("project", (items) =>
-          items.map((item) => (item.id === project.id ? normalizeProjectInfo(project) : item)),
-        )
-        serverCtx().sync.project.icon(props.project.worktree, store.iconOverride || undefined)
-        dialog.close()
-        return
+        // TODO: Restore project edits when the V2 client exposes a project update API.
+        // await serverCtx().sdk.api.project.update({ projectID: props.project.id, name, icon, commands })
+        throw new Error(`Project ${props.project.id} cannot be updated`)
       }
 
       serverCtx().sync.project.meta(props.project.worktree, {
@@ -101,7 +88,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
 
   function submit(event: SubmitEvent) {
     event.preventDefault()
-    if (save.isPending) return
+    if (!supported || save.isPending) return
     save.mutate()
   }
 
@@ -111,6 +98,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     folderName,
     defaultName,
     save,
+    supported,
     submit,
     drop,
     dragOver,

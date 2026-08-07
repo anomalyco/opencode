@@ -8,7 +8,7 @@ import { createHomeSessionSearchController } from "./home/home-session-search-co
 import { createHomeSessionsController } from "./home/home-sessions-controller"
 import { HomeSessions } from "./home/home-sessions"
 
-export function NewHome() {
+export function Home() {
   const home = createHomeController()
   const projects = createHomeProjectsController(home)
   const sessions = createHomeSessionsController(home)

@@ -1,24 +1,16 @@
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
-import type { Event, PermissionRequest } from "@/types"
+import type { Event } from "@/types"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { type Accessor, batch, createMemo, createResource, onCleanup, onMount } from "solid-js"
-import { createApiForServer, createSdkForServer, type ServerApi } from "@/utils/server"
+import { type Accessor, batch, createMemo, onCleanup, onMount } from "solid-js"
+import { createApiForServer, type ServerApi } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
 import { ServerConnection, useServer } from "./server"
 import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerScope } from "@/utils/server-scope"
-import { detectServerProtocol, type ServerProtocol } from "@/utils/server-protocol"
-import {
-  createCompatibleApi,
-  createLegacyCapabilities,
-  type CompatibleApi,
-  type LegacyCapabilities,
-} from "@/utils/server-compat"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 
 const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
@@ -32,44 +24,10 @@ type CurrentDelta = Extract<
 >
 
 export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
-  if (event.type === "permission.asked") {
-    return {
-      id: event.id,
-      type: "permission.asked",
-      properties: {
-        id: event.data.id,
-        sessionID: event.data.sessionID,
-        permission: event.data.action,
-        patterns: event.data.resources,
-        always: event.data.save ?? [],
-        metadata: event.data.metadata ?? {},
-        tool:
-          event.data.source?.type === "tool"
-            ? { messageID: event.data.source.messageID, callID: event.data.source.id }
-            : undefined,
-      } satisfies PermissionRequest,
-      current: event,
-    }
-  }
   return { id: event.id, type: event.type, properties: event.data, current: event } as ServerEvent
 }
 
-const coalescedKey = (event: QueuedServerEvent) => {
-  if (event.payload.type === "lsp.updated") return `lsp.updated:${event.directory}`
-  if (event.payload.type === "message.part.updated") {
-    const part = event.payload.properties.part
-    return `message.part.updated:${event.directory}:${part.messageID}:${part.id}`
-  }
-  return undefined
-}
-
 export function enqueueServerEvent(queue: QueuedServerEvent[], event: QueuedServerEvent) {
-  const key = coalescedKey(event)
-  const previous = queue[queue.length - 1]
-  if (key && previous && coalescedKey(previous) === key) {
-    queue[queue.length - 1] = event
-    return false
-  }
   queue.push(event)
   return true
 }
@@ -105,33 +63,7 @@ export function coalesceServerEvents(events: QueuedServerEvent[]) {
       output.push(event)
       return
     }
-    if (event.payload.type !== "message.part.delta") {
-      output.push(event)
-      return
-    }
-    const props = event.payload.properties
-    const previous = output[output.length - 1]
-    if (
-      !previous ||
-      previous.payload.type !== "message.part.delta" ||
-      previous.directory !== event.directory ||
-      previous.payload.properties.messageID !== props.messageID ||
-      previous.payload.properties.partID !== props.partID ||
-      previous.payload.properties.field !== props.field
-    ) {
-      output.push({
-        directory: event.directory,
-        payload: { ...event.payload, properties: { ...props } },
-      })
-      return
-    }
-    output[output.length - 1] = {
-      directory: event.directory,
-      payload: {
-        ...event.payload,
-        properties: { ...props, delta: previous.payload.properties.delta + props.delta },
-      },
-    }
+    output.push(event)
   })
   return output
 }
@@ -166,21 +98,13 @@ type ServerEventEmitter = ReturnType<typeof createGlobalEmitter<{ [key: string]:
 type ServerSDKBase = {
   server: ServerConnection.Any
   scope: ServerScope
-  protocol: Promise<ServerProtocol>
-  protocolKind: Accessor<ServerProtocol | undefined>
   url: string
-  client: ReturnType<typeof createSdkForServer>
-  api: CompatibleApi
-  legacy: LegacyCapabilities
-  currentApi: ServerApi
+  api: ServerApi
   event: {
     on: ServerEventEmitter["on"]
     listen: ServerEventEmitter["listen"]
     start: () => Promise<void> | undefined
   }
-  createClient: (
-    opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">,
-  ) => ReturnType<typeof createSdkForServer>
 }
 
 function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope): ServerSDKBase {
@@ -199,11 +123,6 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   })()
 
   const eventApi = createApiForServer({ server: server.http, fetch: eventFetch })
-  const protocol = detectServerProtocol(server.http, platform.fetch ?? globalThis.fetch)
-  const [protocolKind] = createResource(
-    () => protocol,
-    (value) => value,
-  )
   const emitter = createGlobalEmitter<{
     [key: string]: ServerEvent
   }>()
@@ -321,66 +240,23 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     flush()
   })
 
-  const sdk = createSdkForServer({
-    server: server.http,
-    fetch: platform.fetch,
-    throwOnError: true,
-  })
-  const currentApi: ServerApi = createApiForServer({ server: server.http, fetch: platform.fetch })
-  const legacy = (directory?: string) =>
-    createSdkForServer({
-      server: server.http,
-      fetch: platform.fetch,
-      throwOnError: true,
-      directory,
-    })
-  const api = createCompatibleApi({ protocol, current: currentApi, legacy })
-  const capabilities = createLegacyCapabilities({ protocol, current: currentApi, legacy })
+  const api = createApiForServer({ server: server.http, fetch: platform.fetch })
 
   return {
     server,
     scope,
-    protocol,
-    protocolKind,
     url: server.http.url,
-    client: sdk,
     api,
-    legacy: capabilities,
-    currentApi,
     event: {
       on: emitter.on.bind(emitter),
       listen: emitter.listen.bind(emitter),
       start,
     },
-    createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {
-      return createSdkForServer({
-        server: server.http,
-        fetch: platform.fetch,
-        ...opts,
-      })
-    },
   }
 }
 
-type SDKEventMap = {
-  [key in Event["type"]]: Extract<ServerEvent, { type: key }>
-}
-
-export type DirectorySDK = {
-  scope: ServerScope
-  protocol: Promise<ServerProtocol>
-  directory: string
-  client: OpencodeClient
-  currentApi: ServerApi
-  api: CompatibleApi
-  legacy: LegacyCapabilities
-  event: ReturnType<typeof createGlobalEmitter<SDKEventMap>>
-  readonly url: string
-  createClient: ServerSDKBase["createClient"]
-}
-
 export type ServerSDK = ServerSDKBase & {
-  ensureDirSdkContext: (directory: string) => DirectorySDK
+  ensureDirSdkContext: (directory: string) => ReturnType<typeof createDirSdkContext>
 }
 
 export function createServerSdkContext(server: ServerConnection.Any, scope: ServerScope): ServerSDK {
@@ -407,17 +283,19 @@ export const { use: useServerSDK, provider: ServerSDKProvider } = createSimpleCo
   },
 })
 
-export function useServerProtocol() {
-  const serverSDK = useServerSDK()
-  return createMemo(() => serverSDK().protocolKind())
+type SDKEventMap = {
+  [key in Event["type"]]: Extract<ServerEvent, { type: key }>
+}
+
+export type DirectorySDK = {
+  scope: ServerScope
+  directory: string
+  api: ServerApi
+  event: ReturnType<typeof createGlobalEmitter<SDKEventMap>>
+  readonly url: string
 }
 
 function createDirSdkContext(directory: string, serverSDK: ServerSDKBase): DirectorySDK {
-  const client = serverSDK.createClient({
-    directory,
-    throwOnError: true,
-  })
-
   const emitter = createGlobalEmitter<SDKEventMap>()
 
   const unsub = serverSDK.event.on(directory, (event) => {
@@ -427,28 +305,11 @@ function createDirSdkContext(directory: string, serverSDK: ServerSDKBase): Direc
 
   return {
     scope: serverSDK.scope,
-    protocol: serverSDK.protocol,
     directory,
-    client,
-    currentApi: serverSDK.currentApi,
-    api: createCompatibleApi({
-      protocol: serverSDK.protocol,
-      current: serverSDK.currentApi,
-      legacy: (next) => serverSDK.createClient({ directory: next ?? directory, throwOnError: true }),
-      directory,
-    }),
-    legacy: createLegacyCapabilities({
-      protocol: serverSDK.protocol,
-      current: serverSDK.currentApi,
-      legacy: (next) => serverSDK.createClient({ directory: next ?? directory, throwOnError: true }),
-      directory,
-    }),
+    api: serverSDK.api,
     event: emitter,
     get url() {
       return serverSDK.url
-    },
-    createClient(opts: Parameters<typeof serverSDK.createClient>[0]) {
-      return serverSDK.createClient(opts)
     },
   }
 }

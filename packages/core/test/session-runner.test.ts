@@ -49,9 +49,10 @@ import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { QuestionTool } from "@opencode-ai/core/tool/plugin/question"
 import { Agent } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
-import { ConfigCompaction } from "@opencode-ai/core/config/compaction"
+import { Document, Info } from "@opencode-ai/schema/config"
+import { ConfigCompaction } from "@opencode-ai/schema/config/compaction"
 import { Tool } from "@opencode-ai/core/tool"
-import type { Info } from "@opencode-ai/schema/tool"
+import type { Info as ToolInfo } from "@opencode-ai/schema/tool"
 import {
   InstructionStateTable,
   SessionPendingTable,
@@ -228,7 +229,7 @@ const permission = Layer.succeed(
     list: () => Effect.die("unused"),
   }),
 )
-const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string, Info>>, options?: Tool.Options) =>
+const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string, ToolInfo>>, options?: Tool.Options) =>
   registry.transform((draft) =>
     Object.entries(tools).forEach(([name, tool]) => draft.add({ ...tool, name, options: options ?? tool.options })),
   )
@@ -334,9 +335,9 @@ const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
 })
 const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const config = Config.testLayer([
-  new Config.Document({
+  new Document({
     type: "document",
-    info: new Config.Info({
+    info: new Info({
       compaction: new ConfigCompaction.Info({
         buffer: 3_000,
         keep: new ConfigCompaction.Keep({ tokens: 1_000 }),
@@ -423,6 +424,7 @@ const it = testEffect(
       Session.node,
     ]),
     [
+      [Bus.node, Bus.configured({ persist: true })],
       [LayerNodePlatform.llmClient, client],
       [Permission.node, permission],
       [Catalog.node, promptCatalog],
@@ -522,6 +524,9 @@ const incompleteStream = () =>
       message: "The provider response ended unexpectedly.",
     }),
   })
+
+const INCOMPLETE_STREAM_CONTINUATION =
+  "The previous response was interrupted. Continue from where you left off without repeating completed content."
 
 const invalidRequest = () =>
   new AIError({
@@ -4006,10 +4011,11 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("does not retry eligible failures after observable output", () =>
+  it.effect("continues an incomplete stream after observable text", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const failure = incompleteStream()
+      yield* admit(session, "Continue partial output")
       yield* TestLLM.push(
         TestLLM.failAfter(
           failure,
@@ -4018,19 +4024,194 @@ describe("SessionRunnerLLM", () => {
           LLMEvent.textDelta({ id: "partial-rate-limit", text: "Partial" }),
         ),
       )
+      yield* TestLLM.push(TestLLM.text(" continuation", "continued-text"))
 
-      expect(yield* runPrompt(session, "Do not replay partial output").pipe(Effect.flip)).toBe(failure)
-      expect(requests).toHaveLength(1)
-      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
-      expect(yield* session.context(sessionID)).toMatchObject([
-        { type: "user" },
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      yield* TestClock.adjust("2 seconds")
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.messages.at(-2)).toMatchObject({
+        role: "assistant",
+        content: [{ type: "text", text: "Partial" }],
+      })
+      expect(requests[1]?.messages.at(-1)).toMatchObject({
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: INCOMPLETE_STREAM_CONTINUATION,
+          },
+        ],
+      })
+      const context = yield* session.context(sessionID)
+      expect(context).toMatchObject([
+        { type: "user", text: "Continue partial output" },
         {
           type: "assistant",
           finish: "error",
           error: { type: "provider.invalid-output" },
           content: [{ type: "text", text: "Partial" }],
         },
+        {
+          type: "synthetic",
+          text: INCOMPLETE_STREAM_CONTINUATION,
+        },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: " continuation" }] },
       ])
+      const assistants = context.filter((message) => message.type === "assistant")
+      expect(new Set(assistants.map((message) => message.id)).size).toBe(2)
+      expect(context.find((message) => message.type === "synthetic")?.description).toBeUndefined()
+      expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
+      yield* replaySessionProjection(sessionID)
+      expect(yield* session.context(sessionID)).toMatchObject(context)
+    }),
+  )
+
+  it.effect("lowers interrupted reasoning before continuing an incomplete stream", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Continue interrupted reasoning")
+      yield* TestLLM.push(
+        TestLLM.failAfter(
+          incompleteStream(),
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.reasoningStart({ id: "partial-reasoning" }),
+          LLMEvent.reasoningDelta({ id: "partial-reasoning", text: "Partial thought" }),
+        ),
+      )
+      yield* TestLLM.push(TestLLM.text("Recovered", "reasoning-recovery"))
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      yield* TestClock.adjust("2 seconds")
+      yield* Fiber.join(run)
+
+      expect(requests[1]?.messages.at(-2)).toMatchObject({
+        role: "assistant",
+        content: [{ type: "text", text: "Partial thought" }],
+      })
+      expect(requests[1]?.messages.at(-1)).toMatchObject({
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: INCOMPLETE_STREAM_CONTINUATION,
+          },
+        ],
+      })
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        { type: "assistant", finish: "error", content: [{ type: "reasoning", text: "Partial thought" }] },
+        { type: "synthetic" },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("continues an incomplete stream after settling a local tool", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Continue after tool")
+      yield* TestLLM.push(
+        TestLLM.failAfter(
+          incompleteStream(),
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-before-close", name: "echo", input: { text: "settled" } }),
+        ),
+      )
+      yield* TestLLM.push(TestLLM.text("Recovered", "tool-recovery"))
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      while (!(yield* recordedEventTypes(sessionID)).includes("session.retry.scheduled.1")) yield* Effect.yieldNow
+      yield* TestClock.adjust("2 seconds")
+      yield* Fiber.join(run)
+
+      expect(executions).toEqual(["settled"])
+      expect(requests[1]?.messages.slice(-3)).toMatchObject([
+        {
+          role: "assistant",
+          content: [{ type: "tool-call", id: "call-before-close", name: "echo", input: { text: "settled" } }],
+        },
+        { role: "tool", content: [{ type: "tool-result", id: "call-before-close" }] },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: INCOMPLETE_STREAM_CONTINUATION,
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("continues an incomplete stream after settling a local tool defect", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Continue after tool defect")
+      yield* TestLLM.push(
+        TestLLM.failAfter(
+          incompleteStream(),
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-defect-before-close", name: "defect", input: {} }),
+        ),
+      )
+      yield* TestLLM.push(TestLLM.text("Recovered", "tool-defect-recovery"))
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      while (!(yield* recordedEventTypes(sessionID)).includes("session.retry.scheduled.1")) yield* Effect.yieldNow
+      yield* TestClock.adjust("2 seconds")
+      yield* Fiber.join(run)
+
+      expect(messageRoles(requests[1])).toEqual(["user", "assistant", "tool", "user"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-defect-before-close",
+              state: { status: "error", error: { type: "unknown", message: "unexpected tool defect" } },
+            },
+          ],
+        },
+        { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("stops incomplete stream continuations after five total attempts", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Exhaust partial continuations")
+      const failure = incompleteStream()
+      yield* TestLLM.always(
+        TestLLM.failAfter(
+          failure,
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "partial-exhaustion" }),
+          LLMEvent.textDelta({ id: "partial-exhaustion", text: "Partial" }),
+        ),
+      )
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestLLM.wait(1)
+      for (const [index, delay] of [2_000, 4_000, 8_000, 16_000].entries()) {
+        yield* TestClock.adjust(delay)
+        yield* TestLLM.wait(index + 2)
+      }
+      expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
+      expect(requests).toHaveLength(5)
+      const context = yield* session.context(sessionID)
+      expect(context.filter((message) => message.type === "assistant")).toHaveLength(5)
+      expect(context.filter((message) => message.type === "synthetic")).toHaveLength(4)
     }),
   )
 

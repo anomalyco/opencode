@@ -191,10 +191,7 @@ export function createChildStoreManager(input: {
           const pathQuery = useQuery(() => ({ ...input.queryOptions.path(key), enabled: instanceQueriesEnabled() }))
           const mcpQuery = useQuery(() => ({ ...input.queryOptions.mcp(key), enabled: mcpEnabled() }))
           const mcpResourceQuery = useQuery(() => ({ ...input.queryOptions.mcpResources(key), enabled: mcpEnabled() }))
-          const lspQuery = useQuery(() => {
-            const options = input.queryOptions.lsp(key)
-            return { ...options, enabled: options.enabled !== false && instanceQueriesEnabled() }
-          })
+          const lspQuery = useQuery(() => ({ ...input.queryOptions.lsp(key), enabled: instanceQueriesEnabled() }))
           const providerQuery = useQuery(() => ({
             ...input.queryOptions.providers(key),
             enabled: instanceQueriesEnabled(),

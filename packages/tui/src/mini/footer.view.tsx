@@ -34,6 +34,8 @@ import { Keymap } from "../context/keymap"
 import { modelInfo } from "./variant.shared"
 import { monoShortcut } from "./mono"
 import { stringWidth } from "../util/string-width"
+import { errorMessage } from "../util/error"
+import { createSingleFlight } from "../util/single-flight"
 
 import type {
   FooterPromptRoute,
@@ -46,6 +48,7 @@ import type {
   MiniSettingChange,
   MiniSettings,
   PermissionReply,
+  QueuedPromptAction,
   RunAgent,
   RunCommand,
   RunInput,
@@ -92,13 +95,14 @@ type RunFooterViewProps = {
   mono: boolean
   miniSettings: () => MiniSettings
   history?: () => RunPrompt[]
-  onSubmit: (input: RunPrompt) => boolean
+  onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onFormReply: (input: FormReply) => void | Promise<void>
   onFormCancel: (input: FormCancel) => void | Promise<void>
   onCycle: () => void
   onInterrupt: () => boolean
   onBackground?: () => void
+  onQueuedPromptAction?: (action: QueuedPromptAction, inputID: string) => Promise<void>
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onInputClear: () => void
   onExitRequest?: () => boolean
@@ -132,6 +136,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const [route, setRoute] = createSignal<FooterPromptRoute>({ type: "composer" })
   const [subagentMenuRows, setSubagentMenuRows] = createSignal(RUN_SUBAGENT_PANEL_ROWS)
   const queuedPrompts = createMemo(() => props.queuedPrompts?.() ?? [])
+  const queue = createMemo(() => queuedPrompts().filter((item) => item.delivery === "queue"))
   const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
   const prompt = createMemo(() => active().type === "prompt" && route().type === "composer")
   const selectingSubagent = createMemo(() => active().type === "prompt" && route().type === "subagent-menu")
@@ -229,7 +234,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     const details = [busy() ? "running" : "idle", `agent ${props.currentAgent()}`]
     if (current) details.push(variant ? `${current} ${variant}` : current)
     if (usage()) details.push(props.mono ? usage().replaceAll(" · ", " - ") : usage())
-    if (queuedPrompts().length > 0) details.push(`${queuedPrompts().length} pending`)
+    if (queue().length > 0) details.push(`${queue().length} queued`)
     if (activeTabs().length > 0) details.push(`${activeTabs().length} subagent${activeTabs().length === 1 ? "" : "s"}`)
     return details.join(props.mono ? " - " : " · ")
   })
@@ -309,13 +314,29 @@ export function RunFooterView(props: RunFooterViewProps) {
   }
 
   const openQueuedMenu = () => {
-    if (queuedPrompts().length === 0) return
+    if (queue().length === 0) return
     setRoute({ type: "queued-menu" })
     props.onSubagentSelect?.(undefined)
   }
 
   const closePanel = () => {
     setRoute({ type: "composer" })
+  }
+
+  const runQueuedAction = createSingleFlight<string>()
+  const queuedPromptAction = async (action: QueuedPromptAction, inputID: string) => {
+    const run = props.onQueuedPromptAction
+    if (!run) return false
+    const result = await runQueuedAction(inputID, async () => {
+      const error = await run(action, inputID).then(
+        () => undefined,
+        (error) => error,
+      )
+      if (!error) return true
+      props.onStatus(`failed to ${action === "cancel" ? "delete" : action} queued prompt: ${errorMessage(error)}`)
+      return false
+    })
+    return result ?? false
   }
 
   const openTab = (sessionID: string) => {
@@ -357,6 +378,8 @@ export function RunFooterView(props: RunFooterViewProps) {
     theme,
     mono: () => props.mono,
     history: props.history,
+    queuedPrompts: queue,
+    onQueuedPromptSteer: (inputID) => queuedPromptAction("steer", inputID),
     onSubmit: props.onSubmit,
     onCycle: props.onCycle,
     onInterrupt: props.onInterrupt,
@@ -451,13 +474,12 @@ export function RunFooterView(props: RunFooterViewProps) {
     if (foregroundSubagents() && backgroundShortcut()) {
       items.push({ key: backgroundShortcut(), label: "background" })
     }
-    if (queuedPrompts().length > 0 && queuedShortcut()) {
-      items.push({ key: queuedShortcut(), label: `${queuedPrompts().length} pending` })
+    if (queue().length > 0 && queuedShortcut()) {
+      items.push({ key: queuedShortcut(), label: `${queue().length} queued` })
     }
     if (activeTabs().length > 0 && subagentShortcut()) {
       items.push({ key: subagentShortcut(), label: "subagents" })
     }
-
     return items
   })
   const commandHint = createMemo(() => {
@@ -568,11 +590,11 @@ export function RunFooterView(props: RunFooterViewProps) {
   }))
 
   Keymap.createLayer(() => ({
-    enabled: active().type === "prompt" && route().type === "composer" && queuedPrompts().length > 0,
+    enabled: active().type === "prompt" && route().type === "composer" && queue().length > 0,
     commands: [
       {
         id: "session.queued_prompts",
-        title: "View pending work",
+        title: "View queued prompts",
         group: "Session",
         run: openQueuedMenu,
       },
@@ -630,7 +652,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
 
   createEffect(() => {
-    if (route().type !== "queued-menu" || queuedPrompts().length > 0) return
+    if (route().type !== "queued-menu" || queue().length > 0) return
     closePanel()
   })
 
@@ -734,8 +756,16 @@ export function RunFooterView(props: RunFooterViewProps) {
                         <Match when={selectingQueued()}>
                           <RunQueuedPromptSelectBody
                             theme={theme}
-                            prompts={queuedPrompts}
+                            prompts={queue}
                             onClose={closePanel}
+                            onSteer={(item) => {
+                              void queuedPromptAction("steer", item.messageID).then((steered) => {
+                                if (steered) closePanel()
+                              })
+                            }}
+                            onDelete={(item) => {
+                              void queuedPromptAction("cancel", item.messageID)
+                            }}
                             onRows={setSubagentMenuRows}
                             mono={props.mono}
                           />
@@ -745,7 +775,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             theme={theme}
                             commands={props.commands}
                             subagents={tabs}
-                            queued={queuedPrompts}
+                            queued={queue}
                             variants={props.variants}
                             variantCycle={variantCycle()}
                             onClose={closePanel}

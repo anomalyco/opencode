@@ -1,12 +1,15 @@
 import { getFilename } from "@opencode-ai/core/util/path"
-import type { AgentPartInput, FilePartInput, Part, TextPartInput } from "@/types"
+import type { AgentPart as MessageAgentPart, FilePart, Part, TextPart } from "@/types"
 import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
 
-type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
+type PromptRequestPart =
+  | (Omit<TextPart, "id" | "sessionID" | "messageID"> & { id: string })
+  | (Omit<FilePart, "id" | "sessionID" | "messageID"> & { id: string })
+  | (Omit<MessageAgentPart, "id" | "sessionID" | "messageID"> & { id: string })
 
 type ContextFile = {
   key: string

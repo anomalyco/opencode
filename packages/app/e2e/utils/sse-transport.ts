@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test"
 export type SseConnectionRecord = {
   id: number
   url: string
-  path: "/global/event" | "/event" | "/api/event"
+  path: "/api/event"
   headers: Record<string, string>
   openedAt: number
   endedAt?: number
@@ -174,10 +174,7 @@ export async function installSseTransport<T>(
       const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
         const url = new URL(request.url)
-        if (
-          url.origin !== server ||
-          (url.pathname !== "/global/event" && url.pathname !== "/event" && url.pathname !== "/api/event")
-        )
+        if (url.origin !== server || url.pathname !== "/api/event")
           return originalFetch(request)
 
         const id = ++nextConnectionID
@@ -193,18 +190,9 @@ export async function installSseTransport<T>(
             record.controller = controller
             connections.push(record)
             if (retry !== undefined) controller.enqueue(encoder.encode(`retry: ${retry}\n\n`))
-            if (url.pathname === "/api/event")
-              controller.enqueue(
-                encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
-              )
-            if (url.pathname === "/global/event")
-              controller.enqueue(
-                encoder.encode(
-                  frame({
-                    payload: { id: `evt_mock_connected_${id}`, type: "server.connected", properties: {} },
-                  }),
-                ),
-              )
+            controller.enqueue(
+              encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
+            )
             request.signal.addEventListener(
               "abort",
               () => {

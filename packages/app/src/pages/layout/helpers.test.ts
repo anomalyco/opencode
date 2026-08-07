@@ -6,7 +6,7 @@ import {
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
-import type { Session } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import {
   childSessionOnPath,
   closeHomeProject,
@@ -25,16 +25,18 @@ import { ServerConnection } from "@/context/server"
 
 const serverKey = ServerConnection.Key.make
 
-const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
+const session = (input: Partial<SessionInfo> & Pick<SessionInfo, "id"> & { directory: string }) =>
   ({
+    projectID: "project",
     title: "",
-    version: "v2",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     parentID: undefined,
-    messageCount: 0,
-    permissions: { session: {}, share: {} },
     time: { created: 0, updated: 0, archived: undefined },
     ...input,
-  }) as Session
+    location: { directory: input.directory },
+    directory: undefined,
+  }) as SessionInfo
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {

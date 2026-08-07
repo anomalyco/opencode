@@ -5,6 +5,7 @@ import { Effect, Layer, Schema, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Npm } from "@opencode-ai/util/npm"
+import { Document, Info } from "@opencode-ai/schema/config"
 import { Config } from "../src/config"
 import { Formatter } from "../src/formatter"
 import { Location } from "../src/location"
@@ -13,16 +14,16 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(Layer.empty)
-type ConfigInput = typeof Config.Info.Encoded
+type ConfigInput = typeof Info.Encoded
 
 function formatterLayer(directory: string, configured?: ConfigInput["formatter"]) {
   const entries =
     configured === undefined
       ? []
       : [
-          new Config.Document({
+          new Document({
             type: "document",
-            info: Schema.decodeUnknownSync(Config.Info)({ formatter: configured }),
+            info: Schema.decodeUnknownSync(Info)({ formatter: configured }),
           }),
         ]
   return AppNodeBuilder.build(Formatter.node, [

@@ -342,7 +342,7 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const key = trimPickerPath(directory)
     const existing = cache.get(key)
     if (existing) return existing
-    const request = args.sdk.currentApi.file
+    const request = args.sdk.api.file
       .list({ location: { directory: key } })
       .then((result) => result.data)
       .catch(() => [])
@@ -374,7 +374,7 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)
     if (!pathInput) {
-      const results = await args.sdk.currentApi.file
+      const results = await args.sdk.api.file
         .find({ location: { directory: input.directory }, query, type: "directory", limit: 50 })
         .then((result) => result.data.map((entry) => entry.path))
         .catch(() => [])

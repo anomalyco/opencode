@@ -340,7 +340,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           void removePersisted(target, platform)
 
           if (scope !== ServerScope.local) continue
-          const legacyKey = `${dir}/${entry.legacy}${session ? "/" + session : ""}.${entry.version}`
+          const legacyKey = `${dir}/${entry["legacy"]}${session ? "/" + session : ""}.${entry.version}`
           void removePersisted({ key: legacyKey }, platform)
         }
       }
@@ -572,17 +572,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
         const projectID = project.id
         void (async () => {
-          const sdk = serverSdk()
-          if ((await sdk.protocol) !== "v1") return
-          return sdk.legacy.project
-            .update({ projectID, directory: worktree, icon: { color } })
-            .then((response) => response.data)
-            .then((result) => {
-              if (!result) return
-              serverSync().set("project", (items) =>
-                items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
-              )
-            })
+          // TODO: Restore project color updates when the V2 client exposes a project update API.
+          void projectID
         })().catch(() => {
           if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
         })

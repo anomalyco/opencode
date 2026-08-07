@@ -7,7 +7,7 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bom } from "@opencode-ai/util/bom"
 
 export interface Target {
-  readonly canonical: string
+  readonly absolute: string
   readonly resource: string
 }
 
@@ -29,6 +29,10 @@ export interface WriteResult {
 }
 
 export interface Interface {
+  /** Serialize a complete read/prepare/write mutation transaction by resolved path. */
+  readonly withLock: (
+    targets: ReadonlyArray<string>,
+  ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, FSUtil.Error>
   /** Write text while retaining an existing UTF-8 BOM and emitting at most one BOM. */
   readonly writeTextPreservingBom: (input: TextWriteInput) => Effect.Effect<WriteResult, FSUtil.Error>
@@ -36,8 +40,11 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileMutation") {}
 
+/** Share transaction locks across Location graphs that address the same file. */
+const transactionLocks = KeyedMutex.makeUnsafe<string>()
+
 /**
- * Serialize file changes by canonical target. Conditional writes compare and
+ * Serialize file changes by absolute target. Conditional writes compare and
  * write under the same process-local lock so cooperating OpenCode mutations do
  * not overwrite changes made from the same stale content.
  */
@@ -46,14 +53,18 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const locks = KeyedMutex.makeUnsafe<string>()
+    const withLock: Interface["withLock"] = (targets) => (effect) =>
+      [...new Set(targets.map(FSUtil.resolve))]
+        .sort()
+        .reduceRight((result, target) => transactionLocks.withLock(target)(result), effect)
     const withTargetLock =
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        locks.withLock(target.canonical)(Effect.uninterruptible(effect))
+        locks.withLock(target.absolute)(Effect.uninterruptible(effect))
 
     const writeResult = (target: Target, existed: boolean): WriteResult => ({
       operation: "write",
-      target: target.canonical,
+      target: target.absolute,
       resource: target.resource,
       existed,
     })
@@ -61,8 +72,8 @@ const layer = Layer.effect(
     const write = Effect.fn("FileMutation.write")((input: WriteInput) =>
       withTargetLock(input.target)(
         Effect.gen(function* () {
-          const existed = yield* fs.exists(input.target.canonical)
-          yield* fs.writeWithDirs(input.target.canonical, input.content)
+          const existed = yield* fs.exists(input.target.absolute)
+          yield* fs.writeWithDirs(input.target.absolute, input.content)
           return writeResult(input.target, existed)
         }),
       ),
@@ -73,10 +84,10 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const next = Bom.split(input.content)
           const current = yield* fs
-            .readFile(input.target.canonical)
+            .readFile(input.target.absolute)
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
           yield* fs.writeWithDirs(
-            input.target.canonical,
+            input.target.absolute,
             Bom.join(next.text, Boolean(current && Bom.has(current)) || next.bom),
           )
           return writeResult(input.target, current !== undefined)
@@ -84,7 +95,7 @@ const layer = Layer.effect(
       ),
     )
 
-    return Service.of({ write, writeTextPreservingBom })
+    return Service.of({ withLock, write, writeTextPreservingBom })
   }),
 )
 

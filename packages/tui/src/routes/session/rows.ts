@@ -46,9 +46,14 @@ export function createSessionRows(sessionID: Accessor<string>) {
   function reduce() {
     const messages = data.session.message.list(sessionID())
     const inputs = new Set(data.session.input.list(sessionID()))
+    const pending = data.session.pending.list(sessionID())
+    const queued = new Set(
+      pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),
+    )
+    const visible = queued.size === 0 ? messages : messages.filter((message) => !queued.has(message.id))
     const boundary = revertBoundary()
     const rows = reduceSessionRows(
-      boundary ? messages.filter((message) => message.id < boundary) : messages,
+      boundary ? visible.filter((message) => message.id < boundary) : visible,
       inputs,
       turnTokens(),
     )
@@ -57,8 +62,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
     rows.splice(
       position === -1 ? rows.length : position,
       0,
-      ...data.session.pending
-        .list(sessionID())
+      ...pending
         .filter((item) => item.type === "compaction")
         .map((item): SessionRow => ({ type: "compaction-queued", inputID: item.id })),
     )
@@ -112,10 +116,11 @@ export function createSessionRows(sessionID: Accessor<string>) {
   createEffect(
     on(
       () =>
-        data.session.pending
-          .list(sessionID())
-          .filter((item) => item.type === "compaction")
-          .map((item) => item.id),
+        data.session.pending.list(sessionID()).flatMap((item) => {
+          if (item.type === "compaction") return [`${item.id}:compaction`]
+          if (item.type === "user" && item.delivery === "queue") return [`${item.id}:queue`]
+          return []
+        }),
       () => setRows(reconcile(reduce())),
       { defer: true },
     ),
@@ -196,7 +201,9 @@ export function createSessionRows(sessionID: Accessor<string>) {
 
   const queuedStart = (rows: SessionRow[]) => {
     const index = rows.findIndex(
-      (row) => row.type === "compaction-queued" || (row.type === "message" && isPending(row.messageID)),
+      (row) =>
+        row.type === "compaction-queued" ||
+        (row.type === "message" && isPending(row.messageID)),
     )
     return index === -1 ? rows.length : index
   }

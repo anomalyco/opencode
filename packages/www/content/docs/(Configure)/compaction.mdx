@@ -81,9 +81,8 @@ Add `compaction` to any [OpenCode configuration file](/config):
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": false,
     "keep": {
-      "tokens": 8000
+      "tokens": 15000
     },
     "buffer": 20000
   }
@@ -93,8 +92,7 @@ Add `compaction` to any [OpenCode configuration file](/config):
 | Field | Default | V2 behavior |
 | --- | ---: | --- |
 | `auto` | `true` | Runs the preflight context-size check. It does not disable manual compaction or one-shot provider-overflow recovery. |
-| `prune` | None | Accepted by the V2 schema, but currently has no runtime effect. V2 does not prune old tool outputs in place. |
-| `keep.tokens` | `8000` | Approximate number of tokens from the newest serialized conversation context to retain beside the summary. |
+| `keep.tokens` | `15000` | Approximate number of tokens from the newest serialized conversation context to retain beside the summary. |
 | `buffer` | `20000` | Safety reserve below an explicit input limit. Without one, it is the minimum context reserve and the model output allowance wins when larger. |
 
 `keep.tokens` and `buffer` accept non-negative integers. Larger `keep.tokens`
@@ -135,8 +133,6 @@ behavior.
 
 ## Current limitations
 
-- `prune` is reserved configuration; V1-style in-place tool-output pruning is
-  not implemented in V2.
 - Compaction requires a resolvable model with a positive catalog context limit.
   There is no separate compaction-model setting or fallback model.
 - Summary generation can fail if the summary prompt itself cannot fit beside

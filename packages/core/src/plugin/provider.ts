@@ -1,7 +1,7 @@
 import { AlibabaPlugin } from "./provider/alibaba"
 import { AmazonBedrockPlugin } from "./provider/amazon-bedrock"
 import { AnthropicPlugin } from "./provider/anthropic"
-import { AzureCognitiveServicesPlugin, AzurePlugin } from "./provider/azure"
+import { AzurePlugin } from "./provider/azure"
 import { CerebrasPlugin } from "./provider/cerebras"
 import { CloudflareAIGatewayPlugin } from "./provider/cloudflare-ai-gateway"
 import { CloudflareWorkersAIPlugin } from "./provider/cloudflare-workers-ai"
@@ -11,7 +11,7 @@ import { DynamicProviderPlugin } from "./provider/dynamic"
 import { GatewayPlugin } from "./provider/gateway"
 import { GithubCopilotPlugin } from "./provider/github-copilot"
 import { GitLabPlugin } from "./provider/gitlab"
-import { GoogleVertexAnthropicPlugin, GoogleVertexPlugin } from "./provider/google-vertex"
+import { GoogleVertexPlugin } from "./provider/google-vertex"
 import { GroqPlugin } from "./provider/groq"
 import { KiloPlugin } from "./provider/kilo"
 import { LLMGatewayPlugin } from "./provider/llmgateway"
@@ -35,7 +35,6 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   AlibabaPlugin,
   AmazonBedrockPlugin,
   AnthropicPlugin,
-  AzureCognitiveServicesPlugin,
   AzurePlugin,
   CerebrasPlugin,
   CloudflareAIGatewayPlugin,
@@ -45,7 +44,6 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   GatewayPlugin,
   GithubCopilotPlugin,
   GitLabPlugin,
-  GoogleVertexAnthropicPlugin,
   GoogleVertexPlugin,
   GroqPlugin,
   KiloPlugin,

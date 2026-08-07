@@ -221,18 +221,18 @@ export const OpenAIPlugin = define({
           }
           draft.cost = []
           // Match Codex CLI so context consumption and subscription usage stay consistent between clients.
-          draft.limit = { ...draft.limit, context: 272_000, input: 272_000 }
+          draft.limit = { ...draft.limit, context: 400_000, input: 272_000 }
         })
       }
     })
-    yield* ctx.session.hook("http", (evt) =>
-      evt.use((request, next) => {
-        if (!chatgpt || evt.model.providerID !== Provider.ID.openai) return next(request)
-        const url = new URL(request.url)
-        request.headers.set("originator", "opencode")
-        request.headers.set("session-id", evt.sessionID)
-        if (url.origin !== "https://api.openai.com") return next(request)
-        return next(new Request(`${codexBaseURL}${url.pathname.replace(/^\/v1/, "")}${url.search}`, request))
+    yield* ctx.session.hook("http.request", (evt) =>
+      Effect.sync(() => {
+        if (!chatgpt || evt.model.providerID !== Provider.ID.openai) return
+        const url = new URL(evt.request.url)
+        evt.request.headers.set("originator", "opencode")
+        evt.request.headers.set("session-id", evt.sessionID)
+        if (url.origin !== "https://api.openai.com") return
+        evt.request = new Request(`${codexBaseURL}${url.pathname.replace(/^\/v1/, "")}${url.search}`, evt.request)
       }),
     )
 

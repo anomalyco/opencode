@@ -56,6 +56,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
   const project = pipe(
     Match.type<SessionEvent.DurableEvent>(),
     Match.discriminatorsExhaustive("type")({
+      "session.created": () => Effect.void,
       "session.usage.recorded": () => Effect.void,
       "session.agent.selected": (event) => {
         return adapter.appendMessage(
@@ -89,6 +90,9 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.forked": () => Effect.void,
       "session.input.promoted": () => Effect.void,
       "session.input.admitted": () => Effect.void,
+      "session.input.cancelled": () => Effect.void,
+      "session.input.steered": () => Effect.void,
+      "session.input.queued": () => Effect.void,
       "session.execution.started": () => Effect.void,
       "session.execution.succeeded": () => clearCurrentRetry,
       "session.execution.failed": () => clearCurrentRetry,

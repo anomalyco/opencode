@@ -1,10 +1,8 @@
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import type { ServerConnection } from "@/context/server"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 
-type HomeSession = {
-  id: string
-  directory: string
-}
+type HomeSession = Pick<SessionInfo, "id" | "location">
 
 export async function archiveHomeSession(input: {
   server: ServerConnection.Key
@@ -19,7 +17,7 @@ export async function archiveHomeSession(input: {
       input.remove()
       notifySessionTabsRemoved({
         server: input.server,
-        directory: input.session.directory,
+        directory: input.session.location.directory,
         sessionIDs: [input.session.id],
       })
     })

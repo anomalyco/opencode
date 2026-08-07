@@ -1,8 +1,8 @@
-import type { SnapshotFileDiff } from "@/types"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { PartGroup } from "@opencode-ai/session-ui/message-part"
 import { Data, Equal } from "effect"
 
-export type SummaryDiff = SnapshotFileDiff & { file: string }
+export type SummaryDiff = FileDiffInfo
 
 export namespace TimelineRow {
   export class TurnGap extends Data.TaggedClass("TurnGap")<{

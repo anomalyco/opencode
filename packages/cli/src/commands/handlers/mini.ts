@@ -10,7 +10,11 @@ export default Runtime.handler(Commands.commands.mini, (input) =>
     const { runMini, validateMiniTerminal } = yield* Effect.promise(() => import("../../mini"))
     yield* Effect.promise(async () => validateMiniTerminal())
     const serverURL = Option.getOrUndefined(input.server)
-    const server = yield* ServerConnection.resolve({ server: serverURL, standalone: input.standalone })
+    const server = yield* ServerConnection.resolve({
+      server: serverURL,
+      standalone: input.standalone,
+      mismatch: "replace",
+    })
     const config = yield* Config.Service
     const resolved = resolve(yield* config.get(), { terminalSuspend: process.platform !== "win32" })
     const fileSystem = yield* FileSystem.FileSystem

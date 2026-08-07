@@ -14,7 +14,8 @@ function isWindowsStoragePath(input: string) {
 
 function absolute(input: string) {
   const result = storagePath(input)
-  if (!nodePath.posix.isAbsolute(result) && !(process.platform === "win32" && isWindowsStoragePath(result))) {
+  // Persisted projects and sessions can move between operating systems during migration.
+  if (!nodePath.posix.isAbsolute(result) && !isWindowsStoragePath(result)) {
     throw new Error(`Path is not absolute: ${input}`)
   }
   return result

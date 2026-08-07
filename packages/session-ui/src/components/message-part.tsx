@@ -23,7 +23,6 @@ import {
   Message as MessageType,
   Part as PartType,
   ReasoningPart,
-  Session,
   TextPart,
   ToolPart,
   UserMessage,
@@ -31,7 +30,7 @@ import {
   QuestionAnswer,
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
-import { useData } from "../context"
+import { type SessionSummary, useData } from "../context"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
@@ -463,6 +462,7 @@ function newLayout() {
 function webSearchProviderLabel(provider: unknown) {
   if (provider === "parallel") return "Parallel Web Search"
   if (provider === "exa") return "Exa Web Search"
+  if (provider === "firecrawl") return "Firecrawl Web Search"
   return "Web Search"
 }
 
@@ -601,7 +601,7 @@ function currentSession(path: string) {
 function taskSession(
   input: Record<string, any>,
   path: string,
-  sessions: Session[] | undefined,
+  sessions: SessionSummary[] | undefined,
   agents?: readonly { name: string; color?: string }[],
 ) {
   const parentID = currentSession(path)
@@ -610,8 +610,8 @@ function taskSession(
   const agent = taskAgent(input.subagent_type, agents).name
   return (sessions ?? [])
     .filter((session) => session.parentID === parentID && !session.time?.archived)
-    .filter((session) => (description ? session.title.startsWith(description) : true))
-    .filter((session) => (agent ? session.title.includes(`@${agent}`) : true))
+    .filter((session) => (description ? session.title?.startsWith(description) : true))
+    .filter((session) => (agent ? session.title?.includes(`@${agent}`) : true))
     .sort((a, b) => (b.time.created ?? 0) - (a.time.created ?? 0))[0]?.id
 }
 

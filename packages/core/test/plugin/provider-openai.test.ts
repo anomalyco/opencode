@@ -12,7 +12,6 @@ import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { OpenAIPlugin } from "@opencode-ai/core/plugin/provider/openai"
 import { Provider } from "@opencode-ai/core/provider"
-import type { SessionHttpHandler } from "@opencode-ai/plugin/effect/session"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -31,26 +30,13 @@ function required<T>(value: T | undefined): T {
 }
 
 const http = Effect.fn(function* (providerID: Provider.ID, url: string) {
-  const middlewares: Parameters<PluginHooks.Domains["session"]["http"]["use"]>[0][] = []
-  yield* (yield* PluginHooks.Service).trigger("session", "http", {
+  const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
     sessionID: Session.ID.make("ses_test"),
     agent: Agent.ID.make("build"),
     model: Model.Ref.make({ providerID, id: Model.ID.make("gpt-5.5") }),
-    use: (item) =>
-      Effect.sync(() => {
-        middlewares.push(item)
-      }),
+    request: new Request(url, { method: "POST", body: "{}" }),
   })
-  const request = middlewares.reduce<SessionHttpHandler>(
-    (next, item) => (input: Request) => item(input, next),
-    (input: Request) => {
-      const headers = new Headers(input.headers)
-      headers.set("x-seen-url", input.url)
-      return Effect.succeed(new Response(null, { headers }))
-    },
-  )
-  const response = yield* request(new Request(url, { method: "POST", body: "{}" }))
-  return { url: response.headers.get("x-seen-url"), headers: Object.fromEntries(response.headers.entries()) }
+  return { url: event.request.url, headers: Object.fromEntries(event.request.headers.entries()) }
 })
 
 describe("OpenAIPlugin", () => {
@@ -140,7 +126,7 @@ describe("OpenAIPlugin", () => {
       const eligible = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
       expect(eligible.package).toBe("@opencode-ai/ai/providers/openai")
       expect(eligible.cost).toEqual([])
-      expect(eligible.limit).toEqual({ context: 272_000, input: 272_000, output: 128_000 })
+      expect(eligible.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
       expect(eligible.enabled).toBe(true)
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.5-pro"))).enabled).toBe(
         false,
@@ -149,14 +135,14 @@ describe("OpenAIPlugin", () => {
         false,
       )
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.4"))).limit).toEqual({
-        context: 272_000,
+        context: 400_000,
         input: 272_000,
         output: 64_000,
       })
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.6"))).enabled).toBe(false)
       const gpt56 = required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-5.6-sol")))
       expect(gpt56.enabled).toBe(true)
-      expect(gpt56.limit).toEqual({ context: 272_000, input: 272_000, output: 128_000 })
+      expect(gpt56.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
       expect(required(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(false)
     }),
   )

@@ -3,31 +3,6 @@ import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import { normalizeSessionMessages } from "./session-message"
 
 describe("normalizeSessionMessages", () => {
-  test("keeps attachments without inventing an empty text part", () => {
-    const source = [
-      {
-        id: "msg_1",
-        type: "user",
-        text: "",
-        files: [
-          {
-            data: "aGVsbG8=",
-            mime: "text/plain",
-            name: "note.txt",
-            source: { type: "inline" },
-          },
-        ],
-        agents: [{ name: "review" }],
-        time: { created: 1 },
-      },
-    ] satisfies SessionMessageInfo[]
-
-    const result = normalizeSessionMessages("ses_1", source)
-
-    expect(result.messages).toHaveLength(1)
-    expect(result.parts.get("msg_1")?.map((part) => part.type)).toEqual(["file", "agent"])
-  })
-
   test("projects current turns into stable legacy rendering records", () => {
     const source = [
       { id: "msg_1", type: "agent-switched", agent: "build", time: { created: 1 } },

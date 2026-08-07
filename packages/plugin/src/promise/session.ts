@@ -15,23 +15,25 @@ export interface SessionContext {
   tools: Record<string, { description: string; input: JsonSchema.JsonSchema }>
 }
 
-export interface SessionHttp {
+export interface SessionHttpRequest {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly model: Model.Ref
-  readonly use: (middleware: SessionHttpMiddleware) => void
+  request: Request
 }
 
-export type SessionHttpHandler = (request: Request) => Promise<Response>
-
-export type SessionHttpMiddleware = (
-  request: Request,
-  next: SessionHttpHandler,
-) => Promise<Response> | Response
+export interface SessionHttpResponse {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly request: Request
+  response: Response
+}
 
 export interface SessionHooks {
   readonly context: SessionContext
-  readonly http: SessionHttp
+  readonly "http.request": SessionHttpRequest
+  readonly "http.response": SessionHttpResponse
 }
 
 export type SessionDomain = Pick<

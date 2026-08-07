@@ -47,9 +47,16 @@ export const ReasoningField: Schema.Codec<ReasoningField> = Schema.Union([
   Schema.String,
 ]).annotate({ identifier: "Model.ReasoningField" })
 
+export const MaxTokensField = Schema.Literals(["max_completion_tokens", "max_tokens"]).annotate({
+  identifier: "Model.MaxTokensField",
+})
+export type MaxTokensField = typeof MaxTokensField.Type
+
 export interface Compatibility extends Schema.Schema.Type<typeof Compatibility> {}
 export const Compatibility = Schema.Struct({
   reasoningField: ReasoningField.pipe(optional),
+  maxTokensField: MaxTokensField.pipe(optional),
+  requireFinishReason: Schema.Boolean.pipe(optional),
 }).annotate({ identifier: "Model.Compatibility" })
 
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}

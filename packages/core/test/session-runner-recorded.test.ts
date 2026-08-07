@@ -159,6 +159,7 @@ const testLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
       Session.node,
     ]),
     [
+      [Bus.node, Bus.configured({ persist: true })],
       [LayerNodePlatform.llmClient, llmClient],
       [Permission.node, permission],
       [Catalog.node, promptCatalog],
@@ -254,6 +255,7 @@ describe("SessionRunnerLLM recorded", () => {
 describe("SessionModelRequest HTTP bridge", () => {
   const bodies: Uint8Array[] = []
   const methods: string[] = []
+  const headers: Array<string | undefined> = []
   const response = [
     'data: {"id":"chatcmpl_test","object":"chat.completion.chunk","created":0,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"role":"assistant","content":"Hello!"},"finish_reason":null}]}',
     'data: {"id":"chatcmpl_test","object":"chat.completion.chunk","created":0,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
@@ -267,6 +269,7 @@ describe("SessionModelRequest HTTP bridge", () => {
         if (request.body._tag !== "Uint8Array") throw new Error(`Unexpected request body: ${request.body._tag}`)
         methods.push(request.method)
         bodies.push(request.body.body.slice())
+        headers.push(request.headers["x-hook"])
         return HttpClientResponse.fromWeb(
           request,
           new Response(response, { headers: { "content-type": "text/event-stream" } }),
@@ -274,14 +277,16 @@ describe("SessionModelRequest HTTP bridge", () => {
       }),
     ),
   )
-  const retryIt = testEffect(
+  const httpIt = testEffect(
     testLayer(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer.pipe(Layer.provide(transport))))),
   )
 
-  retryIt.effect("lets an Effect plugin send the same POST Request twice", () =>
+  httpIt.effect("runs Effect HTTP request and response hooks around one provider request", () =>
     Effect.gen(function* () {
       bodies.length = 0
       methods.length = 0
+      headers.length = 0
+      const seen: string[] = []
       const agents = yield* Agent.Service
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
@@ -296,13 +301,20 @@ describe("SessionModelRequest HTTP bridge", () => {
         catalog: catalogHost(catalog),
         session: { hook: (name, callback) => hooks.register("session", name, callback) },
       })
-      yield* pluginHost.session.hook("http", (event) =>
-        event.use((request, next) =>
-          Effect.gen(function* () {
-            yield* next(request).pipe(Effect.flatMap((response) => Effect.promise(() => response.text())))
-            return yield* next(request)
-          }),
-        ),
+      yield* pluginHost.session.hook("http.request", (event) =>
+        Effect.sync(() => {
+          seen.push("request")
+          event.request.headers.set("x-hook", "effect")
+        }),
+      )
+      yield* pluginHost.session.hook("http.response", (event) =>
+        Effect.gen(function* () {
+          seen.push(`response:${event.response.status}:${event.request.headers.get("x-hook")}`)
+          event.response = new Response(
+            (yield* Effect.promise(() => event.response.text())).replace("Hello!", "Hooked!"),
+            event.response,
+          )
+        }),
       )
       yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
       const { db } = yield* Database.Service
@@ -330,10 +342,15 @@ describe("SessionModelRequest HTTP bridge", () => {
 
       yield* session.resume(retrySessionID)
 
-      expect(methods).toEqual(["POST", "POST"])
-      expect(bodies).toHaveLength(2)
+      expect(methods).toEqual(["POST"])
+      expect(headers).toEqual(["effect"])
+      expect(seen).toEqual(["request", "response:200:effect"])
+      expect(bodies).toHaveLength(1)
       expect(bodies[0]?.byteLength).toBeGreaterThan(0)
-      expect(bodies[1]).toEqual(bodies[0])
+      expect((yield* session.context(retrySessionID))[1]).toMatchObject({
+        type: "assistant",
+        content: [{ type: "text", text: "Hooked!" }],
+      })
     }),
   )
 })

@@ -213,7 +213,7 @@ const layer = Layer.effect(
           const provider = record.provider
 
           // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
-          if (providerID === Provider.ID.azure || providerID === Provider.ID.make("azure-cognitive-services")) {
+          if (providerID === Provider.ID.azure) {
             return
           }
 

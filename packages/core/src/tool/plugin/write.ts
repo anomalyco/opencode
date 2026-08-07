@@ -54,59 +54,52 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((draft) =>
-        draft.add(
-          ({
-              name,
-              options: { codemode: false, permission: "edit" },
-              description:
-                "Writes a file to the local filesystem, overwriting if one exists.\n\nMissing parent directories are created automatically.\n\nUse this tool to create new files or overwrite existing files. For partial changes, use the edit tool instead.",
-              input: Input,
-              output: Output,
-              execute: (input, context) =>
-                Effect.gen(function* () {
-                  const source = {
-                    type: "tool" as const,
-                    messageID: context.messageID,
-                    id: context.id,
-                  }
-                  const target = yield* mutation.resolve({ path: input.path, kind: "file" })
-                  const external = target.externalDirectory
-                  if (external)
-                    yield* permission.assert({
-                      ...LocationMutation.externalDirectoryPermission(external),
-                      sessionID: context.sessionID,
-                      agent: context.agent,
-                      source,
-                    })
-                  const current = yield* Bom.readFile(fs, target.canonical).pipe(
-                    Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
-                  )
-                  const next = Bom.split(input.content)
-                  const preview = fileDiff(
-                    target.resource,
-                    current?.text ?? "",
-                    next.text,
-                    current ? "modified" : "added",
-                  )
-                  yield* permission.assert({
-                    action: "edit",
-                    resources: [target.resource],
-                    save: ["*"],
-                    metadata: { files: [preview] },
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source,
-                  })
-                  const result = yield* files.writeTextPreservingBom({ target, content: input.content })
-                  const bom = (yield* Bom.readFile(fs, target.canonical)).bom
-                  if (yield* formatter.file(target.canonical)) yield* Bom.syncFile(fs, target.canonical, bom)
-                  return result
-                }).pipe(
-                  Effect.map((output) => ({ output, content: toModelOutput(output) })),
-                  Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
-                ),
-            }),
-        ),
+        draft.add({
+          name,
+          options: { codemode: false, permission: "edit" },
+          description:
+            "Writes a file to the local filesystem, overwriting if one exists.\n\nMissing parent directories are created automatically.\n\nUse this tool to create new files or overwrite existing files. For partial changes, use the edit tool instead.",
+          input: Input,
+          output: Output,
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const source = {
+                type: "tool" as const,
+                messageID: context.messageID,
+                id: context.id,
+              }
+              const target = yield* mutation.resolve({ path: input.path, kind: "file" })
+              const external = target.externalDirectory
+              if (external)
+                yield* permission.assert({
+                  ...LocationMutation.externalDirectoryPermission(external),
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source,
+                })
+              const current = yield* Bom.readFile(fs, target.absolute).pipe(
+                Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+              )
+              const next = Bom.split(input.content)
+              const preview = fileDiff(target.resource, current?.text ?? "", next.text, current ? "modified" : "added")
+              yield* permission.assert({
+                action: "edit",
+                resources: [target.resource],
+                save: ["*"],
+                metadata: { files: [preview] },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source,
+              })
+              const result = yield* files.writeTextPreservingBom({ target, content: input.content })
+              const bom = (yield* Bom.readFile(fs, target.absolute)).bom
+              if (yield* formatter.file(target.absolute)) yield* Bom.syncFile(fs, target.absolute, bom)
+              return result
+            }).pipe(
+              Effect.map((output) => ({ output, content: toModelOutput(output) })),
+              Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
+            ),
+        }),
       )
       .pipe(Effect.orDie)
   }),
