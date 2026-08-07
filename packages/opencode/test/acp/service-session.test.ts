@@ -194,6 +194,7 @@ describe("ACP service sessions", () => {
     messages: readonly { info: unknown; parts: readonly unknown[] }[] = [],
     options?: {
       abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
+      create?: () => Promise<{ data: { id: string } }>
       prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
       sessionUpdate?: (update: SessionNotification) => Promise<void>
     },
@@ -205,6 +206,7 @@ describe("ACP service sessions", () => {
     const prompts: unknown[] = []
     const commands: unknown[] = []
     const summarizes: unknown[] = []
+    const permissionUpdates: unknown[] = []
     const usageUpdates: string[] = []
     const events = createEventStream()
     const sessions = Array.from({ length: 102 }, (_, index) => ({
@@ -242,13 +244,17 @@ describe("ACP service sessions", () => {
           }),
       },
       session: {
-        create: () => Promise.resolve({ data: { id: "ses_new" } }),
+        create: options?.create ?? (() => Promise.resolve({ data: { id: "ses_new" } })),
         get: () => Promise.resolve({ data: { id: "ses_loaded" } }),
         list: (input: { directory?: string }) =>
           Promise.resolve({
             data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
           }),
         messages: () => Promise.resolve({ data: messages }),
+        update: (input: unknown) => {
+          permissionUpdates.push(input)
+          return Promise.resolve({ data: input })
+        },
         prompt: async (input: { sessionID: string }) => {
           const response = await (options?.prompt?.(input) ??
             Promise.resolve({
@@ -328,6 +334,7 @@ describe("ACP service sessions", () => {
       prompts,
       commands,
       summarizes,
+      permissionUpdates,
       usageUpdates,
       events,
     }
@@ -700,6 +707,133 @@ describe("ACP service sessions", () => {
     expect(adds).toHaveLength(2)
     expect(JSON.stringify(adds[0])).toContain("one.js")
     expect(JSON.stringify(adds[1])).toContain("two.js")
+  })
+
+  it("scopes ACP MCP servers to their owning session", async () => {
+    let nextSession = 0
+    const fixture = makeService([], {
+      create: () => Promise.resolve({ data: { id: `ses_${++nextSession}` } }),
+    })
+    const first = await Effect.runPromise(
+      fixture.service.newSession({
+        cwd: "/workspace",
+        mcpServers: [{ name: "first.tools", command: "node", args: ["one.js"], env: [] }],
+      }),
+    )
+    const second = await Effect.runPromise(
+      fixture.service.newSession({
+        cwd: "/workspace",
+        mcpServers: [{ name: "second-tools", command: "node", args: ["two.js"], env: [] }],
+      }),
+    )
+
+    await Effect.runPromise(
+      fixture.service.prompt({ sessionId: first.sessionId, prompt: [{ type: "text", text: "first" }] }),
+    )
+    await Effect.runPromise(
+      fixture.service.prompt({ sessionId: second.sessionId, prompt: [{ type: "text", text: "second" }] }),
+    )
+
+    expect(fixture.permissionUpdates).toEqual([
+      {
+        sessionID: first.sessionId,
+        directory: "/workspace",
+        permission: [{ permission: "second-tools_*", pattern: "*", action: "deny" }],
+      },
+      {
+        sessionID: second.sessionId,
+        directory: "/workspace",
+        permission: [{ permission: "first_tools_*", pattern: "*", action: "deny" }],
+      },
+    ])
+  })
+
+  it("denies an ambiguous MCP server name shared by ACP sessions", async () => {
+    let nextSession = 0
+    const fixture = makeService([], {
+      create: () => Promise.resolve({ data: { id: `ses_${++nextSession}` } }),
+    })
+    const first = await Effect.runPromise(
+      fixture.service.newSession({
+        cwd: "/workspace",
+        mcpServers: [{ name: "tools", command: "node", args: ["one.js"], env: [] }],
+      }),
+    )
+    await Effect.runPromise(
+      fixture.service.newSession({
+        cwd: "/workspace",
+        mcpServers: [{ name: "tools", command: "node", args: ["two.js"], env: [] }],
+      }),
+    )
+
+    await Effect.runPromise(
+      fixture.service.prompt({ sessionId: first.sessionId, prompt: [{ type: "text", text: "hello" }] }),
+    )
+
+    expect(fixture.permissionUpdates).toEqual([
+      {
+        sessionID: first.sessionId,
+        directory: "/workspace",
+        permission: [{ permission: "tools_*", pattern: "*", action: "deny" }],
+      },
+    ])
+  })
+
+  it("keeps closed ACP session MCP servers denied", async () => {
+    let nextSession = 0
+    const fixture = makeService([], {
+      create: () => Promise.resolve({ data: { id: `ses_${++nextSession}` } }),
+    })
+    const closed = await Effect.runPromise(
+      fixture.service.newSession({
+        cwd: "/workspace",
+        mcpServers: [{ name: "closed-tools", command: "node", args: ["closed.js"], env: [] }],
+      }),
+    )
+    await Effect.runPromise(fixture.service.closeSession({ sessionId: closed.sessionId }))
+    const current = await Effect.runPromise(
+      fixture.service.newSession({
+        cwd: "/workspace",
+        mcpServers: [{ name: "current-tools", command: "node", args: ["current.js"], env: [] }],
+      }),
+    )
+
+    await Effect.runPromise(
+      fixture.service.prompt({ sessionId: current.sessionId, prompt: [{ type: "text", text: "hello" }] }),
+    )
+
+    expect(fixture.permissionUpdates).toEqual([
+      {
+        sessionID: current.sessionId,
+        directory: "/workspace",
+        permission: [{ permission: "closed-tools_*", pattern: "*", action: "deny" }],
+      },
+    ])
+  })
+
+  it("does not scope MCP servers across directories", async () => {
+    let nextSession = 0
+    const fixture = makeService([], {
+      create: () => Promise.resolve({ data: { id: `ses_${++nextSession}` } }),
+    })
+    await Effect.runPromise(
+      fixture.service.newSession({
+        cwd: "/other",
+        mcpServers: [{ name: "other-tools", command: "node", args: ["other.js"], env: [] }],
+      }),
+    )
+    const current = await Effect.runPromise(
+      fixture.service.newSession({
+        cwd: "/workspace",
+        mcpServers: [{ name: "current-tools", command: "node", args: ["current.js"], env: [] }],
+      }),
+    )
+
+    await Effect.runPromise(
+      fixture.service.prompt({ sessionId: current.sessionId, prompt: [{ type: "text", text: "hello" }] }),
+    )
+
+    expect(fixture.permissionUpdates).toEqual([])
   })
 
   it("uses the configured model as the new session default", async () => {
