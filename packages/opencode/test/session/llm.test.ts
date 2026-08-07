@@ -1617,6 +1617,99 @@ describe("session.llm.stream", () => {
   )
 
   it.instance(
+    "returns a short error when the model calls an unavailable tool",
+    () =>
+      Effect.gen(function* () {
+        const model = loadFixture("openai", "gpt-5.2").model
+        const phantomCall = [
+          {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "function_call", id: "item-phantom", call_id: "call-phantom", name: "unknown" },
+          },
+          {
+            type: "response.function_call_arguments.delta",
+            item_id: "item-phantom",
+            delta: "{}",
+          },
+          {
+            type: "response.output_item.done",
+            output_index: 0,
+            item: {
+              type: "function_call",
+              id: "item-phantom",
+              call_id: "call-phantom",
+              name: "unknown",
+              arguments: "{}",
+              status: "completed",
+            },
+          },
+          {
+            type: "response.completed",
+            response: { incomplete_details: null, usage: { input_tokens: 1, output_tokens: 1 } },
+          },
+        ]
+        const request = waitRequest("/responses", createEventResponse(phantomCall, true))
+
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.openai, ModelV2.ID.make(model.id))
+        const sessionID = SessionID.make("session-test-phantom-tool")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const toolResults: string[] = []
+        yield* LLM.Service.use((svc) =>
+          svc
+            .stream({
+              user: {
+                id: MessageID.make("msg_user-phantom-tool"),
+                sessionID,
+                role: "user",
+                time: { created: Date.now() },
+                agent: agent.name,
+                model: { providerID: ProviderV2.ID.make("openai"), modelID: resolved.id },
+              } satisfies SessionV1.User,
+              sessionID,
+              model: resolved,
+              agent,
+              system: [],
+              messages: [{ role: "user", content: "Use unknown" }],
+              tools: {
+                invalid: tool({
+                  description: "Do not use",
+                  inputSchema: z.object({ tool: z.string(), error: z.string() }),
+                  execute: async ({ error }) => ({
+                    output: `The arguments provided to the tool are invalid: ${error}`,
+                    metadata: {},
+                  }),
+                }),
+              },
+            })
+            .pipe(
+              Stream.tap((event) =>
+                Effect.sync(() => {
+                  if (event.type !== "tool-result") return
+                  const result = event.result
+                  if (result.type !== "json") return
+                  toolResults.push(JSON.stringify(result.value))
+                }),
+              ),
+              Stream.runDrain,
+            ),
+        )
+
+        yield* Effect.promise(() => request)
+        expect(toolResults).toHaveLength(1)
+        expect(toolResults[0]).toContain("Tool 'unknown' is not available")
+        expect(toolResults[0]).not.toContain("Available tools")
+      }),
+    { config: () => openAIConfig(loadFixture("openai", "gpt-5.2").model, `${state.server!.url.origin}/v1`) },
+  )
+
+  it.instance(
     "accepts user image attachments as data URLs for OpenAI models",
     () =>
       Effect.gen(function* () {

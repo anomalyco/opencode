@@ -301,11 +301,14 @@ const live: Layer.Layer<
                 toolName: lower,
               }
             }
+            const error = prepared.tools[failed.toolCall.toolName]
+              ? failed.error.message
+              : `Tool '${failed.toolCall.toolName}' is not available`
             return {
               ...failed.toolCall,
               input: JSON.stringify({
                 tool: failed.toolCall.toolName,
-                error: failed.error.message,
+                error,
               }),
               toolName: "invalid",
             }
