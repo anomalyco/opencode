@@ -3,8 +3,27 @@
   "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "tasks": {
-    "typecheck": {
-      "dependsOn": ["^typecheck"]
+    "typecheck": {},
+    "@opencode-ai/app#typecheck": {
+      "dependsOn": ["@opencode-ai/core#typecheck"]
+    },
+    "@opencode-ai/enterprise#typecheck": {
+      "dependsOn": ["@opencode-ai/core#typecheck"]
+    },
+    "@opencode-ai/sdk-next#typecheck": {
+      "dependsOn": ["@opencode-ai/core#typecheck"]
+    },
+    "@opencode-ai/server#typecheck": {
+      "dependsOn": ["@opencode-ai/core#typecheck"]
+    },
+    "@opencode-ai/session-ui#typecheck": {
+      "dependsOn": ["@opencode-ai/core#typecheck"]
+    },
+    "@opencode-ai/simulation#typecheck": {
+      "dependsOn": ["@opencode-ai/core#typecheck"]
+    },
+    "@opencode-ai/tui#typecheck": {
+      "dependsOn": ["@opencode-ai/core#typecheck"]
     },
     "build": {
       "dependsOn": [],
