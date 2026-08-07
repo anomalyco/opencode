@@ -147,6 +147,7 @@ const layer = Layer.effect(
               Permission.fromConfig({
                 question: "allow",
                 plan_enter: "allow",
+                skill: "allow",
               }),
               user,
             ),
@@ -162,6 +163,7 @@ const layer = Layer.effect(
               Permission.fromConfig({
                 question: "allow",
                 plan_exit: "allow",
+                skill: "allow",
                 task: {
                   general: "deny",
                 },
@@ -186,6 +188,7 @@ const layer = Layer.effect(
               defaults,
               Permission.fromConfig({
                 todowrite: "deny",
+                skill: "allow",
               }),
               user,
             ),
