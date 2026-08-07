@@ -23,7 +23,7 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
-import { ThemeContextProvider, useTheme, useThemes } from "../../context/theme"
+import { createSyntaxStyleMemo, ThemeContextProvider, useTheme, useThemes } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
@@ -100,6 +100,7 @@ import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallbac
 import { useSessionTabs } from "../../context/session-tabs"
 import { createSingleFlight } from "../../util/single-flight"
 import type { SessionPending } from "@opencode-ai/schema/session-pending"
+import { generateThinkingSyntax } from "./thinking-syntax"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1432,6 +1433,7 @@ function SessionReasoningGroupView(props: {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
+  const thinkingSyntax = createSyntaxStyleMemo(() => generateThinkingSyntax(syntax(), theme.text.subdued))
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
   const [hover, setHover] = createSignal(false)
@@ -1527,7 +1529,7 @@ function SessionReasoningGroupView(props: {
                             filetype="markdown"
                             drawUnstyledText={false}
                             streaming={part()?.time?.completed === undefined && message()?.time.completed === undefined}
-                            syntaxStyle={syntax()}
+                            syntaxStyle={thinkingSyntax()}
                             content={content()}
                             conceal={ctx.markdownMode() === "rendered"}
                             fg={theme.text.subdued}
@@ -2060,6 +2062,7 @@ function ReasoningPart(props: {
 }) {
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
+  const thinkingSyntax = createSyntaxStyleMemo(() => generateThinkingSyntax(syntax(), theme.text.subdued))
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
@@ -2112,7 +2115,7 @@ function ReasoningPart(props: {
                 filetype="markdown"
                 drawUnstyledText={false}
                 streaming={true}
-                syntaxStyle={syntax()}
+                syntaxStyle={thinkingSyntax()}
                 content={content()}
                 conceal={ctx.markdownMode() === "rendered"}
                 fg={theme.text.subdued}
