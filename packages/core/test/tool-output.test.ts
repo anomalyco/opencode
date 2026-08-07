@@ -9,7 +9,7 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
-import { Identifier } from "@opencode-ai/core/util/identifier"
+import { Identifier } from "@opencode-ai/core/id/id"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
@@ -145,8 +145,11 @@ describe("ToolOutput", () => {
     withStore((output, fs, root) =>
       Effect.gen(function* () {
         const directory = path.join(root, ToolOutput.DIRECTORY)
-        const old = path.join(directory, `tool_${Identifier.create(false, Date.now() - 8 * 24 * 60 * 60 * 1_000)}`)
-        const recent = path.join(directory, `tool_${Identifier.ascending()}`)
+        const old = path.join(
+          directory,
+          Identifier.create("tool", "ascending", Date.now() - 8 * 24 * 60 * 60 * 1_000),
+        )
+        const recent = path.join(directory, Identifier.ascending("tool"))
         yield* fs.ensureDir(directory)
         yield* fs.writeFileString(old, "old")
         yield* fs.writeFileString(recent, "recent")

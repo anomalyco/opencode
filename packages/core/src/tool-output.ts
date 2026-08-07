@@ -7,7 +7,7 @@ import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-n
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Config } from "./config"
-import { Identifier } from "./util/identifier"
+import { Identifier } from "./id/id"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024 // 50 KiB
@@ -23,16 +23,16 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolOutput") {}
 
-const timestamp = (id: string) => Number(BigInt(`0x${id.slice(0, 12)}`) / 0x1000n)
-
 const cleanup = Effect.fn("ToolOutput.cleanup")(function* (fs: FSUtil.Interface, directory: string) {
-  const cutoff = timestamp(Identifier.create(false, Date.now() - Duration.toMillis(RETENTION)))
+  const cutoff = Identifier.timestamp(
+    Identifier.create("tool", "ascending", Date.now() - Duration.toMillis(RETENTION)),
+  )
   const entries = yield* fs.readDirectory(directory).pipe(
     Effect.map((entries) => entries.filter((entry) => /^tool_[0-9a-f]{12}/.test(entry))),
     Effect.catch(() => Effect.succeed([])),
   )
   for (const entry of entries) {
-    if (timestamp(entry.slice("tool_".length)) >= cutoff) continue
+    if (Identifier.timestamp(entry) >= cutoff) continue
     yield* fs.remove(path.join(directory, entry)).pipe(Effect.catch(() => Effect.void))
   }
 })
@@ -74,7 +74,7 @@ const layer = Layer.effect(
       if (!hitBytes && kept.length === lines.length && totalBytes > bytes) hitBytes = true
       const removed = hitBytes ? totalBytes - bytes : lines.length - kept.length
       const unit = hitBytes ? (removed === 1 ? "byte" : "bytes") : removed === 1 ? "line" : "lines"
-      const file = path.join(directory, `tool_${Identifier.ascending()}`)
+      const file = path.join(directory, Identifier.ascending("tool"))
       yield* fs.ensureDir(directory).pipe(Effect.orDie)
       yield* fs.writeFileString(file, text).pipe(Effect.orDie)
       const marker = `... ${removed} ${unit} truncated; full content saved to ${file} ...`
