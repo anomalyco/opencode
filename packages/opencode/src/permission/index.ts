@@ -37,34 +37,25 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Permi
     }
   )
 }
-
-// Resolve the absolute path of a worktree-relative filesystem pattern so
-// absolute and `~`/`$HOME`-expanded rules match. URL and bare-command patterns
-// are not paths: leave them on the single (relative) form.
-function absoluteForm(pattern: string, worktree: string): string | undefined {
-  if (!pattern || pattern.includes("://")) return undefined
-  const absolute = path.isAbsolute(pattern) ? pattern : path.resolve(worktree, pattern)
-  return absolute === pattern ? undefined : absolute
-}
-
-// Match a submitted pattern against rules using both its worktree-relative and
-// absolute forms. Rules stay untouched, so relative, absolute and `~`-expanded
-// patterns each match a file edited at an absolute or relative path.
+// Resolve a submitted filesystem pattern against the worktree so absolute and
+// `~`/`$HOME`-expanded rules match files that arrive with a worktree-relative
+// path, and vice versa. URL schemes are not filesystem paths and stay on the
+// single (relative) form.
 export function evaluatePattern(
   permission: string,
   pattern: string,
   worktree: string,
   ...rulesets: PermissionV1.Ruleset[]
 ): PermissionV1.Rule {
-  const absolute = absoluteForm(pattern, worktree)
+  const absolute =
+    !pattern || pattern.includes("://") || path.isAbsolute(pattern) ? undefined : path.resolve(worktree, pattern)
   return (
     rulesets
       .flat()
       .findLast(
         (rule) =>
           Wildcard.match(permission, rule.permission) &&
-          (Wildcard.match(pattern, rule.pattern) ||
-            (absolute !== undefined && Wildcard.match(absolute, rule.pattern))),
+          (Wildcard.match(pattern, rule.pattern) || (absolute !== undefined && Wildcard.match(absolute, rule.pattern))),
       ) ?? {
       action: "ask",
       permission,
