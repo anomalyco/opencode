@@ -199,7 +199,7 @@ test("expands Windows paths and horizontally scrolls long filenames", async ({ p
   await expect.poll(() => viewport.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0)
 
   await viewport.evaluate((element) => {
-    element.dir = "rtl"
+    element.setAttribute("dir", "rtl")
     element.scrollLeft = 0
     element.dispatchEvent(new Event("scroll"))
   })
