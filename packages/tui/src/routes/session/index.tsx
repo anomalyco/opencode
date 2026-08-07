@@ -8,7 +8,6 @@ import {
   Match,
   on,
   onCleanup,
-  onMount,
   Show,
   Switch,
   useContext,
@@ -20,11 +19,11 @@ import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
 import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
-import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
+import { useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { ThemeContextProvider, useTheme, useThemes } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import { ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   ModelInfo,
@@ -50,7 +49,6 @@ import {
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
-import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogMessage } from "./dialog-message"
@@ -140,7 +138,6 @@ export function Session() {
   const data = useData()
   const local = useLocal()
   const args = useArgs()
-  const paths = useTuiPaths()
   const configState = useConfig()
   const config = configState.data
   const theme = useTheme()
@@ -180,16 +177,6 @@ export function Session() {
     tab: undefined as string | undefined,
   })
   const disabled = createMemo(() => promptedPermissions().length > 0 || forms().length > 0)
-
-  const pending = createMemo(() => {
-    const completed = messages().findLast((x) => x.type === "assistant" && x.time.completed)?.id
-    return messages().findLast((x) => x.type === "assistant" && !x.time.completed && (!completed || x.id > completed))
-      ?.id
-  })
-
-  const lastAssistant = createMemo(() => {
-    return messages().findLast((x) => x.type === "assistant")
-  })
 
   const dimensions = useTerminalDimensions()
   const sidebar = createMemo(() => config.session?.sidebar ?? "auto")
@@ -706,7 +693,7 @@ export function Session() {
         const messages = data.session.message.list(route.sessionID)
         if (!messages || !messages.length) return
 
-        // Find the most recent user message with non-ignored, non-synthetic text parts
+        // Find the most recent visible user message in the V2 transcript.
         for (let i = messages.length - 1; i >= 0; i--) {
           const message = messages[i]
           if (!message || message.type !== "user" || !message.text.trim()) continue
@@ -2074,8 +2061,6 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
     </Show>
   )
 }
-
-// Pending messages moved to individual tool pending functions
 
 function ToolPart(props: { part: SessionMessageAssistantTool }) {
   const display = createMemo(() => toolDisplay(props.part.name))
