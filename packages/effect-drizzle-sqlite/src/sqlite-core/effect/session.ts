@@ -304,9 +304,9 @@ export class SQLiteEffectPreparedQuery<
 }
 
 export abstract class SQLiteEffectSession<
-  TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
-  TRunResult = unknown,
-  TRelations extends AnyRelations = EmptyRelations,
+  in out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+  out TRunResult = unknown,
+  out TRelations extends AnyRelations = EmptyRelations,
 > {
   static readonly [entityKind]: string = "SQLiteEffectSession"
 
