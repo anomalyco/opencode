@@ -275,17 +275,7 @@ export async function waitForDependencies() {
 }
 
 export async function get() {
-  return Promise.race([
-    runPromise((svc) => svc.get()),
-    new Promise<any>((resolve) =>
-      setTimeout(() => {
-        resolve({
-          theme: "opencode",
-          keybinds: { gather: () => [] },
-        })
-      }, 2000),
-    ),
-  ]).catch(() => ({} as any))
+  return runPromise((svc) => svc.get())
 }
 
 export async function pluginOrigins() {
