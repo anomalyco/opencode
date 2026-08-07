@@ -41,6 +41,7 @@ export const groupNames = {
   "server.agent": "agent",
   "server.plugin": "plugin",
   "server.session": "session",
+  "server.sessionTransfer": "sessionTransfer",
   "server.message": "message",
   "server.model": "model",
   "server.generate": "generate",

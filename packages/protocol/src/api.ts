@@ -6,6 +6,7 @@ import { MessageGroup } from "./groups/message.js"
 import { ModelGroup } from "./groups/model.js"
 import { ProviderGroup } from "./groups/provider.js"
 import { makeSessionGroup } from "./groups/session.js"
+import { SessionTransferGroup } from "./groups/session-transfer.js"
 import { makePermissionGroup } from "./groups/permission.js"
 import { FileSystemGroup } from "./groups/fs.js"
 import { makeFormGroup } from "./groups/form.js"
@@ -89,6 +90,7 @@ type ApiGroups<
   | typeof ServerGroup
   | typeof DebugGroup
   | typeof MigrationGroup
+  | typeof SessionTransferGroup
   | LocationGroups<LocationId>
   | FormGroups<LocationId, LocationService, FormLocationId, FormLocationService>
   | SessionGroups<SessionLocationId, SessionLocationService>
@@ -178,6 +180,7 @@ const makeApiFromGroup = <
     .add(MigrationGroup)
     .add(WebSearchGroup.middleware(locationMiddleware))
     .add(ConfigGroup.middleware(locationMiddleware))
+    .add(SessionTransferGroup)
     .annotateMerge(
       OpenApi.annotations({
         title: "opencode HttpApi",

@@ -11,6 +11,7 @@ export type ProviderApi = Client["provider"]
 export type ReferenceApi = Client["reference"]
 export type WebSearchApi = Client["websearch"]
 export type SessionApi = Client["session"]
+export type SessionTransferApi = Client["sessionTransfer"]
 export type SkillApi = Client["skill"]
 
 export interface CatalogApi {

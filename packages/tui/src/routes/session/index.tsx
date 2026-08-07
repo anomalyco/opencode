@@ -827,7 +827,7 @@ export function Session() {
               options.format === "markdown"
                 ? formatSessionTranscript(sessionData, messages(), options.thinking)
                 : JSON.stringify(
-                    await client.api.session.export({ sessionID: sessionData.id, sanitize: options.sanitize }),
+                    await client.api.sessionTransfer.export({ sessionID: sessionData.id, sanitize: options.sanitize }),
                     null,
                     2,
                   ) + EOL

@@ -17,6 +17,7 @@ export type {
   ReferenceApi,
   WebSearchApi,
   SessionApi,
+  SessionTransferApi,
   SkillApi,
 } from "./api.js"
 export { Agent } from "@opencode-ai/schema/agent"
@@ -43,6 +44,7 @@ export { AbsolutePath, RelativePath } from "@opencode-ai/schema/schema"
 export { Session } from "@opencode-ai/schema/session"
 export { SessionPending } from "@opencode-ai/schema/session-pending"
 export { SessionMessage } from "@opencode-ai/schema/session-message"
+export { SessionTransfer } from "@opencode-ai/schema/session-transfer"
 export { Skill } from "@opencode-ai/schema/skill"
 export { Prompt } from "@opencode-ai/schema/prompt"
 export { PromptInput } from "@opencode-ai/schema/prompt-input"

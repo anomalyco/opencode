@@ -1,5 +1,4 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
 import { SessionPending } from "@opencode-ai/schema/session-pending"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
@@ -161,36 +160,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           identifier: "v2.session.create",
           summary: "Create session",
           description: "Create a session at the requested location.",
-        }),
-      ),
-    )
-    .add(
-      HttpApiEndpoint.post("session.import", "/api/session/import", {
-        payload: Schema.Struct({
-          ...SessionTransfer.Data.fields,
-          location: Location.Ref.pipe(Schema.optional),
-        }),
-        success: Schema.Struct({ data: Session.Info }),
-        error: ConflictError,
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "v2.session.import",
-          summary: "Import session",
-          description: "Import a projected session transcript at the requested location.",
-        }),
-      ),
-    )
-    .add(
-      HttpApiEndpoint.get("session.export", "/api/session/:sessionID/export", {
-        params: { sessionID: Session.ID },
-        query: Schema.Struct({ sanitize: BooleanFromString.pipe(Schema.optional) }),
-        success: Schema.Struct({ data: SessionTransfer.Data }),
-        error: [SessionNotFoundError, UnknownError],
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "v2.session.export",
-          summary: "Export session",
-          description: "Export a complete projected session transcript.",
         }),
       ),
     )

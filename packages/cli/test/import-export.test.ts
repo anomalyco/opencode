@@ -159,14 +159,7 @@ test("import validates a file and sends it to the resolved location", async () =
   })
 
   try {
-    const [stdout, , exitCode] = await run([
-      "import",
-      file,
-      "--directory",
-      root,
-      "--server",
-      server.url.toString(),
-    ])
+    const [stdout, , exitCode] = await run(["import", file, "--directory", root, "--server", server.url.toString()])
 
     expect(exitCode).toBe(0)
     expect(stdout).toBe(`Imported session: ${info.id}${os.EOL}`)
@@ -192,7 +185,12 @@ test("import reports an existing session without a stack trace", async () => {
           project: { id: "global", directory: root, canonical: root },
         })
       }
-      if (url.pathname === "/api/session/import") return new Response("Conflict", { status: 409 })
+      if (url.pathname === "/api/session/import") {
+        return Response.json(
+          { _tag: "ConflictError", message: `Session already exists: ${info.id}`, resource: info.id },
+          { status: 409 },
+        )
+      }
       return new Response("Not found", { status: 404 })
     },
   })

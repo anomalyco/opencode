@@ -15,10 +15,6 @@ import type {
   SessionListOutput,
   SessionCreateInput,
   SessionCreateOutput,
-  SessionImportInput,
-  SessionImportOutput,
-  SessionExportInput,
-  SessionExportOutput,
   SessionActiveOutput,
   SessionGetInput,
   SessionGetOutput,
@@ -222,6 +218,10 @@ import type {
   WebsearchQueryOutput,
   ConfigGetInput,
   ConfigGetOutput,
+  SessionTransferImportInput,
+  SessionTransferImportOutput,
+  SessionTransferExportInput,
+  SessionTransferExportOutput,
 } from "./types"
 import { ClientError } from "./client-error"
 
@@ -478,30 +478,6 @@ export function make(options: ClientOptions) {
             },
             successStatus: 200,
             declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      import: (input: SessionImportInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionImportOutput }>(
-          {
-            method: "POST",
-            path: `/api/session/import`,
-            body: { info: input["info"], messages: input["messages"], location: input["location"] },
-            successStatus: 200,
-            declaredStatuses: [409, 401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      export: (input: SessionExportInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionExportOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/export`,
-            query: { sanitize: input["sanitize"] },
-            successStatus: 200,
-            declaredStatuses: [404, 500, 401, 400],
             empty: false,
           },
           requestOptions,
@@ -1854,6 +1830,32 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+    },
+    sessionTransfer: {
+      import: (input: SessionTransferImportInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionTransferImportOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/import`,
+            body: { info: input["info"], messages: input["messages"], location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [409, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      export: (input: SessionTransferExportInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionTransferExportOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/export`,
+            query: { sanitize: input["sanitize"] },
+            successStatus: 200,
+            declaredStatuses: [404, 500, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
     },
   }
 }

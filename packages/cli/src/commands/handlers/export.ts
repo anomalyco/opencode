@@ -40,7 +40,7 @@ export default Runtime.handler(
     const sessionID = requested ?? selected?.session.id
     if (!sessionID) return
     const data = yield* Effect.promise(() =>
-      client.session.export({ sessionID, sanitize: selected?.sanitize ?? input.sanitize }),
+      client.sessionTransfer.export({ sessionID, sanitize: selected?.sanitize ?? input.sanitize }),
     )
     process.stdout.write(yield* Effect.promise(() => writeExport(data, sessionID, requested !== undefined)))
   }),

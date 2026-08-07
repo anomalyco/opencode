@@ -12,6 +12,7 @@ export type {
   ReferenceApi,
   WebSearchApi,
   SessionApi,
+  SessionTransferApi,
   SkillApi,
 } from "./api.js"
 export type { EventSubscribeOutput as OpenCodeEvent } from "./generated/types"

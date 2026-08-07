@@ -4,6 +4,7 @@ import { MessageHandler } from "./handlers/message"
 import { ModelHandler } from "./handlers/model"
 import { ProviderHandler } from "./handlers/provider"
 import { SessionHandler } from "./handlers/session"
+import { SessionTransferHandler } from "./handlers/session-transfer"
 import { PermissionHandler } from "./handlers/permission"
 import { FileSystemHandler } from "./handlers/fs"
 import { FormHandler } from "./handlers/form"
@@ -40,6 +41,7 @@ export const handlers = Layer.mergeAll(
   AgentHandler,
   PluginHandler,
   SessionHandler,
+  SessionTransferHandler,
   MessageHandler,
   ModelHandler,
   GenerateHandler,

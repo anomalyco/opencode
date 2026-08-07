@@ -1,6 +1,5 @@
-import { OpenCode } from "@opencode-ai/client"
+import { isConflictError, OpenCode, type SessionTransferImportInput } from "@opencode-ai/client"
 import { Service } from "@opencode-ai/client/effect/service"
-import { Session } from "@opencode-ai/schema/session"
 import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
 import { Effect, Option, Schema } from "effect"
 import { EOL } from "node:os"
@@ -20,10 +19,11 @@ export default Runtime.handler(
               return response.text()
             })
           : Bun.file(input.file).text(),
-      catch: (cause) => new Error(`Failed to read session data: ${cause instanceof Error ? cause.message : String(cause)}`),
+      catch: (cause) =>
+        new Error(`Failed to read session data: ${cause instanceof Error ? cause.message : String(cause)}`),
     })
     const data = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SessionTransfer.Data))(text)
-    const encoded = Schema.encodeSync(SessionTransfer.Data)(data)
+    const encoded = Schema.encodeSync(SessionTransfer.Data)(data) as SessionTransferImportInput
     const server = yield* ServerConnection.resolve({
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
@@ -37,24 +37,18 @@ export default Runtime.handler(
         location: { directory: path.resolve(Option.getOrElse(input.directory, () => process.cwd())) },
       }),
     )
-    const response = yield* Effect.promise(() =>
-      fetch(new URL("/api/session/import", server.endpoint.url), {
-        method: "POST",
-        headers: { ...Service.headers(server.endpoint), "content-type": "application/json" },
-        body: JSON.stringify({
+    const imported = yield* Effect.tryPromise({
+      try: () =>
+        client.sessionTransfer.import({
           ...encoded,
           location: { directory: location.directory, workspaceID: location.workspaceID },
         }),
-      }),
-    )
-    if (response.status === 409) {
+      catch: (cause) => cause,
+    }).pipe(Effect.catchIf(isConflictError, () => Effect.succeed(undefined)))
+    if (!imported) {
       process.stderr.write(`Session already exists${EOL}`)
       return
     }
-    if (!response.ok) yield* Effect.fail(new Error(`Failed to import session: ${response.statusText}`))
-    const imported = yield* Schema.decodeUnknownEffect(
-      Schema.fromJsonString(Schema.Struct({ data: Session.Info })),
-    )(yield* Effect.promise(() => response.text()))
-    process.stdout.write(`Imported session: ${imported.data.id}${EOL}`)
+    process.stdout.write(`Imported session: ${imported.id}${EOL}`)
   }),
 )
