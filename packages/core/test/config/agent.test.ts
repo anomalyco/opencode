@@ -51,6 +51,11 @@ describe("ConfigAgentPlugin.Plugin", () => {
   it.effect("matches Windows paths against home-relative permissions", () =>
     Effect.gen(function* () {
       const permissions = yield* loadHomePermissions("C:\\Users\\test")
+      expect(permissions).toContainEqual({
+        action: "external_directory",
+        resource: "C:\\Users\\test\\p\\**",
+        effect: "allow",
+      })
       expect(
         Permission.evaluate("external_directory", "C:\\Users\\test\\p\\opencode\\src\\*", permissions).effect,
       ).toBe("allow")
