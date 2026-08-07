@@ -71,20 +71,38 @@ const layer = Layer.effect(
         kept.push(line)
         bytes += size
       }
+      if (!hitBytes && kept.length === lines.length && totalBytes > bytes) hitBytes = true
       const removed = hitBytes ? totalBytes - bytes : lines.length - kept.length
-      const unit = hitBytes ? "bytes" : removed === 1 ? "line" : "lines"
+      const unit = hitBytes ? (removed === 1 ? "byte" : "bytes") : removed === 1 ? "line" : "lines"
       const file = path.join(directory, `tool_${Identifier.ascending()}`)
       yield* fs.ensureDir(directory).pipe(Effect.orDie)
       yield* fs.writeFileString(file, text).pipe(Effect.orDie)
+      const marker = `... ${removed} ${unit} truncated; full content saved to ${file} ...`
+      const bounded: Tool.Content[] = []
+      let remaining = kept.join("\n").length
+      let seenText = false
+      let marked = false
+      for (const item of content) {
+        if (item.type === "file") {
+          bounded.push(item)
+          continue
+        }
+        if (seenText && remaining > 0) remaining--
+        seenText = true
+        if (remaining >= item.text.length) {
+          bounded.push(item)
+          remaining -= item.text.length
+          continue
+        }
+        if (remaining > 0) bounded.push({ ...item, text: item.text.slice(0, remaining) })
+        if (!marked) bounded.push({ type: "text", text: marker })
+        remaining = 0
+        marked = true
+      }
+      if (!marked) bounded.push({ type: "text", text: marker })
       return {
         ...result,
-        content: [
-          {
-            type: "text" as const,
-            text: `${kept.join("\n")}\n\n... ${removed} ${unit} truncated; full content saved to ${file} ...`,
-          },
-          ...content.filter((item) => item.type === "file"),
-        ],
+        content: bounded,
         metadata: { ...result.metadata, truncated: true, outputPath: file },
       }
     })

@@ -52,7 +52,8 @@ describe("ToolOutput", () => {
           if (typeof outputPath !== "string") return
           expect(yield* fs.readFileString(outputPath)).toBe("one\ntwo\nthree")
           expect(result.content).toEqual([
-            { type: "text", text: `one\ntwo\n\n... 1 line truncated; full content saved to ${outputPath} ...` },
+            { type: "text", text: "one\ntwo" },
+            { type: "text", text: `... 1 line truncated; full content saved to ${outputPath} ...` },
           ])
         }),
       new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
@@ -65,13 +66,33 @@ describe("ToolOutput", () => {
         Effect.gen(function* () {
           const result = yield* output.truncate({ content: "one\ntwo" })
           expect(result.content).toEqual([
+            { type: "text", text: "one" },
             {
               type: "text",
-              text: expect.stringMatching(/^one\n\n\.\.\. 4 bytes truncated; full content saved to .+ \.\.\.$/),
+              text: expect.stringMatching(/^\.\.\. 4 bytes truncated; full content saved to .+ \.\.\.$/),
             },
           ])
         }),
       new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 100, max_bytes: 5 }) }),
+    ),
+  )
+
+  it.live("preserves mixed content ordering", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const file = { type: "file" as const, uri: "file:///image.png", mime: "image/png" }
+          const result = yield* output.truncate({
+            content: [{ type: "text", text: "before" }, file, { type: "text", text: "after\nomitted" }],
+          })
+          expect(result.content).toEqual([
+            { type: "text", text: "before" },
+            file,
+            { type: "text", text: "after" },
+            { type: "text", text: expect.stringMatching(/^\.\.\. 1 line truncated; full content saved to /) },
+          ])
+        }),
+      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
     ),
   )
 
@@ -103,6 +124,20 @@ describe("ToolOutput", () => {
           })
         }),
       new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
+    ),
+  )
+
+  it.live("reports a trailing newline omitted by the byte limit", () =>
+    withStore(
+      (output) =>
+        Effect.gen(function* () {
+          const result = yield* output.truncate({ content: "one\n" })
+          expect(result.content).toEqual([
+            { type: "text", text: "one" },
+            { type: "text", text: expect.stringMatching(/^\.\.\. 1 byte truncated; full content saved to /) },
+          ])
+        }),
+      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 3 }) }),
     ),
   )
 
