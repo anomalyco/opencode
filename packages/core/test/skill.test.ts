@@ -113,6 +113,7 @@ describe("Skill", () => {
           })
 
           const skill = yield* Skill.Service
+          const watcher = yield* Watcher.Test
           yield* skill.transform((editor) => {
             editor.source({ type: "directory", path: AbsolutePath.make(first) })
             editor.source({ type: "directory", path: AbsolutePath.make(first) })
@@ -142,6 +143,21 @@ describe("Skill", () => {
               location: AbsolutePath.make(path.join(second, "review", "SKILL.md")),
               content: "# review",
             },
+          ])
+          expect(yield* watcher.subscriptions()).toEqual([
+            { path: first, type: "directory" },
+            { path: second, type: "directory" },
+          ])
+
+          yield* Effect.promise(() => write(second, "review", "Updated Second"))
+          yield* emitAndWait({ type: "update", path: path.join(second, "review", "SKILL.md") })
+
+          expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Updated Second")
+          expect(yield* watcher.subscriptions()).toEqual([
+            { path: first, type: "directory" },
+            { path: second, type: "directory" },
+            { path: first, type: "directory" },
+            { path: second, type: "directory" },
           ])
         }),
       ),

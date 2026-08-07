@@ -94,7 +94,7 @@ const layer = Layer.effect(
             loaded.paths.some((item) => FSUtil.overlaps(item, file)),
           )
           if (invalidated.length === 0) return false
-          for (const [key] of invalidated) cache.delete(key)
+          cache.clear()
           yield* FiberMap.clear(watches)
           yield* Effect.logInfo("skill cache invalidated", {
             file,
