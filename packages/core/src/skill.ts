@@ -88,7 +88,7 @@ export interface Interface extends State.Transformable<Draft> {
     name: string
     description?: string
     content: string
-    scope: { type: "global" | "department" | "user"; departmentCode?: string; userID?: string }
+    scope: { type: "global" } | { type: "department"; departmentCode: string } | { type: "user"; userID: string }
     skillsRoot: string
   }) => Effect.Effect<Info>
   readonly update: (input: {
@@ -136,38 +136,57 @@ const layer = Layer.effect(
         const entries = yield* fs
           .readDirectoryEntries(directory)
           .pipe(Effect.catch(() => Effect.succeed([] as {name: string; type: string}[])))
-        const scopeDirs = entries.filter((e) => e.type === "directory")
-        const hasScopeStructure = scopeDirs.some((e) => parseScopeDir(e.name) !== undefined)
+        const dirs = entries.filter((e) => e.type === "directory")
+        const scopeDirs = dirs.filter((e) => parseScopeDir(e.name) !== undefined)
+        const flatDirs = dirs.filter((e) => parseScopeDir(e.name) === undefined)
 
-        if (hasScopeStructure) {
-          // Scope-based structure: each scope subdirectory contains skills
-          for (const scopeDir of scopeDirs) {
-            const scope = parseScopeDir(scopeDir.name)
-            if (!scope) continue // skip non-scope dirs
-            const scopePath = path.join(directory, scopeDir.name)
-            const files = yield* fs
-              .glob("{*.md,**/SKILL.md}", {
-                cwd: scopePath,
-                absolute: true,
-                include: "file",
-                symlink: true,
-                dot: true,
-              })
-              .pipe(Effect.catch(() => Effect.succeed([] as string[])))
-            for (const filepath of files.toSorted()) {
-              const skill = yield* loadSkillFile(fs, filepath, directory)
-              if (!skill) continue
-              if (scope.type === "department") {
-                skills.push({ ...skill, scope: { type: "department", departmentCode: scope.owner } })
-              } else if (scope.type === "user") {
-                skills.push({ ...skill, scope: { type: "user", userID: scope.owner } })
-              } else {
-                skills.push({ ...skill, scope: { type: "global" } })
-              }
+        // Process scope-based directories (global/, dept_<code>/, user_<id>/)
+        for (const scopeDir of scopeDirs) {
+          const scope = parseScopeDir(scopeDir.name)
+          if (!scope) continue
+          const scopePath = path.join(directory, scopeDir.name)
+          const files = yield* fs
+            .glob("{*.md,**/SKILL.md}", {
+              cwd: scopePath,
+              absolute: true,
+              include: "file",
+              symlink: true,
+              dot: true,
+            })
+            .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+          for (const filepath of files.toSorted()) {
+            const skill = yield* loadSkillFile(fs, filepath, directory)
+            if (!skill) continue
+            if (scope.type === "department") {
+              skills.push({ ...skill, scope: { type: "department", departmentCode: scope.owner } })
+            } else if (scope.type === "user") {
+              skills.push({ ...skill, scope: { type: "user", userID: scope.owner } })
+            } else {
+              skills.push({ ...skill, scope: { type: "global" } })
             }
           }
-        } else {
-          // Legacy flat structure: all files are global skills
+        }
+
+        // Process flat directories (migration compat: existing skills outside any scope dir)
+        for (const flatDir of flatDirs) {
+          const flatPath = path.join(directory, flatDir.name)
+          const files = yield* fs
+            .glob("{*.md,**/SKILL.md}", {
+              cwd: flatPath,
+              absolute: true,
+              include: "file",
+              symlink: true,
+              dot: true,
+            })
+            .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+          for (const filepath of files.toSorted()) {
+            const skill = yield* loadSkillFile(fs, filepath, directory)
+            if (skill) skills.push({ ...skill, scope: { type: "global" } })
+          }
+        }
+
+        // Also handle top-level markdown files (completely flat structure with no subdirectories)
+        if (dirs.length === 0) {
           const files = yield* fs
             .glob("{*.md,**/SKILL.md}", {
               cwd: directory,
@@ -215,13 +234,13 @@ const layer = Layer.effect(
 
     function scopeDirName(scope: {
       type: "global" | "department" | "user"
-      departmentCode?: string
-      userID?: string
+      departmentCode: string
+      userID: string
     }): string {
       switch (scope.type) {
         case "global": return "global"
-        case "department": return `dept_${scope.departmentCode ?? "unknown"}`
-        case "user": return `user_${scope.userID ?? "unknown"}`
+        case "department": return `dept_${scope.departmentCode}`
+        case "user": return `user_${scope.userID}`
       }
     }
 

@@ -1,41 +1,38 @@
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { UserContext } from "@opencode-ai/schema/user-context"
 import { Location } from "@opencode-ai/core/location"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Option } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { response } from "../location"
 import { ForbiddenError } from "@opencode-ai/protocol/errors"
-
-// Re-create the protocol-level errors here so they can be referenced by the handler.
-// (These match the declarations in protocol/src/groups/skill.ts)
-const SkillNotFoundError = Schema.TaggedErrorClass<any>()(
-  "SkillNotFoundError",
-  { name: Schema.String, message: Schema.String },
-  { httpApiStatus: 404 },
-)()
+import { SkillNotFoundError } from "@opencode-ai/protocol/groups/skill"
 
 // ─── Scope validation ─────────────────────────────────────────────
 
 function checkScopeAccess(
   userContext: UserContext.Info | undefined,
   scope: { type: "global" | "department" | "user"; departmentCode?: string; userID?: string },
-): string | undefined {
-  if (!userContext) return undefined
+): Effect.Effect<void, ForbiddenError> {
+  if (!userContext) return Effect.void
   switch (scope.type) {
     case "global":
-      if (userContext.role === "global_admin") return undefined
-      return "Only global administrators can manage global skills"
+      if (userContext.role === "global_admin") return Effect.void
+      return Effect.fail(new ForbiddenError({ message: "Only global administrators can manage global skills" }))
     case "department":
-      if (userContext.role === "global_admin") return undefined
-      if (userContext.role !== "dept_admin") return "Only department administrators can manage department skills"
-      if (scope.departmentCode && scope.departmentCode !== userContext.departmentCode) {
-        return "You can only manage skills in your own department"
+      if (userContext.role === "global_admin") return Effect.void
+      if (userContext.role !== "dept_admin") {
+        return Effect.fail(new ForbiddenError({ message: "Only department administrators can manage department skills" }))
       }
-      return undefined
+      if (scope.departmentCode && scope.departmentCode !== userContext.departmentCode) {
+        return Effect.fail(new ForbiddenError({ message: "You can only manage skills in your own department" }))
+      }
+      return Effect.void
     case "user":
-      if (scope.userID && scope.userID !== userContext.userID) return "You can only manage your own personal skills"
-      return undefined
+      if (scope.userID && scope.userID !== userContext.userID) {
+        return Effect.fail(new ForbiddenError({ message: "You can only manage your own personal skills" }))
+      }
+      return Effect.void
   }
 }
 
@@ -59,8 +56,7 @@ export const SkillHandler = HttpApiBuilder.group(Api, "server.skill", (handlers)
           const location = yield* Location.Service
           const skillsRoot = location.directory
 
-          const err = checkScopeAccess(userContext, ctx.payload.scope)
-          if (err) return yield* Effect.fail(new ForbiddenError({ message: err }))
+          yield* checkScopeAccess(userContext, ctx.payload.scope)
 
           const result = yield* SkillV2.Service.use((skill) =>
             skill.create({
@@ -88,12 +84,11 @@ export const SkillHandler = HttpApiBuilder.group(Api, "server.skill", (handlers)
             }))
           }
 
-          const err = checkScopeAccess(userContext, {
+          yield* checkScopeAccess(userContext, {
             type: existing.scope?.type ?? "global",
             departmentCode: existing.scope?.departmentCode,
             userID: existing.scope?.userID,
           })
-          if (err) return yield* Effect.fail(new ForbiddenError({ message: err }))
 
           return {
             data: yield* SkillV2.Service.use((skill) =>
@@ -120,12 +115,11 @@ export const SkillHandler = HttpApiBuilder.group(Api, "server.skill", (handlers)
             }))
           }
 
-          const err = checkScopeAccess(userContext, {
+          yield* checkScopeAccess(userContext, {
             type: existing.scope?.type ?? "global",
             departmentCode: existing.scope?.departmentCode,
             userID: existing.scope?.userID,
           })
-          if (err) return yield* Effect.fail(new ForbiddenError({ message: err }))
 
           yield* SkillV2.Service.use((skill) => skill.remove(ctx.params.name))
           return HttpApiSchema.NoContent.make()

@@ -25,13 +25,13 @@ const SkillParams = Schema.Struct({
   name: Schema.String,
 }).annotate({ identifier: "SkillParams" })
 
-const SkillNotFoundError = Schema.TaggedErrorClass<SkillNotFoundError>()(
+export const SkillNotFoundError = Schema.TaggedErrorClass<SkillNotFoundError>()(
   "SkillNotFoundError",
   { name: Schema.String, message: Schema.String },
   { httpApiStatus: 404 },
 )()
 
-const SkillNameConflictError = Schema.TaggedErrorClass<SkillNameConflictError>()(
+export const SkillNameConflictError = Schema.TaggedErrorClass<SkillNameConflictError>()(
   "SkillNameConflictError",
   { name: Schema.String, message: Schema.String },
   { httpApiStatus: 409 },
