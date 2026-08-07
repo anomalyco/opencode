@@ -12,6 +12,7 @@ export {
   WrongKind,
 } from "./files"
 export { execDefaults } from "./exec-defaults"
+export { makeLocalDriver } from "./local"
 export { makeMemoryDriver, type MemoryDriver } from "./memory"
 
 import type { Driver } from "./driver"
