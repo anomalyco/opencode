@@ -227,7 +227,7 @@ export function Session() {
     permissions().forEach((request) => {
       if (autoApproved.has(request.id)) return
       autoApproved.add(request.id)
-      void client.api.permission
+      void data.session.permission
         .reply({
           sessionID: request.sessionID,
           reply: "once",

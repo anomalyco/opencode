@@ -15,6 +15,7 @@ import type {
   ModelInfo,
   PermissionSavedInfo,
   PermissionRequest,
+  PermissionReplyInput,
   Project,
   ProviderInfo,
   ReferenceInfo,
@@ -31,6 +32,7 @@ import type {
   OpenCodeEvent,
   WebSearchProvider,
 } from "@opencode-ai/client"
+import { isPermissionNotFoundError } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -1035,6 +1037,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           invalidate(sessionID: string) {
             sync.invalidate(`session.permission:${sessionID}`)
+          },
+          async reply(input: PermissionReplyInput) {
+            await client.api.permission.reply(input).catch((error: unknown) => {
+              if (!isPermissionNotFoundError(error)) throw error
+            })
+            setStore(
+              "session",
+              "permission",
+              input.sessionID,
+              (requests = []) => requests.filter((request) => request.id !== input.requestID),
+            )
           },
         },
         form: {
