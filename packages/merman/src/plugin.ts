@@ -9,11 +9,11 @@ export default Plugin.define({
       createMermaidMarkdownRenderer(context.renderer, () => ({
         compact: true,
         colors: {
-          text: context.theme.text.default,
-          primary: context.theme.hue.accent[500],
-          secondary: context.theme.hue.cyan[500],
+          text: context.theme.markdown.text,
+          primary: context.theme.markdown.heading,
+          secondary: context.theme.markdown.link,
           muted: context.theme.text.subdued,
-          accent: context.theme.hue.accent[500],
+          accent: context.theme.text.action.primary.focused,
           warning: context.theme.text.feedback.warning.default,
           background: context.theme.background.default,
         },

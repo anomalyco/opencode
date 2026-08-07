@@ -92,6 +92,7 @@ export function createMermaidMarkdownRenderer(
         })()
         diagram.width = "100%"
         diagram.height = diagram.renderedHeight
+        diagram.marginTop = 1
         diagram.selectable = false
         let drag: { x: number; y: number } | undefined
         diagram.onMouseDown = (event: MouseEvent) => {
