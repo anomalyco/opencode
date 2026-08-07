@@ -1,10 +1,13 @@
 import { SessionV2 } from "@opencode-ai/core/session"
-import { DateTime, Effect, Stream } from "effect"
+import { UserContext } from "@opencode-ai/schema/user-context"
+import type { Session } from "@opencode-ai/schema/session"
+import { DateTime, Effect, Option, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
 import {
   ConflictError,
+  ForbiddenError,
   InvalidCursorError,
   MessageNotFoundError,
   ServiceUnavailableError,
@@ -16,6 +19,58 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 const DefaultSessionsLimit = 50
 const DefaultSessionHistoryLimit = 50
 
+// ─── Ownership helpers ────────────────────────────────────────────
+
+function canAccess(
+  userContext: UserContext.Info | undefined,
+  session: Session.Info,
+  options?: { hideExistence?: boolean },
+): boolean {
+  if (!userContext) return true // No JWT configured, allow all
+  switch (userContext.role) {
+    case "global_admin":
+      return true
+    case "dept_admin":
+      // dept_admin can see own sessions + sessions in their department
+      if (session.userID === userContext.userID) return true
+      if (!session.userDepartmentCode) return false // null dept sessions not exposed to dept_admin
+      return session.userDepartmentCode === userContext.departmentCode
+    case "user":
+    default:
+      return session.userID === userContext.userID
+  }
+}
+
+function assertSessionAccess(
+  userContext: UserContext.Info | undefined,
+  session: Session.Info,
+  options?: { hideExistence?: boolean },
+): Effect.Effect<void, SessionNotFoundError | ForbiddenError> {
+  if (canAccess(userContext, session)) return Effect.void
+  if (options?.hideExistence) {
+    // Return 404 to prevent session ID enumeration (used for prompt)
+    return Effect.fail(new SessionNotFoundError({ sessionID: session.id, message: "Session not found" }))
+  }
+  return Effect.fail(new ForbiddenError({ message: "You do not have access to this session" }))
+}
+
+function withSessionAccess(
+  sessionID: string,
+  sessionService: SessionV2.Interface,
+  userContext: Option.Option<UserContext.Info>,
+  options?: { hideExistence?: boolean },
+): Effect.Effect<Session.Info, SessionNotFoundError | ForbiddenError> {
+  const optionUser = Option.getOrUndefined(userContext)
+  return sessionService.get(sessionID as any).pipe(
+    Effect.catchTag("Session.NotFoundError", (error) =>
+      Effect.fail(new SessionNotFoundError({ sessionID: error.sessionID, message: `Session not found: ${error.sessionID}` })),
+    ),
+    Effect.flatMap((s) => assertSessionAccess(optionUser, s, options).pipe(Effect.as(s))),
+  )
+}
+
+// ─── Handler ──────────────────────────────────────────────────────
+
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* SessionV2.Service
@@ -24,6 +79,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.list",
         Effect.fn(function* (ctx) {
+          const userContext = Option.getOrUndefined(yield* UserContext.Service.pipe(Effect.option))
           const query =
             ctx.query.cursor !== undefined
               ? yield* SessionsCursor.parse(ctx.query.cursor).pipe(
@@ -35,10 +91,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             workspaceID: query.workspace,
             limit: ctx.query.limit ?? DefaultSessionsLimit,
           })
-          const first = sessions[0]
-          const last = sessions.at(-1)
+
+          // Filter sessions by access
+          const filtered = userContext
+            ? sessions.filter((s) => canAccess(userContext, s))
+            : sessions
+
+          const first = filtered[0]
+          const last = filtered.at(-1)
           return {
-            data: sessions,
+            data: filtered,
             cursor: {
               previous: first
                 ? SessionsCursor.make({
@@ -67,14 +129,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.create",
         Effect.fn(function* (ctx) {
-          return {
-            data: yield* session.create({
-              id: ctx.payload.id,
-              agent: ctx.payload.agent,
-              model: ctx.payload.model,
-              location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
-            }),
-          }
+          const userContext = Option.getOrUndefined(yield* UserContext.Service.pipe(Effect.option))
+          const result = yield* session.create({
+            id: ctx.payload.id,
+            agent: ctx.payload.agent,
+            model: ctx.payload.model,
+            location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
+            userID: userContext?.userID,
+            userDepartmentCode: userContext?.departmentCode,
+          })
+          return { data: result }
         }),
       )
       .handle(
@@ -90,23 +154,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.get",
         Effect.fn(function* (ctx) {
-          return {
-            data: yield* session.get(ctx.params.sessionID).pipe(
-              Effect.catchTag(
-                "Session.NotFoundError",
-                (error) =>
-                  new SessionNotFoundError({
-                    sessionID: error.sessionID,
-                    message: `Session not found: ${error.sessionID}`,
-                  }),
-              ),
-            ),
-          }
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          const result = yield* withSessionAccess(ctx.params.sessionID, session, userContext)
+          return { data: result }
         }),
       )
       .handle(
         "session.switchAgent",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
           yield* session.switchAgent({ sessionID: ctx.params.sessionID, agent: ctx.payload.agent }).pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>
               Effect.fail(
@@ -123,6 +180,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.switchModel",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
           yield* session.switchModel({ sessionID: ctx.params.sessionID, model: ctx.payload.model }).pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>
               Effect.fail(
@@ -139,6 +198,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.prompt",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext, { hideExistence: true })
           return {
             data: yield* session
               .prompt({
@@ -172,6 +233,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.compact",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
           yield* session.compact({ sessionID: ctx.params.sessionID }).pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>
               Effect.fail(
@@ -196,6 +259,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.wait",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
           yield* session.wait(ctx.params.sessionID).pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>
               Effect.fail(
@@ -220,6 +285,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.revert.stage",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
           return {
             data: yield* session.revert.stage({ ...ctx.params, ...ctx.payload }).pipe(
               Effect.catchTag(
@@ -259,6 +326,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.revert.clear",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
           yield* session.revert.clear(ctx.params.sessionID).pipe(
             Effect.catchTag(
               "Session.NotFoundError",
@@ -288,6 +357,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.revert.commit",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
           yield* session.revert.commit(ctx.params.sessionID).pipe(
             Effect.catchTag(
               "Session.NotFoundError",
@@ -304,6 +375,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.context",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
           return {
             data: yield* session.context(ctx.params.sessionID).pipe(
               Effect.catchTag("Session.NotFoundError", (error) =>
@@ -332,6 +405,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.history",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
           return yield* session
             .history({
               sessionID: ctx.params.sessionID,
@@ -356,15 +431,19 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       )
       .handle(
         "session.events",
-        Effect.fn((ctx) =>
-          Effect.succeed(
+        Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
+          return Effect.succeed(
             session.events({ sessionID: ctx.params.sessionID, after: ctx.query.after }).pipe(Stream.orDie),
-          ),
-        ),
+          )
+        }),
       )
       .handle(
         "session.interrupt",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
           yield* session.interrupt(ctx.params.sessionID)
           return HttpApiSchema.NoContent.make()
         }),
@@ -372,6 +451,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.message",
         Effect.fn(function* (ctx) {
+          const userContext = yield* UserContext.Service.pipe(Effect.option)
+          yield* withSessionAccess(ctx.params.sessionID, session, userContext)
           const message = yield* session.message(ctx.params)
           if (message) return { data: message }
           return yield* new MessageNotFoundError({

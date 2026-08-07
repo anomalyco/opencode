@@ -20,6 +20,8 @@ export const Info = Schema.Struct({
   id: ID,
   parentID: ID.pipe(optional),
   projectID: Project.ID,
+  userID: Schema.String.pipe(optional),
+  userDepartmentCode: Schema.String.pipe(optional),
   agent: Agent.ID.pipe(optional),
   model: Model.Ref.pipe(optional),
   cost: Schema.Finite,

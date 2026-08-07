@@ -81,6 +81,8 @@ type CreateInput = {
   agent?: AgentV2.ID
   model?: ModelV2.Ref
   location: Location.Ref
+  userID?: string
+  userDepartmentCode?: string
 }
 
 type CompactInput = {
@@ -257,6 +259,20 @@ const layer = Layer.effect(
             }),
           )
         if (projected.type === "existing") return projected.session
+
+        // Set user identity fields directly (not part of V1 event projection)
+        if (input.userID) {
+          yield* db
+            .update(SessionTable)
+            .set({
+              user_id: input.userID,
+              user_department_code: input.userDepartmentCode ?? null,
+            })
+            .where(eq(SessionTable.id, sessionID))
+            .run()
+            .pipe(Effect.orDie)
+        }
+
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
