@@ -512,7 +512,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
   const copyOnSelectEnabled = () => config.data.terminal?.copy_on_select ?? process.platform !== "win32"
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
-  const tabsVertical = () => (config.data.tabs?.vertical ?? false) && sessionTabsFitVertically(dimensions().width)
+  const tabsVertical = () => config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width)
   const tabsVisible = () =>
     sessionTabs.enabled() && (sessionTabs.tabs().length > 0 || sessionTabs.newTab()) && route.data.type !== "plugin"
 

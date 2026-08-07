@@ -119,8 +119,16 @@ function agents(info: typeof ConfigV1.Info.Type) {
     ...Object.entries(info.agent ?? {}),
     ...Object.entries(info.mode ?? {}).map(([name, agent]) => [name, { ...agent, mode: "primary" as const }] as const),
   ]
-  if (!entries.length) return undefined
-  return Object.fromEntries(entries.flatMap(([name, agent]) => (agent ? [[name, migrateAgent(agent)]] : [])))
+  const result = Object.fromEntries(entries.flatMap(([name, agent]) => (agent ? [[name, migrateAgent(agent)]] : [])))
+  const small = modelSelection(info.small_model)
+  if (!small) return entries.length ? result : undefined
+  return {
+    ...result,
+    title: {
+      model: small,
+      ...result.title,
+    },
+  }
 }
 
 export function migrateAgent(info: ConfigAgentV1.Info) {

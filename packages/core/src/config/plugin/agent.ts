@@ -161,11 +161,14 @@ function isPathAction(action: string): action is PathAction {
 }
 
 function expandHome(resource: string, home: string) {
-  if (resource.startsWith("~/")) return home + resource.slice(1)
   if (resource === "~") return home
   if (resource === "$HOME") return home
-  if (resource.startsWith("$HOME/")) return home + resource.slice(5)
-  if (resource.startsWith("$HOME\\")) return home + resource.slice(5)
+  const relative = resource.startsWith("~/")
+    ? resource.slice(2)
+    : resource.startsWith("$HOME/") || resource.startsWith("$HOME\\")
+      ? resource.slice(6)
+      : undefined
+  if (relative !== undefined) return (path.posix.isAbsolute(home) ? path.posix : path.win32).join(home, relative)
   return resource
 }
 

@@ -2067,6 +2067,64 @@ test("reconciles active session permissions when the event stream reconnects", a
   }
 })
 
+test("dismisses a permission that expired before its reply", async () => {
+  const events = createEventStream()
+  const request = { id: "per_stale", sessionID: "ses_active", action: "read", resources: ["old.txt"] }
+  let replies = 0
+  const calls = createFetch((url, init) => {
+    if (url.pathname === "/api/session/ses_active/permission/per_stale/reply" && init.method === "POST") {
+      replies++
+      return json(
+        {
+          _tag: "PermissionNotFoundError",
+          requestID: request.id,
+          message: `Permission request not found: ${request.id}`,
+        },
+        { status: 404 },
+      )
+    }
+  }, events)
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    data = useData()
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    emitEvent(events, {
+      id: "evt_permission_asked_stale",
+      created: 0,
+      type: "permission.asked",
+      data: request,
+    })
+    await wait(() => data.session.permission.list(request.sessionID)?.length === 1)
+
+    await data.session.permission.reply({
+      sessionID: request.sessionID,
+      requestID: request.id,
+      reply: "once",
+    })
+
+    expect(replies).toBe(1)
+    expect(data.session.permission.list(request.sessionID)).toEqual([])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("adds, dismisses, and refreshes form requests", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {

@@ -46,9 +46,9 @@ An agent's `mode` controls where it can run:
 
 | Mode | Behavior |
 | --- | --- |
-| `primary` | Can be selected as the main agent for a session. It cannot be launched as a subagent. |
+| `primary` | Can be selected as the main agent for a session. It cannot be launched as a subagent. This is the default for a custom agent when `mode` is omitted. |
 | `subagent` | Can run in a child session through the `subagent` tool, but cannot be selected as the main agent. |
-| `all` | Can be used either way. This is the default for a custom agent when `mode` is omitted. |
+| `all` | Can be used either way. |
 
 In the TUI, press <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> to cycle
 through visible primary and `all` agents, or use `/agents` to choose one.

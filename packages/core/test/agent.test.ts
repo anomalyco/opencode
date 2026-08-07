@@ -126,6 +126,7 @@ describe("Agent", () => {
 
       yield* agent.transform((editor) => editor.update(id, () => {}))
       const info = yield* agent.get(id)
+      expect(info?.mode).toBe("primary")
       expect(info?.permissions.slice(0, Agent.Info.default(id).permissions.length)).toEqual(
         Agent.Info.default(id).permissions,
       )

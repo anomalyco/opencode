@@ -15,6 +15,7 @@ import type {
   ModelInfo,
   PermissionSavedInfo,
   PermissionRequest,
+  PermissionReplyInput,
   Project,
   ProviderInfo,
   ReferenceInfo,
@@ -31,6 +32,7 @@ import type {
   OpenCodeEvent,
   WebSearchProvider,
 } from "@opencode-ai/client"
+import { isPermissionNotFoundError } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -173,6 +175,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         "pending",
         sessionID,
         (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inputID),
+      )
+    }
+
+    function removePermission(sessionID: string, requestID: string) {
+      const requests = store.session.permission[sessionID]
+      if (!requests?.some((request) => request.id === requestID)) return
+      setStore(
+        "session",
+        "permission",
+        sessionID,
+        requests.filter((request) => request.id !== requestID),
       )
     }
 
@@ -840,14 +853,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           ])
           break
         case "permission.replied":
-          setStore(
-            "session",
-            "permission",
-            event.data.sessionID,
-            (store.session.permission[event.data.sessionID] ?? []).filter(
-              (request) => request.id !== event.data.requestID,
-            ),
-          )
+          removePermission(event.data.sessionID, event.data.requestID)
           break
         case "form.created":
           if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
@@ -1035,6 +1041,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           invalidate(sessionID: string) {
             sync.invalidate(`session.permission:${sessionID}`)
+          },
+          async reply(input: PermissionReplyInput) {
+            await client.api.permission.reply(input).catch((error: unknown) => {
+              if (!isPermissionNotFoundError(error)) throw error
+            })
+            removePermission(input.sessionID, input.requestID)
           },
         },
         form: {
