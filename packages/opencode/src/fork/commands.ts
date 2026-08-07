@@ -2,7 +2,6 @@ import type { CommandModule } from "yargs"
 // Only the parent LoopCommand is registered: it nests list/cancel/pause/resume
 // in its own builder (see cli/cmd/loop.ts for why they cannot be top-level).
 import { LoopCommand } from "../cli/cmd/loop"
-import { HookCommand } from "../cli/cmd/hook"
 
 /**
  * Fork-only CLI commands, registered as a single unit from `src/index.ts`.
@@ -18,5 +17,4 @@ import { HookCommand } from "../cli/cmd/hook"
  */
 export const ForkCommands: CommandModule<any, any>[] = [
   LoopCommand,
-  HookCommand,
 ]
