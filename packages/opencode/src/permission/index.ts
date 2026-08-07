@@ -3,6 +3,7 @@ import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { InstanceState } from "@/effect/instance-state"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Deferred, Effect, Layer, Context } from "effect"
+import path from "node:path"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -30,6 +31,41 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Permi
     rulesets
       .flat()
       .findLast((rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)) ?? {
+      action: "ask",
+      permission,
+      pattern: "*",
+    }
+  )
+}
+
+// Resolve the absolute path of a worktree-relative filesystem pattern so
+// absolute and `~`/`$HOME`-expanded rules match. URL and bare-command patterns
+// are not paths: leave them on the single (relative) form.
+function absoluteForm(pattern: string, worktree: string): string | undefined {
+  if (!pattern || pattern.includes("://")) return undefined
+  const absolute = path.isAbsolute(pattern) ? pattern : path.resolve(worktree, pattern)
+  return absolute === pattern ? undefined : absolute
+}
+
+// Match a submitted pattern against rules using both its worktree-relative and
+// absolute forms. Rules stay untouched, so relative, absolute and `~`-expanded
+// patterns each match a file edited at an absolute or relative path.
+export function evaluatePattern(
+  permission: string,
+  pattern: string,
+  worktree: string,
+  ...rulesets: PermissionV1.Ruleset[]
+): PermissionV1.Rule {
+  const absolute = absoluteForm(pattern, worktree)
+  return (
+    rulesets
+      .flat()
+      .findLast(
+        (rule) =>
+          Wildcard.match(permission, rule.permission) &&
+          (Wildcard.match(pattern, rule.pattern) ||
+            (absolute !== undefined && Wildcard.match(absolute, rule.pattern))),
+      ) ?? {
       action: "ask",
       permission,
       pattern: "*",
@@ -66,11 +102,12 @@ const layer = Layer.effect(
 
     const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
+      const worktree = (yield* InstanceState.context).worktree
       const { ruleset, ...request } = input
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
+        const rule = evaluatePattern(request.permission, pattern, worktree, ruleset, approved)
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new PermissionV1.DeniedError({
@@ -141,6 +178,7 @@ const layer = Layer.effect(
 
       yield* Deferred.succeed(existing.deferred, undefined)
       if (input.reply === "once") return
+      const worktree = (yield* InstanceState.context).worktree
 
       for (const pattern of existing.info.always) {
         approved.push({
@@ -153,7 +191,7 @@ const layer = Layer.effect(
       for (const [id, item] of pending.entries()) {
         if (item.info.sessionID !== existing.info.sessionID) continue
         const ok = item.info.patterns.every(
-          (pattern) => evaluate(item.info.permission, pattern, approved).action === "allow",
+          (pattern) => evaluatePattern(item.info.permission, pattern, worktree, approved).action === "allow",
         )
         if (!ok) continue
         pending.delete(id)
