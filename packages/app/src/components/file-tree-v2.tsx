@@ -99,7 +99,7 @@ const FileTreeNodeV2 = (
       {...rest}
     >
       {local.children}
-      <span class="flex-1 min-w-0 text-start text-12-medium whitespace-nowrap truncate">
+      <span data-slot="file-tree-v2-label" class="flex-1 shrink-0 text-start text-12-medium whitespace-nowrap">
         <bdi dir="auto">{local.node.name}</bdi>
       </span>
       {(() => {
@@ -213,6 +213,19 @@ export default function FileTreeV2(props: {
   )
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key))
 
+  createEffect(() => {
+    rows()
+    const element = root()
+    if (!element) return
+    element.style.removeProperty("width")
+    syncFileTreeV2Width(element)
+  })
+
+  createEffect(() => {
+    virtualRowKeys()
+    syncFileTreeV2Width(root())
+  })
+
   return (
     <div
       ref={setRoot}
@@ -231,6 +244,7 @@ export default function FileTreeV2(props: {
                   top: "0",
                   "inset-inline-start": "0",
                   width: "100%",
+                  "min-width": "max-content",
                   height: `${item().size}px`,
                   transform: `translateY(${item().start}px)`,
                 }}
@@ -298,4 +312,14 @@ export default function FileTreeV2(props: {
       </For>
     </div>
   )
+}
+
+export function syncFileTreeV2Width(element?: HTMLDivElement) {
+  if (!element) return
+  queueMicrotask(() => {
+    if (!element.isConnected) return
+    const width = Math.max(element.clientWidth, ...Array.from(element.children, (child) => child.scrollWidth))
+    if (width <= element.clientWidth) return
+    element.style.width = `${width}px`
+  })
 }
