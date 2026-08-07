@@ -395,6 +395,7 @@
         "ignore": "7.0.5",
         "immer": "11.1.4",
         "jsonc-parser": "3.3.1",
+        "mime-types": "3.0.2",
         "tree-sitter-bash": "0.25.0",
         "tree-sitter-powershell": "0.25.10",
         "turndown": "7.2.0",

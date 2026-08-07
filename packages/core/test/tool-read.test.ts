@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Exit, Layer, PlatformError, Stream } from "effect"
+import { Effect, Exit, Layer, Stream } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { Document, Info } from "@opencode-ai/schema/config"
 import { ConfigMedia } from "@opencode-ai/schema/config/media"
@@ -21,6 +21,7 @@ import { ReadTool } from "@opencode-ai/core/tool/plugin/read"
 import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { SessionInstructions } from "@opencode-ai/core/session/instructions"
+import { Environment } from "@opencode-ai/core/environment"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
@@ -42,24 +43,13 @@ const readToolNode = makeLocationNode({
 const assertions: Permission.AssertInput[] = []
 const missingPath = "__missing_read_target__.txt"
 const missingAbsolutePath = path.join(process.cwd(), missingPath)
-const notFound = (target: string) =>
-  PlatformError.systemError({
-    _tag: "NotFound",
-    module: "FileSystem",
-    method: "stat",
-    pathOrDescriptor: target,
-  })
 const readCalls: {
   input: AbsolutePath
   page: ReadToolFileSystem.PageInput
 }[] = []
-const listCalls: ReadToolFileSystem.PageInput[] = []
-let listResult = new ReadToolFileSystem.ListPage({ type: "list-page", entries: [], truncated: false })
-let resolvedType: "file" | "directory" = "file"
 let resolveFailure: unknown
-let inspectFailure: ReadToolFileSystem.InspectError | undefined
 let directoryEntries: string[] = []
-let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage = {
+let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage | ReadToolFileSystem.ListPage = {
   type: "file",
   uri: "file:///README.md",
   name: "README.md",
@@ -71,22 +61,12 @@ let readFailure: ReadToolFileSystem.ReadError | undefined
 const reader = Layer.succeed(
   ReadToolFileSystem.Service,
   ReadToolFileSystem.Service.of({
-    inspect: () =>
-      resolveFailure !== undefined
-        ? Effect.die(resolveFailure)
-        : inspectFailure !== undefined
-          ? Effect.fail(inspectFailure)
-          : Effect.succeed(resolvedType),
     read: (input, _resource, page = {}) => {
       readCalls.push({ input, page })
+      if (resolveFailure !== undefined) return Effect.die(resolveFailure)
       if (readFailure !== undefined) return Effect.fail(readFailure)
       return Effect.succeed(readResult)
     },
-    list: (_path, input = {}) =>
-      Effect.sync(() => {
-        listCalls.push(input)
-        return listResult
-      }),
   }),
 )
 let allow = true
@@ -125,17 +105,6 @@ const testFileSystem = Layer.effect(
       FSUtil.Service.of({
         ...fs,
         readDirectory: () => Effect.succeed(directoryEntries),
-        realPath: (path) =>
-          path === missingAbsolutePath
-            ? Effect.fail(
-                PlatformError.systemError({
-                  _tag: "NotFound",
-                  module: "FileSystem",
-                  method: "realPath",
-                  pathOrDescriptor: path,
-                }),
-              )
-            : Effect.succeed(path),
       }),
     ),
   ),
@@ -195,11 +164,8 @@ describe("ReadTool", () => {
   beforeEach(() => {
     assertions.length = 0
     readCalls.length = 0
-    listCalls.length = 0
     allow = true
-    resolvedType = "file"
     resolveFailure = undefined
-    inspectFailure = undefined
     directoryEntries = []
     readResult = {
       type: "file",
@@ -210,7 +176,6 @@ describe("ReadTool", () => {
       mime: "text/plain",
     }
     readFailure = undefined
-    listResult = new ReadToolFileSystem.ListPage({ type: "list-page", entries: [], truncated: false })
   })
 
   it.effect("registers, authorizes, and reads through the location filesystem", () =>
@@ -672,7 +637,7 @@ describe("ReadTool", () => {
 
   it.effect("returns missing paths as model-visible tool failures", () =>
     Effect.gen(function* () {
-      inspectFailure = notFound(missingAbsolutePath)
+      readFailure = new Environment.NotFound({ path: missingAbsolutePath })
       directoryEntries = [
         "__missing_read_target__.txt.bak",
         "copy___missing_read_target__.txt",
@@ -696,14 +661,18 @@ describe("ReadTool", () => {
         },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: [missingPath], save: ["*"] }])
-      expect(readCalls).toEqual([])
+      expect(readCalls).toEqual([
+        {
+          input: AbsolutePath.make(missingAbsolutePath),
+          page: { offset: undefined, limit: undefined },
+        },
+      ])
     }),
   )
 
   it.effect("lists a bounded directory page through read", () =>
     Effect.gen(function* () {
-      resolvedType = "directory"
-      listResult = new ReadToolFileSystem.ListPage({
+      readResult = new ReadToolFileSystem.ListPage({
         type: "list-page",
         entries: [
           FileSystem.Entry.make({ path: RelativePath.make("components/"), type: "directory" }),
@@ -726,7 +695,7 @@ describe("ReadTool", () => {
       })
       expect(result).toMatchObject({
         status: "completed",
-        output: { entries: listResult.entries, truncated: true, next: 4 },
+        output: { entries: readResult.entries, truncated: true, next: 4 },
       })
       if (result.status !== "completed") return
       expect(result.metadata).toEqual({ truncated: true })
@@ -737,14 +706,15 @@ describe("ReadTool", () => {
         },
       ])
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["src"], save: ["*"] }])
-      expect(listCalls).toEqual([{ offset: 2, limit: 10 }])
+      expect(readCalls).toEqual([
+        { input: AbsolutePath.make(path.join(process.cwd(), "src")), page: { offset: 2, limit: 10 } },
+      ])
     }),
   )
 
   it.effect("does not list a directory when permission is denied", () =>
     Effect.gen(function* () {
       allow = false
-      resolvedType = "directory"
       const registry = yield* Tool.Service
 
       expect(
@@ -754,7 +724,7 @@ describe("ReadTool", () => {
           call: { type: "tool-call", id: "call-read-directory-denied", name: "read", input: { path: "src" } },
         }),
       ).toEqual({ status: "error", error: { type: "permission.rejected", message: "Permission denied: read" } })
-      expect(listCalls).toEqual([])
+      expect(readCalls).toEqual([])
     }),
   )
 
@@ -773,7 +743,12 @@ describe("ReadTool", () => {
         ),
       ).toBe(true)
 
-      expect(readCalls).toEqual([])
+      expect(readCalls).toEqual([
+        {
+          input: AbsolutePath.make(path.join(process.cwd(), "missing.txt")),
+          page: { offset: undefined, limit: undefined },
+        },
+      ])
     }),
   )
 
