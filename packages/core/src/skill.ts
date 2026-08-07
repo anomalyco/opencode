@@ -2,7 +2,7 @@ export * as Skill from "./skill"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
+import { Context, Effect, Layer, Schema, Scope, Stream, Types } from "effect"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Skill } from "@opencode-ai/schema/skill"
 import { Agent } from "./agent"
@@ -85,20 +85,14 @@ const layer = Layer.effect(
     const watcher = yield* Watcher.Service
     const scope = yield* Scope.Scope
     const cache = new Map<string, { skills: Info[]; paths: readonly string[] }>()
-    const cacheLock = Semaphore.makeUnsafe(1)
     const watched = new Set<string>()
 
     const invalidate = Effect.fn("Skill.invalidateFromWatcher")(function* (file: string) {
-      const invalidated = yield* cacheLock.withPermit(
-        Effect.sync(() => {
-          return Array.from(cache.entries()).flatMap(([key, loaded]) => {
-            if (!loaded.paths.some((item) => FSUtil.overlaps(item, file))) return []
-            cache.delete(key)
-            return [[key, loaded] as const]
-          })
-        }),
+      const invalidated = Array.from(cache.entries()).filter(([, loaded]) =>
+        loaded.paths.some((item) => FSUtil.overlaps(item, file)),
       )
       if (invalidated.length === 0) return
+      for (const [key] of invalidated) cache.delete(key)
       yield* Effect.logInfo("skill cache invalidated", {
         file,
         sources: invalidated.map(([key]) => key),
@@ -107,21 +101,14 @@ const layer = Layer.effect(
       yield* bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid)
     })
 
-    const watch = Effect.fn("Skill.watch")(function* (input: Watcher.WatchInput) {
-      yield* Effect.uninterruptible(
-        Effect.gen(function* () {
-          const target = path.resolve(input.path)
-          const key = `${input.type}:${target}`
-          if (watched.has(key)) return
-          watched.add(key)
-          const updates = yield* watcher
-            .acquire({ ...input, path: target })
-            .pipe(Effect.provideService(Scope.Scope, scope))
-          yield* updates.pipe(
-            Stream.runForEach((update) => invalidate(update.path)),
-            Effect.forkIn(scope, { startImmediately: true }),
-          )
-        }),
+    const watch = Effect.fn("Skill.watch")(function* (directory: string) {
+      const target = path.resolve(directory)
+      if (watched.has(target)) return
+      watched.add(target)
+      const updates = yield* watcher.subscribe({ path: target, type: "directory" })
+      yield* updates.pipe(
+        Stream.runForEach((update) => invalidate(update.path)),
+        Effect.forkIn(scope, { startImmediately: true }),
       )
     })
 
@@ -129,21 +116,16 @@ const layer = Layer.effect(
       const target = path.resolve(directory)
       const resolved = yield* fs.realPath(directory).pipe(Effect.catch(() => Effect.succeed(undefined)))
       if (resolved) {
-        yield* watch({ path: resolved, type: "directory" })
+        yield* watch(resolved)
         if (resolved !== target) {
-          yield* watch({ path: path.dirname(target), type: "directory" })
+          yield* watch(path.dirname(target))
         }
         return resolved === target ? [target] : [target, resolved]
       }
       if (yield* fs.isDir(path.dirname(target))) {
-        yield* watch({ path: path.dirname(target), type: "directory" })
+        yield* watch(path.dirname(target))
       }
       return [target]
-    })
-
-    const refresh = Effect.fn("Skill.refresh")(function* () {
-      yield* cacheLock.withPermit(Effect.sync(() => cache.clear()))
-      yield* bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid)
     })
 
     const state = State.create<Data, Draft>({
@@ -156,7 +138,8 @@ const layer = Layer.effect(
         },
         list: () => draft.sources as Source[],
       }),
-      finalize: refresh,
+      finalize: () =>
+        Effect.sync(() => cache.clear()).pipe(Effect.andThen(bus.publish(Skill.Event.Updated, {})), Effect.asVoid),
     })
 
     const load = Effect.fn("Skill.load")(function* (source: Source) {
@@ -182,7 +165,7 @@ const layer = Layer.effect(
           if (!roots.some((root) => FSUtil.contains(root, resolved))) {
             const external = path.dirname(resolved)
             paths.push(external)
-            yield* watch({ path: external, type: "directory" })
+            yield* watch(external)
           }
           const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
           if (!content) continue
@@ -219,20 +202,16 @@ const layer = Layer.effect(
       Effect.forkScoped({ startImmediately: true }),
     )
 
-    const list = Effect.fn("Skill.list")(() =>
-      cacheLock.withPermit(
-        Effect.gen(function* () {
-          const skills = new Map<ID, Info>()
-          for (const source of state.get().sources) {
-            const key = Source.key(source)
-            const loaded = cache.get(key) ?? (yield* load(source))
-            cache.set(key, loaded)
-            for (const skill of loaded.skills) skills.set(skill.id, skill)
-          }
-          return Array.from(skills.values())
-        }),
-      ),
-    )
+    const list = Effect.fn("Skill.list")(function* () {
+      const skills = new Map<ID, Info>()
+      for (const source of state.get().sources) {
+        const key = Source.key(source)
+        const loaded = cache.get(key) ?? (yield* load(source))
+        cache.set(key, loaded)
+        for (const skill of loaded.skills) skills.set(skill.id, skill)
+      }
+      return Array.from(skills.values())
+    })
 
     return Service.of({
       transform: state.transform,
