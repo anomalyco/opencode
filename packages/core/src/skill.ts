@@ -84,7 +84,25 @@ export type Draft = {
 export interface Interface extends State.Transformable<Draft> {
   readonly sources: () => Effect.Effect<Source[]>
   readonly list: (userContext?: UserContext.Info) => Effect.Effect<Info[]>
+  readonly create: (input: {
+    name: string
+    description?: string
+    content: string
+    scope: { type: "global" | "department" | "user"; departmentCode?: string; userID?: string }
+    skillsRoot: string
+  }) => Effect.Effect<Info>
+  readonly update: (input: {
+    name: string
+    description?: string
+    content?: string
+  }) => Effect.Effect<Info, NotFoundError>
+  readonly remove: (name: string) => Effect.Effect<void, NotFoundError>
 }
+
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("SkillV2.NotFoundError", {
+  name: Schema.String,
+  message: Schema.String,
+}) {}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Skill") {}
 
@@ -195,7 +213,22 @@ const layer = Layer.effect(
       }
     }
 
+    function scopeDirName(scope: {
+      type: "global" | "department" | "user"
+      departmentCode?: string
+      userID?: string
+    }): string {
+      switch (scope.type) {
+        case "global": return "global"
+        case "department": return `dept_${scope.departmentCode ?? "unknown"}`
+        case "user": return `user_${scope.userID ?? "unknown"}`
+      }
+    }
+
     const cache = new Map<string, Info[]>()
+    function invalidateCache() {
+      cache.clear()
+    }
     const list = Effect.fn("SkillV2.list")(function* (userContext?: UserContext.Info) {
       const skills = new Map<string, Info>()
       for (const source of state.get().sources) {
@@ -224,6 +257,64 @@ const layer = Layer.effect(
         return state.get().sources
       }),
       list,
+      create: Effect.fn("SkillV2.create")(function* (input) {
+        const scopePath = scopeDirName(input.scope)
+        const dir = path.join(input.skillsRoot, scopePath, input.name)
+        const filepath = path.join(dir, "SKILL.md")
+        const frontmatter: Record<string, string | undefined> = { name: input.name }
+        if (input.description) frontmatter.description = input.description
+        const frontmatterStr = Object.entries(frontmatter)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("\n")
+        const content = `---\n${frontmatterStr}\n---\n\n${input.content}`
+        yield* fs.writeWithDirs(filepath, content).pipe(Effect.orDie)
+        invalidateCache()
+        const result: Info = {
+          name: input.name,
+          description: input.description,
+          location: AbsolutePath.make(filepath),
+          content: input.content,
+          scope: input.scope.type === "global"
+            ? { type: "global" }
+            : input.scope.type === "department"
+              ? { type: "department", departmentCode: input.scope.departmentCode }
+              : { type: "user", userID: input.scope.userID },
+        }
+        return result
+      }),
+      update: Effect.fn("SkillV2.update")(function* (input) {
+        const all = yield* list()
+        const existing = all.find((s) => s.name === input.name)
+        if (!existing) return yield* new NotFoundError({ name: input.name, message: `Skill not found: ${input.name}` })
+        const content = yield* fs.readFileStringSafe(existing.location)
+        if (!content) return yield* new NotFoundError({ name: input.name, message: `Skill file not found: ${input.name}` })
+        const markdown = ConfigMarkdown.parseOption(content)
+        if (!markdown) return yield* new NotFoundError({ name: input.name, message: `Invalid skill file: ${input.name}` })
+        const updatedFrontmatter = { ...markdown.data }
+        if (input.description !== undefined) updatedFrontmatter.description = input.description
+        const frontmatterStr = Object.entries(updatedFrontmatter)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("\n")
+        const newContent = input.content !== undefined ? input.content : markdown.content
+        const fileContent = `---\n${frontmatterStr}\n---\n\n${newContent}`
+        yield* fs.writeFileString(existing.location, fileContent).pipe(Effect.orDie)
+        invalidateCache()
+        return {
+          ...existing,
+          description: input.description ?? existing.description,
+          content: newContent,
+        }
+      }),
+      remove: Effect.fn("SkillV2.remove")(function* (name) {
+        const all = yield* list()
+        const existing = all.find((s) => s.name === name)
+        if (!existing) return yield* new NotFoundError({ name, message: `Skill not found: ${name}` })
+        const dir = path.dirname(existing.location)
+        yield* fs.remove(dir, { recursive: true, force: true }).pipe(Effect.orDie)
+        invalidateCache()
+      }),
     })
   }),
 )
