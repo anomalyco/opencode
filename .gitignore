@@ -32,3 +32,5 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+dist-package/
+opencode-evolve-linux-x64.tar.gz
