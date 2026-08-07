@@ -1,16 +1,9 @@
 import { Effect, Sink, Stream } from "effect"
 import { systemError } from "effect/PlatformError"
-import type { Command, CommandInput, KillOptions } from "effect/unstable/process/ChildProcess"
+import type { Command, KillOptions } from "effect/unstable/process/ChildProcess"
 import { ExitCode, make, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
 import type { Driver } from "@opencode-ai/core/environment"
 import type { ModalClientParams, Sandbox, SandboxCreateParams } from "modal"
-
-const WRAPPER = `
-pidfile=$1
-inner=$2
-shift 2
-exec setsid --wait sh -c "$inner" sh "$pidfile" "$@"
-`
 
 const INNER_WRAPPER = `
 pidfile=$1
@@ -29,7 +22,6 @@ if [ -s "$1" ]; then
 else
   exit 47
 fi
-rm -f -- "$1"
 `
 
 export interface ModalImageSpec {
@@ -92,30 +84,35 @@ export const makeModalDriver = (sandbox: Sandbox): Driver => {
     const env = compact(command.options.env)
     const isolatedEnv =
       command.options.extendEnv === false || (!command.options.extendEnv && command.options.env !== undefined)
-    const argv = isolatedEnv ? ["env", "-i", ...environment(env)] : []
+    const argv = isolatedEnv ? ["env", "-i", ...Object.entries(env ?? {}).map(([key, value]) => `${key}=${value}`)] : []
     const process = yield* Effect.tryPromise({
       try: () =>
-        sandbox.exec(["sh", "-c", WRAPPER, "sh", pidFile, INNER_WRAPPER, ...argv, command.command, ...command.args], {
-          mode: "binary",
-          stdout: "pipe",
-          stderr: "pipe",
-          workdir: command.options.cwd,
-          env: isolatedEnv ? undefined : env,
-        }),
+        sandbox.exec(
+          ["setsid", "--wait", "sh", "-c", INNER_WRAPPER, "sh", pidFile, ...argv, command.command, ...command.args],
+          {
+            mode: "binary",
+            stdout: "pipe",
+            stderr: "pipe",
+            workdir: command.options.cwd,
+            env: isolatedEnv ? undefined : env,
+          },
+        ),
       catch: (cause) => spawnError("spawn", undefined, cause),
     })
 
     const onError = (cause: unknown) => spawnError("process", undefined, cause)
     let exited = false
-    let stdinClosed = false
     const writer = process.stdin.getWriter()
+    let closingStdin: Promise<void> | undefined
     const waited = process.wait().then((code) => {
       exited = true
-      if (!stdinClosed) writer.releaseLock()
+      if (!closingStdin) writer.releaseLock()
       return code
     })
-    const kill = (options?: KillOptions) =>
-      Effect.tryPromise({
+    const exitCode = Effect.tryPromise({ try: () => waited, catch: onError }).pipe(Effect.map(ExitCode))
+    const kill = (options?: KillOptions) => {
+      if (exited) return Effect.void
+      return Effect.tryPromise({
         try: async () => {
           const killer = await sandbox.exec(["sh", "-c", KILL, "sh", pidFile, options?.killSignal ?? "SIGTERM"], {
             stdout: "pipe",
@@ -125,22 +122,25 @@ export const makeModalDriver = (sandbox: Sandbox): Driver => {
           if (code !== 0) throw new Error(`modal kill exited ${code}`)
         },
         catch: onError,
-      })
+      }).pipe(Effect.andThen(exitCode), Effect.asVoid)
+    }
 
-    yield* Effect.addFinalizer(() => (exited ? Effect.void : kill().pipe(Effect.ignore)))
+    yield* Effect.addFinalizer(() => kill(command.options).pipe(Effect.ignore))
 
     const closeStdin = Effect.tryPromise({
-      try: async () => {
-        await writer.close()
-        stdinClosed = true
-        writer.releaseLock()
-      },
+      try: () => (closingStdin ??= writer.close().finally(() => writer.releaseLock())),
       catch: onError,
     })
-    const stdin = Sink.forEach((chunk: Uint8Array) =>
+    const writeStdin = Sink.forEach((chunk: Uint8Array) =>
       Effect.tryPromise({ try: () => writer.write(chunk), catch: onError }),
-    ).pipe(Sink.ensuring(closeStdin))
-    const input = commandInput(command.options.stdin)
+    )
+    const inputConfig = command.options.stdin
+    const inputOptions =
+      inputConfig !== undefined && typeof inputConfig === "object" && !Stream.isStream(inputConfig)
+        ? inputConfig
+        : undefined
+    const input = inputOptions?.stream ?? inputConfig
+    const stdin = inputOptions?.endOnDone === false ? writeStdin : writeStdin.pipe(Sink.ensuring(closeStdin))
     if (input === "ignore") {
       yield* closeStdin
     }
@@ -152,7 +152,7 @@ export const makeModalDriver = (sandbox: Sandbox): Driver => {
     const stderr = Stream.fromReadableStream({ evaluate: () => process.stderr, onError })
     return makeHandle({
       pid: ProcessId(crypto.getRandomValues(new Uint32Array(1))[0]),
-      exitCode: Effect.tryPromise({ try: () => waited, catch: onError }).pipe(Effect.map(ExitCode)),
+      exitCode,
       isRunning: Effect.sync(() => !exited),
       kill,
       stdin,
@@ -168,16 +168,10 @@ export const makeModalDriver = (sandbox: Sandbox): Driver => {
   return { spawner: make(spawn) }
 }
 
-const commandInput = (input: CommandInput | { readonly stream: CommandInput } | undefined) =>
-  input !== undefined && typeof input === "object" && !Stream.isStream(input) ? input.stream : input
-
 const compact = (env: Record<string, string | undefined> | undefined) => {
   if (!env) return undefined
   return Object.fromEntries(Object.entries(env).flatMap(([key, value]) => (value === undefined ? [] : [[key, value]])))
 }
-
-const environment = (env: Record<string, string> | undefined) =>
-  Object.entries(env ?? {}).map(([key, value]) => `${key}=${value}`)
 
 const spawnError = (method: string, description?: string, cause?: unknown) =>
   systemError({ _tag: "Unknown", module: "ModalDriver", method, description, cause })
