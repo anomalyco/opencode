@@ -125,8 +125,14 @@ export const LoopCommand = effectCmd({
         type: "string",
         describe: `stop word the agent must emit to end the loop (default: ${LoopArgDefaults.completionToken})`,
       })
-      .option("no-progress-limit", {
+      // Primary name is `stall-limit` because yargs' boolean-negation eats the
+      // other one: `--no-progress-limit 0` parses as `progress-limit=false`
+      // plus a stray positional `0`, and yargs answers by printing help. Only
+      // the `=` form ever worked. The old spelling stays as an alias so
+      // anything already using `--no-progress-limit=0` keeps working.
+      .option("stall-limit", {
         type: "number",
+        alias: "no-progress-limit",
         describe: `consecutive no-progress iterations before stopping (default: ${LoopArgDefaults.noProgressLimit}, 0 disables)`,
         default: LoopArgDefaults.noProgressLimit,
       })
@@ -156,7 +162,7 @@ export const LoopCommand = effectCmd({
         prompt: prompt ?? "",
         maxIterations: args.max,
         interval: args.interval,
-        noProgressLimit: args["no-progress-limit"],
+        noProgressLimit: args["stall-limit"],
         completionToken: args["completion-token"],
         mode: queueMode ? "queue" : undefined,
         queue: queueMode && args.queue && args.queue.length > 0 ? args.queue : undefined,

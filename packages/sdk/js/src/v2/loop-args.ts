@@ -38,6 +38,9 @@ const NUMERIC_FLAGS: Record<string, "interval" | "max" | "noProgressLimit"> = {
   "-i": "interval",
   "--max": "max",
   "-n": "max",
+  // Both spellings: the TUI has no yargs and never had the negation problem,
+  // but the two surfaces must not drift on flag names.
+  "--stall-limit": "noProgressLimit",
   "--no-progress-limit": "noProgressLimit",
 }
 

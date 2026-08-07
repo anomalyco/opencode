@@ -72,7 +72,24 @@ not a subagent — is the target worth hitting first.
     the tail wagging the dog. Covered by the live check in 5.5 instead.
 - [x] 5.4 `bun test` and `bun run typecheck` clean
   - 217 loop + agent + peers tests pass; typecheck clean across 23 workspace tasks.
-- [ ] 5.5 Live check against a real `/auto` run
+- [x] 5.5 Live check against a real run
+  - Done 2026-08-07 against a real model in a throwaway repo. Turns 1–3 answered in English;
+    the correction "From now on, answer only in Swedish" was POSTed to a running loop and
+    returned `true`; turns 4 and 5 came back "Det är soligt och varmt idag." and
+    "Det regnar lite grått och molnigt idag.", with the corrections block present in BOTH
+    later prompts. That is delivery and persistence proven end to end, not just in tests.
+  - Also covers 5.3: `/btw` was never involved and nothing about it changed.
+
+## Found while live-checking: `--no-progress-limit` never worked with a space
+
+`--no-progress-limit 0` printed the help text instead of running. yargs' boolean-negation
+reads `--no-X` as `X=false`, so the value `0` became a stray positional and yargs answered
+with usage. Only `--no-progress-limit=0` ever worked, which is not how the flag reads in
+`--help`.
+
+The flag is now `--stall-limit`, with `no-progress-limit` kept as an alias so the `=` form
+anyone already uses keeps working. `parseLoopArgs` accepts both, since the TUI and CLI must
+not drift on flag names. Verified both spellings start a run.
 
 ## Deferred: subagent targeting
 
