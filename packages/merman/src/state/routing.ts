@@ -507,8 +507,9 @@ function addVerticalElbowTransition(builder: StateTransitionRenderBuilder): void
 
   if (topToBottom) addBottomDeparture(builder, from, startX)
   else addTopDeparture(builder, from, startX)
+  const availableApproach = Math.max(0, Math.abs(endY - startY) - 1)
   const bendY =
-    startX === endX ? endY : topToBottom ? endY - verticalStep * Math.min(2, Math.abs(endY - startY) - 1) : startY
+    startX === endX ? endY : topToBottom ? endY - verticalStep * Math.min(2, availableApproach) : startY
   const targetApproachLength = Math.abs(endY - bendY)
   const hasTargetApproach = targetApproachLength > 0
   if (startY !== bendY) addVerticalFadeRamp(builder, startX, startY, bendY - verticalStep, verticalStep, startDistance)

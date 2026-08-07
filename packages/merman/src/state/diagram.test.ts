@@ -512,4 +512,21 @@ stateDiagram-v2
                     ╰──────╯             ╰─────────╯    ╚════════════════════╝"
     `)
   })
+
+  test("keeps composite-to-choice elbows connected", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  [*] --> Authenticated
+  state Authenticated {
+    [*] --> Editing
+    Editing --> Ready
+  }
+  note right of Editing
+    Draft changes
+  end note
+  Authenticated --> Decision
+  state Decision <<choice>>
+  Decision --> [*]`)
+
+    expect(output).toContain("╰─────────────┬\n")
+  })
 })
