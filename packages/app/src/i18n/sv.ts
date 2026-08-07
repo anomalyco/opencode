@@ -726,6 +726,8 @@ export const dict = {
   "session.messages.loadEarlier": "Ladda tidigare meddelanden",
   "session.messages.loading": "Läser in meddelanden...",
   "session.messages.jumpToLatest": "Hoppa till senaste",
+  "session.messages.timelineNavigation": "Meddelandenavigering",
+  "session.messages.jumpToMessage": "Gå till meddelande {{index}}",
   "session.context.addToContext": "Lägg till {{selection}} i kontexten",
   "session.todo.title": "Att göra",
   "session.todo.collapse": "Fäll ihop",
@@ -955,6 +957,9 @@ export const dict = {
     "Växla mellan agenter i inmatningsfältet. När alternativet är dolt används agenten Bygg som standard.",
   "settings.general.row.reasoningSummaries.title": "Visa resonemangssammanfattningar",
   "settings.general.row.reasoningSummaries.description": "Visa modellresonemangssammanfattningar i tidslinjen",
+  "settings.general.row.preloadTimelineHistory.title": "Förhandsläs hela meddelandehistoriken",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Läs in äldre meddelanden i bakgrunden så att meddelandenavigeringen täcker hela sessionen.",
   "settings.general.row.shellToolPartsExpanded.title": "Expandera skalverktygsdelar",
   "settings.general.row.shellToolPartsExpanded.description":
     "Visa skalverktygsdelar expanderade som standard på tidslinjen",

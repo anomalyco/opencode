@@ -730,6 +730,8 @@ export const dict = {
   "session.messages.loadEarlier": "پہلے سنیہے لوڈ کرو",
   "session.messages.loading": "سنیہے لوڈ ہو رۓ...",
   "session.messages.jumpToLatest": "تازہ ترین تے جاؤ",
+  "session.messages.timelineNavigation": "سنیہیاں دی نیویگیشن",
+  "session.messages.jumpToMessage": "سنیہے {{index}} تے جاؤ",
   "session.context.addToContext": "سیاق و سباق چ {{selection}} شامل کرو",
   "session.todo.title": "ٹوڈوس",
   "session.todo.collapse": "سمیٹو",
@@ -955,6 +957,9 @@ export const dict = {
     "کمپوزر چ ایجنٹاں دے وچکار سوئچ کرو۔ جدوں لُکیا ہوندا اے، تے بلڈ ایجنٹ تے ڈیفالٹ ہوندا اے۔",
   "settings.general.row.reasoningSummaries.title": "استدلال دے خلاصے وکھاؤ",
   "settings.general.row.reasoningSummaries.description": "ٹائم لائن وچ ماڈل دی استدلال دے خلاصے وکھاؤ",
+  "settings.general.row.preloadTimelineHistory.title": "سنیہیاں دی پوری تریخ پہلے لوڈ کرو",
+  "settings.general.row.preloadTimelineHistory.description":
+    "پرانے سنیہے پس منظر وچ لوڈ کرو تاکہ سنیہا نیویگیشن پورے سیشن نوں کور کرے۔",
   "settings.general.row.shellToolPartsExpanded.title": "شیل ٹول دے حصیاں نو ودھاؤ",
   "settings.general.row.shellToolPartsExpanded.description":
     "ٹائم لائن وچ ڈیفالٹ دے طور تے ودھائے گئے شیل ٹول دے حصے وکھاؤ",

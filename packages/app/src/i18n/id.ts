@@ -788,6 +788,8 @@ export const dict = {
   "session.messages.loadEarlier": "Muat pesan sebelumnya",
   "session.messages.loading": "Memuat pesan...",
   "session.messages.jumpToLatest": "Lompat ke pesan terbaru",
+  "session.messages.timelineNavigation": "Navigasi pesan",
+  "session.messages.jumpToMessage": "Lompat ke pesan {{index}}",
 
   "session.context.addToContext": "Tambahkan {{selection}} ke konteks",
   "session.todo.title": "Tugas",
@@ -1031,6 +1033,9 @@ export const dict = {
     "Beralih antaragen di penyusun. Saat disembunyikan, Agen Build digunakan sebagai bawaan.",
   "settings.general.row.reasoningSummaries.title": "Tampilkan ringkasan penalaran",
   "settings.general.row.reasoningSummaries.description": "Tampilkan ringkasan penalaran model di linimasa",
+  "settings.general.row.preloadTimelineHistory.title": "Pramuat seluruh riwayat pesan",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Muat pesan lama di latar belakang agar navigasi pesan menjangkau seluruh sesi.",
   "settings.general.row.shellToolPartsExpanded.title": "Bentangkan bagian alat shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Tampilkan bagian alat shell yang dibentangkan secara bawaan di linimasa",

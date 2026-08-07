@@ -604,6 +604,8 @@ export const dict = {
   "session.messages.loadEarlier": "Frühere Nachrichten laden",
   "session.messages.loading": "Nachrichten werden geladen…",
   "session.messages.jumpToLatest": "Zur neuesten Nachricht springen",
+  "session.messages.timelineNavigation": "Nachrichtennavigation",
+  "session.messages.jumpToMessage": "Zu Nachricht {{index}} springen",
   "session.context.addToContext": "{{selection}} zum Kontext hinzufügen",
   "session.todo.title": "Aufgaben",
   "session.todo.collapse": "Einklappen",
@@ -769,6 +771,9 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Reasoning-Zusammenfassungen anzeigen",
   "settings.general.row.reasoningSummaries.description":
     "Zusammenfassungen des Modell-Reasonings in der Timeline anzeigen",
+  "settings.general.row.preloadTimelineHistory.title": "Vollständigen Nachrichtenverlauf vorab laden",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Ältere Nachrichten im Hintergrund laden, damit die Nachrichtennavigation die gesamte Sitzung abdeckt.",
   "settings.general.row.shellToolPartsExpanded.title": "Shell-Tool-Abschnitte ausklappen",
   "settings.general.row.shellToolPartsExpanded.description":
     "Shell-Tool-Abschnitte standardmäßig in der Timeline ausgeklappt anzeigen",

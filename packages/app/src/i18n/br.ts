@@ -711,6 +711,8 @@ export const dict = {
   "session.messages.loadEarlier": "Carregar mensagens anteriores",
   "session.messages.loading": "Carregando mensagens...",
   "session.messages.jumpToLatest": "Ir para a mais recente",
+  "session.messages.timelineNavigation": "Navegação de mensagens",
+  "session.messages.jumpToMessage": "Ir para a mensagem {{index}}",
   "session.context.addToContext": "Adicionar {{selection}} ao contexto",
   "session.todo.title": "Tarefas",
   "session.todo.collapse": "Recolher",
@@ -875,6 +877,9 @@ export const dict = {
     "Alternar entre agentes na área de composição. Quando oculto, usa o agente Build como padrão.",
   "settings.general.row.reasoningSummaries.title": "Mostrar resumos de raciocínio",
   "settings.general.row.reasoningSummaries.description": "Exibir resumos de raciocínio do modelo na linha do tempo",
+  "settings.general.row.preloadTimelineHistory.title": "Pré-carregar o histórico completo de mensagens",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Carrega mensagens anteriores em segundo plano para que a navegação de mensagens cubra toda a sessão.",
   "settings.general.row.shellToolPartsExpanded.title": "Expandir partes da ferramenta shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Mostrar partes da ferramenta shell expandidas por padrão na linha do tempo",

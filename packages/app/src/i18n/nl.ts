@@ -729,6 +729,8 @@ export const dict = {
   "session.messages.loadEarlier": "Laad eerdere berichten",
   "session.messages.loading": "Berichten laden...",
   "session.messages.jumpToLatest": "Ga naar de laatste",
+  "session.messages.timelineNavigation": "Berichtnavigatie",
+  "session.messages.jumpToMessage": "Ga naar bericht {{index}}",
   "session.context.addToContext": "Voeg {{selection}} toe aan de context",
   "session.todo.title": "Taken",
   "session.todo.collapse": "Samenvouwen",
@@ -963,6 +965,9 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Toon redeneeroverzichten",
   "settings.general.row.reasoningSummaries.description":
     "Geef samenvattingen van modelredeneringen weer in de tijdlijn",
+  "settings.general.row.preloadTimelineHistory.title": "Volledige berichtgeschiedenis vooraf laden",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Laad oudere berichten op de achtergrond zodat berichtnavigatie de hele sessie bestrijkt.",
   "settings.general.row.shellToolPartsExpanded.title": "Shelltoolonderdelen uitvouwen",
   "settings.general.row.shellToolPartsExpanded.description":
     "Toon shelltoolonderdelen standaard uitgevouwen in de tijdlijn",

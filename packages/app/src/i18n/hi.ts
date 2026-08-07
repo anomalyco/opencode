@@ -731,6 +731,8 @@ export const dict = {
   "session.messages.loadEarlier": "पहले के संदेश लोड करें",
   "session.messages.loading": "संदेश लोड हो रहे हैं...",
   "session.messages.jumpToLatest": "नवीनतम पर जाएं",
+  "session.messages.timelineNavigation": "संदेश नेविगेशन",
+  "session.messages.jumpToMessage": "संदेश {{index}} पर जाएं",
   "session.context.addToContext": "{{selection}} को कॉन्टेक्स्ट में जोड़ें",
   "session.todo.title": "कार्य सूची",
   "session.todo.collapse": "संकुचित करें",
@@ -958,6 +960,9 @@ export const dict = {
     "कंपोज़र में एजेंट के बीच स्विच करें। छिपाए जाने पर, डिफ़ॉल्ट रूप से बिल्ड एजेंट हो जाता है।",
   "settings.general.row.reasoningSummaries.title": "तर्क सारांश दिखाएँ",
   "settings.general.row.reasoningSummaries.description": "टाइमलाइन में मॉडल तर्क सारांश प्रदर्शित करें",
+  "settings.general.row.preloadTimelineHistory.title": "पूरा संदेश इतिहास पहले से लोड करें",
+  "settings.general.row.preloadTimelineHistory.description":
+    "पुराने संदेश बैकग्राउंड में लोड करें ताकि संदेश नेविगेशन पूरे सत्र को कवर करे।",
   "settings.general.row.shellToolPartsExpanded.title": "शेल टूल पार्ट्स का विस्तार करें",
   "settings.general.row.shellToolPartsExpanded.description":
     "टाइमलाइन में डिफ़ॉल्ट रूप से विस्तारित शेल टूल पार्ट्स दिखाएं",

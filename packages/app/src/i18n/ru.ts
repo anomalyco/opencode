@@ -763,6 +763,8 @@ export const dict = {
   "session.messages.loadEarlier": "Загрузить предыдущие сообщения",
   "session.messages.loading": "Загрузка сообщений...",
   "session.messages.jumpToLatest": "Перейти к последнему",
+  "session.messages.timelineNavigation": "Навигация по сообщениям",
+  "session.messages.jumpToMessage": "Перейти к сообщению {{index}}",
 
   "session.context.addToContext": "Добавить {{selection}} в контекст",
   "session.todo.title": "Задачи",
@@ -942,6 +944,9 @@ export const dict = {
     "Показывать переключатель агентов в редакторе запросов. Если он скрыт, по умолчанию используется агент Build.",
   "settings.general.row.reasoningSummaries.title": "Показывать сводки рассуждений",
   "settings.general.row.reasoningSummaries.description": "Отображать сводки рассуждений модели в ленте",
+  "settings.general.row.preloadTimelineHistory.title": "Предзагружать полную историю сообщений",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Загружать старые сообщения в фоне, чтобы навигация по сообщениям охватывала всю сессию.",
 
   "settings.general.row.shellToolPartsExpanded.title": "Разворачивать элементы инструмента shell",
   "settings.general.row.shellToolPartsExpanded.description":

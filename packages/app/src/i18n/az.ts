@@ -731,6 +731,8 @@ export const dict = {
   "session.messages.loadEarlier": "Əvvəlki mesajları yüklə",
   "session.messages.loading": "Mesajlar yüklənir...",
   "session.messages.jumpToLatest": "Ən sonuncuya keç",
+  "session.messages.timelineNavigation": "Mesaj naviqasiyası",
+  "session.messages.jumpToMessage": "{{index}}. mesaja keç",
   "session.context.addToContext": "{{selection}} kontekstə əlavə et",
   "session.todo.title": "Tapşırıqlar",
   "session.todo.collapse": "Yığ",
@@ -962,6 +964,9 @@ export const dict = {
     "Mesaj sahəsində agentlər arasında keçid edin. Gizlədildikdə Build agenti seçilir.",
   "settings.general.row.reasoningSummaries.title": "Düşünmə xülasələrini göstər",
   "settings.general.row.reasoningSummaries.description": "Zaman xəttində modelin düşünmə xülasələrini göstər",
+  "settings.general.row.preloadTimelineHistory.title": "Tam mesaj tarixçəsini əvvəlcədən yüklə",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Köhnə mesajları arxa planda yüklə ki, mesaj naviqasiyası bütün sessiyanı əhatə etsin.",
   "settings.general.row.shellToolPartsExpanded.title": "Shell alət hissələrini genişlət",
   "settings.general.row.shellToolPartsExpanded.description":
     "Zaman xəttində shell alət hissələrini standart olaraq genişlədilmiş göstər",

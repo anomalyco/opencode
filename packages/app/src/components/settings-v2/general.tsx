@@ -346,6 +346,18 @@ export const SettingsGeneralV2: Component<{
         </SettingsRowV2>
 
         <SettingsRowV2
+          title={language.t("settings.general.row.preloadTimelineHistory.title")}
+          description={language.t("settings.general.row.preloadTimelineHistory.description")}
+        >
+          <div data-action="settings-general-preload-timeline-history">
+            <Switch
+              checked={settings.general.preloadTimelineHistory()}
+              onChange={(checked) => settings.general.setPreloadTimelineHistory(checked)}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <SettingsRowV2
           title={language.t("settings.general.row.shellToolPartsExpanded.title")}
           description={language.t("settings.general.row.shellToolPartsExpanded.description")}
         >

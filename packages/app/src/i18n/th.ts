@@ -757,6 +757,8 @@ export const dict = {
   "session.messages.loadEarlier": "โหลดข้อความก่อนหน้า",
   "session.messages.loading": "กำลังโหลดข้อความ...",
   "session.messages.jumpToLatest": "ไปที่ล่าสุด",
+  "session.messages.timelineNavigation": "การนำทางข้อความ",
+  "session.messages.jumpToMessage": "ไปที่ข้อความ {{index}}",
 
   "session.context.addToContext": "เพิ่ม {{selection}} ไปยังบริบท",
   "session.todo.title": "สิ่งที่ต้องทำ",
@@ -925,6 +927,9 @@ export const dict = {
     "สลับระหว่างเอเจนต์ในช่องเขียนข้อความ เมื่อซ่อน ระบบจะใช้เอเจนต์ Build เป็นค่าเริ่มต้น",
   "settings.general.row.reasoningSummaries.title": "แสดงสรุปการใช้เหตุผล",
   "settings.general.row.reasoningSummaries.description": "แสดงสรุปการใช้เหตุผลของโมเดลในไทม์ไลน์",
+  "settings.general.row.preloadTimelineHistory.title": "โหลดประวัติข้อความทั้งหมดล่วงหน้า",
+  "settings.general.row.preloadTimelineHistory.description":
+    "โหลดข้อความเก่าในเบื้องหลังเพื่อให้การนำทางข้อความครอบคลุมทั้งเซสชัน",
   "settings.general.row.shellToolPartsExpanded.title": "ขยายส่วนเครื่องมือ shell",
   "settings.general.row.shellToolPartsExpanded.description": "แสดงส่วนเครื่องมือ shell แบบขยายตามค่าเริ่มต้นในไทม์ไลน์",
   "settings.general.row.editToolPartsExpanded.title": "ขยายส่วนเครื่องมือ edit",

@@ -792,6 +792,8 @@ export const dict = {
   "session.messages.loadEarlier": "Завантажити раніші повідомлення",
   "session.messages.loading": "Завантаження повідомлень...",
   "session.messages.jumpToLatest": "Перейти до останніх",
+  "session.messages.timelineNavigation": "Навігація повідомленнями",
+  "session.messages.jumpToMessage": "Перейти до повідомлення {{index}}",
 
   "session.context.addToContext": "Додати {{selection}} до контексту",
   "session.todo.title": "Завдання",
@@ -1047,6 +1049,9 @@ export const dict = {
     "Перемикатися між агентами в редакторі запиту. Якщо приховано, типовим є агент Build.",
   "settings.general.row.reasoningSummaries.title": "Показувати підсумки мислення",
   "settings.general.row.reasoningSummaries.description": "Відображати підсумки мислення моделі на часовій шкалі",
+  "settings.general.row.preloadTimelineHistory.title": "Попередньо завантажувати повну історію повідомлень",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Завантажувати старі повідомлення у фоновому режимі, щоб навігація повідомленнями охоплювала всю сесію.",
   "settings.general.row.shellToolPartsExpanded.title": "Розгортати частини інструменту оболонки",
   "settings.general.row.shellToolPartsExpanded.description":
     "Показувати частини інструменту оболонки розгорнутими за замовчуванням на часовій шкалі",

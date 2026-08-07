@@ -698,6 +698,8 @@ export const dict = {
   "session.messages.loadEarlier": "Load earlier messages",
   "session.messages.loading": "Loading messages...",
   "session.messages.jumpToLatest": "Jump to latest",
+  "session.messages.timelineNavigation": "Message navigation",
+  "session.messages.jumpToMessage": "Go to message {{index}}",
 
   "session.context.addToContext": "Add {{selection}} to context",
   "session.todo.title": "Todos",
@@ -944,6 +946,9 @@ export const dict = {
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
   "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
+  "settings.general.row.preloadTimelineHistory.title": "Preload full message history",
+  "settings.general.row.preloadTimelineHistory.description":
+    "Load older messages in the background so message navigation covers the entire session.",
   "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",
   "settings.general.row.shellToolPartsExpanded.description":
     "Show shell tool parts expanded by default in the timeline",

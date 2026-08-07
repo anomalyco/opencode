@@ -360,6 +360,18 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title={language.t("settings.general.row.preloadTimelineHistory.title")}
+          description={language.t("settings.general.row.preloadTimelineHistory.description")}
+        >
+          <div data-action="settings-general-preload-timeline-history">
+            <Switch
+              checked={settings.general.preloadTimelineHistory()}
+              onChange={(checked) => settings.general.setPreloadTimelineHistory(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.row.shellToolPartsExpanded.title")}
           description={language.t("settings.general.row.shellToolPartsExpanded.description")}
         >

@@ -752,6 +752,8 @@ export const dict = {
   "session.messages.loading": "正在載入訊息...",
 
   "session.messages.jumpToLatest": "跳到最新",
+  "session.messages.timelineNavigation": "訊息導覽",
+  "session.messages.jumpToMessage": "跳到第 {{index}} 則訊息",
   "session.context.addToContext": "將 {{selection}} 新增到上下文",
   "session.todo.title": "待辦事項",
   "session.todo.collapse": "收合",
@@ -914,6 +916,8 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "在輸入區顯示代理程式選擇器",
   "settings.general.row.reasoningSummaries.title": "顯示推理摘要",
   "settings.general.row.reasoningSummaries.description": "在時間軸中顯示模型推理摘要",
+  "settings.general.row.preloadTimelineHistory.title": "預先載入完整訊息紀錄",
+  "settings.general.row.preloadTimelineHistory.description": "在背景載入較早的訊息，讓訊息導覽涵蓋整個工作階段。",
 
   "settings.general.row.shellToolPartsExpanded.title": "展開 shell 工具區塊",
   "settings.general.row.shellToolPartsExpanded.description": "在時間軸中預設展開 shell 工具區塊",
