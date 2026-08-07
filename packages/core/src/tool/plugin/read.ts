@@ -53,7 +53,7 @@ export const Plugin = {
                 messageID: context.messageID,
                 id: context.id,
               }
-              const target = yield* mutation.resolve({ path: input.path, kind: "directory" })
+              const target = yield* mutation.resolve({ path: input.path })
               const external = target.externalDirectory
               if (external)
                 yield* permission.assert({
@@ -132,9 +132,9 @@ export const Plugin = {
       )
       .pipe(Effect.orDie)
 
-    const missing = Effect.fn("ReadTool.missing")(function* (input: string, canonical: string) {
+    const missing = Effect.fn("ReadTool.missing")(function* (input: string, absolute: string) {
       const base = basename(input).toLowerCase()
-      const suggestions = yield* fs.readDirectory(dirname(canonical)).pipe(
+      const suggestions = yield* fs.readDirectory(dirname(absolute)).pipe(
         Effect.map((entries) =>
           entries
             .filter((entry) => {
