@@ -190,13 +190,37 @@ describe("LocationWatcher subscriptions", () => {
       (directory) =>
         Effect.gen(function* () {
           yield* LocationWatcher.Service
-          const requested = yield* Effect.sync(() => [...subscriptions]).pipe(
-            Effect.filterOrFail((items) => items.length > 0),
+          yield* Effect.sync(() => subscriptions.length).pipe(
+            Effect.filterOrFail((count) => count > 0),
             Effect.retry(Schedule.spaced("10 millis")),
           )
-          expect(requested).toEqual([{ path: path.join(directory, ".git", "HEAD"), type: "file" }])
+          yield* Effect.sleep("10 millis")
+          expect(subscriptions).toEqual([{ path: path.join(directory, ".git", "HEAD"), type: "file" }])
         }),
       { vcs: "git", watcher },
+    )
+  })
+
+  it.live("watches only exact Hg branch metadata", () => {
+    const subscriptions: Watcher.WatchInput[] = []
+    const watcher = Layer.succeed(
+      Watcher.Service,
+      Watcher.Service.of({
+        subscribe: (input) => Effect.sync(() => subscriptions.push(input)).pipe(Effect.as(Stream.empty)),
+      }),
+    )
+    return withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          yield* LocationWatcher.Service
+          yield* Effect.sync(() => subscriptions.length).pipe(
+            Effect.filterOrFail((count) => count > 0),
+            Effect.retry(Schedule.spaced("10 millis")),
+          )
+          yield* Effect.sleep("10 millis")
+          expect(subscriptions).toEqual([{ path: path.join(directory, ".hg", "branch"), type: "file" }])
+        }),
+      { vcs: "hg", watcher },
     )
   })
 })

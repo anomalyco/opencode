@@ -236,15 +236,29 @@ metadata:
 
           const skill = yield* Skill.Service
           const watcher = yield* Watcher.Test
+          const bus = yield* Bus.Service
           yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(tmp.path) }))
           expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Initial deploy")
-          expect(yield* watcher.subscriptions()).toHaveLength(1)
+          expect(yield* watcher.subscriptions()).toEqual([{ path: tmp.path, type: "directory" }])
+
+          let refreshed: Skill.Info[] = []
+          const unsubscribe = yield* bus.listen((event) => {
+            if (event.type !== Skill.Event.Updated.type) return Effect.void
+            return skill.list().pipe(
+              Effect.tap((items) => Effect.sync(() => (refreshed = items))),
+              Effect.asVoid,
+            )
+          })
 
           yield* Effect.promise(() => write(tmp.path, "deploy", "Updated deploy"))
-          yield* skill.reload()
+          yield* skill.reload().pipe(Effect.timeout("1 second"))
+          yield* unsubscribe
 
-          expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Updated deploy")
-          expect(yield* watcher.subscriptions()).toHaveLength(2)
+          expect(refreshed.find((item) => item.id === "deploy")?.description).toBe("Updated deploy")
+          expect(yield* watcher.subscriptions()).toEqual([
+            { path: tmp.path, type: "directory" },
+            { path: tmp.path, type: "directory" },
+          ])
         }),
       ),
     ),
@@ -260,18 +274,31 @@ metadata:
           const source = path.join(tmp.path, "generated", "skills")
           const file = path.join(source, "deploy", "SKILL.md")
           const skill = yield* Skill.Service
+          const watcher = yield* Watcher.Test
           yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(source) }))
           expect(yield* skill.list()).toEqual([])
-          yield* expectSubscription((input) => input.type === "file" && input.path === path.join(tmp.path, "generated"))
+          expect(yield* watcher.subscriptions()).toEqual([{ path: path.join(tmp.path, "generated"), type: "file" }])
+
+          yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "generated")))
+          yield* emitAndWait({ type: "create", path: path.join(tmp.path, "generated") })
+          expect(yield* skill.list()).toEqual([])
+          expect(yield* watcher.subscriptions()).toEqual([
+            { path: path.join(tmp.path, "generated"), type: "file" },
+            { path: source, type: "file" },
+          ])
 
           yield* Effect.promise(async () => {
             await fs.mkdir(path.dirname(file), { recursive: true })
             await write(source, "deploy", "Deploy production")
           })
-          yield* emitAndWait({ type: "create", path: path.join(tmp.path, "generated") })
+          yield* emitAndWait({ type: "create", path: source })
 
           expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("deploy")])
-          yield* expectSubscription((input) => input.type === "directory" && input.path === source)
+          expect(yield* watcher.subscriptions()).toEqual([
+            { path: path.join(tmp.path, "generated"), type: "file" },
+            { path: source, type: "file" },
+            { path: source, type: "directory" },
+          ])
         }),
       ),
     ),
@@ -367,10 +394,13 @@ metadata:
           })
 
           const skill = yield* Skill.Service
+          const watcher = yield* Watcher.Test
           yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(source) }))
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("First")
-          yield* expectSubscription((input) => input.type === "directory" && input.path === first)
-          yield* expectSubscription((input) => input.type === "directory" && input.path === tmp.path)
+          expect(yield* watcher.subscriptions()).toEqual([
+            { path: first, type: "directory" },
+            { path: source, type: "file" },
+          ])
 
           yield* Effect.promise(async () => {
             await fs.unlink(source)
@@ -379,7 +409,12 @@ metadata:
           yield* emitAndWait({ type: "update", path: source })
 
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Second")
-          yield* expectSubscription((input) => input.type === "directory" && input.path === second)
+          expect(yield* watcher.subscriptions()).toEqual([
+            { path: first, type: "directory" },
+            { path: source, type: "file" },
+            { path: second, type: "directory" },
+            { path: source, type: "file" },
+          ])
         }),
       ),
     ),

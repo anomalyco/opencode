@@ -2,7 +2,7 @@ export * as Skill from "./skill"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
-import { Context, Effect, FiberMap, Layer, Schema, Semaphore, Stream, Types } from "effect"
+import { Context, Effect, FiberMap, Layer, PubSub, Schema, Semaphore, Stream, Types } from "effect"
 import { Skill } from "@opencode-ai/schema/skill"
 import { Agent } from "./agent"
 import { ConfigMarkdown } from "./config/markdown"
@@ -85,24 +85,30 @@ const layer = Layer.effect(
     const cache = new Map<string, { skills: Info[]; paths: readonly string[] }>()
     const watches = yield* FiberMap.make<string>()
     const lock = Semaphore.makeUnsafe(1)
+    const changes = yield* PubSub.unbounded<string>()
 
     const invalidate = Effect.fn("Skill.invalidateFromWatcher")(function* (file: string) {
-      yield* lock.withPermit(
+      const changed = yield* lock.withPermit(
         Effect.gen(function* () {
           const invalidated = Array.from(cache.entries()).filter(([, loaded]) =>
             loaded.paths.some((item) => FSUtil.overlaps(item, file)),
           )
-          if (invalidated.length === 0) return
+          if (invalidated.length === 0) return false
           for (const [key] of invalidated) cache.delete(key)
+          yield* FiberMap.clear(watches)
           yield* Effect.logInfo("skill cache invalidated", {
             file,
             sources: invalidated.map(([key]) => key),
             skills: invalidated.flatMap(([, loaded]) => loaded.skills.map((skill) => skill.id)),
           })
-          yield* bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid)
+          return true
         }),
       )
+      if (!changed) return
+      yield* bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid)
     })
+
+    yield* Stream.fromPubSub(changes).pipe(Stream.runForEach(invalidate), Effect.forkScoped({ startImmediately: true }))
 
     const watch = Effect.fn("Skill.watch")(function* (directory: string, type: Watcher.WatchInput["type"]) {
       const target = path.resolve(directory)
@@ -112,7 +118,7 @@ const layer = Layer.effect(
       yield* FiberMap.run(
         watches,
         `${type}:${target}`,
-        updates.pipe(Stream.runForEach((update) => invalidate(update.path))),
+        updates.pipe(Stream.runForEach((update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid))),
         {
           onlyIfMissing: true,
           startImmediately: true,
@@ -126,18 +132,29 @@ const layer = Layer.effect(
       return fs.isDir(parent).pipe(Effect.flatMap((exists) => (exists ? Effect.succeed(target) : firstMissing(parent))))
     }
 
-    const watchDirectory = Effect.fn("Skill.watchDirectory")(function* (directory: string) {
+    const watchDirectory: (directory: string) => Effect.Effect<string[]> = Effect.fn("Skill.watchDirectory")(function* (
+      directory: string,
+    ) {
       const target = path.resolve(directory)
       const resolved = yield* fs.realPath(directory).pipe(Effect.catch(() => Effect.succeed(undefined)))
       if (resolved) {
         yield* watch(resolved, "directory")
         if (resolved !== target) {
-          yield* watch(path.dirname(target), "directory")
+          yield* watch(target, "file")
         }
         return resolved === target ? [target] : [target, resolved]
       }
       const missing = yield* firstMissing(target)
       if (missing) yield* watch(missing, "file")
+      if (
+        yield* fs.realPath(directory).pipe(
+          Effect.as(true),
+          Effect.catch(() => Effect.succeed(false)),
+        )
+      ) {
+        if (missing) yield* FiberMap.remove(watches, `file:${path.resolve(missing)}`)
+        return yield* watchDirectory(directory)
+      }
       return [target]
     })
 
@@ -152,13 +169,9 @@ const layer = Layer.effect(
         list: () => draft.sources as Source[],
       }),
       finalize: () =>
-        lock.withPermit(
-          FiberMap.clear(watches).pipe(
-            Effect.andThen(Effect.sync(() => cache.clear())),
-            Effect.andThen(bus.publish(Skill.Event.Updated, {})),
-            Effect.asVoid,
-          ),
-        ),
+        lock
+          .withPermit(FiberMap.clear(watches).pipe(Effect.andThen(Effect.sync(() => cache.clear())), Effect.asVoid))
+          .pipe(Effect.andThen(bus.publish(Skill.Event.Updated, {})), Effect.asVoid),
     })
 
     const load = Effect.fn("Skill.load")(function* (source: Source) {
