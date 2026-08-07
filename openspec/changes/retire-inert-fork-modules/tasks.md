@@ -35,9 +35,25 @@
 - [x] 2.5 Retain the 11 upstream files, recorded in the proposal
   - Deleting an upstream file costs a conflict on every sync and buys nothing.
 
+## Phase 2A: The opposite finding
+
+- [x] 2.6 Register `opencode beads`
+  - Found only after 2.4, by noticing `beads` was missing from `--help`. My file-reference
+    scan missed it: `cli/cmd/beads.ts` "matched" because the live `beads/` service
+    directory shares the name. A false negative in the sweep, worth knowing about.
+  - `BeadsCommand` was exported and never imported — not in `ForkCommands`, not in
+    `index.ts`. 194 lines of working code over the live `BeadsSync` service, unreachable.
+  - **Registered, not deleted.** Unreferenced and useless are different findings with
+    opposite actions: `hook` was reachable and did nothing, this does something real and
+    was not reachable. Deleting it would have destroyed working code to satisfy the rule.
+  - Verified live: `beads status` reports the bd CLI and beads dir, `beads list` returns
+    "No linked beads tasks", and `beads --help` lists status/sync/unlink/list.
+
 ## Phase 3: Verification
 
 - [x] 3.1 `bun run typecheck` — zero errors across all 23 workspace tasks
 - [x] 3.2 Full test suite — no regression
 - [x] 3.3 `opencode --help` no longer offers `hook`
 - [x] 3.4 Re-run the sweep — no fork-owned unreferenced module remains
+  - 16 unreferenced modules remain, all upstream, all listed in the proposal
+- [x] 3.5 `opencode beads` runs end to end

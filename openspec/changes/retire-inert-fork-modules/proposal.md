@@ -39,6 +39,21 @@ hooks" manages nothing and directs the reader to a key that does not exist.
 
 Same shape as `pattern-detection --enable`: registered, reachable, wrong.
 
+### Registered, not deleted — the opposite finding
+
+`opencode beads` did not exist. `cli/cmd/beads.ts` exports `BeadsCommand` — 194 lines of
+working code over the live `BeadsSync` service, with `status`, `sync`, `unlink` and `list`
+— and nothing ever imported it. Not in `ForkCommands`, not in `index.ts`. Unreachable.
+
+It is now registered. Unreferenced and useless are different findings and lead to opposite
+actions: `hook` was reachable and did nothing, so it goes; this does something real and was
+not reachable, so it gets connected. Deleting it to satisfy a tidiness rule would have
+destroyed working code.
+
+Found by noticing `beads` missing from `--help`, not by the scan — the scan's file-reference
+check saw the live `beads/` service directory and counted the name as referenced. A false
+negative worth knowing about alongside the false positives below.
+
 ### Deliberately NOT deleted — eleven upstream files
 
 `core/src/data-migration.sql.ts`, `core/src/plugin/layer-map.example.ts`,

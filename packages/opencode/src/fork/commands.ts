@@ -2,6 +2,10 @@ import type { CommandModule } from "yargs"
 // Only the parent LoopCommand is registered: it nests list/cancel/pause/resume
 // in its own builder (see cli/cmd/loop.ts for why they cannot be top-level).
 import { LoopCommand } from "../cli/cmd/loop"
+// Was written, exported, and never registered — so `opencode beads` did not
+// exist despite 194 lines of working code over the live BeadsSync service.
+// The opposite failure from `hook`, which was registered and did nothing.
+import { BeadsCommand } from "../cli/cmd/beads"
 
 /**
  * Fork-only CLI commands, registered as a single unit from `src/index.ts`.
@@ -17,4 +21,5 @@ import { LoopCommand } from "../cli/cmd/loop"
  */
 export const ForkCommands: CommandModule<any, any>[] = [
   LoopCommand,
+  BeadsCommand,
 ]

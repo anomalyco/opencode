@@ -31,6 +31,28 @@ reachable through a package `imports`/`exports` condition.
 - **WHEN** the source tree is scanned for modules with no inbound reference
 - **THEN** no fork-owned module remains that is unreachable from any entry point
 
+### Requirement: unreachable code that works SHALL be wired up, not deleted
+
+Working fork-owned functionality that is merely unregistered SHALL be connected rather than
+removed.
+
+"Unreferenced" and "useless" are different findings and lead to opposite actions. A
+registered command that does nothing is a lie and goes. A complete, working command that
+was never registered is an omission, and deleting it destroys working code to satisfy a
+tidiness rule.
+
+The test is whether it does something real when reached, not whether anything reaches it.
+
+#### Scenario: an unregistered working command is registered
+
+- **WHEN** a sweep finds a fork-owned CLI command that is exported, unregistered, and operates on a live service
+- **THEN** it is registered and verified to run, not deleted
+
+#### Scenario: a registered command that does nothing is removed
+
+- **WHEN** a registered command's only behaviour is reporting state it does not change
+- **THEN** it is removed
+
 ### Requirement: upstream files MUST NOT be deleted for being unreferenced
 
 A module that exists on `upstream/dev` SHALL NOT be deleted on the grounds that this fork
