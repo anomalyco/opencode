@@ -293,11 +293,20 @@ export function shouldAttemptPlacement(input: {
  * run. A named host that is unreachable, busy, or gone simply scores 0 and the
  * other candidates remain eligible. Earlier in the list outranks later, and any
  * named host outranks any unnamed one.
+ *
+ * The step is deliberately BELOW `HOST_PACED_PENALTY` (200_000) and above
+ * `RECENT_PLACEMENT_PENALTY` (3_000) and the free-VRAM term (~65). So naming a
+ * host wins every ordinary tie, and still loses to "that host's only resident
+ * model runs out of system RAM" — measured at 0.81 tok/s against 70 on the same
+ * machine. Wanting work on a particular host is a preference; landing on a model
+ * ~90x slower is not what anyone means by it.
  */
+const HOST_PREFERENCE_STEP = 10_000
+
 export function hostRankFor(prefer: "inherit" | "local" | readonly string[] | undefined, providerID: string): number {
   if (!Array.isArray(prefer)) return 0
   const index = prefer.indexOf(providerID)
-  return index === -1 ? 0 : (prefer.length - index) * 1_000_000
+  return index === -1 ? 0 : (prefer.length - index) * HOST_PREFERENCE_STEP
 }
 
 export async function pick(input: {

@@ -51,12 +51,24 @@ describe("hostRankFor", () => {
   // Ranking rather than filtering is what makes a preference unable to fail a
   // run: a named host that is unreachable never reaches the scoring loop, and
   // every other candidate is still eligible rather than excluded.
-  test("a preference dominates the other scoring terms without excluding anyone", () => {
+  test("a preference outranks the ordinary tie-breakers", () => {
     const prefer = ["rocky"]
-    // Other terms in pick() top out around 105k (fit rank + residency + speed +
-    // free VRAM). One rank step is 1M, so a preferred host wins on eligibility
-    // alone — and an unnamed host still has a positive, usable score.
-    expect(hostRankFor(prefer, "rocky")).toBeGreaterThan(200_000)
+    // Must beat the recent-placement penalty (3_000) and the free-VRAM term
+    // (~65) so naming a host actually decides an ordinary tie.
+    expect(hostRankFor(prefer, "rocky")).toBeGreaterThan(3_000)
     expect(hostRankFor(prefer, "anything-else")).toBe(0)
+  })
+
+  // Interaction with HOST_PACED_PENALTY (200_000), added concurrently by another
+  // session working the same scorer. A model running its expert layers out of
+  // system RAM was measured at 0.81 tok/s against 70 for a full-GPU model on the
+  // same host. If a host preference could outweigh that penalty, naming a host
+  // whose only resident model is hybrid would land a subagent on the slow one —
+  // defeating the very reason someone names a fast host.
+  test("a preference never outweighs the host-paced penalty", () => {
+    const prefer = ["rocky", "m3", "z4", "proxmox", "m5"]
+    for (const host of prefer) {
+      expect(hostRankFor(prefer, host)).toBeLessThan(200_000)
+    }
   })
 })
