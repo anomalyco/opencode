@@ -82,6 +82,7 @@ import { createPromptInputTransientState } from "./prompt-input/transient-state"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
+import { createVoiceInput, VoiceButton } from "./prompt-input/voice"
 
 export { createPromptInputHistory }
 export type { PromptInputControls, PromptInputHistory, PromptInputProps, PromptInputState, PromptInputSubmission }
@@ -578,6 +579,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }),
       ),
   )
+
+  command.register(() => [
+    {
+      id: "prompt.voice",
+      title: "Voice input",
+      description: "Start or stop voice recording",
+      category: "Prompt",
+      keybind: "mod+shift+v",
+      onSelect: () => {
+        if (voice.hasLastRecording() && !voice.transcribing()) {
+          void voice.confirmRetry()
+        } else {
+          void voice.toggleVoice()
+        }
+      },
+    },
+  ])
 
   const agentList = createMemo(() =>
     props.controls.agents.available
@@ -1100,6 +1118,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     closePopover()
     return true
   }
+
+  const voice = createVoiceInput({
+    sdk,
+    editorText: () => prompt.current().map((part) => ("content" in part ? part.content : "")).join(""),
+    addPart,
+    editorRef,
+    queueScroll,
+  })
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     history.add(prompt, mode, mode === "shell" ? [] : historyComments())
@@ -1785,6 +1811,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Show>
               </div>
             </div>
+            <VoiceButton
+              voiceTitle={voice.voiceTitle}
+              toggleVoice={voice.toggleVoice}
+              confirmRetry={voice.confirmRetry}
+              cancelRetry={voice.cancelRetry}
+              recording={voice.recording}
+              transcribing={voice.transcribing}
+              hasLastRecording={voice.hasLastRecording}
+              keybind={command.keybind("prompt.voice")}
+            />
           </div>
         </DockTray>
       </Show>

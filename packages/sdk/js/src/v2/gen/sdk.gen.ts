@@ -10,6 +10,8 @@ import type {
   AppLogResponses,
   AppSkillsErrors,
   AppSkillsResponses,
+  AudioTranscribeErrors,
+  AudioTranscribeResponses,
   Auth as Auth3,
   AuthRemoveErrors,
   AuthRemoveResponses,
@@ -1410,6 +1412,73 @@ export class Event extends HeyApiClient {
       url: "/event",
       ...options,
       ...params,
+    })
+  }
+}
+
+export class Audio extends HeyApiClient {
+  /**
+   * Transcribe audio
+   *
+   * Transcribe base64-encoded audio data with Whisper or an audio language model
+   */
+  public transcribe<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      audio?: string
+      mime?: string
+      prompt?: string
+      sessionID?: string
+      images?: Array<string>
+      voice?: {
+        type?: "whisper" | "lalm"
+        whisper?: {
+          url?: string
+          apiKey?: string
+          model?: string
+          language?: string
+        }
+        lalm?: {
+          model?: {
+            providerID: string
+            modelID: string
+          }
+          system?: string
+          instruction?: string
+          audio_input_format?: "input_audio" | "audio_url"
+        }
+        hot_words?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "audio" },
+            { in: "body", key: "mime" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "images" },
+            { in: "body", key: "voice" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AudioTranscribeResponses, AudioTranscribeErrors, ThrowOnError>({
+      url: "/voice/transcribe",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
@@ -7105,6 +7174,11 @@ export class OpencodeClient extends HeyApiClient {
   private _event?: Event
   get event(): Event {
     return (this._event ??= new Event({ client: this.client }))
+  }
+
+  private _audio?: Audio
+  get audio(): Audio {
+    return (this._audio ??= new Audio({ client: this.client }))
   }
 
   private _config?: Config2

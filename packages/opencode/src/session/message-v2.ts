@@ -14,7 +14,10 @@ import {
   SubtaskPart,
   User,
   WithParts,
+  TextPart,
 } from "@opencode-ai/core/v1/session"
+
+export type { WithParts, TextPart }
 
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
