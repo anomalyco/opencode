@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { AIError, ImageInput, LanguageModel, LLM, LLMClient, Provider } from "@opencode-ai/ai"
-import { Route, Protocol } from "@opencode-ai/ai/route"
+import { Route, Protocol, WebSocketTransport } from "@opencode-ai/ai/route"
 import { Provider as ProviderSubpath } from "@opencode-ai/ai/provider"
 import {
   CloudflareAIGateway,
@@ -36,6 +36,7 @@ describe("public exports", () => {
   test("route barrel exposes route-authoring APIs", () => {
     expect(Route.make).toBeFunction()
     expect(Protocol.make).toBeFunction()
+    expect(WebSocketTransport.makeDirect).toBeFunction()
   })
 
   test("provider barrels expose user-facing facades", async () => {

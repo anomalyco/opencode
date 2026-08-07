@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Ref, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Headers, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LLM, AIError } from "../src/index.js"
-import { LLMClient, RequestExecutor } from "../src/route.js"
+import { LLMClient, RequestExecutor, WebSocketTransport, type WebSocketChannelExecutor } from "../src/route.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
-import { dynamicResponse, systemError } from "./lib/http.js"
+import * as OpenAI from "../src/providers/openai.js"
+import { dynamicResponse, fixedResponse, systemError } from "./lib/http.js"
 import { deltaChunk } from "./lib/openai-chunks.js"
 import { sseRaw } from "./lib/sse.js"
 import { it } from "./lib/effect.js"
@@ -508,6 +509,130 @@ describe("RequestExecutor", () => {
       expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
       expect(yield* Ref.get(attempts)).toBe(1)
+    }),
+  )
+})
+
+describe("WebSocket channel execution", () => {
+  const model = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responsesWebSocket(
+    "gpt-4.1-mini",
+  )
+  const request = LLM.request({ model, prompt: "Say hello." })
+  const frames = [
+    JSON.stringify({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
+    JSON.stringify({ type: "response.completed", response: { id: "resp_1" } }),
+  ]
+
+  it.effect("runs a channel driver through the direct executor", () =>
+    Effect.gen(function* () {
+      const sent = yield* Ref.make("")
+      const closed = yield* Ref.make(false)
+      const observed = yield* Ref.make(0)
+      const webSocket = WebSocketTransport.makeDirect({
+        open: () =>
+          Effect.succeed({
+            sendText: (message) => Ref.set(sent, message),
+            messages: Stream.make("one", "done", "late"),
+            close: Ref.set(closed, true),
+          }),
+      })
+      const received = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const execution = yield* webSocket.execute({
+            id: "exchange_1",
+            connect: { url: "wss://api.openai.test/v1/responses", headers: Headers.empty },
+            fallback: () => Stream.empty,
+            driver: {
+              create: () => Effect.succeed({ message: "create", mode: "full" }),
+              observe: (_create, frame) =>
+                Ref.update(observed, (value) => value + 1).pipe(
+                  Effect.as(
+                    frame === "done" ? { type: "completed" as const, frame } : { type: "frame" as const, frame },
+                  ),
+                ),
+            },
+          })
+          return yield* Stream.runCollect(execution.frames)
+        }),
+      )
+
+      expect(Array.from(received)).toEqual(["one", "done"])
+      expect(yield* Ref.get(sent)).toBe("create")
+      expect(yield* Ref.get(observed)).toBe(2)
+      expect(yield* Ref.get(closed)).toBe(true)
+    }),
+  )
+
+  it.effect("requires a per-call WebSocket executor", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse("")), Effect.flip)
+
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        phase: "prepare",
+        delivery: "not-sent",
+      })
+      expect(error.message).toContain("StreamOptions.webSocket")
+    }),
+  )
+
+  it.effect("commits channel execution only after complete consumption", () =>
+    Effect.gen(function* () {
+      const commits = yield* Ref.make(0)
+      const executor = (input: Stream.Stream<string, AIError>): WebSocketChannelExecutor => ({
+        execute: () =>
+          Effect.succeed({
+            frames: input,
+            complete: Ref.update(commits, (value) => value + 1),
+          }),
+      })
+
+      const response = yield* LLMClient.generate(request, {
+        webSocket: executor(Stream.fromArray(frames)),
+      }).pipe(Effect.provide(fixedResponse("")))
+      expect(response.text).toBe("Hi")
+      expect(yield* Ref.get(commits)).toBe(1)
+
+      yield* LLMClient.generate(request, { webSocket: executor(Stream.make("not-json")) }).pipe(
+        Effect.provide(fixedResponse("")),
+        Effect.flip,
+      )
+      expect(yield* Ref.get(commits)).toBe(1)
+
+      yield* LLMClient.stream(request, { webSocket: executor(Stream.fromArray(frames)) }).pipe(
+        Stream.take(1),
+        Stream.runDrain,
+        Effect.provide(fixedResponse("")),
+      )
+      expect(yield* Ref.get(commits)).toBe(1)
+    }),
+  )
+
+  it.effect("does not commit interrupted channel execution", () =>
+    Effect.gen(function* () {
+      const commits = yield* Ref.make(0)
+      const started = yield* Deferred.make<void>()
+      const executor: WebSocketChannelExecutor = {
+        execute: () =>
+          Effect.succeed({
+            frames: Stream.fromEffect(
+              Deferred.succeed(started, undefined).pipe(
+                Effect.as(JSON.stringify({ type: "response.created", response: { id: "resp_1" } })),
+              ),
+            ).pipe(Stream.concat(Stream.never)),
+            complete: Ref.update(commits, (value) => value + 1),
+          }),
+      }
+      const fiber = yield* LLMClient.stream(request, { webSocket: executor }).pipe(
+        Stream.runDrain,
+        Effect.provide(fixedResponse("")),
+        Effect.forkChild({ startImmediately: true }),
+      )
+
+      yield* Deferred.await(started)
+      yield* Fiber.interrupt(fiber)
+
+      expect(yield* Ref.get(commits)).toBe(0)
     }),
   )
 })

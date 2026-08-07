@@ -2,12 +2,11 @@ import { HttpRecorder } from "@opencode-ai/http-recorder"
 import { Layer } from "effect"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
-import { LLMClient, RequestExecutor, WebSocketExecutor } from "../src/route.js"
+import { LLMClient, RequestExecutor } from "../src/route.js"
 import { ImageClient } from "../src/image-client.js"
 import type { Service as ImageClientService } from "../src/image-client.js"
 import type { Service as LLMClientService } from "../src/route/client.js"
 import type { Service as RequestExecutorService } from "../src/route/executor.js"
-import type { Service as WebSocketExecutorService } from "../src/route/transport/websocket.js"
 import {
   recordedEffectGroup,
   type RecordedCaseOptions as RunnerCaseOptions,
@@ -17,7 +16,7 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES_DIR = path.resolve(__dirname, "fixtures", "recordings")
 
-type RecordedEnv = RequestExecutorService | WebSocketExecutorService | LLMClientService | ImageClientService
+type RecordedEnv = RequestExecutorService | LLMClientService | ImageClientService
 
 type RecordedTestsOptions = RecordedGroupOptions & {
   readonly options?: HttpRecorder.RecorderOptions
@@ -82,11 +81,10 @@ export const recordedTests = (options: RecordedTestsOptions) =>
           }),
         ),
       )
-      const deps = Layer.mergeAll(requestExecutor, WebSocketExecutor.layer)
       return Layer.mergeAll(
-        deps,
-        LLMClient.layer.pipe(Layer.provide(deps)),
-        ImageClient.layer.pipe(Layer.provide(deps)),
+        requestExecutor,
+        LLMClient.layer.pipe(Layer.provide(requestExecutor)),
+        ImageClient.layer.pipe(Layer.provide(requestExecutor)),
       )
     },
   })

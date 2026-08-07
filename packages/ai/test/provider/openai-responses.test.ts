@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { ConfigProvider, Effect, Layer, Stream } from "effect"
+import { ConfigProvider, Effect, Layer, Ref, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
   LLM,
@@ -14,7 +14,7 @@ import {
   TransportReason,
   Usage,
 } from "../../src/index.js"
-import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route.js"
+import { Auth, LLMClient, RequestExecutor, WebSocketTransport } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Azure from "../../src/providers/azure.js"
 import * as OpenAI from "../../src/providers/openai.js"
@@ -239,34 +239,29 @@ describe("OpenAI Responses route", () => {
       const sent: string[] = []
       const opened: Array<{ readonly url: string; readonly authorization: string | undefined }> = []
       let closed = false
-      const deps = Layer.mergeAll(
-        Layer.succeed(
-          RequestExecutor.Service,
-          RequestExecutor.Service.of({
-            execute: () => Effect.die("unexpected HTTP request"),
-          }),
-        ),
-        Layer.succeed(
-          WebSocketExecutor.Service,
-          WebSocketExecutor.Service.of({
-            open: (input) =>
-              Effect.succeed({
-                sendText: (message) =>
-                  Effect.sync(() => {
-                    opened.push({ url: input.url, authorization: input.headers.authorization })
-                    sent.push(message)
-                  }),
-                messages: Stream.fromArray([
-                  ProviderShared.encodeJson({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
-                  ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_ws" } }),
-                ]),
-                close: Effect.sync(() => {
-                  closed = true
-                }),
-              }),
-          }),
-        ),
+      const deps = Layer.succeed(
+        RequestExecutor.Service,
+        RequestExecutor.Service.of({
+          execute: () => Effect.die("unexpected HTTP request"),
+        }),
       )
+      const webSocket = WebSocketTransport.makeDirect({
+        open: (input) =>
+          Effect.succeed({
+            sendText: (message) =>
+              Effect.sync(() => {
+                opened.push({ url: input.url, authorization: input.headers.authorization })
+                sent.push(message)
+              }),
+            messages: Stream.fromArray([
+              ProviderShared.encodeJson({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
+              ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_ws" } }),
+            ]),
+            close: Effect.sync(() => {
+              closed = true
+            }),
+          }),
+      })
       const response = yield* LLMClient.generate(
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responsesWebSocket(
@@ -274,6 +269,7 @@ describe("OpenAI Responses route", () => {
           ),
           prompt: "Say hello.",
         }),
+        { webSocket },
       ).pipe(Effect.provide(LLMClient.layer.pipe(Layer.provide(deps))))
 
       expect(response.text).toBe("Hi")
@@ -286,6 +282,48 @@ describe("OpenAI Responses route", () => {
         input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
         store: false,
       })
+    }),
+  )
+
+  it.effect("closes a direct WebSocket execution after partial consumption", () =>
+    Effect.gen(function* () {
+      const closed = yield* Ref.make(false)
+      const webSocket = WebSocketTransport.makeDirect({
+        open: () =>
+          Effect.succeed({
+            sendText: () => Effect.void,
+            messages: Stream.fromArray([
+              ProviderShared.encodeJson({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
+              ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_ws" } }),
+            ]),
+            close: Ref.set(closed, true),
+          }),
+      })
+
+      yield* LLMClient.stream(
+        LLM.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responsesWebSocket(
+            "gpt-4.1-mini",
+          ),
+          prompt: "Say hello.",
+        }),
+        { webSocket },
+      ).pipe(
+        Stream.take(1),
+        Stream.runDrain,
+        Effect.provide(
+          LLMClient.layer.pipe(
+            Layer.provide(
+              Layer.succeed(
+                RequestExecutor.Service,
+                RequestExecutor.Service.of({ execute: () => Effect.die("unexpected HTTP request") }),
+              ),
+            ),
+          ),
+        ),
+      )
+
+      expect(yield* Ref.get(closed)).toBe(true)
     }),
   )
 
@@ -314,26 +352,23 @@ describe("OpenAI Responses route", () => {
             ),
             prompt: "Say hello.",
           }),
+          {
+            webSocket: WebSocketTransport.makeDirect({
+              open: () =>
+                Effect.succeed({
+                  sendText: () => Effect.void,
+                  messages: Stream.make(ProviderShared.encodeJson(event)).pipe(Stream.concat(Stream.never)),
+                  close: Effect.void,
+                }),
+            }),
+          },
         ).pipe(
           Effect.provide(
             LLMClient.layer.pipe(
               Layer.provide(
-                Layer.mergeAll(
-                  Layer.succeed(
-                    RequestExecutor.Service,
-                    RequestExecutor.Service.of({ execute: () => Effect.die("unexpected HTTP request") }),
-                  ),
-                  Layer.succeed(
-                    WebSocketExecutor.Service,
-                    WebSocketExecutor.Service.of({
-                      open: () =>
-                        Effect.succeed({
-                          sendText: () => Effect.void,
-                          messages: Stream.make(ProviderShared.encodeJson(event)).pipe(Stream.concat(Stream.never)),
-                          close: Effect.void,
-                        }),
-                    }),
-                  ),
+                Layer.succeed(
+                  RequestExecutor.Service,
+                  RequestExecutor.Service.of({ execute: () => Effect.die("unexpected HTTP request") }),
                 ),
               ),
             ),
@@ -362,29 +397,24 @@ describe("OpenAI Responses route", () => {
         Stream.fail(failure),
         Stream.make(ProviderShared.encodeJson({ type: "response.created" })).pipe(Stream.concat(Stream.fail(failure))),
       ]
-      const deps = Layer.mergeAll(
-        Layer.succeed(
-          RequestExecutor.Service,
-          RequestExecutor.Service.of({ execute: () => Effect.die("unexpected HTTP request") }),
-        ),
-        Layer.succeed(
-          WebSocketExecutor.Service,
-          WebSocketExecutor.Service.of({
-            open: () =>
-              Effect.succeed({
-                sendText: () => Effect.void,
-                messages: streams.shift() ?? Stream.die("unexpected WebSocket open"),
-                close: Effect.void,
-              }),
-          }),
-        ),
+      const deps = Layer.succeed(
+        RequestExecutor.Service,
+        RequestExecutor.Service.of({ execute: () => Effect.die("unexpected HTTP request") }),
       )
+      const webSocket = WebSocketTransport.makeDirect({
+        open: () =>
+          Effect.succeed({
+            sendText: () => Effect.void,
+            messages: streams.shift() ?? Stream.die("unexpected WebSocket open"),
+            close: Effect.void,
+          }),
+      })
       const model = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responsesWebSocket(
         "gpt-4.1-mini",
       )
 
       const errors = yield* Effect.forEach(["first", "second"], (prompt) =>
-        LLMClient.generate(LLM.request({ model, prompt })).pipe(
+        LLMClient.generate(LLM.request({ model, prompt }), { webSocket }).pipe(
           Effect.provide(LLMClient.layer.pipe(Layer.provide(deps))),
           Effect.flip,
         ),
@@ -399,7 +429,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("fails immediately when WebSocket is already closed", () =>
     Effect.gen(function* () {
-      const error = yield* WebSocketExecutor.fromWebSocket(
+      const error = yield* WebSocketTransport.fromWebSocket(
         // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- fromWebSocket reads readyState before touching WebSocket methods on this branch.
         { readyState: globalThis.WebSocket.CLOSED } as globalThis.WebSocket,
         { url: "wss://api.openai.test/v1/responses", headers: Headers.empty },
