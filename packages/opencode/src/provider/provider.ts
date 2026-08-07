@@ -1516,6 +1516,21 @@ const layer = Layer.effect(
             )
             parsed.models[modelID] = parsedModel
           }
+
+          // Propagate config provider-level npm to inherited models (models not
+          // explicitly declared in config). Without this, a config override like
+          // `provider.synthetic.npm = "@ai-sdk/anthropic"` is silently dropped for
+          // models sourced from models.dev, leaving their api.npm stuck at the
+          // snapshot value (e.g. @ai-sdk/openai-compatible) while options.baseURL
+          // is applied — producing mismatched SDK+URL 404s.
+          if (provider.npm) {
+            const declared = new Set(Object.keys(provider.models ?? {}))
+            for (const [mid, m] of Object.entries(parsed.models)) {
+              if (declared.has(mid)) continue
+              if (m.api.npm !== provider.npm) m.api.npm = provider.npm
+            }
+          }
+
           database[providerID] = parsed
         }
 
