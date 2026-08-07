@@ -1,148 +1,159 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Failed, NotFound, WrongKind, type Files } from "../../src/environment/index"
+import { it } from "./effect"
 
 export interface EnvironmentHarness {
   readonly files: Files
   readonly root: string
   readonly symlink?: (target: string, path: string) => Effect.Effect<void, Failed>
-  readonly dispose?: () => Promise<void>
+  readonly dispose?: Effect.Effect<void>
 }
 
-export const environmentConformance = (
+export const environmentConformance = <E>(
   name: string,
-  makeHarness: () => EnvironmentHarness | Promise<EnvironmentHarness>,
+  makeHarness: () => Effect.Effect<EnvironmentHarness, E>,
   skip = false,
 ) => {
-  const check = (title: string, body: (harness: EnvironmentHarness) => Promise<void>) =>
-    test(title, async () => {
-      const harness = await makeHarness()
-      try {
-        await Effect.runPromise(harness.files.mkdir(harness.root))
-        await body(harness)
-      } finally {
-        try {
-          await Effect.runPromise(harness.files.remove(harness.root))
-        } finally {
-          await harness.dispose?.()
-        }
-      }
-    })
+  const check = <A, E2>(title: string, body: (harness: EnvironmentHarness) => Effect.Effect<A, E2>) =>
+    it.live(title, () =>
+      Effect.gen(function* () {
+        const harness = yield* Effect.acquireRelease(makeHarness(), (harness) =>
+          Effect.gen(function* () {
+            yield* Effect.ignore(harness.files.remove(harness.root))
+            if (harness.dispose) yield* harness.dispose
+          }),
+        )
+        yield* harness.files.mkdir(harness.root)
+        return yield* body(harness)
+      }),
+    )
 
   const bytes = (value: string) => new TextEncoder().encode(value)
   const text = (value: Uint8Array) => new TextDecoder().decode(value)
-  const failure = <E>(effect: Effect.Effect<unknown, E>) => Effect.runPromise(Effect.flip(effect))
-
   const suite = skip ? describe.skip : describe
 
   suite(name, () => {
-    check("writes, stats, and reads a file with its info", async ({ files, root }) => {
-      const target = `${root}/hello.txt`
-      await Effect.runPromise(files.write(target, bytes("hello")))
-      const result = await Effect.runPromise(files.read(target))
-      expect(text(result.bytes)).toBe("hello")
-      expect(result.info.type).toBe("file")
-      expect(result.info.size).toBe(5)
-      expect(await Effect.runPromise(files.stat(target))).toEqual(result.info)
-    })
+    check("writes, stats, and reads a file with its info", (harness) =>
+      Effect.gen(function* () {
+        const target = `${harness.root}/hello.txt`
+        yield* harness.files.write(target, bytes("hello"))
+        const result = yield* harness.files.read(target)
+        expect(text(result.bytes)).toBe("hello")
+        expect(result.info.type).toBe("file")
+        expect(result.info.size).toBe(5)
+        expect(yield* harness.files.stat(target)).toEqual(result.info)
+      }),
+    )
 
-    check("reports missing paths", async ({ files, root }) => {
-      const target = `${root}/missing`
-      expect(await failure(files.read(target))).toBeInstanceOf(NotFound)
-      expect(await failure(files.stat(target))).toBeInstanceOf(NotFound)
-      expect(await failure(files.list(target))).toBeInstanceOf(NotFound)
-      expect(await failure(files.move(target, `${root}/other`))).toBeInstanceOf(NotFound)
-    })
+    check("reports missing paths", (harness) =>
+      Effect.gen(function* () {
+        const target = `${harness.root}/missing`
+        expect(yield* Effect.flip(harness.files.read(target))).toBeInstanceOf(NotFound)
+        expect(yield* Effect.flip(harness.files.stat(target))).toBeInstanceOf(NotFound)
+        expect(yield* Effect.flip(harness.files.list(target))).toBeInstanceOf(NotFound)
+        expect(yield* Effect.flip(harness.files.move(target, `${harness.root}/other`))).toBeInstanceOf(NotFound)
+      }),
+    )
 
-    check("reports the actual kind", async ({ files, root }) => {
-      const directory = `${root}/directory`
-      const file = `${root}/file`
-      await Effect.runPromise(files.mkdir(directory))
-      await Effect.runPromise(files.write(file, bytes("data")))
-      const readError = await failure(files.read(directory))
-      const listError = await failure(files.list(file))
-      expect(readError).toBeInstanceOf(WrongKind)
-      expect((readError as WrongKind).actual).toBe("directory")
-      expect(listError).toBeInstanceOf(WrongKind)
-      expect((listError as WrongKind).actual).toBe("file")
-    })
+    check("reports the actual kind", (harness) =>
+      Effect.gen(function* () {
+        const directory = `${harness.root}/directory`
+        const file = `${harness.root}/file`
+        yield* harness.files.mkdir(directory)
+        yield* harness.files.write(file, bytes("data"))
+        const readError = yield* Effect.flip(harness.files.read(directory))
+        const listError = yield* Effect.flip(harness.files.list(file))
+        expect(readError).toBeInstanceOf(WrongKind)
+        expect((readError as WrongKind).actual).toBe("directory")
+        expect(listError).toBeInstanceOf(WrongKind)
+        expect((listError as WrongKind).actual).toBe("file")
+      }),
+    )
 
-    check("write creates parent directories", async ({ files, root }) => {
-      const target = `${root}/one/two/file`
-      await Effect.runPromise(files.write(target, bytes("nested")))
-      await Effect.runPromise(files.write(`${root}/empty`, new Uint8Array()))
-      expect((await Effect.runPromise(files.stat(`${root}/one/two`))).type).toBe("directory")
-      expect(await Effect.runPromise(files.stat(`${root}/empty`))).toMatchObject({ type: "file", size: 0 })
-      expect(text((await Effect.runPromise(files.read(target))).bytes)).toBe("nested")
-    })
+    check("write creates parent directories", (harness) =>
+      Effect.gen(function* () {
+        const target = `${harness.root}/one/two/file`
+        yield* harness.files.write(target, bytes("nested"))
+        yield* harness.files.write(`${harness.root}/empty`, new Uint8Array())
+        expect((yield* harness.files.stat(`${harness.root}/one/two`)).type).toBe("directory")
+        expect(yield* harness.files.stat(`${harness.root}/empty`)).toMatchObject({ type: "file", size: 0 })
+        expect(text((yield* harness.files.read(target)).bytes)).toBe("nested")
+      }),
+    )
 
-    check("reads byte ranges", async ({ files, root }) => {
-      const target = `${root}/range`
-      await Effect.runPromise(files.write(target, bytes("0123456789")))
-      expect(text((await Effect.runPromise(files.read(target, { offset: 2, length: 4 }))).bytes)).toBe("2345")
-      expect(text((await Effect.runPromise(files.read(target, { offset: 8, length: 8 }))).bytes)).toBe("89")
-      expect(text((await Effect.runPromise(files.read(target, { offset: 20, length: 4 }))).bytes)).toBe("")
-    })
+    check("reads byte ranges", (harness) =>
+      Effect.gen(function* () {
+        const target = `${harness.root}/range`
+        yield* harness.files.write(target, bytes("0123456789"))
+        expect(text((yield* harness.files.read(target, { offset: 2, length: 4 })).bytes)).toBe("2345")
+        expect(text((yield* harness.files.read(target, { offset: 8, length: 8 })).bytes)).toBe("89")
+        expect(text((yield* harness.files.read(target, { offset: 20, length: 4 })).bytes)).toBe("")
+      }),
+    )
 
-    check("lists immediate entries with their kinds", async ({ files, root }) => {
-      await Effect.runPromise(files.write(`${root}/file name`, bytes("data")))
-      await Effect.runPromise(files.mkdir(`${root}/directory`))
-      await Effect.runPromise(files.write(`${root}/directory/nested`, bytes("nested")))
-      const entries = await Effect.runPromise(files.list(root))
-      expect(entries.toSorted((a, b) => a.name.localeCompare(b.name))).toEqual([
-        { name: "directory", type: "directory" },
-        { name: "file name", type: "file" },
-      ])
-    })
+    check("lists immediate entries with their kinds", (harness) =>
+      Effect.gen(function* () {
+        yield* harness.files.write(`${harness.root}/file name`, bytes("data"))
+        yield* harness.files.mkdir(`${harness.root}/directory`)
+        yield* harness.files.write(`${harness.root}/directory/nested`, bytes("nested"))
+        const entries = yield* harness.files.list(harness.root)
+        expect(entries.toSorted((a, b) => a.name.localeCompare(b.name))).toEqual([
+          { name: "directory", type: "directory" },
+          { name: "file name", type: "file" },
+        ])
+      }),
+    )
 
-    check("reports symlinks without resolving them", async (harness) => {
-      if (!harness.symlink) return
-      await Effect.runPromise(harness.files.write(`${harness.root}/target`, bytes("target")))
-      await Effect.runPromise(harness.files.write(`${harness.root}/target-dir/file`, bytes("through link")))
-      await Effect.runPromise(harness.symlink("target", `${harness.root}/link`))
-      await Effect.runPromise(harness.symlink("target-dir", `${harness.root}/link-dir`))
-      expect((await Effect.runPromise(harness.files.stat(`${harness.root}/link`))).type).toBe("symlink")
-      expect(await Effect.runPromise(harness.files.list(harness.root))).toContainEqual({
-        name: "link",
-        type: "symlink",
-      })
-      expect(text((await Effect.runPromise(harness.files.read(`${harness.root}/link-dir/file`))).bytes)).toBe(
-        "through link",
-      )
-      const listError = await failure(harness.files.list(`${harness.root}/link-dir`))
-      expect(listError).toBeInstanceOf(WrongKind)
-      expect((listError as WrongKind).actual).toBe("symlink")
-    })
+    check("reports symlinks without resolving them", (harness) =>
+      Effect.gen(function* () {
+        if (!harness.symlink) return
+        yield* harness.files.write(`${harness.root}/target`, bytes("target"))
+        yield* harness.files.write(`${harness.root}/target-dir/file`, bytes("through link"))
+        yield* harness.symlink("target", `${harness.root}/link`)
+        yield* harness.symlink("target-dir", `${harness.root}/link-dir`)
+        expect((yield* harness.files.stat(`${harness.root}/link`)).type).toBe("symlink")
+        expect(yield* harness.files.list(harness.root)).toContainEqual({ name: "link", type: "symlink" })
+        expect(text((yield* harness.files.read(`${harness.root}/link-dir/file`)).bytes)).toBe("through link")
+        const listError = yield* Effect.flip(harness.files.list(`${harness.root}/link-dir`))
+        expect(listError).toBeInstanceOf(WrongKind)
+        expect((listError as WrongKind).actual).toBe("symlink")
+      }),
+    )
 
-    check("follows symlinks when reading", async (harness) => {
-      if (!harness.symlink) return
-      await Effect.runPromise(harness.files.write(`${harness.root}/target`, bytes("target content")))
-      await Effect.runPromise(harness.files.mkdir(`${harness.root}/directory`))
-      await Effect.runPromise(harness.symlink("target", `${harness.root}/file-link`))
-      await Effect.runPromise(harness.symlink("directory", `${harness.root}/directory-link`))
-      await Effect.runPromise(harness.symlink("missing", `${harness.root}/dangling-link`))
+    check("follows symlinks when reading", (harness) =>
+      Effect.gen(function* () {
+        if (!harness.symlink) return
+        yield* harness.files.write(`${harness.root}/target`, bytes("target content"))
+        yield* harness.files.mkdir(`${harness.root}/directory`)
+        yield* harness.symlink("target", `${harness.root}/file-link`)
+        yield* harness.symlink("directory", `${harness.root}/directory-link`)
+        yield* harness.symlink("missing", `${harness.root}/dangling-link`)
 
-      const result = await Effect.runPromise(harness.files.read(`${harness.root}/file-link`))
-      expect(text(result.bytes)).toBe("target content")
-      expect(result.info.type).toBe("file")
-      expect(result.info.size).toBe(bytes("target content").length)
+        const result = yield* harness.files.read(`${harness.root}/file-link`)
+        expect(text(result.bytes)).toBe("target content")
+        expect(result.info.type).toBe("file")
+        expect(result.info.size).toBe(bytes("target content").length)
 
-      const directoryError = await failure(harness.files.read(`${harness.root}/directory-link`))
-      expect(directoryError).toBeInstanceOf(WrongKind)
-      expect((directoryError as WrongKind).actual).toBe("directory")
-      expect(await failure(harness.files.read(`${harness.root}/dangling-link`))).toBeInstanceOf(NotFound)
-    })
+        const directoryError = yield* Effect.flip(harness.files.read(`${harness.root}/directory-link`))
+        expect(directoryError).toBeInstanceOf(WrongKind)
+        expect((directoryError as WrongKind).actual).toBe("directory")
+        expect(yield* Effect.flip(harness.files.read(`${harness.root}/dangling-link`))).toBeInstanceOf(NotFound)
+      }),
+    )
 
-    check("moves files and removes trees idempotently", async ({ files, root }) => {
-      const source = `${root}/source/file`
-      const destination = `${root}/destination`
-      await Effect.runPromise(files.write(source, bytes("moved")))
-      await Effect.runPromise(files.move(source, destination))
-      expect(text((await Effect.runPromise(files.read(destination))).bytes)).toBe("moved")
-      expect(await failure(files.stat(source))).toBeInstanceOf(NotFound)
-      await Effect.runPromise(files.remove(`${root}/source`))
-      await Effect.runPromise(files.remove(`${root}/source`))
-      expect(await failure(files.stat(`${root}/source`))).toBeInstanceOf(NotFound)
-    })
+    check("moves files and removes trees idempotently", (harness) =>
+      Effect.gen(function* () {
+        const source = `${harness.root}/source/file`
+        const destination = `${harness.root}/destination`
+        yield* harness.files.write(source, bytes("moved"))
+        yield* harness.files.move(source, destination)
+        expect(text((yield* harness.files.read(destination)).bytes)).toBe("moved")
+        expect(yield* Effect.flip(harness.files.stat(source))).toBeInstanceOf(NotFound)
+        yield* harness.files.remove(`${harness.root}/source`)
+        yield* harness.files.remove(`${harness.root}/source`)
+        expect(yield* Effect.flip(harness.files.stat(`${harness.root}/source`))).toBeInstanceOf(NotFound)
+      }),
+    )
   })
 }
