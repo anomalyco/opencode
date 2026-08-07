@@ -255,6 +255,7 @@ export function MessageTimeline(props: {
   setRevealMessage?: (fn: (id: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
   setHistoryAnchor?: (handlers: { capture: () => void; restore: (done: boolean) => void }) => void
+  search?: JSX.Element
 }) {
   let touchGesture: number | undefined
 
@@ -1521,6 +1522,7 @@ export function MessageTimeline(props: {
                       "gap-3": !settings.general.newLayoutDesigns(),
                     }}
                   >
+                    {props.search}
                     <SessionContextUsage
                       placement="bottom"
                       buttonAppearance={settings.general.newLayoutDesigns() ? "v2" : "default"}

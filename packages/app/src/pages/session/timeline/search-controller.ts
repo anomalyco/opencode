@@ -79,29 +79,6 @@ function applyHighlights(
   CSS.highlights.set(HIGHLIGHT_ACTIVE, new Highlight(...active))
 }
 
-function closestMatchIndex(root: HTMLElement, matches: TimelineSearchMatch[]): number {
-  if (matches.length === 0) return 0
-  const rootRect = root.getBoundingClientRect()
-  const center = rootRect.top + rootRect.height / 2
-  const firstIndexByReveal = new Map<string, number>()
-  matches.forEach((match, index) => {
-    if (!firstIndexByReveal.has(match.revealID)) firstIndexByReveal.set(match.revealID, index)
-  })
-  let best = 0
-  let bestDist = Infinity
-  root.querySelectorAll<HTMLElement>("[data-message-id]").forEach((el) => {
-    const id = el.dataset.messageId
-    if (!id || !firstIndexByReveal.has(id)) return
-    const rect = el.getBoundingClientRect()
-    const dist = Math.abs(rect.top + rect.height / 2 - center)
-    if (dist < bestDist) {
-      bestDist = dist
-      best = firstIndexByReveal.get(id) ?? best
-    }
-  })
-  return best
-}
-
 export function createTimelineSearchController(input: {
   sessionID: () => string | undefined
   scrollRef: () => HTMLDivElement | undefined
@@ -199,7 +176,11 @@ export function createTimelineSearchController(input: {
 
   createEffect(
     on(focusTick, () => {
-      if (state.visible) requestAnimationFrame(() => inputEl?.focus())
+      if (!state.visible) return
+      requestAnimationFrame(() => {
+        inputEl?.focus()
+        inputEl?.select()
+      })
     }),
   )
 
@@ -225,13 +206,16 @@ export function createTimelineSearchController(input: {
 
   function setValue(value: string) {
     setState("value", value)
-    const root = input.scrollRef()
     const list = matches()
-    if (!root || !value.trim() || list.length === 0) {
+    const match = list[0]
+    if (!value.trim() || !match) {
       setState("active", 0)
       return
     }
-    setState("active", closestMatchIndex(root, list))
+    setState("active", 0)
+    input.pauseAutoScroll()
+    input.revealMessage(match.revealID)
+    scrollToMatch(match)
   }
 
   function scrollToMatch(match: TimelineSearchMatch) {

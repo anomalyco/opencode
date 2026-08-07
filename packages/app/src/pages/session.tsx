@@ -2130,6 +2130,7 @@ export default function Page() {
                     setScrollToEnd={(fn) => {
                       scrollToEnd = fn
                     }}
+                    search={<TimelineSearchBar controller={timelineSearch} />}
                   />
                 </div>
               )}
@@ -2262,7 +2263,6 @@ export default function Page() {
   return (
     <SessionRouteFrame>
       <SessionHeader />
-      <TimelineSearchBar controller={timelineSearch} />
       <div
         ref={panelRow}
         class="flex-1 min-h-0 flex flex-col md:flex-row"
