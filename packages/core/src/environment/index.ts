@@ -14,6 +14,7 @@ export {
 export { execDefaults } from "./exec-defaults"
 export { makeLocalDriver } from "./local"
 export { makeMemoryDriver, type MemoryDriver } from "./memory"
+export { type Interface, node, Service } from "./environment"
 
 import type { Driver } from "./driver"
 import { execDefaults } from "./exec-defaults"
