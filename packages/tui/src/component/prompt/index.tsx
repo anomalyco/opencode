@@ -994,6 +994,12 @@ export function Prompt(props: PromptProps) {
       toast.show({ message: "Skills cannot be queued", variant: "warning" })
       return false
     }
+    const editorSelection = editorContext()
+    const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
+    if (delivery === "queue" && pendingEditorSelection) {
+      toast.show({ message: "Editor context cannot be queued", variant: "warning" })
+      return false
+    }
     const agent = local.agent.current()
     if (!agent) return false
     const selection = local.model.selection()
@@ -1052,8 +1058,6 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
-    const editorSelection = editorContext()
-    const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
 
     if (store.mode === "shell") {
       move.startSubmit()

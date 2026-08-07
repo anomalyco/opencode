@@ -37,6 +37,7 @@ const decodeSynthetic = Schema.decodeUnknownSync(SyntheticData)
 const encodeSynthetic = Schema.encodeSync(SyntheticData)
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
+type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
 
 export class LifecycleConflict extends Schema.TaggedErrorClass<LifecycleConflict>()(
   "SessionPending.LifecycleConflict",
@@ -294,10 +295,7 @@ export const projectCompactionAdmitted = Effect.fn("SessionPending.projectCompac
  */
 export const projectPromoted = Effect.fn("SessionPending.projectPromoted")(function* (
   db: DatabaseService,
-  input: {
-    readonly id: SessionMessage.ID
-    readonly sessionID: SessionSchema.ID
-  },
+  input: PendingRef,
 ) {
   if (yield* compaction(db, input.sessionID)) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
   const deleted = yield* db
@@ -314,10 +312,7 @@ export const projectPromoted = Effect.fn("SessionPending.projectPromoted")(funct
 
 export const projectCancelled = Effect.fn("SessionPending.projectCancelled")(function* (
   db: DatabaseService,
-  input: {
-    readonly id: SessionMessage.ID
-    readonly sessionID: SessionSchema.ID
-  },
+  input: PendingRef,
 ) {
   const deleted = yield* db
     .delete(SessionPendingTable)
@@ -336,12 +331,7 @@ export const projectCancelled = Effect.fn("SessionPending.projectCancelled")(fun
 
 const projectDelivery = Effect.fn("SessionPending.projectDelivery")(function* (
   db: DatabaseService,
-  input: {
-    readonly id: SessionMessage.ID
-    readonly sessionID: SessionSchema.ID
-    readonly from: Delivery
-    readonly to: Delivery
-  },
+  input: PendingRef & { readonly from: Delivery; readonly to: Delivery },
 ) {
   const updated = yield* db
     .update(SessionPendingTable)
@@ -360,12 +350,12 @@ const projectDelivery = Effect.fn("SessionPending.projectDelivery")(function* (
 })
 
 export const projectSteered = Effect.fn("SessionPending.projectSteered")(
-  (db: DatabaseService, input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }) =>
+  (db: DatabaseService, input: PendingRef) =>
     projectDelivery(db, { ...input, from: "queue", to: "steer" }),
 )
 
 export const projectQueued = Effect.fn("SessionPending.projectQueued")(
-  (db: DatabaseService, input: { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }) =>
+  (db: DatabaseService, input: PendingRef) =>
     projectDelivery(db, { ...input, from: "steer", to: "queue" }),
 )
 
@@ -446,7 +436,6 @@ export const equivalent = (
   return false
 }
 
-type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
 const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
   inboxLocks.withLock(input.sessionID)(effect).pipe(Effect.asVoid)
 

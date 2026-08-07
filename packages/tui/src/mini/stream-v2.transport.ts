@@ -1685,6 +1685,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       const client = sdk
       if (next.agent)
         await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
+      if (!next.prompt.command) {
+        const selected = await resolveSelectedModel(input, client, next)
+        if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
+        if (selected)
+          await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
+      }
       mergePending(await admitPrompt(next, client, delivery))
       settlementClient = client
     },

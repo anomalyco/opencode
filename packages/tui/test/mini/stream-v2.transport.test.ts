@@ -744,13 +744,17 @@ describe("V2 mini transport", () => {
     )
     await transport.admitPromptTurn({
       agent: "review",
-      model: undefined,
-      variant: undefined,
+      model: { providerID: "test", modelID: "next" },
+      variant: "high",
       prompt: { messageID: "msg_next", text: "another", parts: [] },
       files: [],
       includeFiles: false,
     }, "queue")
     expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: "ses_1", agent: "review" }, expect.anything())
+    expect(client.session.switchModel).toHaveBeenCalledWith(
+      { sessionID: "ses_1", model: { providerID: "test", id: "next", variant: "high" } },
+      expect.anything(),
+    )
     expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ delivery: "queue" }), expect.anything())
     events.push({
       id: "evt_earlier_admission",

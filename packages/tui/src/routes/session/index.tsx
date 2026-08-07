@@ -421,8 +421,9 @@ export function Session() {
             command: "queued_prompt.delete",
             title: "delete",
             onTrigger: (option) => {
+              const last = queuedPrompts().length === 1
               void mutatePending("cancel", option.value).then((cancelled) => {
-                if (cancelled && queuedPrompts().length <= 1) dialog.clear()
+                if (cancelled && last) dialog.clear()
               })
             },
           },

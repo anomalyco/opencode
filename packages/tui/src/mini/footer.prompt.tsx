@@ -1171,7 +1171,12 @@ export function createPromptState(input: PromptInput): PromptState {
     const command = next.mode === "shell" ? undefined : selectedCommand(next.text, next.command)
     if (
       delivery === "queue" &&
-      (next.mode === "shell" || command?.source === "skill" || isNewCommand(next.text) || isCompactCommand(next.text))
+      (next.mode === "shell" ||
+        command?.source === "skill" ||
+        isNewCommand(next.text) ||
+        isCompactCommand(next.text) ||
+        isExitCommand(next.text) ||
+        next.text.trim().toLowerCase() === "/settings")
     ) {
       input.onStatus("this prompt cannot be queued")
       return

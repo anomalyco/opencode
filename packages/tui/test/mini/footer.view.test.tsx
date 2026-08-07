@@ -1020,6 +1020,29 @@ test("direct footer does not steer queued work on a double submit", async () => 
   }
 })
 
+test("direct footer rejects local commands submitted with the queue shortcut", async () => {
+  const submitted: RunPrompt[] = []
+  const statuses: string[] = []
+  const app = await renderFooter({
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      return true
+    },
+    onStatus: (status) => statuses.push(status),
+  })
+
+  try {
+    await app.renderOnce()
+    await app.mockInput.typeText("/settings ")
+    app.mockInput.pressEnter({ meta: true })
+    await Bun.sleep(0)
+    expect(submitted).toEqual([])
+    expect(statuses).toContain("this prompt cannot be queued")
+  } finally {
+    app.cleanup()
+  }
+})
+
 // OpenTUI currently crashes Bun in the full `test/cli/run` directory run here.
 // Re-enable after the upstream OpenTUI fix lands in this repo.
 test.skip("direct footer recreates the frame across command panel transitions", async () => {

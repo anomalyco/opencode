@@ -152,13 +152,15 @@ export const Forked = Event.durable({
 })
 export type Forked = typeof Forked.Type
 
+const InputRef = {
+  ...Base,
+  inputID: SessionMessage.ID,
+}
+
 export const InputPromoted = Event.durable({
   type: "session.input.promoted",
   ...options,
-  schema: {
-    sessionID: SessionID,
-    inputID: SessionMessage.ID,
-  },
+  schema: InputRef,
 })
 export type InputPromoted = typeof InputPromoted.Type
 
@@ -166,8 +168,7 @@ export const InputAdmitted = Event.durable({
   type: "session.input.admitted",
   ...options,
   schema: {
-    ...Base,
-    inputID: SessionMessage.ID,
+    ...InputRef,
     input: SessionPending.Message,
   },
 })
@@ -176,30 +177,21 @@ export type InputAdmitted = typeof InputAdmitted.Type
 export const InputCancelled = Event.durable({
   type: "session.input.cancelled",
   ...options,
-  schema: {
-    sessionID: SessionID,
-    inputID: SessionMessage.ID,
-  },
+  schema: InputRef,
 })
 export type InputCancelled = typeof InputCancelled.Type
 
 export const InputSteered = Event.durable({
   type: "session.input.steered",
   ...options,
-  schema: {
-    sessionID: SessionID,
-    inputID: SessionMessage.ID,
-  },
+  schema: InputRef,
 })
 export type InputSteered = typeof InputSteered.Type
 
 export const InputQueued = Event.durable({
   type: "session.input.queued",
   ...options,
-  schema: {
-    sessionID: SessionID,
-    inputID: SessionMessage.ID,
-  },
+  schema: InputRef,
 })
 export type InputQueued = typeof InputQueued.Type
 
