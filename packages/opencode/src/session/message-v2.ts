@@ -145,6 +145,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   // Only apply this workaround if the model actually supports that media input -
   // otherwise unsupportedParts() will turn it into a user-visible error.
   const supportsMediaInToolResult = (attachment: { mime: string }) => {
+    // If the model has no attachment capability at all (e.g. GLM-5.2 on
+    // Synthetic via @ai-sdk/anthropic), don't keep media in tool results -
+    // route it to a user message so unsupportedParts() can degrade gracefully
+    // instead of the provider rejecting the whole request.
+    if (!model.capabilities.attachment) return false
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
