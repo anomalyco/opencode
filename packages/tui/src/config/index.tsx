@@ -63,6 +63,12 @@ export const Info = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  skills: Schema.optional(
+    Schema.Struct({
+      paths: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+      urls: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+    }),
+  ),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
