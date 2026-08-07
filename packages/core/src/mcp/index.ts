@@ -271,17 +271,35 @@ export const layer = (options?: Options) => Layer.effect(
       const credentialID = found.id
       const methodID = found.value.methodID
       let current: Credential.OAuth | undefined = found.value
+      // Re-read the row instead of trusting the snapshot: another process sharing the store may have
+      // refreshed (rotated) the tokens since this provider was built.
+      const read = async () => {
+        const stored = await Effect.runPromise(credentials.list(entry.integrationID!))
+        const row = stored.find((credential) => credential.id === credentialID)
+        return row && row.value.type === "oauth" ? row.value : undefined
+      }
       return MCPOAuth.provider({
         ...base,
         // Drop a credential the SDK rejected so the next connect cleanly reports needs_auth. Uses the raw
         // credential service (no integration event) to avoid re-triggering the reconnect subscriber mid-connect.
         invalidate: async (scope) => {
           if (scope === "verifier" || scope === "discovery") return
+          const last = current
+          const row = await read()
+          // The tokens the SDK rejected are not the ones in the row anymore: the row was rotated by the
+          // refresh winner, and its fresh tokens must survive our failed (stale) refresh.
+          if (row && last && row.access !== last.access) {
+            current = row
+            return
+          }
           current = undefined
           await Effect.runPromise(credentials.remove(credentialID))
         },
         store: {
-          tokens: async () => (current ? MCPOAuth.toTokens(current) : undefined),
+          tokens: async () => {
+            current = await read()
+            return current ? MCPOAuth.toTokens(current) : undefined
+          },
           saveTokens: async (tokens) => {
             current = MCPOAuth.toCredential({
               methodID,
