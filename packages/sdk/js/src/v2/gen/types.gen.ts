@@ -8462,6 +8462,7 @@ export type McpAddData = {
   body?: {
     name: string
     config: McpLocalConfig | McpRemoteConfig
+    sessionID?: string
   }
   path?: never
   query?: {
@@ -8490,6 +8491,36 @@ export type McpAddResponses = {
 }
 
 export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
+
+export type McpRemoveSessionData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/session/{sessionID}"
+}
+
+export type McpRemoveSessionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type McpRemoveSessionError = McpRemoveSessionErrors[keyof McpRemoveSessionErrors]
+
+export type McpRemoveSessionResponses = {
+  /**
+   * Session MCP servers removed successfully
+   */
+  200: boolean
+}
+
+export type McpRemoveSessionResponse = McpRemoveSessionResponses[keyof McpRemoveSessionResponses]
 
 export type McpAuthRemoveData = {
   body?: never

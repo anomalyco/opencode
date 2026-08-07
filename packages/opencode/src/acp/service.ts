@@ -45,7 +45,6 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
 import type { Command } from "@/command"
-import { McpCatalog } from "@/mcp/catalog"
 
 export const AuthMethodID = "opencode-login"
 
@@ -84,8 +83,6 @@ export function make(input: {
   const session = input.session ?? makeSessionService()
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
   const registeredMcp = new Map<string, Set<string>>()
-  const mcpOwners = new Map<string, Map<string, Set<string>>>()
-  const scopedMcp = new Map<string, string>()
   const sessionSnapshots = new Map<string, Directory.Snapshot>()
   const events = input.connection
     ? ACPEvent.start({ sdk: input.sdk, connection: input.connection, session })
@@ -196,7 +193,7 @@ export function make(input: {
     })
     sessionSnapshots.set(state.id, snapshot)
 
-    yield* registerMcpServers(input.sdk, registeredMcp, mcpOwners, params.cwd, state.id, params.mcpServers)
+    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
 
     const response = {
@@ -233,7 +230,7 @@ export function make(input: {
     })
     sessionSnapshots.set(state.id, snapshot)
 
-    yield* registerMcpServers(input.sdk, registeredMcp, mcpOwners, params.cwd, state.id, params.mcpServers)
+    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
     yield* replayMessages(events, messages)
 
@@ -318,7 +315,7 @@ export function make(input: {
     })
     sessionSnapshots.set(state.id, snapshot)
 
-    yield* registerMcpServers(input.sdk, registeredMcp, mcpOwners, params.cwd, state.id, params.mcpServers ?? [])
+    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
 
     return {
@@ -342,18 +339,17 @@ export function make(input: {
   })
 
   const closeSession = Effect.fn("ACP.closeSession")(function* (params: CloseSessionRequest) {
-    const removed = yield* session.remove(params.sessionId)
-    registeredMcp.delete(params.sessionId)
-    // MCP.add registrations outlive ACP sessions, so keep empty owner sets
-    // and continue denying those stale tools to future sessions.
-    for (const directory of mcpOwners.values()) {
-      for (const owners of directory.values()) owners.delete(params.sessionId)
-    }
-    scopedMcp.delete(params.sessionId)
-    sessionSnapshots.delete(params.sessionId)
-    if (!removed) return {}
+    const current = yield* session.tryGet(params.sessionId)
+    if (!current) return {}
 
-    yield* abortBackingSession(removed)
+    yield* request(
+      () => input.sdk.mcp.removeSession({ directory: current.cwd, sessionID: current.id }, { throwOnError: true }),
+      "mcp",
+    )
+    yield* session.remove(params.sessionId)
+    registeredMcp.delete(params.sessionId)
+    sessionSnapshots.delete(params.sessionId)
+    yield* abortBackingSession(current)
     return {}
   })
 
@@ -392,7 +388,7 @@ export function make(input: {
     })
     sessionSnapshots.set(state.id, snapshot)
 
-    yield* registerMcpServers(input.sdk, registeredMcp, mcpOwners, params.cwd, state.id, params.mcpServers ?? [])
+    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
     yield* replayMessages(events, messages)
 
@@ -511,8 +507,6 @@ export function make(input: {
       const modeId = current.modeId ?? (snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined)
       const parts = promptContentToParts(params.prompt)
       const command = detectSlashCommand(parts)
-
-      yield* scopeMcpServers(input.sdk, mcpOwners, scopedMcp, current)
 
       if (!command) {
         const response = yield* request(
@@ -969,7 +963,6 @@ function sendAvailableCommands(
 function registerMcpServers(
   sdk: OpencodeClient,
   registered: Map<string, Set<string>>,
-  owners: Map<string, Map<string, Set<string>>>,
   directory: string,
   sessionId: string,
   servers: readonly McpServer[],
@@ -996,22 +989,13 @@ function registerMcpServers(
                 directory,
                 name: entry.server.name,
                 config: entry.config,
+                sessionID: sessionId,
               },
               { throwOnError: true },
             ),
           "mcp",
         ).pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
-              current.add(mcpRegistrationKey(entry.server.name, entry.config))
-              const pattern = `${McpCatalog.sanitize(entry.server.name)}_*`
-              const directoryOwners = owners.get(directory) ?? new Map<string, Set<string>>()
-              const sessions = directoryOwners.get(pattern) ?? new Set<string>()
-              sessions.add(sessionId)
-              directoryOwners.set(pattern, sessions)
-              owners.set(directory, directoryOwners)
-            }),
-          ),
+          Effect.tap(() => Effect.sync(() => current.add(mcpRegistrationKey(entry.server.name, entry.config)))),
           Effect.ignore,
         ),
       ),
@@ -1026,43 +1010,6 @@ function registerMcpServers(
     ),
     Effect.asVoid,
   )
-}
-
-function scopeMcpServers(
-  sdk: OpencodeClient,
-  owners: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>,
-  scoped: Map<string, string>,
-  current: ACPSession.Info,
-) {
-  return Effect.gen(function* () {
-    const directoryOwners = owners.get(current.cwd)
-    if (!directoryOwners) return
-
-    const permission = [...directoryOwners.entries()]
-      .filter(([, ids]) => ids.size > 1 || !ids.has(current.id))
-      .map(([pattern]) => ({
-        permission: pattern,
-        pattern: "*",
-        action: "deny" as const,
-      }))
-    if (permission.length === 0) return
-    const signature = JSON.stringify(permission)
-    if (scoped.get(current.id) === signature) return
-
-    yield* request(
-      () =>
-        sdk.session.update(
-          {
-            sessionID: current.id,
-            directory: current.cwd,
-            permission,
-          },
-          { throwOnError: true },
-        ),
-      "session",
-    )
-    scoped.set(current.id, signature)
-  })
 }
 
 function mcpRegistrationKey(name: string, config: ReturnType<typeof mcpConfig>) {

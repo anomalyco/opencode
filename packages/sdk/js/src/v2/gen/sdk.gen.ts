@@ -109,6 +109,8 @@ import type {
   McpDisconnectResponses,
   McpLocalConfig,
   McpRemoteConfig,
+  McpRemoveSessionErrors,
+  McpRemoveSessionResponses,
   McpStatusErrors,
   McpStatusResponses,
   ModelRef,
@@ -2433,6 +2435,7 @@ export class Mcp extends HeyApiClient {
       workspace?: string
       name?: string
       config?: McpLocalConfig | McpRemoteConfig
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2445,6 +2448,7 @@ export class Mcp extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "body", key: "name" },
             { in: "body", key: "config" },
+            { in: "body", key: "sessionID" },
           ],
         },
       ],
@@ -2458,6 +2462,38 @@ export class Mcp extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Remove session MCP servers
+   *
+   * Remove dynamically added MCP servers owned by a session.
+   */
+  public removeSession<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<McpRemoveSessionResponses, McpRemoveSessionErrors, ThrowOnError>({
+      url: "/mcp/session/{sessionID}",
+      ...options,
+      ...params,
     })
   }
 

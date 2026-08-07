@@ -207,8 +207,8 @@ export const CodeModeTool = Tool.define(
         const agent = yield* agents.get(ctx.agent)
         const session = yield* sessions.get(ctx.sessionID).pipe(Effect.orDie)
         const ruleset = Permission.merge(agent.permission, session.permission ?? [])
-        const mcpTools = Permission.visibleTools(yield* mcp.tools(), ruleset)
-        const servers = Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize)
+        const mcpTools = Permission.visibleTools(yield* mcp.tools(ctx.sessionID), ruleset)
+        const servers = Object.keys(yield* mcp.clients(ctx.sessionID)).map(McpCatalog.sanitize)
         const catalog = [...groupByServer(mcpTools, servers).values()].flat()
 
         const calls: CallEntry[] = []

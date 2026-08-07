@@ -145,6 +145,26 @@ interface State {
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
   instructions: Record<string, string>
+  registrations: Record<string, { name: string; sessionID?: string }>
+}
+
+function registrationKey(name: string, sessionID?: string) {
+  return JSON.stringify([sessionID ?? null, name])
+}
+
+function visibleRegistrations(s: State, sessionID?: string) {
+  const visible = new Map<string, [string, State["registrations"][string]]>()
+  for (const [key, registration] of Object.entries(s.registrations)) {
+    if (registration.sessionID) continue
+    visible.set(registration.name, [key, registration])
+  }
+  if (sessionID) {
+    for (const [key, registration] of Object.entries(s.registrations)) {
+      if (registration.sessionID !== sessionID) continue
+      visible.set(registration.name, [key, registration])
+    }
+  }
+  return [...visible.values()]
 }
 
 export interface ServerInstructions {
@@ -163,25 +183,36 @@ export interface McpTool {
 
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
-  readonly clients: () => Effect.Effect<Record<string, MCPClient>>
-  readonly instructions: () => Effect.Effect<ServerInstructions[]>
-  readonly tools: () => Effect.Effect<Record<string, McpTool>>
-  readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
-  readonly resources: (clientName?: string) => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
+  readonly clients: (sessionID?: string) => Effect.Effect<Record<string, MCPClient>>
+  readonly instructions: (sessionID?: string) => Effect.Effect<ServerInstructions[]>
+  readonly tools: (sessionID?: string) => Effect.Effect<Record<string, McpTool>>
+  readonly prompts: (sessionID?: string) => Effect.Effect<Record<string, PromptInfo & { client: string }>>
+  readonly resources: (
+    clientName?: string,
+    sessionID?: string,
+  ) => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
   readonly resourceTemplates: (
     clientName?: string,
+    sessionID?: string,
   ) => Effect.Effect<Record<string, ResourceTemplateInfo & { client: string }>>
-  readonly add: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
+  readonly add: (
+    name: string,
+    mcp: ConfigMCPV1.Info,
+    sessionID?: string,
+  ) => Effect.Effect<{ status: Record<string, Status> | Status }>
+  readonly removeSession: (sessionID: string) => Effect.Effect<void>
   readonly connect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly getPrompt: (
     clientName: string,
     name: string,
     args?: Record<string, string>,
+    sessionID?: string,
   ) => Effect.Effect<Awaited<ReturnType<MCPClient["getPrompt"]>> | undefined>
   readonly readResource: (
     clientName: string,
     resourceUri: string,
+    sessionID?: string,
   ) => Effect.Effect<Awaited<ReturnType<MCPClient["readResource"]>> | undefined>
   readonly startAuth: (
     mcpName: string,
@@ -439,13 +470,14 @@ const layer = Layer.effect(
       Effect.catch(() => Effect.succeed([] as number[])),
     )
 
-    function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
+    function watch(s: State, key: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
+      const name = s.registrations[key]?.name ?? key
       client.onclose = () => {
-        if (s.clients[name] !== client) return
-        delete s.clients[name]
-        delete s.defs[name]
-        delete s.instructions[name]
-        s.status[name] = { status: "failed", error: "Connection closed" }
+        if (s.clients[key] !== client) return
+        delete s.clients[key]
+        delete s.defs[key]
+        delete s.instructions[key]
+        s.status[key] = { status: "failed", error: "Connection closed" }
         bridge.fork(
           Effect.logWarning("MCP connection closed", { server: name }).pipe(
             Effect.andThen(events.publish(ToolsChanged, { server: name })),
@@ -460,13 +492,13 @@ const layer = Layer.effect(
 
       if (!client.getServerCapabilities()?.tools) return
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
-        if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+        if (s.clients[key] !== client || s.status[key]?.status !== "connected") return
 
         const listed = await bridge.promise(McpCatalog.defs(client, timeout))
         if (!listed) return
-        if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+        if (s.clients[key] !== client || s.status[key]?.status !== "connected") return
 
-        s.defs[name] = listed
+        s.defs[key] = listed
         await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
     }
@@ -500,23 +532,26 @@ const layer = Layer.effect(
           clients: {},
           defs: {},
           instructions: {},
+          registrations: {},
         }
 
         yield* Effect.forEach(
           Object.entries(config),
-          ([key, mcp]) =>
+          ([name, mcp]) =>
             Effect.gen(function* () {
               if (!isMcpConfigured(mcp)) {
-                yield* Effect.logError("Ignoring MCP config entry without type", { key })
+                yield* Effect.logError("Ignoring MCP config entry without type", { key: name })
                 return
               }
+              const key = registrationKey(name)
+              s.registrations[key] = { name }
 
               if (mcp.enabled === false) {
                 s.status[key] = { status: "disabled" }
                 return
               }
 
-              const result = yield* create(key, mcp)
+              const result = yield* create(name, mcp)
               s.status[key] = result.status
               if (result.mcpClient) {
                 s.clients[key] = result.mcpClient
@@ -595,75 +630,100 @@ const layer = Layer.effect(
       const config = cfg.mcp ?? {}
       const result: Record<string, Status> = {}
 
-      for (const [key, mcp] of Object.entries(config)) {
+      for (const [name, mcp] of Object.entries(config)) {
         if (!isMcpConfigured(mcp)) continue
-        result[key] = s.status[key] ?? { status: "disabled" }
+        result[name] = s.status[registrationKey(name)] ?? { status: "disabled" }
       }
 
-      for (const key of Object.keys(s.config)) {
-        result[key] = s.status[key] ?? { status: "disabled" }
+      for (const [key, registration] of Object.entries(s.registrations)) {
+        if (registration.sessionID) continue
+        if (!(key in s.config)) continue
+        result[registration.name] = s.status[key] ?? { status: "disabled" }
       }
 
       return result
     })
 
-    const clients = Effect.fn("MCP.clients")(function* () {
+    const clients = Effect.fn("MCP.clients")(function* (sessionID?: string) {
       const s = yield* InstanceState.get(state)
-      return s.clients
+      return Object.fromEntries(
+        visibleRegistrations(s, sessionID)
+          .filter(([key]) => s.status[key]?.status === "connected" && s.clients[key])
+          .map(([key, registration]) => [registration.name, s.clients[key]]),
+      )
     })
 
-    const instructions = Effect.fn("MCP.instructions")(function* () {
+    const instructions = Effect.fn("MCP.instructions")(function* (sessionID?: string) {
       const s = yield* InstanceState.get(state)
-      return Object.entries(s.instructions)
-        .filter(([name]) => s.status[name]?.status === "connected")
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, item]) => ({
-          name,
-          instructions: item,
-          tools: (s.defs[name] ?? []).map((tool) => McpCatalog.toolName(name, tool.name)),
+      return visibleRegistrations(s, sessionID)
+        .filter(([key]) => s.status[key]?.status === "connected" && s.instructions[key])
+        .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+        .map(([key, registration]) => ({
+          name: registration.name,
+          instructions: s.instructions[key],
+          tools: (s.defs[key] ?? []).map((tool) => McpCatalog.toolName(registration.name, tool.name)),
         }))
     })
 
-    const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: ConfigMCPV1.Info) {
+    const createAndStore = Effect.fn("MCP.createAndStore")(function* (
+      key: string,
+      name: string,
+      mcp: ConfigMCPV1.Info,
+    ) {
       const s = yield* InstanceState.get(state)
       const result = yield* create(name, mcp)
 
-      s.status[name] = result.status
+      s.status[key] = result.status
       if (!result.mcpClient) {
-        yield* closeClient(s, name)
-        delete s.clients[name]
+        yield* closeClient(s, key)
+        delete s.clients[key]
         return result.status
       }
 
-      return yield* storeClient(s, name, result.mcpClient, result.defs!, result.instructions, mcp.timeout)
+      return yield* storeClient(s, key, result.mcpClient, result.defs!, result.instructions, mcp.timeout)
     })
 
-    const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCPV1.Info) {
+    const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCPV1.Info, sessionID?: string) {
       const s = yield* InstanceState.get(state)
-      s.config[name] = mcp
-      yield* createAndStore(name, mcp)
-      return { status: s.status }
+      const key = registrationKey(name, sessionID)
+      s.config[key] = mcp
+      s.registrations[key] = { name, sessionID }
+      const added = yield* createAndStore(key, name, mcp)
+      return { status: added }
+    })
+
+    const removeSession = Effect.fn("MCP.removeSession")(function* (sessionID: string) {
+      const s = yield* InstanceState.get(state)
+      const keys = Object.entries(s.registrations)
+        .filter(([, registration]) => registration.sessionID === sessionID)
+        .map(([key]) => key)
+      yield* Effect.forEach(keys, (key) => closeClient(s, key), { concurrency: "unbounded", discard: true })
+      for (const key of keys) {
+        delete s.config[key]
+        delete s.status[key]
+        delete s.registrations[key]
+      }
     })
 
     const connect = Effect.fn("MCP.connect")(function* (name: string) {
       const mcp = yield* requireMcpConfig(name)
-      yield* createAndStore(name, { ...mcp, enabled: true })
+      yield* createAndStore(registrationKey(name), name, { ...mcp, enabled: true })
     })
 
     const disconnect = Effect.fn("MCP.disconnect")(function* (name: string) {
       yield* requireMcpConfig(name)
       const s = yield* InstanceState.get(state)
-      yield* closeClient(s, name)
-      delete s.clients[name]
-      s.status[name] = { status: "disabled" }
+      const key = registrationKey(name)
+      yield* closeClient(s, key)
+      s.status[key] = { status: "disabled" }
     })
 
-    function requestTimeout(s: State, name: string, configured: McpEntry | undefined, fallback?: number) {
+    function requestTimeout(s: State, key: string, configured: McpEntry | undefined, fallback?: number) {
       const staticTimeout = configured && isMcpConfigured(configured) ? configured.timeout : undefined
-      return s.config[name]?.timeout ?? staticTimeout ?? fallback
+      return s.config[key]?.timeout ?? staticTimeout ?? fallback
     }
 
-    const tools = Effect.fn("MCP.tools")(function* () {
+    const tools = Effect.fn("MCP.tools")(function* (sessionID?: string) {
       const result: Record<string, McpTool> = {}
       const s = yield* InstanceState.get(state)
 
@@ -671,17 +731,18 @@ const layer = Layer.effect(
       const config = cfg.mcp ?? {}
       const defaultTimeout = cfg.experimental?.mcp_timeout
 
-      for (const [clientName, client] of Object.entries(s.clients)) {
-        if (s.status[clientName]?.status !== "connected") continue
-        const mcpConfig = config[clientName]
-        const listed = s.defs[clientName]
+      for (const [key, registration] of visibleRegistrations(s, sessionID)) {
+        const client = s.clients[key]
+        if (!client || s.status[key]?.status !== "connected") continue
+        const mcpConfig = registration.sessionID ? undefined : config[registration.name]
+        const listed = s.defs[key]
         if (!listed) {
-          yield* Effect.logWarning("missing cached tools for connected server", { clientName })
+          yield* Effect.logWarning("missing cached tools for connected server", { clientName: registration.name })
           continue
         }
-        const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
+        const timeout = requestTimeout(s, key, mcpConfig, defaultTimeout)
         for (const def of listed) {
-          result[McpCatalog.toolName(clientName, def.name)] = { def, client, timeout }
+          result[McpCatalog.toolName(registration.name, def.name)] = { def, client, timeout }
         }
       }
       return result
@@ -693,18 +754,30 @@ const layer = Layer.effect(
       label: string,
       key?: (item: T) => string,
       targetClientName?: string,
+      sessionID?: string,
     ) {
       return Effect.gen(function* () {
         const cfg = yield* cfgSvc.get()
         return yield* Effect.forEach(
-          Object.entries(s.clients).filter(
-            ([name]) => s.status[name]?.status === "connected" && (!targetClientName || name === targetClientName),
+          visibleRegistrations(s, sessionID).filter(
+            ([registrationKey, registration]) =>
+              s.status[registrationKey]?.status === "connected" &&
+              (!targetClientName || registration.name === targetClientName),
           ),
-          ([clientName, client]) =>
+          ([registrationKey, registration]) =>
             McpCatalog.fetch(
-              clientName,
-              client,
-              (c) => listFn(c, requestTimeout(s, clientName, cfg.mcp?.[clientName], cfg.experimental?.mcp_timeout)),
+              registration.name,
+              s.clients[registrationKey],
+              (c) =>
+                listFn(
+                  c,
+                  requestTimeout(
+                    s,
+                    registrationKey,
+                    registration.sessionID ? undefined : cfg.mcp?.[registration.name],
+                    cfg.experimental?.mcp_timeout,
+                  ),
+                ),
               label,
               key,
             ).pipe(Effect.map((items) => Object.entries(items ?? {}))),
@@ -713,27 +786,36 @@ const layer = Layer.effect(
       })
     }
 
-    const prompts = Effect.fn("MCP.prompts")(function* () {
-      return yield* collectFromConnected(yield* InstanceState.get(state), McpCatalog.prompts, "prompts")
+    const prompts = Effect.fn("MCP.prompts")(function* (sessionID?: string) {
+      return yield* collectFromConnected(
+        yield* InstanceState.get(state),
+        McpCatalog.prompts,
+        "prompts",
+        undefined,
+        undefined,
+        sessionID,
+      )
     })
 
-    const resources = Effect.fn("MCP.resources")(function* (clientName?: string) {
+    const resources = Effect.fn("MCP.resources")(function* (clientName?: string, sessionID?: string) {
       return yield* collectFromConnected(
         yield* InstanceState.get(state),
         McpCatalog.resources,
         "resources",
         (resource) => resource.uri,
         clientName,
+        sessionID,
       )
     })
 
-    const resourceTemplates = Effect.fn("MCP.resourceTemplates")(function* (clientName?: string) {
+    const resourceTemplates = Effect.fn("MCP.resourceTemplates")(function* (clientName?: string, sessionID?: string) {
       return yield* collectFromConnected(
         yield* InstanceState.get(state),
         McpCatalog.resourceTemplates,
         "resource templates",
         (template) => template.uriTemplate,
         clientName,
+        sessionID,
       )
     })
 
@@ -742,16 +824,30 @@ const layer = Layer.effect(
       fn: (client: MCPClient, timeout?: number) => Promise<A>,
       label: string,
       meta?: Record<string, unknown>,
+      sessionID?: string,
     ) {
       const s = yield* InstanceState.get(state)
-      const client = s.clients[clientName]
-      if (!client) {
+      const match = visibleRegistrations(s, sessionID).find(
+        ([key, registration]) => registration.name === clientName && s.clients[key],
+      )
+      if (!match) {
         yield* Effect.logWarning(`client not found for ${label}`, { clientName })
         return undefined
       }
+      const [key, registration] = match
+      const client = s.clients[key]
       const cfg = yield* cfgSvc.get()
       return yield* Effect.tryPromise({
-        try: () => fn(client, requestTimeout(s, clientName, cfg.mcp?.[clientName], cfg.experimental?.mcp_timeout)),
+        try: () =>
+          fn(
+            client,
+            requestTimeout(
+              s,
+              key,
+              registration.sessionID ? undefined : cfg.mcp?.[registration.name],
+              cfg.experimental?.mcp_timeout,
+            ),
+          ),
         catch: (error) => error,
       }).pipe(
         Effect.tapError((error) =>
@@ -769,27 +865,35 @@ const layer = Layer.effect(
       clientName: string,
       name: string,
       args?: Record<string, string>,
+      sessionID?: string,
     ) {
       return yield* withClient(
         clientName,
         (client, timeout) => client.getPrompt({ name, arguments: args }, { timeout }),
         "getPrompt",
         { promptName: name },
+        sessionID,
       )
     })
 
-    const readResource = Effect.fn("MCP.readResource")(function* (clientName: string, resourceUri: string) {
+    const readResource = Effect.fn("MCP.readResource")(function* (
+      clientName: string,
+      resourceUri: string,
+      sessionID?: string,
+    ) {
       return yield* withClient(
         clientName,
         (client, timeout) => client.readResource({ uri: resourceUri }, { timeout }),
         "readResource",
         { resourceUri },
+        sessionID,
       )
     })
 
     const getMcpConfig = Effect.fnUntraced(function* (mcpName: string) {
       const s = yield* InstanceState.get(state)
-      if (s.config[mcpName]) return s.config[mcpName]
+      const dynamic = s.config[registrationKey(mcpName)]
+      if (dynamic) return dynamic
 
       const cfg = yield* cfgSvc.get()
       const mcpConfig = cfg.mcp?.[mcpName]
@@ -892,7 +996,14 @@ const layer = Layer.effect(
 
         const s = yield* InstanceState.get(state)
         yield* auth.clearOAuthState(mcpName)
-        return yield* storeClient(s, mcpName, client, listed, client.getInstructions()?.trim(), mcpConfig.timeout)
+        return yield* storeClient(
+          s,
+          registrationKey(mcpName),
+          client,
+          listed,
+          client.getInstructions()?.trim(),
+          mcpConfig.timeout,
+        )
       }
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
@@ -938,7 +1049,7 @@ const layer = Layer.effect(
 
       const mcpConfig = yield* requireMcpConfig(mcpName)
 
-      return yield* createAndStore(mcpName, { ...mcpConfig, enabled: true })
+      return yield* createAndStore(registrationKey(mcpName), mcpName, { ...mcpConfig, enabled: true })
     })
 
     const removeAuth = Effect.fn("MCP.removeAuth")(function* (mcpName: string) {
@@ -978,6 +1089,7 @@ const layer = Layer.effect(
       resources,
       resourceTemplates,
       add,
+      removeSession,
       connect,
       disconnect,
       getPrompt,

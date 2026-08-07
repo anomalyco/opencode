@@ -252,6 +252,46 @@ it.instance("instructions() returns non-empty connected server instructions with
   }),
 )
 
+it.instance("scopes dynamic servers by session and removes only the owning session", () =>
+  Effect.gen(function* () {
+    const global = yield* lifecycleServer({ instructions: "global instructions" })
+    const first = yield* lifecycleServer({ instructions: "first instructions" })
+    const second = yield* lifecycleServer({ instructions: "second instructions" })
+    global.state.tools[0]!.description = "global tool"
+    first.state.tools[0]!.description = "first tool"
+    second.state.tools[0]!.description = "second tool"
+    global.state.resources = [{ name: "global", uri: "test://global" }]
+    first.state.resources = [{ name: "first", uri: "test://first" }]
+    second.state.resources = [{ name: "second", uri: "test://second" }]
+
+    const mcp = yield* MCP.Service
+    yield* mcp.add("shared", remote(global.url))
+    yield* mcp.add("shared", remote(first.url), "session-first")
+    yield* mcp.add("shared", remote(second.url), "session-second")
+
+    expect((yield* mcp.tools())["shared_test_tool"]?.def.description).toBe("global tool")
+    expect((yield* mcp.tools("session-first"))["shared_test_tool"]?.def.description).toBe("first tool")
+    expect((yield* mcp.tools("session-second"))["shared_test_tool"]?.def.description).toBe("second tool")
+    expect(Object.keys(yield* mcp.clients())).toEqual(["shared"])
+    expect(Object.keys(yield* mcp.resources(undefined, "session-first"))).toEqual(["shared:test://first"])
+    expect(yield* mcp.instructions("session-second")).toEqual([
+      { name: "shared", instructions: "second instructions", tools: ["shared_test_tool"] },
+    ])
+
+    yield* mcp.removeSession("session-first")
+
+    expect((yield* mcp.tools("session-first"))["shared_test_tool"]?.def.description).toBe("global tool")
+    expect((yield* mcp.tools("session-second"))["shared_test_tool"]?.def.description).toBe("second tool")
+    expect((yield* mcp.tools())["shared_test_tool"]?.def.description).toBe("global tool")
+    yield* pollWithTimeout(
+      Effect.sync(() => (first.state.aborted > 0 ? first.state.aborted : undefined)),
+      "removed session's HTTP connection was not closed",
+    )
+    expect(global.state.aborted).toBe(0)
+    expect(second.state.aborted).toBe(0)
+  }),
+)
+
 it.instance("follows cursors when listing tools, prompts, resources, and templates", () =>
   Effect.gen(function* () {
     const server = yield* lifecycleServer()

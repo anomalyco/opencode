@@ -3,6 +3,7 @@ import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { McpServerNotFoundError } from "../errors"
+import { SessionID } from "@/session/schema"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
@@ -11,6 +12,7 @@ import { described } from "./metadata"
 export const AddPayload = Schema.Struct({
   name: Schema.String,
   config: ConfigMCPV1.Info,
+  sessionID: Schema.optional(SessionID),
 })
 
 export const StatusMap = Schema.Record(Schema.String, MCP.Status)
@@ -36,6 +38,7 @@ export const McpPaths = {
   authAuthenticate: "/mcp/:name/auth/authenticate",
   connect: "/mcp/:name/connect",
   disconnect: "/mcp/:name/disconnect",
+  session: "/mcp/session/:sessionID",
 } as const
 
 export const McpApi = HttpApi.make("mcp")
@@ -62,6 +65,17 @@ export const McpApi = HttpApi.make("mcp")
             identifier: "mcp.add",
             summary: "Add MCP server",
             description: "Dynamically add a new Model Context Protocol (MCP) server to the system.",
+          }),
+        ),
+        HttpApiEndpoint.delete("removeSession", McpPaths.session, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Session MCP servers removed successfully"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.removeSession",
+            summary: "Remove session MCP servers",
+            description: "Remove dynamically added MCP servers owned by a session.",
           }),
         ),
         HttpApiEndpoint.post("authStart", McpPaths.auth, {
