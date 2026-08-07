@@ -148,7 +148,7 @@ describe("SessionExecution lifecycle", () => {
         [first, second].map((sessionID) => ({
           sessionID,
           text: "The server restarted while you were working. Continue from where you left off without repeating completed work.",
-          description: "Server restarted",
+          description: "Continuing after restart",
         })),
       )
       expect(yield* suspensions(database)).toEqual({ [first]: false, [second]: false })

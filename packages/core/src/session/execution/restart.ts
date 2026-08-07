@@ -46,7 +46,7 @@ export const layer = Layer.effect(
               yield* bus.publish(SessionEvent.Synthetic, {
                 sessionID,
                 text: CONTINUE_AFTER_SERVER_RESTART,
-                description: "Server restarted",
+                description: "Continuing after restart",
               })
               // Drain failures are already logged and durably recorded by the execution layer.
               yield* Effect.ignore(execution.resume(sessionID))
