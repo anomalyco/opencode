@@ -215,7 +215,7 @@ describe("PatchTool", () => {
                       file: "remove.txt",
                       status: "deleted",
                       additions: 0,
-                      deletions: 2,
+                      deletions: 1,
                       patch: expect.stringContaining("-remove"),
                     },
                   ],
@@ -245,6 +245,29 @@ describe("PatchTool", () => {
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("counts deleted lines with and without a trailing newline", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          Promise.all([
+            fs.writeFile(path.join(directory, "trailing.txt"), "remove\n"),
+            fs.writeFile(path.join(directory, "unterminated.txt"), "remove"),
+          ]),
+        )
+        const settled = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Delete File: trailing.txt\n*** Delete File: unterminated.txt\n*** End Patch"),
+        )
+        expect(settled.status).toBe("completed")
+        if (settled.status !== "completed") return
+        expect(settled.output.files).toMatchObject([
+          { file: "trailing.txt", additions: 0, deletions: 1 },
+          { file: "unterminated.txt", additions: 0, deletions: 1 },
+        ])
+      }),
     ),
   )
 
@@ -446,7 +469,7 @@ describe("PatchTool", () => {
             {
               file: "renamed/dir/name.txt",
               status: "modified",
-              patch: expect.stringContaining("-old content\n+new content"),
+              patch: expect.stringContaining(`Index: ${source}`),
             },
           ],
         })

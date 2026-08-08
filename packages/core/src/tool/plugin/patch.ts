@@ -3,7 +3,6 @@ export * as PatchTool from "./patch"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
-import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Result, Schema } from "effect"
 import path from "path"
 import { Bom } from "@opencode-ai/util/bom"
@@ -15,6 +14,7 @@ import { Location } from "../../location"
 import { Patch } from "@opencode-ai/util/patch"
 import { Permission } from "../../permission"
 import DESCRIPTION from "../patch.txt"
+import { fileDiff } from "./file-diff"
 
 export const name = "patch"
 
@@ -353,22 +353,16 @@ function errorMessage(error: unknown) {
 
 function patchFile(change: Prepared, after = change.after): typeof FileDiff.Info.Type {
   const target = (change.type === "update" ? change.moveTarget : undefined)?.resource ?? change.target.resource
-  const patch = trimDiff(createTwoFilesPatch(change.target.absolute, change.target.absolute, change.before, after))
-  const counts =
-    change.type === "delete"
-      ? { additions: 0, deletions: change.before.split("\n").length }
-      : diffLines(change.before, after).reduce(
-          (result, item) => ({
-            additions: result.additions + (item.added ? (item.count ?? 0) : 0),
-            deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
-          }),
-          { additions: 0, deletions: 0 },
-        )
+  const diff = fileDiff(
+    change.target.absolute,
+    change.before,
+    after,
+    change.type === "add" ? "added" : change.type === "delete" ? "deleted" : "modified",
+  )
   return {
+    ...diff,
     file: target,
-    patch,
-    status: change.type === "add" ? "added" : change.type === "delete" ? "deleted" : "modified",
-    ...counts,
+    patch: trimDiff(diff.patch),
   }
 }
 
