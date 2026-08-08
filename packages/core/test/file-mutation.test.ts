@@ -9,11 +9,12 @@ import { Environment } from "@opencode-ai/core/environment"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { type EnvironmentFilesTransform, transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
-function provide(directory: string, environmentLayer?: Layer.Layer<Environment.Service>) {
+function provide(directory: string, transformFiles: EnvironmentFilesTransform = () => ({})) {
   const activeLocation = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
@@ -21,7 +22,7 @@ function provide(directory: string, environmentLayer?: Layer.Layer<Environment.S
   return Effect.provide(
     AppNodeBuilder.build(LayerNode.group([LocationMutation.node, FileMutation.node]), [
       [Location.node, activeLocation],
-      [Environment.node, environmentLayer ?? AppNodeBuilder.build(Environment.node, [[Location.node, activeLocation]])],
+      [Environment.node, transformEnvironmentFiles(activeLocation, transformFiles)],
     ]),
   )
 }
@@ -118,7 +119,7 @@ describe("FileMutation", () => {
         const releaseFirst = yield* Deferred.make<void>()
         const secondStarted = yield* Deferred.make<void>()
         let writes = 0
-        const filesystem = instrumentWrites(directory, (write) =>
+        const filesystem = instrumentWrites((write) =>
           Effect.gen(function* () {
             writes++
             if (writes === 1) {
@@ -211,7 +212,7 @@ describe("FileMutation", () => {
         const secondFinished = yield* Deferred.make<void>()
         const secondPath = path.join(directory, "second.txt")
         let writes = 0
-        const filesystem = instrumentWrites(directory, (write) =>
+        const filesystem = instrumentWrites((write) =>
           ++writes === 1
             ? Deferred.succeed(firstStarted, undefined).pipe(
                 Effect.andThen(Deferred.await(releaseFirst)),
@@ -241,29 +242,7 @@ describe("FileMutation", () => {
 })
 
 function instrumentWrites(
-  directory: string,
   run: <E>(write: Effect.Effect<void, E>, target: string) => Effect.Effect<void, E>,
-) {
-  return Layer.effect(
-    Environment.Service,
-    Effect.gen(function* () {
-      const environment = yield* Environment.Service
-      return Environment.Service.of({
-        ...environment,
-        files: {
-          ...environment.files,
-          write: (target, content) => run(environment.files.write(target, content), target),
-        },
-      })
-    }),
-  ).pipe(
-    Layer.provide(
-      AppNodeBuilder.build(Environment.node, [
-        [
-          Location.node,
-          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-        ],
-      ]),
-    ),
-  )
+): EnvironmentFilesTransform {
+  return (files) => ({ write: (target, content) => run(files.write(target, content), target) })
 }

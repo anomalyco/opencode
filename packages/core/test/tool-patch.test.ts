@@ -14,6 +14,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Tool } from "@opencode-ai/core/tool"
 import { PatchTool } from "@opencode-ai/core/tool/plugin/patch"
+import { transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -82,36 +83,6 @@ const reset = () => {
   formatFile = () => Effect.succeed(false)
 }
 
-const environment = (activeLocation: Layer.Layer<Location.Service>) =>
-  Layer.effect(
-    Environment.Service,
-    Effect.gen(function* () {
-      const current = yield* Environment.Service
-      return Environment.Service.of({
-        ...current,
-        files: {
-          ...current.files,
-          read: (target, range) =>
-            Effect.sync(() => {
-              if (!editApproved) readsBeforeEditApproval++
-            }).pipe(Effect.andThen(current.files.read(target, range))),
-          remove: (target) => {
-            if (failRemoveTarget && path.basename(target) === failRemoveTarget)
-              return Effect.die("forced remove failure")
-            if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
-              return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced remove failure") }))
-            return current.files.remove(target)
-          },
-          write: (target, content) => {
-            if (failWriteTarget && path.basename(target) === failWriteTarget)
-              return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
-            return current.files.write(target, content)
-          },
-        },
-      })
-    }),
-  ).pipe(Layer.provide(AppNodeBuilder.build(Environment.node, [[Location.node, activeLocation]])))
-
 const withTool = <A, E, R>(
   directory: string,
   body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
@@ -128,7 +99,27 @@ const withTool = <A, E, R>(
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, FileMutation.node, patchToolNode]), [
-        [Environment.node, environment(activeLocation)],
+        [
+          Environment.node,
+          transformEnvironmentFiles(activeLocation, (files) => ({
+            read: (target, range) =>
+              Effect.sync(() => {
+                if (!editApproved) readsBeforeEditApproval++
+              }).pipe(Effect.andThen(files.read(target, range))),
+            remove: (target) => {
+              if (failRemoveTarget && path.basename(target) === failRemoveTarget)
+                return Effect.die("forced remove failure")
+              if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
+                return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced remove failure") }))
+              return files.remove(target)
+            },
+            write: (target, content) => {
+              if (failWriteTarget && path.basename(target) === failWriteTarget)
+                return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
+              return files.write(target, content)
+            },
+          })),
+        ],
         [Location.node, activeLocation],
         [Formatter.node, formatter],
         [Permission.node, permission],
