@@ -28,6 +28,7 @@ import { Vcs } from "@/project/vcs"
 import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
+import { RemoteMobile } from "@/remote/mobile"
 import { SessionCompaction } from "@/session/compaction"
 import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
@@ -134,6 +135,7 @@ const cors = (corsOptions?: CorsOptions) =>
 // - rootApiRoutes: typed /global/* and control routes; auth is declared by RootHttpApi.
 // - eventApiRoutes: typed SSE route with instance routing context and its existing API contract.
 // - ptyConnectApiRoutes: typed WebSocket upgrade route with ticket-aware auth.
+// - remoteMobileRoute: public shell only; the pairing ticket stays in the URL fragment and API calls require scoped auth.
 // - instanceApiRoutes: remaining typed instance routes.
 // - uiRoute: raw catch-all fallback; auth is router middleware so public static assets can bypass it.
 const authOnlyRouterLayer = authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.layer))
@@ -201,6 +203,10 @@ const docResponse = lazy(() => HttpServerResponse.jsonUnsafe(OpenApi.fromApi(Pub
 
 const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effect.succeed(docResponse()))).pipe(
   Layer.provide(authOnlyRouterLayer),
+)
+
+const remoteMobileRoute = HttpRouter.use((router) =>
+  router.add("GET", "/remote/mobile", () => Effect.succeed(RemoteMobile.response())),
 )
 
 const uiRoute = HttpRouter.use((router) =>
@@ -295,6 +301,7 @@ export function createRoutes(
     instanceRoutes,
     serverRoutes,
     docRoute,
+    remoteMobileRoute,
     uiRoute,
   ).pipe(
     Layer.provide([
