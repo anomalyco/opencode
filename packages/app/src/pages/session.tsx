@@ -108,7 +108,7 @@ type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
 const emptyFollowups: FollowupItem[] = []
 
-type ChangeMode = "git" | "branch" | "turn"
+type ChangeMode = "git" | "branch" | "turn" | "all"
 type VcsMode = "git" | "branch"
 
 const sessionViewState = () => ({
@@ -663,6 +663,7 @@ export default function Page() {
       list.push("branch")
     }
     list.push("turn")
+    list.push("all")
     return list
   })
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
@@ -701,6 +702,7 @@ export default function Page() {
   })
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
+    if (reviewMode() === "all") return []
     if (reviewMode() === "git" || reviewMode() === "branch")
       // avoids suspense
       return vcsQuery.isFetched ? (vcsQuery.data ?? []) : []
@@ -715,6 +717,7 @@ export default function Page() {
   const reviewCount = () => reviewDiffs().length
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
+    if (reviewMode() === "all") return true
     if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
     return true
   }
@@ -1164,6 +1167,7 @@ export default function Page() {
   const changesLabel = (option: ChangeMode) => {
     if (option === "git") return language.t("ui.sessionReview.title.git")
     if (option === "branch") return language.t("ui.sessionReview.title.branch")
+    if (option === "all") return language.t("session.files.all")
     return language.t("ui.sessionReview.title.lastTurn")
   }
 
@@ -1226,6 +1230,7 @@ export default function Page() {
   )
 
   const reviewEmptyText = createMemo(() => {
+    if (reviewMode() === "all") return language.t("session.files.empty")
     if (reviewMode() === "git") return language.t("session.review.noUncommittedChanges")
     if (reviewMode() === "branch") return language.t("session.review.noBranchChanges")
     return language.t("session.review.noChanges")
@@ -1250,6 +1255,9 @@ export default function Page() {
   }
 
   const reviewEmptyV2 = () => {
+    if (reviewMode() === "all") {
+      return <div class="px-6 py-4 text-text-weak">{language.t("session.files.empty")}</div>
+    }
     if ((reviewMode() === "git" || reviewMode() === "branch") && !reviewReady()) {
       return <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
     }
@@ -1314,6 +1322,8 @@ export default function Page() {
       return activeReviewFile()
     },
     onSelectFile: focusReviewDiff,
+    onOpenFile: openReviewFile,
+    allFiles: reviewMode() === "all",
     get diffStyle() {
       return layout.review.diffStyle()
     },
