@@ -24,6 +24,14 @@ function fakeGateway(info: RemoteGatewayInfo) {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
 describe("remote pairing controller", () => {
   test("creates a mobile URL while keeping Basic auth in the main-process request", async () => {
     const gateway = fakeGateway({
@@ -98,6 +106,23 @@ describe("remote pairing controller", () => {
     expect(gateway.stops()).toBe(0)
   })
 
+  test("does not stop a gateway it did not start after a paired session disconnects", async () => {
+    const gateway = fakeGateway({ port: 4123, urls: ["http://192.168.1.10:4123"] })
+    await gateway.gateway.start()
+    const controller = createRemotePairingController({
+      getSidecar: async () => ({ url: "http://127.0.0.1:4096", username: null, password: null }),
+      gateway: gateway.gateway,
+      fetch: async (_input, init) =>
+        init?.method === "DELETE" ? Response.json(true) : Response.json({ ticket: "ticket", expires_in: 300 }),
+    })
+
+    await controller.create("session", "/tmp/project")
+    await controller.revoke("session", "/tmp/project")
+
+    expect(gateway.starts()).toBe(1)
+    expect(gateway.stops()).toBe(0)
+  })
+
   test("stops the gateway when the last tracked remote session disconnects", async () => {
     const gateway = fakeGateway({ port: 4123, urls: ["http://192.168.1.10:4123"] })
     const controller = createRemotePairingController({
@@ -128,6 +153,73 @@ describe("remote pairing controller", () => {
     expect(gateway.stops()).toBe(0)
 
     await controller.revoke("session-b", "/tmp/b")
+    expect(gateway.stops()).toBe(1)
+  })
+
+  test("keeps a successful pairing alive when a concurrent pairing fails", async () => {
+    const gateway = fakeGateway({ port: 4123, urls: ["http://192.168.1.10:4123"] })
+    const successRequest = deferred<void>()
+    const failedRequest = deferred<void>()
+    const successResponse = deferred<Response>()
+    const failedResponse = deferred<Response>()
+    const controller = createRemotePairingController({
+      getSidecar: async () => ({ url: "http://127.0.0.1:4096", username: null, password: null }),
+      gateway: gateway.gateway,
+      fetch: async (input, init) => {
+        const request = new Request(input, init)
+        if (request.method === "DELETE") return Response.json(true)
+        if (request.url.includes("session-success")) {
+          successRequest.resolve()
+          return successResponse.promise
+        }
+        failedRequest.resolve()
+        return failedResponse.promise
+      },
+    })
+
+    const success = controller.create("session-success", "/tmp/success")
+    const failed = controller.create("session-failed", "/tmp/failed")
+    await Promise.all([successRequest.promise, failedRequest.promise])
+
+    failedResponse.resolve(new Response(null, { status: 500 }))
+    await expect(failed).rejects.toThrow("status 500")
+    expect(gateway.stops()).toBe(0)
+
+    successResponse.resolve(Response.json({ ticket: "ticket", expires_in: 300 }))
+    await expect(success).resolves.toMatchObject({ expiresIn: 300 })
+    expect(gateway.stops()).toBe(0)
+
+    await controller.revoke("session-success", "/tmp/success")
+    expect(gateway.stops()).toBe(1)
+  })
+
+  test("does not stop the gateway while another pairing is in flight", async () => {
+    const gateway = fakeGateway({ port: 4123, urls: ["http://192.168.1.10:4123"] })
+    const pendingRequest = deferred<void>()
+    const pendingResponse = deferred<Response>()
+    const controller = createRemotePairingController({
+      getSidecar: async () => ({ url: "http://127.0.0.1:4096", username: null, password: null }),
+      gateway: gateway.gateway,
+      fetch: async (input, init) => {
+        const request = new Request(input, init)
+        if (request.method === "DELETE") return Response.json(true)
+        if (request.url.includes("session-pending")) {
+          pendingRequest.resolve()
+          return pendingResponse.promise
+        }
+        return Response.json({ ticket: "ticket", expires_in: 300 })
+      },
+    })
+
+    await controller.create("session-active", "/tmp/active")
+    const pending = controller.create("session-pending", "/tmp/pending")
+    await pendingRequest.promise
+
+    await controller.revoke("session-active", "/tmp/active")
+    expect(gateway.stops()).toBe(0)
+
+    pendingResponse.resolve(new Response(null, { status: 500 }))
+    await expect(pending).rejects.toThrow("status 500")
     expect(gateway.stops()).toBe(1)
   })
 })
