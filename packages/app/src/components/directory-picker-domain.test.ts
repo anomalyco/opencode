@@ -152,6 +152,30 @@ test("resolves directory autocomplete from the current browser root", async () =
   expect(directories).toEqual(["/repo", "/repo/src"])
 })
 
+test("lists the default directory when the query is empty", async () => {
+  const calls: string[] = []
+  const sdk = {
+    api: {
+      file: {
+        list: (input: { location?: { directory?: string } }) => {
+          calls.push(input.location?.directory ?? "")
+          return Promise.resolve({
+            data: [
+              { path: "projects/", type: "directory" },
+              { path: "README.md", type: "file" },
+            ],
+          })
+        },
+        find: () => Promise.reject(new Error("empty queries should not use file search")),
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/home/luke" })
+
+  expect(await search("")).toEqual(["/home/luke", "/home/luke/projects"])
+  expect(calls).toEqual(["/home/luke"])
+})
+
 test("searches from an absolute root without a default base", async () => {
   const directories: string[] = []
   const sdk = {
