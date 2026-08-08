@@ -11,6 +11,7 @@ const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
+const OAUTH_CALLBACK_HOST = "127.0.0.1"
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 const ALLOWED_MODELS = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
 const DISALLOWED_MODELS = new Set(["gpt-5.5-pro"])
@@ -217,7 +218,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
   })
 
   await new Promise<void>((resolve, reject) => {
-    oauthServer!.listen(OAUTH_PORT, () => {
+    oauthServer!.listen(OAUTH_PORT, OAUTH_CALLBACK_HOST, () => {
       resolve()
     })
     oauthServer!.on("error", reject)
