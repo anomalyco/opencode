@@ -22,7 +22,7 @@ REPO = "jaminsmoke/Jarvis"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 FIELDS = {
-    "Status":    "PVTSSF_lAHOBM87Yc4Bfu74zhZ_w4M",  # campo "Estado" (el built-in Status no acepta opciones custom)
+    "Status":    "PVTSSF_lAHOBM87Yc4Bfu74zhZ_v1g",  # built-in Status (opciones custom via UI)
     "Version":   "PVTSSF_lAHOBM87Yc4Bfu74zhZ_weA",  # campo "Versión"
     "Prioridad": "PVTSSF_lAHOBM87Yc4Bfu74zhZ_wb4",
     "Decision":  "PVTSSF_lAHOBM87Yc4Bfu74zhZ_wb0",
@@ -39,8 +39,10 @@ EXACT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 MADRID = ZoneInfo("Europe/Madrid")
 
 STATUS = {
-    "Detectado": "21ffaaa5", "Debate": "e895ad32", "Roadmap": "98ba191b",
-    "Ejecutando": "e59bb649", "Verificando": "0054af8e", "Changelog": "34232d2b",
+    # TODO: actualizar IDs una vez que las opciones custom (Detectado/Debate/Roadmap/Ejecutando/Verificando/Changelog)
+    # se añadan desde la UI de GitHub (Project Settings → Fields → Status → Edit options)
+    "Detectado": "f75ad846", "Debate": "47fc9ee4", "Roadmap": "98236657",
+    "Ejecutando": "98236657", "Verificando": "f75ad846", "Changelog": "47fc9ee4",
 }
 
 VERSION = {
@@ -185,7 +187,7 @@ def get_issue_from_item(item_id):
 def get_item_content(item_id):
     data = gql(
         f'{{node(id:"{item_id}"){{...on ProjectV2Item{{'
-        f'id,createdAt,statusField:fieldValueByName(name:"Estado"){{...on ProjectV2ItemFieldSingleSelectValue{{name,updatedAt}}}},'
+        f'id,createdAt,statusField:fieldValueByName(name:"Status"){{...on ProjectV2ItemFieldSingleSelectValue{{name,updatedAt}}}},'
         f'typeField:fieldValueByName(name:"Tipo"){{...on ProjectV2ItemFieldSingleSelectValue{{name}}}},'
         f'areaField:fieldValueByName(name:"Área principal"){{...on ProjectV2ItemFieldSingleSelectValue{{name}}}},'
         f'startedField:fieldValueByName(name:"Inicio"){{...on ProjectV2ItemFieldDateValue{{date}}}},'
@@ -537,7 +539,7 @@ def cmd_changelog():
             fn = fv.get('field', {}).get('name', '?')
             val = fv.get('name', '?')
             if val != '?': fields[fn] = val
-        if fields.get('Estado') == 'Changelog':
+        if fields.get('Status') == 'Changelog':
             ver = _get_field(fields, 'Versión', 'Version', 'versi', 'Versi')
             changelog_items.append({'number': ct['number'], 'title': ct.get('title', '?'), 'version': ver})
 
@@ -612,7 +614,7 @@ def cmd_backfill_timestamps():
         started, started_exact = temporal_values(created_at)
         completed = None
         completed_exact = None
-        if fields.get('Estado') == 'Changelog':
+        if fields.get('Status') == 'Changelog':
             closed_at = parse_api_datetime(content.get('closedAt'))
             if 'number' not in content or content.get('state') != 'CLOSED' or not closed_at:
                 raise KanbanError(f'Changelog item {item["id"]} lacks a closed Issue timestamp')
@@ -690,7 +692,7 @@ def cmd_audit():
         title = ct.get('title', '?')[:55]
         fields, _ = item_fields(i)
 
-        st = fields.get('Estado', 'SIN')
+        st = fields.get('Status', 'SIN')
         ver = _get_field(fields, 'Versión', 'Version')
         prio = fields.get('Prioridad', '-')
         dec = _get_field(fields, 'Decisión', 'Decision')
@@ -754,7 +756,7 @@ def cmd_audit():
 
     drafts = sum(1 for i in items if 'number' not in i['content'] and any(
         fv.get('name') == 'Changelog' for fv in i.get('fieldValues',{}).get('nodes',[])
-        if fv.get('field',{}).get('name') == 'Estado'))
+        if fv.get('field',{}).get('name') == 'Status'))
     if drafts: print(f"  [!!] {drafts} Drafts in Changelog!")
     return issues_found
 
