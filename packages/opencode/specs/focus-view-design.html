@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Focus View 设计:回合折叠 + 最新消息展示(交互版)</title>
+<style>
+  :root {
+    --ink: #1a1a1a;
+    --paper: #faf8f5;
+    --muted: #6b6b6b;
+    --accent: #c05621;
+    --accent-soft: #f6e3d5;
+    --green: #2f855a;
+    --green-soft: #e2f0e8;
+    --red: #b03a2e;
+    --red-soft: #f7e2df;
+    --line: #d9d2c8;
+    --code-bg: #f1ede6;
+    --term-bg: #141414;
+    --term-fg: #d8d4ce;
+    --term-dim: #7a756e;
+    --term-green: #8fce9c;
+    --term-orange: #e0a458;
+    --term-blue: #9fc2ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e8e4de;
+      --paper: #171512;
+      --muted: #9a948a;
+      --accent: #e08a4f;
+      --accent-soft: #3a2a1c;
+      --green: #6fbf92;
+      --green-soft: #1e3528;
+      --red: #e0756a;
+      --red-soft: #3a221f;
+      --line: #36312a;
+      --code-bg: #211e1a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.65;
+  }
+  header { padding: 3rem 1.25rem 1.5rem; max-width: 940px; margin: 0 auto; }
+  h1 { font-size: 1.9rem; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  .tldr { font-size: 1.02rem; color: var(--muted); max-width: 66ch; margin: .2rem 0 0; }
+  main { max-width: 940px; margin: 0 auto; padding: 0 1.25rem 4rem; }
+  h2 { font-size: 1.25rem; margin: 2.8rem 0 .8rem; padding-top: 1.2rem; border-top: 1px solid var(--line); }
+  h2 .step { color: var(--accent); font-size: .85rem; margin-right: .5rem; }
+  figure { margin: 1rem 0 1.6rem; }
+  figcaption { font-size: .88rem; color: var(--muted); margin-top: .6rem; }
+  svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  .wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; padding: .8rem; background: var(--paper); }
+  .controls { display: flex; align-items: center; justify-content: center; gap: .6rem; margin: .9rem 0 .4rem; flex-wrap: wrap; }
+  .pill {
+    display: inline-block; padding: .28rem .85rem; border-radius: 999px;
+    font-size: .8rem; font-weight: 600; border: 1px solid transparent;
+    cursor: pointer; user-select: none; transition: all .15s ease;
+    background: var(--code-bg); color: var(--ink); border-color: var(--line);
+  }
+  .pill:hover { border-color: var(--accent); color: var(--accent); }
+  .pill.active-off { background: var(--red-soft); color: var(--red); border-color: var(--red); }
+  .pill.active-on { background: var(--green-soft); color: var(--green); border-color: var(--green); }
+  .pill.active-play { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .pill:disabled { opacity: .45; cursor: default; }
+  .legend { display: flex; gap: 1.2rem; flex-wrap: wrap; justify-content: center; margin-top: .7rem; font-size: .8rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: .35rem; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .copy-btn { margin-top: .6rem; background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: .3rem .7rem; font-size: .78rem; cursor: pointer; }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; margin-top: .6rem; }
+  th, td { border: 1px solid var(--line); padding: .55rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); font-weight: 600; }
+  td code, th code { background: var(--code-bg); padding: .05rem .3rem; border-radius: 4px; font-family: ui-monospace, monospace; font-size: .82rem; }
+  .verdict { margin-top: 1rem; border-left: 4px solid var(--accent); background: var(--accent-soft); padding: .8rem 1rem; border-radius: 0 8px 8px 0; font-size: .92rem; }
+  footer { max-width: 940px; margin: 0 auto; padding: 2rem 1.25rem 3.5rem; border-top: 1px solid var(--line); font-size: .78rem; color: var(--muted); }
+  footer code { background: var(--code-bg); padding: .05rem .3rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  pre { background: var(--code-bg); border-radius: 8px; padding: .9rem 1rem; font-size: .8rem; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.55; }
+  .hint { font-size: .82rem; color: var(--muted); text-align: center; margin: .35rem 0 0; }
+  .status-pill {
+    display: inline-block; padding: .18rem .6rem; border-radius: 999px;
+    font-size: .72rem; font-weight: 700; letter-spacing: .03em;
+  }
+  .status-streaming { background: var(--accent-soft); color: var(--accent); }
+  .status-done { background: var(--green-soft); color: var(--green); }
+  .clickable { cursor: pointer; }
+  .clickable:hover { filter: brightness(1.25); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Focus View 设计:回合折叠 + 最新消息展示(交互版)</h1>
+  <p class="tldr">
+    每个用户 prompt = 一个「回合」(turn),产生 <b>多条</b> assistant 消息(共享 <code>parentID</code>)。
+    Focus view 把整个回合折叠为「最后一条 assistant 消息 + 一行工具摘要」,新消息到达时展示<b>就地更新</b>。
+    下方交互图可播放消息流动画、点击展开被折叠的工具轮。
+  </p>
+</header>
+
+<main>
+
+  <!-- ============ FIG 1: 回合结构 ============ -->
+  <h2><span class="step">①</span>回合结构:一个 prompt → 多条 assistant 消息</h2>
+  <div class="wrap">
+    <svg viewBox="0 0 860 300" role="img" aria-labelledby="t1" xmlns="http://www.w3.org/2000/svg">
+      <title id="t1">回合结构</title>
+      <style>
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .dim { fill: #7a756e; }
+        .fg { fill: #d8d4ce; }
+        .userc { fill: #9fc2ff; }
+        .toolr { fill: #e0a458; }
+        .textr { fill: #8fce9c; }
+        .arrow { stroke: #e08a4f; stroke-width: 2; }
+        .arrowhead { fill: #e08a4f; }
+        .dash { stroke: #666; stroke-dasharray: 5 4; }
+      </style>
+      <rect x="0" y="0" width="860" height="300" rx="12" fill="#141414"/>
+      <rect x="30" y="24" width="300" height="44" rx="8" fill="#1d2b3f" stroke="#9fc2ff"/>
+      <text x="48" y="50" class="mono userc" font-size="13" font-weight="bold">❯ write hello world in /tmp/ and run it</text>
+      <text x="48" y="80" class="mono dim" font-size="11">user message · time.created = T0</text>
+      <text x="520" y="50" class="mono dim" font-size="12" text-anchor="middle">同一个回合 = 同一 parentID</text>
+      <line class="dash" x1="330" y1="46" x2="440" y2="46"/>
+      <rect x="440" y="32" width="120" height="28" rx="6" fill="#262626" stroke="#e0a458"/>
+      <text x="500" y="51" class="mono fg" font-size="12" text-anchor="middle">parentID: P1</text>
+      <rect x="30" y="104" width="360" height="54" rx="8" fill="#2a2418" stroke="#e0a458"/>
+      <text x="48" y="128" class="mono toolr" font-size="13" font-weight="bold">A1 · finish = "tool-calls"</text>
+      <text x="48" y="148" class="mono dim" font-size="11">↳ 调用了 write + bash(工具轮)</text>
+      <rect x="30" y="174" width="360" height="54" rx="8" fill="#1e2c21" stroke="#8fce9c"/>
+      <text x="48" y="198" class="mono textr" font-size="13" font-weight="bold">A2 · finish = "stop"</text>
+      <text x="48" y="218" class="mono dim" font-size="11">↳ "Wrote /tmp/hello-world.ts and ran it…"</text>
+      <line class="arrow" x1="210" y1="128" x2="210" y2="158"/>
+      <path class="arrowhead" d="M 210 158 L 205 151 L 215 151 Z"/>
+      <line class="arrow" x1="210" y1="198" x2="210" y2="228"/>
+      <path class="arrowhead" d="M 210 228 L 205 221 L 215 221 Z"/>
+      <text x="700" y="112" class="mono fg" font-size="12">时间线</text>
+      <text x="700" y="134" class="mono dim" font-size="11">T0  user prompt</text>
+      <text x="700" y="156" class="mono dim" font-size="11">T1  A1 工具调用轮 (tool-calls)</text>
+      <text x="700" y="178" class="mono dim" font-size="11">T2  A2 最终文本轮 (stop)</text>
+      <text x="700" y="200" class="mono dim" font-size="11">T3  … 下一条 user prompt → 新回合</text>
+      <line class="dash" x1="670" y1="100" x2="670" y2="250"/>
+      <text x="700" y="252" class="mono toolr" font-size="11">回合 P1 的生命周期</text>
+      <text x="30" y="286" class="mono dim" font-size="12">关键:focus view 只看「回合」这个单位 —— 回合内多条消息按序出现,A2 是回合的最终展示。</text>
+    </svg>
+  </div>
+  <figcaption>图 1 · 一个回合(turn)的完整生命周期。DB 实测:同一 parentID 下有多条 assistant 消息。</figcaption>
+  <button class="copy-btn" onclick="copySvg(this,'t1')">复制 SVG</button>
+
+  <!-- ============ FIG 2: 交互式回合折叠演示 ============ -->
+  <h2><span class="step">②</span>交互演示:Focus ON 回合折叠(点击展开/收起隐藏轮)</h2>
+  <p class="hint">FOCUS OFF ⇄ ON 切换折叠;ON 状态下<b>点击摘要行</b>展开被隐藏的工具轮(模拟 claude 的 "toggle /focus to show")。</p>
+  <div class="wrap">
+    <svg id="t2" viewBox="0 0 860 360" role="img" aria-labelledby="t2t" xmlns="http://www.w3.org/2000/svg">
+      <title id="t2t">Focus ON 回合折叠交互演示</title>
+      <style>
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .dim { fill: #7a756e; }
+        .fg { fill: #d8d4ce; }
+        .keep { fill: #8fce9c; }
+        .sum { fill: #e0a458; }
+        .promptc { fill: #9fc2ff; }
+        .arrow { stroke: #e08a4f; stroke-width: 2; }
+        .arrowhead { fill: #e08a4f; }
+      </style>
+      <rect x="0" y="0" width="860" height="360" rx="12" fill="#141414"/>
+
+      <!-- OFF side -->
+      <g class="off-view">
+        <text x="210" y="30" class="mono fg" font-size="13" text-anchor="middle" font-weight="bold">FOCUS OFF · 全量渲染</text>
+        <text x="40" y="58" class="mono promptc" font-size="12">❯ write hello world in /tmp/ and run it</text>
+        <text x="40" y="82" class="mono dim" font-size="11">+ Thought: 776ms</text>
+        <text x="40" y="104" class="mono sum" font-size="12">⏺ Write(/tmp/hello-world.ts)</text>
+        <rect x="56" y="114" width="240" height="18" rx="3" fill="#262626"/>
+        <text x="64" y="127" class="mono fg" font-size="10">1  console.log("Hello, world!")</text>
+        <text x="40" y="150" class="mono sum" font-size="12">⏺ $ bun /tmp/hello-world.ts</text>
+        <text x="40" y="170" class="mono dim" font-size="11">  Hello, world!</text>
+        <text x="40" y="196" class="mono keep" font-size="12">Wrote /tmp/hello-world.ts and ran it — Hello, world!</text>
+        <text x="40" y="220" class="mono dim" font-size="11">✻ Worked for 12.8s</text>
+        <rect x="40" y="240" width="330" height="24" rx="4" fill="#1d2b3f" stroke="#9fc2ff"/>
+        <text x="205" y="257" class="mono dim" font-size="10" text-anchor="middle">每条 assistant 消息独立渲染(A1 工具轮、A2 文本轮)</text>
+      </g>
+
+      <!-- ON side -->
+      <g class="on-view">
+        <text x="650" y="30" class="mono keep" font-size="13" text-anchor="middle" font-weight="bold">FOCUS ON · 回合折叠</text>
+        <text x="480" y="58" class="mono promptc" font-size="12">❯ write hello world in /tmp/ and run it</text>
+        <!-- summary row: clickable -->
+        <g class="sum-row clickable" style="cursor:pointer">
+          <rect x="480" y="70" width="340" height="20" rx="4" fill="#2a2418" stroke="#e0a458"/>
+          <text x="488" y="84" class="mono sum" font-size="11">edited 1 file +1 · ran 1 shell command ▸</text>
+        </g>
+        <text x="480" y="112" class="mono keep" font-size="12">Wrote /tmp/hello-world.ts and ran it — Hello, world!</text>
+        <rect x="480" y="126" width="150" height="20" rx="10" fill="#333" stroke="#666" stroke-dasharray="4 3"/>
+        <text x="555" y="140" class="mono dim" font-size="11" text-anchor="middle">2 messages hidden</text>
+        <!-- expandable details -->
+        <g class="on-details">
+          <line x1="480" y1="158" x2="820" y2="158" stroke="#666" stroke-dasharray="4 3"/>
+          <text x="480" y="176" class="mono dim" font-size="10">↳ A1 Write(/tmp/hello-world.ts)</text>
+          <rect x="496" y="184" width="240" height="16" rx="3" fill="#262626"/>
+          <text x="504" y="196" class="mono fg" font-size="9">1  console.log("Hello, world!")</text>
+          <text x="480" y="218" class="mono dim" font-size="10">↳ A1 $ bun /tmp/hello-world.ts</text>
+          <text x="496" y="236" class="mono dim" font-size="10">   Hello, world!</text>
+          <text x="480" y="256" class="mono dim" font-size="10">↳ A1 thought 776ms</text>
+        </g>
+        <rect x="480" y="282" width="340" height="24" rx="4" fill="#1e2c21" stroke="#8fce9c"/>
+        <text x="650" y="299" class="mono dim" font-size="10" text-anchor="middle">回合 P1 只渲染 1 个折叠块:摘要 + 最终文本</text>
+      </g>
+
+      <!-- center arrow -->
+      <line class="arrow" x1="400" y1="165" x2="434" y2="165"/>
+      <path class="arrowhead" d="M 434 165 L 427 160 L 427 170 Z"/>
+
+      <text x="40" y="330" class="mono dim" font-size="11">🟢 = 最终文本(保留)</text>
+      <text x="280" y="330" class="mono dim" font-size="11">🟠 = 一行工具摘要(点击可展开)</text>
+      <text x="560" y="330" class="mono dim" font-size="11">🔴 = 中间轮(hidden 计数)</text>
+    </svg>
+  </div>
+  <div class="controls">
+    <button class="pill active-off" id="bOff">FOCUS OFF</button>
+    <span class="hint" style="margin:0">⇄</span>
+    <button class="pill active-on" id="bOn">FOCUS ON</button>
+    <span class="hint" style="margin:0">·</span>
+    <button class="pill" id="bExpand" disabled>展开隐藏轮(ON 时可用)</button>
+  </div>
+  <figcaption>图 2 · 点击 "FOCUS ON" 折叠回合;ON 状态下点 "展开隐藏轮" 或摘要行查看被隐藏的 A1 工具轮。</figcaption>
+  <button class="copy-btn" onclick="copySvg(this,'t2')">复制 SVG</button>
+
+  <!-- ============ FIG 3: 消息流动画 ============ -->
+  <h2><span class="step">③</span>播放动画:消息流到达时,展示块就地更新</h2>
+  <p class="hint">按 ▶ 播放:模拟 A1(工具轮)→ A2(文本轮)按序到达,观察 Focus view 展示区如何<b>就地更新</b>而非新增消息块。支持任意时刻暂停/步进。</p>
+  <div class="wrap">
+    <svg id="t3" viewBox="0 0 860 320" role="img" aria-labelledby="t3t" xmlns="http://www.w3.org/2000/svg">
+      <title id="t3t">Focus ON 消息流动画</title>
+      <style>
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .dim { fill: #7a756e; }
+        .fg { fill: #d8d4ce; }
+        .keep { fill: #8fce9c; }
+        .sum { fill: #e0a458; }
+        .promptc { fill: #9fc2ff; }
+        .dash { stroke: #666; stroke-dasharray: 5 4; }
+        .arrow { stroke: #e08a4f; stroke-width: 2; }
+        .arrowhead { fill: #e08a4f; }
+        .node-live { fill: #1d2b3f; stroke: #9fc2ff; }
+        .node-dim { fill: #101010; stroke: #333; }
+      </style>
+      <rect x="0" y="0" width="860" height="320" rx="12" fill="#141414"/>
+
+      <!-- stage boxes -->
+      <g class="stage" data-stage="1">
+        <rect x="30" y="26" width="250" height="62" rx="8" fill="#1d2b3f" stroke="#9fc2ff"/>
+        <text x="48" y="48" class="mono promptc" font-size="11" font-weight="bold">STAGE 1 · 用户提问</text>
+        <text x="48" y="70" class="mono dim" font-size="10">回合 P1 开始 · 尚无 assistant</text>
+      </g>
+      <g class="stage" data-stage="2">
+        <rect x="310" y="26" width="250" height="62" rx="8" fill="#101010" stroke="#333"/>
+        <text x="328" y="48" class="mono dim" font-size="11" font-weight="bold">STAGE 2 · A1 工具轮到达</text>
+        <text x="328" y="70" class="mono dim" font-size="10">finish="tool-calls"</text>
+      </g>
+      <g class="stage" data-stage="3">
+        <rect x="590" y="26" width="240" height="62" rx="8" fill="#101010" stroke="#333"/>
+        <text x="608" y="48" class="mono dim" font-size="11" font-weight="bold">STAGE 3 · A2 文本轮到达</text>
+        <text x="608" y="70" class="mono dim" font-size="10">finish="stop"</text>
+      </g>
+      <line class="arrow" x1="280" y1="57" x2="308" y2="57"/>
+      <path class="arrowhead" d="M 308 57 L 301 52 L 301 62 Z"/>
+      <line class="arrow" x1="560" y1="57" x2="588" y2="57"/>
+      <path class="arrowhead" d="M 588 57 L 581 52 L 581 62 Z"/>
+
+      <!-- live display area -->
+      <rect x="30" y="116" width="800" height="176" rx="8" fill="#0e0e0e" stroke="#333"/>
+      <text x="48" y="140" class="mono fg" font-size="12" font-weight="bold">Focus view 展示区(回合 P1)</text>
+
+      <!-- live: stage 1 (empty) -->
+      <g class="live" data-live="1">
+        <rect x="48" y="156" width="340" height="44" rx="6" fill="#111" stroke="#333"/>
+        <text x="62" y="174" class="mono dim" font-size="11">等待 agent 回复…</text>
+        <text x="62" y="192" class="mono dim" font-size="10">回合未开始,展示区为空</text>
+      </g>
+
+      <!-- live: stage 2 (streaming) -->
+      <g class="live" data-live="2">
+        <rect x="48" y="156" width="360" height="44" rx="6" fill="#2a2418" stroke="#e0a458"/>
+        <text x="62" y="174" class="mono sum" font-size="11">(流式中) 1 write, 1 bash ▸</text>
+        <text x="62" y="192" class="mono dim" font-size="10">⏺ 正在调用工具…(A1 未完成,流式可见)</text>
+        <text x="48" y="252" class="mono dim" font-size="10">→ 回合尚未完成,展示「进行中」状态</text>
+      </g>
+
+      <!-- live: stage 3 (collapsed final) -->
+      <g class="live" data-live="3">
+        <rect x="48" y="156" width="360" height="20" rx="4" fill="#2a2418" stroke="#e0a458"/>
+        <text x="56" y="170" class="mono sum" font-size="11">edited 1 file +1 · ran 1 shell command</text>
+        <text x="48" y="196" class="mono keep" font-size="12">Wrote /tmp/hello-world.ts and ran it — Hello, world!</text>
+        <rect x="48" y="210" width="150" height="20" rx="10" fill="#333" stroke="#666" stroke-dasharray="4 3"/>
+        <text x="123" y="224" class="mono dim" font-size="11" text-anchor="middle">2 messages hidden</text>
+        <text x="48" y="258" class="mono dim" font-size="10">→ 回合完成,折叠为 摘要 + 最终文本 ✓ 新消息到达时就地更新</text>
+      </g>
+
+      <!-- updating arrow -->
+      <g class="live-update" data-live="3">
+        <line class="arrow" x1="480" y1="180" x2="524" y2="180"/>
+        <path class="arrowhead" d="M 524 180 L 517 175 L 517 185 Z"/>
+        <text x="502" y="172" class="mono sum" font-size="10" text-anchor="middle">A2 到达</text>
+        <text x="502" y="160" class="mono dim" font-size="9" text-anchor="middle">就地更新</text>
+      </g>
+    </svg>
+  </div>
+  <div class="controls">
+    <button class="pill active-play" id="btnPlay">▶ 播放</button>
+    <button class="pill" id="btnPause">⏸ 暂停</button>
+    <button class="pill" id="btnStep">⏭ 步进</button>
+    <button class="pill" id="btnReset">↺ 重置</button>
+    <span class="hint" id="stageLabel" style="margin:0">当前:STAGE 1</span>
+  </div>
+  <figcaption>图 3 · 消息流驱动动画:回合展示随 A1/A2 到达就地更新。</figcaption>
+  <button class="copy-btn" onclick="copySvg(this,'t3')">复制 SVG</button>
+
+  <!-- ============ FIG 4: 渲染规则 ============ -->
+  <h2><span class="step">④</span>渲染规则(实现语义)</h2>
+  <div class="wrap" style="padding:.4rem .8rem">
+  <pre>function renderTurn(turn, focusView) {
+  if (!focusView) {
+    // 现状:回合内每条 assistant 消息独立渲染
+    return turn.messages.map(renderMessage)
+  }
+
+  // Focus ON —— 回合为展示单位
+  const last = turn.messages.at(-1)           // 回合最后一条 assistant 消息
+  const tools = turn.messages.flatMap(toolsOf) // 回合内全部工具调用
+  const isStreaming = !last.time.completed     // 消息未完成 = 正在流式生成
+
+  if (isStreaming) {
+    return <StreamingTurn summary={toolsSummary(tools)} />  // 展示"进行中"
+  }
+  return (
+    <CollapsedTurn
+      text={last.textParts}          // 最终文本(来自最后一条消息)
+      summary={toolsSummary(tools)}  // 一行摘要: edited 1 file +1 · ran 1 shell command
+      hidden={tools.length}          // N messages hidden
+      onExpand={toggleDetails}       // 点击展开被隐藏的工具轮
+    />
+  )
+  // 新消息到达 → turn.messages 追加 → last 更新 → 折叠块就地重渲染,不新增块
+}</pre>
+  </div>
+  <div class="verdict">
+    <b>实现要点:</b>(1) 按 <code>parentID</code> 分组消息为回合;(2) focus 模式下每个回合渲染单一折叠块;
+    (3) 块内容 = <code>last</code> 消息的文本 + 全回合工具摘要 + hidden 计数;
+    (4) 消息流追加时 <code>last</code> 变化,折叠块响应式更新为最新消息;
+    (5) 点击摘要行展开被隐藏的工具轮(claude 的 "toggle /focus to show" 等价物)。
+  </div>
+  <button class="copy-btn" onclick="copyPre(this)">复制伪代码</button>
+
+</main>
+
+<footer>
+  <p>
+    来源项目:opencode focus-view 实现 · 工作目录 <code>/Users/liushiyuwin/projects/opencode-focus-view</code><br>
+    设计依据:DB 实测消息结构(同一 parentID 多条 assistant 消息,首条 finish="tool-calls")+
+    Claude Code <code>/focus view</code> 行为参考 · 2026-08-08<br>
+    配套实现:packages/tui/src/routes/session/index.tsx · config/keybind.ts
+  </p>
+</footer>
+
+<script>
+  // ===== 图 2: FOCUS OFF/ON + 展开 =====
+  const svg2 = document.getElementById('t2')
+  const bOff = document.getElementById('bOff')
+  const bOn = document.getElementById('bOn')
+  const bExpand = document.getElementById('bExpand')
+  let fig2 = { mode: 'off', expanded: false }
+
+  function paint2() {
+    const on = fig2.mode === 'on'
+    svg2.querySelectorAll('.off-view').forEach(g => g.style.opacity = on ? '0' : '1')
+    svg2.querySelectorAll('.on-view').forEach(g => g.style.opacity = on ? '1' : '0')
+    // details visible only when on && expanded
+    svg2.querySelectorAll('.on-details').forEach(g => {
+      g.style.opacity = (on && fig2.expanded) ? '1' : '0'
+      g.style.pointerEvents = (on && fig2.expanded) ? 'auto' : 'none'
+    })
+    // summary row chevron
+    const chev = svg2.querySelector('.sum-row text')
+    if (chev) chev.textContent = fig2.expanded
+      ? 'edited 1 file +1 · ran 1 shell command ▾'
+      : 'edited 1 file +1 · ran 1 shell command ▸'
+    bOff.className = on ? 'pill' : 'pill active-off'
+    bOn.className = on ? 'pill active-on' : 'pill'
+    bExpand.disabled = !on
+    bExpand.textContent = fig2.expanded ? '收起隐藏轮' : '展开隐藏轮(ON 时可用)'
+  }
+  bOff.addEventListener('click', () => { fig2.mode = 'off'; fig2.expanded = false; paint2() })
+  bOn.addEventListener('click', () => { fig2.mode = 'on'; paint2() })
+  bExpand.addEventListener('click', () => { fig2.expanded = !fig2.expanded; paint2() })
+  // click summary row toggles expand when on
+  const sumRow = svg2.querySelector('.sum-row')
+  sumRow.addEventListener('click', () => {
+    if (fig2.mode !== 'on') return
+    fig2.expanded = !fig2.expanded
+    paint2()
+  })
+  paint2()
+
+  // ===== 图 3: 消息流动画 =====
+  const svg3 = document.getElementById('t3')
+  const btnPlay = document.getElementById('btnPlay')
+  const btnPause = document.getElementById('btnPause')
+  const btnStep = document.getElementById('btnStep')
+  const btnReset = document.getElementById('btnReset')
+  const stageLabel = document.getElementById('stageLabel')
+  let stage = 1
+  let timer = null
+
+  function paint3() {
+    // stage boxes
+    svg3.querySelectorAll('.stage').forEach(g => {
+      const s = Number(g.dataset.stage)
+      const active = s <= stage
+      const rect = g.querySelector('rect')
+      const texts = g.querySelectorAll('text')
+      if (active) {
+        rect.setAttribute('fill', '#1d2b3f'); rect.setAttribute('stroke', '#9fc2ff')
+        texts.forEach(t => t.setAttribute('fill', '#9fc2ff'))
+      } else {
+        rect.setAttribute('fill', '#101010'); rect.setAttribute('stroke', '#333')
+        texts.forEach(t => t.setAttribute('fill', '#7a756e'))
+      }
+    })
+    // live display
+    svg3.querySelectorAll('.live').forEach(g => {
+      g.style.opacity = Number(g.dataset.live) === stage ? '1' : '0'
+      g.style.pointerEvents = Number(g.dataset.live) === stage ? 'auto' : 'none'
+    })
+    svg3.querySelectorAll('.live-update').forEach(g => {
+      g.style.opacity = stage >= 3 ? '1' : '0'
+    })
+    stageLabel.textContent = `当前:STAGE ${stage}`
+  }
+
+  function next() {
+    if (stage < 3) { stage++; paint3() }
+    else stop()
+  }
+  function play() {
+    stop()
+    timer = setInterval(next, 1600)
+    btnPlay.className = 'pill'
+    btnPause.className = 'pill active-play'
+  }
+  function stop() {
+    if (timer) { clearInterval(timer); timer = null }
+    btnPlay.className = 'pill active-play'
+    btnPause.className = 'pill'
+  }
+  btnPlay.addEventListener('click', play)
+  btnPause.addEventListener('click', stop)
+  btnStep.addEventListener('click', () => { stop(); next() })
+  btnReset.addEventListener('click', () => { stop(); stage = 1; paint3() })
+  paint3()
+
+  // ===== copy helpers =====
+  function copySvg(btn, id) {
+    const el = document.getElementById(id)
+    const clone = el.cloneNode(true)
+    clone.querySelectorAll('*').forEach(n => n.removeAttribute('style'))
+    // 固化图2当前可见性
+    clone.querySelectorAll('.off-view').forEach(g => g.setAttribute('opacity', fig2.mode === 'off' ? '1' : '0'))
+    clone.querySelectorAll('.on-view').forEach(g => g.setAttribute('opacity', fig2.mode === 'on' ? '1' : '0'))
+    clone.querySelectorAll('.on-details').forEach(g => g.setAttribute('opacity', (fig2.mode === 'on' && fig2.expanded) ? '1' : '0'))
+    // 固化图3当前 stage
+    if (id === 't3') {
+      clone.querySelectorAll('.stage').forEach(g => {
+        const active = Number(g.dataset.stage) <= stage
+        g.querySelector('rect').setAttribute('fill', active ? '#1d2b3f' : '#101010')
+        g.querySelector('rect').setAttribute('stroke', active ? '#9fc2ff' : '#333')
+      })
+      clone.querySelectorAll('.live').forEach(g => {
+        g.setAttribute('opacity', Number(g.dataset.live) === stage ? '1' : '0')
+      })
+      clone.querySelectorAll('.live-update').forEach(g => g.setAttribute('opacity', stage >= 3 ? '1' : '0'))
+    }
+    navigator.clipboard.writeText(clone.outerHTML).then(() => {
+      btn.textContent = '已复制 ✓'; setTimeout(() => btn.textContent = '复制 SVG', 1200)
+    })
+  }
+  function copyPre(btn) {
+    const pre = document.querySelector('pre')
+    navigator.clipboard.writeText(pre.textContent).then(() => {
+      btn.textContent = '已复制 ✓'; setTimeout(() => btn.textContent = '复制伪代码', 1200)
+    })
+  }
+</script>
+
+</body>
+</html>
