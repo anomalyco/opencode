@@ -227,21 +227,12 @@ describe("config queries", () => {
 
 describe("query keys", () => {
   test("partitions identical directories by server scope", () => {
-    const location = {} as Parameters<typeof loadPathQuery>[2]
-    const client = {} as Parameters<typeof loadPathQuery>[3]
+    const client = {} as Parameters<typeof loadPathQuery>[2]
     const api = {} as CatalogApi
     const remote = "https://debian.example" as typeof ServerScope.local
 
-    expect([...loadPathQuery(ServerScope.local, "/repo", location, client).queryKey]).toEqual([
-      "local",
-      "/repo",
-      "path",
-    ])
-    expect([...loadPathQuery(remote, "/repo", location, client).queryKey]).toEqual([
-      "https://debian.example",
-      "/repo",
-      "path",
-    ])
+    expect([...loadPathQuery(ServerScope.local, "/repo", client).queryKey]).toEqual(["local", "/repo", "path"])
+    expect([...loadPathQuery(remote, "/repo", client).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
     expect([...loadProvidersQuery(remote, null, api).queryKey]).toEqual(["https://debian.example", null, "providers"])
   })
 

@@ -1,12 +1,12 @@
 import { Context, Effect, Layer } from "effect"
-import { Details, Info, Ref, response } from "@opencode-ai/schema/location"
+import { Info, Ref, response } from "@opencode-ai/schema/location"
 import { Project } from "./project"
 import { LayerNode } from "./effect/layer-node"
 import { makeLocationNode, tags } from "./effect/app-node"
 
 export * as Location from "./location"
 
-export { Details, Info, Ref, response }
+export { Info, Ref, response }
 
 export interface Interface extends Info {
   readonly vcs?: Project.Vcs

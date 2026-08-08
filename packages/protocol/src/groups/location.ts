@@ -29,7 +29,7 @@ export const locationQueryOpenApi = OpenApi.annotations({
 export const LocationGroup = HttpApiGroup.make("server.location").add(
   HttpApiEndpoint.get("location.get", "/api/location", {
     query: LocationQuery,
-    success: Location.Details,
+    success: Location.Info,
   })
     .annotateMerge(locationQueryOpenApi)
     .annotateMerge(

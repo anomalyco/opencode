@@ -189,7 +189,7 @@ function makeQueryOptionsApi(
     providers: (directory: PathKey | null) =>
       loadProvidersQuery(scope, directory, serverAPI, directory ? sdkFor(directory) : serverSDK(), protocol),
     path: (directory: PathKey | null) =>
-      loadPathQuery(scope, directory, serverAPI.location, directory ? sdkFor(directory) : serverSDK(), protocol),
+      loadPathQuery(scope, directory, directory ? sdkFor(directory) : serverSDK(), protocol),
     agents: (directory: PathKey) => loadAgentsQuery(scope, directory, serverAPI.agent, sdkFor(directory), protocol),
     references: (directory: PathKey) =>
       loadReferencesQuery(scope, directory, serverAPI.reference, sdkFor(directory), protocol),
