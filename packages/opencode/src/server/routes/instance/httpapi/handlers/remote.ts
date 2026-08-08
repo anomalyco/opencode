@@ -139,10 +139,19 @@ export const remoteHandlers = HttpApiBuilder.group(RemoteApi, "remote", (handler
       .handleRaw("events", (ctx) => remoteEventResponse(events, ctx.params.sessionID))
       .handle("message", (ctx) =>
         Effect.gen(function* () {
-          yield* requireSession(ctx.params.sessionID)
+          const session = yield* requireSession(ctx.params.sessionID)
           const parts = ctx.payload.parts.map((part) => ({ type: "text" as const, text: part.text }))
+          const model = session.model
+            ? { providerID: session.model.providerID, modelID: session.model.id }
+            : undefined
           yield* prompt
-            .prompt({ sessionID: ctx.params.sessionID, parts })
+            .prompt({
+              sessionID: ctx.params.sessionID,
+              parts,
+              agent: session.agent,
+              model,
+              variant: session.model?.variant,
+            })
             .pipe(
               Effect.catchCause((cause) =>
                 Effect.logError("remote prompt failed", { sessionID: ctx.params.sessionID, cause: Cause.pretty(cause) }),

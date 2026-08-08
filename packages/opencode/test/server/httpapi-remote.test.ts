@@ -12,6 +12,19 @@ const SessionResponse = Schema.Struct({
   title: Schema.String,
 })
 
+const SessionStateResponse = Schema.Struct({
+  id: SessionID,
+  title: Schema.String,
+  agent: Schema.optional(Schema.String),
+  model: Schema.optional(
+    Schema.Struct({
+      id: Schema.String,
+      providerID: Schema.String,
+      variant: Schema.optional(Schema.String),
+    }),
+  ),
+})
+
 const PairingResponse = Schema.Struct({
   ticket: Schema.String,
   expires_in: Schema.Number,
@@ -50,6 +63,15 @@ const readEvent = (reader: Queue.Dequeue<Uint8Array>) =>
       }),
     )
     return Schema.decodeUnknownSync(EventData)(JSON.parse(new TextDecoder().decode(value).replace(/^data: /, "")))
+  })
+
+const readEventType = (reader: Queue.Dequeue<Uint8Array>, type: string) =>
+  Effect.gen(function* () {
+    for (let index = 0; index < 12; index += 1) {
+      const event = yield* readEvent(reader)
+      if (event.type === type) return event
+    }
+    return yield* Effect.fail(new Error(`remote event not received: ${type}`))
   })
 
 const openRemoteEventStream = (sessionID: string, token: string) =>
@@ -226,6 +248,62 @@ describe("remote HttpApi", () => {
 
         const expired = yield* request(`/remote/session/${session.id}`, bearer(grant.token))
         expect(expired.status).toBe(401)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "inherits the session agent and model for text-only mobile prompts",
+    () =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        const created = yield* requestInDirectory("/session", directory, { method: "POST" })
+        const session = Schema.decodeUnknownSync(SessionResponse)(yield* created.json)
+
+        const seeded = yield* requestInDirectory(
+          `/session/${session.id}/message`,
+          directory,
+          jsonBody(
+            {
+              agent: "plan",
+              model: { providerID: "test", modelID: "test" },
+              noReply: true,
+              parts: [{ type: "text", text: "seed plan mode" }],
+            },
+            { method: "POST" },
+          ),
+        )
+        expect(seeded.status).toBe(200)
+
+        const paired = yield* requestInDirectory(`/session/${session.id}/remote`, directory, { method: "POST" })
+        const pairing = Schema.decodeUnknownSync(PairingResponse)(yield* paired.json)
+        const redeemed = yield* request(
+          "/remote/pair",
+          jsonBody({ ticket: pairing.ticket }, { method: "POST" }),
+        )
+        const grant = Schema.decodeUnknownSync(GrantResponse)(yield* redeemed.json)
+
+        const { reader } = yield* openRemoteEventStream(session.id, grant.token)
+        expect((yield* readEvent(reader)).type).toBe("server.connected")
+
+        const sent = yield* request(
+          `/remote/session/${session.id}/message`,
+          bearer(
+            grant.token,
+            jsonBody({ parts: [{ type: "text", text: "continue from phone" }] }, { method: "POST" }),
+          ),
+        )
+        expect(sent.status).toBe(204)
+        expect((yield* readEventType(reader, "message.updated")).type).toBe("message.updated")
+
+        const state = yield* requestInDirectory(`/session/${session.id}`, directory)
+        expect(state.status).toBe(200)
+        const current = Schema.decodeUnknownSync(SessionStateResponse)(yield* state.json)
+        expect(current.agent).toBe("plan")
+        expect(current.model).toMatchObject({ id: "test", providerID: "test" })
+
+        const revoked = yield* requestInDirectory(`/session/${session.id}/remote`, directory, { method: "DELETE" })
+        expect(revoked.status).toBe(200)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
