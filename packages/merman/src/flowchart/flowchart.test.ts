@@ -424,6 +424,42 @@ flowchart TD
     ])
   })
 
+  test("parses chained undirected solid edges", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  A --- B --- C`)
+
+    expect(diagram.edges).toEqual([
+      { from: "A", to: "B", label: "", arrowhead: false },
+      { from: "B", to: "C", label: "", arrowhead: false },
+    ])
+  })
+
+  test("renders the volume persistence diagram with an undirected solid edge", () => {
+    const content = `flowchart LR
+    subgraph durable [Durable — survives everything]
+        V[(Volume ws-wor_abc<br/>mounted at /workspace)]
+        R[our row: id, provider]
+    end
+    subgraph ephemeral [Ephemeral — dies freely]
+        S1[Sandbox #1] -. mounts .-> V
+        S2[Sandbox #2<br/>Tuesday] -. mounts same .-> V
+        X[apt-get installs,<br/>~/.cache, /tmp]
+    end
+    S1 --- X
+    style X stroke-dasharray: 5 5`
+    const diagram = parseMermaidFlowchartDiagram(content)
+    const layout = layoutParsedFlowchartDiagram(diagram, { compact: true })
+    const grid = drawParsedFlowchartDiagramGrid(diagram, { compact: true })
+    const output = renderFlowchartDiagram(content, { compact: true })
+    const route = layout.routes.find((route) => route.edge.from === "S1" && route.edge.to === "X")!
+    const end = route.points.at(-1)!
+
+    expect(diagram.edges.at(-1)).toEqual({ from: "S1", to: "X", label: "", arrowhead: false })
+    expect(route.points.length).toBeGreaterThan(1)
+    expect(grid.getCell(end.x, end.y)?.char).not.toMatch(/[▶▼◀▲]/)
+    expectDiagram(output).toContainInOrder("Sandbox #1", "apt-get installs,", "~/.cache, /tmp")
+  })
+
   test("parses and renders inline dashed edge labels", () => {
     const content = `flowchart TD
   CS[conformance suite<br/>same test cases pin every driver] -.verifies.-> LS

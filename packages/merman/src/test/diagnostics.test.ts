@@ -22,8 +22,8 @@ describe("parser diagnostics", () => {
     expect(() =>
       parseMermaidFlowchartDiagram(`flowchart LR
   A[Start] --> B[Done]
-  A --- B`),
-    ).toThrow('Unsupported syntax in flowchart diagram at line 3: "A --- B"')
+  A --o B`),
+    ).toThrow('Unsupported syntax in flowchart diagram at line 3: "A --o B"')
   })
 
   test("exposes structured syntax errors through top-level rendering", () => {

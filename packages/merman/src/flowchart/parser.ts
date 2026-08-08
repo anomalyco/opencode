@@ -29,7 +29,7 @@ const BOX_NODE_RE = new RegExp(`^(${ID_RE})\\[(.+)\\]$`)
 const ID_ONLY_RE = new RegExp(`^${ID_RE}$`)
 const EXPLICIT_NODE_SHAPE_RE = new RegExp(`^${ID_RE}(?:\\[|\\(|\\{)`)
 const EDGE_OPERATOR_RE =
-  /(-\.(?!->)(.+?)\.->)|(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->)|(-->|==>|-\.->|~~~)\s*(?:\|([^|]*)\|\s*)?/g
+  /(-\.(?!->)(.+?)\.->)|(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->)|(-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?/g
 
 function normalizeDirection(value?: string): FlowchartDirection {
   const upper = value?.toUpperCase()
@@ -116,8 +116,16 @@ function edgeStyleFromArrow(...arrows: string[]): FlowchartEdgeStyle | undefined
   return undefined
 }
 
-function createEdge(from: string, to: string, label: string, style: FlowchartEdgeStyle | undefined): FlowchartEdge {
-  return style ? { from, to, label, style } : { from, to, label }
+function createEdge(
+  from: string,
+  to: string,
+  label: string,
+  style: FlowchartEdgeStyle | undefined,
+  arrowhead: boolean,
+): FlowchartEdge {
+  const edge: FlowchartEdge = style ? { from, to, label, style } : { from, to, label }
+  if (!arrowhead) edge.arrowhead = false
+  return edge
 }
 
 interface ParsedEdgeOperator {
@@ -125,6 +133,7 @@ interface ParsedEdgeOperator {
   end: number
   label: string
   style: FlowchartEdgeStyle | undefined
+  arrowhead: boolean
   orderOnly: boolean
 }
 
@@ -138,6 +147,7 @@ function parseEdgeOperators(line: string): ParsedEdgeOperator[] {
       end: match.index + match[0].length,
       label: (match[2] ?? match[4] ?? match[7] ?? "").trim(),
       style: edgeStyleFromArrow(startArrow, endArrow),
+      arrowhead: endArrow !== "---",
       orderOnly: endArrow === "~~~",
     }
   })
@@ -223,7 +233,13 @@ export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram 
         }
         for (let index = 0; index < edgeOperators.length; index++) {
           const operator = edgeOperators[index]!
-          const edge = createEdge(chainNodeIds[index]!, chainNodeIds[index + 1]!, operator.label, operator.style)
+          const edge = createEdge(
+            chainNodeIds[index]!,
+            chainNodeIds[index + 1]!,
+            operator.label,
+            operator.style,
+            operator.arrowhead,
+          )
           edges.push(operator.orderOnly ? { ...edge, orderOnly: true } : edge)
         }
         continue

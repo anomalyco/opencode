@@ -163,9 +163,11 @@ function drawRoutedEdge(grid: FlowchartGrid, route: FlowchartEdgeRoute): void {
     cornerStyle: "rounded",
     lineStyle: edge.style === "thick" ? "heavy" : "single",
   })
-  const end = points[points.length - 1]!
-  const arrowFrom = points[points.length - 2]!
-  grid.setCell(end.x, end.y, diagramArrowHeadBetween(arrowFrom, end), style)
+  if (edge.arrowhead !== false) {
+    const end = points[points.length - 1]!
+    const arrowFrom = points[points.length - 2]!
+    grid.setCell(end.x, end.y, diagramArrowHeadBetween(arrowFrom, end), style)
+  }
   if (edge.label) {
     drawEdgeLabel(grid, route, "label")
   }
