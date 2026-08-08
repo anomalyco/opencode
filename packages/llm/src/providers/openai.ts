@@ -39,11 +39,16 @@ export const configure = (input: Config = {}) => {
   const responsesWebSocketRoute = configuredRoute(OpenAIResponses.webSocketRoute, input)
   const chatRoute = configuredRoute(OpenAIChat.route, input)
   const modelDefaults = defaults(input)
-  const responses = (id: string | ModelID) =>
-    responsesRoute.with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true })).model({ id })
-  const responsesWebSocket = (id: string | ModelID) =>
-    responsesWebSocketRoute.with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true })).model({ id })
-  const chat = (id: string | ModelID) => chatRoute.with(withOpenAIOptions(id, modelDefaults)).model({ id })
+
+  // Chat API only supports HTTP/SSE — reject WebSocket selection explicitly
+  const chat = (id: string | ModelID) => {
+    if (input.providerOptions?.transport === "websocket") {
+      throw new Error(
+        "OpenAI Chat does not support WebSocket transport. Use `responsesWebSocket()` for WebSocket mode, or omit the transport option.",
+      )
+    }
+    return chatRoute.with(withOpenAIOptions(id, modelDefaults)).model({ id })
+  }
 
   return {
     id,
