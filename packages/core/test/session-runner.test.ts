@@ -56,6 +56,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -3092,6 +3093,86 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("retries transient upstream HTTP/2 errors twice before succeeding", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Retry transient stream" }), resume: false })
+
+      requests.length = 0
+      responses = [
+        [LLMEvent.providerError({ message: "failed 1", classification: "transient-upstream-http2", retryable: true })],
+        [LLMEvent.providerError({ message: "failed 2", classification: "transient-upstream-http2", retryable: true })],
+        fragmentFixture("text", "text-retried", ["Recovered"]).completeEvents,
+      ]
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestClock.adjust("3 seconds")
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(3)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Retry transient stream" },
+        { type: "assistant", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("surfaces the third consecutive transient upstream HTTP/2 error", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Exhaust transient stream" }), resume: false })
+
+      requests.length = 0
+      responses = [1, 2, 3].map((attempt) => [
+        LLMEvent.providerError({
+          message: `failed ${attempt}`,
+          classification: "transient-upstream-http2",
+          retryable: true,
+        }),
+      ])
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* TestClock.adjust("3 seconds")
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(3)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Exhaust transient stream" },
+        { type: "assistant", finish: "error", error: { message: "failed 3" } },
+      ])
+    }),
+  )
+
+  it.effect("does not retry transient upstream HTTP/2 errors after assistant output", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Do not replay output" }), resume: false })
+
+      requests.length = 0
+      response = [
+        LLMEvent.textStart({ id: "text-partial-http2" }),
+        LLMEvent.textDelta({ id: "text-partial-http2", text: "Partial" }),
+        LLMEvent.textEnd({ id: "text-partial-http2" }),
+        LLMEvent.providerError({
+          message: "stream failed",
+          classification: "transient-upstream-http2",
+          retryable: true,
+        }),
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Do not replay output" },
+        { type: "assistant", finish: "error", content: [{ type: "text", text: "Partial" }] },
+      ])
+    }),
+  )
+
   it.effect("does not recover context overflow after durable assistant output", () =>
     Effect.gen(function* () {
       yield* setup
@@ -3153,7 +3234,11 @@ describe("SessionRunnerLLM", () => {
       response = [
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.toolCall({ id: "call-before-provider-error", name: "echo", input: { text: "settled" } }),
-        LLMEvent.providerError({ message: "Provider unavailable" }),
+        LLMEvent.providerError({
+          message: "stream failed",
+          classification: "transient-upstream-http2",
+          retryable: true,
+        }),
       ]
 
       yield* session.resume(sessionID)

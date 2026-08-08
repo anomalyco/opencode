@@ -40,6 +40,9 @@ import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
 
+const MAX_TRANSIENT_PROVIDER_RETRIES = 2
+const TRANSIENT_PROVIDER_RETRY_DELAY = 1_000
+
 /**
  * Runs one durable coding-agent Session until it settles.
  *
@@ -154,6 +157,7 @@ const layer = Layer.effect(
       | { readonly _tag: "ContinueAfterCompaction"; readonly step: number }
       // Overflow compaction completed; rebuild once through the path without overflow recovery.
       | { readonly _tag: "ContinueAfterOverflowCompaction"; readonly step: number }
+      | { readonly _tag: "RetryTransientProvider"; readonly step: number; readonly attempt: number }
 
     class TurnTransitionError extends Error {
       constructor(readonly transition: TurnTransition) {
@@ -164,6 +168,8 @@ const layer = Layer.effect(
     const continueAfterCompaction = (step: number) => new TurnTransitionError({ _tag: "ContinueAfterCompaction", step })
     const continueAfterOverflowCompaction = (step: number) =>
       new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
+    const retryTransientProvider = (step: number, attempt: number) =>
+      new TurnTransitionError({ _tag: "RetryTransientProvider", step, attempt })
 
     const loadSystemContext = (agent: AgentV2.Selection) =>
       Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
@@ -175,6 +181,7 @@ const layer = Layer.effect(
       promotion: SessionInput.Delivery | undefined,
       step: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
+      providerRetryAttempt = 0,
     ) {
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
@@ -229,13 +236,18 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
+      let transientFailure: ProviderErrorEvent | undefined
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
-            if (overflowFailure || publisher.hasProviderError()) return
+            if (overflowFailure || transientFailure || publisher.hasProviderError()) return
             if (LLMEvent.is.providerError(event)) {
               if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
                 overflowFailure = event
+                return
+              }
+              if (event.classification === "transient-upstream-http2" && !publisher.hasAssistantStarted()) {
+                transientFailure = event
                 return
               }
             }
@@ -279,6 +291,15 @@ const layer = Layer.effect(
           const stream = yield* restore(providerStream).pipe(Effect.exit)
           const failure =
             stream._tag === "Failure" ? Option.getOrUndefined(Cause.findErrorOption(stream.cause)) : undefined
+          if (
+            transientFailure &&
+            !publisher.hasAssistantStarted() &&
+            providerRetryAttempt < MAX_TRANSIENT_PROVIDER_RETRIES
+          ) {
+            yield* restore(Effect.sleep(TRANSIENT_PROVIDER_RETRY_DELAY * Math.pow(2, providerRetryAttempt)))
+            return yield* Effect.die(retryTransientProvider(currentStep, providerRetryAttempt + 1))
+          }
+          if (transientFailure) yield* publish(transientFailure)
           if (
             recoverOverflow &&
             !publisher.hasAssistantStarted() &&
@@ -350,28 +371,46 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
+      providerRetryAttempt?: number,
     ) => Effect.Effect<{ readonly needsContinuation: boolean; readonly step: number }, RunError>
 
-    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step).pipe(
-        Effect.catchDefect(
-          Effect.fnUntraced(function* (defect) {
-            if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
-            if (defect.transition._tag === "ContinueAfterOverflowCompaction")
-              return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
-            yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
-          }),
-        ),
-      )
-    })
+    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(
+      function* (sessionID, promotion, step, providerRetryAttempt) {
+        return yield* runTurnAttempt(sessionID, promotion, step, undefined, providerRetryAttempt).pipe(
+          Effect.catchDefect(
+            Effect.fnUntraced(function* (defect) {
+              if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
+              if (defect.transition._tag === "RetryTransientProvider")
+                return yield* runAfterOverflowCompaction(
+                  sessionID,
+                  undefined,
+                  defect.transition.step,
+                  defect.transition.attempt,
+                )
+              if (defect.transition._tag === "ContinueAfterOverflowCompaction")
+                return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
+              yield* Effect.yieldNow
+              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
+            }),
+          ),
+        )
+      },
+    )
 
-    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step, compaction.compactAfterOverflow).pipe(
+    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, providerRetryAttempt) {
+      return yield* runTurnAttempt(
+        sessionID,
+        promotion,
+        step,
+        compaction.compactAfterOverflow,
+        providerRetryAttempt,
+      ).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
+            if (defect.transition._tag === "RetryTransientProvider")
+              return yield* runTurn(sessionID, undefined, defect.transition.step, defect.transition.attempt)
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
             return yield* runTurn(sessionID, undefined, defect.transition.step)
