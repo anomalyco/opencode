@@ -15,9 +15,17 @@ type Listener = (text: string) => void
 
 const listeners = new Set<Listener>()
 
+// Timestamp of the most recent stripped loading-flavor delta. The stream
+// inactivity watchdog (llm.ts) reads this to tell "a model is loading right
+// now" from "the stream is dead": loading chunks are removed before the
+// ai-sdk, so from the event stream's perspective a long cold load is total
+// silence — exactly what the watchdog is meant to kill.
+let lastEmitAt = 0
+
 export const SkeinLoading = {
   /** Called by the provider stream wrapper for each stripped loading-flavor delta. */
   emit(text: string): void {
+    lastEmitAt = Date.now()
     for (const listener of listeners) {
       try {
         listener(text)
@@ -25,6 +33,10 @@ export const SkeinLoading = {
         // a broken display subscriber must never disrupt the model stream
       }
     }
+  },
+  /** True when a loading-flavor delta was observed within the last `ms`. */
+  activeWithin(ms: number): boolean {
+    return Date.now() - lastEmitAt < ms
   },
   /** Subscribe a transient display; returns an unsubscribe fn. */
   subscribe(listener: Listener): () => void {

@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test"
-import { stripSkeinLoading } from "@/provider/provider"
+import { stripSkeinLoading, wrapSSE } from "@/provider/provider"
 
 const enc = new TextEncoder()
 
@@ -7,6 +7,20 @@ function sseResponse(chunks: string[]): Response {
   const body = new ReadableStream<Uint8Array>({
     start(ctrl) {
       for (const c of chunks) ctrl.enqueue(enc.encode(c))
+      ctrl.close()
+    },
+  })
+  return new Response(body, { headers: { "content-type": "text/event-stream" } })
+}
+
+/** SSE response that emits each [delayMs, chunk] pair on its own timer. */
+function slowSseResponse(parts: Array<[number, string]>): Response {
+  const body = new ReadableStream<Uint8Array>({
+    async start(ctrl) {
+      for (const [delay, chunk] of parts) {
+        await new Promise((r) => setTimeout(r, delay))
+        ctrl.enqueue(enc.encode(chunk))
+      }
       ctrl.close()
     },
   })
@@ -80,6 +94,57 @@ test("passes genuine untagged reasoning_content through untouched", async () => 
   // only the tagged loading chunk was diverted
   expect(seen).toEqual(["Warming the tensors…"])
   expect(out).not.toContain("Warming the tensors")
+})
+
+// Regression for the watchdog-ordering bug: the chunk timer must watch the RAW
+// stream (wrapSSE first, strip after). A cold model load streams only
+// skein_loading flavor chunks; with the timer downstream of the strip those
+// chunks are invisible to it and a healthy load longer than the timeout reads
+// as total silence → false "SSE read timed out" kill.
+test("loading-only traffic keeps the chunk timer alive when wrapSSE wraps the raw stream", async () => {
+  const seen: string[] = []
+  const raw = slowSseResponse([
+    [10, loadingChunk("Filling the key-value cache…")],
+    [60, loadingChunk("Warming the tensors…")],
+    [60, loadingChunk("Nearly there…")],
+    [60, realChunk("Hello")],
+    [10, "data: [DONE]\n\n"],
+  ])
+  // chunk timeout (100ms) is longer than any single gap (60ms) but far shorter
+  // than the total loading phase (~180ms): only the raw ordering survives this.
+  const ctl = new AbortController()
+  const wrapped = wrapSSE(raw, 100, ctl)
+  const out = await readAll(stripSkeinLoading(wrapped, (t) => seen.push(t)))
+
+  expect(out).toContain(JSON.stringify({ choices: [{ delta: { content: "Hello" } }] }))
+  expect(out).not.toContain("skein_loading")
+  expect(seen.length).toBe(3)
+  expect(ctl.signal.aborted).toBe(false)
+})
+
+test("the reversed order (strip before wrapSSE) starves the chunk timer — documents the bug", async () => {
+  const raw = slowSseResponse([
+    [10, loadingChunk("a…")],
+    [60, loadingChunk("b…")],
+    [60, loadingChunk("c…")],
+    [60, realChunk("Hello")],
+  ])
+  const ctl = new AbortController()
+  // strip first: the timer only ever sees post-strip bytes, and none arrive
+  // until the real chunk at ~190ms — past the 100ms timeout.
+  const wrapped = wrapSSE(stripSkeinLoading(raw), 100, ctl)
+  await expect(readAll(wrapped)).rejects.toThrow()
+})
+
+test("a genuinely dead raw stream is still killed by the chunk timer", async () => {
+  const raw = slowSseResponse([
+    [10, loadingChunk("a…")],
+    [300, realChunk("too late")],
+  ])
+  const ctl = new AbortController()
+  const wrapped = stripSkeinLoading(wrapSSE(raw, 100, ctl))
+  await expect(readAll(wrapped)).rejects.toThrow()
+  expect(ctl.signal.aborted).toBe(true)
 })
 
 test("passes a non-SSE response through unchanged", async () => {

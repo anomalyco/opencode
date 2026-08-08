@@ -64,7 +64,7 @@ const LOCAL_PROVIDER_HEADER_TIMEOUT_DEFAULT = 180_000
 // always wins.
 const LOCAL_PROVIDER_CHUNK_TIMEOUT_DEFAULT = 120_000
 
-function wrapSSE(res: Response, ms: number, ctl: AbortController) {
+export function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
   if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
@@ -1482,6 +1482,26 @@ export function isHostPaced(providerID: string, modelID: string): boolean {
   return hostPacedModels.has(`${providerID}/${modelID}`)
 }
 
+// Inactivity floor for host-bandwidth-paced models, shared by the LLM-event
+// watchdog (llm.ts) and the raw chunk timer below. Sized off the measured
+// worst case (254s to first token on a small prompt, z4 hybrid DeepSeek) with
+// room for a large agent prompt and a long hidden reasoning phase on top.
+export const HOST_PACED_STREAM_DEADLINE_SECONDS = 1800
+
+/**
+ * Updates the host-paced registry from a discovery pass. Fresh fit data is
+ * authoritative in both directions (a re-placement to GPU-resident clears the
+ * flag). A missing fit report — the probe raced its abort budget or the host
+ * was busy — keeps the previous verdict: wiping it would re-arm the short
+ * stall deadline for exactly the model that needs the long one.
+ */
+export function noteHostPaced(providerID: string, modelID: string, fit?: { hostPaced?: boolean }): void {
+  if (!fit) return
+  const key = `${providerID}/${modelID}`
+  if (fit.hostPaced) hostPacedModels.add(key)
+  else hostPacedModels.delete(key)
+}
+
 async function fetchLocalModelFit(
   controlBase: string,
   signal?: AbortSignal,
@@ -1641,9 +1661,7 @@ async function discoverOpenAICompatibleModels(input: {
           numberFrom(item.size_bytes) ??
           (fit?.modelMb ? fit.modelMb * 1024 * 1024 : undefined) ??
           existingModel?.sizeBytes
-        const hostPacedKey = `${input.providerID}/${modelID}`
-        if (fit?.hostPaced) hostPacedModels.add(hostPacedKey)
-        else hostPacedModels.delete(hostPacedKey)
+        noteHostPaced(input.providerID, modelID, fit)
 
         discovered[modelID] = {
           id: ModelV2.ID.make(modelID),
@@ -2193,30 +2211,43 @@ export const layer = Layer.effect(
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
 
-          // Inject X-Loading-Theme on the first request per model (cold-start only).
-          // Parse the model ID from the request body to key per baseURL::modelId.
-          if (
-            model.api.npm === "@ai-sdk/openai-compatible" &&
-            typeof options["baseURL"] === "string" &&
-            opts.method === "POST" &&
-            opts.body
-          ) {
+          // Model identity for this request. The SDK (and this closure's `model`)
+          // is shared by every model of the provider, so per-model decisions must
+          // parse the id from the request body.
+          let requestModelID: string | undefined
+          if (model.api.npm === "@ai-sdk/openai-compatible" && opts.method === "POST" && typeof opts.body === "string") {
+            try {
+              requestModelID = JSON.parse(opts.body)?.model
+            } catch {
+              // malformed body — leave undefined
+            }
+          }
+
+          // Inject X-Loading-Theme on the first request per model (cold-start only),
+          // keyed per baseURL::modelId.
+          if (requestModelID !== undefined && typeof options["baseURL"] === "string") {
             const loadingTheme = ThemeState.get()
             if (loadingTheme) {
-              try {
-                const body = JSON.parse(opts.body as string)
-                const modelKey = `${options["baseURL"]}::${body.model}`
-                if (!_loadingThemeSent.has(modelKey)) {
-                  opts.headers = { ...opts.headers, "X-Loading-Theme": loadingTheme }
-                  _loadingThemeSent.add(modelKey)
-                }
-              } catch {
-                // malformed body — skip header silently
+              const modelKey = `${options["baseURL"]}::${requestModelID}`
+              if (!_loadingThemeSent.has(modelKey)) {
+                opts.headers = { ...opts.headers, "X-Loading-Theme": loadingTheme }
+                _loadingThemeSent.add(modelKey)
               }
             }
           }
 
-          const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
+          // fork: a host-paced placement is legitimately raw-silent for minutes —
+          // weight faulting and prefill emit no SSE bytes at all — so the raw
+          // chunk timer gets the same floor the LLM-event watchdog uses. Without
+          // this, the 1800s watchdog floor is dead code: the 120s chunk timer
+          // kills the stream first.
+          const effectiveChunkTimeout =
+            typeof chunkTimeout === "number" && requestModelID !== undefined && isHostPaced(model.providerID, requestModelID)
+              ? Math.max(chunkTimeout, HOST_PACED_STREAM_DEADLINE_SECONDS * 1000)
+              : chunkTimeout
+
+          const chunkAbortCtl =
+            typeof effectiveChunkTimeout === "number" && effectiveChunkTimeout > 0 ? new AbortController() : undefined
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
           const signals: AbortSignal[] = []
@@ -2254,16 +2285,24 @@ export const layer = Layer.effect(
             }).finally(() => headerTimeoutCtl?.clear())
           }
 
+          // Order matters: the chunk timer must watch the RAW stream, before
+          // stripSkeinLoading. During a cold load the server sends only
+          // skein_loading flavor chunks; with the timer downstream of the strip
+          // those chunks are invisible to it and a healthy multi-minute load
+          // reads as total silence → false "SSE read timed out" kill.
+          if (chunkAbortCtl && typeof effectiveChunkTimeout === "number") {
+            res = wrapSSE(res, effectiveChunkTimeout, chunkAbortCtl)
+          }
+
           // fork (skein-duey): for llama-skein local providers, strip the
-          // skein_loading flavor deltas from the raw stream before the ai-sdk so
+          // skein_loading flavor deltas from the stream before the ai-sdk so
           // they are never persisted as reasoning. Surface their text for live
           // display via the transient loading channel (never stored).
           if (model.api.npm === "@ai-sdk/openai-compatible") {
             res = stripSkeinLoading(res, (text) => SkeinLoading.emit(text))
           }
 
-          if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+          return res
         }
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]

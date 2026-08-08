@@ -16,4 +16,22 @@ describe("host-paced model registry", () => {
   test("absence of placement data leaves a model unpaced", () => {
     expect(Provider.isHostPaced("openai", "gpt-4")).toBe(false)
   })
+
+  // A discovery pass where the fit probe raced its abort budget (host busy —
+  // which correlates with a host-paced model being loaded or generating) must
+  // NOT wipe a previously-known verdict; that would re-arm the 300s deadline
+  // for exactly the model that needs the 1800s floor. Fresh fit data stays
+  // authoritative in both directions.
+  test("a failed fit probe keeps the previous verdict; fresh data overrides", () => {
+    Provider.noteHostPaced("z4", "big-moe", { hostPaced: true })
+    expect(Provider.isHostPaced("z4", "big-moe")).toBe(true)
+
+    // probe lost the race: no fit report for this pass
+    Provider.noteHostPaced("z4", "big-moe", undefined)
+    expect(Provider.isHostPaced("z4", "big-moe")).toBe(true)
+
+    // re-placed fully GPU-resident: fresh data clears the flag
+    Provider.noteHostPaced("z4", "big-moe", { hostPaced: false })
+    expect(Provider.isHostPaced("z4", "big-moe")).toBe(false)
+  })
 })

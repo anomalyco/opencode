@@ -30,13 +30,20 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+import { SkeinLoading } from "@/local/skein-loading"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
-// Inactivity floor for host-bandwidth-paced models. Sized off the measured
-// worst case (254s to first token on a small prompt) with room for a large
-// agent prompt and a long hidden reasoning phase on top.
-const HOST_PACED_STREAM_DEADLINE_SECONDS = 1800
+// While a local model cold-loads, llama-skein streams loading-flavor chunks
+// that stripSkeinLoading removes before the ai-sdk — so from this watchdog's
+// viewpoint a healthy multi-minute load is total event silence. The strip
+// callback stamps SkeinLoading; a tick that fires only while that stamp is
+// fresh feeds the timeout as liveness. The signal is process-global, not
+// per-request: a concurrent load elsewhere can extend a genuinely dead
+// stream's life — bounded (loads end, then the deadline runs as usual) and
+// far cheaper than a false kill of a working turn.
+const LOADING_TICK: unique symbol = Symbol("skein-loading-tick")
+const LOADING_ACTIVE_WINDOW_MS = 30_000
 
 export type StreamInput = {
   user: SessionV1.User
@@ -387,16 +394,30 @@ const live: Layer.Layer<
             // An explicit 0 still disables it entirely.
             const deadline =
               configured > 0 && Provider.isHostPaced(input.model.providerID, input.model.id)
-                ? Math.max(configured, HOST_PACED_STREAM_DEADLINE_SECONDS)
+                ? Math.max(configured, Provider.HOST_PACED_STREAM_DEADLINE_SECONDS)
                 : configured
+            // Loading liveness: ticks only while stripped skein_loading chunks
+            // were recently observed (see LOADING_TICK above), so a cold load
+            // longer than the deadline doesn't read as a stalled stream. Ticks
+            // are filtered back out after the timeout — they never reach the
+            // processor. haltStrategy "left": the tick stream must not keep a
+            // finished event stream open.
             const watchdog = <A, E, R>(self: Stream.Stream<A, E, R>): Stream.Stream<A, E | StreamStalledError, R> =>
               deadline <= 0
                 ? self
                 : self.pipe(
+                    Stream.merge(
+                      Stream.tick(`${LOADING_ACTIVE_WINDOW_MS / 2} millis`).pipe(
+                        Stream.filter(() => SkeinLoading.activeWithin(LOADING_ACTIVE_WINDOW_MS)),
+                        Stream.map(() => LOADING_TICK),
+                      ),
+                      { haltStrategy: "left" },
+                    ),
                     Stream.timeoutOrElse({
                       duration: `${deadline} seconds`,
                       orElse: () => Stream.fail(new StreamStalledError(deadline)),
                     }),
+                    Stream.filter((event): event is A => event !== LOADING_TICK),
                   )
 
             if (result.type === "native") return watchdog(result.stream)
