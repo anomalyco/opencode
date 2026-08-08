@@ -10,7 +10,13 @@ import type {
 import { QueryClient } from "@tanstack/solid-query"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
 import { estimateRootSessionTotal, loadRootSessions } from "./global-sync/session-load"
-import { loadActiveSessionsQuery, loadMcpQuery, loadMcpResourcesQuery, seedActiveSessionStatuses } from "./server-sync"
+import {
+  loadActiveSessionsQuery,
+  loadMcpQuery,
+  loadMcpResourcesQuery,
+  reconcileActiveSessionStatuses,
+  seedActiveSessionStatuses,
+} from "./server-sync"
 import { ServerScope } from "@/utils/server-scope"
 import { createServerSession } from "./server-session"
 import type { ServerApi } from "@/utils/server"
@@ -99,6 +105,59 @@ describe("active session query", () => {
       message: "retrying",
       next: 10,
     })
+  })
+
+  test("clears statuses for runs that finished while the stream was down", () => {
+    const session = createServerSession({} as OpencodeClient)
+    session.set("session_status", "ses_done", { type: "busy" })
+    session.set("session_status", "ses_still_running", { type: "busy" })
+    session.set("session_status", "ses_idle", { type: "idle" })
+
+    reconcileActiveSessionStatuses(Object.assign(session, { sync: async () => undefined }), {
+      ses_still_running: { type: "running" },
+    })
+
+    expect(session.data.session_status.ses_done).toEqual({ type: "idle" })
+    expect(session.data.session_status.ses_still_running).toEqual({ type: "busy" })
+  })
+
+  test("reloads every session holding messages, and only those", () => {
+    const session = createServerSession({} as OpencodeClient)
+    const synced: string[] = []
+    session.set("session_status", "ses_running", { type: "busy" })
+    session.set("message", "ses_running", [])
+    // ses_unopened is active but holds no messages, so it loads on demand.
+
+    const resync = reconcileActiveSessionStatuses(
+      Object.assign(session, {
+        sync: async (sessionID: string) => void synced.push(sessionID),
+      }),
+      { ses_running: { type: "running" }, ses_unopened: { type: "running" } },
+    )
+
+    expect(session.data.session_status.ses_running).toEqual({ type: "busy" })
+    expect(resync).toEqual(["ses_running"])
+    expect(synced).toEqual(["ses_running"])
+  })
+
+  test("reloads a finished session whose status a racing bootstrap already reset", () => {
+    const session = createServerSession({} as OpencodeClient)
+    const synced: string[] = []
+    // A concurrent directory bootstrap rewrites session_status from the server
+    // first, so nothing here still reads busy - but the timeline is frozen
+    // mid-message and must be reloaded anyway.
+    session.set("session_status", "ses_done", { type: "idle" })
+    session.set("message", "ses_done", [])
+
+    const resync = reconcileActiveSessionStatuses(
+      Object.assign(session, {
+        sync: async (sessionID: string) => void synced.push(sessionID),
+      }),
+      {},
+    )
+
+    expect(resync).toEqual(["ses_done"])
+    expect(synced).toEqual(["ses_done"])
   })
 })
 

@@ -164,6 +164,47 @@ export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () 
   start()
 }
 
+// Structural shape of the only thing the SDKs ever call. Narrower than
+// `typeof fetch`, whose runtime-specific statics a wrapper cannot carry over.
+type StreamFetch = (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>
+
+/**
+ * Wraps a fetch so every byte delivered on an event stream is reported back.
+ *
+ * Liveness has to be observed at the byte level rather than at the event level:
+ * the v2 server heartbeats with an SSE comment frame, which the SSE parser
+ * discards without yielding an event, so a quiet-but-healthy stream is
+ * indistinguishable from a dead one to the consumer of the async iterator.
+ */
+export function createActivityTrackingFetch(base: StreamFetch, onActivity: () => void): StreamFetch {
+  return async (input, init) => {
+    const response = await base(input, init)
+    if (!response.body) return response
+    if (!response.headers.get("content-type")?.includes("text/event-stream")) return response
+    onActivity()
+    const reader = response.body.getReader()
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const next = await reader.read()
+        if (next.done) {
+          controller.close()
+          return
+        }
+        onActivity()
+        controller.enqueue(next.value)
+      },
+      cancel(reason) {
+        return reader.cancel(reason)
+      },
+    })
+    return new Response(body, {
+      headers: response.headers,
+      status: response.status,
+      statusText: response.statusText,
+    })
+  }
+}
+
 type ServerEventEmitter = ReturnType<typeof createGlobalEmitter<{ [key: string]: ServerEvent }>>
 type ServerSDKBase = {
   server: ServerConnection.Any
@@ -178,6 +219,7 @@ type ServerSDKBase = {
     on: ServerEventEmitter["on"]
     listen: ServerEventEmitter["listen"]
     start: () => Promise<void> | undefined
+    onReconnect: (handler: () => void) => () => void
   }
   createClient: (
     opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">,
@@ -199,10 +241,17 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     }
   })()
 
-  const eventApi = createApiForServer({ server: server.http, fetch: eventFetch })
+  // Updated on every byte the event stream delivers, including heartbeat frames
+  // the SSE parser drops. Read by the per-attempt stall watchdog in start().
+  let activity = 0
+  const streamFetch = createActivityTrackingFetch(eventFetch ?? globalThis.fetch.bind(globalThis), () => {
+    activity = Date.now()
+  }) as typeof fetch
+
+  const eventApi = createApiForServer({ server: server.http, fetch: streamFetch })
   const eventSdk = createSdkForServer({
     signal: abort.signal,
-    fetch: eventFetch,
+    fetch: streamFetch,
     server: server.http,
   })
   const protocol = detectServerProtocol(server.http, platform.fetch ?? globalThis.fetch)
@@ -218,6 +267,12 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   const FLUSH_FRAME_MS = 16
   const STREAM_YIELD_MS = 8
   const RECONNECT_DELAY_MS = 250
+  // Servers heartbeat every 10s (v1) / 15s (v2), so three missed beats means the
+  // socket is gone even though no error ever surfaced — common when a NAT or
+  // proxy drops the connection, or the host suspends, leaving the read hanging
+  // forever instead of failing.
+  const STREAM_STALL_MS = 45_000
+  const STREAM_STALL_CHECK_MS = 5_000
 
   let queue: Queued[] = []
   let buffer: Queued[] = []
@@ -257,6 +312,25 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   let started = false
   let generation = 0
 
+  // Fired when the stream is re-established, so consumers can repair state that
+  // drifted while it was down. Deliberately not driven by the server's
+  // `server.connected` frame: the whole failure mode here is a stream that stops
+  // delivering, so a repair that waits to be told about the reconnect is exactly
+  // the one that never runs. This fires on the attempt itself, before any byte
+  // arrives, because the repair goes over plain HTTP and must work even if the
+  // replacement stream never delivers anything either.
+  const reconnectHandlers = new Set<() => void>()
+  let attempts = 0
+  const notifyReconnect = () => {
+    for (const handler of reconnectHandlers) {
+      try {
+        handler()
+      } catch (error) {
+        console.error("[global-sdk] reconnect handler failed", error)
+      }
+    }
+  }
+
   const start = () => {
     if (started) return run
     started = true
@@ -267,10 +341,23 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
       // oxlint-disable-next-line no-unmodified-loop-condition -- `started` is set to false by stop() which also aborts; both flags are checked to allow graceful exit
       while (!abort.signal.aborted && started && generation === active) {
         attempt = new AbortController()
+        const controller = attempt
         const onAbort = () => {
-          attempt?.abort()
+          controller.abort()
         }
         abort.signal.addEventListener("abort", onAbort)
+        activity = Date.now()
+        attempts++
+        if (attempts > 1) {
+          console.warn("[global-sdk] event stream re-established, repairing state", { attempt: attempts })
+          notifyReconnect()
+        }
+        const watchdog = setInterval(() => {
+          const idle = Date.now() - activity
+          if (idle < STREAM_STALL_MS) return
+          console.warn("[global-sdk] event stream stalled, reconnecting", { url: server.http.url, idle })
+          controller.abort()
+        }, STREAM_STALL_CHECK_MS)
         try {
           const kind = await protocol
           const events =
@@ -280,6 +367,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
           let yielded = Date.now()
           for await (const event of events) {
             streamErrorLogged = false
+            activity = Date.now()
             const legacy = "payload" in event
             if (legacy && event.payload.type === "sync") continue
             const directory = legacy ? (event.directory ?? "global") : (event.location?.directory ?? "global")
@@ -300,6 +388,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
             })
           }
         } finally {
+          clearInterval(watchdog)
           abort.signal.removeEventListener("abort", onAbort)
           attempt = undefined
         }
@@ -361,6 +450,10 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
       on: emitter.on.bind(emitter),
       listen: emitter.listen.bind(emitter),
       start,
+      onReconnect(handler: () => void) {
+        reconnectHandlers.add(handler)
+        return () => reconnectHandlers.delete(handler)
+      },
     },
     createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {
       return createSdkForServer({
