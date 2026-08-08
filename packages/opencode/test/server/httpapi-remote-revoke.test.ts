@@ -33,7 +33,7 @@ const it = testEffect(httpApiLayer)
 
 describe("remote revoke lifecycle", () => {
   it.instance(
-    "revokes access after the paired session has already been deleted",
+    "revokes access when the paired session is deleted and keeps admin revoke idempotent",
     () =>
       Effect.gen(function* () {
         const { directory } = yield* TestInstance
@@ -52,12 +52,15 @@ describe("remote revoke lifecycle", () => {
         const removed = yield* requestInDirectory(`/session/${session.id}`, directory, { method: "DELETE" })
         expect(removed.status).toBe(200)
 
+        const expiredAfterDelete = yield* request(`/remote/session/${session.id}`, bearer(grant.token))
+        expect(expiredAfterDelete.status).toBe(401)
+
         const revoked = yield* requestInDirectory(`/session/${session.id}/remote`, directory, { method: "DELETE" })
         expect(revoked.status).toBe(200)
         expect(yield* revoked.json).toBe(true)
 
-        const expired = yield* request(`/remote/session/${session.id}`, bearer(grant.token))
-        expect(expired.status).toBe(401)
+        const stillExpired = yield* request(`/remote/session/${session.id}`, bearer(grant.token))
+        expect(stillExpired.status).toBe(401)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

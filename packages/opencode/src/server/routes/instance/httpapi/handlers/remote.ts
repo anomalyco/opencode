@@ -108,6 +108,16 @@ export const remoteHandlers = HttpApiBuilder.group(RemoteApi, "remote", (handler
     const events = yield* EventV2Bridge.Service
     const scope = yield* Scope.Scope
 
+    const unsubscribeDeleted = yield* events.listen((event) =>
+      Effect.sync(() => {
+        if (event.type !== "session.deleted") return
+        const sessionID = (event.data as { sessionID?: unknown }).sessionID
+        if (typeof sessionID !== "string") return
+        RemoteAccess.revoke(sessionID as Parameters<typeof RemoteAccess.revoke>[0])
+      }),
+    )
+    yield* Effect.addFinalizer(() => unsubscribeDeleted)
+
     const requireSession = (sessionID: Parameters<typeof RemoteAccess.revoke>[0]) =>
       SessionError.mapStorageNotFound(sessions.get(sessionID))
 
