@@ -1,6 +1,24 @@
 import { PluginContextProvider } from "@opencode-ai/plugin/tui"
 import type { JSX } from "solid-js"
-import type { Context, Dialog, Page, Slot, SlotMap, Toast } from "@opencode-ai/plugin/tui/context"
+import type {
+  Context,
+  Dialog,
+  Page,
+  RegionClaim,
+  RegionName,
+  Slot,
+  SlotMap,
+  SlotName,
+  Toast,
+} from "@opencode-ai/plugin/tui/context"
+import type { Placement } from "./structure"
+
+// A registered claim as stored by the plugin provider's registry.
+export type SlotClaim = {
+  readonly region: RegionName
+  readonly placement: Placement
+  readonly render: Slot
+}
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { useClient } from "../context/client"
@@ -29,10 +47,25 @@ export type Dispose = () => Promise<void>
 export type Registry = {
   has(kind: "routes" | "slots" | "markdown", name: string): boolean
   set(kind: "routes", name: string, page: Page): void
-  set(kind: "slots", name: string, slot: Slot): void
+  set(kind: "slots", name: string, claim: SlotClaim): void
   set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
   remove(kind: "routes" | "slots" | "markdown", name: string): void
   active(): boolean
+}
+
+// Position-encoded legacy slot names map onto the region model. Append
+// slots become end-edge claims. Host-declared "replace" slots on partless
+// regions become root takeovers, reproducing their old last-registrant-wins
+// semantics exactly. One deliberate change: "prompt.footer.end" was also
+// last-registrant-wins, but maps to an end-edge claim — chips from several
+// plugins now coexist instead of silently shadowing each other.
+const legacySlots: Record<SlotName, { readonly region: RegionName; readonly placement: Placement }> = {
+  app: { region: "app", placement: { at: "end" } },
+  "home.footer": { region: "home.footer", placement: { replace: "home.footer" } },
+  "prompt.footer.end": { region: "prompt.footer", placement: { at: "end" } },
+  "session.composer.top": { region: "session.composer.top", placement: { at: "end" } },
+  "sidebar.content": { region: "sidebar.content", placement: { at: "end" } },
+  "sidebar.footer": { region: "sidebar.footer", placement: { replace: "sidebar.footer" } },
 }
 
 // The host services a plugin context adapts. Collected once by the provider
@@ -70,6 +103,7 @@ export function createPluginContext(input: {
 }): Context {
   const host = input.host
   let context: Context
+  let claims = 0
   // Every dialog and registered render is wrapped so plugin components can
   // reach their own context through usePlugin().
   const provide = (render: () => JSX.Element) => (
@@ -184,12 +218,45 @@ export function createPluginContext(input: {
           return true
         },
       },
-      slot(name, render) {
-        if (input.registry.has("slots", name)) throw new Error(`Slot already registered: ${name}`)
-        // The registration map erases the slot-specific input type.
-        input.registry.set("slots", name, ((slotInput: SlotMap[typeof name]) =>
-          provide(() => render(slotInput))) as Slot)
-        return registration("slots", name)
+      slot(name: SlotName | RegionName, value: Slot | RegionClaim) {
+        // Legacy form: position-encoded name plus a bare render function.
+        if (typeof value === "function") {
+          if (input.registry.has("slots", name)) throw new Error(`Slot already registered: ${name}`)
+          const mapped = legacySlots[name as SlotName]
+          // Reachable only from untyped plugin code; fail with the name
+          // instead of a property access on undefined.
+          if (!mapped) throw new Error(`Unknown slot: ${name}`)
+          input.registry.set("slots", name, {
+            region: mapped.region,
+            placement: mapped.placement,
+            // The registration map erases the slot-specific input type.
+            render: ((slotInput: SlotMap[SlotName]) => provide(() => value(slotInput))) as Slot,
+          })
+          return registration("slots", name)
+        }
+        // Region form: a placement plus render. Keys are counter-suffixed so
+        // one plugin may claim several places in the same region; order
+        // within the plugin is registration order.
+        const key = `${name}#${claims++}`
+        // Rebuilt field-by-field rather than rest-spread so malformed input
+        // from untyped plugins normalizes to exactly one placement key — a
+        // claim carrying two keys would match twice in the resolver.
+        const placement: Placement =
+          value.at !== undefined
+            ? { at: value.at }
+            : value.before !== undefined
+              ? { before: value.before }
+              : value.after !== undefined
+                ? { after: value.after }
+                : { replace: value.replace }
+        input.registry.set("slots", key, {
+          // The overloads correlate the second argument's shape with the
+          // name: an object value implies a region name.
+          region: name as RegionName,
+          placement,
+          render: ((slotInput: SlotMap[SlotName]) => provide(() => value.render(slotInput))) as Slot,
+        })
+        return registration("slots", key)
       },
     },
   }

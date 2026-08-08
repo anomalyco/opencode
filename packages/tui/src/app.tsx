@@ -87,7 +87,7 @@ import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { PluginProvider, usePlugin, type PackageResolver } from "./plugin/context"
 import { tuiPluginDirectories } from "./plugin/discovery"
-import { PluginRoute, PluginSlot } from "./plugin/render"
+import { PluginRoute, Region } from "./plugin/render"
 import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
@@ -1240,7 +1240,7 @@ function App(props: { pair?: DialogPairCredentials }) {
                 </Match>
               </Switch>
             </box>
-            <PluginSlot name="app" input={{}} mode="all" />
+            <Region name="app" input={{}} />
           </Show>
         </box>
       </box>

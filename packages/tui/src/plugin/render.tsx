@@ -9,7 +9,8 @@ import {
   type JSX,
   type ParentProps,
 } from "solid-js"
-import type { SlotMap, SlotName } from "@opencode-ai/plugin/tui/context"
+import type { RegionMap, RegionName, Slot, SlotMap, SlotName } from "@opencode-ai/plugin/tui/context"
+import { resolveStructure, type Entry, type Part } from "./structure"
 import { useRoute } from "../context/route"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
@@ -64,31 +65,69 @@ export function PluginRoute(props: { readonly fallback: (id: string, name: strin
   )
 }
 
-export function PluginSlot<Name extends SlotName>(props: {
+type HostRender = () => JSX.Element
+
+// One extensible area of the host UI: the host's parts plus every active
+// plugin claim, resolved into one ordered child list. Placement policy —
+// takeover suppression, last-enabled-wins, missing-anchor degradation —
+// lives in resolveStructure; this component only renders the result.
+export function Region<Name extends RegionName>(props: {
   readonly name: Name
-  readonly input: SlotMap[Name]
-  readonly mode: "all" | "replace"
+  readonly input: RegionMap[Name]["input"]
+  readonly parts?: ReadonlyArray<Part<HostRender, RegionMap[Name]["part"]>>
 }) {
   const plugins = usePlugin()
-  const renderers = createMemo(() => {
-    const items = plugins.slot(props.name)
-    if (props.mode === "replace") return items.slice(-1)
-    return items
-  })
+  // resolveStructure builds fresh entry objects each run, but <For> diffs
+  // rows by reference: cache entries so untouched rows (and the plugin
+  // state inside them) survive unrelated claim changes. Part entries key on
+  // their documented-stable id — render-function identity would break if
+  // the compiled parts prop ever rebuilt its closures. Claim entries key on
+  // the render function (weakly, so hot-reloaded generations collect).
+  const partEntries = new Map<string, Entry<HostRender, Slot>>()
+  const claimEntries = new WeakMap<Slot, Entry<HostRender, Slot>>()
+  const entries = createMemo(
+    () =>
+      resolveStructure<HostRender, Slot>({
+        region: props.name,
+        parts: props.parts ?? [],
+        claims: plugins.claims(props.name),
+      }).entries.map((entry) => {
+        if (entry.kind === "part") {
+          const cached = partEntries.get(entry.id)
+          if (cached) return cached
+          partEntries.set(entry.id, entry)
+          return entry
+        }
+        const cached = claimEntries.get(entry.claim.render)
+        if (cached) return cached
+        claimEntries.set(entry.claim.render, entry)
+        return entry
+      }),
+    [] as ReadonlyArray<Entry<HostRender, Slot>>,
+    // Rows are reference-stable, so an elementwise comparison makes a claim
+    // change in some other region a complete no-op for this one.
+    { equals: (a, b) => a.length === b.length && a.every((entry, index) => entry === b[index]) },
+  )
   return (
-    <For each={renderers()}>
-      {(item) => (
-        <PluginBoundary id={item.id} where={`slot ${props.name}`}>
-          {
-            // Component semantics: the render body runs once and untracked, so
-            // signals and intervals created inside are stable, while props stay
-            // reactive through the merged getter. A bare item.render(props.input)
-            // call would run inside the host's tracked scope and re-execute the
-            // whole body (resetting plugin state) on every tracked read.
-            createComponent(item.render, mergeProps(() => props.input) as SlotMap[Name])
-          }
-        </PluginBoundary>
-      )}
+    <For each={entries()}>
+      {(entry) =>
+        // A row's entry object is cached, so its kind never changes within
+        // the row's lifetime — a plain branch is safe here.
+        entry.kind === "part" ? (
+          entry.render()
+        ) : (
+          <PluginBoundary id={entry.claim.plugin} where={`region ${props.name}`}>
+            {
+              // Component semantics: the render body runs once and untracked, so
+              // signals and intervals created inside are stable, while props stay
+              // reactive through the merged getter. A bare render(props.input)
+              // call would run inside the host's tracked scope and re-execute the
+              // whole body (resetting plugin state) on every tracked read.
+              createComponent(entry.claim.render, mergeProps(() => props.input) as SlotMap[SlotName])
+            }
+          </PluginBoundary>
+        )
+      }
     </For>
   )
 }

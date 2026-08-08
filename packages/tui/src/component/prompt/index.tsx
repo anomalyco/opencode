@@ -58,7 +58,7 @@ import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
-import { PluginSlot } from "../../plugin/render"
+import { Region } from "../../plugin/render"
 import type { SessionPending } from "@opencode-ai/schema/session-pending"
 import {
   deduplicatePromptImages,
@@ -1778,76 +1778,93 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
-          <box flexGrow={1} flexShrink={1} minWidth={0}>
-            <Switch>
-              <Match when={status() === "running"}>
-                <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
-                  <box marginLeft={1}>
-                    <Show when={config.animations ?? true} fallback={<text fg={theme.text.subdued}>[⋯]</text>}>
-                      <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
-                    </Show>
-                  </box>
-                  <text
-                    fg={store.interrupt > 0 ? theme.background.action.primary.default : theme.text.default}
-                    wrapMode="none"
-                    truncate
-                    flexShrink={1}
-                  >
-                    esc{" "}
-                    <span
-                      style={{
-                        fg: store.interrupt > 0 ? theme.background.action.primary.default : theme.text.subdued,
-                      }}
-                    >
-                      {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                    </span>
-                  </text>
-                </box>
-              </Match>
-              <Match when={move.progress()}>
-                {(progress) => (
-                  <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
-                    <Spinner color={theme.hue.accent[500]}>
-                      {progress()}
-                      <span style={{ fg: theme.text.subdued }}>{".".repeat(move.creatingDots())}</span>
-                    </Spinner>
-                  </box>
-                )}
-              </Match>
-              <Match when={move.pendingNew()}>
-                <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
-                  <text fg={theme.hue.accent[500]} wrapMode="none" truncate>
-                    (new working copy)
-                  </text>
-                </box>
-              </Match>
-              <Match when={true}>
-                <Show when={!props.hint && locationLabel()} fallback={props.hint ?? <text />}>
-                  {(location) => (
-                    <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
-                      {location()}
-                    </text>
-                  )}
-                </Show>
-              </Match>
-            </Switch>
-          </box>
-          <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
-            {(file) => (
-              <text
-                wrapMode="none"
-                truncate
-                flexShrink={1}
-                fg={editorContextLabelState() === "pending" ? theme.hue.accent[500] : theme.text.subdued}
-              >
-                {file()}
-              </text>
-            )}
-          </Show>
-          <PluginSlot
-            name="prompt.footer.end"
+          <Region
+            name="prompt.footer"
             input={{ sessionID: props.sessionID, mode: store.mode }}
-            mode="replace"
+            parts={[
+              {
+                id: "status",
+                render: () => (
+                  <box flexGrow={1} flexShrink={1} minWidth={0}>
+                    <Switch>
+                      <Match when={status() === "running"}>
+                        <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
+                          <box marginLeft={1}>
+                            <Show
+                              when={config.animations ?? true}
+                              fallback={<text fg={theme.text.subdued}>[⋯]</text>}
+                            >
+                              <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                            </Show>
+                          </box>
+                          <text
+                            fg={store.interrupt > 0 ? theme.background.action.primary.default : theme.text.default}
+                            wrapMode="none"
+                            truncate
+                            flexShrink={1}
+                          >
+                            esc{" "}
+                            <span
+                              style={{
+                                fg:
+                                  store.interrupt > 0
+                                    ? theme.background.action.primary.default
+                                    : theme.text.subdued,
+                              }}
+                            >
+                              {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                            </span>
+                          </text>
+                        </box>
+                      </Match>
+                      <Match when={move.progress()}>
+                        {(progress) => (
+                          <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
+                            <Spinner color={theme.hue.accent[500]}>
+                              {progress()}
+                              <span style={{ fg: theme.text.subdued }}>{".".repeat(move.creatingDots())}</span>
+                            </Spinner>
+                          </box>
+                        )}
+                      </Match>
+                      <Match when={move.pendingNew()}>
+                        <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
+                          <text fg={theme.hue.accent[500]} wrapMode="none" truncate>
+                            (new working copy)
+                          </text>
+                        </box>
+                      </Match>
+                      <Match when={true}>
+                        <Show when={!props.hint && locationLabel()} fallback={props.hint ?? <text />}>
+                          {(location) => (
+                            <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
+                              {location()}
+                            </text>
+                          )}
+                        </Show>
+                      </Match>
+                    </Switch>
+                  </box>
+                ),
+              },
+              {
+                id: "file",
+                render: () => (
+                  <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
+                    {(file) => (
+                      <text
+                        wrapMode="none"
+                        truncate
+                        flexShrink={1}
+                        fg={editorContextLabelState() === "pending" ? theme.hue.accent[500] : theme.text.subdued}
+                      >
+                        {file()}
+                      </text>
+                    )}
+                  </Show>
+                ),
+              },
+            ]}
           />
         </box>
       </box>

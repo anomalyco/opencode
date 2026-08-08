@@ -14,15 +14,16 @@ import {
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import type { Page, Slot, SlotName } from "@opencode-ai/plugin/tui/context"
-import { createStore, produce, reconcile as reconcileStore } from "solid-js/store"
+import type { Page, Slot } from "@opencode-ai/plugin/tui/context"
+import type { Claim } from "./structure"
+import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
 import { isDeepEqual } from "remeda"
 import "#runtime-plugin-support"
 import { useConfig } from "../config"
 import { useTuiLifecycle } from "../context/runtime"
 import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
-import { createPluginContext, usePluginHost, type Dispose } from "./api"
+import { createPluginContext, usePluginHost, type Dispose, type SlotClaim } from "./api"
 import { createSourceWatcher } from "./watch"
 import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
 
@@ -46,9 +47,7 @@ type Value = {
   readonly list: () => ReadonlyArray<State>
   readonly registered: () => ReadonlyArray<RegisteredPlugin>
   readonly route: (id: string, name: string) => Page["render"] | undefined
-  readonly slot: <Name extends SlotName>(
-    name: Name,
-  ) => ReadonlyArray<{ readonly id: string; readonly render: Slot<Name> }>
+  readonly claims: (region: string) => ReadonlyArray<Claim<Slot>>
   readonly markdown: () => MarkdownOptions["renderNode"]
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
@@ -62,7 +61,7 @@ type Registration = {
   options?: Readonly<Record<string, any>>
   active: boolean
   routes: Record<string, Page>
-  slots: Record<string, Slot>
+  slots: Record<string, SlotClaim>
   markdown: Record<string, MarkdownCodeBlockRenderer>
   cleanups: Dispose[]
 }
@@ -119,7 +118,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       owned,
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
-        set: (kind: "routes" | "slots" | "markdown", name: string, value: Page | Slot | MarkdownCodeBlockRenderer) =>
+        set: (kind: "routes" | "slots" | "markdown", name: string, value: Page | SlotClaim | MarkdownCodeBlockRenderer) =>
           setStore("registrations", id, kind, name, () => value),
         remove: (kind, name) =>
           setStore(
@@ -387,7 +386,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         host.toast.show({ variant: "error", title: "Plugin", message: `${state.target}: ${state.error}` })
     setStore("states", reconcileStore(states))
   }
-  const slotItems = new WeakMap<Slot, { readonly id: string; readonly render: Slot }>()
+  const slotItems = new WeakMap<Slot, Claim<Slot>>()
   createEffect(
     on(
       () => JSON.stringify(config.data.plugins ?? []),
@@ -436,19 +435,27 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
             active: plugin.active,
           })),
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
-        slot: (name) =>
-          Object.entries(store.registrations).flatMap(([id, registration]) => {
-            const render = registration.active ? registration.slots[name] : undefined
-            if (!render) return []
-            // <For> diffs rows by reference; a stable wrapper per render
-            // function keeps untouched plugins' slot rows (and their state)
-            // alive across other plugins' reloads.
-            const cached = slotItems.get(render)
-            if (cached) return [cached]
-            const item = { id, render }
-            slotItems.set(render, item)
-            return [item]
-          }),
+        // Claims come back in enable order: registration-store key order
+        // across plugins (generations preserve key positions in place), then
+        // registration order within one plugin. The resolver's last-wins
+        // rules depend on it.
+        claims: (region) =>
+          Object.entries(store.registrations).flatMap(([id, registration]) =>
+            Object.entries(registration.active ? registration.slots : {}).flatMap(([key, slot]) => {
+              if (slot.region !== region) return []
+              // <For> diffs rows by reference; a stable claim per render
+              // function keeps untouched plugins' slot rows (and their
+              // state) alive across other plugins' reloads.
+              const cached = slotItems.get(slot.render)
+              if (cached) return [cached]
+              // Placements are immutable once registered; unwrap the store
+              // proxy so the resolver's `in` checks hit plain objects
+              // instead of subscribing tracked scopes to every key probe.
+              const item = { key: `${id}/${key}`, plugin: id, placement: unwrap(slot.placement), render: slot.render }
+              slotItems.set(slot.render, item)
+              return [item]
+            }),
+          ),
         markdown,
         // Manual dialog toggles join the same chain as reconciles so a
         // toggle mid-reload cannot mix registrations across generations.

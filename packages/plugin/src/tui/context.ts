@@ -169,6 +169,55 @@ export interface SlotMap {
 export type SlotName = keyof SlotMap
 export type Slot<Name extends SlotName = SlotName> = (props: SlotMap[Name]) => JSX.Element
 
+/**
+ * The host UI's extensible regions. Each region publishes an input (reactive
+ * props passed to every claim render) and a part vocabulary: the stable ids
+ * of host furniture that placements may anchor to. Part ids are documented
+ * API — coarse, few, and kept stable across host refactors.
+ */
+export interface RegionMap {
+  readonly app: { readonly input: Readonly<Record<string, never>>; readonly part: never }
+  readonly "home.footer": { readonly input: Readonly<Record<string, never>>; readonly part: never }
+  readonly "prompt.footer": {
+    readonly input: { readonly sessionID?: string; readonly mode: "normal" | "shell" }
+    readonly part: "status" | "file"
+  }
+  readonly "session.composer.top": { readonly input: { readonly sessionID: string }; readonly part: never }
+  readonly "sidebar.content": { readonly input: { readonly sessionID: string }; readonly part: never }
+  readonly "sidebar.footer": { readonly input: Readonly<Record<string, never>>; readonly part: never }
+}
+export type RegionName = keyof RegionMap
+
+/**
+ * Where a claim lands in a region's structure. Exactly one of:
+ * - `at`: the region's edge — `"end"` is the ceremony-free default position
+ * - `before` / `after`: adjacent to a host part, wherever the host keeps it
+ * - `replace`: take over one part — or the whole region by naming it.
+ *   Replace is takeover: anything anchored inside the replaced subtree is
+ *   suppressed and recorded, never silently dropped. At the same target the
+ *   last-enabled claim wins; an ancestor takeover beats a descendant one
+ *   regardless of order.
+ * A placement aimed at a part the host no longer publishes degrades to the
+ * region's end (after end-edge claims) rather than disappearing.
+ *
+ * The `?: never` fields make the variants mutually exclusive: a claim with
+ * two placement keys is a type error, not a silent priority pick.
+ */
+export type RegionPlacement<Name extends RegionName = RegionName> =
+  | { readonly at: "start" | "end"; readonly before?: never; readonly after?: never; readonly replace?: never }
+  | { readonly before: RegionMap[Name]["part"]; readonly at?: never; readonly after?: never; readonly replace?: never }
+  | { readonly after: RegionMap[Name]["part"]; readonly at?: never; readonly before?: never; readonly replace?: never }
+  | {
+      readonly replace: RegionMap[Name]["part"] | Name
+      readonly at?: never
+      readonly before?: never
+      readonly after?: never
+    }
+
+export type RegionClaim<Name extends RegionName = RegionName> = RegionPlacement<Name> & {
+  readonly render: (input: RegionMap[Name]["input"]) => JSX.Element
+}
+
 export interface App {
   readonly version: string
   readonly channel: string
@@ -394,7 +443,16 @@ export interface UI {
     /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
     close(sessionID?: string): boolean
   }
-  readonly slot: <Name extends SlotName>(name: Name, render: Slot<Name>) => () => void
+  readonly slot: {
+    /**
+     * @deprecated Position-encoded slot names are the legacy surface; use
+     * the region + placement form. `slot("prompt.footer.end", render)` is
+     * `slot("prompt.footer", { at: "end", render })`.
+     */
+    <Name extends SlotName>(name: Name, render: Slot<Name>): () => void
+    /** Claims a place in a region's structure; see RegionPlacement. */
+    <Name extends RegionName>(region: Name, claim: RegionClaim<Name>): () => void
+  }
 }
 
 export interface Context {
