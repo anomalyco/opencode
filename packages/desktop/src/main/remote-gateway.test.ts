@@ -43,6 +43,28 @@ describe("remote gateway", () => {
     await gateway.stop()
   })
 
+  test("pins absolute-form request targets to the configured upstream", async () => {
+    let upstreamHits = 0
+    let foreignHits = 0
+    const upstream = await listen((request, response) => {
+      upstreamHits += 1
+      response.end(request.url)
+    })
+    const foreign = await listen((_request, response) => {
+      foreignHits += 1
+      response.end("foreign")
+    })
+    const gateway = createRemoteGateway({ upstreamUrl: origin(upstream) })
+    const info = await gateway.start()
+
+    const body = await rawGet(info.port, `${origin(foreign)}/remote/probe?x=1`)
+    expect(body).toBe("/remote/probe?x=1")
+    expect(upstreamHits).toBe(1)
+    expect(foreignHits).toBe(0)
+
+    await gateway.stop()
+  })
+
   test("forwards request bodies and response headers", async () => {
     const upstream = await listen((request, response) => {
       const chunks: Buffer[] = []
@@ -188,6 +210,18 @@ function rawRequest(port: number, headers: http.OutgoingHttpHeaders) {
     const request = http.request({ host: "127.0.0.1", port, path: "/remote/mobile", headers }, (response) => {
       response.resume()
       response.on("end", resolve)
+    })
+    request.on("error", reject)
+    request.end()
+  })
+}
+
+function rawGet(port: number, path: string) {
+  return new Promise<string>((resolve, reject) => {
+    const request = http.request({ host: "127.0.0.1", port, path }, (response) => {
+      const chunks: Buffer[] = []
+      response.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+      response.on("end", () => resolve(Buffer.concat(chunks).toString()))
     })
     request.on("error", reject)
     request.end()

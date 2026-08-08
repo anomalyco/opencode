@@ -109,8 +109,12 @@ export function createRemoteGateway(options: RemoteGatewayOptions) {
   }
 }
 
+function requestURL(rawUrl: string | undefined) {
+  return new URL(rawUrl ?? "/", "http://remote.invalid")
+}
+
 function isRemotePath(rawUrl: string | undefined) {
-  const pathname = new URL(rawUrl ?? "/", "http://localhost").pathname
+  const pathname = requestURL(rawUrl).pathname
   return pathname === "/remote" || pathname.startsWith("/remote/")
 }
 
@@ -146,7 +150,11 @@ function proxyRequest(
   response: http.ServerResponse,
   logger?: Logger,
 ) {
-  const target = new URL(request.url ?? "/", upstream)
+  const incoming = requestURL(request.url)
+  const target = new URL(upstream)
+  target.pathname = incoming.pathname
+  target.search = incoming.search
+  target.hash = ""
   const requestImpl = target.protocol === "https:" ? https.request : http.request
   const headers = hopByHop(request.headers, blockedRequestHeaders)
 
