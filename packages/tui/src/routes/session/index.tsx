@@ -1551,8 +1551,10 @@ function AssistantMessage(props: {
   })
 
   const allTools = createMemo(() =>
-    (props.turnParts as ToolPart[]).filter((part) => part.type === "tool"),
+    props.turnParts.filter((part): part is ToolPart => part.type === "tool"),
   )
+
+  const textParts = createMemo(() => props.parts.filter((part): part is TextPart => part.type === "text"))
 
   const toolSummary = createMemo(() => {
     const tools = allTools()
@@ -1569,7 +1571,7 @@ function AssistantMessage(props: {
   const hiddenCount = createMemo(() => {
     const tools = allTools()
     const reasoning = props.turnParts.filter(
-      (part) => part.type === "reasoning" && (part as any).time?.end !== undefined,
+      (part): part is ReasoningPart => part.type === "reasoning" && part.time.end !== undefined,
     ).length
     return tools.length + reasoning
   })
@@ -1586,48 +1588,46 @@ function AssistantMessage(props: {
   const backgroundShortcut = useCommandShortcut("session.background")
 
   return (
-    <>
-      <Show when={!focusHidden()}>
-        <Show
-          when={!focusCollapsed()}
-          fallback={
-            <box paddingLeft={3} paddingTop={1} flexShrink={0}>
-              <Show when={toolSummary()}>
-                <box paddingLeft={1} marginTop={1} flexShrink={0}>
-                  <text fg={theme.textMuted}>
-                    <span style={{ fg: theme.text }}>  ↳ </span>
-                    {toolSummary()}
-                    <Show when={hiddenCount() > 0}>
-                      <span style={{ fg: theme.textMuted }}>
-                        {" · "}
-                        {hiddenCount()} message{hiddenCount() > 1 ? "s" : ""} hidden (toggle /focus to show)
-                      </span>
-                    </Show>
-                  </text>
-                </box>
+    <Show when={!focusHidden()}>
+      <Show
+        when={!focusCollapsed()}
+        fallback={
+          <box paddingLeft={3} paddingTop={1} flexShrink={0}>
+            <Show when={toolSummary()}>
+              <box paddingLeft={1} marginTop={1} flexShrink={0}>
+                <text fg={theme.textMuted}>
+                  <span style={{ fg: theme.text }}>  ↳ </span>
+                  {toolSummary()}
+                  <Show when={hiddenCount() > 0}>
+                    <span style={{ fg: theme.textMuted }}>
+                      {" · "}
+                      {hiddenCount()} message{hiddenCount() > 1 ? "s" : ""} hidden (toggle /focus to show)
+                    </span>
+                  </Show>
+                </text>
+              </box>
+            </Show>
+            <For each={textParts()}>
+              {(part) => <TextPart last={false} part={part} message={props.message} />}
+            </For>
+          </box>
+        }
+      >
+        <For each={props.parts}>
+          {(part, index) => {
+            const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+            return (
+              <Show when={component()}>
+                <Dynamic
+                  last={index() === props.parts.length - 1}
+                  component={component()}
+                  part={part as any}
+                  message={props.message}
+                />
               </Show>
-              <For each={props.parts.filter((part) => part.type === "text")}>
-                {(part) => <TextPart last={false} part={part as any} message={props.message} />}
-              </For>
-            </box>
-          }
-        >
-          <For each={props.parts}>
-            {(part, index) => {
-              const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
-              return (
-                <Show when={component()}>
-                  <Dynamic
-                    last={index() === props.parts.length - 1}
-                    component={component()}
-                    part={part as any}
-                    message={props.message}
-                  />
-                </Show>
-              )
-            }}
-          </For>
-        </Show>
+            )
+          }}
+        </For>
       </Show>
       <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
         <box paddingTop={1} paddingLeft={3}>
@@ -1694,7 +1694,7 @@ function AssistantMessage(props: {
           </box>
         </Match>
       </Switch>
-    </>
+    </Show>
   )
 }
 
