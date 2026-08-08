@@ -151,6 +151,43 @@ flowchart LR
   expect(captureCharFrame()).toContain("flowchart LR")
 })
 
+test("keeps the last valid Mermaid diagram while a fence is streaming", async () => {
+  const testRenderer = await createTestRenderer({ width: 80, height: 12 })
+  renderer = testRenderer.renderer
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-streaming-mermaid",
+    content: `\`\`\`mermaid
+flowchart LR
+  A[Stable] --> B[Previous]
+\`\`\``,
+    syntaxStyle,
+    streaming: true,
+    internalBlockMode: "top-level",
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+  expect(testRenderer.captureCharFrame()).toContain("Previous")
+
+  markdown.content = `\`\`\`mermaid
+flowchart LR
+  A[Stable] --> B[Previous]
+  B -->
+\`\`\``
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+  expect(testRenderer.captureCharFrame()).toContain("Previous")
+  expect(testRenderer.captureCharFrame()).not.toContain("flowchart LR")
+
+  markdown.content = `\`\`\`mermaid
+flowchart LR
+  A[Stable] --> B[Previous]
+  B --> C[Current]
+\`\`\``
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+  expect(testRenderer.captureCharFrame()).toContain("Current")
+})
+
 test("renders a Mermaid sequence fence inside MarkdownRenderable", async () => {
   const testRenderer = await createTestRenderer({ width: 80, height: 14 })
   renderer = testRenderer.renderer
@@ -206,6 +243,11 @@ sequenceDiagram
   await testRenderer.renderOnce()
   expect(diagram.scrollX).toBeGreaterThan(0)
   expect(diagram.hasSelection()).toBe(false)
+
+  diagram.scrollX = 0
+  await testRenderer.mockMouse.scroll(diagram.x + 20, diagram.y + 2, "right")
+  await testRenderer.renderOnce()
+  expect(diagram.scrollX).toBeGreaterThan(0)
 })
 
 test("renders a Mermaid state fence inside MarkdownRenderable", async () => {
