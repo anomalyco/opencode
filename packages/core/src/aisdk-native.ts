@@ -51,6 +51,8 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapGoogleOptions(input.settings),
         },
       }
+    case "@ai-sdk/openai-compatible":
+      return mapOpenAICompatible(input.settings)
     case "@openrouter/ai-sdk-provider":
       return mapOpenRouter(input.settings, baseSettings)
     case "@ai-sdk/xai":
@@ -62,6 +64,34 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapXAIOptions(input.settings),
         },
       }
+  }
+  return undefined
+}
+
+function mapOpenAICompatible(settings: Readonly<Record<string, unknown>>): Mapping | undefined {
+  if (typeof settings.baseURL !== "string") return undefined
+  if (
+    settings.timeout !== undefined ||
+    settings.headerTimeout !== undefined ||
+    settings.chunkTimeout !== undefined ||
+    settings.fetch !== undefined ||
+    settings.transformRequestBody !== undefined ||
+    settings.metadataExtractor !== undefined ||
+    settings.supportsStructuredOutputs === true ||
+    settings.strictJsonSchema !== undefined
+  )
+    return undefined
+  const options = typeof settings.reasoningEffort === "string" ? { reasoningEffort: settings.reasoningEffort } : undefined
+  return {
+    package: "@opencode-ai/ai/providers/openai-compatible",
+    settings: {
+      baseURL: settings.baseURL,
+      ...(typeof settings.name === "string" ? { provider: settings.name } : {}),
+      ...mapAPIKey(settings),
+      ...(isStringRecord(settings.queryParams) ? { http: { query: settings.queryParams } } : {}),
+      ...(options === undefined ? {} : { providerOptions: { openai: options } }),
+    },
+    ...(isStringRecord(settings.headers) ? { headers: settings.headers } : {}),
   }
 }
 
@@ -192,9 +222,7 @@ function mapOpenAIOptions(settings: Readonly<Record<string, unknown>>) {
 }
 
 function mapBaseSettings(settings: Readonly<Record<string, unknown>>) {
-  return {
-    ...(typeof settings.baseURL === "string" ? { baseURL: settings.baseURL } : {}),
-  }
+  return typeof settings.baseURL === "string" ? { baseURL: settings.baseURL } : {}
 }
 
 function mapAPIKey(settings: Readonly<Record<string, unknown>>) {

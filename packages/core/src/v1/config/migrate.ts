@@ -248,7 +248,7 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
     body: info.options && options.body,
     models:
       info.models &&
-      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model)])),
+      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model, info.npm)])),
   }
 }
 
@@ -294,8 +294,9 @@ export function providerID(input: string) {
   return input
 }
 
-function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
-  const settings = info.options && ConfigProviderOptionsV1.model(info.options)
+function migrateModel(info: typeof ConfigProviderV1.Model.Type, inheritedPackage?: string) {
+  const packageName = info.provider?.npm ?? inheritedPackage
+  const overlays = info.options && ConfigProviderOptionsV1.modelOverlays(info.options, packageName)
   const costs = info.cost && [
     {
       input: info.cost.input,
@@ -323,14 +324,15 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
     name: info.name,
     compatibility: Model.compatibility(info.interleaved),
     package: info.provider?.npm ? Provider.aisdk(info.provider.npm) : undefined,
-    settings: info.provider?.api ? { ...settings, baseURL: info.provider.api } : settings,
+    settings: info.provider?.api ? { ...overlays?.settings, baseURL: info.provider.api } : overlays?.settings,
+    body: overlays?.body,
     capabilities,
     headers: info.headers,
     variants:
       info.variants &&
       Object.entries(info.variants).map(([id, options]) => ({
         id,
-        settings: ConfigProviderOptionsV1.model(options),
+        ...ConfigProviderOptionsV1.modelOverlays(options, packageName),
       })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,

@@ -111,6 +111,22 @@ describe("provider package entrypoints", () => {
     })
   })
 
+  test("maps OpenAI-compatible Chat settings onto the executable model", async () => {
+    const OpenAICompatible = await import("@opencode-ai/ai/providers/openai-compatible")
+    const selected = OpenAICompatible.model("custom-model", {
+      apiKey: "fixture",
+      baseURL: "https://chat.example.test/v1",
+      provider: "example",
+      http: { query: { tenant: "one" } },
+      providerOptions: { openai: { reasoningEffort: "high" } },
+    })
+
+    expect(String(selected.provider)).toBe("example")
+    expect(selected.route.id).toBe("openai-compatible-chat")
+    expect(selected.route.defaults.http?.query).toEqual({ tenant: "one" })
+    expect(selected.route.defaults.providerOptions).toEqual({ openai: { reasoningEffort: "high" } })
+  })
+
   test("maps Anthropic-compatible settings onto the executable model", async () => {
     const AnthropicCompatible = await import("@opencode-ai/ai/providers/anthropic-compatible")
     const selected = AnthropicCompatible.model("compatible-model", {

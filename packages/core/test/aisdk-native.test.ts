@@ -5,6 +5,49 @@ const map = (packageName: string, settings: Readonly<Record<string, unknown>>, m
   AISDKNative.map({ packageName, settings, modelID })
 
 describe("AISDKNative", () => {
+  test("maps the generic OpenAI-compatible package to the native provider package", () => {
+    expect(
+      map("@ai-sdk/openai-compatible", {
+        apiKey: "secret",
+        baseURL: "https://compatible.example/v1",
+        name: "example",
+        headers: { "x-test": "value" },
+        queryParams: { tenant: "one" },
+        reasoningEffort: "high",
+      }),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/openai-compatible",
+      settings: {
+        apiKey: "secret",
+        baseURL: "https://compatible.example/v1",
+        provider: "example",
+        http: { query: { tenant: "one" } },
+        providerOptions: {
+          openai: {
+            reasoningEffort: "high",
+          },
+        },
+      },
+      headers: { "x-test": "value" },
+    })
+    expect(map("@ai-sdk/openai-compatible", {})).toBeUndefined()
+    expect(
+      map("@ai-sdk/openai-compatible", { baseURL: "https://compatible.example/v1", timeout: 30_000 }),
+    ).toBeUndefined()
+    expect(
+      map("@ai-sdk/openai-compatible", {
+        baseURL: "https://compatible.example/v1",
+        supportsStructuredOutputs: true,
+      }),
+    ).toBeUndefined()
+    expect(
+      map("@ai-sdk/openai-compatible", {
+        baseURL: "https://compatible.example/v1",
+        strictJsonSchema: false,
+      }),
+    ).toBeUndefined()
+  })
+
   test("maps both models.dev Bedrock packages to native providers", () => {
     expect(map("@ai-sdk/amazon-bedrock", { region: "us-east-1" })).toEqual({
       package: "@opencode-ai/ai/providers/amazon-bedrock",

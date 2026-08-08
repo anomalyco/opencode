@@ -38,6 +38,28 @@ describe("ConfigProviderOptionsV1", () => {
     })
   })
 
+  test("splits OpenAI-compatible model options into native settings and body extensions", () => {
+    expect(
+      ConfigProviderOptionsV1.modelOverlays(
+        {
+          user: "user-1",
+          reasoningEffort: "high",
+          textVerbosity: "low",
+          strictJsonSchema: false,
+          vendor_extension: { enabled: true },
+          store: false,
+        },
+        "@ai-sdk/openai-compatible",
+      ),
+    ).toEqual({
+      settings: {
+        reasoningEffort: "high",
+        strictJsonSchema: false,
+      },
+      body: { user: "user-1", verbosity: "low", vendor_extension: { enabled: true }, store: false },
+    })
+  })
+
   test("uses mechanical lowering for custom provider options", () => {
     expect(ConfigProviderOptionsV1.provider({ enabled: true })).toEqual({
       settings: { enabled: true },

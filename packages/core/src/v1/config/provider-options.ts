@@ -29,3 +29,18 @@ export function provider(options: Options): ProviderResult {
 export function model(options: Options) {
   return { ...options }
 }
+
+export function modelOverlays(options: Options, packageName: string | undefined) {
+  if (packageName !== "@ai-sdk/openai-compatible") return { settings: model(options) }
+  const known = new Set(["reasoningEffort", "strictJsonSchema"])
+  const settings = Object.fromEntries(Object.entries(options).filter(([key]) => known.has(key)))
+  const body = Object.fromEntries(
+    Object.entries(options)
+      .filter(([key]) => !known.has(key))
+      .map(([key, value]) => [key === "textVerbosity" ? "verbosity" : key, value]),
+  )
+  return {
+    settings: Object.keys(settings).length === 0 ? undefined : settings,
+    body: Object.keys(body).length === 0 ? undefined : body,
+  }
+}

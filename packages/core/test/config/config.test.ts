@@ -566,6 +566,72 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("preserves serializable OpenAI-compatible options across v1 migration", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        provider: {
+          acme: {
+            npm: "@ai-sdk/openai-compatible",
+            api: "https://api.example/v1",
+            options: {
+              apiKey: "secret",
+              name: "acme",
+              headers: { "x-provider": "yes" },
+              body: { provider_body_extension: true },
+              queryParams: { tenant: "one" },
+              includeUsage: false,
+              supportsStructuredOutputs: true,
+            },
+            models: {
+              chat: {
+                options: {
+                  user: "user-1",
+                  reasoningEffort: "high",
+                  textVerbosity: "low",
+                  strictJsonSchema: false,
+                  vendor_extension: { enabled: true },
+                },
+                variants: {
+                  strict: { strictJsonSchema: true, variant_extension: "value" },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      expect(migrated.providers?.acme).toMatchObject({
+        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+        settings: {
+          apiKey: "secret",
+          name: "acme",
+          queryParams: { tenant: "one" },
+          includeUsage: false,
+          supportsStructuredOutputs: true,
+          baseURL: "https://api.example/v1",
+        },
+        headers: { "x-provider": "yes" },
+        body: { provider_body_extension: true },
+        models: {
+          chat: {
+            settings: {
+              reasoningEffort: "high",
+              strictJsonSchema: false,
+            },
+            body: { user: "user-1", verbosity: "low", vendor_extension: { enabled: true } },
+            variants: [
+              {
+                id: "strict",
+                settings: { strictJsonSchema: true },
+                body: { variant_extension: "value" },
+              },
+            ],
+          },
+        },
+      })
+    }),
+  )
+
   it.effect("renames old provider IDs while migrating v1 configuration", () =>
     Effect.sync(() => {
       const migrated = ConfigMigrateV1.migrate({

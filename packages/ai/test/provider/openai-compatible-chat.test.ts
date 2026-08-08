@@ -4,6 +4,7 @@ import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src"
 import { Auth, LLMClient } from "../../src/route"
 import { compileRequest } from "../../src/route/client"
+import { jsonRequestParts } from "../../src/route/transport/http"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { it } from "../lib/effect"
@@ -141,6 +142,48 @@ describe("OpenAI-compatible Chat route", () => {
         max_tokens: 20,
         temperature: 0,
       })
+    }),
+  )
+
+  it.effect("preserves compatible provider URL, usage, options, and body extensions", () =>
+    Effect.gen(function* () {
+      const selected = OpenAICompatible.model("custom-model", {
+        apiKey: "generated-key",
+        baseURL: "https://compatible.example/v1",
+        provider: "custom",
+        headers: { Authorization: "Bearer configured-key" },
+        http: {
+          query: { tenant: "one" },
+          body: {
+            user: "user-1",
+            verbosity: "low",
+            vendor_extension: { enabled: true },
+            custom_boolean: false,
+          },
+        },
+        providerOptions: { openai: { reasoningEffort: "high" } },
+      })
+      const request = LLM.request({ model: selected, prompt: "Hello" })
+      const prepared = yield* compileRequest(request)
+      const parts = yield* jsonRequestParts({
+        endpoint: selected.route.endpoint,
+        auth: selected.route.auth,
+        headers: selected.route.headers,
+        request: LLMRequest.update(request, { http: selected.route.defaults.http }),
+        body: prepared.body,
+        encodeBody: (body) => JSON.stringify(body),
+      })
+
+      expect(parts.url).toBe("https://compatible.example/v1/chat/completions?tenant=one")
+      expect(parts.headers.authorization).toBe("Bearer configured-key")
+      expect(parts.jsonBody).toMatchObject({
+        user: "user-1",
+        reasoning_effort: "high",
+        verbosity: "low",
+        vendor_extension: { enabled: true },
+        custom_boolean: false,
+      })
+      expect(parts.jsonBody).toMatchObject({ stream_options: { include_usage: true } })
     }),
   )
 
