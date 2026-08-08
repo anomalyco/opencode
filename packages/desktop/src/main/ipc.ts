@@ -24,6 +24,7 @@ import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
+import { createRemoteGatewayController } from "./remote-gateway-controller"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -57,13 +58,23 @@ type Deps = {
 export function registerIpcHandlers(deps: Deps) {
   const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
   const updaterSubscriptions = createUpdaterSubscriptions()
+  const remoteGateway = createRemoteGatewayController({
+    getUpstreamUrl: () => deps.awaitInitialization().then((data) => data.url),
+  })
   app.once("will-quit", updaterSubscriptions.clear)
   app.on("before-quit", () => drafts.flush())
   app.once("will-quit", () => drafts.close())
+  app.once("will-quit", () => void remoteGateway.stop())
   app.on("browser-window-created", (_event, win) => win.on("session-end", () => drafts.flush()))
 
-  ipcMain.handle("kill-sidecar", () => deps.killSidecar())
+  ipcMain.handle("kill-sidecar", async () => {
+    await remoteGateway.stop()
+    return deps.killSidecar()
+  })
   ipcMain.handle("await-initialization", () => deps.awaitInitialization())
+  ipcMain.handle("remote-gateway-start", () => remoteGateway.start())
+  ipcMain.handle("remote-gateway-stop", () => remoteGateway.stop())
+  ipcMain.handle("remote-gateway-status", () => remoteGateway.status() ?? null)
   ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
   ipcMain.handle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>

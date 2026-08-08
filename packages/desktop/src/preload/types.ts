@@ -22,6 +22,11 @@ export type ServerReadyData = {
   password: string | null
 }
 
+export type RemoteGatewayInfo = {
+  port: number
+  urls: string[]
+}
+
 export type WslServersAPI = WslServersPlatform
 export type UpdaterAPI = {
   subscribe: (cb: (state: UpdaterState) => void) => Promise<() => void>
@@ -46,6 +51,9 @@ export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
   awaitInitialization: () => Promise<ServerReadyData>
+  startRemoteGateway: () => Promise<RemoteGatewayInfo>
+  stopRemoteGateway: () => Promise<void>
+  getRemoteGatewayStatus: () => Promise<RemoteGatewayInfo | null>
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks: () => Promise<string[]>
