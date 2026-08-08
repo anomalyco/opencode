@@ -58,6 +58,19 @@ export const AttachCommand = cmd({
       .option("replay-limit", {
         type: "number",
         describe: "cap visible mini replay to the newest N messages",
+      })
+      .option("model", {
+        type: "string",
+        alias: ["m"],
+        describe: "model to use in the format of provider/model",
+      })
+      .option("prompt", {
+        type: "string",
+        describe: "prompt to use",
+      })
+      .option("agent", {
+        type: "string",
+        describe: "agent to use",
       }),
   handler: async (args) => {
     if (args.replay === true) {
@@ -88,6 +101,9 @@ export const AttachCommand = cmd({
         continue: args.continue,
         session: args.session,
         fork: args.fork,
+        model: args.model,
+        agent: args.agent,
+        prompt: args.prompt,
         replay: noReplay ? false : undefined,
         replayLimit: args.replayLimit,
       })
