@@ -28,7 +28,8 @@ const DECISION_NODE_RE = new RegExp(`^(${ID_RE})\\{(.+)\\}$`)
 const BOX_NODE_RE = new RegExp(`^(${ID_RE})\\[(.+)\\]$`)
 const ID_ONLY_RE = new RegExp(`^${ID_RE}$`)
 const EXPLICIT_NODE_SHAPE_RE = new RegExp(`^${ID_RE}(?:\\[|\\(|\\{)`)
-const EDGE_OPERATOR_RE = /(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->)|(-->|==>|-\.->)\s*(?:\|([^|]*)\|\s*)?/g
+const EDGE_OPERATOR_RE =
+  /(-\.(?!->)(.+?)\.->)|(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->)|(-->|==>|-\.->|~~~)\s*(?:\|([^|]*)\|\s*)?/g
 
 function normalizeDirection(value?: string): FlowchartDirection {
   const upper = value?.toUpperCase()
@@ -124,17 +125,20 @@ interface ParsedEdgeOperator {
   end: number
   label: string
   style: FlowchartEdgeStyle | undefined
+  orderOnly: boolean
 }
 
 function parseEdgeOperators(line: string): ParsedEdgeOperator[] {
   return [...line.matchAll(EDGE_OPERATOR_RE)].map((match) => {
-    const startArrow = match[1] ?? match[4]!
-    const endArrow = match[3] ?? match[4]!
+    const inlineDashedArrow = match[1]
+    const startArrow = inlineDashedArrow ?? match[3] ?? match[6]!
+    const endArrow = inlineDashedArrow ?? match[5] ?? match[6]!
     return {
       index: match.index,
       end: match.index + match[0].length,
-      label: (match[2] ?? match[5] ?? "").trim(),
+      label: (match[2] ?? match[4] ?? match[7] ?? "").trim(),
       style: edgeStyleFromArrow(startArrow, endArrow),
+      orderOnly: endArrow === "~~~",
     }
   })
 }
@@ -208,11 +212,19 @@ export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram 
       ]
 
       if (nodeTokens.every((token) => stripNodeToken(token).length > 0)) {
-        const chainNodes = nodeTokens.map((token) => ensureNode(nodes, stripNodeToken(token)))
-        for (const node of chainNodes) addNodeToSubgraph(currentSubgraph, node.id)
+        const chainNodeIds = nodeTokens.map((token, index) => {
+          const stripped = stripNodeToken(token)
+          const orderOnlyEndpoint = edgeOperators[index - 1]?.orderOnly || edgeOperators[index]?.orderOnly
+          if (orderOnlyEndpoint && subgraphs.some((subgraph) => subgraph.id === stripped)) return stripped
+          return ensureNode(nodes, stripped).id
+        })
+        for (const nodeId of chainNodeIds) {
+          if (nodes.has(nodeId)) addNodeToSubgraph(currentSubgraph, nodeId)
+        }
         for (let index = 0; index < edgeOperators.length; index++) {
           const operator = edgeOperators[index]!
-          edges.push(createEdge(chainNodes[index]!.id, chainNodes[index + 1]!.id, operator.label, operator.style))
+          const edge = createEdge(chainNodeIds[index]!, chainNodeIds[index + 1]!, operator.label, operator.style)
+          edges.push(operator.orderOnly ? { ...edge, orderOnly: true } : edge)
         }
         continue
       }

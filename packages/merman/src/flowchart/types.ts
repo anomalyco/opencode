@@ -15,6 +15,7 @@ export interface FlowchartEdge {
   to: string
   label: string
   style?: FlowchartEdgeStyle
+  orderOnly?: boolean
 }
 
 export interface FlowchartSubgraph {

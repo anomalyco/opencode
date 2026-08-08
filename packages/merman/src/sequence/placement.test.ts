@@ -39,7 +39,7 @@ describe("createSequencePlacementPlan", () => {
 
     const messageWidth = Math.max(...message.labelLines.map(diagramTextWidth))
     expect(message.labelX + messageWidth).toBeLessThanOrEqual(plan.width)
-    expect(note.textX + diagramTextWidth(note.text)).toBeLessThanOrEqual(plan.width)
+    expect(note.textX + Math.max(...note.textLines.map(diagramTextWidth))).toBeLessThanOrEqual(plan.width)
   })
 
   test("keeps side notes clear of adjacent participant lifelines", () => {
@@ -53,7 +53,9 @@ describe("createSequencePlacementPlan", () => {
     )
     const notes = plan.steps.filter((step) => step.type === "note")
 
-    expect(notes[0]!.textX + diagramTextWidth(notes[0]!.text)).toBeLessThan(plan.participants[1]!.centerX)
+    expect(notes[0]!.textX + Math.max(...notes[0]!.textLines.map(diagramTextWidth))).toBeLessThan(
+      plan.participants[1]!.centerX,
+    )
     expect(notes[1]!.textX).toBeGreaterThan(plan.participants[1]!.centerX)
   })
 
@@ -121,6 +123,33 @@ describe("createSequencePlacementPlan", () => {
       fragmentMessage.labelX + Math.max(...fragmentMessage.labelLines.map(diagramTextWidth)) - 1
 
     expect(fragment.bounds.rightX).toBeGreaterThan(fragmentMessageRight)
+  })
+
+  test("sizes multiline notes and their group and fragment bounds for every br spelling", () => {
+    const plan = createSequencePlacementPlan(
+      parseMermaidSequenceDiagram(`sequenceDiagram
+  box Tools
+    participant Tool
+    alt retry
+      Note over Tool: directory instead?<br/>the WrongKind error carries the answer —<br/>branch to list, no extra round trip
+      Note over Tool: first<br>second<br />third
+    end
+  end`),
+    )
+    const notes = plan.steps.filter((step) => step.type === "note")
+    const fragment = plan.steps.filter((step) => step.type === "fragment").find((step) => step.fragment.kind === "alt")!
+    const group = plan.groups[0]!
+    const firstNoteWidth = Math.max(...notes[0]!.textLines.map(diagramTextWidth))
+
+    expect(notes[0]!.textLines.map((line) => line.trim())).toEqual([
+      "directory instead?",
+      "the WrongKind error carries the answer —",
+      "branch to list, no extra round trip",
+    ])
+    expect(notes[1]!.textLines.map((line) => line.trim())).toEqual(["first", "second", "third"])
+    expect(fragment.bounds.rightX).toBeGreaterThan(notes[0]!.textX + firstNoteWidth - 1)
+    expect(group.rightX).toBeGreaterThan(notes[0]!.textX + firstNoteWidth - 1)
+    expect(plan.height).toBeGreaterThan(notes[1]!.textY + notes[1]!.textLines.length)
   })
 
   test("preserves nesting inset when a child fragment has a wide heading", () => {

@@ -227,7 +227,9 @@ export function drawSequenceDiagramGrid(
 
   for (const placement of plan.steps) {
     if (placement.type === "note") {
-      setText(grid, placement.textX, placement.textY, placement.text, "noteBadge")
+      for (let lineIndex = 0; lineIndex < placement.textLines.length; lineIndex++) {
+        setText(grid, placement.textX, placement.textY + lineIndex, placement.textLines[lineIndex]!, "noteBadge")
+      }
       continue
     }
 

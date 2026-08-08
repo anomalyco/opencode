@@ -185,6 +185,20 @@ sequenceDiagram
     expect(diagram.steps).toContainEqual({ type: "note", note: { over: ["A"], label: "hello" } })
   })
 
+  test("parses the complete source of a br-delimited note", () => {
+    const diagram = parseMermaidSequenceDiagram(`sequenceDiagram
+  Note over Tool: directory instead?<br/>the WrongKind error carries the answer —<br/>branch to list, no extra round trip`)
+
+    expect(diagram.steps).toContainEqual({
+      type: "note",
+      note: {
+        over: ["Tool"],
+        label:
+          "directory instead?<br/>the WrongKind error carries the answer —<br/>branch to list, no extra round trip",
+      },
+    })
+  })
+
   test("parses activation shorthand and control blocks", () => {
     const diagram = parseMermaidSequenceDiagram(`
 sequenceDiagram
@@ -658,5 +672,17 @@ sequenceDiagram
     expect(output).toContain("· Basic (cached by browser)")
     expect(output).toContain("· X-OpenCode-Ticket: 1")
     expect(output.indexOf("· X-OpenCode-Ticket: 1")).toBeLessThan(output.indexOf("├"))
+  })
+
+  test("renders br-delimited notes as rows without source tags", () => {
+    const output = renderSequenceDiagram(`sequenceDiagram
+  Note over Tool: directory instead?<br/>the WrongKind error carries the answer —<br/>branch to list, no extra round trip`)
+
+    expectDiagram(output).toContainInOrder(
+      "directory instead?",
+      "the WrongKind error carries the answer —",
+      "branch to list, no extra round trip",
+    )
+    expect(output).not.toMatch(/<br\s*\/?\s*>/i)
   })
 })

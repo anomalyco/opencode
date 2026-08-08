@@ -632,34 +632,39 @@ export function routeFlowchartEdges(
   directionForEdge: (edge: FlowchartEdge) => FlowchartDirection = () => diagram.direction,
   subgraphBounds?: ReadonlyMap<string, FlowchartSubgraphBounds>,
 ): FlowchartEdgeRoute[] {
+  const routedDiagram = { ...diagram, edges: diagram.edges.filter((edge) => !edge.orderOnly) }
   const handled = new Set<FlowchartEdge>()
   const routes: FlowchartEdgeRoute[] = []
   const leftBoundary = subgraphBounds
     ? Math.min(...[...bounds.values(), ...subgraphBounds.values()].map((bound) => bound.left))
     : undefined
 
-  routeParallelEdges(diagram, bounds, directionForEdge, leftBoundary, handled, routes)
+  routeParallelEdges(routedDiagram, bounds, directionForEdge, leftBoundary, handled, routes)
 
   for (const direction of ["LR", "RL"] satisfies FlowchartDirection[]) {
-    const horizontalEdges = diagram.edges.filter((edge) => !handled.has(edge) && directionForEdge(edge) === direction)
+    const horizontalEdges = routedDiagram.edges.filter(
+      (edge) => !handled.has(edge) && directionForEdge(edge) === direction,
+    )
     if (horizontalEdges.length === 0) continue
     const records = horizontalForwardRecords(horizontalEdges, bounds, direction)
     routeHorizontalFanOut(records, direction, handled, routes)
     routeHorizontalFanIn(records, direction, handled, routes)
   }
 
-  routeHorizontalSubgraphExitFanIn(diagram, bounds, subgraphBounds, handled, routes)
-  routeHorizontalSubgraphEntries(diagram, bounds, subgraphBounds, handled, routes)
+  routeHorizontalSubgraphExitFanIn(routedDiagram, bounds, subgraphBounds, handled, routes)
+  routeHorizontalSubgraphEntries(routedDiagram, bounds, subgraphBounds, handled, routes)
 
   for (const direction of ["TD", "TB", "BT"] satisfies FlowchartDirection[]) {
-    const verticalEdges = diagram.edges.filter((edge) => !handled.has(edge) && directionForEdge(edge) === direction)
+    const verticalEdges = routedDiagram.edges.filter(
+      (edge) => !handled.has(edge) && directionForEdge(edge) === direction,
+    )
     if (verticalEdges.length === 0) continue
     const records = verticalForwardRecords(verticalEdges, bounds, direction)
     routeVerticalFanOut(records, direction, handled, routes)
     routeVerticalFanIn(records, direction, handled, routes)
   }
 
-  for (const edge of diagram.edges) {
+  for (const edge of routedDiagram.edges) {
     if (handled.has(edge)) continue
     const from = bounds.get(edge.from)
     const to = bounds.get(edge.to)

@@ -42,7 +42,7 @@ export interface SequenceWallPlacement {
 }
 
 export type SequenceStepPlacement =
-  | { type: "note"; note: SequenceNote; text: string; textX: number; textY: number }
+  | { type: "note"; note: SequenceNote; textLines: string[]; textX: number; textY: number }
   | {
       type: "fragment"
       fragment: SequenceFragment
@@ -115,9 +115,16 @@ function centeredStart(center: number, text: string): number {
   return center - Math.floor(visualLength(text) / 2)
 }
 
-function noteLabelText(label: string): string {
+function mermaidLabelLines(label: string): string[] {
+  const lines = label.split(/(?:<br\s*\/?\s*>|\\n)/i).map((line) => line.trimEnd())
+  return lines.length > 0 ? lines : [""]
+}
+
+function noteLabelLines(label: string): string[] {
+  const lines = mermaidLabelLines(label)
+  const width = labelLinesWidth(lines)
   const padding = " ".repeat(NOTE_HORIZONTAL_PADDING)
-  return `${padding}${label}${padding}`
+  return lines.map((line) => `${padding}${line}${" ".repeat(width - visualLength(line))}${padding}`)
 }
 
 function messageLabelText(message: SequenceMessage): string {
@@ -135,8 +142,7 @@ function fragmentLabelText(fragment: SequenceFragment): string {
 }
 
 function messageLabelLines(label: string): string[] {
-  const lines = label.split(/(?:<br\s*\/?\s*>|\\n)/i).map((line) => line.trimEnd())
-  return lines.length > 0 ? lines : [""]
+  return mermaidLabelLines(label)
 }
 
 function labelLinesWidth(lines: string[]): number {
@@ -177,7 +183,7 @@ function getStepHeight(
   participantIndexes: Map<string, number>,
   compact: boolean,
 ): number {
-  if (step.type === "note") return 3
+  if (step.type === "note") return noteLabelLines(step.note.label).length + 2
   if (step.type === "activation") return 0
   if (step.type === "fragment") return 2
   const labelLines = messageLabelLines(messageLabelText(step.message))
@@ -236,14 +242,15 @@ function getStepContentBounds(
   const indexes = getParticipantIndexes(participantIndexes, step.note.over)
   if (indexes.length === 0) return undefined
   const centerX = Math.floor((centers[Math.min(...indexes)]! + centers[Math.max(...indexes)]!) / 2)
-  const text = noteLabelText(step.note.label)
+  const textLines = noteLabelLines(step.note.label)
+  const width = labelLinesWidth(textLines)
   const leftX =
     step.note.position === "left"
-      ? centerX - visualLength(text) - 2
+      ? centerX - width - 2
       : step.note.position === "right"
         ? centerX + 2
-        : centeredStart(centerX, text)
-  return { leftX, rightX: leftX + visualLength(text) - 1 }
+        : centerX - Math.floor(width / 2)
+  return { leftX, rightX: leftX + width - 1 }
 }
 
 function rangeContainsIndexes(range: SequenceGroupRange, indexes: readonly number[]): boolean {
@@ -395,13 +402,13 @@ function resolveParticipantCenters(
       const participantIndex = indexes[0]!
       const gapIndex = step.note.position === "left" ? participantIndex - 1 : participantIndex
       if (gapIndex >= 0 && gapIndex < gaps.length) {
-        gaps[gapIndex] = Math.max(gaps[gapIndex]!, visualLength(noteLabelText(step.note.label)) + 4)
+        gaps[gapIndex] = Math.max(gaps[gapIndex]!, labelLinesWidth(noteLabelLines(step.note.label)) + 4)
       }
       continue
     }
     if (indexes.length !== 2 || Math.abs(indexes[0]! - indexes[1]!) !== 1) continue
     const gapIndex = Math.min(indexes[0]!, indexes[1]!)
-    gaps[gapIndex] = Math.max(gaps[gapIndex]!, visualLength(noteLabelText(step.note.label)) + 4)
+    gaps[gapIndex] = Math.max(gaps[gapIndex]!, labelLinesWidth(noteLabelLines(step.note.label)) + 4)
   }
   const centers = [Math.max(1, Math.floor(participantHeaderWidth(diagram.participants[0]?.label ?? "", compact) / 2))]
   for (let i = 1; i < diagram.participants.length; i++) centers[i] = centers[i - 1]! + gaps[i - 1]!
@@ -536,14 +543,15 @@ export function createSequencePlacementPlan(
       const noteIndexes = getParticipantIndexes(indexes, step.note.over)
       if (noteIndexes.length > 0) {
         const centerX = Math.floor((centers[Math.min(...noteIndexes)]! + centers[Math.max(...noteIndexes)]!) / 2)
-        const text = noteLabelText(step.note.label)
+        const textLines = noteLabelLines(step.note.label)
+        const width = labelLinesWidth(textLines)
         const textX =
           step.note.position === "left"
-            ? centerX - visualLength(text) - 2
+            ? centerX - width - 2
             : step.note.position === "right"
               ? centerX + 2
-              : centeredStart(centerX, text)
-        steps.push({ type: "note", note: step.note, text, textX, textY: stepY + 1 })
+              : centerX - Math.floor(width / 2)
+        steps.push({ type: "note", note: step.note, textLines, textX, textY: stepY + 1 })
       }
       stepY += stepHeight
       continue

@@ -424,6 +424,49 @@ flowchart TD
     ])
   })
 
+  test("parses and renders inline dashed edge labels", () => {
+    const content = `flowchart TD
+  CS[conformance suite<br/>same test cases pin every driver] -.verifies.-> LS
+  CS -.verifies.-> MS
+  CS -.verifies.-> MEM[memory driver]`
+    const diagram = parseMermaidFlowchartDiagram(content)
+    const output = renderFlowchartDiagram(content, { compact: true })
+
+    expect(diagram.edges).toEqual([
+      { from: "CS", to: "LS", label: "verifies", style: "dashed" },
+      { from: "CS", to: "MS", label: "verifies", style: "dashed" },
+      { from: "CS", to: "MEM", label: "verifies", style: "dashed" },
+    ])
+    expect(output.match(/verifies/g)).toHaveLength(3)
+    expect(output).toContain("─ ─")
+  })
+
+  test("uses invisible subgraph links for ordering without rendering them", () => {
+    const content = `flowchart LR
+  subgraph before [Before]
+    T1[read/edit/write/patch<br/>shell/grep/glob] --> F1[FSUtil / node:fs / AppProcess<br/>+ hosted branching in every tool]
+  end
+  subgraph after [After — merged this week]
+    T2[same 8 tools] --> E[Environment<br/>files + spawner]
+    E --> D{driver}
+    D --> L[local<br/>node:fs]
+    D --> M[Modal<br/>sandbox.exec]
+    D --> Mem[memory<br/>tests]
+  end
+  before ~~~ after`
+    const diagram = parseMermaidFlowchartDiagram(content)
+    const layout = layoutParsedFlowchartDiagram(diagram, { compact: true })
+    const output = renderFlowchartDiagram(content, { compact: true })
+
+    expect(diagram.edges.at(-1)).toEqual({ from: "before", to: "after", label: "", orderOnly: true })
+    expect(diagram.nodes.some((node) => node.id === "before" || node.id === "after")).toBe(false)
+    expect(layout.routes).toHaveLength(diagram.edges.length - 1)
+    expect(layout.routes.some((route) => route.edge.orderOnly)).toBe(false)
+    expect(layout.subgraphBounds.get("before")!.left).toBeLessThan(layout.subgraphBounds.get("after")!.left)
+    expect(output).toContain("Before")
+    expect(output).toContain("After — merged this week")
+  })
+
   test("keeps every node and edge in a long chain distinct and in its subgraph", () => {
     const diagram = parseMermaidFlowchartDiagram(`flowchart LR
   subgraph Pipeline

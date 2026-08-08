@@ -129,7 +129,15 @@ function rankNodes(diagram: FlowchartDiagram): Map<string, number> {
   const incoming = new Set<string>()
   const incomingCounts = new Map(diagram.nodes.map((node) => [node.id, 0]))
 
-  for (const edge of diagram.edges) {
+  const nodeIds = new Set(diagram.nodes.map((node) => node.id))
+  const rankEdges = diagram.edges.flatMap((edge) => {
+    if (!edge.orderOnly) return [edge]
+    const fromIds = nodeIds.has(edge.from) ? [edge.from] : [...collectSubgraphNodeIds(diagram, edge.from)]
+    const toIds = nodeIds.has(edge.to) ? [edge.to] : [...collectSubgraphNodeIds(diagram, edge.to)]
+    return fromIds.flatMap((from) => toIds.map((to) => ({ ...edge, from, to })))
+  })
+
+  for (const edge of rankEdges) {
     const list = outgoing.get(edge.from) ?? []
     list.push(edge.to)
     outgoing.set(edge.from, list)
