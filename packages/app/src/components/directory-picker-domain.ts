@@ -382,7 +382,7 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
       if (results.length || query) {
         return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)
       }
-      const fallback = await match(input.directory, "", 50)
+      const fallback = (await directories(input.directory)).map((item) => item.absolute)
       if (!active()) return []
       return fallback
     }

@@ -168,6 +168,10 @@ test("keeps indexed directory results for servers that support empty search", as
 
 test("lists the default directory when empty search is unsupported", async () => {
   const calls: string[] = []
+  const directories = Array.from({ length: 60 }, (_, index) => ({
+    path: `project-${index}/`,
+    type: "directory" as const,
+  }))
   const sdk = {
     api: {
       file: {
@@ -176,7 +180,7 @@ test("lists the default directory when empty search is unsupported", async () =>
           calls.push(input.location?.directory ?? "")
           return Promise.resolve({
             data: [
-              { path: "projects/", type: "directory" },
+              ...directories,
               { path: "README.md", type: "file" },
             ],
           })
@@ -186,7 +190,9 @@ test("lists the default directory when empty search is unsupported", async () =>
   } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
   const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/home/luke" })
 
-  expect(await search("")).toEqual(["/home/luke/projects"])
+  const results = await search("")
+  expect(results).toHaveLength(60)
+  expect(results.at(-1)).toBe("/home/luke/project-59")
   expect(calls).toEqual(["/home/luke"])
 })
 
