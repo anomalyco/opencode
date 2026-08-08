@@ -57,6 +57,7 @@ import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
+import { findUndoBoundary } from "./undo"
 import { Sidebar } from "./sidebar"
 import { Composer } from "./composer"
 import { filetype } from "../../util/filetype"
@@ -656,10 +657,10 @@ export function Session() {
       group: "Session",
       slash: { name: "undo" },
       run: () => {
-        const boundary = session()?.revert?.messageID
-        const message = messages().findLast(
-          (message): message is SessionMessageUser =>
-            message.type === "user" && !!message.text.trim() && (!boundary || message.id < boundary),
+        const message = findUndoBoundary(
+          messages(),
+          data.session.input.list(route.sessionID),
+          session()?.revert?.messageID,
         )
         if (!message) {
           toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
