@@ -35,7 +35,9 @@ export function realignPromptMentions(
     ([left], [right]) => right.length - left.length || left.localeCompare(right),
   )) {
     const candidates = mentionRanges(content, text)
-    const available = candidates.filter((candidate) => !protectedRanges.some((range) => overlaps(candidate, range)))
+    const available = candidates.filter(
+      (candidate) => !protectedRanges.some((range) => overlaps(candidate, range)),
+    )
     for (const [item, candidate] of assignMentions(items, available)) {
       aligned[item.index] = {
         text,
@@ -111,10 +113,7 @@ function assignMentions(items: MentionItem[], candidates: CandidateRange[]) {
   const ordered = items.toSorted((left, right) => left.mention.start - right.mention.start || left.index - right.index)
   const memo = new Map<string, { matches: number; cost: number; pairs: Array<[MentionItem, CandidateRange]> }>()
 
-  function solve(
-    item: number,
-    candidate: number,
-  ): { matches: number; cost: number; pairs: Array<[MentionItem, CandidateRange]> } {
+  function solve(item: number, candidate: number): { matches: number; cost: number; pairs: Array<[MentionItem, CandidateRange]> } {
     if (item >= ordered.length || candidate >= candidates.length) return { matches: 0, cost: 0, pairs: [] }
     const key = `${item}:${candidate}`
     const cached = memo.get(key)

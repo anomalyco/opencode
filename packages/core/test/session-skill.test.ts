@@ -30,7 +30,7 @@ const skills = Layer.mock(Skill.Service, {
         id: Skill.ID.make("effect"),
         name: Skill.Name.make("Effect"),
         description: "Effect guidance",
-        location: AbsolutePath.make(path.resolve("/skills/effect.md")),
+        location: AbsolutePath.make(path.resolve("/skills/effect/SKILL.md")),
         content: "Use Effect",
       }),
     ]),

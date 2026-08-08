@@ -70,7 +70,7 @@ export const Plugin = {
                 return {
                   name: skill.name,
                   directory,
-                  output: toModelOutput(skill, files),
+                  output: Skill.toModelOutput(skill, files),
                 }
               }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
             }).pipe(

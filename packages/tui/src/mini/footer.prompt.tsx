@@ -1244,7 +1244,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const parsed =
-      command || next.mode === "shell" || isNewCommand(next.text)
+      command || next.parts.some((part) => part.type === "skill") || next.mode === "shell" || isNewCommand(next.text)
         ? undefined
         : parseSlashCommand(next.text, input.commands())
     if (parsed?.type === "pending") {
