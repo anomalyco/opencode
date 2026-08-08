@@ -1723,6 +1723,7 @@ export function Prompt(props: PromptProps) {
         value={store.prompt.text}
         fileStyleId={fileStyleId}
         agentStyleId={agentStyleId}
+        skillStyleId={skillStyleId}
         promptPartTypeId={() => promptPartTypeId}
       />
     </>
