@@ -392,12 +392,13 @@ function layoutRankedNodes(
       )
     })
     const canvasHeight = Math.max(1, ...columnHeights)
+    const centerBaseline = Math.floor(canvasHeight / 2)
     let x = 0
     for (let rankIndex = 0; rankIndex < rankKeys.length; rankIndex++) {
       const rank = rankKeys[rankIndex]!
       const nodes = ranksByIndex.get(rank)!
       const columnWidth = columnWidths[rankIndex]!
-      let y = Math.floor((canvasHeight - columnHeights[rankIndex]!) / 2)
+      let y = centerBaseline - Math.floor(columnHeights[rankIndex]! / 2)
       for (const node of nodes) {
         const size = sizes.get(node.id)!
         const left = x + Math.floor((columnWidth - size.width) / 2)

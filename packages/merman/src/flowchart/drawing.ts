@@ -168,7 +168,7 @@ function drawRoutedEdge(grid: FlowchartGrid, route: FlowchartEdgeRoute): void {
 
   drawOrthogonalPath(points, (x, y, char) => grid.setCell(x, y, char, style), {
     cornerStyle: "rounded",
-    lineStyle: edge.style === "thick" ? "heavy" : edge.style === "dashed" ? "dashed" : "single",
+    lineStyle: edge.style === "thick" ? "heavy" : "single",
   })
   const end = points[points.length - 1]!
   const arrowFrom = points[points.length - 2]!
@@ -188,34 +188,42 @@ function sourceFadeStyles(sourceStyle: "node" | "database"): readonly FlowchartE
 
 function styleExistingEdgeCell(grid: FlowchartGrid, x: number, y: number, style: FlowchartEdgeFadeStyle): boolean {
   const cell = grid.getCell(x, y)
-  if (!cell || cell.char === " " || cell.style === "label" || DIAGRAM_ARROW_HEADS.has(cell.char)) return false
+  if (!cell || !"─━│┃".includes(cell.char) || cell.style === "label") return false
   grid.setCell(x, y, cell.char, style)
   return true
+}
+
+function routeCellOccupancy(routes: readonly FlowchartEdgeRoute[]): Map<string, number> {
+  const occupancy = new Map<string, number>()
+  for (const route of routes) {
+    const routeCells = new Set<string>()
+    for (let index = 1; index < route.points.length; index++) {
+      walkOrthogonalSegment(route.points[index - 1]!, route.points[index]!, index === 1, (point) => {
+        routeCells.add(`${point.x}:${point.y}`)
+      })
+    }
+    for (const key of routeCells) occupancy.set(key, (occupancy.get(key) ?? 0) + 1)
+  }
+  return occupancy
 }
 
 function fadeSourcePath(
   grid: FlowchartGrid,
   points: FlowchartPoint[],
   styles: readonly FlowchartEdgeFadeStyle[],
+  occupancy: ReadonlyMap<string, number>,
 ): void {
   let styleIndex = 1
-  const seen = new Set<string>()
+  const from = points[0]
+  const to = points[1]
+  if (!from || !to) return
 
-  for (let index = 1; index < points.length && styleIndex < styles.length; index++) {
-    const from = points[index - 1]!
-    const to = points[index]!
-    const direction = flowchartDirectionBetween(from, to)
-    if (!direction) continue
-    walkOrthogonalSegment(from, to, index === 1, (point) => {
-      if (styleIndex >= styles.length) return false
-      const key = `${point.x}:${point.y}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        if (styleExistingEdgeCell(grid, point.x, point.y, styles[styleIndex]!)) styleIndex += 1
-      }
-      return styleIndex < styles.length
-    })
-  }
+  walkOrthogonalSegment(from, to, true, (point) => {
+    if (styleIndex >= styles.length) return false
+    const key = `${point.x}:${point.y}`
+    if (occupancy.get(key) === 1 && styleExistingEdgeCell(grid, point.x, point.y, styles[styleIndex]!)) styleIndex += 1
+    return styleIndex < styles.length
+  })
 }
 
 function drawSourceConnectors(
@@ -225,6 +233,7 @@ function drawSourceConnectors(
   routes: readonly FlowchartEdgeRoute[],
 ): void {
   const nodesById = new Map(diagram.nodes.map((node) => [node.id, node]))
+  const occupancy = routeCellOccupancy(routes)
 
   for (const route of routes) {
     const from = bounds.get(route.edge.from)
@@ -246,7 +255,7 @@ function drawSourceConnectors(
         cell.style = "edge"
       }
     }
-    fadeSourcePath(grid, route.points, styles)
+    fadeSourcePath(grid, route.points, styles, occupancy)
   }
 }
 

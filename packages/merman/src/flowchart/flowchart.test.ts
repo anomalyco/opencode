@@ -438,7 +438,7 @@ flowchart TD
       { from: "CS", to: "MEM", label: "verifies", style: "dashed" },
     ])
     expect(output.match(/verifies/g)).toHaveLength(3)
-    expect(output).toContain("─ ─")
+    expect(output).not.toContain("─ ─")
   })
 
   test("uses invisible subgraph links for ordering without rendering them", () => {
@@ -463,6 +463,11 @@ flowchart TD
     expect(layout.routes).toHaveLength(diagram.edges.length - 1)
     expect(layout.routes.some((route) => route.edge.orderOnly)).toBe(false)
     expect(layout.subgraphBounds.get("before")!.left).toBeLessThan(layout.subgraphBounds.get("after")!.left)
+    const chain = ["T2", "E", "D"].map((id) => layout.bounds.get(id)!)
+    expect(chain.map((bounds) => bounds.centerY)).toEqual([chain[0]!.centerY, chain[0]!.centerY, chain[0]!.centerY])
+    for (const route of layout.routes.filter((route) => route.edge.from === "T2" || route.edge.from === "E")) {
+      expect(new Set(route.points.map((point) => point.y)).size).toBe(1)
+    }
     expect(output).toContain("Before")
     expect(output).toContain("After — merged this week")
   })
@@ -570,7 +575,42 @@ flowchart LR
     const output = renderFlowchartDiagram(content)
 
     expect(diagram.edges).toEqual([{ from: "Build", to: "Ship", label: "", style: "dashed" }])
-    expect(output).toContain("─ ─ ─ ─ ─▶")
+    expect(output).toContain("─────────▶")
+  })
+
+  test("paints horizontal and vertical dashed routes with solid terminal cells", () => {
+    for (const direction of ["LR", "TD"] as const) {
+      const content = `flowchart ${direction}\n  A -.-> B`
+      const diagram = parseMermaidFlowchartDiagram(content)
+      const layout = layoutParsedFlowchartDiagram(diagram)
+      const grid = drawParsedFlowchartDiagramGrid(diagram)
+      const route = layout.routes[0]!
+
+      expect(route.edge.style).toBe("dashed")
+      for (let index = 1; index < route.points.length; index++) {
+        const from = route.points[index - 1]!
+        const to = route.points[index]!
+        const length = Math.abs(to.x - from.x) + Math.abs(to.y - from.y)
+        for (let offset = 0; offset <= length; offset++) {
+          const x = from.x + Math.sign(to.x - from.x) * offset
+          const y = from.y + Math.sign(to.y - from.y) * offset
+          expect(grid.getCell(x, y)?.char).not.toBe(" ")
+        }
+      }
+    }
+  })
+
+  test("leaves shared fan-out junctions neutral", () => {
+    const content = `flowchart LR
+  D{driver} --> L[local]
+  D --> M[Modal]
+  D --> Mem[memory]`
+    const diagram = parseMermaidFlowchartDiagram(content)
+    const layout = layoutParsedFlowchartDiagram(diagram, { compact: true })
+    const grid = drawParsedFlowchartDiagramGrid(diagram, { compact: true })
+    const junction = layout.routes[0]!.points[1]!
+
+    expect(grid.getCell(junction.x, junction.y)?.style).toBe("edge")
   })
 
   test("tracks nested Mermaid subgraphs", () => {
