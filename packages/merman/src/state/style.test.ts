@@ -38,3 +38,21 @@ describe("state note connector styles", () => {
     expect(new Set(reds).size).toBe(5)
   })
 })
+
+describe("state transition departure styles", () => {
+  test("ramps once from an ordinary state without restarting at a choice fork", () => {
+    const grid = drawStateDiagramGrid(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  Check --> Decision
+  state Decision <<choice>>
+  Decision --> Ready: yes
+  Decision --> Failed: no`),
+    )
+    const rampStyles = grid.rows
+      .flatMap((row) => row.map((cell) => cell.style))
+      .filter((style) => style?.startsWith("stateDepartureRamp"))
+
+    expect(rampStyles).toHaveLength(3)
+    expect(new Set(rampStyles)).toEqual(new Set(["stateDepartureRamp1", "stateDepartureRamp2", "stateDepartureRamp3"]))
+  })
+})

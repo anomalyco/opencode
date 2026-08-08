@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { expectDiagram } from "../test/diagram.js"
 import { renderSequenceDiagram } from "./diagram.js"
+import { drawSequenceDiagramGrid } from "./drawing.js"
 import { parseMermaidSequenceDiagram } from "./parser.js"
 
 describe("SequenceDiagram", () => {
@@ -133,6 +134,19 @@ sequenceDiagram
     expect(lines[3]?.[browserCenter]).toBe("│")
     expect(lines[2]?.[serverCenter]).toBe("┬")
     expect(lines[3]?.[serverCenter]).toBe("│")
+  })
+
+  test("ramps participant frames into neutral lifelines", () => {
+    const grid = drawSequenceDiagramGrid(
+      parseMermaidSequenceDiagram(
+        "sequenceDiagram\n  participant Browser\n  participant Server\n  Note over Browser,Server: context\n  Browser->>Server: request",
+      ),
+    )
+    const rampStyles = grid.rows
+      .flatMap((row) => row.map((cell) => cell.style))
+      .filter((style) => style?.startsWith("lifelineRamp"))
+
+    expect(new Set(rampStyles)).toEqual(new Set(["lifelineRamp1", "lifelineRamp2", "lifelineRamp3"]))
   })
 
   test("renders notes and long cross-participant messages in order", () => {

@@ -176,10 +176,16 @@ function drawTransitionRenderPlan(
   grid: StateGrid,
   plan: StateTransitionRenderPlan,
   arrowHeadStyle: StateDiagramArrowHeadStyle,
+  rampDeparture: boolean,
 ): void {
+  const departure = new Map(
+    rampDeparture
+      ? plan.path.slice(0, 3).map(([x, y], index) => [`${x}:${y}`, `stateDepartureRamp${index + 1}` as StateCellStyle])
+      : [],
+  )
   for (const cell of plan.cells) {
     const char = cell.arrowDirection ? diagramArrowHead(cell.arrowDirection, arrowHeadStyle) : cell.char
-    setCell(grid, cell.x, cell.y, char, "transition")
+    setCell(grid, cell.x, cell.y, char, departure.get(`${cell.x}:${cell.y}`) ?? "transition")
   }
   if (plan.label) {
     setTransitionLabel(grid, plan.label.x, plan.label.y, plan.label.lines, "label")
@@ -279,7 +285,8 @@ export function drawStateDiagramGrid(sourceDiagram: StateDiagram, options: State
   }
 
   for (const plan of transitionPlans) {
-    drawTransitionRenderPlan(grid, plan, arrowHeadStyle)
+    const source = diagram.states.find((state) => state.id === plan.route.transition.from)
+    drawTransitionRenderPlan(grid, plan, arrowHeadStyle, source?.kind === "state")
   }
 
   drawTransitionJunctionPlans(grid, diagram, bounds, transitionPlans)

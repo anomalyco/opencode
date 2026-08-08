@@ -1,6 +1,6 @@
 import { RGBA } from "@opentui/core"
 import { createColorRampTheme, DIAGRAM_FADE_STEPS, numberedStyleKeys, type DiagramRgb } from "../core/color/style.js"
-import type { FadeStyle, SequenceCellStyle } from "./types.js"
+import type { FadeStyle, LifelineRampStyle, SequenceCellStyle } from "./types.js"
 
 export interface SequenceStyleColors {
   participant?: RGBA
@@ -15,6 +15,11 @@ export interface SequenceStyleColors {
 }
 
 export const SEQUENCE_FADE_STEPS = DIAGRAM_FADE_STEPS
+const LIFELINE_RAMP_STYLES = [
+  "lifelineRamp1",
+  "lifelineRamp2",
+  "lifelineRamp3",
+] as const satisfies readonly LifelineRampStyle[]
 
 const DEFAULT_THEME_RGB = {
   participant: [228, 239, 232],
@@ -30,7 +35,7 @@ const DEFAULT_THEME_RGB = {
 
 export function resolveSequenceStyleColors(
   colors: SequenceStyleColors = {},
-): Required<SequenceStyleColors> & Record<FadeStyle, RGBA> {
+): Required<SequenceStyleColors> & Record<FadeStyle | LifelineRampStyle, RGBA> {
   const lifeline = colors.lifeline ?? RGBA.fromInts(...DEFAULT_THEME_RGB.lifeline, 255)
   const request = colors.request ?? RGBA.fromInts(...DEFAULT_THEME_RGB.request, 255)
   const response = colors.response ?? RGBA.fromInts(...DEFAULT_THEME_RGB.response, 255)
@@ -46,12 +51,17 @@ export function resolveSequenceStyleColors(
     noteBg: colors.noteBg ?? RGBA.fromInts(...DEFAULT_THEME_RGB.noteBg, 255),
     ...createColorRampTheme(numberedStyleKeys("requestFade", SEQUENCE_FADE_STEPS), lifeline, request),
     ...createColorRampTheme(numberedStyleKeys("responseFade", SEQUENCE_FADE_STEPS), lifeline, response),
+    ...createColorRampTheme(
+      LIFELINE_RAMP_STYLES,
+      colors.participant ?? RGBA.fromInts(...DEFAULT_THEME_RGB.participant, 255),
+      lifeline,
+    ),
   }
 }
 
 export function sequenceStyleColor(
   style: SequenceCellStyle | undefined,
-  colors: Required<SequenceStyleColors> & Record<FadeStyle, RGBA>,
+  colors: Required<SequenceStyleColors> & Record<FadeStyle | LifelineRampStyle, RGBA>,
 ): RGBA | undefined {
   if (style === "noteBadge") return colors.note
   if (style === "fragmentLabel") return colors.fragment

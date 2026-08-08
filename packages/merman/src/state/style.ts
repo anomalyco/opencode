@@ -1,6 +1,6 @@
 import { RGBA } from "@opentui/core"
 import { createColorRampTheme, type DiagramRgb } from "../core/color/style.js"
-import type { BaseStateCellStyle, NoteConnectorRampStyle, StateCellStyle } from "./types.js"
+import type { BaseStateCellStyle, NoteConnectorRampStyle, StateCellStyle, StateDepartureRampStyle } from "./types.js"
 
 const DEFAULT_THEME_RGB = {
   state: [228, 239, 232],
@@ -19,6 +19,11 @@ const NOTE_CONNECTOR_RAMP_STYLES = [
   "noteConnectorRamp2",
   "noteConnectorRamp3",
 ] as const satisfies readonly NoteConnectorRampStyle[]
+const STATE_DEPARTURE_RAMP_STYLES = [
+  "stateDepartureRamp1",
+  "stateDepartureRamp2",
+  "stateDepartureRamp3",
+] as const satisfies readonly StateDepartureRampStyle[]
 export type StateStyleColors = Required<Record<StateCellStyle, RGBA>>
 
 export function resolveStateStyleColors(
@@ -39,5 +44,6 @@ export function resolveStateStyleColors(
   return {
     ...resolved,
     ...createColorRampTheme(NOTE_CONNECTOR_RAMP_STYLES, resolved.noteConnector, resolved.noteBorder),
+    ...createColorRampTheme(STATE_DEPARTURE_RAMP_STYLES, resolved.state, resolved.transition),
   }
 }

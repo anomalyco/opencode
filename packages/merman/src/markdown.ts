@@ -107,7 +107,7 @@ function renderDiagram(
           grid,
           resolveFlowchartStyleColors({
             node: color(colors.primary),
-            database: color(colors.secondary),
+            database: color(colors.primary),
             edge: color(colors.secondary),
             label: color(colors.text),
             group: color(colors.muted),
@@ -155,7 +155,7 @@ function renderDiagram(
             noteConnector: color(colors.muted),
             start: color(colors.muted),
             end: color(colors.muted),
-            choice: color(colors.primary),
+            choice: color(colors.secondary),
           }),
         ),
         size.height,

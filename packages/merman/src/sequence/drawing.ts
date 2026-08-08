@@ -204,22 +204,24 @@ export function drawSequenceDiagramGrid(
       setText(grid, labelX, participantHeaderY, participant.label, "participant")
     } else {
       for (let x = headerLeftX; x <= headerRightX; x++) {
-        setCell(grid, x, participantHeaderTopY, SEQUENCE_BORDER.horizontal, "lifeline")
-        setCell(grid, x, participantRuleY, SEQUENCE_BORDER.horizontal, "lifeline")
+        setCell(grid, x, participantHeaderTopY, SEQUENCE_BORDER.horizontal, "participant")
+        setCell(grid, x, participantRuleY, SEQUENCE_BORDER.horizontal, "participant")
       }
 
-      setCell(grid, headerLeftX, participantHeaderTopY, SEQUENCE_BORDER.topLeft, "lifeline")
-      setCell(grid, headerRightX, participantHeaderTopY, SEQUENCE_BORDER.topRight, "lifeline")
-      setCell(grid, headerLeftX, participantHeaderY, SEQUENCE_BORDER.vertical, "lifeline")
-      setCell(grid, headerRightX, participantHeaderY, SEQUENCE_BORDER.vertical, "lifeline")
-      setCell(grid, headerLeftX, participantRuleY, SEQUENCE_BORDER.bottomLeft, "lifeline")
-      setCell(grid, headerRightX, participantRuleY, SEQUENCE_BORDER.bottomRight, "lifeline")
+      setCell(grid, headerLeftX, participantHeaderTopY, SEQUENCE_BORDER.topLeft, "participant")
+      setCell(grid, headerRightX, participantHeaderTopY, SEQUENCE_BORDER.topRight, "participant")
+      setCell(grid, headerLeftX, participantHeaderY, SEQUENCE_BORDER.vertical, "participant")
+      setCell(grid, headerRightX, participantHeaderY, SEQUENCE_BORDER.vertical, "participant")
+      setCell(grid, headerLeftX, participantRuleY, SEQUENCE_BORDER.bottomLeft, "participant")
+      setCell(grid, headerRightX, participantRuleY, SEQUENCE_BORDER.bottomRight, "participant")
       setText(grid, labelX, participantHeaderY, participant.label, "participant")
-      setCell(grid, center, participantRuleY, SEQUENCE_BORDER.topT, "lifeline")
+      setCell(grid, center, participantRuleY, SEQUENCE_BORDER.topT, "participant")
     }
 
     for (let y = lifelineStartY; y <= lifelineEndY; y++) {
-      setCell(grid, center, y, SEQUENCE_BORDER.vertical, "lifeline")
+      const distance = y - lifelineStartY
+      const style = !options.compact && distance < 3 ? (`lifelineRamp${distance + 1}` as SequenceCellStyle) : "lifeline"
+      setCell(grid, center, y, SEQUENCE_BORDER.vertical, style)
     }
   }
 

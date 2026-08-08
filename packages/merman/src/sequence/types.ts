@@ -60,12 +60,14 @@ export interface SequenceDiagramRenderOptions {
 
 export type MessageStyle = "request" | "response"
 export type FadeStyle = `${MessageStyle}Fade${1 | 2 | 3 | 4 | 5}`
+export type LifelineRampStyle = `lifelineRamp${1 | 2 | 3}`
 export type SequenceCellStyle =
   | "participant"
   | "lifeline"
   | "group"
   | MessageStyle
   | FadeStyle
+  | LifelineRampStyle
   | "fragment"
   | "fragmentLabel"
   | "note"

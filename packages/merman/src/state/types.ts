@@ -44,6 +44,7 @@ export interface StateDiagramRenderOptions {
 }
 
 export type NoteConnectorRampStyle = `noteConnectorRamp${1 | 2 | 3}`
+export type StateDepartureRampStyle = `stateDepartureRamp${1 | 2 | 3}`
 export type BaseStateCellStyle =
   | "state"
   | "composite"
@@ -55,4 +56,4 @@ export type BaseStateCellStyle =
   | "start"
   | "end"
   | "choice"
-export type StateCellStyle = BaseStateCellStyle | NoteConnectorRampStyle
+export type StateCellStyle = BaseStateCellStyle | NoteConnectorRampStyle | StateDepartureRampStyle
