@@ -9,7 +9,7 @@ import { SessionStatus } from "@/session/status"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Cause, Effect, Queue, Scope } from "effect"
 import * as Stream from "effect/Stream"
-import { HttpServerResponse } from "effect/unstable/http"
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { RemoteAdminApi, RemoteApi, RemotePairApi } from "../groups/remote"
@@ -23,8 +23,15 @@ function eventID() {
   return EventV2.ID.create()
 }
 
+function bearer(request: HttpServerRequest.HttpServerRequest) {
+  const match = /^Bearer\s+(.+)$/i.exec(request.headers.authorization ?? "")
+  return match?.[1]
+}
+
 function remoteEventResponse(events: EventV2.Interface, sessionID: string) {
   return Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest
+    const token = bearer(request)
     const queue = yield* Queue.sliding<ReturnType<typeof RemoteEvent.signal>>(64)
     const unsubscribe = yield* events.listen((event) =>
       Effect.sync(() => {
@@ -43,6 +50,7 @@ function remoteEventResponse(events: EventV2.Interface, sessionID: string) {
     return HttpServerResponse.stream(
       Stream.make({ id: eventID(), type: "server.connected", properties: { sessionID } }).pipe(
         Stream.concat(output.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
+        Stream.takeWhile(() => !!token && RemoteAccess.authorized(token, sessionID)),
         Stream.map(eventData),
         Stream.pipeThroughChannel(Sse.encode()),
         Stream.encodeText,

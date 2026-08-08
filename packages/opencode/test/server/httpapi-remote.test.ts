@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Queue, Schema, Stream } from "effect"
+import { Effect, Fiber, Queue, Schema, Stream } from "effect"
 import { RemoteAccess } from "@/remote/access"
 import { SessionID } from "@/session/schema"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
@@ -78,11 +78,11 @@ const openRemoteEventStream = (sessionID: string, token: string) =>
   Effect.gen(function* () {
     const response = yield* request(`/remote/session/${sessionID}/events`, bearer(token))
     const reader = yield* Queue.unbounded<Uint8Array>()
-    yield* response.stream.pipe(
+    const fiber = yield* response.stream.pipe(
       Stream.runForEach((value) => Queue.offer(reader, value)),
       Effect.forkScoped,
     )
-    return { response, reader }
+    return { response, reader, fiber }
   })
 
 afterEach(async () => {
@@ -210,7 +210,7 @@ describe("remote HttpApi", () => {
         expect(abort.status).toBe(200)
         expect(yield* abort.json).toBe(true)
 
-        const { response: events, reader } = yield* openRemoteEventStream(session.id, grant.token)
+        const { response: events, reader, fiber } = yield* openRemoteEventStream(session.id, grant.token)
         expect(events.status).toBe(200)
         expect(events.headers["content-type"]).toContain("text/event-stream")
         expect(events.headers["cache-control"]).toBe("no-cache, no-transform")
@@ -248,6 +248,19 @@ describe("remote HttpApi", () => {
 
         const expired = yield* request(`/remote/session/${session.id}`, bearer(grant.token))
         expect(expired.status).toBe(401)
+
+        const updateAfterRevoke = yield* requestInDirectory(
+          `/session/${session.id}`,
+          directory,
+          jsonBody({ title: "revoked stream probe" }, { method: "PATCH" }),
+        )
+        expect(updateAfterRevoke.status).toBe(200)
+        yield* Fiber.join(fiber).pipe(
+          Effect.timeoutOrElse({
+            duration: "5 seconds",
+            orElse: () => Effect.fail(new Error("remote event stream stayed open after revoke")),
+          }),
+        )
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
