@@ -20,9 +20,10 @@ type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type PlatformName = "web" | "desktop"
 type DesktopOS = "macos" | "windows" | "linux"
 
-export type RemoteGatewayInfo = {
-  port: number
+export type RemotePairingInfo = {
+  url: string
   urls: string[]
+  expiresIn: number
 }
 
 export type FatalRendererErrorLog = {
@@ -88,14 +89,11 @@ type PlatformBase = {
   /** Set the default server URL to use on app startup (platform-specific) */
   setDefaultServer?(url: ServerConnection.Key | null): Promise<void> | void
 
-  /** Start the desktop LAN gateway for mobile remote control. */
-  startRemoteGateway?(): Promise<RemoteGatewayInfo>
+  /** Create a one-time mobile remote-control pairing for a local desktop session. */
+  createRemotePairing?(sessionID: string, directory: string): Promise<RemotePairingInfo>
 
-  /** Stop the desktop LAN gateway for mobile remote control. */
-  stopRemoteGateway?(): Promise<void>
-
-  /** Read the active desktop LAN gateway, if any. */
-  getRemoteGatewayStatus?(): Promise<RemoteGatewayInfo | null>
+  /** Revoke mobile remote access for a local desktop session. */
+  revokeRemotePairing?(sessionID: string, directory: string): Promise<void>
 
   /** Manage WSL sidecar servers (Electron on Windows only) */
   wslServers?: WslServersPlatform

@@ -282,9 +282,8 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       await window.api.setDefaultServerUrl(url)
     },
 
-    startRemoteGateway: () => window.api.startRemoteGateway(),
-    stopRemoteGateway: () => window.api.stopRemoteGateway(),
-    getRemoteGatewayStatus: () => window.api.getRemoteGatewayStatus(),
+    createRemotePairing: (sessionID, directory) => window.api.createRemotePairing(sessionID, directory),
+    revokeRemotePairing: (sessionID, directory) => window.api.revokeRemotePairing(sessionID, directory),
 
     wslServers: wslServersApi,
 

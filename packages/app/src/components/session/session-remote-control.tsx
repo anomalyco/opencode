@@ -14,11 +14,6 @@ import { decode64 } from "@/utils/base64"
 import { encodeRemoteQr, REMOTE_QR_QUIET_ZONE, REMOTE_QR_SIZE, remoteQrPath } from "@/utils/remote-qr"
 import { showToast } from "@/utils/toast"
 
-type PairingResult = {
-  ticket: string
-  expires_in: number
-}
-
 type RemoteDialogProps = {
   url: string
   modules: boolean[][]
@@ -34,37 +29,19 @@ export function SessionRemoteControl() {
   const [state, setState] = createStore({ loading: false })
 
   const directory = createMemo(() => decode64(params.dir) ?? "")
-  const sidecar = createMemo(() => {
+  const localSidecar = createMemo(() => {
     const current = server.current
-    if (current?.type !== "sidecar" || current.variant !== "base") return
-    return current
+    return current?.type === "sidecar" && current.variant === "base"
   })
   const available = createMemo(
     () =>
       platform.platform === "desktop" &&
-      !!platform.startRemoteGateway &&
+      !!platform.createRemotePairing &&
+      !!platform.revokeRemotePairing &&
       !!params.id &&
       !!directory() &&
-      !!sidecar(),
+      localSidecar(),
   )
-
-  const adminRequest = async (method: "POST" | "DELETE") => {
-    const current = sidecar()
-    const sessionID = params.id
-    const cwd = directory()
-    if (!current || !sessionID || !cwd) throw new Error("remote_admin_unavailable")
-
-    const url = new URL(`/session/${encodeURIComponent(sessionID)}/remote`, current.http.url)
-    url.searchParams.set("directory", cwd)
-    const headers = new Headers()
-    if (current.http.username !== undefined || current.http.password !== undefined) {
-      headers.set(
-        "authorization",
-        `Basic ${btoa(`${current.http.username ?? ""}:${current.http.password ?? ""}`)}`,
-      )
-    }
-    return (platform.fetch ?? fetch)(url, { method, headers })
-  }
 
   const fail = (reason?: "no-lan") => {
     showToast({
@@ -77,39 +54,26 @@ export function SessionRemoteControl() {
   }
 
   const open = async () => {
-    if (state.loading || !available() || !platform.startRemoteGateway) return
+    const sessionID = params.id
+    const cwd = directory()
+    if (state.loading || !available() || !platform.createRemotePairing || !sessionID || !cwd) return
+
     setState("loading", true)
     try {
-      const gateway = await platform.startRemoteGateway()
-      const base = gateway.urls[0]
-      if (!base) {
-        await platform.stopRemoteGateway?.().catch(() => undefined)
-        fail("no-lan")
-        return
-      }
-
-      const response = await adminRequest("POST")
-      if (!response.ok) throw new Error("remote_pair_failed")
-      const pairing = (await response.json()) as Partial<PairingResult>
-      if (typeof pairing.ticket !== "string" || typeof pairing.expires_in !== "number") {
-        throw new Error("remote_pair_invalid")
-      }
-
-      const mobile = new URL("/remote/mobile", base)
-      const url = `${mobile.toString()}#ticket=${encodeURIComponent(pairing.ticket)}`
-      const modules = encodeRemoteQr(url)
+      const pairing = await platform.createRemotePairing(sessionID, cwd)
+      const modules = encodeRemoteQr(pairing.url)
       dialog.show(() => (
         <RemoteControlDialog
-          url={url}
+          url={pairing.url}
           modules={modules}
           onDisconnect={async () => {
-            const revoke = await adminRequest("DELETE")
-            if (!revoke.ok) throw new Error("remote_revoke_failed")
+            if (!platform.revokeRemotePairing) throw new Error("remote_revoke_unavailable")
+            await platform.revokeRemotePairing(sessionID, cwd)
           }}
         />
       ))
-    } catch {
-      fail()
+    } catch (error) {
+      fail(error instanceof Error && error.message.includes("No local network address") ? "no-lan" : undefined)
     } finally {
       setState("loading", false)
     }
