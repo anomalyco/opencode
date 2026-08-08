@@ -1,0 +1,176 @@
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { Permission } from "@/permission"
+import { Question } from "@/question"
+import { RemoteAccess } from "@/remote/access"
+import { SessionPrompt } from "@/session/prompt"
+import { Session } from "@/session/session"
+import { SessionStatus } from "@/session/status"
+import { EventV2 } from "@opencode-ai/core/event"
+import { Cause, Effect, Queue, Scope } from "effect"
+import * as Stream from "effect/Stream"
+import { HttpServerResponse } from "effect/unstable/http"
+import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
+import * as Sse from "effect/unstable/encoding/Sse"
+import { RemoteAdminApi, RemoteApi, RemotePairApi } from "../groups/remote"
+import * as SessionError from "./session-errors"
+
+function eventData(data: unknown): Sse.Event {
+  return { _tag: "Event", event: "message", id: undefined, data: JSON.stringify(data) }
+}
+
+function eventID() {
+  return EventV2.ID.create()
+}
+
+function belongsToSession(value: unknown, sessionID: string) {
+  if (!value || typeof value !== "object") return false
+  const data = value as Record<string, unknown>
+  if (data.sessionID === sessionID) return true
+  for (const key of ["info", "part", "message"]) {
+    const nested = data[key]
+    if (nested && typeof nested === "object" && (nested as Record<string, unknown>).sessionID === sessionID) return true
+  }
+  return false
+}
+
+function remoteEventResponse(events: EventV2.Interface, sessionID: string) {
+  return Effect.gen(function* () {
+    const queue = yield* Queue.unbounded<EventV2.Payload>()
+    const unsubscribe = yield* events.listen((event) => Effect.sync(() => Queue.offerUnsafe(queue, event)))
+    yield* Effect.addFinalizer(() => unsubscribe)
+
+    const output = Stream.fromQueue(queue).pipe(
+      Stream.filter((event) => belongsToSession(event.data, sessionID)),
+      Stream.map((event) => ({ id: event.id, type: event.type, properties: event.data })),
+    )
+    const heartbeat = Stream.tick("10 seconds").pipe(
+      Stream.drop(1),
+      Stream.map(() => ({ id: eventID(), type: "server.heartbeat", properties: {} })),
+    )
+
+    return HttpServerResponse.stream(
+      Stream.make({ id: eventID(), type: "server.connected", properties: { sessionID } }).pipe(
+        Stream.concat(output.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
+        Stream.map(eventData),
+        Stream.pipeThroughChannel(Sse.encode()),
+        Stream.encodeText,
+      ),
+      {
+        contentType: "text/event-stream",
+        headers: {
+          "Cache-Control": "no-cache, no-transform",
+          "X-Accel-Buffering": "no",
+          "X-Content-Type-Options": "nosniff",
+        },
+      },
+    )
+  })
+}
+
+export const remoteAdminHandlers = HttpApiBuilder.group(RemoteAdminApi, "remote-admin", (handlers) =>
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    const requireSession = (sessionID: Parameters<typeof RemoteAccess.pair>[0]) =>
+      SessionError.mapStorageNotFound(sessions.get(sessionID))
+
+    return handlers
+      .handle("pair", (ctx) =>
+        Effect.gen(function* () {
+          yield* requireSession(ctx.params.sessionID)
+          return RemoteAccess.pair(ctx.params.sessionID)
+        }),
+      )
+      .handle("revoke", (ctx) =>
+        Effect.gen(function* () {
+          yield* requireSession(ctx.params.sessionID)
+          RemoteAccess.revoke(ctx.params.sessionID)
+          return true
+        }),
+      )
+  }),
+)
+
+export const remotePairHandlers = HttpApiBuilder.group(RemotePairApi, "remote-pair", (handlers) =>
+  Effect.succeed(
+    handlers.handle("redeem", (ctx) => {
+      const grant = RemoteAccess.redeem(ctx.payload.ticket)
+      return grant ? Effect.succeed(grant) : Effect.fail(new HttpApiError.Forbidden({}))
+    }),
+  ),
+)
+
+export const remoteHandlers = HttpApiBuilder.group(RemoteApi, "remote", (handlers) =>
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    const prompt = yield* SessionPrompt.Service
+    const status = yield* SessionStatus.Service
+    const permission = yield* Permission.Service
+    const question = yield* Question.Service
+    const events = yield* EventV2Bridge.Service
+    const scope = yield* Scope.Scope
+
+    const requireSession = (sessionID: Parameters<typeof RemoteAccess.revoke>[0]) =>
+      SessionError.mapStorageNotFound(sessions.get(sessionID))
+
+    return handlers
+      .handle("bootstrap", (ctx) =>
+        Effect.gen(function* () {
+          const session = yield* requireSession(ctx.params.sessionID)
+          const messages = yield* SessionError.mapStorageNotFound(sessions.messages({ sessionID: ctx.params.sessionID }))
+          const pendingPermissions = (yield* permission.list()).filter((item) => item.sessionID === ctx.params.sessionID)
+          const pendingQuestions = (yield* question.list()).filter((item) => item.sessionID === ctx.params.sessionID)
+          return {
+            session,
+            messages,
+            status: yield* status.get(ctx.params.sessionID),
+            permissions: pendingPermissions,
+            questions: pendingQuestions,
+          }
+        }),
+      )
+      .handleRaw("events", (ctx) => remoteEventResponse(events, ctx.params.sessionID))
+      .handle("message", (ctx) =>
+        Effect.gen(function* () {
+          yield* requireSession(ctx.params.sessionID)
+          yield* prompt
+            .prompt({ ...ctx.payload, sessionID: ctx.params.sessionID })
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.logError("remote prompt failed", { sessionID: ctx.params.sessionID, cause: Cause.pretty(cause) }),
+              ),
+              Effect.forkIn(scope, { startImmediately: true }),
+            )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle("abort", (ctx) => prompt.cancel(ctx.params.sessionID).pipe(Effect.as(true)))
+      .handle("permission", (ctx) =>
+        Effect.gen(function* () {
+          const request = (yield* permission.list()).find((item) => item.id === ctx.params.requestID)
+          if (!request || request.sessionID !== ctx.params.sessionID) return yield* new HttpApiError.Forbidden({})
+          yield* permission
+            .reply({ requestID: ctx.params.requestID, reply: ctx.payload.reply, message: ctx.payload.message })
+            .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+          return true
+        }),
+      )
+      .handle("question", (ctx) =>
+        Effect.gen(function* () {
+          const request = (yield* question.list()).find((item) => item.id === ctx.params.requestID)
+          if (!request || request.sessionID !== ctx.params.sessionID) return yield* new HttpApiError.Forbidden({})
+          yield* question
+            .reply({ requestID: ctx.params.requestID, answers: ctx.payload.answers })
+            .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+          return true
+        }),
+      )
+      .handle("questionReject", (ctx) =>
+        Effect.gen(function* () {
+          const request = (yield* question.list()).find((item) => item.id === ctx.params.requestID)
+          if (!request || request.sessionID !== ctx.params.sessionID) return yield* new HttpApiError.Forbidden({})
+          yield* question.reject(ctx.params.requestID).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+          return true
+        }),
+      )
+  }),
+)

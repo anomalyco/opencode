@@ -79,8 +79,10 @@ import {
   ptyConnectAuthorizationLayer,
   serverAuthorizationLayer,
 } from "./middleware/authorization"
+import { remoteAuthorizationLayer } from "./middleware/remote-authorization"
 import { EventApi } from "./groups/event"
 import { PtyConnectApi } from "./groups/pty"
+import { RemoteAdminApi, RemoteApi, RemotePairApi } from "./groups/remote"
 import { eventHandlers } from "./handlers/event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
@@ -96,6 +98,7 @@ import { projectCopyHandlers } from "./handlers/project-copy"
 import { providerHandlers } from "./handlers/provider"
 import { ptyConnectHandlers, ptyHandlers } from "./handlers/pty"
 import { questionHandlers } from "./handlers/question"
+import { remoteAdminHandlers, remoteHandlers, remotePairHandlers } from "./handlers/remote"
 import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
 import { tuiHandlers } from "./handlers/tui"
@@ -150,6 +153,15 @@ const eventApiRoutes = HttpApiBuilder.layer(EventApi).pipe(
 const ptyConnectApiRoutes = HttpApiBuilder.layer(PtyConnectApi).pipe(
   Layer.provide(ptyConnectHandlers),
   Layer.provide([ptyConnectHttpApiAuthLayer, workspaceRoutingLive, instanceContextLayer]),
+)
+const remoteAdminApiRoutes = HttpApiBuilder.layer(RemoteAdminApi).pipe(
+  Layer.provide(remoteAdminHandlers),
+  Layer.provide([httpApiAuthLayer, workspaceRoutingLive, instanceContextLayer]),
+)
+const remotePairApiRoutes = HttpApiBuilder.layer(RemotePairApi).pipe(Layer.provide(remotePairHandlers))
+const remoteApiRoutes = HttpApiBuilder.layer(RemoteApi).pipe(
+  Layer.provide(remoteHandlers),
+  Layer.provide([remoteAuthorizationLayer, workspaceRoutingLive, instanceContextLayer]),
 )
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   Layer.provide([
@@ -277,6 +289,9 @@ export function createRoutes(
     rootApiRoutes,
     eventApiRoutes,
     ptyConnectApiRoutes,
+    remoteAdminApiRoutes,
+    remotePairApiRoutes,
+    remoteApiRoutes,
     instanceRoutes,
     serverRoutes,
     docRoute,

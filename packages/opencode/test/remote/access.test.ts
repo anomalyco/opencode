@@ -1,0 +1,34 @@
+import { afterEach, describe, expect, test } from "bun:test"
+import { RemoteAccess } from "@/remote/access"
+import { SessionID } from "@/session/schema"
+
+afterEach(() => RemoteAccess.resetForTest())
+
+describe("RemoteAccess", () => {
+  test("pairing tickets are one-use and create a session-scoped grant", () => {
+    const session = SessionID.make("ses_remote_a")
+    const other = SessionID.make("ses_remote_b")
+    const pair = RemoteAccess.pair(session, 1_000)
+
+    const grant = RemoteAccess.redeem(pair.ticket, 2_000)
+    expect(grant?.sessionID).toBe(session)
+    expect(RemoteAccess.redeem(pair.ticket, 2_000)).toBeUndefined()
+    expect(RemoteAccess.authorized(grant!.token, session, 2_000)).toBe(true)
+    expect(RemoteAccess.authorized(grant!.token, other, 2_000)).toBe(false)
+  })
+
+  test("expired pairing ticket is rejected", () => {
+    const session = SessionID.make("ses_remote_expired")
+    const pair = RemoteAccess.pair(session, 1_000)
+    expect(RemoteAccess.redeem(pair.ticket, 1_000 + pair.expires_in * 1_000 + 1)).toBeUndefined()
+  })
+
+  test("revoke invalidates issued grants", () => {
+    const session = SessionID.make("ses_remote_revoke")
+    const pair = RemoteAccess.pair(session, 1_000)
+    const grant = RemoteAccess.redeem(pair.ticket, 2_000)!
+
+    RemoteAccess.revoke(session)
+    expect(RemoteAccess.authorized(grant.token, session, 2_000)).toBe(false)
+  })
+})
