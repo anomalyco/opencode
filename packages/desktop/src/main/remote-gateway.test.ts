@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import * as http from "node:http"
-import type { AddressInfo } from "node:net"
+import { connect, type AddressInfo } from "node:net"
 import type { NetworkInterfaceInfo } from "node:os"
 import { createRemoteGateway } from "./remote-gateway"
 
@@ -62,6 +62,19 @@ describe("remote gateway", () => {
     expect(upstreamHits).toBe(1)
     expect(foreignHits).toBe(0)
 
+    await gateway.stop()
+  })
+
+  test("rejects malformed request targets without crashing", async () => {
+    const upstream = await listen((_request, response) => response.end("ok"))
+    const gateway = createRemoteGateway({ upstreamUrl: origin(upstream) })
+    const info = await gateway.start()
+
+    for (const target of ["http://[::1", "http://%zz/remote", "//[::1", "http://example.com:99999/remote"]) {
+      expect(await rawTarget(info.port, target)).toContain(" 400 ")
+    }
+
+    expect((await fetch(`http://127.0.0.1:${info.port}/remote/mobile`)).status).toBe(200)
     await gateway.stop()
   })
 
@@ -225,5 +238,18 @@ function rawGet(port: number, path: string) {
     })
     request.on("error", reject)
     request.end()
+  })
+}
+
+function rawTarget(port: number, target: string) {
+  return new Promise<string>((resolve, reject) => {
+    const socket = connect(port, "127.0.0.1", () =>
+      socket.write(`GET ${target} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n`),
+    )
+    let body = ""
+    socket.setEncoding("utf8")
+    socket.on("data", (chunk) => (body += chunk))
+    socket.on("close", () => resolve(body.split("\r\n")[0] ?? ""))
+    socket.on("error", reject)
   })
 }

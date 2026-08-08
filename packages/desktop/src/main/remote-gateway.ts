@@ -56,12 +56,17 @@ export function createRemoteGateway(options: RemoteGatewayOptions) {
         response.writeHead(403).end()
         return
       }
-      if (!isRemotePath(request.url)) {
+      const incoming = requestURL(request.url)
+      if (!incoming) {
+        response.writeHead(400).end()
+        return
+      }
+      if (!isRemotePath(incoming.pathname)) {
         response.writeHead(404).end()
         return
       }
 
-      proxyRequest(upstream, request, response, options.logger)
+      proxyRequest(upstream, incoming, request, response, options.logger)
     })
 
     await new Promise<void>((resolve, reject) => {
@@ -110,11 +115,14 @@ export function createRemoteGateway(options: RemoteGatewayOptions) {
 }
 
 function requestURL(rawUrl: string | undefined) {
-  return new URL(rawUrl ?? "/", "http://remote.invalid")
+  try {
+    return new URL(rawUrl ?? "/", "http://remote.invalid")
+  } catch {
+    return
+  }
 }
 
-function isRemotePath(rawUrl: string | undefined) {
-  const pathname = requestURL(rawUrl).pathname
+function isRemotePath(pathname: string) {
   return pathname === "/remote" || pathname.startsWith("/remote/")
 }
 
@@ -146,11 +154,11 @@ function hopByHop(headers: http.IncomingHttpHeaders, fixed: Set<string>) {
 
 function proxyRequest(
   upstream: URL,
+  incoming: URL,
   request: http.IncomingMessage,
   response: http.ServerResponse,
   logger?: Logger,
 ) {
-  const incoming = requestURL(request.url)
   const target = new URL(upstream)
   target.pathname = incoming.pathname
   target.search = incoming.search
