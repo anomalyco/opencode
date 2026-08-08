@@ -7,7 +7,6 @@ export default Plugin.define({
     context.markdown.registerCodeBlockRenderer(
       "mermaid",
       createMermaidMarkdownRenderer(context.renderer, () => ({
-        compact: true,
         colors: {
           text: context.theme.markdown.text,
           primary: context.theme.text.default,

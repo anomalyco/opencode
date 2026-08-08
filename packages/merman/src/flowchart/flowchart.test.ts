@@ -389,6 +389,80 @@ flowchart TD
     ])
   })
 
+  test("parses and renders each edge in a chained flowchart statement", () => {
+    const content = `flowchart LR
+  API --> Worker --> DB[(Database)]`
+    const diagram = parseMermaidFlowchartDiagram(content)
+    const output = renderFlowchartDiagram(content, { compact: true })
+
+    expect(diagram.nodes).toEqual([
+      { id: "API", label: "API", shape: "box" },
+      { id: "Worker", label: "Worker", shape: "box" },
+      { id: "DB", label: "Database", shape: "database" },
+    ])
+    expect(diagram.edges).toEqual([
+      { from: "API", to: "Worker", label: "" },
+      { from: "Worker", to: "DB", label: "" },
+    ])
+    expectDiagram(output).toEqualDiagram(`
+                               ╭──────────╮
+      ╭─────╮    ╭────────╮    ├──────────┤
+      │ API ├───▶│ Worker ├───▶│ Database │
+      ╰─────╯    ╰────────╯    ├──────────┤
+                               ╰──────────╯
+    `)
+  })
+
+  test("preserves labels and styles on every edge in a chain", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  A -->|plain| B -.->|retry| C ==>|done| D`)
+
+    expect(diagram.edges).toEqual([
+      { from: "A", to: "B", label: "plain" },
+      { from: "B", to: "C", label: "retry", style: "dashed" },
+      { from: "C", to: "D", label: "done", style: "thick" },
+    ])
+  })
+
+  test("keeps every node and edge in a long chain distinct and in its subgraph", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  subgraph Pipeline
+    A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K --> L
+  end`)
+
+    expect(diagram.nodes.map((node) => node.id)).toEqual(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"])
+    expect(diagram.edges.map((edge) => `${edge.from}->${edge.to}`)).toEqual([
+      "A->B",
+      "B->C",
+      "C->D",
+      "D->E",
+      "E->F",
+      "F->G",
+      "G->H",
+      "H->I",
+      "I->J",
+      "J->K",
+      "K->L",
+    ])
+    expect(diagram.subgraphs?.[0]?.nodeIds).toEqual(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"])
+  })
+
+  test("parses bare subgraph nodes before a chained edge", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  subgraph Services
+    API
+    Worker
+  end
+  API --> Worker --> DB[(Database)]`)
+
+    expect(diagram.nodes.map((node) => node.id)).toEqual(["API", "Worker", "DB"])
+    expect(diagram.edges.map((edge) => [edge.from, edge.to])).toEqual([
+      ["API", "Worker"],
+      ["Worker", "DB"],
+    ])
+    expect(diagram.subgraphs?.[0]?.nodeIds).toEqual(["API", "Worker"])
+  })
+
   test("parses Mermaid subgraph groups", () => {
     const diagram = parseMermaidFlowchartDiagram(`
 flowchart LR

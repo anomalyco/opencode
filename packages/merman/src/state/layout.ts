@@ -282,7 +282,13 @@ function placeNote(
   const gap = 4
   const baseLeft = note.position === "right" ? target.left + target.width + gap : target.left - size.width - gap
   const baseTop = target.centerY - Math.floor(size.height / 2)
-  const topOffsets = [0, -(size.height + 2), target.height + 2, -(size.height * 2 + 4), target.height + size.height + 4]
+  const candidateTops = [
+    baseTop,
+    target.top - size.height - 2,
+    target.top + target.height + 2,
+    baseTop - size.height - 2,
+    baseTop + target.height + 2,
+  ]
   const collides = (left: number, top: number) => {
     for (const bound of avoidBounds) {
       if (bound.id !== target.id && intersects(left, top, size.width, size.height, bound)) return true
@@ -293,8 +299,7 @@ function placeNote(
     return false
   }
 
-  for (const offset of topOffsets) {
-    const top = baseTop + offset
+  for (const top of candidateTops) {
     if (!collides(baseLeft, top)) return createNoteBound(note, index, baseLeft, top, size)
   }
 

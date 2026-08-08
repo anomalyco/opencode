@@ -28,6 +28,7 @@ const DECISION_NODE_RE = new RegExp(`^(${ID_RE})\\{(.+)\\}$`)
 const BOX_NODE_RE = new RegExp(`^(${ID_RE})\\[(.+)\\]$`)
 const ID_ONLY_RE = new RegExp(`^${ID_RE}$`)
 const EXPLICIT_NODE_SHAPE_RE = new RegExp(`^${ID_RE}(?:\\[|\\(|\\{)`)
+const EDGE_OPERATOR_RE = /(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->)|(-->|==>|-\.->)\s*(?:\|([^|]*)\|\s*)?/g
 
 function normalizeDirection(value?: string): FlowchartDirection {
   const upper = value?.toUpperCase()
@@ -118,6 +119,26 @@ function createEdge(from: string, to: string, label: string, style: FlowchartEdg
   return style ? { from, to, label, style } : { from, to, label }
 }
 
+interface ParsedEdgeOperator {
+  index: number
+  end: number
+  label: string
+  style: FlowchartEdgeStyle | undefined
+}
+
+function parseEdgeOperators(line: string): ParsedEdgeOperator[] {
+  return [...line.matchAll(EDGE_OPERATOR_RE)].map((match) => {
+    const startArrow = match[1] ?? match[4]!
+    const endArrow = match[3] ?? match[4]!
+    return {
+      index: match.index,
+      end: match.index + match[0].length,
+      label: (match[2] ?? match[5] ?? "").trim(),
+      style: edgeStyleFromArrow(startArrow, endArrow),
+    }
+  })
+}
+
 export function isMermaidFlowchartDiagram(content: string): boolean {
   return FLOWCHART_HEADER_RE.test(firstMeaningfulMermaidLine(content) ?? "")
 }
@@ -177,22 +198,27 @@ export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram 
       continue
     }
 
-    const pipeEdge = line.match(/^(.+?)\s*(-->|==>|-\.->)\s*(?:\|([^|]*)\|\s*)?(.+)$/)
-    const textEdge = line.match(/^(.+?)\s*(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->)\s*(.+)$/)
-    const edgeMatch = textEdge ?? pipeEdge
-    if (edgeMatch) {
-      const from = ensureNode(nodes, stripNodeToken(edgeMatch[1]!))
-      const toToken = textEdge ? edgeMatch[5]! : edgeMatch[4]!
-      const to = ensureNode(nodes, stripNodeToken(toToken))
-      addNodeToSubgraph(currentSubgraph, from.id)
-      addNodeToSubgraph(currentSubgraph, to.id)
-      const arrow = textEdge ? edgeMatch[4]! : edgeMatch[2]!
-      const label = textEdge ? edgeMatch[3]! : (edgeMatch[3] ?? "")
-      edges.push(createEdge(from.id, to.id, label.trim(), edgeStyleFromArrow(textEdge ? edgeMatch[2]! : arrow, arrow)))
-      continue
+    const edgeOperators = parseEdgeOperators(line)
+    if (edgeOperators.length > 0) {
+      const nodeTokens = [
+        line.slice(0, edgeOperators[0]!.index),
+        ...edgeOperators.map((operator, index) =>
+          line.slice(operator.end, edgeOperators[index + 1]?.index ?? line.length),
+        ),
+      ]
+
+      if (nodeTokens.every((token) => stripNodeToken(token).length > 0)) {
+        const chainNodes = nodeTokens.map((token) => ensureNode(nodes, stripNodeToken(token)))
+        for (const node of chainNodes) addNodeToSubgraph(currentSubgraph, node.id)
+        for (let index = 0; index < edgeOperators.length; index++) {
+          const operator = edgeOperators[index]!
+          edges.push(createEdge(chainNodes[index]!.id, chainNodes[index + 1]!.id, operator.label, operator.style))
+        }
+        continue
+      }
     }
 
-    if (hasExplicitNodeShape(line)) {
+    if (hasExplicitNodeShape(line) || ID_ONLY_RE.test(stripNodeToken(line))) {
       const node = ensureNode(nodes, line)
       addNodeToSubgraph(currentSubgraph, node.id)
       continue

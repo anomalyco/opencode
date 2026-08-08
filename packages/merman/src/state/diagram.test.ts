@@ -281,6 +281,37 @@ stateDiagram-v2
     `)
   })
 
+  test("places a composite note above an occupied right side", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  [*] --> Processing
+
+  state Processing {
+    [*] --> Validate
+    Validate --> Decision
+    state Decision <<choice>>
+    Decision --> Accepted: valid
+    Decision --> Rejected: invalid
+    Accepted --> [*]
+    Rejected --> [*]
+  }
+
+  note right of Processing
+    Validation and routing happen
+    inside this composite state.
+  end note
+
+  Processing --> Complete
+  Complete --> [*]`)
+    const lines = output.split("\n")
+    const noteBottom = lines.findIndex((line) => line.includes("╚═══════════════════════════════╝"))
+    const completeRow = lines.findIndex((line) => line.includes(" Complete "))
+
+    expect(noteBottom).toBeGreaterThanOrEqual(0)
+    expect(noteBottom).toBeLessThan(completeRow)
+    expect(lines.slice(noteBottom + 1, completeRow).every((line) => !line.includes("Complete"))).toBe(true)
+    expect(lines).toHaveLength(20)
+  })
+
   test("renders configurable line arrowheads", () => {
     const output = renderStateDiagram(
       `

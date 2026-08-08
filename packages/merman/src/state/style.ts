@@ -1,6 +1,6 @@
 import { RGBA } from "@opentui/core"
-import { createColorRampTheme, DIAGRAM_FADE_STEPS, numberedStyleKeys, type DiagramRgb } from "../core/color/style.js"
-import type { BaseStateCellStyle, FadeSourceStyle, StateCellStyle, TransitionFadeStyle } from "./types.js"
+import { createColorRampTheme, type DiagramRgb } from "../core/color/style.js"
+import type { BaseStateCellStyle, NoteConnectorRampStyle, StateCellStyle } from "./types.js"
 
 const DEFAULT_THEME_RGB = {
   state: [228, 239, 232],
@@ -14,16 +14,11 @@ const DEFAULT_THEME_RGB = {
   end: [230, 177, 126],
   choice: [134, 225, 200],
 } as const satisfies Record<BaseStateCellStyle, DiagramRgb>
-const FADE_STEPS = DIAGRAM_FADE_STEPS
-const FADE_SOURCE_STYLES = [
-  "state",
-  "composite",
-  "start",
-  "end",
-  "choice",
-] as const satisfies readonly FadeSourceStyle[]
-const TRANSITION_FADE_STYLES = createTransitionFadeStyles()
-const TRANSITION_FADE_STYLES_SET = new Set<StateCellStyle>(Object.values(TRANSITION_FADE_STYLES).flat())
+const NOTE_CONNECTOR_RAMP_STYLES = [
+  "noteConnectorRamp1",
+  "noteConnectorRamp2",
+  "noteConnectorRamp3",
+] as const satisfies readonly NoteConnectorRampStyle[]
 export type StateStyleColors = Required<Record<StateCellStyle, RGBA>>
 
 export function resolveStateStyleColors(
@@ -43,28 +38,6 @@ export function resolveStateStyleColors(
   }
   return {
     ...resolved,
-    ...createColorRampTheme(TRANSITION_FADE_STYLES.state, resolved.state, resolved.transition),
-    ...createColorRampTheme(TRANSITION_FADE_STYLES.composite, resolved.composite, resolved.transition),
-    ...createColorRampTheme(TRANSITION_FADE_STYLES.start, resolved.start, resolved.transition),
-    ...createColorRampTheme(TRANSITION_FADE_STYLES.end, resolved.end, resolved.transition),
-    ...createColorRampTheme(TRANSITION_FADE_STYLES.choice, resolved.choice, resolved.transition),
+    ...createColorRampTheme(NOTE_CONNECTOR_RAMP_STYLES, resolved.noteConnector, resolved.noteBorder),
   }
-}
-
-function createTransitionFadeStyles(): Record<FadeSourceStyle, readonly TransitionFadeStyle[]> {
-  const styles = {} as Record<FadeSourceStyle, readonly TransitionFadeStyle[]>
-  for (const source of FADE_SOURCE_STYLES) {
-    styles[source] = numberedStyleKeys(`${source}TransitionFade`, FADE_STEPS)
-  }
-  return styles
-}
-
-export function isStateTransitionFadeStyle(style: StateCellStyle | undefined): boolean {
-  return style ? TRANSITION_FADE_STYLES_SET.has(style) : false
-}
-
-export function stateTransitionFadeStyle(source: FadeSourceStyle, distance: number): StateCellStyle {
-  if (distance <= 0) return `${source}TransitionFade1` as TransitionFadeStyle
-  if (distance >= FADE_STEPS.length) return "transition"
-  return `${source}TransitionFade${distance + 1}` as TransitionFadeStyle
 }

@@ -190,11 +190,11 @@ describe("createStateTransitionRenderPlans", () => {
     const plan = createStateTransitionRenderPlans(diagram, placements, 18)[0]!
 
     expect(plan.cells).toEqual([
-      { x: 6, y: 4, char: "├", fadeDistance: 0 },
-      { x: 7, y: 4, char: "─", fadeDistance: 1 },
-      { x: 8, y: 4, char: "─", fadeDistance: 2 },
-      { x: 9, y: 4, char: "─", fadeDistance: 3 },
-      { x: 10, y: 4, char: "─", fadeDistance: 4 },
+      { x: 6, y: 4, char: "├" },
+      { x: 7, y: 4, char: "─" },
+      { x: 8, y: 4, char: "─" },
+      { x: 9, y: 4, char: "─" },
+      { x: 10, y: 4, char: "─" },
       { x: 11, y: 4, arrowDirection: "right" },
     ])
     expect(plan.label).toEqual({ x: 8, y: 3, lines: ["next"] })

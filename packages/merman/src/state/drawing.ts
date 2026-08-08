@@ -16,23 +16,17 @@ import {
   measureStateTransitionLabel,
   type StateTransitionRenderPlan,
 } from "./routing.js"
-import { isStateTransitionFadeStyle, stateTransitionFadeStyle } from "./style.js"
 import type {
-  FadeSourceStyle,
+  NoteConnectorRampStyle,
   StateCellStyle,
   StateDiagram,
   StateDiagramArrowHeadStyle,
   StateDiagramRenderOptions,
   StateDiagramState,
-  StateDiagramTransition,
 } from "./types.js"
 import { isHiddenCompositeMarker, prepareVisibleStateDiagram } from "./visible-model.js"
 
 type StateCell = DiagramCanvasCell<StateCellStyle>
-
-interface TransitionDrawContext {
-  fadeSource: FadeSourceStyle
-}
 
 function translateTransitionPlans(
   plans: readonly StateTransitionRenderPlan[],
@@ -49,7 +43,7 @@ function translateTransitionPlans(
 function makeGrid(width: number, height: number): StateGrid {
   return new DiagramCanvas(width, height, {
     mergeCell: (existing, incoming): StateCell => {
-      const shouldMerge = isTransitionDrawingStyle(existing.style) && isTransitionDrawingStyle(incoming.style)
+      const shouldMerge = existing.style === "transition" && incoming.style === "transition"
       return {
         ...incoming,
         char: shouldMerge
@@ -58,10 +52,6 @@ function makeGrid(width: number, height: number): StateGrid {
       }
     },
   })
-}
-
-function isTransitionDrawingStyle(style: StateCellStyle | undefined): boolean {
-  return style === "transition" || isStateTransitionFadeStyle(style)
 }
 
 function setCell(grid: StateGrid, x: number, y: number, char: string, style?: StateCellStyle): void {
@@ -129,7 +119,10 @@ function drawContainerFrame(
 function drawHorizontalNoteConnector(grid: StateGrid, fromX: number, toX: number, y: number, char: string): void {
   const step = fromX <= toX ? 1 : -1
   for (let x = fromX; step === 1 ? x <= toX : x >= toX; x += step) {
-    setCell(grid, x, y, char, "noteConnector")
+    const distanceFromNote = Math.abs(toX - x)
+    const style: StateCellStyle =
+      distanceFromNote < 3 ? (`noteConnectorRamp${3 - distanceFromNote}` as NoteConnectorRampStyle) : "noteConnector"
+    setCell(grid, x, y, char, style)
   }
 }
 
@@ -179,20 +172,14 @@ function drawNote(grid: StateGrid, bounds: StateNoteBounds, target: BoxBounds): 
   bounds.lines.forEach((line, index) => setText(grid, bounds.left + 2, bounds.top + 1 + index, line, "noteText"))
 }
 
-function transitionFadeCellStyle(context: TransitionDrawContext, distance: number): StateCellStyle {
-  return stateTransitionFadeStyle(context.fadeSource, distance)
-}
-
 function drawTransitionRenderPlan(
   grid: StateGrid,
   plan: StateTransitionRenderPlan,
   arrowHeadStyle: StateDiagramArrowHeadStyle,
-  context: TransitionDrawContext,
 ): void {
   for (const cell of plan.cells) {
     const char = cell.arrowDirection ? diagramArrowHead(cell.arrowDirection, arrowHeadStyle) : cell.char
-    const style = cell.fadeDistance === undefined ? "transition" : transitionFadeCellStyle(context, cell.fadeDistance)
-    setCell(grid, cell.x, cell.y, char, style)
+    setCell(grid, cell.x, cell.y, char, "transition")
   }
   if (plan.label) {
     setTransitionLabel(grid, plan.label.x, plan.label.y, plan.label.lines, "label")
@@ -211,18 +198,6 @@ function drawTransitionJunctionPlans(
   }
 }
 
-function transitionFadeSource(
-  statesById: Map<string, StateDiagramState>,
-  transition: StateDiagramTransition,
-): FadeSourceStyle {
-  const source = statesById.get(transition.from)
-  if (isHiddenCompositeMarker(source)) return "composite"
-  if (source?.kind === "start") return "start"
-  if (source?.kind === "end") return "end"
-  if (source?.kind === "choice") return "choice"
-  return "state"
-}
-
 export function drawStateDiagramGrid(sourceDiagram: StateDiagram, options: StateDiagramRenderOptions = {}): StateGrid {
   const directedDiagram = options.direction ? { ...sourceDiagram, direction: options.direction } : sourceDiagram
   const diagram = prepareVisibleStateDiagram(directedDiagram)
@@ -232,7 +207,6 @@ export function drawStateDiagramGrid(sourceDiagram: StateDiagram, options: State
   const { bounds, sizes, compositeBounds, noteBounds } = createStateDiagramLayout(diagram, {
     minStateGap,
   })
-  const statesById = new Map(diagram.states.map((state) => [state.id, state]))
   let allBounds = [...bounds.values(), ...noteBounds]
   let maxY = Math.max(0, ...allBounds.map((bound) => bound.top + bound.height))
   let feedbackLaneY = maxY + 3
@@ -305,12 +279,7 @@ export function drawStateDiagramGrid(sourceDiagram: StateDiagram, options: State
   }
 
   for (const plan of transitionPlans) {
-    const transition = plan.route.transition
-    const fadeSource = transitionFadeSource(statesById, transition)
-    const drawContext: TransitionDrawContext = {
-      fadeSource,
-    }
-    drawTransitionRenderPlan(grid, plan, arrowHeadStyle, drawContext)
+    drawTransitionRenderPlan(grid, plan, arrowHeadStyle)
   }
 
   drawTransitionJunctionPlans(grid, diagram, bounds, transitionPlans)

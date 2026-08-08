@@ -27,7 +27,6 @@ export type StateTransitionPathPoint = readonly [number, number]
 interface StateTransitionRenderCellBase {
   x: number
   y: number
-  fadeDistance?: number
 }
 
 export type StateTransitionRenderCell = StateTransitionRenderCellBase &
@@ -281,33 +280,27 @@ function addLabel(builder: StateTransitionRenderBuilder, x: number, y: number, l
   if (metrics.lines.length > 0) builder.label = { x, y, lines: metrics.lines }
 }
 
-function addHorizontalFadeRamp(
+function addHorizontalLine(
   builder: StateTransitionRenderBuilder,
   fromX: number,
   toX: number,
   y: number,
   direction: 1 | -1,
-  startDistance: number,
 ): void {
-  let fadeDistance = startDistance
   for (let x = fromX; direction === 1 ? x <= toX : x >= toX; x += direction) {
-    addCell(builder, { x, y, char: "─", fadeDistance })
-    fadeDistance += 1
+    addCell(builder, { x, y, char: "─" })
   }
 }
 
-function addVerticalFadeRamp(
+function addVerticalLine(
   builder: StateTransitionRenderBuilder,
   x: number,
   fromY: number,
   toY: number,
   direction: 1 | -1,
-  startDistance: number,
 ): void {
-  let fadeDistance = startDistance
   for (let y = fromY; direction === 1 ? y <= toY : y >= toY; y += direction) {
-    addCell(builder, { x, y, char: "│", fadeDistance })
-    fadeDistance += 1
+    addCell(builder, { x, y, char: "│" })
   }
 }
 
@@ -317,13 +310,12 @@ function addRightDeparture(builder: StateTransitionRenderBuilder, bounds: BoxBou
     x: bounds.left + bounds.width - 1,
     y: bounds.centerY,
     char: BorderChars.rounded.leftT,
-    fadeDistance: 0,
   })
 }
 
 function addLeftDeparture(builder: StateTransitionRenderBuilder, bounds: BoxBounds): void {
   if (bounds.width <= 1 || bounds.height <= 1) return
-  addCell(builder, { x: bounds.left, y: bounds.centerY, char: BorderChars.rounded.rightT, fadeDistance: 0 })
+  addCell(builder, { x: bounds.left, y: bounds.centerY, char: BorderChars.rounded.rightT })
 }
 
 function addBottomDeparture(builder: StateTransitionRenderBuilder, bounds: BoxBounds, x: number): void {
@@ -332,13 +324,12 @@ function addBottomDeparture(builder: StateTransitionRenderBuilder, bounds: BoxBo
     x,
     y: bounds.top + bounds.height - 1,
     char: BorderChars.rounded.topT,
-    fadeDistance: 0,
   })
 }
 
 function addTopDeparture(builder: StateTransitionRenderBuilder, bounds: BoxBounds, x: number): void {
   if (bounds.width <= 1 || bounds.height <= 1) return
-  addCell(builder, { x, y: bounds.top, char: BorderChars.rounded.bottomT, fadeDistance: 0 })
+  addCell(builder, { x, y: bounds.top, char: BorderChars.rounded.bottomT })
 }
 
 function addHorizontalForward(builder: StateTransitionRenderBuilder): void {
@@ -352,8 +343,7 @@ function addHorizontalForward(builder: StateTransitionRenderBuilder): void {
   const step = leftToRight ? 1 : -1
   const startX = leftToRight ? from.left + from.width : from.left - 1
   const endX = leftToRight ? to.left - 1 : to.left + to.width
-  const startDistance = from.width <= 1 || from.height <= 1 ? 0 : 1
-  addHorizontalFadeRamp(builder, startX, targetIsChoice ? endX : endX - step, y, step, startDistance)
+  addHorizontalLine(builder, startX, targetIsChoice ? endX : endX - step, y, step)
   if (targetIsChoice) addPathPoint(builder, to.left, y)
   else addCell(builder, { x: endX, y, arrowDirection: leftToRight ? "right" : "left" })
   if (!transition.label) return
@@ -371,7 +361,7 @@ function addSelfTransition(builder: StateTransitionRenderBuilder): void {
   const targetX = Math.max(sourceX + 3, bounds.left + Math.min(bounds.width - 3, Math.ceil((bounds.width * 2) / 3)))
 
   addBottomDeparture(builder, bounds, sourceX)
-  addCell(builder, { x: sourceX, y: bottomY + 1, char: "│", fadeDistance: 1 })
+  addCell(builder, { x: sourceX, y: bottomY + 1, char: "│" })
   addCell(builder, { x: sourceX, y: railY, char: "╰" })
   for (let x = sourceX + 1; x < targetX; x++) addCell(builder, { x, y: railY, char: "─" })
   addCell(builder, { x: targetX, y: railY, char: "╯" })
@@ -398,10 +388,8 @@ function addBottomLaneTransition(builder: StateTransitionRenderBuilder): void {
   const railTargetX = targetRailCutsSource ? Math.max(from.left + from.width, to.left + to.width) + 2 : targetX
   const sourceBottomY = outsideBottomY(from)
   const targetBottomY = outsideBottomY(to)
-  const startDistance = from.width <= 1 || from.height <= 1 ? 0 : 1
-
   addBottomDeparture(builder, from, sourceX)
-  addVerticalFadeRamp(builder, sourceX, sourceBottomY, railY - 1, 1, startDistance)
+  addVerticalLine(builder, sourceX, sourceBottomY, railY - 1, 1)
   addCell(builder, { x: sourceX, y: railY, char: sourceX > railTargetX ? "╯" : "╰" })
   if (sourceX !== railTargetX) {
     const horizontalStep = sourceX < railTargetX ? 1 : -1
@@ -439,10 +427,8 @@ function addTopFeedbackTransition(builder: StateTransitionRenderBuilder): void {
   const targetX = to.width > 1 ? (sourceX > to.centerX ? to.left + to.width - 2 : to.left + 1) : to.centerX
   const sourceTopY = outsideTopY(from)
   const targetTopY = outsideTopY(to)
-  const startDistance = from.width <= 1 || from.height <= 1 ? 0 : 1
-
   addTopDeparture(builder, from, sourceX)
-  addVerticalFadeRamp(builder, sourceX, sourceTopY, railY + 1, -1, startDistance)
+  addVerticalLine(builder, sourceX, sourceTopY, railY + 1, -1)
   addCell(builder, { x: sourceX, y: railY, char: sourceX > targetX ? "╮" : "╭" })
   if (sourceX !== targetX) {
     const horizontalStep = sourceX < targetX ? 1 : -1
@@ -473,10 +459,8 @@ function addSideParallelTransition(builder: StateTransitionRenderBuilder): void 
   const startY = from.centerY
   const endY = to.centerY
   const verticalStep: 1 | -1 = startY <= endY ? 1 : -1
-  const startDistance = from.width <= 1 || from.height <= 1 ? 0 : 1
-
   addRightDeparture(builder, from)
-  addHorizontalFadeRamp(builder, startX, railX - 1, startY, 1, startDistance)
+  addHorizontalLine(builder, startX, railX - 1, startY, 1)
   addCell(builder, { x: railX, y: startY, char: verticalStep === 1 ? "╮" : "╯" })
   for (let y = startY + verticalStep; y !== endY; y += verticalStep) addCell(builder, { x: railX, y, char: "│" })
   addCell(builder, { x: railX, y: endY, char: verticalStep === 1 ? "╯" : "╮" })
@@ -503,16 +487,13 @@ function addVerticalElbowTransition(builder: StateTransitionRenderBuilder): void
   const startY = topToBottom ? from.top + from.height : from.top - 1
   const endY = topToBottom ? to.top - 1 : to.top + to.height
   const verticalStep = topToBottom ? 1 : -1
-  const startDistance = from.width <= 1 || from.height <= 1 ? 0 : 1
-
   if (topToBottom) addBottomDeparture(builder, from, startX)
   else addTopDeparture(builder, from, startX)
   const availableApproach = Math.max(0, Math.abs(endY - startY) - 1)
-  const bendY =
-    startX === endX ? endY : topToBottom ? endY - verticalStep * Math.min(2, availableApproach) : startY
+  const bendY = startX === endX ? endY : topToBottom ? endY - verticalStep * Math.min(2, availableApproach) : startY
   const targetApproachLength = Math.abs(endY - bendY)
   const hasTargetApproach = targetApproachLength > 0
-  if (startY !== bendY) addVerticalFadeRamp(builder, startX, startY, bendY - verticalStep, verticalStep, startDistance)
+  if (startY !== bendY) addVerticalLine(builder, startX, startY, bendY - verticalStep, verticalStep)
   if (startX !== endX) {
     const horizontalStep = startX < endX ? 1 : -1
     addCell(builder, {
@@ -568,11 +549,9 @@ function addVerticalTransition(builder: StateTransitionRenderBuilder): void {
   const startY = topToBottom ? from.top + from.height : from.top - 1
   const endY = topToBottom ? to.top - 1 : to.top + to.height
   const step = topToBottom ? 1 : -1
-  const startDistance = from.width <= 1 || from.height <= 1 ? 0 : 1
-
   if (topToBottom) addBottomDeparture(builder, from, x)
   else addTopDeparture(builder, from, x)
-  if (startY !== endY) addVerticalFadeRamp(builder, x, startY, endY - step, step, startDistance)
+  if (startY !== endY) addVerticalLine(builder, x, startY, endY - step, step)
   addCell(builder, {
     x,
     y: endY,

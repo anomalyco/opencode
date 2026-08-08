@@ -1,5 +1,4 @@
 import type { BorderStyle } from "@opentui/core"
-import type { DiagramFadeStep } from "../core/color/style.js"
 
 export type StateDiagramDirection = "TB" | "TD" | "LR" | "RL"
 export type StateDiagramArrowHeadStyle = "filled" | "line"
@@ -44,8 +43,7 @@ export interface StateDiagramRenderOptions {
   minStateGap?: number
 }
 
-export type FadeSourceStyle = "state" | "composite" | "start" | "end" | "choice"
-export type TransitionFadeStyle = `${FadeSourceStyle}TransitionFade${DiagramFadeStep}`
+export type NoteConnectorRampStyle = `noteConnectorRamp${1 | 2 | 3}`
 export type BaseStateCellStyle =
   | "state"
   | "composite"
@@ -57,4 +55,4 @@ export type BaseStateCellStyle =
   | "start"
   | "end"
   | "choice"
-export type StateCellStyle = BaseStateCellStyle | TransitionFadeStyle
+export type StateCellStyle = BaseStateCellStyle | NoteConnectorRampStyle
