@@ -20,13 +20,43 @@ type PairingPayload = {
 }
 
 export function createRemotePairingController(options: RemotePairingControllerOptions) {
-  const sessions = new Set<string>()
+  const sessions = new Map<string, string>()
   let creating = 0
   let ownsGateway = false
   let stopping: Promise<void> | undefined
 
-  const stopIfIdle = () => {
-    if (!ownsGateway || creating > 0 || sessions.size > 0) return Promise.resolve()
+  const request = async (method: "GET" | "POST" | "DELETE", path: string, directory: string) => {
+    const sidecar = await options.getSidecar()
+    const url = new URL(path, sidecar.url)
+    url.searchParams.set("directory", directory)
+
+    const headers = new Headers()
+    if (sidecar.password) {
+      const username = sidecar.username ?? "opencode"
+      headers.set("authorization", `Basic ${Buffer.from(`${username}:${sidecar.password}`).toString("base64")}`)
+    }
+
+    return (options.fetch ?? globalThis.fetch)(url, { method, headers })
+  }
+
+  const adminRequest = (method: "POST" | "DELETE", sessionID: string, directory: string) =>
+    request(method, `/session/${encodeURIComponent(sessionID)}/remote`, directory)
+
+  const pruneSessions = async () => {
+    if (!ownsGateway || sessions.size === 0) return
+    const snapshot = [...sessions.entries()]
+    await Promise.all(
+      snapshot.map(async ([sessionID, directory]) => {
+        const response = await request("GET", `/session/${encodeURIComponent(sessionID)}`, directory).catch(() => undefined)
+        if (response?.status === 404 && sessions.get(sessionID) === directory) sessions.delete(sessionID)
+      }),
+    )
+  }
+
+  const stopIfIdle = async (prune = false) => {
+    if (!ownsGateway || creating > 0) return
+    if (prune) await pruneSessions()
+    if (!ownsGateway || creating > 0 || sessions.size > 0) return
     if (stopping) return stopping
 
     stopping = options.gateway
@@ -40,20 +70,6 @@ export function createRemotePairingController(options: RemotePairingControllerOp
     return stopping
   }
 
-  const request = async (method: "POST" | "DELETE", sessionID: string, directory: string) => {
-    const sidecar = await options.getSidecar()
-    const url = new URL(`/session/${encodeURIComponent(sessionID)}/remote`, sidecar.url)
-    url.searchParams.set("directory", directory)
-
-    const headers = new Headers()
-    if (sidecar.password) {
-      const username = sidecar.username ?? "opencode"
-      headers.set("authorization", `Basic ${Buffer.from(`${username}:${sidecar.password}`).toString("base64")}`)
-    }
-
-    return (options.fetch ?? globalThis.fetch)(url, { method, headers })
-  }
-
   const create = async (sessionID: string, directory: string): Promise<RemotePairingInfo> => {
     if (stopping) await stopping
 
@@ -61,6 +77,8 @@ export function createRemotePairingController(options: RemotePairingControllerOp
     if (!existing && creating === 0) {
       sessions.clear()
       ownsGateway = false
+    } else if (existing && creating === 0) {
+      await pruneSessions()
     }
 
     creating += 1
@@ -71,7 +89,7 @@ export function createRemotePairingController(options: RemotePairingControllerOp
         throw new Error("No local network address is available for remote control")
       }
 
-      const response = await request("POST", sessionID, directory)
+      const response = await adminRequest("POST", sessionID, directory)
       if (!response.ok) throw new Error(`Remote pairing failed with status ${response.status}`)
 
       const payload = (await response.json()) as PairingPayload
@@ -84,7 +102,7 @@ export function createRemotePairingController(options: RemotePairingControllerOp
         return `${mobile.toString()}#ticket=${encodeURIComponent(payload.ticket as string)}`
       })
 
-      sessions.add(sessionID)
+      sessions.set(sessionID, directory)
       return {
         url: urls[0]!,
         urls,
@@ -99,10 +117,10 @@ export function createRemotePairingController(options: RemotePairingControllerOp
   const revoke = async (sessionID: string, directory: string) => {
     if (stopping) await stopping
 
-    const response = await request("DELETE", sessionID, directory)
+    const response = await adminRequest("DELETE", sessionID, directory)
     if (!response.ok) throw new Error(`Remote revoke failed with status ${response.status}`)
     if (!sessions.delete(sessionID)) return
-    await stopIfIdle()
+    await stopIfIdle(true)
   }
 
   return { create, revoke }

@@ -156,6 +156,31 @@ describe("remote pairing controller", () => {
     expect(gateway.stops()).toBe(1)
   })
 
+  test("prunes deleted tracked sessions before deciding whether the gateway is idle", async () => {
+    const gateway = fakeGateway({ port: 4123, urls: ["http://192.168.1.10:4123"] })
+    const deleted = new Set<string>()
+    const controller = createRemotePairingController({
+      getSidecar: async () => ({ url: "http://127.0.0.1:4096", username: null, password: null }),
+      gateway: gateway.gateway,
+      fetch: async (input, init) => {
+        const request = new Request(input, init)
+        if (request.method === "GET") {
+          const sessionID = request.url.match(/\/session\/([^/?]+)/)?.[1]
+          return new Response(null, { status: sessionID && deleted.has(decodeURIComponent(sessionID)) ? 404 : 200 })
+        }
+        if (request.method === "DELETE") return Response.json(true)
+        return Response.json({ ticket: "ticket", expires_in: 300 })
+      },
+    })
+
+    await controller.create("session-a", "/tmp/a")
+    await controller.create("session-b", "/tmp/b")
+    deleted.add("session-a")
+
+    await controller.revoke("session-b", "/tmp/b")
+    expect(gateway.stops()).toBe(1)
+  })
+
   test("keeps a successful pairing alive when a concurrent pairing fails", async () => {
     const gateway = fakeGateway({ port: 4123, urls: ["http://192.168.1.10:4123"] })
     const successRequest = deferred<void>()
@@ -168,6 +193,7 @@ describe("remote pairing controller", () => {
       fetch: async (input, init) => {
         const request = new Request(input, init)
         if (request.method === "DELETE") return Response.json(true)
+        if (request.method === "GET") return new Response(null, { status: 200 })
         if (request.url.includes("session-success")) {
           successRequest.resolve()
           return successResponse.promise
@@ -203,6 +229,7 @@ describe("remote pairing controller", () => {
       fetch: async (input, init) => {
         const request = new Request(input, init)
         if (request.method === "DELETE") return Response.json(true)
+        if (request.method === "GET") return new Response(null, { status: 200 })
         if (request.url.includes("session-pending")) {
           pendingRequest.resolve()
           return pendingResponse.promise
