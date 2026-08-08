@@ -1054,12 +1054,30 @@ export function Session() {
       category: "Session",
       hidden: true,
       enabled: foregroundTasks().length > 0,
-      run: () => {
-        void sdk.client.experimental.session.background({
-          sessionID: route.sessionID,
-          workspace: project.workspace.current(),
-        })
+      run: async () => {
         dialog.clear()
+        // fork: the footer advertises this keybind whenever a foreground
+        // subagent is running, but the server refuses it (returns false)
+        // unless background subagents are enabled — and the response used to
+        // be discarded, so the keypress was a silent no-op. Say why instead.
+        await sdk.client.experimental.session
+          .background({
+            sessionID: route.sessionID,
+            workspace: project.workspace.current(),
+          })
+          .then((res) => {
+            if (res.data === true) return
+            toast.show({
+              message: "Background subagents are disabled — set OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true",
+              variant: "error",
+            })
+          })
+          .catch((error) => {
+            toast.show({
+              message: error instanceof Error ? error.message : "Failed to background subagents",
+              variant: "error",
+            })
+          })
       },
     },
     {
