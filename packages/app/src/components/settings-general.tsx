@@ -144,6 +144,12 @@ export const SettingsGeneral: Component = () => {
     { initialValue: null as DisplayBackend | null },
   )
 
+  const [keepAwake, { mutate: setKeepAwake }] = createResource(
+    () => (desktop() && platform.getKeepAwakeEnabled ? true : false),
+    () => Promise.resolve(platform.getKeepAwakeEnabled?.() ?? false).catch(() => false),
+    { initialValue: false },
+  )
+
   const [pinchZoom, { mutate: setPinchZoom }] = createResource(
     () => (desktop() && platform.getPinchZoomEnabled ? true : false),
     () => Promise.resolve(platform.getPinchZoomEnabled?.() ?? false).catch(() => false),
@@ -194,6 +200,13 @@ export const SettingsGeneral: Component = () => {
     void update.finally(() => {
       void refetchDisplayBackend()
     })
+  }
+
+  const onKeepAwakeChange = (checked: boolean) => {
+    setKeepAwake(checked)
+    const update = platform.setKeepAwakeEnabled?.(checked)
+    if (!update) return
+    void Promise.resolve(update).catch(() => setKeepAwake(!checked))
   }
 
   const onPinchZoomChange = (checked: boolean) => {
@@ -706,6 +719,15 @@ export const SettingsGeneral: Component = () => {
         <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
 
         <SettingsList>
+          <SettingsRow
+            title={language.t("settings.general.row.keepAwake.title")}
+            description={language.t("settings.general.row.keepAwake.description")}
+          >
+            <div data-action="settings-keep-awake">
+              <Switch checked={keepAwake.latest} onChange={onKeepAwakeChange} />
+            </div>
+          </SettingsRow>
+
           <SettingsRow
             title={language.t("settings.general.row.pinchZoom.title")}
             description={language.t("settings.general.row.pinchZoom.description")}
