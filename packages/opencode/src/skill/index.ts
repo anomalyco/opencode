@@ -1,6 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context, Schema, Stream, Duration } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -17,6 +17,9 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import { Discovery } from "./discovery"
 import { isRecord } from "@/util/record"
 import { escapeHtml } from "@/util/html"
+import { SkillEvent } from "@opencode-ai/schema/skill-event"
+import { FileSystemWatcher } from "@opencode-ai/schema/filesystem-watcher"
+import ParcelWatcher from "@parcel/watcher"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
@@ -87,6 +90,7 @@ type State = {
 type DiscoveryState = {
   matches: string[]
   dirs: string[]
+  roots: string[]
 }
 
 type ScanState = {
@@ -181,6 +185,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   worktree: string,
 ) {
   const state: ScanState = { matches: new Set(), dirs: new Set() }
+  const roots = new Set<string>()
 
   const externalDirs: string[] = []
   if (!disableExternalSkills) {
@@ -191,6 +196,7 @@ const discoverSkills = Effect.fnUntraced(function* (
       const root = path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+      roots.add(path.join(root, "skills"))
     }
 
     const upDirs = yield* fsys
@@ -199,12 +205,14 @@ const discoverSkills = Effect.fnUntraced(function* (
 
     for (const root of upDirs) {
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+      roots.add(path.join(root, "skills"))
     }
   }
 
   const configDirs = yield* config.directories()
   for (const dir of configDirs) {
     yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+    roots.add(dir)
   }
 
   const cfg = yield* config.get()
@@ -217,18 +225,21 @@ const discoverSkills = Effect.fnUntraced(function* (
     }
 
     yield* scan(state, dir, SKILL_PATTERN)
+    roots.add(dir)
   }
 
   for (const url of cfg.skills?.urls ?? []) {
     const pulledDirs = yield* discovery.pull(url)
     for (const dir of pulledDirs) {
       yield* scan(state, dir, SKILL_PATTERN)
+      roots.add(dir)
     }
   }
 
   return {
     matches: Array.from(state.matches),
     dirs: Array.from(state.dirs),
+    roots: Array.from(roots),
   }
 })
 
@@ -270,7 +281,59 @@ const layer = Layer.effect(
         )
       }),
     )
-    const state = yield* InstanceState.make(
+    // Watch every skill root so newly installed skills (SKILL.md added after
+    // startup) trigger a reload instead of waiting for an opencode restart.
+    // The native watcher is registered once per instance below; its callback
+    // publishes `file.watcher.updated` events, which each instance's skill
+    // state subscribes to for rebuilding itself.
+    const context = yield* Effect.context()
+    const runFork = Effect.runForkWith(context)
+    const backend = process.platform === "win32" ? "windows" : process.platform === "darwin" ? "fs-events" : "inotify"
+    const watchedRoots = new Set<string>()
+    let debounce: ReturnType<typeof setTimeout> | undefined
+    let pendingFile: string | undefined
+    const scheduleRefresh = (file: string) => {
+      pendingFile = file
+      if (debounce) return
+      debounce = setTimeout(() => {
+        debounce = undefined
+        const changed = pendingFile
+        pendingFile = undefined
+        if (!changed) return
+        void runFork(events.publish(FileSystemWatcher.Event.Updated, { file: changed, event: "change" }))
+      }, 300)
+    }
+    const subscriptions: ParcelWatcher.AsyncSubscription[] = []
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(() => Promise.allSettled(subscriptions.map((subscription) => subscription.unsubscribe()))),
+    )
+    const watchRoots = Effect.fnUntraced(function* (roots: string[]) {
+      for (const root of roots) {
+        if (watchedRoots.has(root)) continue
+        if (!(yield* fsys.isDir(root).pipe(Effect.catch(() => Effect.succeed(false))))) continue
+        watchedRoots.add(root)
+        const subscription = yield* Effect.promise(() =>
+          ParcelWatcher.subscribe(
+            root,
+            (_error, updates) => {
+              for (const update of updates) {
+                if (update.type !== "update" || update.path.endsWith(".md")) {
+                  scheduleRefresh(update.path)
+                  break
+                }
+              }
+            },
+            { backend },
+          ),
+        )
+          .pipe(Effect.timeout(Duration.seconds(3)))
+          .pipe(Effect.catch((error) => Effect.logWarning("failed to watch skill root", { root, error })))
+        if (subscription) subscriptions.push(subscription)
+      }
+    })
+
+    let state: InstanceState<State> | undefined
+    state = yield* InstanceState.make(
       Effect.fn("Skill.state")(function* () {
         const s: State = { skills: {}, dirs: new Set() }
         // Register the built-in skill BEFORE disk discovery so a user-disk
@@ -282,6 +345,20 @@ const layer = Layer.effect(
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), events)
+        yield* Effect.forkScoped(watchRoots((yield* InstanceState.get(discovered)).roots).pipe(Effect.ignore))
+        yield* Effect.forkScoped(
+          events.subscribe(FileSystemWatcher.Event.Updated).pipe(
+            Stream.filter((event) => Array.from(watchedRoots).some((root) => event.data.file.startsWith(root))),
+            Stream.debounce(Duration.millis(300)),
+            Stream.runForEach(() =>
+              Effect.gen(function* () {
+                yield* InstanceState.invalidate(discovered)
+                yield* InstanceState.invalidate(state!)
+                yield* events.publish(SkillEvent.Event.Updated, {})
+              }),
+            ),
+          ),
+        )
         return s
       }),
     )

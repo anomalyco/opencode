@@ -442,6 +442,16 @@ export const {
           }
           break
         }
+
+        default: {
+          // `skill.updated` is emitted when skills are installed or removed
+          // while opencode is running. Handle it before the SDK types catch
+          // up so the slash-command list refreshes without a restart.
+          if ((event as { type: string }).type === "skill.updated" && workspace === project.workspace.current()) {
+            void sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? [])))
+          }
+          break
+        }
       }
     })
 

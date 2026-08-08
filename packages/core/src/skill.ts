@@ -2,7 +2,7 @@ export * as SkillV2 from "./skill"
 
 import { makeLocationNode } from "./effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, Schema, Types } from "effect"
+import { Context, Effect, Layer, Schema, Stream, Types } from "effect"
 import { Skill } from "@opencode-ai/schema/skill"
 import { AgentV2 } from "./agent"
 import { ConfigMarkdown } from "./config/markdown"
@@ -11,6 +11,8 @@ import { PermissionV2 } from "./permission"
 import { AbsolutePath } from "./schema"
 import { SkillDiscovery } from "./skill/discovery"
 import { State } from "./state"
+import { EventV2 } from "./event"
+import { SkillEvent } from "@opencode-ai/schema/skill-event"
 
 export const DirectorySource = Skill.DirectorySource
 export type DirectorySource = Skill.DirectorySource
@@ -58,6 +60,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const discovery = yield* SkillDiscovery.Service
     const fs = yield* FSUtil.Service
+    const events = yield* EventV2.Service
 
     const state = State.create<Data, Draft>({
       initial: () => ({ sources: [] }),
@@ -106,7 +109,13 @@ const layer = Layer.effect(
 
     // QUESTION(Dax): Should local skill sources invalidate on filesystem watch
     // events, following the reload policy chosen for other context sources?
+    // Resolved: the opencode host watches skill directories and publishes
+    // `skill.updated` when they change; drop the cache here so v2 skill lists
+    // reflect newly installed skills without restarting opencode.
     const cache = new Map<string, Info[]>()
+    yield* Effect.forkScoped(
+      events.subscribe(SkillEvent.Event.Updated).pipe(Stream.runForEach(() => Effect.sync(() => cache.clear()))),
+    )
     const list = Effect.fn("SkillV2.list")(function* () {
       const skills = new Map<string, Info>()
       for (const source of state.get().sources) {
@@ -129,4 +138,8 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [SkillDiscovery.node, FSUtil.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [SkillDiscovery.node, FSUtil.node, EventV2.node],
+})
