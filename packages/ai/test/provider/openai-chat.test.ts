@@ -102,6 +102,24 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("concatenates assistant text parts without adding separators", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "text", text: "Hello" },
+              { type: "text", text: " world" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([{ role: "assistant", content: "Hello world" }])
+    }),
+  )
+
   it.effect("writes reasoning to a configured custom field on every assistant message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -578,7 +596,7 @@ describe("OpenAI Chat route", () => {
         }),
       )
 
-      expect(prepared.body.messages).toEqual([{ role: "assistant", content: null, reasoning_content: "hidden" }])
+      expect(prepared.body.messages).toEqual([{ role: "assistant", content: "", reasoning_content: "hidden" }])
     }),
   )
 
@@ -947,7 +965,7 @@ describe("OpenAI Chat route", () => {
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
-      expect(replay.body.messages).toEqual([{ role: "assistant", content: null, reasoning_details: details }])
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "", reasoning_details: details }])
     }),
   )
 
@@ -997,7 +1015,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(replay.body.messages).toEqual([
-        { role: "assistant", content: null, reasoning: "firstsecond", reasoning_details: [first, second] },
+        { role: "assistant", content: "", reasoning: "firstsecond", reasoning_details: [first, second] },
       ])
     }),
   )
@@ -1022,7 +1040,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(replay.body.messages).toEqual([
-        { role: "assistant", content: null, reasoning_content: "AB", reasoning_details: [detail] },
+        { role: "assistant", content: "", reasoning_content: "AB", reasoning_details: [detail] },
       ])
     }),
   )
@@ -1044,7 +1062,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(replay.body.messages).toEqual([
-        { role: "assistant", content: null, reasoning_content: "thinking", reasoning_details: details },
+        { role: "assistant", content: "", reasoning_content: "thinking", reasoning_details: details },
       ])
     }),
   )

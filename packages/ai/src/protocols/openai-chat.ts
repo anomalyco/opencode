@@ -371,12 +371,13 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     return text
   })()
   const cached = message.content.findLast((part) => "cache" in part && part.cache !== undefined)
+  const cacheControl = options.cacheControl?.(cached && "cache" in cached ? cached.cache : undefined)
   const result = {
     role: "assistant" as const,
-    content: content.length === 0 ? null : ProviderShared.joinText(content),
-    tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
-    reasoning_details: details,
-    cache_control: options.cacheControl?.(cached && "cache" in cached ? cached.cache : undefined),
+    content: content.length > 0 ? content.map((part) => part.text).join("") : toolCalls.length > 0 ? null : "",
+    ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+    ...(details !== undefined ? { reasoning_details: details } : {}),
+    ...(cacheControl !== undefined ? { cache_control: cacheControl } : {}),
   }
   if (field === undefined || reasoningText === undefined) return result
   return { ...result, [field]: reasoningText }
