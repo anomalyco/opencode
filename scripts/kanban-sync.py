@@ -16,60 +16,61 @@ from zoneinfo import ZoneInfo
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
 
-PROJECT_ID = "PVT_kwHOBM87Yc4Bfn48"
-REPO_ID = "R_kgDOTv7ysw"
+PROJECT_ID = "PVT_kwHOBM87Yc4Bfu74"
+REPO_ID = "R_kgDOTxw4Iw"
 REPO = "jaminsmoke/Jarvis"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 FIELDS = {
-    "Status":    "PVTSSF_lAHOBM87Yc4Bfn48zhZ5fDo",
-    "Version":   "PVTSSF_lAHOBM87Yc4Bfn48zhZ5goQ",
-    "Prioridad": "PVTSSF_lAHOBM87Yc4Bfn48zhZ5goU",
-    "Decision":  "PVTSSF_lAHOBM87Yc4Bfn48zhZ5jKI",
-    "Tipo":      "PVTSSF_lAHOBM87Yc4Bfn48zhZ8Pgs",
-    "Area":      "PVTSSF_lAHOBM87Yc4Bfn48zhZ8Pis",
-    "Started":   "PVTF_lAHOBM87Yc4Bfn48zhZ8bRE",
-    "StartedExact": "PVTF_lAHOBM87Yc4Bfn48zhZ8bRI",
-    "Completed": "PVTF_lAHOBM87Yc4Bfn48zhZ5mT8",
-    "CompletedExact": "PVTF_lAHOBM87Yc4Bfn48zhZ8bRM",
+    "Status":    "PVTSSF_lAHOBM87Yc4Bfu74zhZ_w4M",  # campo "Estado" (el built-in Status no acepta opciones custom)
+    "Version":   "PVTSSF_lAHOBM87Yc4Bfu74zhZ_weA",  # campo "Versión"
+    "Prioridad": "PVTSSF_lAHOBM87Yc4Bfu74zhZ_wb4",
+    "Decision":  "PVTSSF_lAHOBM87Yc4Bfu74zhZ_wb0",
+    "Tipo":      "PVTSSF_lAHOBM87Yc4Bfu74zhZ_wbw",
+    "Area":      "PVTSSF_lAHOBM87Yc4Bfu74zhZ_wwc",   # campo "Área principal"
+    "HighLighted": "PVTSSF_lAHOBM87Yc4Bfu74zhZ_wbs",
+    "Started":   "PVTF_lAHOBM87Yc4Bfu74zhZ_wwg",    # campo "Inicio"
+    "StartedExact": "PVTF_lAHOBM87Yc4Bfu74zhZ_wxY",  # campo "Inicio exacto"
+    "Completed": "PVTF_lAHOBM87Yc4Bfu74zhZ_wbo",     # campo "Completado"
+    "CompletedExact": "PVTF_lAHOBM87Yc4Bfu74zhZ_wyQ", # campo "Completado exacto"
 }
 
 EXACT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 MADRID = ZoneInfo("Europe/Madrid")
 
 STATUS = {
-    "Detectado": "0a2ea60d", "Debate": "12bff49e", "Roadmap": "e0f179d6",
-    "Ejecutando": "5983e216", "Verificando": "4885da16", "Changelog": "7874500c",
+    "Detectado": "21ffaaa5", "Debate": "e895ad32", "Roadmap": "98ba191b",
+    "Ejecutando": "e59bb649", "Verificando": "0054af8e", "Changelog": "34232d2b",
 }
 
 VERSION = {
-    "v0.1.0": "15905bd2", "v0.1.1": "f2c85aca", "v0.1.2": "ac87c877",
-    "v0.1.3": "9e7509ea", "v0.1.4": "66fdab55", "v0.1.5": "469e6317", "Sin asignar": "837adc26",
+    "v0.1.0": "075d6fb1", "v0.1.1": "ace4e772", "v0.1.2": "b7128c7b",
+    "v0.1.3": "4deda89b", "v0.1.4": "674f4064", "v0.1.5": "ec9916a0", "Sin asignar": "b38b3c4e",
 }
 
-PRIORITY = {"Alta": "5d462692", "Media": "8759d88f", "Baja": "491c0a1b"}
-DECISION = {"Decidido": "21adec4d", "Descartado": "c4245afc", "Diferido": "3e191ae5"}
+PRIORITY = {"Alta": "6921d900", "Media": "f5651c12", "Baja": "2eee9b96"}
+DECISION = {"Pendiente": "836be57a", "Aprobado": "f73848fa", "Diferido": "d4010352", "Cancelado": "57635fa9"}
 TYPE = {
-    "Bug": "b691c1c3", "Feature": "d1c781da", "Maintenance": "cc0d870e",
-    "Security": "e0113689", "Decision": "5b30cb08",
+    "Bug": "274ee788", "Feature": "80bb9b0c", "Maintenance": "f15d15e8",
+    "Security": "22af383b", "Decision": "fcdd6924",
 }
 AREA = {
-    "App": "60f552c6", "Desktop": "0d7ae8e0", "Core": "295fb2fd",
-    "Server": "6a079565", "CI": "000da29f", "Infra": "b6546326",
-    "Docs": "b592ee68", "Lint": "c2734252", "Dependencies": "9ad312e3",
-    "Release": "f304f880", "Governance": "47729191", "Upstream": "05960faf",
+    "App": "cef0dd05", "Desktop": "cdf56c71", "Core": "5b3f603e",
+    "Server": "394a3c9b", "CI": "403239d7", "Infra": "8d9d4236",
+    "Docs": "44c2fa77", "Lint": "1603e9a1", "Dependencies": "91bee31d",
+    "Release": "0e4281a5", "Governance": "41e91e98", "Upstream": "5977d3e8",
 }
 
 LABELS = {
-    "app": "LA_kwDOTv7ys88AAAACvLtGZg", "desktop": "LA_kwDOTv7ys88AAAACvLtGkw",
-    "docs": "LA_kwDOTv7ys88AAAACvLtGyg", "CI": "LA_kwDOTv7ys88AAAACvLtG8g",
-    "infra": "LA_kwDOTv7ys88AAAACvLtHMA", "decision": "LA_kwDOTv7ys88AAAACvLtHYA",
-    "lint": "LA_kwDOTv7ys88AAAACvLtHig", "feature": "LA_kwDOTv7ys88AAAACvLtH_g",
-    "bug": "LA_kwDOTv7ys88AAAACvFq_WQ", "dependencies": "LA_kwDOTv7ys88AAAACvKuiTw",
-    "maintenance": "LA_kwDOTv7ys88AAAACvQsgSw", "security": "LA_kwDOTv7ys88AAAACvQsgZQ",
-    "core": "LA_kwDOTv7ys88AAAACvQsgkg", "server": "LA_kwDOTv7ys88AAAACvQsg0w",
-    "release": "LA_kwDOTv7ys88AAAACvQshCw", "governance": "LA_kwDOTv7ys88AAAACvQshSA",
-    "upstream": "LA_kwDOTv7ys88AAAACvQshcA",
+    "app": "LA_kwDOTx4wI88AAAACvXv54Q", "desktop": "LA_kwDOTx4wI88AAAACvXv6Bw",
+    "docs": "LA_kwDOTx4wI88AAAACvXv6KQ", "CI": "LA_kwDOTx4wI88AAAACvXv6WQ",
+    "infra": "LA_kwDOTx4wI88AAAACvXv6mA", "decision": "LA_kwDOTx4wI88AAAACvXv6uw",
+    "lint": "LA_kwDOTx4wI88AAAACvXv69g", "feature": "LA_kwDOTx4wI88AAAACvXv7NA",
+    "bug": "LA_kwDOTx4wI88AAAACvXv7Sw", "dependencies": "LA_kwDOTx4wI88AAAACvXv7fw",
+    "maintenance": "LA_kwDOTx4wI88AAAACvXv7wQ", "security": "LA_kwDOTx4wI88AAAACvXv8BQ",
+    "core": "LA_kwDOTx4wI88AAAACvXv8Iw", "server": "LA_kwDOTx4wI88AAAACvXv8Qw",
+    "release": "LA_kwDOTx4wI88AAAACvXv8YA", "governance": "LA_kwDOTx4wI88AAAACvXv8fw",
+    "upstream": "LA_kwDOTx4wI88AAAACvXv8nw",
 }
 
 TYPE_LABELS = {
@@ -184,7 +185,7 @@ def get_issue_from_item(item_id):
 def get_item_content(item_id):
     data = gql(
         f'{{node(id:"{item_id}"){{...on ProjectV2Item{{'
-        f'id,createdAt,statusField:fieldValueByName(name:"Status"){{...on ProjectV2ItemFieldSingleSelectValue{{name,updatedAt}}}},'
+        f'id,createdAt,statusField:fieldValueByName(name:"Estado"){{...on ProjectV2ItemFieldSingleSelectValue{{name,updatedAt}}}},'
         f'typeField:fieldValueByName(name:"Tipo"){{...on ProjectV2ItemFieldSingleSelectValue{{name}}}},'
         f'areaField:fieldValueByName(name:"Área principal"){{...on ProjectV2ItemFieldSingleSelectValue{{name}}}},'
         f'startedField:fieldValueByName(name:"Inicio"){{...on ProjectV2ItemFieldDateValue{{date}}}},'
@@ -399,7 +400,7 @@ def cmd_move(item_id, from_status, to_status):
     if from_status == "Detectado" and to_status == "Debate":
         set_field(item_id, FIELDS["Status"], to_id); print("  OK Status -> Debate"); return 0
     if from_status == "Debate" and to_status == "Roadmap":
-        set_field(item_id, FIELDS["Decision"], DECISION["Decidido"]); print("  OK Decision -> Decidido")
+        set_field(item_id, FIELDS["Decision"], DECISION["Aprobado"]); print("  OK Decision -> Aprobado")
         set_field(item_id, FIELDS["Status"], to_id); print("  OK Status -> Roadmap"); return 0
     if from_status == "Roadmap" and to_status == "Ejecutando":
         if item['status'] == "Ejecutando":
@@ -510,7 +511,7 @@ def cmd_move(item_id, from_status, to_status):
         set_field(item_id, FIELDS["Status"], to_id); print(f"  OK Reopened -> {to_status}")
         return 0
     if to_status == "Changelog" and from_status in ("Detectado", "Debate"):
-        set_field(item_id, FIELDS["Decision"], DECISION["Descartado"]); print("  OK Decision -> Descartado")
+        set_field(item_id, FIELDS["Decision"], DECISION["Cancelado"]); print("  OK Decision -> Cancelado")
         set_field(item_id, FIELDS["Status"], to_id); print("  OK Status -> Changelog"); time.sleep(0.3)
         convert_to_issue(item_id); time.sleep(0.3)
         issue = get_issue_from_item(item_id)
@@ -518,7 +519,7 @@ def cmd_move(item_id, from_status, to_status):
             old_title = issue.get('title', '')
             if not old_title.startswith('✅ '): update_issue(issue['id'], title=f"✅ {old_title}")
             add_labels(issue['id'], ['decision']); close_issue(issue['id'])
-            print(f"  OK Issue #{issue['number']} closed as Descartado")
+            print(f"  OK Issue #{issue['number']} closed as Cancelado")
         return 0
     set_field(item_id, FIELDS["Status"], to_id); print(f"  OK Status -> {to_status}"); return 0
 
@@ -536,7 +537,7 @@ def cmd_changelog():
             fn = fv.get('field', {}).get('name', '?')
             val = fv.get('name', '?')
             if val != '?': fields[fn] = val
-        if fields.get('Status') == 'Changelog':
+        if fields.get('Estado') == 'Changelog':
             ver = _get_field(fields, 'Versión', 'Version', 'versi', 'Versi')
             changelog_items.append({'number': ct['number'], 'title': ct.get('title', '?'), 'version': ver})
 
@@ -611,7 +612,7 @@ def cmd_backfill_timestamps():
         started, started_exact = temporal_values(created_at)
         completed = None
         completed_exact = None
-        if fields.get('Status') == 'Changelog':
+        if fields.get('Estado') == 'Changelog':
             closed_at = parse_api_datetime(content.get('closedAt'))
             if 'number' not in content or content.get('state') != 'CLOSED' or not closed_at:
                 raise KanbanError(f'Changelog item {item["id"]} lacks a closed Issue timestamp')
@@ -689,7 +690,7 @@ def cmd_audit():
         title = ct.get('title', '?')[:55]
         fields, _ = item_fields(i)
 
-        st = fields.get('Status', 'SIN')
+        st = fields.get('Estado', 'SIN')
         ver = _get_field(fields, 'Versión', 'Version')
         prio = fields.get('Prioridad', '-')
         dec = _get_field(fields, 'Decisión', 'Decision')
@@ -753,7 +754,7 @@ def cmd_audit():
 
     drafts = sum(1 for i in items if 'number' not in i['content'] and any(
         fv.get('name') == 'Changelog' for fv in i.get('fieldValues',{}).get('nodes',[])
-        if fv.get('field',{}).get('name') == 'Status'))
+        if fv.get('field',{}).get('name') == 'Estado'))
     if drafts: print(f"  [!!] {drafts} Drafts in Changelog!")
     return issues_found
 
