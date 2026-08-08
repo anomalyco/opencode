@@ -191,7 +191,7 @@ export function Session() {
   const paths = useTuiPaths()
   const tuiConfig = useTuiConfig()
   const kv = useKV()
-  const { theme } = useTheme()
+  const { theme, selectionBg, selectionFg } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
   const location = createMemo(() => {
@@ -1234,15 +1234,17 @@ export function Session() {
                                 paddingLeft={2}
                                 backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
                               >
-                                <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
-                                <text fg={theme.textMuted}>
+                                <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
+                                  {revert()!.reverted.length} message reverted
+                                </text>
+                                <text fg={theme.textMuted} selectionBg={selectionBg()} selectionFg={selectionFg()}>
                                   <span style={{ fg: theme.text }}>{redoShortcut()}</span> or /redo to restore
                                 </text>
                                 <Show when={revert()!.diffFiles?.length}>
                                   <box marginTop={1}>
                                     <For each={revert()!.diffFiles}>
                                       {(file) => (
-                                        <text fg={theme.text}>
+                                        <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>
                                           {file.filename}
                                           <Show when={file.additions > 0}>
                                             <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
@@ -1383,7 +1385,7 @@ function UserMessage(props: {
     return texts.join("\n\n")
   })
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
-  const { theme } = useTheme()
+  const { theme, selectionBg, selectionFg } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending !== undefined && props.index > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
@@ -1417,7 +1419,9 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{text()}</text>
+            <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>
+              {text()}
+            </text>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
@@ -1585,7 +1589,7 @@ const PART_MAPPING = {
 const INLINE_TOOL_ICON_WIDTH = 2
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
-  const { theme } = useTheme()
+  const { theme, selectionBg, selectionFg } = useTheme()
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
@@ -1639,6 +1643,8 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
               content={summary().body}
               conceal={ctx.conceal()}
               fg={theme.textMuted}
+              selectionBg={selectionBg()}
+              selectionFg={selectionFg()}
             />
           </box>
         </Show>
@@ -1693,19 +1699,25 @@ function ReasoningHeader(props: {
 
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme, syntax, selectionBg, selectionFg } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
       <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
-        <markdown
-          syntaxStyle={syntax()}
+        {/*
+          Use CodeRenderable (not MarkdownRenderable) so OpenTUI can apply explicit
+          selectionBg/selectionFg. Markdown does not expose those props yet; without them
+          light themes invert to unreadable black-on-black (#41281).
+        */}
+        <code
+          filetype="markdown"
+          drawUnstyledText={false}
           streaming={true}
-          internalBlockMode="top-level"
+          syntaxStyle={syntax()}
           content={props.part.text.trim()}
-          tableOptions={{ style: "grid" }}
           conceal={ctx.conceal()}
           fg={theme.markdownText}
-          bg={theme.background}
+          selectionBg={selectionBg()}
+          selectionFg={selectionFg()}
         />
       </box>
     </Show>
@@ -2052,7 +2064,7 @@ function BlockTool(props: {
 }
 
 function Shell(props: ToolProps) {
-  const { theme } = useTheme()
+  const { theme, selectionBg, selectionFg } = useTheme()
   const pathFormatter = usePathFormatter()
   const ctx = use()
   const isRunning = createMemo(() => props.part.state.status === "running")
@@ -2089,11 +2101,11 @@ function Shell(props: ToolProps) {
           onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
+            <Show when={isRunning()} fallback={<text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>$ {stringValue(props.input.command)}</text>}>
               <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
             </Show>
             <Show when={output()}>
-              <text fg={theme.text}>{limited()}</text>
+              <text fg={theme.text} selectionBg={selectionBg()} selectionFg={selectionFg()}>{limited()}</text>
             </Show>
             <Show when={collapsed().overflow}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
@@ -2111,7 +2123,7 @@ function Shell(props: ToolProps) {
 }
 
 function Write(props: ToolProps) {
-  const { theme, syntax } = useTheme()
+  const { theme, syntax, selectionBg, selectionFg } = useTheme()
   const pathFormatter = usePathFormatter()
   const code = createMemo(() => {
     return stringValue(props.input.content) ?? ""
@@ -2128,6 +2140,8 @@ function Write(props: ToolProps) {
               filetype={filetype(stringValue(props.input.filePath))}
               syntaxStyle={syntax()}
               content={code()}
+              selectionBg={selectionBg()}
+              selectionFg={selectionFg()}
             />
           </line_number>
           <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.filePath) ?? ""} />
@@ -2402,7 +2416,7 @@ function Execute(props: ToolProps) {
 
 function Edit(props: ToolProps) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme, syntax, selectionBg, selectionFg } = useTheme()
   const pathFormatter = usePathFormatter()
 
   const view = createMemo(() => {
@@ -2430,6 +2444,8 @@ function Edit(props: ToolProps) {
               width="100%"
               wrapMode={ctx.diffWrapMode()}
               fg={theme.text}
+              selectionBg={selectionBg()}
+              selectionFg={selectionFg()}
               addedBg={theme.diffAddedBg}
               removedBg={theme.diffRemovedBg}
               contextBg={theme.diffContextBg}
@@ -2455,7 +2471,7 @@ function Edit(props: ToolProps) {
 
 function ApplyPatch(props: ToolProps) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme, syntax, selectionBg, selectionFg } = useTheme()
   const pathFormatter = usePathFormatter()
 
   const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
@@ -2478,6 +2494,8 @@ function ApplyPatch(props: ToolProps) {
           width="100%"
           wrapMode={ctx.diffWrapMode()}
           fg={theme.text}
+          selectionBg={selectionBg()}
+          selectionFg={selectionFg()}
           addedBg={theme.diffAddedBg}
           removedBg={theme.diffRemovedBg}
           contextBg={theme.diffContextBg}

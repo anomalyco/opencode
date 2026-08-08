@@ -1,0 +1,38 @@
+# Compact plan for OpenCode #41281
+issue: 41281
+title: "TUI: unreadable mouse text selection in light mode (default opencode theme)"
+repo: opencode
+repo_remote: anomalyco/opencode
+cwd: /Users/saifer/Documents/WEBS/opencode
+stack: opentui
+branch: wr-41281-light-selection-contrast
+
+paths:
+  - packages/tui/src/theme/index.ts
+  - packages/tui/src/context/theme.tsx
+  - packages/tui/src/routes/session/index.tsx
+  - packages/tui/test/theme.test.ts
+
+ac:
+  - opencode light theme mouse selection has readable contrast
+  - copy-on-select unchanged
+  - dark mode no regression
+  - luminance-aware fallback when selection colors omitted
+  - theme exposes selectionBg/selectionFg for text/code/diff/markdown content
+
+out_of_scope:
+  - Desktop/web
+  - New picker themes
+  - Full audit of every <text> in TUI chrome
+
+hints:
+  entry: "textSelectionColors + ThemeProvider selectionBg/Fg"
+  pattern: "closed PR #13352 tint(backgroundPanel, primary) + pass selectionBg/Fg to content"
+  tests: "cd packages/tui && bun test test/theme.test.ts"
+
+risk:
+  sensitive: false
+  areas: [tui, theme]
+
+next:
+  after_pr: "Closes #41281"

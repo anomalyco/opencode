@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TerminalColors } from "@opentui/core"
-import { DEFAULT_THEMES, addTheme, allThemes, hasTheme, resolveTheme, terminalMode } from "../src/theme"
+import { DEFAULT_THEMES, addTheme, allThemes, hasTheme, resolveTheme, terminalMode, textSelectionColors } from "../src/theme"
 import { discoverThemes } from "../src/context/theme"
 import { tmpdir } from "./fixture/fixture"
 
@@ -66,6 +66,22 @@ test("terminalMode derives mode from refreshed background", () => {
 
 test("terminalMode does not derive mode from ANSI slot zero", () => {
   expect(terminalMode(terminalColors(null, ["#000000"]))).toBeUndefined()
+})
+
+test("textSelectionColors keep contrast on opencode light theme", () => {
+  const theme = resolveTheme(DEFAULT_THEMES.opencode, "light")
+  const { selectionBg, selectionFg } = textSelectionColors(theme, "light")
+  const bgLum = 0.299 * selectionBg.r + 0.587 * selectionBg.g + 0.114 * selectionBg.b
+  const fgLum = 0.299 * selectionFg.r + 0.587 * selectionFg.g + 0.114 * selectionFg.b
+  expect(Math.abs(bgLum - fgLum)).toBeGreaterThanOrEqual(0.35)
+})
+
+test("textSelectionColors keep contrast on opencode dark theme", () => {
+  const theme = resolveTheme(DEFAULT_THEMES.opencode, "dark")
+  const { selectionBg, selectionFg } = textSelectionColors(theme, "dark")
+  const bgLum = 0.299 * selectionBg.r + 0.587 * selectionBg.g + 0.114 * selectionBg.b
+  const fgLum = 0.299 * selectionFg.r + 0.587 * selectionFg.g + 0.114 * selectionFg.b
+  expect(Math.abs(bgLum - fgLum)).toBeGreaterThanOrEqual(0.35)
 })
 
 test("custom theme precedence follows directory order", async () => {

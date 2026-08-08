@@ -15,6 +15,7 @@ import {
   setSystemTheme,
   subscribeThemes,
   terminalMode,
+  textSelectionColors,
   tint,
   upsertTheme,
   type ThemeJson,
@@ -72,6 +73,7 @@ export {
   resolveTheme,
   selectedForeground,
   terminalMode,
+  textSelectionColors,
   tint,
   upsertTheme,
   type Theme,
@@ -268,6 +270,10 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     createEffect(() => renderer.setBackgroundColor(values().background))
 
+    const selection = createMemo(() => textSelectionColors(values(), store.mode))
+    const selectionBg = createMemo(() => selection().selectionBg)
+    const selectionFg = createMemo(() => selection().selectionFg)
+
     const syntax = createSyntaxStyleMemo(() => generateSyntax(values()))
     const subtleSyntax = createSyntaxStyleMemo(() => generateSubtleSyntax(values()))
 
@@ -285,6 +291,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       has: hasTheme,
       syntax,
       subtleSyntax,
+      selectionBg,
+      selectionFg,
       mode: () => store.mode,
       locked: () => store.lock !== undefined,
       lock: () => pin(store.mode),

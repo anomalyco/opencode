@@ -350,6 +350,31 @@ export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
   return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
 }
 
+function relativeLuminance(color: RGBA): number {
+  return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
+}
+
+/**
+ * Mouse drag / copy-on-select colors for OpenTUI text buffers.
+ * OpenTUI inverts fg/bg when these are omitted, which is unreadable on light themes.
+ */
+export function textSelectionColors(
+  theme: Theme,
+  mode: "dark" | "light",
+): { selectionBg: RGBA; selectionFg: RGBA } {
+  const selectionBg = tint(theme.backgroundPanel, theme.primary, mode === "light" ? 0.22 : 0.32)
+  // Prefer theme text when it contrasts with the highlight; otherwise pick black/white.
+  const textLum = relativeLuminance(theme.text)
+  const bgLum = relativeLuminance(selectionBg)
+  const selectionFg =
+    Math.abs(textLum - bgLum) >= 0.35
+      ? theme.text
+      : bgLum > 0.55
+        ? RGBA.fromInts(0, 0, 0)
+        : RGBA.fromInts(255, 255, 255)
+  return { selectionBg, selectionFg }
+}
+
 export function terminalMode(colors: TerminalColors): "dark" | "light" | undefined {
   const bg = colors.defaultBackground
   if (!bg) return
