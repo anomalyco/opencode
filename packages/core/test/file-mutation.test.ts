@@ -13,7 +13,7 @@ import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
-function provide(directory: string, environmentLayer = LayerNode.compile(Environment.node)) {
+function provide(directory: string, environmentLayer?: Layer.Layer<Environment.Service>) {
   const activeLocation = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
@@ -21,7 +21,7 @@ function provide(directory: string, environmentLayer = LayerNode.compile(Environ
   return Effect.provide(
     AppNodeBuilder.build(LayerNode.group([LocationMutation.node, FileMutation.node]), [
       [Location.node, activeLocation],
-      [Environment.node, environmentLayer],
+      [Environment.node, environmentLayer ?? AppNodeBuilder.build(Environment.node, [[Location.node, activeLocation]])],
     ]),
   )
 }
@@ -118,7 +118,7 @@ describe("FileMutation", () => {
         const releaseFirst = yield* Deferred.make<void>()
         const secondStarted = yield* Deferred.make<void>()
         let writes = 0
-        const filesystem = instrumentWrites((write) =>
+        const filesystem = instrumentWrites(directory, (write) =>
           Effect.gen(function* () {
             writes++
             if (writes === 1) {
@@ -211,7 +211,7 @@ describe("FileMutation", () => {
         const secondFinished = yield* Deferred.make<void>()
         const secondPath = path.join(directory, "second.txt")
         let writes = 0
-        const filesystem = instrumentWrites((write) =>
+        const filesystem = instrumentWrites(directory, (write) =>
           ++writes === 1
             ? Deferred.succeed(firstStarted, undefined).pipe(
                 Effect.andThen(Deferred.await(releaseFirst)),
@@ -240,7 +240,10 @@ describe("FileMutation", () => {
   )
 })
 
-function instrumentWrites(run: <E>(write: Effect.Effect<void, E>, target: string) => Effect.Effect<void, E>) {
+function instrumentWrites(
+  directory: string,
+  run: <E>(write: Effect.Effect<void, E>, target: string) => Effect.Effect<void, E>,
+) {
   return Layer.effect(
     Environment.Service,
     Effect.gen(function* () {
@@ -253,5 +256,14 @@ function instrumentWrites(run: <E>(write: Effect.Effect<void, E>, target: string
         },
       })
     }),
-  ).pipe(Layer.provide(LayerNode.compile(Environment.node)))
+  ).pipe(
+    Layer.provide(
+      AppNodeBuilder.build(Environment.node, [
+        [
+          Location.node,
+          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+        ],
+      ]),
+    ),
+  )
 }

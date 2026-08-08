@@ -3,12 +3,15 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Location } from "@opencode-ai/core/location"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { tempLocationLayer } from "./fixture/location"
 
-const it = testEffect(LayerNode.compile(Ripgrep.node))
+const it = testEffect(AppNodeBuilder.build(Ripgrep.node, [[Location.node, tempLocationLayer]]))
 
 describe("Ripgrep", () => {
   it.live("globs files as an array", () =>

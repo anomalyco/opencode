@@ -82,33 +82,35 @@ const reset = () => {
   formatFile = () => Effect.succeed(false)
 }
 
-const environment = Layer.effect(
-  Environment.Service,
-  Effect.gen(function* () {
-    const current = yield* Environment.Service
-    return Environment.Service.of({
-      ...current,
-      files: {
-        ...current.files,
-        read: (target, range) =>
-          Effect.sync(() => {
-            if (!editApproved) readsBeforeEditApproval++
-          }).pipe(Effect.andThen(current.files.read(target, range))),
-        remove: (target) => {
-          if (failRemoveTarget && path.basename(target) === failRemoveTarget) return Effect.die("forced remove failure")
-          if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
-            return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced remove failure") }))
-          return current.files.remove(target)
+const environment = (activeLocation: Layer.Layer<Location.Service>) =>
+  Layer.effect(
+    Environment.Service,
+    Effect.gen(function* () {
+      const current = yield* Environment.Service
+      return Environment.Service.of({
+        ...current,
+        files: {
+          ...current.files,
+          read: (target, range) =>
+            Effect.sync(() => {
+              if (!editApproved) readsBeforeEditApproval++
+            }).pipe(Effect.andThen(current.files.read(target, range))),
+          remove: (target) => {
+            if (failRemoveTarget && path.basename(target) === failRemoveTarget)
+              return Effect.die("forced remove failure")
+            if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
+              return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced remove failure") }))
+            return current.files.remove(target)
+          },
+          write: (target, content) => {
+            if (failWriteTarget && path.basename(target) === failWriteTarget)
+              return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
+            return current.files.write(target, content)
+          },
         },
-        write: (target, content) => {
-          if (failWriteTarget && path.basename(target) === failWriteTarget)
-            return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
-          return current.files.write(target, content)
-        },
-      },
-    })
-  }),
-).pipe(Layer.provide(LayerNode.compile(Environment.node)))
+      })
+    }),
+  ).pipe(Layer.provide(AppNodeBuilder.build(Environment.node, [[Location.node, activeLocation]])))
 
 const withTool = <A, E, R>(
   directory: string,
@@ -126,7 +128,7 @@ const withTool = <A, E, R>(
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, FileMutation.node, patchToolNode]), [
-        [Environment.node, environment],
+        [Environment.node, environment(activeLocation)],
         [Location.node, activeLocation],
         [Formatter.node, formatter],
         [Permission.node, permission],

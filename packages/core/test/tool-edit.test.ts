@@ -80,28 +80,31 @@ const reset = () => {
   formatFile = () => Effect.succeed(false)
 }
 
-const environment = Layer.effect(
-  Environment.Service,
-  Effect.gen(function* () {
-    const current = yield* Environment.Service
-    return Environment.Service.of({
-      ...current,
-      files: {
-        ...current.files,
-        read: (target, range) =>
-          current.files
-            .read(target, range)
-            .pipe(
-              Effect.tap((result) =>
-                Effect.sync(() => reads++).pipe(Effect.andThen(Effect.suspend(() => afterRead(target, result.bytes)))),
+const environment = (activeLocation: Layer.Layer<Location.Service>) =>
+  Layer.effect(
+    Environment.Service,
+    Effect.gen(function* () {
+      const current = yield* Environment.Service
+      return Environment.Service.of({
+        ...current,
+        files: {
+          ...current.files,
+          read: (target, range) =>
+            current.files
+              .read(target, range)
+              .pipe(
+                Effect.tap((result) =>
+                  Effect.sync(() => reads++).pipe(
+                    Effect.andThen(Effect.suspend(() => afterRead(target, result.bytes))),
+                  ),
+                ),
               ),
-            ),
-        write: (target, content) =>
-          Effect.sync(() => writes.push(target)).pipe(Effect.andThen(current.files.write(target, content))),
-      },
-    })
-  }),
-).pipe(Layer.provide(LayerNode.compile(Environment.node)))
+          write: (target, content) =>
+            Effect.sync(() => writes.push(target)).pipe(Effect.andThen(current.files.write(target, content))),
+        },
+      })
+    }),
+  ).pipe(Layer.provide(AppNodeBuilder.build(Environment.node, [[Location.node, activeLocation]])))
 
 const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) => Effect.Effect<A, E, R>) => {
   const activeLocation = Layer.succeed(
@@ -115,7 +118,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) =
       AppNodeBuilder.build(
         LayerNode.group([Tool.node, Tool.node, LocationMutation.node, FileMutation.node, editToolNode]),
         [
-          [Environment.node, environment],
+          [Environment.node, environment(activeLocation)],
           [Location.node, activeLocation],
           [Formatter.node, formatter],
           [Permission.node, permission],

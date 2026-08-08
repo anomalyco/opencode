@@ -5,6 +5,8 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 import type { Files } from "./files"
 import { makeFiles } from "./index"
 import { makeLocalDriver } from "./local"
+import { Location } from "../location"
+import { Workspace } from "../workspace"
 
 export interface Interface {
   readonly files: Files
@@ -17,10 +19,19 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
-    return Service.of({ files: makeFiles(makeLocalDriver(spawner)), spawner })
+    const location = yield* Location.Service
+    const workspace = yield* Workspace.Service
+    const driver = location.workspaceID
+      ? yield* workspace.connect(location.workspaceID).pipe(Effect.orDie)
+      : makeLocalDriver(spawner)
+    return Service.of({ files: makeFiles(driver), spawner: driver.spawner })
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [CrossSpawnSpawner.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [CrossSpawnSpawner.node, Location.node, Workspace.node],
+})
 
 export * as EnvironmentService from "./environment"
