@@ -31,6 +31,7 @@ import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
 import { SkeinLoading } from "@/local/skein-loading"
+import { ToolActivity } from "./tool-activity"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
@@ -396,19 +397,31 @@ const live: Layer.Layer<
               configured > 0 && Provider.isHostPaced(input.model.providerID, input.model.id)
                 ? Math.max(configured, Provider.HOST_PACED_STREAM_DEADLINE_SECONDS)
                 : configured
-            // Loading liveness: ticks only while stripped skein_loading chunks
-            // were recently observed (see LOADING_TICK above), so a cold load
-            // longer than the deadline doesn't read as a stalled stream. Ticks
-            // are filtered back out after the timeout — they never reach the
-            // processor. haltStrategy "left": the tick stream must not keep a
-            // finished event stream open.
+            // Liveness ticks: the merged tick fires only while something we
+            // know about is legitimately producing silence, so the deadline
+            // measures actual provider absence rather than any quiet stretch.
+            // Two such sources:
+            //   - a stripped skein_loading cold load (see LOADING_TICK above)
+            //   - one of OUR tools still executing: the ai-sdk awaits execute()
+            //     before emitting tool-result, so the stream is silent for the
+            //     whole call. Without this a foreground subagent (allowed 600s
+            //     by SUBAGENT_TASK_TIMEOUT_MS) always outlived the 300s
+            //     deadline and killed its own parent, reported as a provider
+            //     stall. Tool calls carry their own timeouts.
+            // Ticks are filtered back out after the timeout — they never reach
+            // the processor. haltStrategy "left": the tick stream must not keep
+            // a finished event stream open.
             const watchdog = <A, E, R>(self: Stream.Stream<A, E, R>): Stream.Stream<A, E | StreamStalledError, R> =>
               deadline <= 0
                 ? self
                 : self.pipe(
                     Stream.merge(
                       Stream.tick(`${LOADING_ACTIVE_WINDOW_MS / 2} millis`).pipe(
-                        Stream.filter(() => SkeinLoading.activeWithin(LOADING_ACTIVE_WINDOW_MS)),
+                        Stream.filter(
+                          () =>
+                            SkeinLoading.activeWithin(LOADING_ACTIVE_WINDOW_MS) ||
+                            ToolActivity.active(input.sessionID),
+                        ),
                         Stream.map(() => LOADING_TICK),
                       ),
                       { haltStrategy: "left" },

@@ -34,11 +34,20 @@ const id = "task"
 // and chunk timeouts in place, 10min is a generous backstop for a stuck agent
 // while still allowing legitimate multi-step subagent work to complete.
 const SUBAGENT_TASK_TIMEOUT_MS = 10 * 60 * 1000
+// fork: the original wording ("Foreground is the default; use background only
+// for independent work") reliably produced all-foreground fan-out — the model
+// took the stated default and blocked on every subagent in turn, which on a
+// multi-host local fleet means one host works while the rest sit idle. State
+// the preference the other way round: background is the norm, foreground is
+// the exception you justify.
 const BACKGROUND_DESCRIPTION = [
-  "Background mode: background=true launches the subagent asynchronously and returns immediately.",
-  "Foreground is the default; use it when you need the result before continuing.",
-  "Use background only for independent work that can run while you continue elsewhere.",
-  "You will be notified automatically when it finishes.",
+  "Background mode: background=true launches the subagent asynchronously and returns immediately,",
+  "and you are notified automatically when it finishes.",
+  "PREFER background=true whenever the work is independent of your very next step —",
+  "several agents then run at once instead of one at a time, and you keep working meanwhile.",
+  "Launching N independent agents in one message with background=true is the normal way to fan out.",
+  "Foreground blocks this entire turn until the agent finishes; choose it only when you genuinely",
+  "cannot take another step without that agent's result.",
 ].join(" ")
 const BACKGROUND_STARTED = [
   "The task is working in the background. You will be notified automatically when it finishes.",
