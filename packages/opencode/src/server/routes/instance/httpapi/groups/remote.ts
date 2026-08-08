@@ -1,10 +1,7 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Question } from "@/question"
 import { QuestionID } from "@/question/schema"
 import { SessionID } from "@/session/schema"
-import { Session } from "@/session/session"
-import { SessionStatus } from "@/session/status"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { ApiNotFoundError } from "../errors"
@@ -27,12 +24,42 @@ export const RemoteRedeemResult = Schema.Struct({
   expires_in: Schema.Number,
 })
 
+const RemoteMessagePart = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("text"),
+    text: Schema.String,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("tool"),
+    tool: Schema.String,
+    state: Schema.Struct({
+      status: Schema.Literals(["pending", "running", "completed", "error"]),
+    }),
+  }),
+])
+
+const RemotePermission = Schema.Struct({
+  id: PermissionV1.ID,
+  permission: Schema.String,
+  patterns: Schema.Array(Schema.String),
+})
+
+const RemoteQuestion = Schema.Struct({
+  id: QuestionID,
+  questions: Schema.Array(Question.Info),
+})
+
 export const RemoteBootstrap = Schema.Struct({
-  session: Session.Info,
-  messages: Schema.Array(SessionV1.WithParts),
-  status: SessionStatus.Info,
-  permissions: Schema.Array(PermissionV1.Request),
-  questions: Schema.Array(Question.Request),
+  session: Schema.Struct({ title: Schema.String }),
+  messages: Schema.Array(
+    Schema.Struct({
+      info: Schema.Struct({ role: Schema.Literals(["user", "assistant"]) }),
+      parts: Schema.Array(RemoteMessagePart),
+    }),
+  ),
+  status: Schema.Struct({ type: Schema.Literals(["idle", "retry", "busy"]) }),
+  permissions: Schema.Array(RemotePermission),
+  questions: Schema.Array(RemoteQuestion),
 })
 
 export const RemoteMessagePayload = Schema.Struct({

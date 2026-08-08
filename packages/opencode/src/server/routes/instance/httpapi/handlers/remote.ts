@@ -107,14 +107,28 @@ export const remoteHandlers = HttpApiBuilder.group(RemoteApi, "remote", (handler
         Effect.gen(function* () {
           const session = yield* requireSession(ctx.params.sessionID)
           const messages = yield* SessionError.mapStorageNotFound(sessions.messages({ sessionID: ctx.params.sessionID }))
+          const currentStatus = yield* status.get(ctx.params.sessionID)
           const pendingPermissions = (yield* permission.list()).filter((item) => item.sessionID === ctx.params.sessionID)
           const pendingQuestions = (yield* question.list()).filter((item) => item.sessionID === ctx.params.sessionID)
           return {
-            session,
-            messages,
-            status: yield* status.get(ctx.params.sessionID),
-            permissions: pendingPermissions,
-            questions: pendingQuestions,
+            session: { title: session.title },
+            messages: messages.map((message) => ({
+              info: { role: message.info.role },
+              parts: message.parts.flatMap((part) => {
+                if (part.type === "text") return [{ type: "text" as const, text: part.text }]
+                if (part.type === "tool") {
+                  return [{ type: "tool" as const, tool: part.tool, state: { status: part.state.status } }]
+                }
+                return []
+              }),
+            })),
+            status: { type: currentStatus.type },
+            permissions: pendingPermissions.map((item) => ({
+              id: item.id,
+              permission: item.permission,
+              patterns: item.patterns,
+            })),
+            questions: pendingQuestions.map((item) => ({ id: item.id, questions: item.questions })),
           }
         }),
       )
