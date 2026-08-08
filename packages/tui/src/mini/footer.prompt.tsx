@@ -528,7 +528,7 @@ export function createPromptState(input: PromptInput): PromptState {
         continue
       }
 
-      const text = area.plainText.slice(item.start, item.end)
+      const text = displaySlice(area.plainText, item.start, item.end)
       const prev =
         part.type === "agent"
           ? (part.source?.value ?? "@" + part.name)

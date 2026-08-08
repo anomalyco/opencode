@@ -1300,6 +1300,37 @@ test("direct footer submits a selected leading skill as a prompt attachment", as
   }
 })
 
+test("direct footer preserves a selected skill after wide text", async () => {
+  const submits: RunPrompt[] = []
+  const app = await renderFooter({
+    commands: [command({ name: "formatter", description: "Apply formatter fixes", source: "skill" })],
+    onSubmit(prompt) {
+      submits.push(prompt)
+      return true
+    },
+  })
+
+  try {
+    await app.renderOnce()
+    "中 /forma".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    expect(submits[0]?.parts).toEqual([
+      {
+        type: "skill",
+        id: "formatter",
+        source: { start: 3, end: 13, value: "/formatter" },
+      },
+    ])
+  } finally {
+    app.cleanup()
+  }
+})
+
 // OpenTUI currently segfaults Bun while tearing down this composer-to-skill-panel transition.
 // Re-enable after the upstream renderer teardown fix lands.
 test.skip("direct footer skill picker inserts an editable bound skill command", async () => {
