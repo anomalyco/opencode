@@ -627,10 +627,25 @@ function placeStateTransitionLabels(
   return plans.map((plan) => {
     if (!plan.label) return plan
     const width = Math.max(...plan.label.lines.map(diagramTextWidth))
+    if (plan.label.lines.length === 1) {
+      placedLabels.push(labelRect(plan.label, width))
+      return plan
+    }
+    const statePadding = 1
     const isClear = (x: number, y: number): boolean => {
       if (x < 0 || y < 0) return false
       const rect = labelRect({ ...plan.label!, x, y }, width)
-      if (stateRects.some((state) => rectsOverlap(rect, state))) return false
+      if (
+        stateRects.some((state) =>
+          rectsOverlap(rect, {
+            left: state.left - statePadding,
+            top: state.top - statePadding,
+            width: state.width + statePadding * 2,
+            height: state.height + statePadding * 2,
+          }),
+        )
+      )
+        return false
       if (placedLabels.some((label) => rectsOverlap(rect, label))) return false
       for (let row = rect.top; row < rect.top + rect.height; row++) {
         for (let column = rect.left; column < rect.left + rect.width; column++) {

@@ -162,6 +162,48 @@ stateDiagram-v2
     expect(output).toContain("second")
   })
 
+  test("keeps reciprocal multiline transition labels clear of routes", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+    [*] --> Running: create from base image
+    Running --> Dormant: 📸 suspend hook fires<br/>(WE must call it on idle)
+    Dormant --> Running: wake from snapshot image<br/>(apt installs restored!)
+    Running --> Lost: 💥 sandbox dies BEFORE hook fires<br/>(crash, our bug, race)
+    Lost --> Running: wake from LAST snapshot<br/>⚠ files since then GONE`)
+    const labelLines = [
+      "create from base image",
+      "📸 suspend hook fires",
+      "(WE must call it on idle)",
+      "wake from snapshot image",
+      "(apt installs restored!)",
+      "💥 sandbox dies BEFORE hook fires",
+      "(crash, our bug, race)",
+      "wake from LAST snapshot",
+      "⚠ files since then GONE",
+    ]
+
+    for (const line of labelLines) expect(output.split(line)).toHaveLength(2)
+    expect(output).toMatchInlineSnapshot(`
+      "
+        create from base image ╭─────────╮
+      ●───────────────────────▶│ Running │
+                               ╰──┬──────╯ 💥 sandbox dies BEFORE hook fires
+                                ▲ │   ▲    (crash, our bug, race)
+                       ╭────────┼─╰───┼───────╮
+                       ▼   ╭────┼─────╯       ▼
+                    ╭──────┴──╮ │           ╭──────╮
+                    │ Dormant │ │           │ Lost │
+                    ╰─────────╯ │           ╰───┬──╯
+                                │               │
+       📸 suspend hook fires    │               │
+       (WE must call it on idle)│               │
+                                ╰───────────────╯
+                            wake from snapshot image
+                            (apt installs restored!)
+                                  wake from LAST snapshot
+                                  ⚠ files since then GONE"
+    `)
+  })
+
   test("renders a vertical state diagram", () => {
     const output = renderStateDiagram(`
 stateDiagram-v2
