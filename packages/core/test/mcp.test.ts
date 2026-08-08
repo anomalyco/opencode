@@ -12,14 +12,14 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js"
-import { Document, Info } from "@opencode-ai/schema/config"
+import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { Config } from "@opencode-ai/core/config"
 import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
-import { Event } from "@opencode-ai/schema/event"
+import { ID, type Payload } from "@opencode-ai/schema/event"
 import { Form } from "@opencode-ai/core/form"
 import { Integration } from "@opencode-ai/core/integration"
 import { Location } from "@opencode-ai/core/location"
@@ -30,7 +30,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { Tool } from "@opencode-ai/core/tool"
-import { Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, Schema, Stream } from "effect"
 import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
@@ -67,6 +67,8 @@ function resourceServer(
         ] as Array<{ uri: string; text: string; mimeType?: string } | { uri: string; blob: string; mimeType?: string }>,
         resourceLists: 0,
         templateLists: 0,
+        toolLists: 0,
+        initializations: 0,
       }
       const protocol = new Server(
         { name: "mcp-resources", version: "1.0.0" },
@@ -77,15 +79,16 @@ function resourceServer(
           },
         },
       )
-      protocol.setRequestHandler(ListToolsRequestSchema, () =>
-        Promise.resolve({
+      protocol.setRequestHandler(ListToolsRequestSchema, () => {
+        state.toolLists += 1
+        return Promise.resolve({
           tools: input.emptyElicitation
             ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
             : input.urlElicitation
               ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
               : [],
-        }),
-      )
+        })
+      })
       if (input.emptyElicitation) {
         protocol.setRequestHandler(CallToolRequestSchema, async () => {
           const result = await protocol.elicitInput({
@@ -133,7 +136,13 @@ function resourceServer(
       await protocol.connect(transport)
       const http = Bun.serve({
         port: 0,
-        fetch: (request) => transport.handleRequest(request),
+        fetch: async (request) => {
+          const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+          if (typeof body === "object" && body !== null && "method" in body && body.method === "initialize") {
+            state.initializations += 1
+          }
+          return transport.handleRequest(request)
+        },
       })
       return {
         state,
@@ -155,6 +164,10 @@ function resourceMcpLayer(
   server: string | typeof ConfigMCP.Server.Type,
   onFormCreated?: (form: Form.Info) => Effect.Effect<void>,
   options?: MCP.Options,
+  overrides?: {
+    entries?: Config.Interface["entries"]
+    subscribe?: Bus.Interface["subscribe"]
+  },
 ) {
   const directory = AbsolutePath.make(import.meta.dir)
   const unusedIntegration = () => Effect.die("unused integration service")
@@ -162,30 +175,35 @@ function resourceMcpLayer(
     Layer.provideMerge(Form.layer),
     Layer.provide(
       Layer.mergeAll(
-        Config.testLayer([
-          new Document({
-            type: "document",
-            info: new Info({
-              mcp: new ConfigMCP.Info({
-                servers: {
-                  resources:
-                    typeof server === "string"
-                      ? new ConfigMCP.Remote({ type: "remote", url: server, oauth: false })
-                      : server,
-                },
+        overrides?.entries
+          ? Layer.succeed(
+              Config.Service,
+              Config.Service.of({ entries: overrides.entries, changes: () => Stream.never }),
+            )
+          : Config.testLayer([
+              new Document({
+                type: "document",
+                info: new Info({
+                  mcp: new ConfigMCP.Info({
+                    servers: {
+                      resources:
+                        typeof server === "string"
+                          ? new ConfigMCP.Remote({ type: "remote", url: server, oauth: false })
+                          : server,
+                    },
+                  }),
+                }),
               }),
-            }),
-          }),
-        ]),
+            ]),
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
         Layer.mock(Bus.Service, {
-          subscribe: () => Stream.never,
+          subscribe: overrides?.subscribe ?? (() => Stream.never),
           publish: (definition, data) => {
             const event = {
-              id: Event.ID.create(),
+              id: ID.create(),
               type: definition.type,
               data,
-            } as Event.Payload<typeof definition>
+            } as Payload<typeof definition>
             if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
             return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
           },
@@ -781,6 +799,123 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
           ),
         )
       }),
+    ),
+  )
+})
+
+test("reconciles only changed MCP server config", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer()
+        const updates = yield* PubSub.unbounded<Payload>()
+        const resources = (codemode?: boolean) =>
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, codemode })
+        const added = new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })
+        const dynamic = new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })
+        const document = (servers: Record<string, typeof ConfigMCP.Server.Type>, username?: string) =>
+          new Document({
+            type: "document",
+            info: new Info({
+              username,
+              mcp: new ConfigMCP.Info({ servers }),
+            }),
+          })
+        let entries = [document({ resources: resources() })]
+        const publishUpdate = () =>
+          PubSub.publish(updates, {
+            id: ID.create(),
+            created: DateTime.makeUnsafe(0),
+            type: Event.Updated.type,
+            data: {},
+          } satisfies Payload<typeof Event.Updated>)
+
+        yield* Effect.gen(function* () {
+          const service = yield* MCP.Service
+          yield* service.tools()
+          expect(server.state.toolLists).toBe(1)
+          expect(server.state.initializations).toBe(1)
+
+          yield* service.add("dynamic", dynamic)
+          entries = [document({ resources: resources() }, "unrelated")]
+          yield* publishUpdate()
+          entries = [document({ resources: resources(), added }, "unrelated")]
+          yield* publishUpdate()
+          const appended = yield* service.servers().pipe(
+            Effect.filterOrFail(
+              (items) => items.some((item) => item.name === "added"),
+              () => new Error("MCP config addition was not applied"),
+            ),
+            Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+          )
+          expect(appended.map((item) => String(item.name)).toSorted()).toEqual(["added", "dynamic", "resources"])
+          expect(server.state.toolLists).toBe(1)
+          expect(server.state.initializations).toBe(1)
+
+          entries = [
+            document(
+              {
+                resources: resources(false),
+                added,
+              },
+              "unrelated",
+            ),
+          ]
+          yield* publishUpdate()
+          yield* Effect.sync(() => server.state.initializations).pipe(
+            Effect.filterOrFail(
+              (count) => count === 2,
+              () => new Error("MCP config change did not reconnect the server"),
+            ),
+            Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+          )
+
+          entries = [document({ added }, "unrelated")]
+          yield* publishUpdate()
+          const removed = yield* service.servers().pipe(
+            Effect.filterOrFail(
+              (items) => !items.some((item) => item.name === "resources"),
+              () => new Error("MCP config removal was not applied"),
+            ),
+            Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+          )
+          expect(removed.map((item) => String(item.name)).toSorted()).toEqual(["added", "dynamic"])
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(resources(), undefined, undefined, {
+              entries: () => Effect.sync(() => entries),
+              subscribe: (() => Stream.fromPubSub(updates)) as Bus.Interface["subscribe"],
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+})
+
+test("reconciles MCP config changed during startup", async () => {
+  const server = new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })
+  let reads = 0
+  const entries = () =>
+    Effect.sync(() => {
+      reads += 1
+      return [
+        new Document({
+          type: "document",
+          info: new Info({
+            mcp: new ConfigMCP.Info({ servers: reads === 1 ? { initial: server } : { initial: server, added: server } }),
+          }),
+        }),
+      ]
+    })
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = yield* MCP.Service
+        expect((yield* service.servers()).map((item) => String(item.name))).toEqual(["added", "initial"])
+        expect(reads).toBeGreaterThanOrEqual(2)
+      }).pipe(Effect.provide(resourceMcpLayer(server, undefined, undefined, { entries }))),
     ),
   )
 })
