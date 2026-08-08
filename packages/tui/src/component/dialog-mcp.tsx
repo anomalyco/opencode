@@ -9,6 +9,7 @@ import { TextAttributes } from "@opentui/core"
 import { useSDK } from "../context/sdk"
 import { useDialog } from "../ui/dialog"
 import { DialogPrompt } from "../ui/dialog-prompt"
+import { useToast } from "../ui/toast"
 
 function Status(props: { enabled: boolean; loading: boolean }) {
   const { theme } = useTheme()
@@ -28,6 +29,7 @@ export function DialogMcp() {
   const sync = useSync()
   const sdk = useSDK()
   const dialog = useDialog()
+  const toast = useToast()
   const [, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [loading, setLoading] = createSignal<string | null>(null)
 
@@ -83,8 +85,12 @@ export function DialogMcp() {
             setPendingAdd(name)
             sync.set("mcp", { ...sync.data.mcp, [name]: { status: "disabled" } })
             dialog.replace(() => <DialogMcp />)
-            sdk.client.mcp.add({ name, config }).then(() => refreshStatus()).catch((error) => {
+            sdk.client.mcp.add({ name, config }).then(() => {
+              refreshStatus()
+              toast.show({ variant: "success", message: `MCP "${name}" added` })
+            }).catch((error) => {
               console.error("Failed to add MCP:", error)
+              toast.show({ variant: "error", message: `Failed to add MCP "${name}"` })
             }).finally(() => {
               setPendingAdd(null)
             })
@@ -101,8 +107,10 @@ export function DialogMcp() {
       await sdk.client.mcp.remove({ name: option.value })
       const { [option.value]: _, ...rest } = sync.data.mcp
       sync.set("mcp", reconcile(rest))
+      toast.show({ variant: "success", message: `MCP "${option.value}" removed` })
     } catch (error) {
       console.error("Failed to remove MCP:", error)
+      toast.show({ variant: "error", message: `Failed to remove MCP "${option.value}"` })
     } finally {
       setLoading(null)
     }
