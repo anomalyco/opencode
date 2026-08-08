@@ -87,7 +87,7 @@ export const RemoteAdminApi = HttpApi.make("remote-admin").add(
         params: { sessionID: SessionID },
         query: WorkspaceRoutingQuery,
         success: RemotePairToken,
-        error: ApiNotFoundError,
+        error: [HttpApiError.BadRequest, ApiNotFoundError],
       }),
       HttpApiEndpoint.delete("revoke", "/session/:sessionID/remote", {
         params: { sessionID: SessionID },

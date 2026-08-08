@@ -1,3 +1,5 @@
+import { Workspace } from "@/control-plane/workspace"
+import { WorkspaceAdapterRuntime } from "@/control-plane/workspace-adapter-runtime"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Permission } from "@/permission"
 import { Question } from "@/question"
@@ -70,13 +72,24 @@ function remoteEventResponse(events: EventV2.Interface, sessionID: string) {
 export const remoteAdminHandlers = HttpApiBuilder.group(RemoteAdminApi, "remote-admin", (handlers) =>
   Effect.gen(function* () {
     const sessions = yield* Session.Service
+    const workspaces = yield* Workspace.Service
     const requireSession = (sessionID: Parameters<typeof RemoteAccess.pair>[0]) =>
       SessionError.mapStorageNotFound(sessions.get(sessionID))
+    const requireLocalSession = (sessionID: Parameters<typeof RemoteAccess.pair>[0]) =>
+      Effect.gen(function* () {
+        const session = yield* requireSession(sessionID)
+        if (!session.workspaceID) return session
+        const workspace = yield* workspaces.get(session.workspaceID)
+        if (!workspace) return yield* new HttpApiError.BadRequest({})
+        const target = yield* WorkspaceAdapterRuntime.target(workspace)
+        if (target.type !== "local") return yield* new HttpApiError.BadRequest({})
+        return session
+      })
 
     return handlers
       .handle("pair", (ctx) =>
         Effect.gen(function* () {
-          yield* requireSession(ctx.params.sessionID)
+          yield* requireLocalSession(ctx.params.sessionID)
           return RemoteAccess.pair(ctx.params.sessionID)
         }),
       )
