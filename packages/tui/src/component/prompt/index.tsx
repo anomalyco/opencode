@@ -29,6 +29,7 @@ import { parseSlashHead } from "../../prompt/parse"
 import { stringWidth } from "../../util/string-width"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
+import { Skill } from "@opencode-ai/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
@@ -273,6 +274,7 @@ export function Prompt(props: PromptProps) {
   }
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
+  const skillStyleId = syntax().getStyleId("extmark.skill")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
   const event = useEvent()
@@ -493,12 +495,29 @@ export function Prompt(props: PromptProps) {
             <DialogSkill
               location={currentLocation.current}
               onSelect={(skill) => {
-                input.setText(`/${skill} `)
-                setStore("prompt", {
-                  ...emptyPrompt(),
-                  text: `/${skill} `,
+                if (store.prompt.skills?.some((item) => item.id === skill)) return
+                const text = `/${skill}`
+                const start = input.cursorOffset
+                input.insertText(text + " ")
+                const extmarkId = input.extmarks.create({
+                  start,
+                  end: start + promptOffsetWidth(text),
+                  virtual: true,
+                  styleId: skillStyleId,
+                  typeId: promptPartTypeId,
                 })
-                input.gotoBufferEnd()
+                setStore(
+                  produce((draft) => {
+                    draft.prompt.text = input.plainText
+                    const skills = (draft.prompt.skills ??= [])
+                    const index = skills.length
+                    skills.push({
+                      id: Skill.ID.make(skill),
+                      mention: { start, end: start + promptOffsetWidth(text), text },
+                    })
+                    draft.extmarkToPart.set(extmarkId, { type: "skill", index })
+                  }),
+                )
               }}
             />
           ))
@@ -639,6 +658,11 @@ export function Prompt(props: PromptProps) {
         ref: { type: "agent" as const, index },
         styleId: agentStyleId,
       })),
+      ...(prompt.skills ?? []).map((part, index) => ({
+        mention: part.mention,
+        ref: { type: "skill" as const, index },
+        styleId: skillStyleId,
+      })),
       ...prompt.pasted.map((part, index) => ({
         mention: part.source,
         ref: { type: "pasted" as const, index },
@@ -671,6 +695,7 @@ export function Prompt(props: PromptProps) {
         const newMap = new Map<number, PromptPartRef>()
         const files: NonNullable<PromptInfo["files"]> = []
         const agents: NonNullable<PromptInfo["agents"]> = []
+        const skills: NonNullable<PromptInfo["skills"]> = []
         const pasted: PromptInfo["pasted"] = []
 
         for (const extmark of allExtmarks) {
@@ -696,6 +721,16 @@ export function Prompt(props: PromptProps) {
             newMap.set(extmark.id, { type: "agent", index })
             continue
           }
+          if (ref.type === "skill") {
+            const part = draft.prompt.skills?.[ref.index]
+            if (!part?.mention) continue
+            part.mention.start = extmark.start
+            part.mention.end = extmark.end
+            const index = skills.length
+            skills.push(part)
+            newMap.set(extmark.id, { type: "skill", index })
+            continue
+          }
           const part = draft.prompt.pasted[ref.index]
           if (!part) continue
           part.source.start = extmark.start
@@ -708,6 +743,7 @@ export function Prompt(props: PromptProps) {
         draft.extmarkToPart = newMap
         draft.prompt.files = files
         draft.prompt.agents = agents
+        draft.prompt.skills = skills
         draft.prompt.pasted = pasted
       }),
     )
@@ -983,6 +1019,7 @@ export function Prompt(props: PromptProps) {
     )
     const slashHead = parseSlashHead(inputText, /\s/)
     const isSkill =
+      !(store.prompt.skills?.length ?? 0) &&
       slashHead !== undefined &&
       (data.location.skill.list(currentLocation.ref) ?? []).some(
         (skill) => skill.slash === true && skill.id === slashHead.name,
@@ -1146,6 +1183,7 @@ export function Prompt(props: PromptProps) {
           text: inputText,
           files: store.prompt.files,
           agents: store.prompt.agents,
+          skills: store.prompt.skills?.length ? store.prompt.skills : undefined,
           delivery,
         })
         .then(

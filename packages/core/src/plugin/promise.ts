@@ -11,6 +11,7 @@ import { Provider } from "@opencode-ai/schema/provider"
 import { AbsolutePath } from "@opencode-ai/schema/schema"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { Skill } from "@opencode-ai/schema/skill"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { WebSearch } from "@opencode-ai/schema/websearch"
 import { DateTime, Effect, Scope, Stream } from "effect"
@@ -296,6 +297,7 @@ export function fromPromise(plugin: Plugin) {
                   ...input,
                   sessionID: Session.ID.make(input.sessionID),
                   id: input.id == null ? undefined : SessionMessage.ID.make(input.id),
+                  skills: input.skills?.map((skill) => ({ ...skill, id: Skill.ID.make(skill.id) })),
                   delivery: input.delivery ?? undefined,
                   resume: input.resume ?? undefined,
                 }),

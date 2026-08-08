@@ -2,6 +2,7 @@ export * as SessionTransfer from "./transfer"
 
 import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
 import { Tool } from "@opencode-ai/schema/tool"
+import { Skill } from "@opencode-ai/schema/skill"
 import { eq, isNotNull, isNull, ne, or } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import path from "path"
@@ -216,6 +217,14 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
         name: redact("agent-name", String(index), agent.name),
         mention: agent.mention
           ? { ...agent.mention, text: redact("agent-mention", String(index), agent.mention.text) }
+          : undefined,
+      })),
+      skills: message.skills?.map((skill, index) => ({
+        ...skill,
+        name: Skill.Name.make(redact("skill-name", String(index), skill.name)),
+        text: redact("skill", String(index), skill.text),
+        mention: skill.mention
+          ? { ...skill.mention, text: redact("skill-mention", String(index), skill.mention.text) }
           : undefined,
       })),
     }

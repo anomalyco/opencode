@@ -124,7 +124,8 @@ const serialize = (message: SessionMessage.Info) => {
         (file) =>
           `[Attached ${file.mime}: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}]`,
       ) ?? []
-    return [`[User]: ${message.text}`, ...files].join("\n")
+    const skills = message.skills?.map((skill) => `[Attached skill: ${skill.name}]\n${skill.text}`) ?? []
+    return [`[User]: ${message.text}`, ...skills, ...files].join("\n")
   }
   if (message.type === "assistant") {
     return message.content

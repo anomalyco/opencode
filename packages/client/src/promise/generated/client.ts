@@ -615,6 +615,7 @@ export function make(options: ClientOptions) {
               text: input["text"],
               files: input["files"],
               agents: input["agents"],
+              skills: input["skills"],
               metadata: input["metadata"],
               delivery: input["delivery"],
               resume: input["resume"],

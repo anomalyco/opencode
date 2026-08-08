@@ -21,6 +21,7 @@ import {
   isExitCommand,
   isCompactCommand,
   mentionTriggerIndex,
+  slashTriggerIndex,
   isNewCommand,
   movePromptHistory,
   promptCopy,
@@ -50,7 +51,7 @@ export const TEXTAREA_MIN_ROWS = 1
 const TEXTAREA_MAX_ROWS = 6
 export const PROMPT_MAX_ROWS = TEXTAREA_MAX_ROWS + AUTOCOMPLETE_ROWS - 1 + AUTOCOMPLETE_BOTTOM_ROWS
 
-type Mention = Extract<RunPromptPart, { type: "file" | "agent" }>
+type Mention = Extract<RunPromptPart, { type: "file" | "agent" | "skill" }>
 
 type Auto = RunFooterMenuItem & {
   kind: "mention"
@@ -65,7 +66,12 @@ type SlashOption = RunFooterMenuItem & {
   action?: "skill-menu" | "editor" | "settings"
 }
 
-type PromptOption = Auto | SlashOption
+type SkillOption = RunFooterMenuItem & {
+  kind: "skill"
+  id: string
+}
+
+type PromptOption = Auto | SlashOption | SkillOption
 
 type MenuMode = false | "mention" | "slash"
 
@@ -124,12 +130,9 @@ function emptyPrompt(shell: boolean): RunPrompt {
 }
 
 function slashQuery(text: string, cursor: number) {
-  const head = parseSlashHead(text.slice(0, cursor))
-  if (!head || head.end !== cursor) {
-    return
-  }
-
-  return head.name
+  const at = slashTriggerIndex(text, cursor)
+  if (at === undefined) return
+  return { at, value: displaySlice(text, at + 1, cursor) }
 }
 
 function parseSlashCommand(text: string, commands: RunCommand[] | undefined) {
@@ -382,10 +385,18 @@ export function createPromptState(input: PromptInput): PromptState {
   )
   const mentionOptions = createMemo(() => [...agents(), ...files(), ...references()])
   const skillCommands = createMemo(() => (input.commands() ?? []).filter((item) => item.source === "skill"))
+  const skillOptions = createMemo<SkillOption[]>(() =>
+    skillCommands().map((item) => ({
+      kind: "skill",
+      id: item.name,
+      display: `/${item.name}`,
+      description: item.description,
+    })),
+  )
   const hasSkillsCommand = createMemo(() =>
     (input.commands() ?? []).some((item) => item.source !== "skill" && item.name === "skills"),
   )
-  const slashOptions = createMemo<SlashOption[]>(() => {
+  const slashOptions = createMemo<Array<SlashOption | SkillOption>>(() => {
     const builtins = [
       {
         kind: "slash",
@@ -417,6 +428,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     return [
+      ...skillOptions(),
       ...(showSkillMenu
         ? [
             {
@@ -443,7 +455,7 @@ export function createPromptState(input: PromptInput): PromptState {
     ].sort((a, b) => a.display.localeCompare(b.display))
   })
   const options = createMemo<PromptOption[]>(() => {
-    const mixed: PromptOption[] = mode() === "slash" ? slashOptions() : mentionOptions()
+    const mixed: PromptOption[] = mode() === "slash" ? (at() === 0 ? slashOptions() : skillOptions()) : mentionOptions()
     if (!query()) {
       return mixed
     }
@@ -459,7 +471,11 @@ export function createPromptState(input: PromptInput): PromptState {
 
     return fuzzysort
       .go(next, mixed, {
-        keys: [(item) => (item.kind === "mention" ? item.value : item.name).trimEnd(), "display", "description"],
+        keys: [
+          (item) => (item.kind === "mention" ? item.value : item.kind === "skill" ? item.id : item.name).trimEnd(),
+          "display",
+          "description",
+        ],
       })
       .map((item) => item.obj)
   })
@@ -516,13 +532,15 @@ export function createPromptState(input: PromptInput): PromptState {
       const prev =
         part.type === "agent"
           ? (part.source?.value ?? "@" + part.name)
-          : (part.source?.text.value ?? "@" + (part.filename ?? ""))
+          : part.type === "skill"
+            ? (part.source?.value ?? "/" + part.id)
+            : (part.source?.text.value ?? "@" + (part.filename ?? ""))
       if (text !== prev) {
         continue
       }
 
       const copy = structuredClone(part)
-      if (copy.type === "agent") {
+      if (copy.type === "agent" || copy.type === "skill") {
         copy.source = {
           start: item.start,
           end: item.end,
@@ -558,7 +576,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const restoreParts = (value: RunPromptPart[]) => {
     clearParts()
     parts = value
-      .filter((item): item is Mention => item.type === "file" || item.type === "agent")
+      .filter((item): item is Mention => item.type === "file" || item.type === "agent" || item.type === "skill")
       .map((item) => structuredClone(item))
     if (!area || area.isDestroyed || type === 0) {
       return
@@ -566,8 +584,8 @@ export function createPromptState(input: PromptInput): PromptState {
 
     const box = area
     parts.forEach((item, idx) => {
-      const start = item.type === "agent" ? item.source?.start : item.source?.text.start
-      const end = item.type === "agent" ? item.source?.end : item.source?.text.end
+      const start = item.type === "file" ? item.source?.text.start : item.source?.start
+      const end = item.type === "file" ? item.source?.text.end : item.source?.end
       if (start === undefined || end === undefined) {
         return
       }
@@ -627,16 +645,16 @@ export function createPromptState(input: PromptInput): PromptState {
         return
       }
 
-      setAt(0)
-      setQuery(slash)
+      setAt(slash.at)
+      setQuery(slash.value)
       return
     }
 
     if (slash !== undefined) {
-      setAt(0)
+      setAt(slash.at)
       menu.reset()
       setMode("slash")
-      setQuery(slash)
+      setQuery(slash.value)
       return
     }
 
@@ -782,7 +800,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const cursor = area.cursorOffset
-    const startOffset = mode() === "slash" ? 0 : at()
+    const startOffset = at()
     area.cursorOffset = startOffset
     const start = area.logicalCursor
     area.cursorOffset = cursor
@@ -825,6 +843,39 @@ export function createPromptState(input: PromptInput): PromptState {
   const select = (item?: PromptOption) => {
     const next = item ?? options()[menu.selected()]
     if (!next || !area || area.isDestroyed) {
+      return
+    }
+
+    if (next.kind === "skill") {
+      if (parts.some((part) => part.type === "skill" && part.id === next.id)) {
+        cancelAutocomplete()
+        return
+      }
+      const cursor = area.cursorOffset
+      const tail = displayCharAt(area.plainText, cursor)
+      const append = `/${next.id}${tail === " " ? "" : " "}`
+      area.cursorOffset = at()
+      const start = area.logicalCursor
+      area.cursorOffset = cursor
+      const end = area.logicalCursor
+      area.deleteRange(start.row, start.col, end.row, end.col)
+      area.insertText(append)
+
+      const text = `/${next.id}`
+      const startOffset = at()
+      const endOffset = startOffset + stringWidth(text)
+      const part: Extract<RunPromptPart, { type: "skill" }> = {
+        type: "skill",
+        id: next.id,
+        source: { start: startOffset, end: endOffset, value: text },
+      }
+      const id = area.extmarks.create({ start: startOffset, end: endOffset, virtual: true, typeId: type })
+      marks.set(id, parts.length)
+      parts.push(part)
+      hide()
+      syncDraft()
+      scheduleRows()
+      area.focus()
       return
     }
 

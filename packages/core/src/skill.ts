@@ -38,6 +38,41 @@ export { Event } from "@opencode-ai/schema/skill"
 export const available = (skills: ReadonlyArray<Info>, agent: Agent.Info) =>
   skills.filter((skill) => Permission.evaluate("skill", skill.id, agent.permissions).effect !== "deny")
 
+const FILE_LIMIT = 10
+
+export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
+  const directory = path.dirname(skill.location)
+  return [
+    `<skill_content name="${skill.name}">`,
+    `# Skill: ${skill.name}`,
+    "",
+    skill.content.trim(),
+    "",
+    `Base directory for this skill: ${directory}`,
+    "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
+    "Note: file list is sampled.",
+    "",
+    "<skill_files>",
+    ...files.map((file) => `<file>${file}</file>`),
+    "</skill_files>",
+    "</skill_content>",
+  ].join("\n")
+}
+
+export const modelOutput = Effect.fn("Skill.modelOutput")(function* (fs: FSUtil.Interface, skill: Info) {
+  const directory = path.dirname(skill.location)
+  const files =
+    path.basename(skill.location) === "SKILL.md"
+      ? (yield* fs
+          .scan("**/*", { cwd: directory, absolute: true, include: "file", dot: true })
+          .pipe(Effect.catch(() => Effect.succeed([] as string[]))))
+          .filter((file) => path.basename(file) !== "SKILL.md")
+          .toSorted()
+          .slice(0, FILE_LIMIT)
+      : []
+  return { directory, output: toModelOutput(skill, files) }
+})
+
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),

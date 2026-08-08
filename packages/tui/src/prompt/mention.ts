@@ -52,9 +52,11 @@ export function realignPromptMentions(
 export function realignPromptInputMentions(content: string, input: PromptInput.Prompt): EditablePromptInput {
   const files = input.files ?? []
   const agents = input.agents ?? []
+  const skills = input.skills ?? []
   const mentions = realignPromptMentions(content, [
     ...files.map((file) => file.mention),
     ...agents.map((agent) => agent.mention),
+    ...skills.map((skill) => skill.mention),
   ])
   const align = <T extends { mention?: PromptMention }>(items: readonly T[] | undefined, offset = 0) =>
     items?.flatMap((item, index) => {
@@ -67,6 +69,7 @@ export function realignPromptInputMentions(content: string, input: PromptInput.P
     text: content,
     files: align(input.files),
     agents: align(input.agents, files.length),
+    skills: align(input.skills, files.length + agents.length),
   }
 }
 
@@ -89,6 +92,7 @@ export function expandPromptInputPastedText(
     text: expandTrackedPastedText(input.text, ranges),
     files: input.files?.map((file) => ({ ...file, mention: shift(file.mention) })),
     agents: input.agents?.map((agent) => ({ ...agent, mention: shift(agent.mention) })),
+    skills: input.skills?.map((skill) => ({ ...skill, mention: shift(skill.mention) })),
   }
 }
 

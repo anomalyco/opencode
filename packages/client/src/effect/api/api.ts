@@ -180,6 +180,7 @@ export type Endpoint5_12Input = {
   readonly text: string
   readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
   readonly agents?: ReadonlyArray<AgentAttachment> | undefined
+  readonly skills?: ReadonlyArray<PromptInput.SkillAttachment> | undefined
   readonly metadata?: { readonly [x: string]: unknown } | undefined
   readonly delivery?: "steer" | "queue" | undefined
   readonly resume?: boolean | undefined

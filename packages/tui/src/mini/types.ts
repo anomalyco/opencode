@@ -47,6 +47,7 @@ export type RunPromptPart =
       }
     }
   | { type: "agent"; name: string; source?: { start: number; end: number; value: string } }
+  | { type: "skill"; id: string; source?: { start: number; end: number; value: string } }
 
 export type RunCommand = {
   name: string

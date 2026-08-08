@@ -412,6 +412,7 @@ const Endpoint5_12 = (raw: RawClient["server.session"]) => (input: Endpoint5_12I
         text: input["text"],
         files: input["files"],
         agents: input["agents"],
+        skills: input["skills"],
         metadata: input["metadata"],
         delivery: input["delivery"],
         resume: input["resume"],

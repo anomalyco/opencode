@@ -288,6 +288,21 @@ function promptAgents(next: SessionTurnInput) {
   )
 }
 
+function promptSkills(next: SessionTurnInput) {
+  return next.prompt.parts.flatMap((part) =>
+    part.type === "skill"
+      ? [
+          {
+            id: part.id,
+            mention: part.source
+              ? { start: part.source.start, end: part.source.end, text: part.source.value }
+              : undefined,
+          },
+        ]
+      : [],
+  )
+}
+
 function streamPartKey(messageID: string, partID: string) {
   return `${messageID}\u0000${partID}`
 }
@@ -637,7 +652,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.messageIDs.add(message.id)
       if (!render) return
       if (reuseVisibleWait && waiting) return
-      write([{ kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id }])
+      write([
+        ...(message.skills ?? []).map((skill) => skillCommit(message.id + ":" + skill.id, skill.name)),
+        { kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id },
+      ])
       return
     }
     if (message.type === "skill") {
@@ -1615,6 +1633,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const command = next.prompt.command
     const attachments = await prepareAttachments(next, command ? "command" : "prompt", input.readTextFile)
     const agents = promptAgents(next)
+    const skills = promptSkills(next)
     if (!command) {
       input.trace?.write("send.prompt", { sessionID: input.sessionID, messageID, delivery })
       return client.session.prompt(
@@ -1624,6 +1643,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           text: [next.prompt.text, ...attachments.text].join("\n\n"),
           files: attachments.files.length ? attachments.files : undefined,
           agents: agents.length ? agents : undefined,
+          skills: skills.length ? skills : undefined,
           delivery,
         },
         { signal: next.signal },

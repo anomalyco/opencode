@@ -218,10 +218,11 @@ export interface Interface {
     text: string
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
+    skills?: PromptInput.Prompt["skills"]
     metadata?: Record<string, unknown>
     delivery?: SessionPending.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionPending.User, NotFoundError | PromptConflictError | AttachmentError>
+  }) => Effect.Effect<SessionPending.User, NotFoundError | PromptConflictError | AttachmentError | SkillNotFoundError>
   /** Generates text from current Session context without admitting input or mutating history. */
   readonly generate: (input: {
     sessionID: SessionSchema.ID
@@ -240,7 +241,12 @@ export interface Interface {
     resume?: boolean
   }) => Effect.Effect<
     SessionPending.User,
-    NotFoundError | PromptConflictError | AttachmentError | Command.NotFoundError | Command.EvaluationError
+    | NotFoundError
+    | PromptConflictError
+    | AttachmentError
+    | SkillNotFoundError
+    | Command.NotFoundError
+    | Command.EvaluationError
   >
   readonly shell: (input: {
     id?: Event.ID
@@ -565,9 +571,11 @@ const layer = Layer.effect(
             // Resolved lazily so prompt admission only boots location services when an
             // image attachment actually needs the resizer.
             const image = Image.Service.pipe(Effect.provide(locations.get(session.location)))
+            const skills = Skill.Service.pipe(Effect.provide(locations.get(session.location)))
             const prompt = yield* resolvePrompt(
-              { text: input.text, files: input.files, agents: input.agents },
+              { text: input.text, files: input.files, agents: input.agents, skills: input.skills },
               image,
+              skills,
             ).pipe(Effect.provideService(FSUtil.Service, fs))
             const messageID = input.id ?? SessionMessage.ID.create()
             const admittedInput = SessionPending.Message.make({
@@ -895,12 +903,32 @@ function synthesizeTerminalShellInfo(started: ShellSchema.Info): ShellSchema.Inf
 const resolvePrompt = Effect.fn("Session.resolvePrompt")(function* (
   input: PromptInput.Prompt,
   image: Effect.Effect<Image.Interface>,
+  skills: Effect.Effect<Skill.Interface>,
 ) {
   const fs = yield* FSUtil.Service
   const files = input.files
     ? yield* Effect.forEach(input.files, (file) => materializeAttachment(fs, file, image), { concurrency: 8 })
     : undefined
-  return Prompt.make({ text: input.text, agents: input.agents, files })
+  const requested = input.skills
+  const selected = requested?.length
+    ? yield* Effect.gen(function* () {
+        const available = yield* (yield* skills).list()
+        const attachments = Array.from(new Map(requested.map((attachment) => [attachment.id, attachment])).values())
+        return yield* Effect.forEach(attachments, (attachment) => {
+          const skill = available.find((item) => item.id === attachment.id)
+          if (!skill) return Effect.fail(new SkillNotFoundError({ skill: attachment.id }))
+          return Skill.modelOutput(fs, skill).pipe(
+            Effect.map((output) => ({
+              id: skill.id,
+              name: skill.name,
+              text: output.output,
+              mention: attachment.mention,
+            })),
+          )
+        })
+      })
+    : undefined
+  return Prompt.make({ text: input.text, agents: input.agents, files, skills: selected?.length ? selected : undefined })
 })
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024

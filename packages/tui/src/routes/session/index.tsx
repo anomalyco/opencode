@@ -1893,6 +1893,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const data = useData()
   const local = useLocal()
   const files = createMemo(() => props.message.files ?? [])
+  const skills = createMemo(() => props.message.skills ?? [])
   const themes = useThemes()
   const theme = useTheme("elevated")
   const mode = themes.mode
@@ -1908,7 +1909,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
   }
 
   return (
-    <Show when={props.message.text.trim() || files().length}>
+    <Show when={props.message.text.trim() || files().length || skills().length}>
       <box
         border={["left"]}
         borderColor={delivery() ? theme.border.default : color()}
@@ -1953,6 +1954,28 @@ function UserMessage(props: { message: SessionMessageUser }) {
           flexShrink={0}
         >
           <text fg={theme.text.default}>{props.message.text}</text>
+          <Show when={skills().length}>
+            <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
+              <For each={skills()}>
+                {(skill) => (
+                  <text fg={theme.text.default}>
+                    <span
+                      style={{
+                        bg: theme.hue.accent[mode() === "light" ? 700 : 200],
+                        fg: theme.background.default,
+                        bold: true,
+                      }}
+                    >
+                      {" skill "}
+                    </span>
+                    <span style={{ bg: theme.raise(theme.background.default), fg: theme.text.subdued }}>
+                      {` ${skill.name} `}
+                    </span>
+                  </text>
+                )}
+              </For>
+            </box>
+          </Show>
           <Show when={files().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={files()}>

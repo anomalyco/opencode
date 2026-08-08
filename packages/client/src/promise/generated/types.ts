@@ -1080,6 +1080,8 @@ export type PromptFileAttachment = {
 
 export type PromptAgentAttachment = { name: string; mention?: PromptMention }
 
+export type PromptSkillAttachment = { id: string; name: string; text: string; mention?: PromptMention }
+
 export type SessionMessageAssistantText = { type: "text"; text: string; state?: SessionMessageProviderState }
 
 export type SessionMessageAssistantReasoning = {
@@ -1565,6 +1567,7 @@ export type SessionMessageUser = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  skills?: Array<PromptSkillAttachment>
   type: "user"
 }
 
@@ -1572,6 +1575,7 @@ export type SessionPendingUserData = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  skills?: Array<PromptSkillAttachment>
   metadata?: { [x: string]: JsonValue }
 }
 
@@ -1579,6 +1583,7 @@ export type SessionPendingUserData1 = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
+  skills?: Array<PromptSkillAttachment>
   metadata?: { [x: string]: any }
 }
 
@@ -2579,6 +2584,12 @@ export type SessionImportInput = {
             readonly name: string
             readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
           }>
+          readonly skills?: ReadonlyArray<{
+            readonly id: string
+            readonly name: string
+            readonly text: string
+            readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+          }>
           readonly type: "user"
         }
       | {
@@ -2824,6 +2835,12 @@ export type SessionImportInput = {
             readonly name: string
             readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
           }>
+          readonly skills?: ReadonlyArray<{
+            readonly id: string
+            readonly name: string
+            readonly text: string
+            readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+          }>
           readonly type: "user"
         }
       | {
@@ -3067,6 +3084,12 @@ export type SessionImportInput = {
           }>
           readonly agents?: ReadonlyArray<{
             readonly name: string
+            readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+          }>
+          readonly skills?: ReadonlyArray<{
+            readonly id: string
+            readonly name: string
+            readonly text: string
             readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
           }>
           readonly type: "user"
@@ -3320,6 +3343,10 @@ export type SessionPromptInput = {
       readonly name: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
@@ -3335,6 +3362,10 @@ export type SessionPromptInput = {
     }>
     readonly agents?: ReadonlyArray<{
       readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly metadata?: { readonly [x: string]: JsonValue }
@@ -3354,6 +3385,10 @@ export type SessionPromptInput = {
       readonly name: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
@@ -3371,10 +3406,35 @@ export type SessionPromptInput = {
       readonly name: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["agents"]
+  readonly skills?: {
+    readonly id?: string | null
+    readonly text: string
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["skills"]
   readonly metadata?: {
     readonly id?: string | null
     readonly text: string
@@ -3386,6 +3446,10 @@ export type SessionPromptInput = {
     }>
     readonly agents?: ReadonlyArray<{
       readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly metadata?: { readonly [x: string]: JsonValue }
@@ -3405,6 +3469,10 @@ export type SessionPromptInput = {
       readonly name: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
@@ -3420,6 +3488,10 @@ export type SessionPromptInput = {
     }>
     readonly agents?: ReadonlyArray<{
       readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly metadata?: { readonly [x: string]: JsonValue }
