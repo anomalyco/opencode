@@ -24,9 +24,7 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolOutput") {}
 
 const cleanup = Effect.fn("ToolOutput.cleanup")(function* (fs: FSUtil.Interface, directory: string) {
-  const cutoff = Identifier.timestamp(
-    Identifier.create("tool", "ascending", Date.now() - Duration.toMillis(RETENTION)),
-  )
+  const cutoff = Identifier.timestamp(Identifier.create("tool", "ascending", Date.now() - Duration.toMillis(RETENTION)))
   const entries = yield* fs.readDirectory(directory).pipe(
     Effect.map((entries) => entries.filter((entry) => /^tool_[0-9a-f]{12}/.test(entry))),
     Effect.catch(() => Effect.succeed([])),
@@ -122,7 +120,11 @@ const cleanupLayer = Layer.effectDiscard(
   }),
 )
 
-const cleanupNode = makeGlobalNode({ name: "tool-output-cleanup", layer: cleanupLayer, deps: [FSUtil.node, Global.node] })
+const cleanupNode = makeGlobalNode({
+  name: "tool-output-cleanup",
+  layer: cleanupLayer,
+  deps: [FSUtil.node, Global.node],
+})
 
 export const node = makeLocationNode({
   service: Service,

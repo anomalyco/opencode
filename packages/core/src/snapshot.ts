@@ -59,7 +59,7 @@ export interface Interface {
   /**
    * Restore selected project-relative paths from their associated trees. A path
    * absent from its selected tree is removed; paths outside the map are untouched.
-  */
+   */
   readonly restore: (input: RestoreInput) => Effect.Effect<void, Error>
 }
 

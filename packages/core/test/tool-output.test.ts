@@ -147,10 +147,7 @@ describe("ToolOutput", () => {
     withStore((output, fs, root) =>
       Effect.gen(function* () {
         const directory = path.join(root, ToolOutput.DIRECTORY)
-        const old = path.join(
-          directory,
-          Identifier.create("tool", "ascending", Date.now() - 8 * 24 * 60 * 60 * 1_000),
-        )
+        const old = path.join(directory, Identifier.create("tool", "ascending", Date.now() - 8 * 24 * 60 * 60 * 1_000))
         const recent = path.join(directory, Identifier.ascending("tool"))
         yield* fs.ensureDir(directory)
         yield* fs.writeFileString(old, "old")

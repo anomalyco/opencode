@@ -213,9 +213,7 @@ const configuredIt = testEffect(
       Layer.mock(Config.Service)({
         entries: () =>
           Effect.succeed(
-            configuredShell
-              ? [new Document({ type: "document", info: new Info({ shell: configuredShell }) })]
-              : [],
+            configuredShell ? [new Document({ type: "document", info: new Info({ shell: configuredShell }) })] : [],
           ),
       }),
     ],

@@ -39,10 +39,7 @@ function formatterLayer(directory: string, configured?: ConfigInput["formatter"]
     ],
     [
       Location.node,
-      Layer.succeed(
-        Location.Service,
-        Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
-      ),
+      Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
     ],
     [Npm.node, Layer.mock(Npm.Service, { which: () => Effect.succeed(undefined) })],
   ])

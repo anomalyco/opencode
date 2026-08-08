@@ -349,14 +349,12 @@ const projectDelivery = Effect.fn("SessionPending.projectDelivery")(function* (
   if (!updated) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
 })
 
-export const projectSteered = Effect.fn("SessionPending.projectSteered")(
-  (db: DatabaseService, input: PendingRef) =>
-    projectDelivery(db, { ...input, from: "queue", to: "steer" }),
+export const projectSteered = Effect.fn("SessionPending.projectSteered")((db: DatabaseService, input: PendingRef) =>
+  projectDelivery(db, { ...input, from: "queue", to: "steer" }),
 )
 
-export const projectQueued = Effect.fn("SessionPending.projectQueued")(
-  (db: DatabaseService, input: PendingRef) =>
-    projectDelivery(db, { ...input, from: "steer", to: "queue" }),
+export const projectQueued = Effect.fn("SessionPending.projectQueued")((db: DatabaseService, input: PendingRef) =>
+  projectDelivery(db, { ...input, from: "steer", to: "queue" }),
 )
 
 export const settleCompaction = Effect.fn("SessionPending.settleCompaction")(function* (

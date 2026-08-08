@@ -213,9 +213,7 @@ export function make(input: {
       const bin = which("uv")
       if (!bin) return disabled
       const output = yield* commandOutput([bin, "format", "--help"])
-      return output._tag === "Some" && output.value.exitCode === 0
-        ? [bin, "format", "--", "$FILE"]
-        : disabled
+      return output._tag === "Some" && output.value.exitCode === 0 ? [bin, "format", "--", "$FILE"] : disabled
     }),
   }
 

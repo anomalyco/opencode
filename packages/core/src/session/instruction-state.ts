@@ -66,7 +66,10 @@ const renderUpdateText = Effect.fnUntraced(function* (
   observation: Observation,
 ) {
   const replaced = Object.entries(observation.previous).filter(([key]) => Object.hasOwn(observation.delta, key))
-  const blobs = yield* loadBlobs(db, replaced.map(([, hash]) => hash))
+  const blobs = yield* loadBlobs(
+    db,
+    replaced.map(([, hash]) => hash),
+  )
   const previous = Object.fromEntries(replaced.map(([key, hash]) => [key, requireBlob(blobs, hash)]))
   const admitted = new Map(
     Object.entries(observation.blobs).map(([hash, value]) => [Instructions.Hash.make(hash), value]),
@@ -193,10 +196,7 @@ export const preview = Effect.fn("InstructionState.preview")(function* (
     const values = dereference(result.current, observedBlobs)
     return { initial: Instructions.renderInitial(instructions, values), update: "" }
   }
-  const stored = yield* loadBlobs(db, [
-    ...Object.values(state.initial_values),
-    ...Object.values(state.current_values),
-  ])
+  const stored = yield* loadBlobs(db, [...Object.values(state.initial_values), ...Object.values(state.current_values)])
   return {
     initial: Instructions.renderInitial(instructions, dereference(state.initial_values, stored)),
     update: Instructions.renderUpdate(

@@ -33,27 +33,27 @@ test("execute describes invariant Code Mode behavior", () => {
 })
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
-  const declared: Info = ({
+  const declared: Info = {
     name: "declared",
     description: "Declared",
     input: Schema.Struct({ value: Schema.String }),
     output: Schema.Struct({ value: Schema.String }),
     execute: ({ value }) => Effect.succeed({ output: { value } }),
-  })
+  }
   const modelOnlyInput = Schema.Struct({})
-  const modelOnly = ({
+  const modelOnly = {
     name: "model_only",
     description: "Model only",
     input: modelOnlyInput,
     execute: () => Effect.succeed({ content: "visible only", metadata: { kind: "model" } }),
-  }) satisfies Info<typeof modelOnlyInput, undefined>
-  const raw: Info = ({
+  } satisfies Info<typeof modelOnlyInput, undefined>
+  const raw: Info = {
     name: "raw",
     description: "Raw",
     input: {},
     output: {},
     execute: (input) => Effect.succeed({ output: input, content: "raw" }),
-  })
+  }
 
   expect(await Effect.runPromise(execute(declared, { value: "encoded" }, context))).toEqual({
     output: { value: "encoded" },
@@ -95,22 +95,22 @@ test("declared outputs cannot bypass validation and raw outputs stay JSON-compat
 })
 
 test("execute supports callable namespace tools", async () => {
-  const callable: Info = ({
+  const callable: Info = {
     name: "admin",
     description: "Administer Slack",
     input: Schema.Struct({}),
     output: Schema.String,
     options: { namespace: "slack" },
     execute: () => Effect.succeed({ output: "admin" }),
-  })
-  const child: Info = ({
+  }
+  const child: Info = {
     name: "create",
     description: "Create a Slack resource",
     input: Schema.Struct({}),
     output: Schema.String,
     options: { namespace: "slack.admin" },
     execute: () => Effect.succeed({ output: "created" }),
-  })
+  }
   const codeMode = createCodeMode(
     new Map([
       ["slack_admin", callable],
@@ -118,10 +118,7 @@ test("execute supports callable namespace tools", async () => {
     ]),
   )
   const result = await Effect.runPromise(
-    codeMode.execute(
-      { code: "return [await tools.slack.admin({}), await tools.slack.admin.create({})]" },
-      context,
-    ),
+    codeMode.execute({ code: "return [await tools.slack.admin({}), await tools.slack.admin.create({})]" }, context),
   )
 
   expect(result.metadata).toEqual({

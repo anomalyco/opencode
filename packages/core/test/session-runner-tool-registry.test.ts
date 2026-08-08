@@ -48,33 +48,25 @@ const call = (name: string, id = `call-${name}`): Parameters<Tool.Snapshot["exec
   call: { type: "tool-call", id, name, input: { text: name } },
 })
 
-const make = (): Info =>
-  ({
-    name: "echo",
-    description: "Echo text",
-    input: Schema.Struct({ text: Schema.String }),
-    output: Schema.Struct({ text: Schema.String }),
-    execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
-  })
+const make = (): Info => ({
+  name: "echo",
+  description: "Echo text",
+  input: Schema.Struct({ text: Schema.String }),
+  output: Schema.Struct({ text: Schema.String }),
+  execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
+})
 
-const constant = (text: string): Info =>
-  ({
-    name: "constant",
-    description: "Return text",
-    input: Schema.Struct({ text: Schema.String }),
-    output: Schema.Struct({ text: Schema.String }),
-    execute: () => Effect.succeed({ output: { text }, content: text }),
-  })
+const constant = (text: string): Info => ({
+  name: "constant",
+  description: "Return text",
+  input: Schema.Struct({ text: Schema.String }),
+  output: Schema.Struct({ text: Schema.String }),
+  execute: () => Effect.succeed({ output: { text }, content: text }),
+})
 
-const transform = (
-  service: Tool.Interface,
-  tools: Readonly<Record<string, Info>>,
-  options?: Tool.Options,
-) =>
+const transform = (service: Tool.Interface, tools: Readonly<Record<string, Info>>, options?: Tool.Options) =>
   service.transform((draft) =>
-    Object.entries(tools).forEach(([name, tool]) =>
-      draft.add({ ...tool, name, options: options ?? tool.options }),
-    ),
+    Object.entries(tools).forEach(([name, tool]) => draft.add({ ...tool, name, options: options ?? tool.options })),
   )
 
 describe("Tool", () => {
@@ -95,8 +87,9 @@ describe("Tool", () => {
       const invalid = yield* transform(service, { "123": make() }, { codemode: false }).pipe(Effect.flip)
       expect(invalid.message).toBe("Invalid tool name: 123")
 
-      const collision = yield* transform(service, { "echo.tool": make(), echo_tool: make() }, { codemode: false })
-        .pipe(Effect.flip)
+      const collision = yield* transform(service, { "echo.tool": make(), echo_tool: make() }, { codemode: false }).pipe(
+        Effect.flip,
+      )
       expect(collision.message).toBe("Duplicate normalized tool name: echo_tool")
       expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
     }),
@@ -202,11 +195,7 @@ describe("Tool", () => {
           { action: "*", resource: "*", effect: "deny" },
         ]),
       ).toEqual([])
-      expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual([
-        "bash",
-        "question",
-        "execute",
-      ])
+      expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["bash", "question", "execute"])
     }),
   )
 
@@ -239,13 +228,12 @@ describe("Tool", () => {
       const service = yield* Tool.Service
       const scope = yield* Scope.make()
       const registered = yield* Deferred.make<void>()
-      const fiber = yield* transform(service, { echo: make() }, { codemode: false })
-        .pipe(
-          Effect.andThen(Deferred.succeed(registered, undefined)),
-          Effect.andThen(Effect.never),
-          Scope.provide(scope),
-          Effect.forkChild,
-        )
+      const fiber = yield* transform(service, { echo: make() }, { codemode: false }).pipe(
+        Effect.andThen(Deferred.succeed(registered, undefined)),
+        Effect.andThen(Effect.never),
+        Scope.provide(scope),
+        Effect.forkChild,
+      )
       yield* Deferred.await(registered)
       yield* Fiber.interrupt(fiber)
 
@@ -258,15 +246,16 @@ describe("Tool", () => {
   it.effect("returns model errors without swallowing interruption or defects", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      yield* transform(service,
+      yield* transform(
+        service,
         {
-          failed: ({
+          failed: {
             name: "failed",
             description: "Failed",
             input: Schema.Struct({}),
             output: Schema.Struct({ ok: Schema.Boolean }),
             execute: () => Effect.fail(new Tool.Error({ message: "Denied" })),
-          }),
+          },
         },
         { codemode: false },
       )
@@ -285,15 +274,16 @@ describe("Tool", () => {
         }),
       ).toEqual({ status: "error", error: { type: "tool.execution", message: "Unknown tool: missing" } })
 
-      yield* transform(service,
+      yield* transform(
+        service,
         {
-          defect: ({
+          defect: {
             name: "defect",
             description: "Defect",
             input: Schema.Struct({}),
             output: Schema.Struct({}),
             execute: () => Effect.die("unexpected executor defect"),
-          }),
+          },
         },
         { codemode: false },
       )
@@ -326,16 +316,17 @@ describe("Tool", () => {
     Effect.gen(function* () {
       const service = yield* Tool.Service
       const contexts: Tool.Context[] = []
-      yield* transform(service,
+      yield* transform(
+        service,
         {
-          context: ({
+          context: {
             name: "context",
             description: "Context",
             input: Schema.Struct({}),
             output: Schema.Struct({ ok: Schema.Boolean }),
             execute: (_, context) =>
               Effect.sync(() => contexts.push(context)).pipe(Effect.as({ output: { ok: true } })),
-          }),
+          },
         },
         { codemode: false },
       )
@@ -353,9 +344,10 @@ describe("Tool", () => {
   it.effect("normalizes image tool output once and drops unresizable images", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      yield* transform(service,
+      yield* transform(
+        service,
         {
-          snapshot: ({
+          snapshot: {
             name: "snapshot",
             description: "Return images",
             input: Schema.Struct({ text: Schema.String }),
@@ -375,7 +367,7 @@ describe("Tool", () => {
                   { type: "text", text },
                 ],
               }),
-          }),
+          },
         },
         { codemode: false },
       )
@@ -405,9 +397,7 @@ describe("Tool", () => {
           if (event.status !== "completed") return
           event.result = {
             ...event.result,
-            content: [
-              { type: "file", uri: "data:image/png;base64,aW1hZ2U=", mime: "image/png", name: "hook.png" },
-            ],
+            content: [{ type: "file", uri: "data:image/png;base64,aW1hZ2U=", mime: "image/png", name: "hook.png" }],
           }
         }),
       )
@@ -426,16 +416,17 @@ describe("Tool", () => {
   it.effect("publishes progress metadata unchanged", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
-      yield* transform(service,
+      yield* transform(
+        service,
         {
-          progressive: ({
+          progressive: {
             name: "progressive",
             description: "Emit image progress",
             input: Schema.Struct({ text: Schema.String }),
             output: Schema.Struct({ text: Schema.String }),
             execute: ({ text }, context) =>
               context.progress({ stage: "capture" }).pipe(Effect.as({ output: { text } })),
-          }),
+          },
         },
         { codemode: false },
       )
@@ -462,16 +453,17 @@ describe("Tool", () => {
           encode: SchemaGetter.transform((value) => value === "yes"),
         }),
       )
-      yield* transform(service,
+      yield* transform(
+        service,
         {
-          transformed: ({
+          transformed: {
             name: "transformed",
             description: "Transform values",
             input: Schema.Struct({ value: Transformed }),
             output: Schema.Struct({ value: Transformed }),
             execute: ({ value }) =>
               Effect.sync(() => executed.push(value)).pipe(Effect.as({ output: { value }, content: String(value) })),
-          }),
+          },
         },
         { codemode: false },
       )
@@ -501,9 +493,10 @@ describe("Tool", () => {
       })
       expect(executed).toEqual(["yes"])
 
-      yield* transform(service,
+      yield* transform(
+        service,
         {
-          invalid_output: ({
+          invalid_output: {
             name: "invalid_output",
             description: "Return invalid output",
             input: Schema.Struct({}),
@@ -520,7 +513,7 @@ describe("Tool", () => {
               ),
             }),
             execute: () => Effect.succeed({ output: { value: "invalid" } }),
-          }),
+          },
         },
         { codemode: false },
       )
@@ -570,19 +563,18 @@ describe("Tool", () => {
       const executed: string[] = []
       const scope = yield* Scope.make()
       yield* transform(service, {
-          echo: ({
-            name: "echo",
-            description: "Echo text",
-            input: Schema.Struct({ text: Schema.String }),
-            output: Schema.Struct({ text: Schema.String }),
-            execute: ({ text }, context) =>
-              Effect.sync(() => executed.push(`old:${text}`)).pipe(
-                Effect.andThen(context.progress({ stage: "old" })),
-                Effect.as({ output: { text } }),
-              ),
-          }),
-        })
-        .pipe(Scope.provide(scope))
+        echo: {
+          name: "echo",
+          description: "Echo text",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.Struct({ text: Schema.String }),
+          execute: ({ text }, context) =>
+            Effect.sync(() => executed.push(`old:${text}`)).pipe(
+              Effect.andThen(context.progress({ stage: "old" })),
+              Effect.as({ output: { text } }),
+            ),
+        },
+      }).pipe(Scope.provide(scope))
       const toolSet = yield* service.snapshot()
       const execute = toolSet.definitions.find((tool) => tool.name === "execute")
       expect(toolSet.codeModeCatalog?.[0]?.signature).toContain("tools.echo")
@@ -590,13 +582,13 @@ describe("Tool", () => {
       expect(execute?.description).not.toContain("Echo text")
       yield* Scope.close(scope, Exit.void)
       yield* transform(service, {
-        echo: ({
+        echo: {
           name: "echo",
           description: "Echo text",
           input: Schema.Struct({ text: Schema.String }),
           output: Schema.Struct({ text: Schema.String }),
           execute: ({ text }) => Effect.sync(() => executed.push(`new:${text}`)).pipe(Effect.as({ output: { text } })),
-        }),
+        },
       })
 
       const progress: Tool.Metadata[] = []

@@ -183,7 +183,11 @@ export const layer = Layer.effect(
           const invalid = validateAnswer(entry.form, input.answer)
           if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
           const next: TerminalState = { status: "answered", answer: input.answer }
-          yield* bus.publish(Form.Event.Replied, { id: input.id, sessionID: entry.form.sessionID, answer: input.answer })
+          yield* bus.publish(Form.Event.Replied, {
+            id: input.id,
+            sessionID: entry.form.sessionID,
+            answer: input.answer,
+          })
           yield* Cache.set(forms, input.id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
         }),

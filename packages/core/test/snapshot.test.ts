@@ -199,7 +199,5 @@ async function initGit(directory: string, commit = false) {
   await $`git init`.cwd(directory).quiet()
   await $`git -c core.fsmonitor=false add .`.cwd(directory).quiet()
   if (!commit) return
-  await $`git -c user.email=test@opencode.test -c user.name=Test commit --no-gpg-sign -m initial`
-    .cwd(directory)
-    .quiet()
+  await $`git -c user.email=test@opencode.test -c user.name=Test commit --no-gpg-sign -m initial`.cwd(directory).quiet()
 }

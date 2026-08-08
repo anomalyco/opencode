@@ -92,9 +92,7 @@ type Options = {
   readonly nextDatabasePath?: string
 }
 
-type MigrationState =
-  | { readonly phase: "sessions"; readonly cursor?: string }
-  | { readonly phase: "completed" }
+type MigrationState = { readonly phase: "sessions"; readonly cursor?: string } | { readonly phase: "completed" }
 
 type RuntimeState =
   | { readonly status: "idle" }
@@ -487,7 +485,10 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
             .transaction((tx) =>
               Effect.gen(function* () {
                 yield* tx.delete(EventTable).run()
-                yield* tx.insert(KVTable).values({ key: MIGRATION_STATE_KEY, value: { phase: "sessions" } }).run()
+                yield* tx
+                  .insert(KVTable)
+                  .values({ key: MIGRATION_STATE_KEY, value: { phase: "sessions" } })
+                  .run()
               }),
             )
             .pipe(Effect.orDie)
@@ -505,7 +506,9 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
           updateProgress({ label: "Migrating sessions", numerator: migrated + completed, denominator })
         })
         updateProgress({ label: "Migrating sessions", numerator: migrated + sourceTotal, denominator })
-        const projects = new Set((yield* db.all<{ id: string }>(sql`SELECT id FROM project`)).map((project) => project.id))
+        const projects = new Set(
+          (yield* db.all<{ id: string }>(sql`SELECT id FROM project`)).map((project) => project.id),
+        )
         while (true) {
           const state = yield* readState(db)
           const cursorValue = state?.phase === "sessions" ? state.cursor : undefined
@@ -594,7 +597,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                 numerator: (runtimeState.progress.numerator ?? 0) + 1,
                 denominator,
               },
-          }
+            }
           yield* Effect.yieldNow
         }
         yield* db
@@ -681,9 +684,10 @@ function importNextDatabase(
           })
         }
         const messages = source
-          .query<NextMessage, [string]>(
-            "SELECT id, session_id, type, seq, time_created, time_updated, data FROM session_message WHERE session_id = ? ORDER BY seq",
-          )
+          .query<
+            NextMessage,
+            [string]
+          >("SELECT id, session_id, type, seq, time_created, time_updated, data FROM session_message WHERE session_id = ? ORDER BY seq")
           .all(session.id)
         yield* db
           .transaction((tx) =>

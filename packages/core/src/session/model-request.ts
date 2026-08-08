@@ -249,7 +249,9 @@ export const layer = Layer.effect(
               model: resolved.ref,
               request: before.request,
               response: new Response(
-                [204, 205, 304].includes(response.status) ? null : yield* Stream.toReadableStreamEffect(response.stream),
+                [204, 205, 304].includes(response.status)
+                  ? null
+                  : yield* Stream.toReadableStreamEffect(response.stream),
                 { status: response.status, headers: response.headers },
               ),
             })
@@ -274,8 +276,7 @@ export const layer = Layer.effect(
         )
       }
       const executeTool: Prepared["executeTool"] = (input) => {
-        if (stepLimitReached)
-          return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
+        if (stepLimitReached) return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
         const tool = hooked.get(input.call.name)
         // A registered tool absent from the hooked set was removed or renamed by a hook.
         if (!tool && registry.has(input.call.name))

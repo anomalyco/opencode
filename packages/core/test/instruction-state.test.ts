@@ -14,7 +14,12 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstructionState } from "@opencode-ai/core/session/instruction-state"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
-import { InstructionBlobTable, InstructionStateTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import {
+  InstructionBlobTable,
+  InstructionStateTable,
+  SessionMessageTable,
+  SessionTable,
+} from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(

@@ -85,14 +85,11 @@ describe("SkillTool", () => {
               list: () => Effect.succeed(current),
             }),
           )
-          const skillToolLayer = AppNodeBuilder.build(
-            LayerNode.group([Tool.node, skillToolNode]),
-            [
-              [Permission.node, permission],
-              [Skill.node, skills],
-              [Image.node, imagePassthrough],
-            ],
-          )
+          const skillToolLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode]), [
+            [Permission.node, permission],
+            [Skill.node, skills],
+            [Image.node, imagePassthrough],
+          ])
 
           return yield* Effect.gen(function* () {
             const registry = yield* Tool.Service

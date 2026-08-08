@@ -139,14 +139,15 @@ const layer = Layer.effect(
 
     const savedRules = Effect.fnUntraced(function* () {
       return (yield* saved.list({ projectID: location.project.id })).map(
-        (item): Permission.Rule => ({ action: item.action, resource: item.resource, effect: "allow" }),
+        (item): Permission.Rule => ({
+          action: item.action,
+          resource: item.resource,
+          effect: "allow",
+        }),
       )
     })
 
-    const configured = Effect.fn("Permission.configured")(function* (
-      sessionID: SessionSchema.ID,
-      agentID?: Agent.ID,
-    ) {
+    const configured = Effect.fn("Permission.configured")(function* (sessionID: SessionSchema.ID, agentID?: Agent.ID) {
       const session = yield* sessions.get(sessionID)
       if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
       const agent = yield* agents.resolve(agentID ?? session.agent)

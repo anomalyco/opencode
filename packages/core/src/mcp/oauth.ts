@@ -160,7 +160,9 @@ export const authorize = (input: {
       }
       const fail = (reason: string) => {
         Effect.runFork(Deferred.fail(code, new Error(reason)))
-        response.writeHead(400, { "Content-Type": "text/html" }).end(OauthCallbackPage.error(reason, { provider: input.name }))
+        response
+          .writeHead(400, { "Content-Type": "text/html" })
+          .end(OauthCallbackPage.error(reason, { provider: input.name }))
       }
       const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
       if (error) return fail(error)
@@ -216,7 +218,12 @@ export const authorize = (input: {
 
     // The provider may already hold valid tokens (e.g. a re-auth), in which case there is no browser step.
     if (result === "AUTHORIZED") {
-      return { url: input.config.url, instructions: `Connected to ${input.name}.`, mode: "auto" as const, callback: finalize }
+      return {
+        url: input.config.url,
+        instructions: `Connected to ${input.name}.`,
+        mode: "auto" as const,
+        callback: finalize,
+      }
     }
     if (!authorizationUrl)
       return yield* Effect.fail(new Error(`MCP server "${input.name}" did not provide an authorization URL`))
@@ -228,7 +235,8 @@ export const authorize = (input: {
       callback: Deferred.await(code).pipe(
         Effect.flatMap((value) =>
           Effect.tryPromise({
-            try: () => auth(oauthProvider, { serverUrl: input.config.url, authorizationCode: value, scope: oauth?.scope }),
+            try: () =>
+              auth(oauthProvider, { serverUrl: input.config.url, authorizationCode: value, scope: oauth?.scope }),
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),
           }),
         ),

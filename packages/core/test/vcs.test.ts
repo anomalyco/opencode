@@ -104,11 +104,9 @@ describe("Vcs", () => {
         const bus = yield* Bus.Service
         expect(yield* vcs.info()).toEqual({ branch: { current: "main", default: undefined } })
 
-        const updated = yield* bus.subscribe(VcsEvent.BranchUpdated).pipe(
-          Stream.take(1),
-          Stream.runHead,
-          Effect.forkScoped({ startImmediately: true }),
-        )
+        const updated = yield* bus
+          .subscribe(VcsEvent.BranchUpdated)
+          .pipe(Stream.take(1), Stream.runHead, Effect.forkScoped({ startImmediately: true }))
         yield* Effect.promise(() => $`git checkout -q -b feature`.cwd(directory).quiet())
 
         yield* bus.publish(FileSystem.Event.Changed, { file: path.join(directory, "HEAD"), event: "change" })

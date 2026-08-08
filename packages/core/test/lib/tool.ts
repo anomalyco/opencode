@@ -16,11 +16,7 @@ export const toolIdentity = {
 export const toolDefinitions = (registry: Tool.Interface, permissions?: Permission.Ruleset) =>
   registry.snapshot(permissions).pipe(Effect.map((toolSet) => toolSet.definitions))
 
-export function waitForTool(
-  registry: Tool.Interface,
-  name: string,
-  remaining = 1000,
-): Effect.Effect<void, Error> {
+export function waitForTool(registry: Tool.Interface, name: string, remaining = 1000): Effect.Effect<void, Error> {
   return Effect.gen(function* () {
     if ((yield* toolDefinitions(registry)).some((tool) => tool.name === name)) return
     if (remaining === 0) {

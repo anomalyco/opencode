@@ -226,8 +226,7 @@ export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog
                   })),
                 })
               }),
-            remove: (providerID, modelID) =>
-              draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+            remove: (providerID, modelID) => draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
             default: {
               get: () => {
                 const value = draft.model.default.get()
@@ -417,9 +416,7 @@ function method(value: Integration.Method) {
   }
 }
 
-function internalMethod(
-  value: IntegrationMethodRegistration["method"],
-): Integration.Method {
+function internalMethod(value: IntegrationMethodRegistration["method"]): Integration.Method {
   if (value.type === "env") return value
   if (value.type === "key") return value
   if (value.type === "command") {

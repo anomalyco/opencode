@@ -3254,10 +3254,7 @@ describe("SessionRunnerLLM", () => {
       yield* stream.started
 
       expect(requests).toHaveLength(2)
-      expect(requests.map((request) => request.promptCacheKey)).toEqual([
-        sessionID,
-        otherSessionID,
-      ])
+      expect(requests.map((request) => request.promptCacheKey)).toEqual([sessionID, otherSessionID])
       yield* stream.release
       yield* Fiber.join(first)
       yield* Fiber.join(second)

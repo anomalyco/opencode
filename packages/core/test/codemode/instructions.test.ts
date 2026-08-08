@@ -70,20 +70,20 @@ describe("CodeModeInstructions", () => {
   )
 
   it.effect("stores a canonical sorted snapshot so registration order does not churn history", () => {
-    const alpha = ({
+    const alpha = {
       name: "alpha",
       description: "Alpha tool",
       input: Schema.Struct({}),
       output: Schema.String,
       execute: () => Effect.succeed({ output: "alpha" }),
-    })
-    const zeta = ({
+    }
+    const zeta = {
       name: "zeta",
       description: "Zeta tool",
       input: Schema.Struct({}),
       output: Schema.String,
       execute: () => Effect.succeed({ output: "zeta" }),
-    })
+    }
     const layer = AppNodeBuilder.build(Tool.node, [
       [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
     ])
@@ -96,9 +96,7 @@ describe("CodeModeInstructions", () => {
             draft.add({ ...zeta, options: { namespace: "tools" } })
             draft.add({ ...alpha, options: { namespace: "tools" } })
           })
-          return yield* readInitial(
-            CodeModeInstructions.make((yield* tools.snapshot()).codeModeCatalog),
-          )
+          return yield* readInitial(CodeModeInstructions.make((yield* tools.snapshot()).codeModeCatalog))
         }),
       )
       const reordered = yield* Effect.scoped(
@@ -107,10 +105,7 @@ describe("CodeModeInstructions", () => {
             draft.add({ ...alpha, options: { namespace: "tools" } })
             draft.add({ ...zeta, options: { namespace: "tools" } })
           })
-          return yield* readUpdate(
-            CodeModeInstructions.make((yield* tools.snapshot()).codeModeCatalog),
-            initialized,
-          )
+          return yield* readUpdate(CodeModeInstructions.make((yield* tools.snapshot()).codeModeCatalog), initialized)
         }),
       )
 

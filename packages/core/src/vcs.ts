@@ -46,7 +46,7 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const impl = adapter(proc, fs, location)
     const vcs = location.vcs
-    const state = { info: impl ? yield* impl.info() : { branch: {} } satisfies Info }
+    const state = { info: impl ? yield* impl.info() : ({ branch: {} } satisfies Info) }
 
     if (vcs && impl) {
       const store = yield* fs.realPath(vcs.store).pipe(Effect.catch(() => Effect.succeed(vcs.store)))

@@ -345,9 +345,7 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           yield* mutation(bus, { sessionID: input.sessionID, id: input.inputID }).pipe(
             Effect.catchDefect((defect) =>
-              defect instanceof SessionPending.LifecycleConflict
-                ? pendingConflict(input)
-                : Effect.die(defect),
+              defect instanceof SessionPending.LifecycleConflict ? pendingConflict(input) : Effect.die(defect),
             ),
           )
           if (wake) yield* execution.wake(input.sessionID)

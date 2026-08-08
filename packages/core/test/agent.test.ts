@@ -130,18 +130,20 @@ describe("Agent", () => {
       expect(info?.permissions.slice(0, Agent.Info.default(id).permissions.length)).toEqual(
         Agent.Info.default(id).permissions,
       )
-      expect(Permission.evaluate("external_directory", path.join(global.data, "shell", "*", "*"), info?.permissions ?? []).effect).toBe(
-        "allow",
-      )
-      expect(Permission.evaluate("external_directory", path.join(global.data, "tool-output", "*"), info?.permissions ?? []).effect).toBe(
-        "allow",
-      )
-      expect(Permission.evaluate("external_directory", path.join(global.config, "*"), info?.permissions ?? []).effect).toBe(
-        "allow",
-      )
-      expect(Permission.evaluate("external_directory", path.join(global.tmp, "*"), info?.permissions ?? []).effect).toBe(
-        "allow",
-      )
+      expect(
+        Permission.evaluate("external_directory", path.join(global.data, "shell", "*", "*"), info?.permissions ?? [])
+          .effect,
+      ).toBe("allow")
+      expect(
+        Permission.evaluate("external_directory", path.join(global.data, "tool-output", "*"), info?.permissions ?? [])
+          .effect,
+      ).toBe("allow")
+      expect(
+        Permission.evaluate("external_directory", path.join(global.config, "*"), info?.permissions ?? []).effect,
+      ).toBe("allow")
+      expect(
+        Permission.evaluate("external_directory", path.join(global.tmp, "*"), info?.permissions ?? []).effect,
+      ).toBe("allow")
 
       yield* agent.transform((editor) => editor.remove(id))
       expect(yield* agent.get(id)).toBeUndefined()

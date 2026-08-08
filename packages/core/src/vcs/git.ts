@@ -181,7 +181,10 @@ function makeGit(proc: AppProcess.Interface) {
     if (remote) {
       const head = yield* run(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd })
       if (head.exitCode === 0) {
-        const ref = head.text().trim().replace(/^refs\/remotes\//, "")
+        const ref = head
+          .text()
+          .trim()
+          .replace(/^refs\/remotes\//, "")
         const name = ref.startsWith(`${remote}/`) ? ref.slice(`${remote}/`.length) : ""
         if (name) return { name, ref } satisfies Base
       }

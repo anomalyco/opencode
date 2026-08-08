@@ -47,17 +47,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
       workspaceID: location.workspaceID,
       project: location.project,
     })
-  const locationRef = (input?: {
-    readonly location?: { readonly directory?: string; readonly workspace?: string }
-  }) =>
+  const locationRef = (input?: { readonly location?: { readonly directory?: string; readonly workspace?: string } }) =>
     input?.location === undefined
       ? undefined
       : Location.Ref.make({
           directory: AbsolutePath.make(input.location.directory ?? location.directory),
           workspaceID:
-            input.location.workspace === undefined
-              ? location.workspaceID
-              : Workspace.ID.make(input.location.workspace),
+            input.location.workspace === undefined ? location.workspaceID : Workspace.ID.make(input.location.workspace),
         })
   const isCurrentLocation = (ref: Location.Ref) =>
     ref.directory === location.directory && ref.workspaceID === location.workspaceID
@@ -72,9 +68,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
         const ref = locationRef(input)
         const output =
           ref && !isCurrentLocation(ref)
-            ? runtime.location.agent
-                .list(ref)
-                .pipe(Effect.map((result) => ({ ...result, data: result.data.find((agent) => agent.id === input.agentID) })))
+            ? runtime.location.agent.list(ref).pipe(
+                Effect.map((result) => ({
+                  ...result,
+                  data: result.data.find((agent) => agent.id === input.agentID),
+                })),
+              )
             : response(agents.get(input.agentID))
         return output.pipe(
           Effect.flatMap((result) =>
@@ -162,8 +161,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
                 mutable(draft.model.get(Provider.ID.make(providerID), Model.ID.make(modelID))),
               update: (providerID, modelID, update) =>
                 draft.model.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
-              remove: (providerID, modelID) =>
-                draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+              remove: (providerID, modelID) => draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
               default: {
                 get: draft.model.default.get,
                 set: (providerID, modelID) =>

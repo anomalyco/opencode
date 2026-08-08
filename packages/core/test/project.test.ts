@@ -366,10 +366,7 @@ describe("Project.resolve", () => {
       })
       expect(
         (yield* project.directories({ projectID: id })).toSorted((a, b) => a.directory.localeCompare(b.directory)),
-      ).toEqual([
-        { directory: yield* real(tmp.path) },
-        { directory: yield* real(worktree), strategy: "git_worktree" },
-      ])
+      ).toEqual([{ directory: yield* real(tmp.path) }, { directory: yield* real(worktree), strategy: "git_worktree" }])
     }),
   )
 })

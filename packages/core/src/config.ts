@@ -78,287 +78,292 @@ export const testLayer = (initial: Entry[] = []) =>
     }),
   )
 
-export const layer = (options?: Options) => Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    const global = yield* Global.Service
-    const location = yield* Location.Service
-    const watcher = yield* Watcher.Service
-    const bus = yield* Bus.Service
-    const credentials = yield* Credential.Service
-    const wellknown = yield* WellKnown.Service
-    const names = ["opencode.json", "opencode.jsonc"]
-    const reloadLock = Semaphore.makeUnsafe(1)
-    const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
-    const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
-    const parseInfo = Effect.fn("Config.parseInfo")(function* (text: string, source: string) {
-      const errors: ParseError[] = []
-      const input: unknown = parse(text, errors, { allowTrailingComma: true })
-      if (errors.length) {
+export const layer = (options?: Options) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const global = yield* Global.Service
+      const location = yield* Location.Service
+      const watcher = yield* Watcher.Service
+      const bus = yield* Bus.Service
+      const credentials = yield* Credential.Service
+      const wellknown = yield* WellKnown.Service
+      const names = ["opencode.json", "opencode.jsonc"]
+      const reloadLock = Semaphore.makeUnsafe(1)
+      const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+      const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
+      const parseInfo = Effect.fn("Config.parseInfo")(function* (text: string, source: string) {
+        const errors: ParseError[] = []
+        const input: unknown = parse(text, errors, { allowTrailingComma: true })
+        if (errors.length) {
+          yield* Effect.logWarning("configuration normalization diagnostic", {
+            source,
+            path: "$",
+            kind: "invalid",
+            action: "rejected malformed JSON or JSONC document",
+          })
+          return
+        }
+        const result = ConfigNormalize.normalize(input)
+        yield* Effect.forEach(result.diagnostics, (diagnostic) =>
+          Effect.logWarning("configuration normalization diagnostic", {
+            source,
+            path: diagnostic.path[0] === "$" ? "$" : `$.${diagnostic.path.join(".")}`,
+            kind: diagnostic.kind,
+            action: diagnostic.message,
+          }),
+        )
+        if (result.type === "rejected") return
+        const info = Option.getOrUndefined(decodeInfo(result.encoded))
+        if (info) return info
         yield* Effect.logWarning("configuration normalization diagnostic", {
           source,
           path: "$",
           kind: "invalid",
-          action: "rejected malformed JSON or JSONC document",
+          action: "rejected canonical configuration after final validation",
         })
-        return
-      }
-      const result = ConfigNormalize.normalize(input)
-      yield* Effect.forEach(result.diagnostics, (diagnostic) =>
-        Effect.logWarning("configuration normalization diagnostic", {
-          source,
-          path: diagnostic.path[0] === "$" ? "$" : `$.${diagnostic.path.join(".")}`,
-          kind: diagnostic.kind,
-          action: diagnostic.message,
-        }),
-      )
-      if (result.type === "rejected") return
-      const info = Option.getOrUndefined(decodeInfo(result.encoded))
-      if (info) return info
-      yield* Effect.logWarning("configuration normalization diagnostic", {
-        source,
-        path: "$",
-        kind: "invalid",
-        action: "rejected canonical configuration after final validation",
       })
-    })
 
-    const loadFile = Effect.fnUntraced(function* (filepath: string) {
-      const text = yield* fs.readFileStringSafe(filepath)
-      if (text === undefined) return
-      const substituted = yield* ConfigVariable.substitute({ type: "path", path: filepath, text })
-      const info = yield* parseInfo(substituted, filepath)
-      if (!info) return
-      return new Document({ type: "document", path: filepath, info })
-    })
+      const loadFile = Effect.fnUntraced(function* (filepath: string) {
+        const text = yield* fs.readFileStringSafe(filepath)
+        if (text === undefined) return
+        const substituted = yield* ConfigVariable.substitute({ type: "path", path: filepath, text })
+        const info = yield* parseInfo(substituted, filepath)
+        if (!info) return
+        return new Document({ type: "document", path: filepath, info })
+      })
 
-    const loadWellknown = Effect.fn("Config.loadWellknown")(function* () {
-      const entries = yield* wellknown
-        .entries()
-        .pipe(
-          Effect.catch((error) =>
-            Effect.logWarning("failed to discover wellknown config", { error }).pipe(Effect.as([] as const)),
-          ),
-        )
-      return yield* Effect.forEach(entries, (entry) =>
-        Effect.gen(function* () {
-          const auth = entry.manifest.auth
-          if (!auth) return []
-          const credential = (yield* credentials.list(entry.integrationID)).findLast(
-            (credential) => credential.value.type === "key",
-          )
-          if (!credential || credential.value.type !== "key") return []
-          const variables = { [auth.env]: credential.value.key }
-          const configs = yield* wellknown.resolve(entry, variables).pipe(Effect.orDie)
-          return yield* Effect.forEach(configs, (config) =>
-            ConfigVariable.substitute({
-              type: "virtual",
-              source: entry.origin,
-              dir: entry.origin,
-              text: JSON.stringify(config),
-              env: variables,
-            }).pipe(
-              Effect.flatMap((text) => parseInfo(text, entry.origin)),
-              Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
+      const loadWellknown = Effect.fn("Config.loadWellknown")(function* () {
+        const entries = yield* wellknown
+          .entries()
+          .pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("failed to discover wellknown config", { error }).pipe(Effect.as([] as const)),
             ),
-          ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
-        }),
-      ).pipe(Effect.map((documents) => documents.flat()))
-    })
+          )
+        return yield* Effect.forEach(entries, (entry) =>
+          Effect.gen(function* () {
+            const auth = entry.manifest.auth
+            if (!auth) return []
+            const credential = (yield* credentials.list(entry.integrationID)).findLast(
+              (credential) => credential.value.type === "key",
+            )
+            if (!credential || credential.value.type !== "key") return []
+            const variables = { [auth.env]: credential.value.key }
+            const configs = yield* wellknown.resolve(entry, variables).pipe(Effect.orDie)
+            return yield* Effect.forEach(configs, (config) =>
+              ConfigVariable.substitute({
+                type: "virtual",
+                source: entry.origin,
+                dir: entry.origin,
+                text: JSON.stringify(config),
+                env: variables,
+              }).pipe(
+                Effect.flatMap((text) => parseInfo(text, entry.origin)),
+                Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
+              ),
+            ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
+          }),
+        ).pipe(Effect.map((documents) => documents.flat()))
+      })
 
-    const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
-      return [
-        ...(yield* Effect.forEach(names, (file) => loadFile(path.join(directory, file))).pipe(
-          Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
-        )),
-        new Directory({ type: "directory", path: directory }),
-      ]
-    })
+      const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
+        return [
+          ...(yield* Effect.forEach(names, (file) => loadFile(path.join(directory, file))).pipe(
+            Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
+          )),
+          new Directory({ type: "directory", path: directory }),
+        ]
+      })
 
-    const discover = Effect.fn("Config.discover")(function* () {
-      const globalDirectory = AbsolutePath.make(global.config)
-      const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
-      const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
-      const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
-      const discovered = locationIsGlobal || options?.project === false
-        ? []
-        : yield* fs
-            .up({
-              targets: [".opencode", ".claude", ".agents", ...names.toReversed()],
-              start: location.directory,
-            })
-            .pipe(Effect.orDie)
+      const discover = Effect.fn("Config.discover")(function* () {
+        const globalDirectory = AbsolutePath.make(global.config)
+        const globalAgentsDirectory = AbsolutePath.make(path.join(global.home, ".agents"))
+        const globalClaudeDirectory = AbsolutePath.make(path.join(global.home, ".claude"))
+        const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
+        const discovered =
+          locationIsGlobal || options?.project === false
+            ? []
+            : yield* fs
+                .up({
+                  targets: [".opencode", ".claude", ".agents", ...names.toReversed()],
+                  start: location.directory,
+                })
+                .pipe(Effect.orDie)
 
-      // We load certain files from a few other folders in the ecosystem
-      const claude = [
-        ...new Set([
-          ...((yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
-          ...discovered.filter((item) => path.basename(item) === ".claude"),
-        ]),
-      ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
-      const agents = [
-        ...new Set([
-          ...((yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
-          ...discovered.filter((item) => path.basename(item) === ".agents"),
-        ]),
-      ].map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) }))
-
-      const directories = [
-        globalDirectory,
-        ...discovered
-          .filter((item) => path.basename(item) === ".opencode")
-          .toReversed()
-          .map((directory) => AbsolutePath.make(directory)),
-      ]
-      const directPaths = discovered
-        .filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item)))
-        .toReversed()
-      const direct = yield* Effect.forEach(directPaths, (filepath) =>
-        loadFile(filepath).pipe(
-          Effect.map((config) => [
-            ...(config ? [config] : []),
-            new File({ type: "file", path: AbsolutePath.make(filepath) }),
+        // We load certain files from a few other folders in the ecosystem
+        const claude = [
+          ...new Set([
+            ...((yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
+            ...discovered.filter((item) => path.basename(item) === ".claude"),
           ]),
-        ),
-      ).pipe(
-        Effect.orDie,
-        Effect.map((entries) => entries.flat()),
-      )
+        ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
+        const agents = [
+          ...new Set([
+            ...((yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
+            ...discovered.filter((item) => path.basename(item) === ".agents"),
+          ]),
+        ].map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) }))
 
-      const file = options?.file
-      const explicit = file
-        ? yield* loadFile(path.resolve(file)).pipe(
+        const directories = [
+          globalDirectory,
+          ...discovered
+            .filter((item) => path.basename(item) === ".opencode")
+            .toReversed()
+            .map((directory) => AbsolutePath.make(directory)),
+        ]
+        const directPaths = discovered
+          .filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item)))
+          .toReversed()
+        const direct = yield* Effect.forEach(directPaths, (filepath) =>
+          loadFile(filepath).pipe(
             Effect.map((config) => [
               ...(config ? [config] : []),
-              new File({ type: "file", path: AbsolutePath.make(path.resolve(file)) }),
+              new File({ type: "file", path: AbsolutePath.make(filepath) }),
             ]),
-            Effect.orDie,
-          )
-        : []
-      const content = options?.content !== undefined
-        ? yield* ConfigVariable.substitute({
-            type: "virtual",
-            source: "OPENCODE_CONFIG_CONTENT",
-            dir: location.directory,
-            text: options.content,
-          }).pipe(
-            Effect.flatMap((text) => parseInfo(text, "OPENCODE_CONFIG_CONTENT")),
-            Effect.map((info) => (info ? [new Document({ type: "document", info })] : [])),
-            Effect.orDie,
-          )
-        : []
-
-      const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
-      return [
-        ...(yield* loadWellknown().pipe(Effect.orDie)),
-        ...claude,
-        ...agents,
-        ...(supplementary[0] ?? []),
-        ...explicit,
-        ...direct,
-        ...supplementary.slice(1).flat(),
-        ...content,
-      ]
-    })
-
-    const initial = yield* discover()
-    let configs = initial
-    const updates = yield* PubSub.unbounded<Watcher.Update>()
-    // Vendored trees inside config roots (a plugin's node_modules, a nested
-    // .git) produce event blizzards that can never change discovery output.
-    const ignore = ["node_modules", ".git", "**/{node_modules,.git}/**"]
-    // Watch-once: roots leave discovery only by deletion, so a stale watch is
-    // inert, bounded, and dies with this layer — and keeping a deleted root's
-    // watch alive is exactly what makes its recreation observable.
-    const watched = new Set<string>()
-    const reconcile = Effect.fn("Config.reconcileWatches")(function* (entries: readonly Entry[]) {
-      const directories = entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
-      const files = entries.flatMap((entry) => (entry.type === "file" ? [entry.path] : []))
-      const targets = [
-        ...directories.map((path) => ({ path, type: "directory" as const, ignore })),
-        ...files
-          .filter((file) => !directories.some((directory) => FSUtil.contains(directory, file)))
-          .map((path) => ({ path, type: "file" as const })),
-      ]
-      for (const target of targets) {
-        const key = JSON.stringify(target)
-        if (watched.has(key)) continue
-        watched.add(key)
-        const stream = yield* watcher.subscribe(target)
-        yield* stream.pipe(
-          Stream.runForEach((update) => PubSub.publish(updates, update)),
-          Effect.forkScoped({ startImmediately: true }),
+          ),
+        ).pipe(
+          Effect.orDie,
+          Effect.map((entries) => entries.flat()),
         )
-      }
-    })
 
-    const reload = Effect.fn("Config.reload")(() =>
-      reloadLock.withPermit(
-        Effect.gen(function* () {
-          const next = yield* discover()
-          if (isDeepStrictEqual(configs, next)) return
-          configs = next
-          yield* reconcile(next)
-          yield* bus.publish(Event.Updated, {})
-        }),
-      ),
-    )
-
-    yield* Stream.fromPubSub(updates).pipe(
-      Stream.debounce("100 millis"),
-      Stream.runForEach((update) =>
-        reload().pipe(
-          Effect.catchCause((cause) => Effect.logError("failed to reload config", { path: update.path, cause })),
-        ),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
-      Stream.filterEffect((event) =>
-        wellknown.entries().pipe(
-          Effect.map((entries) => entries.some((entry) => entry.integrationID === event.data.integrationID)),
-          Effect.catch(() => Effect.succeed(false)),
-        ),
-      ),
-      Stream.runForEach(() =>
-        reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload wellknown config", { cause }))),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* bus.subscribe(WellKnown.Event.Updated).pipe(
-      Stream.runForEach(() =>
-        reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload wellknown sources", { cause }))),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* Effect.sleep("10 minutes").pipe(
-      Effect.andThen(
-        Effect.suspend(() => {
-          if (!wellknown.snapshot().length) return Effect.void
-          return Effect.gen(function* () {
-            const changed = yield* wellknown.refresh().pipe(
-              Effect.catch((error) =>
-                Effect.logWarning("failed to refresh wellknown manifests", { error }).pipe(Effect.as(false)),
-              ),
+        const file = options?.file
+        const explicit = file
+          ? yield* loadFile(path.resolve(file)).pipe(
+              Effect.map((config) => [
+                ...(config ? [config] : []),
+                new File({ type: "file", path: AbsolutePath.make(path.resolve(file)) }),
+              ]),
+              Effect.orDie,
             )
-            if (!changed) yield* reload()
-          }).pipe(Effect.catchCause((cause) => Effect.logWarning("failed to refresh wellknown config", { cause })))
-        }),
-      ),
-      Effect.forever,
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* reconcile(initial)
+          : []
+        const content =
+          options?.content !== undefined
+            ? yield* ConfigVariable.substitute({
+                type: "virtual",
+                source: "OPENCODE_CONFIG_CONTENT",
+                dir: location.directory,
+                text: options.content,
+              }).pipe(
+                Effect.flatMap((text) => parseInfo(text, "OPENCODE_CONFIG_CONTENT")),
+                Effect.map((info) => (info ? [new Document({ type: "document", info })] : [])),
+                Effect.orDie,
+              )
+            : []
 
-    return Service.of({
-      entries: Effect.fn("Config.entries")(function* () {
-        return configs
-      }),
-      changes: () => Stream.fromPubSub(updates),
-    })
-  }),
-)
+        const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
+        return [
+          ...(yield* loadWellknown().pipe(Effect.orDie)),
+          ...claude,
+          ...agents,
+          ...(supplementary[0] ?? []),
+          ...explicit,
+          ...direct,
+          ...supplementary.slice(1).flat(),
+          ...content,
+        ]
+      })
+
+      const initial = yield* discover()
+      let configs = initial
+      const updates = yield* PubSub.unbounded<Watcher.Update>()
+      // Vendored trees inside config roots (a plugin's node_modules, a nested
+      // .git) produce event blizzards that can never change discovery output.
+      const ignore = ["node_modules", ".git", "**/{node_modules,.git}/**"]
+      // Watch-once: roots leave discovery only by deletion, so a stale watch is
+      // inert, bounded, and dies with this layer — and keeping a deleted root's
+      // watch alive is exactly what makes its recreation observable.
+      const watched = new Set<string>()
+      const reconcile = Effect.fn("Config.reconcileWatches")(function* (entries: readonly Entry[]) {
+        const directories = entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
+        const files = entries.flatMap((entry) => (entry.type === "file" ? [entry.path] : []))
+        const targets = [
+          ...directories.map((path) => ({ path, type: "directory" as const, ignore })),
+          ...files
+            .filter((file) => !directories.some((directory) => FSUtil.contains(directory, file)))
+            .map((path) => ({ path, type: "file" as const })),
+        ]
+        for (const target of targets) {
+          const key = JSON.stringify(target)
+          if (watched.has(key)) continue
+          watched.add(key)
+          const stream = yield* watcher.subscribe(target)
+          yield* stream.pipe(
+            Stream.runForEach((update) => PubSub.publish(updates, update)),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+        }
+      })
+
+      const reload = Effect.fn("Config.reload")(() =>
+        reloadLock.withPermit(
+          Effect.gen(function* () {
+            const next = yield* discover()
+            if (isDeepStrictEqual(configs, next)) return
+            configs = next
+            yield* reconcile(next)
+            yield* bus.publish(Event.Updated, {})
+          }),
+        ),
+      )
+
+      yield* Stream.fromPubSub(updates).pipe(
+        Stream.debounce("100 millis"),
+        Stream.runForEach((update) =>
+          reload().pipe(
+            Effect.catchCause((cause) => Effect.logError("failed to reload config", { path: update.path, cause })),
+          ),
+        ),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
+        Stream.filterEffect((event) =>
+          wellknown.entries().pipe(
+            Effect.map((entries) => entries.some((entry) => entry.integrationID === event.data.integrationID)),
+            Effect.catch(() => Effect.succeed(false)),
+          ),
+        ),
+        Stream.runForEach(() =>
+          reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload wellknown config", { cause }))),
+        ),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* bus.subscribe(WellKnown.Event.Updated).pipe(
+        Stream.runForEach(() =>
+          reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload wellknown sources", { cause }))),
+        ),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* Effect.sleep("10 minutes").pipe(
+        Effect.andThen(
+          Effect.suspend(() => {
+            if (!wellknown.snapshot().length) return Effect.void
+            return Effect.gen(function* () {
+              const changed = yield* wellknown
+                .refresh()
+                .pipe(
+                  Effect.catch((error) =>
+                    Effect.logWarning("failed to refresh wellknown manifests", { error }).pipe(Effect.as(false)),
+                  ),
+                )
+              if (!changed) yield* reload()
+            }).pipe(Effect.catchCause((cause) => Effect.logWarning("failed to refresh wellknown config", { cause })))
+          }),
+        ),
+        Effect.forever,
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* reconcile(initial)
+
+      return Service.of({
+        entries: Effect.fn("Config.entries")(function* () {
+          return configs
+        }),
+        changes: () => Stream.fromPubSub(updates),
+      })
+    }),
+  )
 
 export function configured(options?: Options) {
   return makeLocationNode({

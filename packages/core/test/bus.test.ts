@@ -105,13 +105,9 @@ const it = testEffect(
   ]),
 )
 const itWithoutLocation = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
-    [Bus.node, Bus.configured({ persist: true })],
-  ]),
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [[Bus.node, Bus.configured({ persist: true })]]),
 )
-const itWithoutPersistence = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node])),
-)
+const itWithoutPersistence = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node])))
 
 describe("Bus", () => {
   it.effect("subscribes to multiple event definitions with a discriminated payload union", () =>
@@ -1341,5 +1337,4 @@ describe("Bus", () => {
       }).pipe(Effect.provide(eventLayer))
     }),
   )
-
 })

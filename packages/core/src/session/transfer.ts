@@ -33,10 +33,7 @@ export interface Interface {
     sessionID: Session.ID
     sanitize?: boolean
   }) => Effect.Effect<Data, Session.NotFoundError | Session.MessageDecodeError>
-  readonly import: (input: {
-    data: Data
-    location: Location.Ref
-  }) => Effect.Effect<Session.Info, ImportConflictError>
+  readonly import: (input: { data: Data; location: Location.Ref }) => Effect.Effect<Session.Info, ImportConflictError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTransfer") {}
@@ -108,7 +105,9 @@ const layer = Layer.effect(
               version: app.version,
               projectID: project.id,
               location: input.location,
-              subpath: RelativePath.make(path.relative(project.directory, input.location.directory).replaceAll("\\", "/")),
+              subpath: RelativePath.make(
+                path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
+              ),
               title: input.data.info.title,
               agent: input.data.info.agent,
               model: input.data.info.model,
@@ -230,8 +229,7 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
           ? undefined
           : redact("synthetic-description", message.id, message.description),
     }
-  if (message.type === "system")
-    return { ...message, metadata: meta, text: redact("system", message.id, message.text) }
+  if (message.type === "system") return { ...message, metadata: meta, text: redact("system", message.id, message.text) }
   if (message.type === "skill") return { ...message, metadata: meta, text: redact("skill", message.id, message.text) }
   if (message.type === "shell")
     return {

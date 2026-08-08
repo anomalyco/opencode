@@ -539,122 +539,122 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mo
 
 export const layer = (options?: Options) =>
   Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    const bus = yield* Bus.Service
+    Service,
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const bus = yield* Bus.Service
       const app = yield* App.Metadata
-    const http = HttpClient.filterStatusOk(
-      (yield* HttpClient.HttpClient).pipe(
-        HttpClient.retryTransient({
-          retryOn: "errors-and-responses",
-          times: 2,
-          schedule: Schedule.exponential(200).pipe(Schedule.jittered),
-        }),
-      ),
-    )
-
-    const source = options?.url || "https://models.dev"
-    const fetch = options?.fetch ?? true
-      const userAgent = App.useragent(app)
-    const filepath = path.join(
-      Global.Path.cache,
-      source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
-    )
-    const ttl = Duration.minutes(5)
-    const lockKey = `models-dev:${filepath}`
-
-    const fresh = Effect.fnUntraced(function* () {
-      const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
-      if (!stat) return false
-      const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
-      return Date.now() - mtime < Duration.toMillis(ttl)
-    })
-
-    const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
-      return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
-        HttpClientRequest.setHeader("User-Agent", userAgent),
-        http.execute,
-        Effect.flatMap((res) => res.text),
-        Effect.timeout("10 seconds"),
-      )
-    })
-
-    const loadFromDisk = fs.readJson(options?.file ?? filepath).pipe(
-      Effect.map((input) => input as Record<string, SourceProvider>),
-      Effect.catch((error) => {
-          if (options?.file === undefined && error._tag === "FileSystemError" && error.method === "readJson") {
-          return fs.remove(filepath, { force: true }).pipe(Effect.ignore, Effect.as(undefined))
-        }
-        return Effect.succeed(undefined)
-      }),
-    )
-
-    const loadSnapshot = Effect.sync(() =>
-      typeof OPENCODE_MODELS_DEV === "undefined" ? undefined : OPENCODE_MODELS_DEV,
-    )
-
-    const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
-      const text = yield* fetchApi()
-      const tempfile = `${filepath}.${process.pid}.${Date.now()}.tmp`
-      yield* fs.writeWithDirs(tempfile, text).pipe(
-        Effect.andThen(fs.rename(tempfile, filepath)),
-        Effect.catch((error) =>
-          Effect.gen(function* () {
-            yield* fs.remove(tempfile, { force: true }).pipe(Effect.ignore)
-            return yield* Effect.fail(error)
+      const http = HttpClient.filterStatusOk(
+        (yield* HttpClient.HttpClient).pipe(
+          HttpClient.retryTransient({
+            retryOn: "errors-and-responses",
+            times: 2,
+            schedule: Schedule.exponential(200).pipe(Schedule.jittered),
           }),
         ),
       )
-      return text
-    })
 
-    const populate = Effect.gen(function* () {
-      const fromDisk = yield* loadFromDisk
-      if (fromDisk) return normalize(fromDisk)
-      const bundled = yield* loadSnapshot
-      if (bundled) return normalize(bundled)
-      if (!fetch) return []
-      // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
-      const text = yield* Effect.scoped(
-        Effect.gen(function* () {
-          yield* Flock.effect(lockKey)
-          return yield* fetchAndWrite()
+      const source = options?.url || "https://models.dev"
+      const fetch = options?.fetch ?? true
+      const userAgent = App.useragent(app)
+      const filepath = path.join(
+        Global.Path.cache,
+        source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
+      )
+      const ttl = Duration.minutes(5)
+      const lockKey = `models-dev:${filepath}`
+
+      const fresh = Effect.fnUntraced(function* () {
+        const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (!stat) return false
+        const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
+        return Date.now() - mtime < Duration.toMillis(ttl)
+      })
+
+      const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
+        return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
+          HttpClientRequest.setHeader("User-Agent", userAgent),
+          http.execute,
+          Effect.flatMap((res) => res.text),
+          Effect.timeout("10 seconds"),
+        )
+      })
+
+      const loadFromDisk = fs.readJson(options?.file ?? filepath).pipe(
+        Effect.map((input) => input as Record<string, SourceProvider>),
+        Effect.catch((error) => {
+          if (options?.file === undefined && error._tag === "FileSystemError" && error.method === "readJson") {
+            return fs.remove(filepath, { force: true }).pipe(Effect.ignore, Effect.as(undefined))
+          }
+          return Effect.succeed(undefined)
         }),
       )
-      return normalize(JSON.parse(text) as Record<string, SourceProvider>)
-    }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
-    const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
-
-    const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
-
-    const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
-      if (!force && (yield* fresh())) return
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          yield* Flock.effect(lockKey)
-          // Re-check under the lock: another process may have refreshed between
-          // our outer check and lock acquisition.
-          if (!force && (yield* fresh())) return
-          yield* fetchAndWrite()
-          yield* invalidate
-          yield* bus.publish(ModelsDev.Event.Refreshed, {})
-        }),
-      ).pipe(
-        Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
-        Effect.ignore,
+      const loadSnapshot = Effect.sync(() =>
+        typeof OPENCODE_MODELS_DEV === "undefined" ? undefined : OPENCODE_MODELS_DEV,
       )
-    })
 
-    if (fetch && !process.argv.includes("--get-yargs-completions")) {
-      // Schedule.spaced runs the effect once, then waits between completions.
-      yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced(ttl)), Effect.ignore))
-    }
+      const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
+        const text = yield* fetchApi()
+        const tempfile = `${filepath}.${process.pid}.${Date.now()}.tmp`
+        yield* fs.writeWithDirs(tempfile, text).pipe(
+          Effect.andThen(fs.rename(tempfile, filepath)),
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              yield* fs.remove(tempfile, { force: true }).pipe(Effect.ignore)
+              return yield* Effect.fail(error)
+            }),
+          ),
+        )
+        return text
+      })
 
-    return Service.of({ get, refresh })
-  }),
-)
+      const populate = Effect.gen(function* () {
+        const fromDisk = yield* loadFromDisk
+        if (fromDisk) return normalize(fromDisk)
+        const bundled = yield* loadSnapshot
+        if (bundled) return normalize(bundled)
+        if (!fetch) return []
+        // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
+        const text = yield* Effect.scoped(
+          Effect.gen(function* () {
+            yield* Flock.effect(lockKey)
+            return yield* fetchAndWrite()
+          }),
+        )
+        return normalize(JSON.parse(text) as Record<string, SourceProvider>)
+      }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
+
+      const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
+
+      const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
+
+      const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
+        if (!force && (yield* fresh())) return
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            yield* Flock.effect(lockKey)
+            // Re-check under the lock: another process may have refreshed between
+            // our outer check and lock acquisition.
+            if (!force && (yield* fresh())) return
+            yield* fetchAndWrite()
+            yield* invalidate
+            yield* bus.publish(ModelsDev.Event.Refreshed, {})
+          }),
+        ).pipe(
+          Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
+          Effect.ignore,
+        )
+      })
+
+      if (fetch && !process.argv.includes("--get-yargs-completions")) {
+        // Schedule.spaced runs the effect once, then waits between completions.
+        yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced(ttl)), Effect.ignore))
+      }
+
+      return Service.of({ get, refresh })
+    }),
+  )
 
 export function configured(options?: Options) {
   return makeGlobalNode({

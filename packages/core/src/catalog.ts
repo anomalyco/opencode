@@ -115,8 +115,7 @@ const layer = Layer.effect(
                 }
                 draft.providers.set(providerID, record)
               }
-              const model =
-                record.models.get(modelID) ?? (Model.Info.default(providerID, modelID) as Model.MutableInfo)
+              const model = record.models.get(modelID) ?? (Model.Info.default(providerID, modelID) as Model.MutableInfo)
               if (!record.models.has(modelID)) record.models.set(modelID, model)
               fn(model)
               model.id = modelID
@@ -249,8 +248,7 @@ const layer = Layer.effect(
               items,
               Order.mapInput(
                 Order.Number,
-                (item: (typeof candidates)[number]) =>
-                  (item.cost / maxCost) * 0.8 + (item.age / maxAge) * 0.2,
+                (item: (typeof candidates)[number]) => (item.cost / maxCost) * 0.8 + (item.age / maxAge) * 0.2,
               ),
             )
             return projectModel(selected.model, provider)

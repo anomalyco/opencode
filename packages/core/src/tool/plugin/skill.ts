@@ -56,50 +56,48 @@ export const Plugin = {
     const permission = yield* Permission.Service
     yield* ctx.tool
       .transform((draft) =>
-        draft.add(
-          ({
-            name,
-            options: { codemode: false },
-            description,
-            input: Input,
-            output: Output,
-            execute: (input, context) =>
-              Effect.gen(function* () {
-                const current = yield* skills.list()
-                const skill = current.find((skill) => skill.id === input.id)
-                if (!skill) return yield* unableToLoad(input.id)
-                return yield* Effect.gen(function* () {
-                  yield* permission.assert({
-                    action: name,
-                    resources: [skill.id],
-                    save: [skill.id],
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source: { type: "tool", messageID: context.messageID, id: context.id },
-                  })
-                  const directory = path.dirname(skill.location)
-                  const files =
-                    path.basename(skill.location) === "SKILL.md"
-                      ? (yield* fs.scan("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
-                          .filter((file) => path.basename(file) !== "SKILL.md")
-                          .toSorted()
-                          .slice(0, FILE_LIMIT)
-                      : []
-                  return {
-                    name: skill.name,
-                    directory,
-                    output: toModelOutput(skill, files),
-                  }
-                }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
-              }).pipe(
-                Effect.map((output) => ({
-                  output,
-                  content: output.output,
-                  metadata: { name: output.name, directory: output.directory },
-                })),
-              ),
-          }),
-        ),
+        draft.add({
+          name,
+          options: { codemode: false },
+          description,
+          input: Input,
+          output: Output,
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const current = yield* skills.list()
+              const skill = current.find((skill) => skill.id === input.id)
+              if (!skill) return yield* unableToLoad(input.id)
+              return yield* Effect.gen(function* () {
+                yield* permission.assert({
+                  action: name,
+                  resources: [skill.id],
+                  save: [skill.id],
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source: { type: "tool", messageID: context.messageID, id: context.id },
+                })
+                const directory = path.dirname(skill.location)
+                const files =
+                  path.basename(skill.location) === "SKILL.md"
+                    ? (yield* fs.scan("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
+                        .filter((file) => path.basename(file) !== "SKILL.md")
+                        .toSorted()
+                        .slice(0, FILE_LIMIT)
+                    : []
+                return {
+                  name: skill.name,
+                  directory,
+                  output: toModelOutput(skill, files),
+                }
+              }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
+            }).pipe(
+              Effect.map((output) => ({
+                output,
+                content: output.output,
+                metadata: { name: output.name, directory: output.directory },
+              })),
+            ),
+        }),
       )
       .pipe(Effect.orDie)
   }),

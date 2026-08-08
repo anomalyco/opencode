@@ -63,9 +63,7 @@ export const Plugin = define({
               Effect.catch(() => Effect.succeed(undefined)),
             ),
           ).pipe(
-            Effect.map((documents) =>
-              documents.filter((document): document is Document => document !== undefined),
-            ),
+            Effect.map((documents) => documents.filter((document): document is Document => document !== undefined)),
           )
         })
       }).pipe(Effect.map((documents) => documents.flat()))
