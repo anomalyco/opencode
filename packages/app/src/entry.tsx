@@ -119,7 +119,7 @@ const clearAuthToken = () => {
 const platform: Platform = {
   platform: "web",
   draftStore: createBrowserDraftStore(),
-  version: pkg.version,
+  version: import.meta.env.VITE_OPENCODE_VERSION ?? pkg.version,
   openExternal,
   restart,
   notify,
