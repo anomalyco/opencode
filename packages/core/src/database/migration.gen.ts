@@ -42,5 +42,6 @@ export const migrations: DatabaseMigration.Migration[] = (
     import("./migration/20260622202450_simplify_session_input"),
     import("./migration/20260804233008_loose_psylocke"),
     import("./migration/20260805200742_import_legacy_credentials"),
+    import("./migration/20260806200000_import_next_credentials"),
   ])
 ).map((module) => module.default)

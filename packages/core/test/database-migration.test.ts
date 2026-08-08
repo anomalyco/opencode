@@ -12,6 +12,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { tmpdir } from "./fixture/tmpdir"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 import { importLegacyCredentials } from "@opencode-ai/core/database/migration/20260805200742_import_legacy_credentials"
+import { importNextCredentials } from "@opencode-ai/core/database/migration/20260806200000_import_next_credentials"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
   Effect.runPromise(
@@ -162,6 +163,75 @@ describe("DatabaseMigration", () => {
     )
 
     expect(await Bun.file(source).text()).toBe(content)
+  })
+
+  test("imports previous channel database credentials without replacing existing integrations", async () => {
+    await using tmp = await tmpdir()
+    const source = path.join(tmp.path, "opencode-next.db")
+    const { Database: Sqlite } = await import("bun:sqlite")
+    const sourceDb = new Sqlite(source, { strict: true })
+    sourceDb.run(`
+      CREATE TABLE credential (
+        id text PRIMARY KEY, integration_id text, label text NOT NULL, value text NOT NULL,
+        connector_id text, method_id text, active integer, time_created integer NOT NULL, time_updated integer NOT NULL
+      )
+    `)
+    const insert = sourceDb.prepare(
+      "INSERT INTO credential (id, integration_id, label, value, connector_id, method_id, active, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    insert.run("cred_next_opencode", "opencode", "anomaly", JSON.stringify({ type: "key", key: "zen-key" }), null, "console", null, 100, 200)
+    insert.run(
+      "cred_next_anthropic",
+      "anthropic",
+      "default",
+      JSON.stringify({ type: "oauth", methodID: "oauth", refresh: "next-refresh", access: "next-access", expires: 456 }),
+      null,
+      null,
+      null,
+      100,
+      200,
+    )
+    insert.run("cred_next_invalid", "invalid", "default", "not-json", null, null, null, 100, 200)
+    sourceDb.close()
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        const now = Date.now()
+        yield* db.run(sql`
+          INSERT INTO credential (id, integration_id, label, value, time_created, time_updated)
+          VALUES ('existing', 'anthropic', 'Existing', ${JSON.stringify({ type: "key", key: "current-key" })}, ${now}, ${now})
+        `)
+
+        yield* db.transaction((tx) => importNextCredentials(tx, source))
+        // A second run is a no-op because the integration now has a credential.
+        yield* db.transaction((tx) => importNextCredentials(tx, source))
+        // A missing source database is a no-op.
+        yield* db.transaction((tx) => importNextCredentials(tx, path.join(tmp.path, "missing.db")))
+
+        expect(
+          yield* db.all(sql`SELECT id, integration_id, label, value, method_id, time_created FROM credential ORDER BY integration_id`),
+        ).toEqual([
+          {
+            id: "existing",
+            integration_id: "anthropic",
+            label: "Existing",
+            value: JSON.stringify({ type: "key", key: "current-key" }),
+            method_id: null,
+            time_created: now,
+          },
+          {
+            id: "cred_next_opencode",
+            integration_id: "opencode",
+            label: "anomaly",
+            value: JSON.stringify({ type: "key", key: "zen-key" }),
+            method_id: "console",
+            time_created: 100,
+          },
+        ])
+      }),
+    )
   })
 
   test("rolls back a failed migration without recording it", async () => {
