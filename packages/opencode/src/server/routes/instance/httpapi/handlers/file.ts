@@ -47,7 +47,21 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       const limit = ctx.query.limit ?? 10
       const type = ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : undefined)
       const started = performance.now()
-      const found = yield* filesystem(FileSystem.Service.use((fs) => fs.find({ query: ctx.query.query, limit, type })))
+      const found = yield* filesystem(
+        FileSystem.Service.use((fs) => {
+          if (ctx.query.query.trim()) return fs.find({ query: ctx.query.query, limit, type })
+          return fs
+            .list({ path: RelativePath.make("") })
+            .pipe(
+              Effect.map((items) =>
+                items
+                  .filter((item) => item.type === (type === "file" ? "file" : "directory"))
+                  .filter((item) => !path.basename(item.path).startsWith("."))
+                  .slice(0, limit),
+              ),
+            )
+        }),
+      )
       yield* Effect.logInfo("find file", {
         query: ctx.query.query,
         type,
