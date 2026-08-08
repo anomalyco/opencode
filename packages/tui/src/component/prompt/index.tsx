@@ -129,7 +129,7 @@ function formatEditorContext(selection: EditorSelection) {
   return `<system-reminder>${ranges.join("\n")} This may or may not be relevant to the current task.</system-reminder>\n`
 }
 
-let stashed: { prompt: PromptInfo; cursor: number } | undefined
+const drafts = new Map<string, { prompt: PromptInfo; cursor: number }>()
 
 function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
   const head = parseSlashHead(input, /\s/)
@@ -171,6 +171,20 @@ export function Prompt(props: PromptProps) {
   const exit = useExit()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
+  const draftKey = (sessionID?: string) => sessionID ?? "new"
+  const saveDraft = (sessionID?: string) => {
+    const key = draftKey(sessionID)
+    if (
+      !store.prompt.text &&
+      store.prompt.pasted.length === 0 &&
+      (store.prompt.files?.length ?? 0) === 0 &&
+      (store.prompt.agents?.length ?? 0) === 0
+    ) {
+      drafts.delete(key)
+      return
+    }
+    drafts.set(key, { prompt: structuredClone(unwrap(store.prompt)), cursor: input.cursorOffset })
+  }
   const { currentSyntax: syntax } = useThemes()
   const animationsEnabled = createMemo(() => config.animations ?? true)
   const list = createMemo(() => props.placeholders?.normal ?? [])
@@ -575,6 +589,7 @@ export function Prompt(props: PromptProps) {
       input.extmarks.clear()
       setStore("prompt", emptyPrompt())
       setStore("extmarkToPart", new Map())
+      drafts.delete(draftKey(props.sessionID))
     },
     submit() {
       void submit()
@@ -582,10 +597,10 @@ export function Prompt(props: PromptProps) {
   }
 
   onMount(() => {
-    const saved = stashed
-    stashed = undefined
+    void history.load(props.sessionID)
+    const saved = drafts.get(draftKey(props.sessionID))
     if (store.prompt.text) return
-    if (saved && saved.prompt.text) {
+    if (saved) {
       input.setText(saved.prompt.text)
       setStore("prompt", saved.prompt)
       restoreExtmarksFromPrompt(saved.prompt)
@@ -593,10 +608,25 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  createEffect(
+    on(
+      () => props.sessionID,
+      (sessionID, previous) => {
+        saveDraft(previous)
+        const saved = drafts.get(draftKey(sessionID))
+        input.clear()
+        input.extmarks.clear()
+        setStore("prompt", saved?.prompt ?? emptyPrompt())
+        restoreExtmarksFromPrompt(saved?.prompt ?? emptyPrompt())
+        input.cursorOffset = saved?.cursor ?? 0
+        void history.load(sessionID)
+      },
+      { defer: true },
+    ),
+  )
+
   onCleanup(() => {
-    if (store.prompt.text) {
-      stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
-    }
+    saveDraft(props.sessionID)
     setInputTarget(undefined)
     props.ref?.(undefined)
   })
@@ -868,7 +898,7 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(-1, input.plainText)
+            const item = history.move(props.sessionID, -1, input.plainText)
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -907,7 +937,7 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(1, input.plainText)
+            const item = history.move(props.sessionID, 1, input.plainText)
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1158,13 +1188,14 @@ export function Prompt(props: PromptProps) {
       }
       if (pendingEditorSelection) editor.markSelectionSent()
     }
-    history.append({
+    history.append(sessionID, {
       ...store.prompt,
       mode: currentMode,
     })
     input.extmarks.clear()
     setStore("prompt", emptyPrompt())
     setStore("extmarkToPart", new Map())
+    drafts.delete(draftKey(sessionID))
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
@@ -1314,7 +1345,7 @@ export function Prompt(props: PromptProps) {
       (store.prompt.files?.length ?? 0) > 0 ||
       (store.prompt.agents?.length ?? 0) > 0
     ) {
-      history.append({
+      history.append(props.sessionID, {
         ...store.prompt,
         mode: store.mode,
       })
@@ -1323,6 +1354,7 @@ export function Prompt(props: PromptProps) {
     input.extmarks.clear()
     setStore("prompt", emptyPrompt())
     setStore("extmarkToPart", new Map())
+    drafts.delete(draftKey(props.sessionID))
   }
 
   const highlight = createMemo(() => {

@@ -1,6 +1,5 @@
 import path from "path"
-import { onMount } from "solid-js"
-import { createStore, produce, unwrap } from "solid-js/store"
+import { unwrap } from "solid-js/store"
 import type { SessionPromptInput } from "@opencode-ai/client"
 import type { Types } from "effect"
 import { createSimpleContext } from "../context/helper"
@@ -61,56 +60,67 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
   name: "PromptHistory",
   init: () => {
     const paths = useTuiPaths()
-    const historyPath = path.join(paths.state, "prompt-history.jsonl")
-    onMount(async () => {
-      const lines = parsePromptHistory(await readText(historyPath).catch(() => ""))
-      setStore("history", lines)
-
-      // Rewrite valid retained entries to self-heal corruption and enforce the limit.
-      if (lines.length > 0)
-        writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
-    })
-
-    const [store, setStore] = createStore({
-      index: 0,
-      history: [] as PromptInfo[],
-    })
+    const stores = new Map<string, { index: number; history: PromptInfo[] }>()
+    const loaded = new Set<string>()
+    const key = (sessionID?: string) => sessionID ?? "new"
+    const historyPath = (sessionID?: string) =>
+      path.join(paths.state, "prompt-history", encodeURIComponent(key(sessionID)) + ".jsonl")
+    const store = (sessionID?: string) => {
+      const id = key(sessionID)
+      const current = stores.get(id)
+      if (current) return current
+      const next = { index: 0, history: [] as PromptInfo[] }
+      stores.set(id, next)
+      return next
+    }
 
     return {
-      move(direction: 1 | -1, input: string) {
-        if (!store.history.length) return undefined
-        const current = store.history.at(store.index)
+      async load(sessionID?: string) {
+        const id = key(sessionID)
+        if (loaded.has(id)) return
+        loaded.add(id)
+        const lines = parsePromptHistory(await readText(historyPath(sessionID)).catch(() => ""))
+        const current = stores.get(id)
+        const history = [...lines, ...(current?.history ?? [])]
+          .filter((entry, index, entries) => !isDuplicateEntry(entries[index - 1], entry))
+          .slice(-MAX_HISTORY_ENTRIES)
+        stores.set(id, { index: current?.index ?? 0, history })
+        if (lines.length > 0)
+          writeText(historyPath(sessionID), history.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(
+            () => {},
+          )
+      },
+      move(sessionID: string | undefined, direction: 1 | -1, input: string) {
+        const state = store(sessionID)
+        if (!state.history.length) return undefined
+        const current = state.history.at(state.index)
         if (!current) return undefined
         if (current.text !== input && input.length) return
-        const next = store.index + direction
-        if (Math.abs(next) > store.history.length || next > 0) return
-        setStore("index", next)
+        const next = state.index + direction
+        if (Math.abs(next) > state.history.length || next > 0) return
+        state.index = next
         if (next === 0) return emptyPrompt()
-        return store.history.at(next)
+        return state.history.at(next)
       },
-      append(item: PromptInfo) {
+      append(sessionID: string | undefined, item: PromptInfo) {
+        const state = store(sessionID)
         const entry = structuredClone(unwrap(item))
-        if (isDuplicateEntry(store.history.at(-1), entry)) {
-          setStore("index", 0)
+        if (isDuplicateEntry(state.history.at(-1), entry)) {
+          state.index = 0
           return
         }
-        let trimmed = false
-        setStore(
-          produce((draft) => {
-            draft.history.push(entry)
-            if (draft.history.length > MAX_HISTORY_ENTRIES) {
-              draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
-              trimmed = true
-            }
-            draft.index = 0
-          }),
-        )
+        state.history.push(entry)
+        const trimmed = state.history.length > MAX_HISTORY_ENTRIES
+        if (trimmed) state.history = state.history.slice(-MAX_HISTORY_ENTRIES)
+        state.index = 0
 
         if (trimmed) {
-          writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+          writeText(historyPath(sessionID), state.history.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(
+            () => {},
+          )
           return
         }
-        appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
+        appendText(historyPath(sessionID), JSON.stringify(entry) + "\n").catch(() => {})
       },
     }
   },
