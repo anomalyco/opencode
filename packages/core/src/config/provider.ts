@@ -66,6 +66,9 @@ export class Info extends Schema.Class<Info>("ConfigV2.Provider")({
   name: Schema.String.pipe(Schema.optional),
   env: Schema.String.pipe(Schema.Array, Schema.optional),
   api: ProviderV2.Api.pipe(Schema.optional),
+  npm: Schema.String.pipe(Schema.optional).annotate({
+    description: "Override the npm package for all models under this provider, including inherited models",
+  }),
   request: Request.pipe(Schema.optional),
   models: Schema.Record(Schema.String, Model).pipe(Schema.optional),
 }) {}

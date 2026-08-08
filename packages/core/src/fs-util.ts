@@ -170,8 +170,16 @@ export namespace FSUtil {
         let current = options.start
         while (true) {
           for (const target of options.targets) {
-            const search = join(current, target)
-            if (yield* fs.exists(search)) result.push(search)
+            const isWildcard = target.includes("*") || target.includes("?")
+            if (isWildcard) {
+              const matches = yield* glob(target, { cwd: current, absolute: true, include: "all", dot: true }).pipe(
+                Effect.catch(() => Effect.succeed([] as string[])),
+              )
+              if (matches.length > 0) result.push(matches[0])
+            } else {
+              const search = join(current, target)
+              if (yield* fs.exists(search)) result.push(search)
+            }
           }
           if (options.stop === current) break
           const parent = dirname(current)
