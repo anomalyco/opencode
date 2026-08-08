@@ -25,14 +25,16 @@ function eventID() {
 
 function remoteEventResponse(events: EventV2.Interface, sessionID: string) {
   return Effect.gen(function* () {
-    const queue = yield* Queue.unbounded<EventV2.Payload>()
-    const unsubscribe = yield* events.listen((event) => Effect.sync(() => Queue.offerUnsafe(queue, event)))
+    const queue = yield* Queue.sliding<ReturnType<typeof RemoteEvent.signal>>(64)
+    const unsubscribe = yield* events.listen((event) =>
+      Effect.sync(() => {
+        if (!RemoteEvent.shouldForward(event, sessionID)) return
+        Queue.offerUnsafe(queue, RemoteEvent.signal(event))
+      }),
+    )
     yield* Effect.addFinalizer(() => unsubscribe)
 
-    const output = Stream.fromQueue(queue).pipe(
-      Stream.filter((event) => RemoteEvent.shouldForward(event, sessionID)),
-      Stream.map((event) => RemoteEvent.signal(event)),
-    )
+    const output = Stream.fromQueue(queue)
     const heartbeat = Stream.tick("10 seconds").pipe(
       Stream.drop(1),
       Stream.map(() => ({ id: eventID(), type: "server.heartbeat", properties: {} })),
