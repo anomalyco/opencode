@@ -1017,6 +1017,51 @@ flowchart LR
     }
   })
 
+  test("separates cross-dependent top-level subgraphs", () => {
+    const content = `flowchart TD
+  subgraph plugins["Plugins — one verb: attach"]
+    chip["pr-indicator<br/>attach(prompt.footer, { after: 'directory' })"]
+    theme["fancy-footer<br/>attach(prompt.footer, { replace: 'right' })"]
+  end
+
+  subgraph host["Host anatomy tree — published, stable part IDs"]
+    footer["prompt.footer"]
+    left["left"]
+    right["right<br/>(container)"]
+    dir["directory"]
+    model["model"]
+    tokens["tokens"]
+    footer --> left
+    footer --> right
+    right --> dir
+    right --> model
+    right --> tokens
+  end
+
+  chip -- "insert after" --> dir
+  theme == "takeover" ==> right
+  theme -. "suppresses guests<br/>in subtree" .-> chip`
+    const layout = layoutFlowchartDiagram(content)
+    const plugins = layout.subgraphBounds.get("plugins")!
+    const host = layout.subgraphBounds.get("host")!
+    const output = renderFlowchartDiagram(content)
+    const lines = output.split("\n")
+
+    expect(host.top).toBeGreaterThanOrEqual(plugins.top + plugins.height)
+    expect(lines.filter((line) => line.includes("Plugins — one verb: attach"))).toHaveLength(1)
+    expect(lines.filter((line) => line.includes("Host anatomy tree — published, stable part IDs"))).toHaveLength(1)
+    expect(lines.findIndex((line) => line.includes("Host anatomy tree"))).toBeGreaterThan(
+      lines.findIndex((line) => line.includes("Plugins — one verb")),
+    )
+    for (const route of layout.routes) {
+      for (let index = 1; index < route.points.length; index++) {
+        const from = route.points[index - 1]!
+        const to = route.points[index]!
+        expect(from.x === to.x || from.y === to.y).toBe(true)
+      }
+    }
+  })
+
   test("moves subgraph labels away from crossing routes", () => {
     const output = renderFlowchartDiagram(`
 flowchart TD
