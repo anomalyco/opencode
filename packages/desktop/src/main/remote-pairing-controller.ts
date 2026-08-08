@@ -73,16 +73,17 @@ export function createRemotePairingController(options: RemotePairingControllerOp
   const create = async (sessionID: string, directory: string): Promise<RemotePairingInfo> => {
     if (stopping) await stopping
 
-    const existing = options.gateway.status()
-    if (!existing && creating === 0) {
-      sessions.clear()
-      ownsGateway = false
-    } else if (existing && creating === 0) {
-      await pruneSessions()
-    }
-
     creating += 1
     try {
+      const initial = options.gateway.status()
+      if (!initial && creating === 1) {
+        sessions.clear()
+        ownsGateway = false
+      } else if (initial && creating === 1) {
+        await pruneSessions()
+      }
+
+      const existing = options.gateway.status()
       const gateway = existing ?? (await options.gateway.start())
       if (!existing) ownsGateway = true
       if (gateway.urls.length === 0) {
