@@ -15,6 +15,7 @@ import { testEffect } from "./lib/effect"
 
 const calls: Array<{ readonly operation: string; readonly binding?: WorkspaceDriver.Binding }> = []
 const memory = makeMemoryDriver()
+let failConnect = false
 
 const driver = WorkspaceDriver.make({
   create: ({ workspaceID }) => {
@@ -23,6 +24,7 @@ const driver = WorkspaceDriver.make({
   },
   connect: ({ binding }) => {
     calls.push({ operation: "connect", binding })
+    if (failConnect) return Effect.fail(new WorkspaceDriver.Error({ message: "wake failed" }))
     return Effect.succeed(memory)
   },
   suspendForIdle: ({ binding, saveBinding }) => {
@@ -51,7 +53,10 @@ const it = testEffect(
   ),
 )
 
-beforeEach(() => calls.splice(0))
+beforeEach(() => {
+  calls.splice(0)
+  failConnect = false
+})
 
 it.effect("persists the workspace lifecycle and reconnects after idle suspension", () =>
   Effect.gen(function* () {
@@ -95,5 +100,27 @@ it.effect("roundtrips nullable bindings through the workspace table", () =>
 
     const row = yield* Database.Service.use(({ db }) => db.select().from(WorkspaceTable).get()).pipe(Effect.orDie)
     expect(row).toEqual({ id, provider: "fake", binding: null, created_at: 10, last_used_at: 20 })
+  }),
+)
+
+it.effect("surfaces wake failures through the spawn error channel", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const created = yield* workspace.create("fake")
+    const environment = yield* workspace.connect(created.id)
+
+    yield* TestClock.adjust("6 minutes")
+    failConnect = true
+
+    const error = yield* Effect.scoped(environment.spawner.spawn(ChildProcess.make("wake"))).pipe(Effect.flip)
+    expect(error).toMatchObject({
+      _tag: "PlatformError",
+      reason: {
+        _tag: "Unknown",
+        module: "Workspace",
+        method: "spawn",
+        description: `Failed to wake workspace ${created.id}`,
+      },
+    })
   }),
 )

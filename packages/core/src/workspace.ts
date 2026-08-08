@@ -4,6 +4,7 @@ import { Workspace } from "@opencode-ai/schema/workspace"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { eq } from "drizzle-orm"
 import { Clock, Context, Duration, Effect, Exit, Layer, Ref, Schedule, Schema, Scope } from "effect"
+import { systemError } from "effect/PlatformError"
 import { make as makeSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import type { Driver as EnvironmentDriver } from "./environment/driver"
 import { Database } from "./database/database"
@@ -169,7 +170,17 @@ const layer = (options: Options) =>
             Effect.acquireRelease(
               locks.withLock(workspaceID)(
                 Effect.gen(function* () {
-                  const connection = yield* open(workspaceID).pipe(Effect.orDie)
+                  const connection = yield* open(workspaceID).pipe(
+                    Effect.mapError((cause) =>
+                      systemError({
+                        _tag: "Unknown",
+                        module: "Workspace",
+                        method: "spawn",
+                        description: `Failed to wake workspace ${workspaceID}`,
+                        cause,
+                      }),
+                    ),
+                  )
                   yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
                   yield* Ref.update(connection.active, (active) => active + 1)
                   return connection
@@ -184,6 +195,7 @@ const layer = (options: Options) =>
                 ),
             ).pipe(Effect.flatMap((connection) => connection.environment.spawner.spawn(command))),
           )
+          // Overrides are connection-bound; route them per spawn before any workspace driver ships them.
           return { spawner, overrides: initial.environment.overrides }
         }),
         destroy: Effect.fn("Workspace.destroy")(function* (workspaceID) {
