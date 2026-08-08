@@ -152,6 +152,44 @@ test("resolves directory autocomplete from the current browser root", async () =
   expect(directories).toEqual(["/repo", "/repo/src"])
 })
 
+test("keeps indexed directory results for servers that support empty search", async () => {
+  const sdk = {
+    api: {
+      file: {
+        find: () => Promise.resolve({ data: [{ path: "projects/", type: "directory" }] }),
+        list: () => Promise.reject(new Error("listing should not run when search returns results")),
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/home/luke" })
+
+  expect(await search("")).toEqual(["/home/luke/projects"])
+})
+
+test("lists the default directory when empty search is unsupported", async () => {
+  const calls: string[] = []
+  const sdk = {
+    api: {
+      file: {
+        find: () => Promise.resolve({ data: [] }),
+        list: (input: { location?: { directory?: string } }) => {
+          calls.push(input.location?.directory ?? "")
+          return Promise.resolve({
+            data: [
+              { path: "projects/", type: "directory" },
+              { path: "README.md", type: "file" },
+            ],
+          })
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/home/luke" })
+
+  expect(await search("")).toEqual(["/home/luke/projects"])
+  expect(calls).toEqual(["/home/luke"])
+})
+
 test("searches from an absolute root without a default base", async () => {
   const directories: string[] = []
   const sdk = {

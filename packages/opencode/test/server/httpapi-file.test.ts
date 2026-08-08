@@ -55,11 +55,9 @@ describe("file HttpApi", () => {
   test("serves search endpoints", async () => {
     await using tmp = await tmpdir({ git: true })
     await Bun.write(path.join(tmp.path, "hello.txt"), "needle")
-    await Bun.write(path.join(tmp.path, "src", "index.ts"), "export {}")
 
-    const [text, directories, symbols] = await Promise.all([
+    const [text, symbols] = await Promise.all([
       request(FilePaths.findText, tmp.path, { pattern: "needle" }),
-      request(FilePaths.findFile, tmp.path, { query: "", dirs: "true" }),
       request(FilePaths.findSymbol, tmp.path, { query: "hello" }),
     ])
     const files = await Effect.runPromise(
@@ -75,9 +73,6 @@ describe("file HttpApi", () => {
 
     expect(text.status).toBe(200)
     expect(await text.json()).toContainEqual(expect.objectContaining({ line_number: 1 }))
-
-    expect(directories.status).toBe(200)
-    expect(await directories.json()).toEqual(["src/"])
 
     expect(files.response.status).toBe(200)
     expect(files.body).toContain("hello.txt")

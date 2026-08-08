@@ -379,7 +379,12 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
         .then((result) => result.data.map((entry) => entry.path))
         .catch(() => [])
       if (!active()) return []
-      return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)
+      if (results.length || query) {
+        return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)
+      }
+      const fallback = await match(input.directory, "", 50)
+      if (!active()) return []
+      return fallback
     }
     const segments = query.replace(/^\/+/, "").split("/")
     const head = segments.slice(0, -1).filter((part) => part && part !== ".")
