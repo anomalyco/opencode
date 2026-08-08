@@ -64,6 +64,24 @@ describe("provider package entrypoints", () => {
     expect(xai.route.defaults.providerOptions).toMatchObject({ xai: { reasoningEffort: "high", store: false } })
   })
 
+  test("maps OpenAI-compatible package settings onto the executable model", async () => {
+    const OpenAICompatible = await import("@opencode-ai/ai/providers/openai-compatible")
+    const selected = OpenAICompatible.model("custom-model", {
+      apiKey: "fixture",
+      baseURL: "https://provider.example.test/v1",
+      provider: "example",
+      queryParams: { version: "preview" },
+      providerOptions: { openai: { reasoningEffort: "high" } },
+    })
+
+    expect(String(selected.provider)).toBe("example")
+    expect(selected.route.endpoint).toMatchObject({
+      baseURL: "https://provider.example.test/v1",
+      query: { version: "preview" },
+    })
+    expect(selected.route.defaults.providerOptions).toEqual({ openai: { reasoningEffort: "high" } })
+  })
+
   test("maps package settings onto the executable model", () => {
     const selected = model("gpt-5", {
       apiKey: "fixture",

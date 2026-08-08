@@ -12,6 +12,7 @@ type GenericModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly provider?: string
     readonly baseURL: string
+    readonly queryParams?: Readonly<Record<string, string>>
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
 
@@ -19,6 +20,8 @@ export interface Settings extends ProviderPackage.Settings {
   readonly apiKey?: string
   readonly baseURL: string
   readonly provider?: string
+  readonly providerOptions?: OpenAIProviderOptionsInput
+  readonly queryParams?: Readonly<Record<string, string>>
 }
 
 export type FamilyModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
@@ -31,11 +34,11 @@ export const routes = [OpenAICompatibleChat.route]
 
 export const configure = (input: GenericModelOptions) => {
   const provider = input.provider ?? "openai-compatible"
-  const { provider: _, baseURL, apiKey: _apiKey, auth: _auth, ...rest } = input
+  const { provider: _, baseURL, apiKey: _apiKey, auth: _auth, queryParams, ...rest } = input
   const route = OpenAICompatibleChat.route.with({
     ...rest,
     provider,
-    endpoint: { baseURL },
+    endpoint: { baseURL, query: queryParams },
     auth: AuthOptions.bearer(input, []),
   })
   return {
@@ -75,6 +78,8 @@ export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsIn
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
     limits: settings.limits,
     provider: settings.provider,
+    providerOptions: settings.providerOptions,
+    queryParams: settings.queryParams === undefined ? undefined : { ...settings.queryParams },
   }).model(modelID)
 
 export const baseten = define(profiles.baseten)

@@ -1,6 +1,7 @@
 export * as PluginHooks from "./hooks"
 
 import type { AISDKHooks } from "@opencode-ai/plugin/effect/aisdk"
+import type { ProviderHooks } from "@opencode-ai/plugin/effect/provider"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import type { ShellHooks } from "@opencode-ai/plugin/effect/shell"
 import type { ToolHooks } from "@opencode-ai/plugin/effect/tool"
@@ -10,6 +11,7 @@ import { State } from "../state"
 
 export interface Domains {
   readonly aisdk: AISDKHooks
+  readonly provider: ProviderHooks
   readonly session: SessionHooks
   readonly shell: ShellHooks
   readonly tool: ToolHooks

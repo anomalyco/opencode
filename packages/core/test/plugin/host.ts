@@ -29,6 +29,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     aisdk: overrides.aisdk ?? {
       hook: () => Effect.die("unused aisdk.hook"),
     },
+    provider: overrides.provider ?? {
+      hook: () => Effect.die("unused provider.hook"),
+    },
     catalog: overrides.catalog ?? {
       provider: {
         list: () => Effect.die("unused catalog.provider.list"),

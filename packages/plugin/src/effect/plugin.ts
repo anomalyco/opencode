@@ -8,6 +8,7 @@ import type { CatalogDomain } from "./catalog.js"
 import type { CommandDomain } from "./command.js"
 import type { EventDomain } from "./event.js"
 import type { IntegrationDomain } from "./integration.js"
+import type { ProviderDomain } from "./provider.js"
 import type { ReferenceDomain } from "./reference.js"
 import type { SessionDomain } from "./session.js"
 import type { ShellDomain } from "./shell.js"
@@ -25,6 +26,7 @@ export interface Context {
   readonly event: EventDomain
   readonly integration: IntegrationDomain
   readonly plugin: PluginApi<unknown>
+  readonly provider: ProviderDomain
   readonly reference: ReferenceDomain
   readonly session: SessionDomain
   readonly shell: ShellDomain

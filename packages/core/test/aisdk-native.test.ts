@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { AISDKNative } from "@opencode-ai/core/aisdk-native"
 
-const map = (packageName: string, settings: Readonly<Record<string, unknown>>, modelID = "test-model") =>
-  AISDKNative.map({ packageName, settings, modelID })
+const map = (
+  packageName: string,
+  settings: Readonly<Record<string, unknown>>,
+  modelID = "test-model",
+  providerID = "test-provider",
+) => AISDKNative.map({ packageName, providerID, settings, modelID })
 
 describe("AISDKNative", () => {
   test("maps both models.dev Bedrock packages to native providers", () => {
@@ -39,6 +43,52 @@ describe("AISDKNative", () => {
     expect(map("@ai-sdk/azure", { ...settings, useCompletionUrls: true }, "custom-deployment")?.package).toBe(
       "@opencode-ai/ai/providers/azure/chat",
     )
+  })
+
+  test("maps Cloudflare Workers AI to the generic OpenAI-compatible provider", () => {
+    expect(
+      map(
+        "@ai-sdk/openai-compatible",
+        {
+          accountId: "account/id",
+          apiKey: "secret",
+          baseURL: "https://api.cloudflare.com/client/v4/accounts/account%2Fid/ai/v1",
+          headers: { "x-custom": "value" },
+          queryParams: { version: "preview" },
+          reasoningEffort: "high",
+        },
+        "@cf/model",
+        "cloudflare-workers-ai",
+      ),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/openai-compatible",
+      settings: {
+        apiKey: "secret",
+        baseURL: "https://api.cloudflare.com/client/v4/accounts/account%2Fid/ai/v1",
+        provider: "cloudflare-workers-ai",
+        queryParams: { version: "preview" },
+        providerOptions: { openai: { reasoningEffort: "high" } },
+      },
+      headers: { "x-custom": "value" },
+    })
+  })
+
+  test("maps generic OpenAI-compatible providers to the native package", () => {
+    expect(
+      map("@ai-sdk/openai-compatible", {
+        apiKey: "secret",
+        baseURL: "https://provider.example/v1",
+        reasoningEffort: "high",
+      }),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/openai-compatible",
+      settings: {
+        apiKey: "secret",
+        baseURL: "https://provider.example/v1",
+        provider: "test-provider",
+        providerOptions: { openai: { reasoningEffort: "high" } },
+      },
+    })
   })
 
   test("maps Bedrock provider and request options", () => {

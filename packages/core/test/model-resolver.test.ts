@@ -131,6 +131,56 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("routes Cloudflare Workers AI through the generic OpenAI-compatible provider", () =>
+    Effect.gen(function* () {
+      const resolved = yield* ModelResolver.resolveModel(
+        model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+          providerID: Provider.ID.make("cloudflare-workers-ai"),
+          modelID: "@cf/meta/llama-3.1-8b-instruct",
+          settings: {
+            baseURL: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+            queryParams: { version: "preview" },
+            reasoningEffort: "high",
+          },
+        }),
+        undefined,
+        Credential.Key.make({ type: "key", key: "secret", metadata: { accountId: "account/id" } }),
+        {
+          loadAISDK: () => Effect.die("AI SDK loader should not be called"),
+          resolveProvider: (input) =>
+            Effect.succeed({
+              ...input.settings,
+              baseURL: String(input.settings.baseURL).replace(
+                "${CLOUDFLARE_ACCOUNT_ID}",
+                encodeURIComponent(String(input.settings.accountId)),
+              ),
+            }),
+        },
+      )
+      const headers = yield* resolved.route.auth.apply({
+        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        method: "POST",
+        url: "https://example.com",
+        body: "{}",
+        headers: Headers.empty,
+      })
+
+      expect(resolved.route.id).toBe("openai-compatible-chat")
+      expect(String(resolved.provider)).toBe("cloudflare-workers-ai")
+      expect(resolved.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/account%2Fid/ai/v1")
+      expect(resolved.route.endpoint.query).toEqual({ version: "preview" })
+      expect(resolved.route.defaults.providerOptions).toEqual({ openai: { reasoningEffort: "high" } })
+      expect(resolved.route.defaults.http?.body).toEqual({ custom_extension: { enabled: true } })
+      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      expect(prepared.body).toMatchObject({
+        reasoning_effort: "high",
+        stream_options: { include_usage: true },
+      })
+      expect(prepared.body).not.toHaveProperty("accountId")
+      expect(headers.authorization).toBe("Bearer secret")
+    }),
+  )
+
   it.effect("uses the API modelID instead of the catalog ID for native OpenAI routes", () =>
     Effect.gen(function* () {
       const catalog = model(Provider.aisdk("@ai-sdk/openai"), {
@@ -365,7 +415,7 @@ describe("ModelResolver", () => {
     }),
   )
 
-  it.effect("prefers stored credentials over configured auth", () =>
+  it.effect("keeps key credential metadata out of request bodies", () =>
     Effect.gen(function* () {
       const credential = Credential.Key.make({ type: "key", key: "stored-secret", metadata: { tenant: "work" } })
       const resolved = yield* ModelResolver.fromCatalogModel(
@@ -385,7 +435,7 @@ describe("ModelResolver", () => {
       })
 
       expect(headers.authorization).toBe("Bearer stored-secret")
-      expect(resolved.route.defaults.http?.body).toEqual({ tenant: "work" })
+      expect(resolved.route.defaults.http?.body).toEqual({})
     }),
   )
 

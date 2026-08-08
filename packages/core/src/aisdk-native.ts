@@ -12,6 +12,7 @@ export interface Mapping {
 
 export interface MapInput {
   readonly packageName: string | undefined
+  readonly providerID: string
   readonly settings: Readonly<Record<string, unknown>>
   readonly modelID: string
 }
@@ -51,6 +52,8 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapGoogleOptions(input.settings),
         },
       }
+    case "@ai-sdk/openai-compatible":
+      return mapOpenAICompatible(input, baseSettings)
     case "@openrouter/ai-sdk-provider":
       return mapOpenRouter(input.settings, baseSettings)
     case "@ai-sdk/xai":
@@ -62,6 +65,25 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapXAIOptions(input.settings),
         },
       }
+  }
+  return undefined
+}
+
+function mapOpenAICompatible(
+  input: MapInput,
+  baseSettings: Readonly<Record<string, unknown>>,
+): Mapping | undefined {
+  if (typeof baseSettings.baseURL !== "string") return undefined
+  return {
+    package: "@opencode-ai/ai/providers/openai-compatible",
+    settings: {
+      baseURL: baseSettings.baseURL,
+      ...mapAPIKey(input.settings),
+      provider: input.providerID,
+      ...(isStringRecord(input.settings.queryParams) ? { queryParams: input.settings.queryParams } : {}),
+      ...mapOpenAIOptions(input.settings),
+    },
+    ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
   }
 }
 

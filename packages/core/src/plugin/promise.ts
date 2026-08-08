@@ -85,6 +85,10 @@ export function fromPromise(plugin: Plugin) {
             transform: transform(host.catalog),
             reload: () => run(host.catalog.reload()),
           },
+          provider: {
+            hook: (name, callback) =>
+              register(host.provider.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
+          },
           command: {
             list: (input) => run(host.command.list(input)),
             transform: transform(host.command),

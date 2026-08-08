@@ -7,6 +7,7 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { Generate } from "@opencode-ai/core/generate"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { ID, Info, Ref } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { Npm } from "@opencode-ai/util/npm"
@@ -65,9 +66,13 @@ const aisdk = Layer.mock(AISDK.Service, {
   },
   model: () => Effect.succeed(runtime),
 })
+const hooks = Layer.mock(PluginHooks.Service, {
+  register: () => Effect.die("unused"),
+  trigger: (_domain, _name, event) => Effect.succeed(event),
+})
 const client = TestLLM.clientLayer.pipe(Layer.provide(TestLLM.layer({ fallback: TestLLM.text("OK", "generate") })))
 
-const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
+const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk, hooks)))
 const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, client))))
 const resolverIt = testEffect(resolver)
 
