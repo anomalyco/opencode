@@ -42,6 +42,10 @@ const request = LLM.request({
   generation: { maxTokens: 20, temperature: 0 },
 })
 
+const optionalFinishRequest = LLMRequest.update(request, {
+  model: LanguageModel.update(model, { compatibility: { requireFinishReason: false } }),
+})
+
 describe("OpenAI Chat route", () => {
   it.effect("prepares OpenAI Chat payload", () =>
     Effect.gen(function* () {
@@ -639,6 +643,20 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("accepts text and usage without a finish reason when configured", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({ role: "assistant", content: "Hello" }),
+        usageChunk({ prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 }),
+      )
+      const response = yield* LLMClient.generate(optionalFinishRequest).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.text).toBe("Hello")
+      expect(response.finishReason).toEqual({ normalized: "unknown" })
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 1, totalTokens: 6 })
+    }),
+  )
+
   it.effect("parses and replays OpenAI-compatible reasoning fields", () =>
     Effect.gen(function* () {
       const fields = ["reasoning_content", "reasoning", "reasoning_text"] as const
@@ -1188,21 +1206,89 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("fails on malformed stream events", () =>
+  it.effect("finalizes a streamed tool call without a finish reason when configured", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          role: "assistant",
+          tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query"' } }],
+        }),
+        deltaChunk({ tool_calls: [{ index: 0, function: { arguments: ':"weather"}' } }] }),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(optionalFinishRequest, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { query: "weather" } }])
+      expect(response.finishReason).toEqual({ normalized: "unknown" })
+    }),
+  )
+
+  it.effect("settles malformed tool input without a finish reason when configured", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          role: "assistant",
+          tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query"' } }],
+        }),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(optionalFinishRequest, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.filter(LLMEvent.is.toolInputError)).toMatchObject([
+        { id: "call_1", name: "lookup", raw: '{"query"' },
+      ])
+      expect(response.toolCalls).toEqual([])
+      expect(response.finishReason).toEqual({ normalized: "unknown" })
+    }),
+  )
+
+  it.effect("rejects incomplete tool identity without a finish reason when configured", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { arguments: "{}" } }] }))
+      const error = yield* LLMClient.generate(optionalFinishRequest).pipe(
+        Effect.provide(fixedResponse(body)),
+        Effect.flip,
+      )
+
+      expect(error.message).toContain("OpenAI Chat tool call delta is missing id or name")
+    }),
+  )
+
+  it.effect("rejects an empty stream when a finish reason is not required", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(optionalFinishRequest).pipe(
+        Effect.provide(fixedResponse(sseEvents())),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+    }),
+  )
+
+  it.effect("fails on malformed stream events when a finish reason is not required", () =>
     Effect.gen(function* () {
       const body = sseEvents(deltaChunk({ content: 123 }))
-      const error = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)), Effect.flip)
+      const error = yield* LLMClient.generate(optionalFinishRequest).pipe(
+        Effect.provide(fixedResponse(body)),
+        Effect.flip,
+      )
 
       expect(error.message).toContain("Invalid openai/openai-chat stream event")
     }),
   )
 
-  it.effect("surfaces transport errors that occur mid-stream", () =>
+  it.effect("surfaces transport errors when a finish reason is not required", () =>
     Effect.gen(function* () {
       const layer = truncatedStream([
         `data: ${JSON.stringify(deltaChunk({ role: "assistant", content: "Hello" }))}\n\n`,
       ])
-      const error = yield* LLMClient.generate(request).pipe(Effect.provide(layer), Effect.flip)
+      const error = yield* LLMClient.generate(optionalFinishRequest).pipe(Effect.provide(layer), Effect.flip)
 
       expect(error.message).toContain("Failed to read openai/openai-chat stream")
     }),

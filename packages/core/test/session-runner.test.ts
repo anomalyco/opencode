@@ -2440,6 +2440,30 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("continues after an unknown finish containing a local tool call", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* admit(session, "Echo this")
+      yield* TestLLM.push(
+        TestLLM.complete(
+          { reason: { normalized: "unknown" } },
+          LLMEvent.toolCall({ id: "call-echo", name: "echo", input: { text: "hello" } }),
+        ),
+        TestLLM.text("Done", "text-final"),
+      )
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(executions).toEqual(["hello"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Echo this" },
+        { type: "assistant", finish: "unknown", content: [{ type: "tool", state: { status: "completed" } }] },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Done" }] },
+      ])
+    }),
+  )
+
   it.effect("reloads a model switch before a tool-driven continuation step", () =>
     Effect.gen(function* () {
       const session = yield* setup

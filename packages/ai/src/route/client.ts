@@ -7,7 +7,7 @@ import { Framing } from "./framing"
 import { HttpTransport } from "./transport"
 import type { HttpMiddleware, Transport, TransportRuntime } from "./transport"
 import { WebSocketExecutor } from "./transport"
-import type { Protocol } from "./protocol"
+import type { Protocol, ProtocolStream } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
 import type { ProtocolID, ProviderOptions } from "../schema"
@@ -243,27 +243,55 @@ const incompleteStreamError = (route: string) =>
     }),
   })
 
-const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent, AIError>) =>
+const ensureTerminalEvent = (route: string, required: boolean) => (events: Stream.Stream<LLMEvent, AIError>) =>
   Stream.suspend(() => {
     let terminal = false
+    let output = false
+    const fallback = Stream.suspend(() => {
+      if (terminal) return Stream.empty
+      if (required || !output) return Stream.fail(incompleteStreamError(route))
+      // The compatibility override trusts a clean stream end, but it cannot
+      // recover the provider's omitted reason.
+      const reason = { normalized: "unknown" as const }
+      return Stream.make(LLMEvent.stepFinish({ index: 0, reason }), LLMEvent.finish({ reason }))
+    })
     return events.pipe(
       Stream.mapEffect((event) => {
         if (terminal)
           return Effect.fail(
             ProviderShared.eventError(route, `Provider emitted ${event.type} after the terminal event`),
           )
+        output = true
         if (LLMEvent.is.finish(event) || LLMEvent.is.providerError(event)) terminal = true
         return Effect.succeed(event)
       }),
-      Stream.onEnd(
-        Effect.suspend(() =>
-          terminal
-            ? Effect.void
-            : Effect.fail(incompleteStreamError(route)),
-        ),
-      ),
+      Stream.concat(fallback),
     )
   })
+
+type ProtocolEvent<Event> = { readonly type: "event"; readonly event: Event } | { readonly type: "halt" }
+
+const parseProtocolEvents = <Event, State>(
+  events: Stream.Stream<Event, AIError>,
+  request: LLMRequest,
+  protocol: { readonly stream: ProtocolStream<unknown, Event, State> },
+) =>
+  events.pipe(
+    Stream.map((event): ProtocolEvent<Event> => ({ type: "event", event })),
+    // A normal halt becomes an in-band parser input so finalization may fail.
+    Stream.concat(Stream.succeed({ type: "halt" } as const)),
+    Stream.mapAccumEffect(
+      () => protocol.stream.initial(request),
+      (state, event) => {
+        if (event.type === "event") return protocol.stream.step(state, event.event)
+        if (!protocol.stream.onHalt) return Effect.succeed([state, []] as const)
+        const events = protocol.stream.onHalt(state)
+        return Effect.isEffect(events)
+          ? events.pipe(Effect.map((events) => [state, events] as const))
+          : Effect.succeed([state, events] as const)
+      },
+    ),
+  )
 
 function makeFromTransport<Body, Prepared, Frame, Event, State>(
   input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
@@ -329,14 +357,9 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
             Stream.mapEffect(decodeEvent(route)),
             protocol.stream.terminal ? Stream.takeUntil(protocol.stream.terminal) : (stream) => stream,
           )
-        return events.pipe(
-          Stream.mapAccumEffect(
-            () => protocol.stream.initial(request),
-            protocol.stream.step,
-            protocol.stream.onHalt ? { onHalt: protocol.stream.onHalt } : undefined,
-          ),
+        return parseProtocolEvents(events, request, protocol).pipe(
           Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
-          requireTerminalEvent(route),
+          ensureTerminalEvent(route, request.model.compatibility?.requireFinishReason ?? true),
         )
       },
     } satisfies Route<Body, Prepared>

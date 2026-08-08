@@ -242,6 +242,8 @@ export interface ParserState {
   readonly reasoningEmitted: boolean
   readonly latestToolIndex?: number
   readonly nextToolIndex: number
+  readonly outputStarted: boolean
+  readonly requireFinishReason: boolean
 }
 
 // =============================================================================
@@ -709,9 +711,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       Boolean(delta?.content) ||
       reasoning !== undefined ||
       (Array.isArray(delta?.reasoning_details) && delta.reasoning_details.length > 0) ||
-      toolDeltas.some(
-        (tool) => Boolean(tool.id) || Boolean(tool.function?.name) || Boolean(tool.function?.arguments),
-      )
+      toolDeltas.some((tool) => Boolean(tool.id) || Boolean(tool.function?.name) || Boolean(tool.function?.arguments))
     if (state.finishReason !== undefined) {
       if (hasLateContent)
         return yield* ProviderShared.eventError(ADAPTER, "OpenAI Chat received content after the finish reason")
@@ -751,8 +751,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       const fallback = toolDeltas.length > 1 ? position : (latestToolIndex ?? position)
       const fallbackTool = tools[fallback] ?? pendingTools[fallback]
       const index =
-        tool.index ?? matched ??
-        (tool.id && fallbackTool?.id && fallbackTool.id !== tool.id ? nextToolIndex : fallback)
+        tool.index ?? matched ?? (tool.id && fallbackTool?.id && fallbackTool.id !== tool.id ? nextToolIndex : fallback)
       const current = tools[index]
       const pending = pendingTools[index]
       const id = current?.id ?? pending?.id ?? (tool.id || undefined)
@@ -808,6 +807,8 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         reasoningEmitted,
         latestToolIndex,
         nextToolIndex,
+        outputStarted: state.outputStarted || hasLateContent,
+        requireFinishReason: state.requireFinishReason,
       },
       events,
     ] as const
@@ -838,6 +839,23 @@ const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   return events
 }
 
+const onHalt = (state: ParserState) =>
+  Effect.gen(function* () {
+    if (state.finishReason !== undefined || state.requireFinishReason) return finishEvents(state)
+    if (!state.outputStarted) return []
+    if (Object.keys(state.pendingTools).length > 0)
+      return yield* ProviderShared.eventError(ADAPTER, "OpenAI Chat tool call delta is missing id or name")
+    // Chat has no per-call stop event, so an accepted EOF must finalize every
+    // accumulated tool input before publishing the synthetic terminal reason.
+    const finished = yield* ToolStream.finishAll(ADAPTER, state.tools)
+    return finishEvents({
+      ...state,
+      tools: finished.tools,
+      toolCallEvents: finished.events,
+      finishReason: { normalized: "unknown" },
+    })
+  })
+
 // =============================================================================
 // Protocol And OpenAI Route
 // =============================================================================
@@ -865,9 +883,11 @@ export const protocol = Protocol.make({
       reasoningDetailsObserved: false,
       reasoningEmitted: false,
       nextToolIndex: 0,
+      outputStarted: false,
+      requireFinishReason: request.model.compatibility?.requireFinishReason ?? true,
     }),
     step,
-    onHalt: finishEvents,
+    onHalt,
   },
 })
 

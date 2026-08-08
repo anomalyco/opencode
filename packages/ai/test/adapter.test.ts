@@ -138,6 +138,29 @@ describe("llm route", () => {
     }),
   )
 
+  unterminated.effect("synthesizes an unknown finish when a terminal event is not required", () =>
+    Effect.gen(function* () {
+      const response = yield* (yield* LLMClient.Service).generate(
+        LLMRequest.update(request, {
+          model: updateModel(request.model, { compatibility: { requireFinishReason: false } }),
+        }),
+      )
+
+      expect(response.text).toBe("partial")
+      expect(response.finishReason).toEqual({ normalized: "unknown" })
+      expect(response.events.slice(-2)).toEqual([
+        {
+          type: "step-finish",
+          index: 0,
+          reason: { normalized: "unknown" },
+          usage: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "finish", reason: { normalized: "unknown" }, usage: undefined },
+      ])
+    }),
+  )
+
   it.effect("selects routes by model route value", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
