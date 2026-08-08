@@ -1443,6 +1443,62 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test.each([
+    {
+      message: "Upstream HTTP/2 stream failed",
+      type: "upstream_error",
+      code: "upstream_http2_stream_error",
+    },
+    {
+      type: "error",
+      error: {
+        message: "Upstream HTTP/2 stream failed",
+        type: "upstream_error",
+        code: "upstream_http2_stream_error",
+      },
+    },
+  ])("serializes upstream HTTP/2 stream errors as retryable APIError", (input) => {
+    const result = MessageV2.fromError(input, { providerID })
+
+    expect(result).toStrictEqual({
+      name: "APIError",
+      data: {
+        message: "Upstream HTTP/2 stream failed",
+        isRetryable: true,
+        responseBody: JSON.stringify(input),
+        metadata: { code: "upstream_http2_stream_error" },
+      },
+    })
+  })
+
+  test("serializes upstream HTTP/2 stream errors wrapped in Error.message", () => {
+    const body = {
+      message: "Upstream HTTP/2 stream failed",
+      type: "upstream_error",
+      code: "upstream_http2_stream_error",
+    }
+    const result = MessageV2.fromError(new Error(JSON.stringify(body)), { providerID })
+
+    expect(result).toMatchObject({
+      name: "APIError",
+      data: {
+        message: body.message,
+        isRetryable: true,
+        metadata: { code: body.code },
+      },
+    })
+  })
+
+  test("does not classify unrelated upstream errors", () => {
+    const input = {
+      message: "Upstream rejected the request",
+      type: "upstream_error",
+      code: "upstream_permanent_error",
+    }
+
+    expect(MessageV2.fromError(input, { providerID }).name).toBe("UnknownError")
+  })
+
   test("detects context overflow from APICallError provider messages", () => {
     const cases = [
       "prompt is too long: 213462 tokens > 200000 maximum",

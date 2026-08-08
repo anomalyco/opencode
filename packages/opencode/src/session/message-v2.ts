@@ -676,7 +676,7 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case APICallError.isInstance(e):
+    case APICallError.isInstance(e): {
       const parsed = ProviderError.parseAPICallError({
         providerID: ctx.providerID,
         error: e,
@@ -702,8 +702,24 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case e instanceof Error:
+    }
+    case e instanceof Error: {
+      try {
+        const parsed = ProviderError.parseStreamError(e)
+        if (parsed?.type === "api_error") {
+          return new APIError(
+            {
+              message: parsed.message,
+              isRetryable: parsed.isRetryable,
+              responseBody: parsed.responseBody,
+              ...(parsed.metadata ? { metadata: parsed.metadata } : {}),
+            },
+            { cause: e },
+          ).toObject()
+        }
+      } catch {}
       return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
+    }
     default:
       try {
         const parsed = ProviderError.parseStreamError(e)
@@ -722,6 +738,7 @@ export function fromError(
               message: parsed.message,
               isRetryable: parsed.isRetryable,
               responseBody: parsed.responseBody,
+              ...(parsed.metadata ? { metadata: parsed.metadata } : {}),
             },
             {
               cause: e,

@@ -97,17 +97,28 @@ export type ParsedStreamError =
       message: string
       isRetryable: boolean
       responseBody: string
+      metadata?: Record<string, string>
     }
 
 export function parseStreamError(input: unknown): ParsedStreamError | undefined {
-  const raw = json(input)
+  const raw = json(input instanceof Error ? input.message : input)
   const body = typeof raw?.message === "string" ? (json(raw.message) ?? raw) : raw
   if (!body) return
 
   const responseBody = JSON.stringify(body)
+  const error = body.type === "error" ? json(body.error) : body
+  if (error?.type === "upstream_error" && error.code === "upstream_http2_stream_error") {
+    return {
+      type: "api_error",
+      message: typeof error.message === "string" ? error.message : "Upstream HTTP/2 stream failed",
+      isRetryable: true,
+      responseBody,
+      metadata: { code: "upstream_http2_stream_error" },
+    }
+  }
   if (body.type !== "error") return
 
-  switch (body?.error?.code) {
+  switch (error?.code) {
     case "context_length_exceeded":
       return {
         type: "context_overflow",
@@ -131,7 +142,7 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
     case "invalid_prompt":
       return {
         type: "api_error",
-        message: typeof body?.error?.message === "string" ? body?.error?.message : "Invalid prompt.",
+        message: typeof error.message === "string" ? error.message : "Invalid prompt.",
         isRetryable: false,
         responseBody,
       }
@@ -139,7 +150,7 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
     case "server_error":
       return {
         type: "api_error",
-        message: typeof body?.error?.message === "string" ? body?.error?.message : "Server error.",
+        message: typeof error.message === "string" ? error.message : "Server error.",
         isRetryable: true,
         responseBody,
       }
