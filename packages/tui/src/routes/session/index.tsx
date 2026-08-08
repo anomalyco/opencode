@@ -2037,7 +2037,7 @@ function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
       {(retry) => (
         <box paddingLeft={3}>
           <text fg={theme.text.feedback.warning.default}>
-            ⚠ Retry attempt {retry().attempt} scheduled: {retry().error.message} [{retry().error.type}]
+            ⚠ Retry attempt {retry().attempt} scheduled: {retry().error.message}
           </text>
         </box>
       )}
