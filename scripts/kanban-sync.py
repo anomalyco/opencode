@@ -17,7 +17,7 @@ if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
 
 PROJECT_ID = "PVT_kwHOBM87Yc4Bfu74"
-REPO_ID = "R_kgDOTxw4Iw"
+REPO_ID = "R_kgDOTx4wIw"
 REPO = "jaminsmoke/Jarvis"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -280,9 +280,11 @@ def latest_release_tag():
         ['gh', 'api', f'repos/{REPO}/releases/latest', '--jq', '.tag_name'],
         capture_output=True, encoding='utf-8', timeout=15,
     )
-    if result.returncode != 0:
-        raise KanbanError('Cannot reach GitHub API to resolve latest release')
-    return result.stdout.strip()
+    if result.returncode == 0:
+        return result.stdout.strip()
+    if 'Not Found' in result.stderr:
+        return None
+    raise KanbanError('Cannot reach GitHub API to resolve latest release')
 
 
 def next_patch(version):
@@ -679,8 +681,12 @@ def cmd_audit():
     except KanbanError as error:
         print(f"ERROR: {error}; audit requires GitHub API access", file=sys.stderr)
         return 1
-    target = next_patch(latest)
-    print(f"  Release latest={latest} -> version objetivo={target}")
+    if latest is None:
+        target = "v0.1.0"
+        print(f"  No releases yet -> version objetivo={target}")
+    else:
+        target = next_patch(latest)
+        print(f"  Release latest={latest} -> version objetivo={target}")
     items = get_all_items()
     issues_found = 0
 
