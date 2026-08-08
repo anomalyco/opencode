@@ -4,7 +4,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { createMemo, Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -15,8 +15,7 @@ import { encodeRemoteQr, REMOTE_QR_QUIET_ZONE, REMOTE_QR_SIZE, remoteQrPath } fr
 import { showToast } from "@/utils/toast"
 
 type RemoteDialogProps = {
-  url: string
-  modules: boolean[][]
+  urls: string[]
   onDisconnect: () => Promise<void>
 }
 
@@ -61,11 +60,10 @@ export function SessionRemoteControl() {
     setState("loading", true)
     try {
       const pairing = await platform.createRemotePairing(sessionID, cwd)
-      const modules = encodeRemoteQr(pairing.url)
+      const urls = pairing.urls.length > 0 ? pairing.urls : [pairing.url]
       dialog.show(() => (
         <RemoteControlDialog
-          url={pairing.url}
-          modules={modules}
+          urls={urls}
           onDisconnect={async () => {
             if (!platform.revokeRemotePairing) throw new Error("remote_revoke_unavailable")
             await platform.revokeRemotePairing(sessionID, cwd)
@@ -102,15 +100,17 @@ export function SessionRemoteControl() {
 function RemoteControlDialog(props: RemoteDialogProps) {
   const language = useLanguage()
   const dialog = useDialog()
-  const [state, setState] = createStore({ copying: false, disconnecting: false })
+  const [state, setState] = createStore({ copying: false, disconnecting: false, index: 0 })
   const size = REMOTE_QR_SIZE + REMOTE_QR_QUIET_ZONE * 2
-  const path = createMemo(() => remoteQrPath(props.modules, REMOTE_QR_QUIET_ZONE))
+  const url = createMemo(() => props.urls[state.index] ?? props.urls[0]!)
+  const modules = createMemo(() => encodeRemoteQr(url()))
+  const path = createMemo(() => remoteQrPath(modules(), REMOTE_QR_QUIET_ZONE))
 
   const copy = async () => {
     if (state.copying) return
     setState("copying", true)
     try {
-      await navigator.clipboard.writeText(props.url)
+      await navigator.clipboard.writeText(url())
       showToast({
         variant: "success",
         icon: "circle-check",
@@ -166,8 +166,25 @@ function RemoteControlDialog(props: RemoteDialogProps) {
         </div>
 
         <p class="text-12-regular text-text-weak text-center">{language.t("session.remote.networkNote")}</p>
+        <Show when={props.urls.length > 1}>
+          <div class="flex flex-wrap items-center justify-center gap-1.5">
+            <For each={props.urls}>
+              {(item, index) => (
+                <Button
+                  type="button"
+                  size="small"
+                  variant={state.index === index() ? "secondary" : "ghost"}
+                  aria-pressed={state.index === index()}
+                  onClick={() => setState("index", index())}
+                >
+                  {new URL(item).hostname}
+                </Button>
+              )}
+            </For>
+          </div>
+        </Show>
         <code class="block max-w-[420px] overflow-hidden text-ellipsis whitespace-nowrap rounded-md bg-surface-raised-base px-3 py-2 text-11-regular text-text-weak">
-          {props.url}
+          {url()}
         </code>
 
         <div class="flex items-center justify-end gap-2">

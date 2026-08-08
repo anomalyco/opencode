@@ -1,6 +1,6 @@
 import { HttpServerResponse } from "effect/unstable/http"
 
-const html = `<!doctype html>
+const html = String.raw`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -69,6 +69,7 @@ const html = `<!doctype html>
       "use strict"
 
       var STORAGE_KEY = "opencode.remote.grant.v1"
+      var EXPIRED_MESSAGE = "Remote access expired or was replaced by another phone."
       var state = { token: "", sessionID: "", refreshTimer: 0, streamAbort: null, connected: false }
       var title = document.getElementById("title")
       var status = document.getElementById("status")
@@ -84,16 +85,27 @@ const html = `<!doctype html>
         status.className = error ? "status error" : "status"
       }
 
+      function expireRemoteAccess() {
+        sessionStorage.removeItem(STORAGE_KEY)
+        state.token = ""
+        state.sessionID = ""
+        state.connected = false
+        clearTimeout(state.refreshTimer)
+        state.refreshTimer = 0
+        if (state.streamAbort && !state.streamAbort.signal.aborted) state.streamAbort.abort()
+        state.streamAbort = null
+        composer.hidden = true
+        setStatus(EXPIRED_MESSAGE, true)
+        return new Error(EXPIRED_MESSAGE)
+      }
+
       function api(path, init) {
         var options = init || {}
         var headers = new Headers(options.headers || {})
         headers.set("Authorization", "Bearer " + state.token)
         if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json")
         return fetch(path, Object.assign({}, options, { headers: headers })).then(function (response) {
-          if (response.status === 401 || response.status === 403) {
-            sessionStorage.removeItem(STORAGE_KEY)
-            throw new Error("Remote access expired or was replaced by another phone.")
-          }
+          if (response.status === 401 || response.status === 403) throw expireRemoteAccess()
           if (!response.ok) throw new Error("Request failed (" + response.status + ")")
           if (response.status === 204) return null
           var type = response.headers.get("content-type") || ""
@@ -112,11 +124,15 @@ const html = `<!doctype html>
           var raw = sessionStorage.getItem(STORAGE_KEY)
           if (!raw) return false
           var grant = JSON.parse(raw)
-          if (!grant || typeof grant.token !== "string" || typeof grant.sessionID !== "string") return false
+          if (!grant || typeof grant.token !== "string" || typeof grant.sessionID !== "string") {
+            sessionStorage.removeItem(STORAGE_KEY)
+            return false
+          }
           state.token = grant.token
           state.sessionID = grant.sessionID
           return true
         } catch (_) {
+          sessionStorage.removeItem(STORAGE_KEY)
           return false
         }
       }
@@ -293,6 +309,7 @@ const html = `<!doctype html>
       }
 
       function scheduleRefresh() {
+        if (!state.token || !state.sessionID) return
         clearTimeout(state.refreshTimer)
         state.refreshTimer = setTimeout(function () { refresh().catch(fail) }, 180)
       }
@@ -305,6 +322,7 @@ const html = `<!doctype html>
           headers: { Authorization: "Bearer " + state.token, Accept: "text/event-stream" },
           signal: controller.signal,
         })
+        if (response.status === 401 || response.status === 403) throw expireRemoteAccess()
         if (!response.ok || !response.body) throw new Error("Live connection failed (" + response.status + ")")
         state.connected = true
         scheduleRefresh()
@@ -317,9 +335,9 @@ const html = `<!doctype html>
           if (result.done) break
           buffer += decoder.decode(result.value, { stream: true })
           var boundary
-          while ((boundary = buffer.indexOf("\n\n")) >= 0) {
-            var block = buffer.slice(0, boundary).replace(/\r/g, "")
-            buffer = buffer.slice(boundary + 2)
+          while ((boundary = /\r\n\r\n|\n\n|\r\r/.exec(buffer))) {
+            var block = buffer.slice(0, boundary.index).replace(/\r/g, "")
+            buffer = buffer.slice(boundary.index + boundary[0].length)
             if (block.split("\n").some(function (line) { return line.indexOf("data:") === 0 })) scheduleRefresh()
           }
         }
@@ -332,10 +350,12 @@ const html = `<!doctype html>
           try {
             await streamEvents()
           } catch (error) {
+            if (!state.token || !state.sessionID) return
             if (state.streamAbort && state.streamAbort.signal.aborted) return
             state.connected = false
             setStatus(error instanceof Error ? error.message : String(error), true)
           }
+          if (!state.token || !state.sessionID) return
           await new Promise(function (resolve) { setTimeout(resolve, 1200) })
         }
       }
@@ -384,6 +404,10 @@ const html = `<!doctype html>
   </script>
 </body>
 </html>`
+
+export function markup() {
+  return html
+}
 
 export function response() {
   return HttpServerResponse.text(html, {
