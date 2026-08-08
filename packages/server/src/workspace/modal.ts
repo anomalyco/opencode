@@ -13,15 +13,30 @@ trap 'rm -f -- "$pidfile"' EXIT
 "$@"
 `
 
+// Modal's VM runtime accepts process-group signals without delivering them
+// (kill(-pgid) returns 0 and nothing dies; direct-pid signals work), so the
+// group is enumerated from /proc and each member is signalled directly. The
+// second pass catches children forked between scan and signal.
 const KILL = `
+pidfile=$1
+sig=$2
 i=0
-while [ ! -s "$1" ] && [ "$i" -lt 250 ]; do sleep 0.02; i=$((i + 1)); done
-if [ -s "$1" ]; then
-  pid=$(cat "$1")
-  /bin/kill "-$2" "-$pid" 2>/dev/null || true
-else
-  exit 47
-fi
+while [ ! -s "$pidfile" ] && [ "$i" -lt 250 ]; do sleep 0.02; i=$((i + 1)); done
+[ -s "$pidfile" ] || exit 47
+target=$(cat "$pidfile")
+pass=0
+while [ "$pass" -lt 2 ]; do
+  for stat in /proc/[0-9]*/stat; do
+    [ -e "$stat" ] || continue
+    pid=\${stat#/proc/}
+    pid=\${pid%/stat}
+    set -- $(sed "s/.*) //" "$stat" 2>/dev/null)
+    if [ "\${3:-}" = "$target" ]; then
+      /bin/kill "-$sig" "$pid" 2>/dev/null || true
+    fi
+  done
+  pass=$((pass + 1))
+done
 `
 
 export interface ModalImageSpec {
@@ -54,7 +69,15 @@ export const createModalSandbox = async (options: ModalSandboxOptions) => {
   const app = await client.apps.fromName(options.app, { createIfMissing: true })
   const imageSpec = options.image ?? ubuntuImage
   const image = client.images.fromRegistry(imageSpec.registry).dockerfileCommands([...imageSpec.dockerfileCommands])
-  const sandbox = await client.sandboxes.create(app, image, options.sandbox)
+  // Always Modal's Full-VM runtime (beta, enabled per account): a real kernel
+  // with real device nodes, so workspaces can run Docker and other
+  // kernel-dependent workloads. Costs versus gVisor, measured Aug 2026:
+  // per-exec floor ~285-535ms versus ~90-165ms, and filesystem snapshots only
+  // (no memory snapshots — acceptable; fs-snapshot is the persistence design).
+  const sandbox = await client.sandboxes.create(app, image, {
+    ...options.sandbox,
+    experimentalOptions: { ...options.sandbox?.experimentalOptions, vm_runtime: true },
+  })
   return {
     driver: makeModalDriver(sandbox),
     sandbox,
@@ -64,12 +87,14 @@ export const createModalSandbox = async (options: ModalSandboxOptions) => {
 
 /**
  * Adapts Modal exec to the Environment driver. Files intentionally has no native
- * overrides: Modal exec and filesystem tools share the same roughly 175ms floor,
- * so the derived exec defaults are the simplest implementation with no measured loss.
+ * overrides: exec latency dominates payload work (VM runtime floor measured
+ * ~285-535ms per exec, Aug 2026), so the derived exec defaults are the simplest
+ * implementation with no measured loss.
  *
  * Modal cannot signal a ContainerProcess. Each command therefore starts a new
  * process group and records its leader in a unique pid file; kill runs a second
- * sandbox command that signals that group. Pid files are removed best-effort.
+ * sandbox command that enumerates that group from /proc and signals each member
+ * directly (see KILL). Pid files are removed best-effort.
  */
 export const makeModalDriver = (sandbox: Sandbox): Driver => {
   const spawn = Effect.fnUntraced(function* (command: Command) {
