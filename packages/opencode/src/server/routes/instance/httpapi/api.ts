@@ -21,7 +21,6 @@ import { ProjectCopyApi } from "./groups/project-copy"
 import { ProviderApi } from "./groups/provider"
 import { PtyApi, PtyConnectApi } from "./groups/pty"
 import { QuestionApi } from "./groups/question"
-import { RemoteAdminApi, RemoteApi, RemotePairApi } from "./groups/remote"
 import { SessionApi } from "./groups/session"
 import { SyncApi } from "./groups/sync"
 import { TuiApi } from "./groups/tui"
@@ -83,9 +82,6 @@ export const OpenCodeHttpApi = HttpApi.make("opencode")
   .addHttpApi(InstanceHttpApi)
   .addHttpApi(ServerApi)
   .addHttpApi(PtyConnectApi)
-  .addHttpApi(RemoteAdminApi)
-  .addHttpApi(RemotePairApi)
-  .addHttpApi(RemoteApi)
   .annotate(HttpApi.AdditionalSchemas, [
     EventSchema,
     Question.Replied,
