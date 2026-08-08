@@ -40,6 +40,18 @@ export interface DiagramCanvasRunOptions<Style extends string, Metadata extends 
   trimBottom?: boolean
 }
 
+const MAX_DIAGRAM_CELLS = 1_000_000
+
+export class DiagramCanvasSizeError extends Error {
+  constructor(
+    readonly width: number,
+    readonly height: number,
+  ) {
+    super(`Diagram canvas ${width}x${height} exceeds the ${MAX_DIAGRAM_CELLS.toLocaleString()} cell limit`)
+    this.name = "DiagramCanvasSizeError"
+  }
+}
+
 function createEmptyCell<Style extends string, Metadata extends object>(): DiagramCanvasCell<Style, Metadata> {
   return { char: " " } as DiagramCanvasCell<Style, Metadata>
 }
@@ -59,6 +71,7 @@ export class DiagramCanvas<Style extends string, Metadata extends object = objec
     readonly height: number,
     options: DiagramCanvasOptions<Style, Metadata> = {},
   ) {
+    if (width * height > MAX_DIAGRAM_CELLS) throw new DiagramCanvasSizeError(width, height)
     this.measure = options.measure ?? stringWidth
     this.mergeCell = options.mergeCell
     this.rows = Array.from({ length: height }, () => Array.from({ length: width }, () => createEmptyCell()))

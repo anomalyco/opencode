@@ -1,5 +1,5 @@
 import {
-  TextBufferRenderable,
+  TextRenderable,
   RenderableEvents,
   createMarkdownCodeBlockRenderer,
   parseColor,
@@ -12,6 +12,7 @@ import {
   type StyledText,
 } from "@opentui/core"
 import { MermaidSyntaxError } from "./diagnostics.js"
+import { DiagramCanvasSizeError } from "./core/canvas.js"
 import { detectMermaidDiagram } from "./detect.js"
 import { drawFlowchartDiagramGrid } from "./flowchart/drawing.js"
 import { parseMermaidFlowchartDiagram } from "./flowchart/parser.js"
@@ -27,9 +28,11 @@ import { resolveStateStyleColors } from "./state/style.js"
 
 type DiagramKind = NonNullable<ReturnType<typeof detectMermaidDiagram>>
 
-interface LastGoodDiagram {
+interface PreparedDiagram {
   readonly kind: DiagramKind
   readonly source: string
+  readonly text: StyledText
+  readonly height: number
 }
 
 export interface MermaidMarkdownRendererOptions {
@@ -48,12 +51,16 @@ function color(value: ColorInput | undefined): RGBA | undefined {
   return value === undefined ? undefined : parseColor(value)
 }
 
-class StaticDiagramRenderable extends TextBufferRenderable {
-  constructor(ctx: RenderContext, text: StyledText, height: number) {
-    super(ctx, { width: "100%", height, wrapMode: "none", selectable: false, marginTop: 1 })
-    this.textBuffer.setStyledText(text)
-    this.updateTextInfo()
-
+class StaticDiagramRenderable extends TextRenderable {
+  constructor(ctx: RenderContext, prepared: PreparedDiagram) {
+    super(ctx, {
+      content: prepared.text,
+      width: "100%",
+      height: prepared.height,
+      wrapMode: "none",
+      selectable: false,
+      marginTop: 1,
+    })
     let dragX: number | undefined
     this.onMouseDown = (event: MouseEvent) => {
       if (event.button !== 0) return
@@ -84,27 +91,22 @@ class StaticDiagramRenderable extends TextBufferRenderable {
     this.onMouseScroll = (event: MouseEvent) => {
       const scroll = event.scroll
       if (!scroll || (scroll.direction !== "left" && scroll.direction !== "right")) return
-      this.scrollX += (scroll.direction === "right" ? 1 : -1) * scroll.delta
       event.preventDefault()
       event.stopPropagation()
     }
   }
 }
 
-function renderDiagram(
-  ctx: RenderContext,
-  kind: DiagramKind,
-  source: string,
-  options: MermaidMarkdownRendererOptions,
-): StaticDiagramRenderable {
+function prepareDiagram(kind: DiagramKind, source: string, options: MermaidMarkdownRendererOptions): PreparedDiagram {
   const colors = options.colors ?? {}
   switch (kind) {
     case "flowchart": {
       const grid = drawFlowchartDiagramGrid(parseMermaidFlowchartDiagram(source), { compact: options.compact })
       const size = grid.getTextSize({ trimTop: true, trimBottom: true })
-      return new StaticDiagramRenderable(
-        ctx,
-        renderGridStyledText(
+      return {
+        kind,
+        source,
+        text: renderGridStyledText(
           grid,
           resolveFlowchartStyleColors({
             node: color(colors.primary),
@@ -114,15 +116,16 @@ function renderDiagram(
             group: color(colors.muted),
           }),
         ),
-        size.height,
-      )
+        height: size.height,
+      }
     }
     case "sequence": {
       const grid = drawSequenceDiagramGrid(parseMermaidSequenceDiagram(source), { compact: options.compact })
       const size = grid.getTextSize()
-      return new StaticDiagramRenderable(
-        ctx,
-        renderSequenceGridStyledText(
+      return {
+        kind,
+        source,
+        text: renderSequenceGridStyledText(
           grid,
           resolveSequenceStyleColors({
             participant: color(colors.primary),
@@ -136,15 +139,16 @@ function renderDiagram(
             noteBg: color(colors.background),
           }),
         ),
-        size.height,
-      )
+        height: size.height,
+      }
     }
     case "state": {
       const grid = drawStateDiagramGrid(parseMermaidStateDiagram(source))
       const size = grid.getTextSize({ trimBottom: true })
-      return new StaticDiagramRenderable(
-        ctx,
-        renderStateGridStyledText(
+      return {
+        kind,
+        source,
+        text: renderStateGridStyledText(
           grid,
           resolveStateStyleColors({
             state: color(colors.primary),
@@ -159,8 +163,8 @@ function renderDiagram(
             choice: color(colors.secondary),
           }),
         ),
-        size.height,
-      )
+        height: size.height,
+      }
     }
   }
 }
@@ -177,7 +181,7 @@ export function createMermaidCodeBlockRenderer(
   ctx: RenderContext,
   input: MermaidMarkdownRendererOptions | (() => MermaidMarkdownRendererOptions) = {},
 ): MarkdownCodeBlockRenderer {
-  const lastGood = new Map<string, LastGoodDiagram>()
+  const lastGood = new Map<string, PreparedDiagram>()
   return (token, context) => {
     const kind = detectMermaidDiagram(token.text)
     if (!kind) return undefined
@@ -186,17 +190,19 @@ export function createMermaidCodeBlockRenderer(
     const options = typeof input === "function" ? input() : input
 
     try {
-      const diagram = renderDiagram(ctx, kind, token.text, options)
-      if (key) claimLastGood(key, { kind, source: token.text }, diagram, lastGood)
+      const prepared = prepareDiagram(kind, token.text, options)
+      const diagram = new StaticDiagramRenderable(ctx, prepared)
+      if (key) claimLastGood(key, prepared, diagram, lastGood)
       return diagram
     } catch (error) {
       if (error instanceof MermaidSyntaxError) {
         const previous = key ? lastGood.get(key) : undefined
         if (!previous || previous.kind !== kind) return undefined
-        const diagram = renderDiagram(ctx, previous.kind, previous.source, options)
+        const diagram = new StaticDiagramRenderable(ctx, previous)
         claimLastGood(key!, previous, diagram, lastGood)
         return diagram
       }
+      if (error instanceof DiagramCanvasSizeError) return undefined
       throw error
     }
   }
@@ -204,9 +210,9 @@ export function createMermaidCodeBlockRenderer(
 
 function claimLastGood(
   key: string,
-  value: LastGoodDiagram,
+  value: PreparedDiagram,
   owner: StaticDiagramRenderable,
-  cache: Map<string, LastGoodDiagram>,
+  cache: Map<string, PreparedDiagram>,
 ): void {
   const claim = { ...value }
   cache.set(key, claim)

@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import stringWidth from "string-width"
-import { DiagramCanvas, type DiagramCanvasCell } from "./canvas.js"
+import { DiagramCanvas, DiagramCanvasSizeError, type DiagramCanvasCell } from "./canvas.js"
 
 describe("DiagramCanvas", () => {
+  test("rejects canvases that exceed the rendering budget", () => {
+    expect(() => new DiagramCanvas(2_000, 1_000)).toThrow(DiagramCanvasSizeError)
+  })
+
   test("writes cells and text while clipping out-of-bounds positions", () => {
     const canvas = new DiagramCanvas<"label">(5, 2)
 
