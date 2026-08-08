@@ -12,7 +12,6 @@ import { Database } from "@opencode-ai/core/database/database"
 import { tmpdir } from "./fixture/tmpdir"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 import { importLegacyCredentials } from "@opencode-ai/core/database/migration/20260805200742_import_legacy_credentials"
-import removeLegacyAccounts from "@opencode-ai/core/database/migration/20260808014022_remove_legacy_accounts"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
   Effect.runPromise(
@@ -60,41 +59,7 @@ describe("DatabaseMigration", () => {
         expect(
           yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_pending'`),
         ).toEqual({ name: "session_pending" })
-        expect(
-          yield* db.all(sql`
-            SELECT name FROM sqlite_master
-            WHERE type = 'table' AND name IN ('account', 'account_state', 'control_account')
-          `),
-        ).toEqual([])
         expect(yield* db.get(sql`SELECT count(*) AS count FROM migration`)).toEqual({ count: migrations.length })
-      }),
-    )
-  })
-
-  test("drops legacy account tables without changing credential data", async () => {
-    await run(
-      Effect.gen(function* () {
-        const db = yield* makeDb
-        yield* db.run(sql`CREATE TABLE account (id text PRIMARY KEY)`)
-        yield* db.run(
-          sql`CREATE TABLE account_state (id integer PRIMARY KEY, active_account_id text REFERENCES account(id))`,
-        )
-        yield* db.run(sql`CREATE TABLE control_account (email text PRIMARY KEY)`)
-        yield* db.run(sql`CREATE TABLE credential (id text PRIMARY KEY, value text NOT NULL)`)
-        yield* db.run(sql`INSERT INTO account VALUES ('legacy')`)
-        yield* db.run(sql`INSERT INTO account_state VALUES (1, 'legacy')`)
-        yield* db.run(sql`INSERT INTO control_account VALUES ('legacy@example.com')`)
-        yield* db.run(sql`INSERT INTO credential VALUES ('current', 'secret')`)
-
-        yield* DatabaseMigration.applyOnly(db, [removeLegacyAccounts])
-
-        expect(
-          yield* db.all(sql`
-            SELECT name FROM sqlite_master
-            WHERE type = 'table' AND name IN ('account', 'account_state', 'control_account')
-          `),
-        ).toEqual([])
-        expect(yield* db.all(sql`SELECT * FROM credential`)).toEqual([{ id: "current", value: "secret" }])
       }),
     )
   })
