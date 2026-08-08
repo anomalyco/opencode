@@ -1,25 +1,13 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "2d214a71-3b0a-48c1-a667-741952c4e188",
+  "id": "7f432ef4-b4bd-4f7f-b2ce-2ac66250a190",
   "prevIds": [
-    "f14a9b18-8207-487e-a3d3-227e629ba9ad"
+    "2d214a71-3b0a-48c1-a667-741952c4e188"
   ],
   "ddl": [
     {
       "name": "workspace",
-      "entityType": "tables"
-    },
-    {
-      "name": "account_state",
-      "entityType": "tables"
-    },
-    {
-      "name": "account",
-      "entityType": "tables"
-    },
-    {
-      "name": "control_account",
       "entityType": "tables"
     },
     {
@@ -153,196 +141,6 @@
       "name": "time_used",
       "entityType": "columns",
       "table": "workspace"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "entityType": "columns",
-      "table": "account_state"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "active_account_id",
-      "entityType": "columns",
-      "table": "account_state"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "active_org_id",
-      "entityType": "columns",
-      "table": "account_state"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "id",
-      "entityType": "columns",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "email",
-      "entityType": "columns",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "url",
-      "entityType": "columns",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "access_token",
-      "entityType": "columns",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "refresh_token",
-      "entityType": "columns",
-      "table": "account"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "token_expiry",
-      "entityType": "columns",
-      "table": "account"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_created",
-      "entityType": "columns",
-      "table": "account"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_updated",
-      "entityType": "columns",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "email",
-      "entityType": "columns",
-      "table": "control_account"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "url",
-      "entityType": "columns",
-      "table": "control_account"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "access_token",
-      "entityType": "columns",
-      "table": "control_account"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "refresh_token",
-      "entityType": "columns",
-      "table": "control_account"
-    },
-    {
-      "type": "integer",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "token_expiry",
-      "entityType": "columns",
-      "table": "control_account"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "active",
-      "entityType": "columns",
-      "table": "control_account"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_created",
-      "entityType": "columns",
-      "table": "control_account"
-    },
-    {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "time_updated",
-      "entityType": "columns",
-      "table": "control_account"
     },
     {
       "type": "text",
@@ -1401,21 +1199,6 @@
     },
     {
       "columns": [
-        "active_account_id"
-      ],
-      "tableTo": "account",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "nameExplicit": false,
-      "name": "fk_account_state_active_account_id_account_id_fk",
-      "entityType": "fks",
-      "table": "account_state"
-    },
-    {
-      "columns": [
         "aggregate_id"
       ],
       "tableTo": "event_sequence",
@@ -1536,16 +1319,6 @@
     },
     {
       "columns": [
-        "email",
-        "url"
-      ],
-      "nameExplicit": false,
-      "name": "control_account_pk",
-      "entityType": "pks",
-      "table": "control_account"
-    },
-    {
-      "columns": [
         "project_id",
         "directory"
       ],
@@ -1571,24 +1344,6 @@
       "nameExplicit": false,
       "name": "workspace_pk",
       "table": "workspace",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "account_state_pk",
-      "table": "account_state",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "account_pk",
-      "table": "account",
       "entityType": "pks"
     },
     {

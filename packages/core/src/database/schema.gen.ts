@@ -18,39 +18,6 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`account_state\` (
-          \`id\` integer PRIMARY KEY,
-          \`active_account_id\` text,
-          \`active_org_id\` text,
-          CONSTRAINT \`fk_account_state_active_account_id_account_id_fk\` FOREIGN KEY (\`active_account_id\`) REFERENCES \`account\`(\`id\`) ON DELETE SET NULL
-        );
-      `)
-      yield* tx.run(`
-        CREATE TABLE \`account\` (
-          \`id\` text PRIMARY KEY,
-          \`email\` text NOT NULL,
-          \`url\` text NOT NULL,
-          \`access_token\` text NOT NULL,
-          \`refresh_token\` text NOT NULL,
-          \`token_expiry\` integer,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL
-        );
-      `)
-      yield* tx.run(`
-        CREATE TABLE \`control_account\` (
-          \`email\` text NOT NULL,
-          \`url\` text NOT NULL,
-          \`access_token\` text NOT NULL,
-          \`refresh_token\` text NOT NULL,
-          \`token_expiry\` integer,
-          \`active\` integer NOT NULL,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          CONSTRAINT \`control_account_pk\` PRIMARY KEY(\`email\`, \`url\`)
-        );
-      `)
-      yield* tx.run(`
         CREATE TABLE \`credential\` (
           \`id\` text PRIMARY KEY,
           \`integration_id\` text,
