@@ -5,7 +5,7 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { eq } from "drizzle-orm"
 import { Clock, Context, Duration, Effect, Exit, Layer, Ref, Schedule, Schema, Scope } from "effect"
 import { systemError } from "effect/PlatformError"
-import { make as makeSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { make } from "effect/unstable/process/ChildProcessSpawner"
 import type { Driver as EnvironmentDriver } from "./environment/driver"
 import { Database } from "./database/database"
 import { KeyedMutex } from "./effect/keyed-mutex"
@@ -18,29 +18,21 @@ export type ID = Workspace.ID
 export class Info extends Schema.Class<Info>("Workspace.Info")({
   id: ID,
   provider: Schema.String,
-  binding: Schema.NullOr(WorkspaceDriver.Binding),
+  binding: WorkspaceDriver.Binding,
   createdAt: Schema.Number,
   lastUsedAt: Schema.Number,
 }) {}
 
 export class NotFound extends Schema.TaggedErrorClass<NotFound>()("Workspace.NotFound", { workspaceID: ID }) {}
 
-export class BindingNotFound extends Schema.TaggedErrorClass<BindingNotFound>()("Workspace.BindingNotFound", {
-  workspaceID: ID,
-}) {}
-
 export interface Interface {
   readonly create: (provider: string) => Effect.Effect<Info, WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
   readonly connect: (
     workspaceID: ID,
-  ) => Effect.Effect<
-    EnvironmentDriver,
-    NotFound | BindingNotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound,
-    Scope.Scope
-  >
+  ) => Effect.Effect<EnvironmentDriver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
   readonly destroy: (
     workspaceID: ID,
-  ) => Effect.Effect<void, NotFound | BindingNotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  ) => Effect.Effect<void, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
 }
 
 export interface Options {
@@ -53,7 +45,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Wo
 interface Connection {
   readonly driver: WorkspaceDriver.Interface
   readonly environment: EnvironmentDriver
-  readonly binding: Ref.Ref<WorkspaceDriver.Binding>
   readonly saveBinding: (binding: WorkspaceDriver.Binding) => Effect.Effect<void>
   readonly lastActivity: Ref.Ref<number>
   readonly active: Ref.Ref<number>
@@ -94,34 +85,32 @@ const layer = (options: Options) =>
         if (existing) return existing
 
         const row = yield* load(workspaceID)
-        if (!row.binding) return yield* new BindingNotFound({ workspaceID })
         const driver = yield* registry.get(row.provider)
-        const binding = yield* Ref.make(row.binding)
         const saveBinding = (value: WorkspaceDriver.Binding) =>
           db
             .update(WorkspaceTable)
             .set({ binding: value })
             .where(eq(WorkspaceTable.id, workspaceID))
             .run()
-            .pipe(Effect.orDie, Effect.andThen(Ref.set(binding, value)))
+            .pipe(Effect.orDie)
         const scope = yield* Scope.fork(lifetime)
         const environment = yield* driver.connect({ workspaceID, binding: row.binding, saveBinding }).pipe(
           Effect.provideService(Scope.Scope, scope),
           Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
         )
+        const now = yield* Clock.currentTimeMillis
         const connection: Connection = {
           driver,
           environment,
-          binding,
           saveBinding,
-          lastActivity: yield* Ref.make(yield* Clock.currentTimeMillis),
+          lastActivity: yield* Ref.make(now),
           active: yield* Ref.make(0),
           scope,
         }
         connections.set(workspaceID, connection)
         yield* db
           .update(WorkspaceTable)
-          .set({ last_used_at: yield* Clock.currentTimeMillis })
+          .set({ last_used_at: now })
           .where(eq(WorkspaceTable.id, workspaceID))
           .run()
           .pipe(Effect.orDie)
@@ -137,11 +126,21 @@ const layer = (options: Options) =>
               Effect.gen(function* () {
                 const connection = connections.get(workspaceID)
                 if (connection !== expected || (yield* Ref.get(connection.active)) > 0) return
-                if (now - (yield* Ref.get(connection.lastActivity)) < idleThreshold) return
+                const lastActivity = yield* Ref.get(connection.lastActivity)
+                if (now - lastActivity < idleThreshold) return
+                const row = yield* load(workspaceID)
+                // Deliberate: a racing spawn blocks, then wakes cleanly. Unlocking mid-suspend could reattach a sandbox being terminated.
                 yield* connection.driver.suspendForIdle({
-                  binding: yield* Ref.get(connection.binding),
+                  workspaceID,
+                  binding: row.binding,
                   saveBinding: connection.saveBinding,
                 })
+                yield* db
+                  .update(WorkspaceTable)
+                  .set({ last_used_at: lastActivity })
+                  .where(eq(WorkspaceTable.id, workspaceID))
+                  .run()
+                  .pipe(Effect.orDie)
                 connections.delete(workspaceID)
                 yield* Scope.close(connection.scope, Exit.void)
               }).pipe(Effect.catchCause((cause) => Effect.logError("workspace idle suspension failed", cause))),
@@ -164,9 +163,7 @@ const layer = (options: Options) =>
           return new Info({ id: workspaceID, provider, binding: result.binding, createdAt: now, lastUsedAt: now })
         }),
         connect: Effect.fn("Workspace.connect")(function* (workspaceID) {
-          yield* Scope.Scope
-          const initial = yield* locks.withLock(workspaceID)(open(workspaceID))
-          const spawner = makeSpawner((command) =>
+          const spawner = make((command) =>
             Effect.acquireRelease(
               locks.withLock(workspaceID)(
                 Effect.gen(function* () {
@@ -195,19 +192,18 @@ const layer = (options: Options) =>
                 ),
             ).pipe(Effect.flatMap((connection) => connection.environment.spawner.spawn(command))),
           )
-          // Overrides are connection-bound; route them per spawn before any workspace driver ships them.
-          return { spawner, overrides: initial.environment.overrides }
+          // Overrides are connection-bound; per-spawn routing is required before any driver ships them, so they are deliberately omitted.
+          return { spawner }
         }),
         destroy: Effect.fn("Workspace.destroy")(function* (workspaceID) {
           yield* locks.withLock(workspaceID)(
             Effect.gen(function* () {
               const row = yield* load(workspaceID)
-              if (!row.binding) return yield* new BindingNotFound({ workspaceID })
               const connection = connections.get(workspaceID)
               connections.delete(workspaceID)
               if (connection) yield* Scope.close(connection.scope, Exit.void)
               const driver = yield* registry.get(row.provider)
-              yield* driver.destroy({ binding: connection ? yield* Ref.get(connection.binding) : row.binding })
+              yield* driver.destroy({ workspaceID, binding: row.binding })
               yield* db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).run().pipe(Effect.orDie)
             }),
           )
@@ -219,3 +215,5 @@ const layer = (options: Options) =>
 export const node = configured()
 
 // TODO(workspace-plan): add the boot janitor and ~23h safety snapshot rotation in a later PR.
+// TODO(workspace-plan): make cold wake interruptible with a re-pin loop against janitor races.
+// TODO(workspace-plan): consider RcMap at end-of-series consolidation; idle suspend and destroy need distinct finalizers.

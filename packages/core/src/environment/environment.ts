@@ -22,7 +22,13 @@ const layer = Layer.effect(
     const location = yield* Location.Service
     const workspace = yield* Workspace.Service
     const driver = location.workspaceID
-      ? yield* workspace.connect(location.workspaceID).pipe(Effect.orDie)
+      ? yield* workspace.connect(location.workspaceID).pipe(
+          // Environment has no error channel; an unknown or destroyed placement is a configuration defect by design.
+          Effect.mapError(
+            (cause) => new Error(`Failed to bind Environment to workspace ${location.workspaceID}`, { cause }),
+          ),
+          Effect.orDie,
+        )
       : makeLocalDriver(spawner)
     return Service.of({ files: makeFiles(driver), spawner: driver.spawner })
   }),

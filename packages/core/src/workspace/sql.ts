@@ -5,7 +5,7 @@ import type { WorkspaceDriver } from "./driver"
 export const WorkspaceTable = sqliteTable("workspace", {
   id: text().$type<Workspace.ID>().primaryKey(),
   provider: text().notNull(),
-  binding: text({ mode: "json" }).$type<WorkspaceDriver.Binding>(),
+  binding: text({ mode: "json" }).$type<WorkspaceDriver.Binding>().notNull(),
   created_at: integer().notNull(),
   last_used_at: integer().notNull(),
 })

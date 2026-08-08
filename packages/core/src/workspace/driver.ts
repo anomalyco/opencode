@@ -33,10 +33,14 @@ export interface Interface {
     readonly saveBinding: (binding: Binding) => Effect.Effect<void>
   }) => Effect.Effect<EnvironmentDriver, Error, Scope.Scope>
   readonly suspendForIdle: (input: {
+    readonly workspaceID: Workspace.ID
     readonly binding: Binding
     readonly saveBinding: (binding: Binding) => Effect.Effect<void>
   }) => Effect.Effect<void, Error>
-  readonly destroy: (input: { readonly binding: Binding }) => Effect.Effect<void, Error>
+  readonly destroy: (input: {
+    readonly workspaceID: Workspace.ID
+    readonly binding: Binding
+  }) => Effect.Effect<void, Error>
 }
 
 export const make = (driver: Interface) => driver
@@ -56,8 +60,11 @@ export const registry = (drivers: Readonly<Record<string, Interface>>): Registry
   },
 })
 
-export const node = makeGlobalNode({
-  service: RegistryService,
-  layer: Layer.succeed(RegistryService, RegistryService.of(registry({}))),
-  deps: [],
-})
+export const registryNode = (drivers: Readonly<Record<string, Interface>>) =>
+  makeGlobalNode({
+    service: RegistryService,
+    layer: Layer.succeed(RegistryService, RegistryService.of(registry(drivers))),
+    deps: [],
+  })
+
+export const node = registryNode({})

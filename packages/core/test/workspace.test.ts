@@ -1,14 +1,13 @@
 import { beforeEach, expect } from "bun:test"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Database } from "@opencode-ai/core/database/database"
 import { makeMemoryDriver } from "@opencode-ai/core/environment"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { WorkspaceTable } from "@opencode-ai/core/workspace/sql"
-import { Database } from "@opencode-ai/core/database/database"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { eq } from "drizzle-orm"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { TestClock } from "effect/testing"
 import { ChildProcess } from "effect/unstable/process"
 import { testEffect } from "./lib/effect"
@@ -37,19 +36,10 @@ const driver = WorkspaceDriver.make({
   },
 })
 
-const registryNode = makeGlobalNode({
-  service: WorkspaceDriver.RegistryService,
-  layer: Layer.succeed(
-    WorkspaceDriver.RegistryService,
-    WorkspaceDriver.RegistryService.of(WorkspaceDriver.registry({ fake: driver })),
-  ),
-  deps: [],
-})
-
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Workspace.configured({ idleThreshold: "5 minutes", pollInterval: "1 minute" })]),
-    [[WorkspaceDriver.node, registryNode]],
+    [[WorkspaceDriver.node, WorkspaceDriver.registryNode({ fake: driver })]],
   ),
 )
 
@@ -67,7 +57,7 @@ it.effect("persists the workspace lifecycle and reconnects after idle suspension
     expect(created.binding).toEqual({ workspaceID: created.id, generation: 0 })
 
     const environment = yield* workspace.connect(created.id)
-    expect(calls.map((call) => call.operation)).toEqual(["create", "connect"])
+    expect(calls.map((call) => call.operation)).toEqual(["create"])
 
     yield* TestClock.adjust("4 minutes")
     yield* Effect.scoped(environment.spawner.spawn(ChildProcess.make("activity"))).pipe(Effect.exit)
@@ -81,6 +71,7 @@ it.effect("persists the workspace lifecycle and reconnects after idle suspension
       db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, created.id)).get(),
     ).pipe(Effect.orDie)
     expect(stored?.binding).toEqual({ workspaceID: created.id, generation: 1, suspended: true })
+    expect(stored?.last_used_at).toBe(4 * 60 * 1000)
 
     yield* Effect.scoped(environment.spawner.spawn(ChildProcess.make("wake"))).pipe(Effect.exit)
     expect(calls.map((call) => call.operation)).toEqual(["create", "connect", "suspendForIdle", "connect"])
@@ -91,23 +82,12 @@ it.effect("persists the workspace lifecycle and reconnects after idle suspension
   }),
 )
 
-it.effect("roundtrips nullable bindings through the workspace table", () =>
-  Effect.gen(function* () {
-    const id = Workspace.ID.create()
-    yield* Database.Service.use(({ db }) =>
-      db.insert(WorkspaceTable).values({ id, provider: "fake", binding: null, created_at: 10, last_used_at: 20 }).run(),
-    ).pipe(Effect.orDie)
-
-    const row = yield* Database.Service.use(({ db }) => db.select().from(WorkspaceTable).get()).pipe(Effect.orDie)
-    expect(row).toEqual({ id, provider: "fake", binding: null, created_at: 10, last_used_at: 20 })
-  }),
-)
-
 it.effect("surfaces wake failures through the spawn error channel", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
     const created = yield* workspace.create("fake")
     const environment = yield* workspace.connect(created.id)
+    yield* Effect.scoped(environment.spawner.spawn(ChildProcess.make("connect"))).pipe(Effect.exit)
 
     yield* TestClock.adjust("6 minutes")
     failConnect = true
