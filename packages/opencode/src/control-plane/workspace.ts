@@ -185,12 +185,18 @@ const layer = Layer.effect(
       url: URL | string,
       headers: HeadersInit | undefined,
     ) {
-      const response = yield* http.execute(
-        HttpClientRequest.get(route(url, "/global/event"), {
-          headers: new Headers(headers),
-          accept: "text/event-stream",
-        }),
-      )
+      // Bound the connect phase only — the stream itself stays open indefinitely.
+      // Without a timeout, a target that accepts the connection but never answers
+      // wedges the sync loop before its retry/backoff can run, and the workspace
+      // reports "connecting" forever.
+      const response = yield* http
+        .execute(
+          HttpClientRequest.get(route(url, "/global/event"), {
+            headers: new Headers(headers),
+            accept: "text/event-stream",
+          }),
+        )
+        .pipe(Effect.timeout("10 seconds"))
       if (response.status < 200 || response.status >= 300) {
         return yield* new SyncHttpError({
           message: `Workspace sync HTTP failure: ${response.status}`,
