@@ -27,6 +27,9 @@ export const RETRY_INITIAL_DELAY = 2000
 export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+export const UPSTREAM_HTTP2_STREAM_ERROR = "upstream_http2_stream_error"
+export const UPSTREAM_HTTP2_MAX_RETRIES = 2
+export const UPSTREAM_HTTP2_RETRY_DELAY = 1_000
 
 const RETRYABLE_MESSAGE_PATTERNS = [
   /429|500|502|503|504|524/i,
@@ -175,6 +178,7 @@ function parseJSON(value: unknown) {
 export function policy(opts: {
   provider: string
   parse: (error: unknown) => Err
+  replaySafe?: () => boolean
   set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
 }) {
   return Schedule.fromStepWithMetadata(
@@ -182,8 +186,14 @@ export function policy(opts: {
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
+      const upstreamHTTP2 =
+        SessionV1.APIError.isInstance(error) && error.data.metadata?.code === UPSTREAM_HTTP2_STREAM_ERROR
+      if (upstreamHTTP2 && (meta.attempt > UPSTREAM_HTTP2_MAX_RETRIES || opts.replaySafe?.() === false))
+        return Cause.done(meta.attempt)
       return Effect.gen(function* () {
-        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
+        const wait = upstreamHTTP2
+          ? UPSTREAM_HTTP2_RETRY_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, meta.attempt - 1)
+          : delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({
           attempt: meta.attempt,

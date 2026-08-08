@@ -113,6 +113,7 @@ const layer = Layer.effect(
         reasoningMap: {},
       }
       let aborted = false
+      let replaySafe = true
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {
@@ -276,6 +277,17 @@ const layer = Layer.effect(
       }
 
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
+        if (
+          value.type === "text-start" ||
+          value.type === "reasoning-start" ||
+          value.type === "tool-input-start" ||
+          value.type === "tool-input-delta" ||
+          value.type === "tool-input-end" ||
+          value.type === "tool-call" ||
+          value.type === "tool-result" ||
+          value.type === "tool-error"
+        )
+          replaySafe = false
         switch (value.type) {
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
@@ -636,6 +648,7 @@ const layer = Layer.effect(
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
+            replaySafe = true
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
@@ -661,6 +674,7 @@ const layer = Layer.effect(
               SessionRetry.policy({
                 provider: input.model.providerID,
                 parse,
+                replaySafe: () => replaySafe,
                 set: (info) => {
                   return status.set(ctx.sessionID, {
                     type: "retry",

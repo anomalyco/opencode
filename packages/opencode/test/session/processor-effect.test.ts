@@ -226,6 +226,62 @@ const fragmentFailureLLM = Layer.succeed(
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
+const upstreamHTTP2Error = JSON.stringify({
+  message: "Upstream HTTP/2 stream failed",
+  type: "upstream_error",
+  code: "upstream_http2_stream_error",
+})
+let retrySuccessCalls = 0
+const retrySuccessLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () => {
+      retrySuccessCalls++
+      if (retrySuccessCalls <= 2) return Stream.make(LLMEvent.providerError({ message: upstreamHTTP2Error }))
+      return Stream.make(
+        LLMEvent.textStart({ id: "text-recovered" }),
+        LLMEvent.textDelta({ id: "text-recovered", text: "Recovered" }),
+        LLMEvent.textEnd({ id: "text-recovered" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      )
+    },
+  }),
+)
+const retrySuccessEnv = LayerNode.compile(root, [...replacements, [LLM.node, retrySuccessLLM]])
+const itRetrySuccess = testEffect(retrySuccessEnv)
+
+let retryExhaustedCalls = 0
+const retryExhaustedLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () => {
+      retryExhaustedCalls++
+      return Stream.make(LLMEvent.providerError({ message: upstreamHTTP2Error }))
+    },
+  }),
+)
+const retryExhaustedEnv = LayerNode.compile(root, [...replacements, [LLM.node, retryExhaustedLLM]])
+const itRetryExhausted = testEffect(retryExhaustedEnv)
+
+let partialHTTP2Calls = 0
+const partialHTTP2LLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () => {
+      partialHTTP2Calls++
+      return Stream.make(
+        LLMEvent.textStart({ id: "text-http2-partial" }),
+        LLMEvent.textDelta({ id: "text-http2-partial", text: "Partial" }),
+        LLMEvent.textEnd({ id: "text-http2-partial" }),
+        LLMEvent.providerError({ message: upstreamHTTP2Error }),
+      )
+    },
+  }),
+)
+const partialHTTP2Env = LayerNode.compile(root, [...replacements, [LLM.node, partialHTTP2LLM]])
+const itPartialHTTP2 = testEffect(partialHTTP2Env)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -1108,6 +1164,124 @@ itFragmentFailure.live("session.processor effect tests retain partial legacy par
         expect(seen).toContain(MessageV2.Event.PartUpdated.type)
         expect(seen).toContain(Session.Event.Error.type)
         expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
+      }),
+    { config: cfg },
+  ),
+)
+
+itRetrySuccess.live("session.processor retries upstream HTTP/2 stream errors twice before succeeding", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        retrySuccessCalls = 0
+        const { processors, session, provider } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "retry transient stream")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        const result = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "retry transient stream" }],
+          tools: {},
+        })
+
+        expect(result).toBe("continue")
+        expect(retrySuccessCalls).toBe(3)
+        expect(yield* MessageV2.parts(msg.id)).toEqual(
+          expect.arrayContaining([expect.objectContaining({ type: "text", text: "Recovered" })]),
+        )
+      }),
+    { config: cfg },
+  ),
+)
+
+itRetryExhausted.live("session.processor surfaces the third upstream HTTP/2 stream error", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        retryExhaustedCalls = 0
+        const { processors, session, provider } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "exhaust transient stream")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        const result = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "exhaust transient stream" }],
+          tools: {},
+        })
+
+        expect(result).toBe("stop")
+        expect(retryExhaustedCalls).toBe(3)
+        expect(handle.message.error).toMatchObject({
+          name: "APIError",
+          data: { metadata: { code: "upstream_http2_stream_error" } },
+        })
+      }),
+    { config: cfg },
+  ),
+)
+
+itPartialHTTP2.live("session.processor does not retry upstream HTTP/2 errors after assistant output", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        partialHTTP2Calls = 0
+        const { processors, session, provider } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "do not replay output")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        const result = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "do not replay output" }],
+          tools: {},
+        })
+
+        expect(result).toBe("stop")
+        expect(partialHTTP2Calls).toBe(1)
+        expect(yield* MessageV2.parts(msg.id)).toEqual(
+          expect.arrayContaining([expect.objectContaining({ type: "text", text: "Partial" })]),
+        )
       }),
     { config: cfg },
   ),
