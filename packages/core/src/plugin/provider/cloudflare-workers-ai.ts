@@ -2,7 +2,10 @@ import os from "os"
 import { App } from "../../app"
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import type { Form } from "@opencode-ai/schema/form"
 import { Provider } from "../../provider"
+import type { DeepMutable } from "../../schema"
+import { iife } from "../../util/iife"
 import { configuredSettings } from "./configured"
 
 const providerID = Provider.ID.make("cloudflare-workers-ai")
@@ -11,24 +14,25 @@ export const CloudflareWorkersAIPlugin = define({
   id: "opencode.provider.cloudflare-workers-ai",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
+    const forms = iife((): DeepMutable<Form.Fields> | undefined => {
+      if (typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})) return
+      return [
+        {
+          type: "string",
+          key: "accountId",
+          title: "Enter your Cloudflare Account ID",
+          placeholder: "e.g. 1234567890abcdef1234567890abcdef",
+          required: true,
+        },
+      ]
+    })
     yield* ctx.integration.transform((draft) => {
       draft.method.update({
         integrationID: providerID,
         method: {
           type: "key",
           label: "API key",
-          forms:
-            typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})
-              ? undefined
-              : [
-                  {
-                    type: "string",
-                    key: "accountId",
-                    title: "Enter your Cloudflare Account ID",
-                    placeholder: "e.g. 1234567890abcdef1234567890abcdef",
-                    required: true,
-                  },
-                ],
+          forms,
         },
       })
     })

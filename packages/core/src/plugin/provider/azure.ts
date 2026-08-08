@@ -1,6 +1,9 @@
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import type { Form } from "@opencode-ai/schema/form"
 import { Provider } from "../../provider"
+import type { DeepMutable } from "../../schema"
+import { iife } from "../../util/iife"
 import { configuredSettings } from "./configured"
 
 function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
@@ -15,24 +18,25 @@ export const AzurePlugin = define({
   id: "opencode.provider.azure",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(Provider.ID.azure)
+    const forms = iife((): DeepMutable<Form.Fields> | undefined => {
+      if (resolveResourceName(configured) || typeof configured?.baseURL === "string") return
+      return [
+        {
+          type: "string",
+          key: "resourceName",
+          title: "Enter Azure Resource Name",
+          placeholder: "e.g. my-models",
+          required: true,
+        },
+      ]
+    })
     yield* ctx.integration.transform((draft) => {
       draft.method.update({
         integrationID: Provider.ID.azure,
         method: {
           type: "key",
           label: "API key",
-          forms:
-            resolveResourceName(configured) || typeof configured?.baseURL === "string"
-              ? undefined
-              : [
-                  {
-                    type: "string",
-                    key: "resourceName",
-                    title: "Enter Azure Resource Name",
-                    placeholder: "e.g. my-models",
-                    required: true,
-                  },
-                ],
+          forms,
         },
       })
     })

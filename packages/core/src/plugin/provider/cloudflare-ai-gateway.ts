@@ -2,7 +2,10 @@ import os from "os"
 import { App } from "../../app"
 import { Effect, Option, Schema } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import type { Form } from "@opencode-ai/schema/form"
 import { Provider } from "../../provider"
+import type { DeepMutable } from "../../schema"
+import { iife } from "../../util/iife"
 import { configuredSettings } from "./configured"
 
 const providerID = Provider.ID.make("cloudflare-ai-gateway")
@@ -11,44 +14,39 @@ export const CloudflareAIGatewayPlugin = define({
   id: "opencode.provider.cloudflare-ai-gateway",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
-    const hasBaseURL = typeof configured?.baseURL === "string"
-    yield* ctx.integration.transform((draft) => {
-      const hasAccountId =
-        hasBaseURL || Boolean(process.env.CLOUDFLARE_ACCOUNT_ID || stringOption(configured ?? {}, "accountId"))
-      const hasGatewayId =
-        hasBaseURL ||
-        Boolean(
-          process.env.CLOUDFLARE_GATEWAY_ID ||
-            stringOption(configured ?? {}, "gatewayId") ||
-            stringOption(configured ?? {}, "gateway"),
-        )
+    const forms = iife((): DeepMutable<Form.Fields> | undefined => {
+      if (typeof configured?.baseURL === "string") return
+      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || stringOption(configured ?? {}, "accountId")
+      const gatewayId =
+        process.env.CLOUDFLARE_GATEWAY_ID ||
+        stringOption(configured ?? {}, "gatewayId") ||
+        stringOption(configured ?? {}, "gateway")
+      if (accountId && gatewayId) return
       const accountIdForm = {
-        type: "string" as const,
+        type: "string",
         key: "accountId",
         title: "Enter your Cloudflare Account ID",
         placeholder: "e.g. 1234567890abcdef1234567890abcdef",
         required: true,
-      }
+      } satisfies DeepMutable<Form.Field>
       const gatewayIdForm = {
-        type: "string" as const,
+        type: "string",
         key: "gatewayId",
         title: "Enter your Cloudflare AI Gateway ID",
         placeholder: "e.g. my-gateway",
         required: true,
-      }
+      } satisfies DeepMutable<Form.Field>
+      if (accountId) return [gatewayIdForm]
+      if (gatewayId) return [accountIdForm]
+      return [accountIdForm, gatewayIdForm]
+    })
+    yield* ctx.integration.transform((draft) => {
       draft.method.update({
         integrationID: providerID,
         method: {
           type: "key",
           label: "Gateway API token",
-          forms:
-            !hasAccountId && !hasGatewayId
-              ? [accountIdForm, gatewayIdForm]
-              : !hasAccountId
-                ? [accountIdForm]
-                : !hasGatewayId
-                  ? [gatewayIdForm]
-                  : undefined,
+          forms,
         },
       })
     })
