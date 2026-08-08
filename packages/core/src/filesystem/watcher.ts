@@ -41,6 +41,10 @@ function getBackend() {
   if (process.platform === "linux") return "inotify"
 }
 
+export function normalizeEventPath(file: string): string {
+  return process.platform === "win32" ? file.replaceAll("\\", "/") : file
+}
+
 function protecteds(dir: string) {
   return Protected.paths().filter((item) => {
     const relative = path.relative(dir, item)
@@ -85,9 +89,10 @@ const layer = Layer.effect(
 
     const callback: ParcelWatcher.SubscribeCallback = (_error, updates) => {
       for (const update of updates) {
-        if (update.type === "create") runFork(events.publish(Event.Updated, { file: update.path, event: "add" }))
-        if (update.type === "update") runFork(events.publish(Event.Updated, { file: update.path, event: "change" }))
-        if (update.type === "delete") runFork(events.publish(Event.Updated, { file: update.path, event: "unlink" }))
+        const file = normalizeEventPath(update.path)
+        if (update.type === "create") runFork(events.publish(Event.Updated, { file, event: "add" }))
+        if (update.type === "update") runFork(events.publish(Event.Updated, { file, event: "change" }))
+        if (update.type === "delete") runFork(events.publish(Event.Updated, { file, event: "unlink" }))
       }
     }
 
