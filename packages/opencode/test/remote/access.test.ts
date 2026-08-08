@@ -17,6 +17,24 @@ describe("RemoteAccess", () => {
     expect(RemoteAccess.authorized(grant!.token, other, 2_000)).toBe(false)
   })
 
+  test("new pairing invalidates the previous pending ticket for the same session", () => {
+    const session = SessionID.make("ses_remote_pair_replace")
+    const first = RemoteAccess.pair(session, 1_000)
+    const second = RemoteAccess.pair(session, 2_000)
+
+    expect(RemoteAccess.redeem(first.ticket, 3_000)).toBeUndefined()
+    expect(RemoteAccess.redeem(second.ticket, 3_000)?.sessionID).toBe(session)
+  })
+
+  test("new grant invalidates the previous phone grant for the same session", () => {
+    const session = SessionID.make("ses_remote_grant_replace")
+    const first = RemoteAccess.redeem(RemoteAccess.pair(session, 1_000).ticket, 2_000)!
+    const second = RemoteAccess.redeem(RemoteAccess.pair(session, 3_000).ticket, 4_000)!
+
+    expect(RemoteAccess.authorized(first.token, session, 4_000)).toBe(false)
+    expect(RemoteAccess.authorized(second.token, session, 4_000)).toBe(true)
+  })
+
   test("expired pairing ticket is rejected", () => {
     const session = SessionID.make("ses_remote_expired")
     const pair = RemoteAccess.pair(session, 1_000)

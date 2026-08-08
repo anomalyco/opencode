@@ -34,8 +34,21 @@ function prune(now = Date.now()) {
   }
 }
 
+function revokePairings(sessionID: SessionID) {
+  for (const [id, value] of pairings) {
+    if (value.sessionID === sessionID) pairings.delete(id)
+  }
+}
+
+function revokeGrants(sessionID: SessionID) {
+  for (const [id, value] of grants) {
+    if (value.sessionID === sessionID) grants.delete(id)
+  }
+}
+
 export function pair(sessionID: SessionID, now = Date.now()) {
   prune(now)
+  revokePairings(sessionID)
   const ticket = token()
   pairings.set(key(ticket), { sessionID, expiresAt: now + PAIR_TTL_MS })
   return { ticket, expires_in: Math.floor(PAIR_TTL_MS / 1000) }
@@ -49,6 +62,7 @@ export function redeem(ticket: string, now = Date.now()) {
   pairings.delete(ticketKey)
   if (pairing.expiresAt <= now) return
 
+  revokeGrants(pairing.sessionID)
   const accessToken = token()
   grants.set(key(accessToken), { sessionID: pairing.sessionID, expiresAt: now + GRANT_TTL_MS })
   return {
@@ -66,12 +80,8 @@ export function authorized(accessToken: string, sessionID: string, now = Date.no
 }
 
 export function revoke(sessionID: SessionID) {
-  for (const [id, value] of pairings) {
-    if (value.sessionID === sessionID) pairings.delete(id)
-  }
-  for (const [id, value] of grants) {
-    if (value.sessionID === sessionID) grants.delete(id)
-  }
+  revokePairings(sessionID)
+  revokeGrants(sessionID)
 }
 
 export function resetForTest() {
