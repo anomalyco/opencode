@@ -12,6 +12,13 @@ const channel = (() => {
   return "dev"
 })()
 
+// Version injected at build time by packages/opencode/script/build.ts (OPENCODE_VERSION).
+// Falls back to the app package.json version so local/dev builds still have a version.
+const version = (() => {
+  const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"))
+  return process.env.OPENCODE_VERSION ?? pkg.version
+})()
+
 /**
  * @type {import("vite").PluginOption}
  */
@@ -27,6 +34,7 @@ export default [
         },
         define: {
           "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+          "import.meta.env.VITE_OPENCODE_VERSION": JSON.stringify(version),
         },
         worker: {
           format: "es",
