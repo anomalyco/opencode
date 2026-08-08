@@ -16,7 +16,6 @@ import { SessionPendingTable, SessionMessageTable, SessionTable } from "./sql"
 import { Slug } from "../util/slug"
 import { Money } from "@opencode-ai/schema/money"
 import type { SessionSchema } from "./schema"
-import { WorkspaceTable } from "../control-plane/workspace.sql"
 
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
@@ -376,13 +375,6 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (!stored) return yield* Effect.die(new SessionAlreadyProjected())
-        if (!event.data.location.workspaceID) return
-        yield* db
-          .update(WorkspaceTable)
-          .set({ time_used: Date.now() })
-          .where(eq(WorkspaceTable.id, event.data.location.workspaceID))
-          .run()
-          .pipe(Effect.orDie)
       }),
     )
     yield* bus.project(SessionEvent.Moved, (event) =>
