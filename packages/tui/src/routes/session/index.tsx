@@ -1,5 +1,6 @@
 import {
   batch,
+  createComputed,
   createContext,
   createEffect,
   createMemo,
@@ -74,7 +75,7 @@ import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
-import { getScrollAcceleration } from "../../util/scroll"
+import { getScrollAcceleration, compensatePruneScrollTop } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
@@ -344,6 +345,25 @@ export function Session() {
   let seeded = false
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef | undefined
+
+  // When the oldest messages are pruned while the user is scrolled up reading a
+  // backlog, the scrollbox holds scrollTop fixed and the reading position
+  // drifts down the transcript. This runs before the message list is re-rendered
+  // (the pruned children are still laid out) and compensates scrollTop by the
+  // height of the content that disappeared above the first surviving message.
+  createComputed(() => {
+    const list = messages()
+    if (!scroll || scroll.isDestroyed) return
+    const compensated = compensatePruneScrollTop({
+      children: scroll.getChildren(),
+      messageIDs: new Set(list.map((message) => message.id)),
+      scrollTop: scroll.scrollTop,
+      scrollHeight: scroll.scrollHeight,
+      viewportHeight: scroll.viewport.height,
+    })
+    if (compensated !== scroll.scrollTop) scroll.scrollTop = compensated
+  })
+
   const bind = (r: PromptRef | undefined) => {
     prompt = r
     promptRef.set(r)
@@ -1491,7 +1511,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const backgroundShortcut = useCommandShortcut("session.background")
 
   return (
-    <>
+    <box id={props.message.id} flexShrink={0}>
       <For each={props.parts}>
         {(part, index) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
@@ -1572,7 +1592,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           </box>
         </Match>
       </Switch>
-    </>
+    </box>
   )
 }
 
