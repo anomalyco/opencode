@@ -141,7 +141,7 @@ export const layer = (options?: Options) => Layer.effect(
             Effect.logWarning("failed to discover wellknown config", { error }).pipe(Effect.as([] as const)),
           ),
         )
-      return yield* Effect.forEach(entries, (entry) =>
+      const resolved = yield* Effect.forEach(entries, (entry) =>
         Effect.gen(function* () {
           const auth = entry.manifest.auth
           if (!auth) return []
@@ -151,20 +151,29 @@ export const layer = (options?: Options) => Layer.effect(
           if (!credential || credential.value.type !== "key") return []
           const variables = { [auth.env]: credential.value.key }
           const configs = yield* wellknown.resolve(entry, variables).pipe(Effect.orDie)
-          return yield* Effect.forEach(configs, (config) =>
-            ConfigVariable.substitute({
-              type: "virtual",
-              source: entry.origin,
-              dir: entry.origin,
-              text: JSON.stringify(config),
-              env: variables,
-            }).pipe(
-              Effect.flatMap((text) => parseInfo(text, entry.origin)),
-              Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
-            ),
-          ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
+          return configs.map((config) => ({ config, source: entry.origin, variables }))
         }),
       ).pipe(Effect.map((documents) => documents.flat()))
+      // V1 merged authenticated configs before applying this allowlist. Give every
+      // migrated document the union so one source's wildcard deny cannot hide another.
+      const enabledProviders = Array.from(
+        new Set(resolved.flatMap((item) => legacyEnabledProviders(item.config) ?? [])),
+      )
+      return yield* Effect.forEach(resolved, (item) => {
+        const config = legacyEnabledProviders(item.config)
+          ? { ...item.config, enabled_providers: enabledProviders }
+          : item.config
+        return ConfigVariable.substitute({
+          type: "virtual",
+          source: item.source,
+          dir: item.source,
+          text: JSON.stringify(config),
+          env: item.variables,
+        }).pipe(
+          Effect.flatMap((text) => parseInfo(text, item.source)),
+          Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
+        )
+      }).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
     })
 
     const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
@@ -359,6 +368,13 @@ export const layer = (options?: Options) => Layer.effect(
     })
   }),
 )
+
+function legacyEnabledProviders(config: WellKnown.Config) {
+  if (typeof config !== "object" || config === null) return
+  if (!Array.isArray(config.enabled_providers)) return
+  if (!config.enabled_providers.every((provider): provider is string => typeof provider === "string")) return
+  return config.enabled_providers
+}
 
 export function configured(options?: Options) {
   return makeLocationNode({

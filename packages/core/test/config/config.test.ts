@@ -307,7 +307,7 @@ describe("Config", () => {
     }),
   )
 
-  it.live("loads authenticated wellknown config before user configuration", () =>
+  it.live("loads and merges authenticated wellknown config before user configuration", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -322,6 +322,7 @@ describe("Config", () => {
           })
 
           const integrationID = Integration.ID.make("https://example.com")
+          const supplementalID = Integration.ID.make("https://models.example.com")
           let key = "secret"
           const credentialNode = makeGlobalNode({
             service: Credential.Service,
@@ -329,13 +330,16 @@ describe("Config", () => {
               Credential.Service,
               Credential.Service.of({
                 all: () => Effect.die("unused Credential.all"),
-                list: () =>
+                list: (requested) =>
                   Effect.succeed([
                     new Credential.Info({
                       id: Credential.ID.create(),
-                      integrationID,
+                      integrationID: requested,
                       label: "default",
-                      value: Credential.Key.make({ type: "key", key }),
+                      value: Credential.Key.make({
+                        type: "key",
+                        key: requested === integrationID ? key : "supplemental",
+                      }),
                     }),
                   ]),
                 get: () => Effect.die("unused Credential.get"),
@@ -351,17 +355,28 @@ describe("Config", () => {
             integrationID,
             manifest: { auth: { command: ["login"], env: "TOKEN" } },
           }
+          const supplemental: WellKnown.Entry = {
+            origin: "https://models.example.com",
+            integrationID: supplementalID,
+            manifest: { auth: { command: ["login"], env: "TOKEN" } },
+          }
           const wellknownNode = makeGlobalNode({
             service: WellKnown.Service,
             layer: Layer.succeed(
               WellKnown.Service,
               WellKnown.Service.of({
-                entries: () => Effect.succeed([entry]),
-                snapshot: () => [entry],
+                entries: () => Effect.succeed([entry, supplemental]),
+                snapshot: () => [entry, supplemental],
                 refresh: () => Effect.succeed(false),
                 add: () => Effect.die("unused Wellknown.add"),
                 remove: () => Effect.die("unused Wellknown.remove"),
-                resolve: (_entry, variables) => Effect.succeed([{ shell: variables.TOKEN }]),
+                resolve: (resolved, variables) =>
+                  Effect.succeed([
+                    {
+                      shell: variables.TOKEN,
+                      enabled_providers: [resolved.integrationID === integrationID ? "primary" : "fable"],
+                    },
+                  ]),
               }),
             ),
             deps: [],
@@ -376,7 +391,24 @@ describe("Config", () => {
               initial.flatMap((entry) =>
                 entry.type === "document" && entry.info.shell ? [entry.info.shell] : [],
               ),
-            ).toEqual(["secret", "global", "project"])
+            ).toEqual(["secret", "supplemental", "global", "project"])
+            expect(
+              initial
+                .filter((entry): entry is Document => entry.type === "document" && entry.info.shell !== undefined)
+                .slice(0, 2)
+                .map((entry) => entry.info.experimental?.policies),
+            ).toEqual([
+              [
+                { action: "provider.use", resource: "*", effect: "deny" },
+                { action: "provider.use", resource: "primary", effect: "allow" },
+                { action: "provider.use", resource: "fable", effect: "allow" },
+              ],
+              [
+                { action: "provider.use", resource: "*", effect: "deny" },
+                { action: "provider.use", resource: "primary", effect: "allow" },
+                { action: "provider.use", resource: "fable", effect: "allow" },
+              ],
+            ])
             const updated = yield* bus
               .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
@@ -390,7 +422,7 @@ describe("Config", () => {
               refreshed.flatMap((entry) =>
                 entry.type === "document" && entry.info.shell ? [entry.info.shell] : [],
               ),
-            ).toEqual(["next", "global", "project"])
+            ).toEqual(["next", "supplemental", "global", "project"])
           }).pipe(
             Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
           )
