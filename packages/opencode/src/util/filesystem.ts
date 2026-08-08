@@ -215,6 +215,16 @@ export async function* up(options: { targets: string[]; start: string; stop?: st
   let current = start
   while (true) {
     for (const target of targets) {
+      // Wildcard targets like "*.cabal" name a shape rather than a concrete path, so an
+      // existence probe can never match them. Scan the directory instead. `include: "all"`
+      // is required because some glob markers resolve to directories (e.g. Xcode's
+      // "*.xcodeproj" / "*.xcworkspace" bundles), not just files.
+      if (target.includes("*")) {
+        for (const match of await Glob.scan(target, { cwd: current, absolute: true, include: "all", dot: true })) {
+          yield match
+        }
+        continue
+      }
       const search = join(current, target)
       if (await exists(search)) yield search
     }
