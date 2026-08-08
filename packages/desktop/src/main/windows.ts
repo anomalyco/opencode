@@ -220,6 +220,11 @@ export function createMainWindow(id: string = randomUUID()) {
   state.manage(win)
   registerWindow(win, id)
   wireFullscreen(win)
+  win.webContents.on("will-frame-navigate", (event) => {
+    if (isRendererUrl(event.url)) return
+    event.preventDefault()
+  })
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
   loadWindow(win, "index.html")
   wireZoom(win)
 
