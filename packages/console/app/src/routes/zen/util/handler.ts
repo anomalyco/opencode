@@ -238,6 +238,10 @@ export async function handler(
                 if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
                 return
               }
+              if (v === "$org") {
+                if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID.replace("wrk_", "org_"))
+                return
+              }
               headers.set(k, v)
             })
             headers.delete("host")
