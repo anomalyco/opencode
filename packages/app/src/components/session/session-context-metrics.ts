@@ -11,6 +11,9 @@ type Model = {
   limit: {
     context: number
   }
+  cost?: {
+    currency?: string
+  }
 }
 
 type Context = {
