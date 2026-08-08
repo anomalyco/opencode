@@ -341,9 +341,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 Effect.catchTag("Session.SkillNotFoundError", (error) =>
                   Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
                 ),
-                Effect.catchTag("Session.SkillAttachmentError", (error) =>
-                  Effect.fail(new InvalidRequestError({ message: error.message, field: "skills" })),
-                ),
               ),
           }
         }),
@@ -404,9 +401,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 ),
                 Effect.catchTag("Session.SkillNotFoundError", (error) =>
                   Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
-                ),
-                Effect.catchTag("Session.SkillAttachmentError", (error) =>
-                  Effect.fail(new InvalidRequestError({ message: error.message, field: "skills" })),
                 ),
               ),
           }

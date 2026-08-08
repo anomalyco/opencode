@@ -1,6 +1,7 @@
 export * as SkillTool from "./skill"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import path from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
@@ -8,6 +9,7 @@ import { Skill } from "../../skill"
 import { Permission } from "../../permission"
 
 export const name = "skill"
+const FILE_LIMIT = 10
 
 export const Input = Schema.Struct({
   id: Skill.ID.annotate({ description: "The ID of the skill from the available skills list" }),
@@ -57,11 +59,18 @@ export const Plugin = {
                   agent: context.agent,
                   source: { type: "tool", messageID: context.messageID, id: context.id },
                 })
-                const output = yield* Skill.modelOutput(fs, skill)
+                const directory = path.dirname(skill.location)
+                const files =
+                  path.basename(skill.location) === "SKILL.md"
+                    ? (yield* fs.scan("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
+                        .filter((file) => path.basename(file) !== "SKILL.md")
+                        .toSorted()
+                        .slice(0, FILE_LIMIT)
+                    : []
                 return {
                   name: skill.name,
-                  directory: output.directory,
-                  output: output.output,
+                  directory,
+                  output: toModelOutput(skill, files),
                 }
               }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
             }).pipe(
