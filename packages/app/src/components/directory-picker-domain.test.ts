@@ -139,6 +139,7 @@ test("resolves directory autocomplete from the current browser root", async () =
           directories.push(input.location?.directory ?? "")
           return Promise.resolve({ data: [] })
         },
+        list: () => Promise.resolve({ data: [] }),
       },
     },
   } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
@@ -194,6 +195,26 @@ test("lists the default directory when empty search is unsupported", async () =>
   expect(results).toHaveLength(60)
   expect(results.at(-1)).toBe("/home/luke/project-59")
   expect(calls).toEqual(["/home/luke"])
+})
+
+test("matches the default directory listing when typed search is unsupported", async () => {
+  const sdk = {
+    api: {
+      file: {
+        find: () => Promise.resolve({ data: [] }),
+        list: () =>
+          Promise.resolve({
+            data: [
+              { path: "Documents/", type: "directory" },
+              { path: "Downloads/", type: "directory" },
+            ],
+          }),
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/home/luke" })
+
+  expect(await search("documents")).toEqual(["/home/luke/Documents"])
 })
 
 test("searches from an absolute root without a default base", async () => {
