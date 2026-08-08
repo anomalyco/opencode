@@ -3,6 +3,7 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
@@ -140,44 +141,46 @@ export function PromptInputV2(props: PromptInputV2Props) {
         </Show>
 
         <div class="relative min-h-[60px]">
-          <div
-            ref={(element) => {
-              editor = element
-              props.controller.setEditor(element)
-              renderPromptInputV2Editor(element, props.controller.parts())
-            }}
-            data-component="prompt-input"
-            role="textbox"
-            aria-multiline="true"
-            aria-label="Prompt"
-            contenteditable={!props.disabled && !props.readOnly}
-            autocapitalize={state.mode === "normal" ? "sentences" : "off"}
-            autocorrect={state.mode === "normal" ? "on" : "off"}
-            spellcheck={state.mode === "normal"}
-            // @ts-expect-error
-            autocomplete="off"
-            class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none empty:before:content-['\200B'] [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
-            classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
-            onInput={(event) => {
-              const cursor = promptInputV2Cursor(event.currentTarget)
-              const prompt = parsePromptInputV2Editor(event.currentTarget)
-              const images = props.controller.parts().filter((part) => part.type === "image")
-              localInput = true
-              props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
-            }}
-            onKeyDown={(event) => {
-              if (props.controller.onKeyDown(event)) return
-              if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-                event.preventDefault()
-                if (event.repeat) return
-                props.controller.submit()
-              }
-            }}
-            onKeyUp={updateCursor}
-            onPointerUp={updateCursor}
-            onPaste={props.controller.onPaste}
-            onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
-          />
+          <ScrollView class="min-h-[60px] max-h-[180px]">
+            <div
+              ref={(element) => {
+                editor = element
+                props.controller.setEditor(element)
+                renderPromptInputV2Editor(element, props.controller.parts())
+              }}
+              data-component="prompt-input"
+              role="textbox"
+              aria-multiline="true"
+              aria-label="Prompt"
+              contenteditable={!props.disabled && !props.readOnly}
+              autocapitalize={state.mode === "normal" ? "sentences" : "off"}
+              autocorrect={state.mode === "normal" ? "on" : "off"}
+              spellcheck={state.mode === "normal"}
+              // @ts-expect-error
+              autocomplete="off"
+              class="relative z-10 block min-h-[60px] w-full whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none empty:before:content-['\200B'] [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
+              classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
+              onInput={(event) => {
+                const cursor = promptInputV2Cursor(event.currentTarget)
+                const prompt = parsePromptInputV2Editor(event.currentTarget)
+                const images = props.controller.parts().filter((part) => part.type === "image")
+                localInput = true
+                props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
+              }}
+              onKeyDown={(event) => {
+                if (props.controller.onKeyDown(event)) return
+                if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+                  event.preventDefault()
+                  if (event.repeat) return
+                  props.controller.submit()
+                }
+              }}
+              onKeyUp={updateCursor}
+              onPointerUp={updateCursor}
+              onPaste={props.controller.onPaste}
+              onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
+            />
+          </ScrollView>
           <Show when={!props.controller.value()}>
             <div
               class="pointer-events-none absolute inset-x-0 top-0 px-4 pt-4 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
