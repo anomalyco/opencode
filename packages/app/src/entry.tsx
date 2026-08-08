@@ -104,7 +104,9 @@ const getCurrentUrl = () => {
       : location.origin,
   )
   url.pathname = import.meta.env.VITE_OPENCODE_SERVER_BASE_URL ?? ""
-  return url.href
+  // Stripping the trailing slash since some consumer code is sensitive to it.
+  // For example, ~18 tests (e.g. e2e/regression/legacy-new-session.spec.ts) fail on "http://127.0.0.1:4096/", but succeed on "http://127.0.0.1:4096".
+  return url.href.replace(/\/$/, "")
 }
 
 const getDefaultUrl = () => {
