@@ -1154,15 +1154,6 @@ function App(props: { pair?: DialogPairCredentials }) {
     }
   })
 
-  event.on("session.execution.failed", (evt, { workspace }) => {
-    if (workspace !== (location.current?.workspaceID ?? data.location.default().workspaceID)) return
-    toast.show({
-      variant: "error",
-      message: evt.data.error.message,
-      duration: 5000,
-    })
-  })
-
   // Suppress the full-screen overlay for transient startup and event-stream retry states.
   // Initial connection gets a longer grace period; retries surface more quickly.
   const [showReconnecting, setShowReconnecting] = createSignal(false)

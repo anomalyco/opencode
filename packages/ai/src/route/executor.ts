@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer } from "effect"
+import { Cause, Context, Effect, Layer, Option, Schema } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -198,8 +198,20 @@ const responseBody = (body: string | void, request: HttpClientRequest.HttpClient
   return { body: redacted.slice(0, BODY_LIMIT), bodyTruncated: true }
 }
 
+const decodeProviderBody = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({
+      message: Schema.optionalKey(Schema.String),
+      error: Schema.optionalKey(Schema.Struct({ message: Schema.optionalKey(Schema.String) })),
+    }),
+  ),
+)
+
 const providerMessage = (status: number, body: { readonly body?: string }) => {
-  if (body.body && body.body.length <= 500) return `Provider request failed with HTTP ${status}: ${body.body}`
+  if (body.body && body.body.length <= 500) {
+    const decoded = Option.getOrUndefined(decodeProviderBody(body.body))
+    return `Provider request failed with HTTP ${status}: ${decoded?.error?.message ?? decoded?.message ?? body.body}`
+  }
   return `Provider request failed with HTTP ${status}`
 }
 
