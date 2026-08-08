@@ -12,7 +12,6 @@ import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { RemoteAuthorization } from "../middleware/remote-authorization"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
-import { PromptPayload } from "./session"
 
 const remoteRoot = "/remote"
 
@@ -34,6 +33,15 @@ export const RemoteBootstrap = Schema.Struct({
   status: SessionStatus.Info,
   permissions: Schema.Array(PermissionV1.Request),
   questions: Schema.Array(Question.Request),
+})
+
+export const RemoteMessagePayload = Schema.Struct({
+  parts: Schema.Array(
+    Schema.Struct({
+      type: Schema.Literal("text"),
+      text: Schema.String,
+    }),
+  ),
 })
 
 export const RemotePermissionReply = Schema.Struct({
@@ -95,7 +103,7 @@ export const RemoteApi = HttpApi.make("remote").add(
       HttpApiEndpoint.post("message", `${remoteRoot}/session/:sessionID/message`, {
         params: { sessionID: SessionID },
         query: WorkspaceRoutingQuery,
-        payload: PromptPayload,
+        payload: RemoteMessagePayload,
         success: HttpApiSchema.NoContent,
         error: [HttpApiError.BadRequest, HttpApiError.Forbidden, ApiNotFoundError],
       }),
