@@ -93,7 +93,6 @@ export const RemoteAdminApi = HttpApi.make("remote-admin").add(
         params: { sessionID: SessionID },
         query: WorkspaceRoutingQuery,
         success: Schema.Boolean,
-        error: ApiNotFoundError,
       }),
     )
     .middleware(InstanceContextMiddleware)

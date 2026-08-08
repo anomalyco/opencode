@@ -81,8 +81,7 @@ export const remoteAdminHandlers = HttpApiBuilder.group(RemoteAdminApi, "remote-
         }),
       )
       .handle("revoke", (ctx) =>
-        Effect.gen(function* () {
-          yield* requireSession(ctx.params.sessionID)
+        Effect.sync(() => {
           RemoteAccess.revoke(ctx.params.sessionID)
           return true
         }),
