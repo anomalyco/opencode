@@ -24,6 +24,7 @@ const blockedRequestHeaders = new Set([
   "keep-alive",
   "proxy-authorization",
   "proxy-authenticate",
+  "proxy-connection",
   "te",
   "trailer",
   "transfer-encoding",
@@ -34,6 +35,7 @@ const blockedResponseHeaders = new Set([
   "connection",
   "keep-alive",
   "proxy-authenticate",
+  "proxy-connection",
   "trailer",
   "transfer-encoding",
   "upgrade",
@@ -45,11 +47,22 @@ export function createRemoteGateway(options: RemoteGatewayOptions) {
     throw new Error(`Unsupported remote gateway upstream protocol: ${upstream.protocol}`)
   }
 
+  const getNetworkInterfaces = options.networkInterfaces ?? networkInterfaces
   let server: http.Server | undefined
   let info: RemoteGatewayInfo | undefined
 
+  const currentInfo = () => {
+    if (!server || !info) return
+    info = {
+      port: info.port,
+      urls: lanUrls(info.port, getNetworkInterfaces()),
+    }
+    return info
+  }
+
   const start = async (): Promise<RemoteGatewayInfo> => {
-    if (server && info) return info
+    const current = currentInfo()
+    if (current) return current
 
     const next = http.createServer((request, response) => {
       if (!isAllowedNetworkRequest(request)) {
@@ -92,7 +105,7 @@ export function createRemoteGateway(options: RemoteGatewayOptions) {
     server = next
     info = {
       port: address.port,
-      urls: lanUrls(address.port, (options.networkInterfaces ?? networkInterfaces)()),
+      urls: lanUrls(address.port, getNetworkInterfaces()),
     }
     options.logger?.log("remote gateway started", { port: info.port, urls: info.urls })
     return info
@@ -110,7 +123,7 @@ export function createRemoteGateway(options: RemoteGatewayOptions) {
   return {
     start,
     stop,
-    status: () => info,
+    status: currentInfo,
   }
 }
 

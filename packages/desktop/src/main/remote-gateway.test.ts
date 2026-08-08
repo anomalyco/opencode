@@ -124,7 +124,33 @@ describe("remote gateway", () => {
     await gateway.stop()
   })
 
-  test("strips Connection-declared hop-by-hop request headers", async () => {
+  test("refreshes advertised LAN addresses while keeping the gateway port", async () => {
+    const upstream = await listen((_request, response) => response.end("ok"))
+    let address = "192.168.50.12"
+    const gateway = createRemoteGateway({
+      upstreamUrl: origin(upstream),
+      networkInterfaces: () => ({ wifi: [networkAddress(address)] }),
+    })
+
+    const first = await gateway.start()
+    expect(first.urls).toEqual([`http://192.168.50.12:${first.port}`])
+
+    address = "192.168.60.24"
+    expect(gateway.status()).toEqual({
+      port: first.port,
+      urls: [`http://192.168.60.24:${first.port}`],
+    })
+
+    const second = await gateway.start()
+    expect(second).toEqual({
+      port: first.port,
+      urls: [`http://192.168.60.24:${first.port}`],
+    })
+
+    await gateway.stop()
+  })
+
+  test("strips fixed and Connection-declared hop-by-hop request headers", async () => {
     let seen: http.IncomingHttpHeaders = {}
     const upstream = await listen((request, response) => {
       seen = request.headers
@@ -136,19 +162,23 @@ describe("remote gateway", () => {
     await rawRequest(info.port, {
       connection: "keep-alive, x-remote-hop",
       "keep-alive": "timeout=5",
+      "proxy-connection": "keep-alive",
       "x-remote-hop": "secret",
       "x-end-to-end": "keep",
     })
 
+    expect(seen["keep-alive"]).toBeUndefined()
+    expect(seen["proxy-connection"]).toBeUndefined()
     expect(seen["x-remote-hop"]).toBeUndefined()
     expect(seen["x-end-to-end"]).toBe("keep")
 
     await gateway.stop()
   })
 
-  test("strips Connection-declared hop-by-hop response headers", async () => {
+  test("strips fixed and Connection-declared hop-by-hop response headers", async () => {
     const upstream = await listen((_request, response) => {
       response.setHeader("connection", "x-remote-hop")
+      response.setHeader("proxy-connection", "keep-alive")
       response.setHeader("x-remote-hop", "secret")
       response.setHeader("x-end-to-end", "keep")
       response.end("ok")
@@ -157,6 +187,7 @@ describe("remote gateway", () => {
     const info = await gateway.start()
 
     const response = await fetch(`http://127.0.0.1:${info.port}/remote/mobile`)
+    expect(response.headers.get("proxy-connection")).toBeNull()
     expect(response.headers.get("x-remote-hop")).toBeNull()
     expect(response.headers.get("x-end-to-end")).toBe("keep")
 
