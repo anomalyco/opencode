@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/session-ui",
-  "version": "1.18.11",
+  "version": "1.18.15",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -31,7 +31,6 @@
   "devDependencies": {
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
-    "@types/katex": "0.16.7",
     "@types/luxon": "catalog:",
     "@typescript/native-preview": "catalog:",
     "typescript": "catalog:",
@@ -54,11 +53,8 @@
     "diff": "catalog:",
     "dompurify": "3.3.1",
     "fuzzysort": "catalog:",
-    "katex": "0.16.27",
     "luxon": "catalog:",
     "marked": "catalog:",
-    "marked-katex-extension": "5.1.6",
-    "marked-shiki": "catalog:",
     "morphdom": "2.7.8",
     "motion": "12.34.5",
     "remeda": "catalog:",

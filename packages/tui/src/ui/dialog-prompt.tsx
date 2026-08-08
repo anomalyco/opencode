@@ -96,6 +96,7 @@ export function DialogPrompt(props: DialogPromptProps) {
           textColor={props.busy ? theme.textMuted : theme.text}
           focusedTextColor={props.busy ? theme.textMuted : theme.text}
           cursorColor={props.busy ? theme.backgroundElement : theme.text}
+          cursorStyle={tuiConfig.cursor}
         />
         <Show when={props.busy}>
           <Spinner color={theme.textMuted}>{props.busyText ?? "Working..."}</Spinner>
