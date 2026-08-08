@@ -85,9 +85,14 @@ export function DialogMcp() {
             setPendingAdd(name)
             sync.set("mcp", { ...sync.data.mcp, [name]: { status: "disabled" } })
             dialog.replace(() => <DialogMcp />)
-            sdk.client.mcp.add({ name, config }).then(() => {
-              refreshStatus()
-              toast.show({ variant: "success", message: `MCP "${name}" added` })
+            sdk.client.mcp.add({ name, config }).then(async () => {
+              await refreshStatus()
+              const status = sync.data.mcp[name]
+              if (status?.status === "failed") {
+                toast.show({ variant: "error", message: `MCP "${name}" failed to connect` })
+              } else {
+                toast.show({ variant: "success", message: `MCP "${name}" added` })
+              }
             }).catch((error) => {
               console.error("Failed to add MCP:", error)
               toast.show({ variant: "error", message: `Failed to add MCP "${name}"` })
