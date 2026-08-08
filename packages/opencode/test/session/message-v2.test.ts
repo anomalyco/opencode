@@ -322,6 +322,18 @@ describe("session.message-v2.toModelMessage", () => {
   test("converts assistant tool completion into tool-call + tool-result messages with attachments", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
+    const mediaModel: Provider.Model = {
+      ...model,
+      capabilities: {
+        ...model.capabilities,
+        attachment: true,
+        input: {
+          ...model.capabilities.input,
+          image: true,
+          pdf: true,
+        },
+      },
+    }
 
     const input: SessionV1.WithParts[] = [
       {
@@ -371,7 +383,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, mediaModel)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -405,6 +417,85 @@ describe("session.message-v2.toModelMessage", () => {
               ],
             },
             providerOptions: { openai: { tool: "meta" } },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("moves OpenAI tool-result media out when the model has no attachment capability", async () => {
+    const png = Buffer.from("image").toString("base64")
+    const userID = "m-user-openai-no-media"
+    const assistantID = "m-assistant-openai-no-media"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [{ ...basePart(userID, "u1-openai-no-media"), type: "text", text: "run tool" }] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-openai-no-media"),
+            type: "tool",
+            callID: "call-openai-no-media",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/screenshot.png" },
+              output: "Screenshot read successfully",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-openai-no-media"),
+                  type: "file",
+                  mime: "image/png",
+                  filename: "screenshot.png",
+                  url: `data:image/png;base64,${png}`,
+                },
+              ],
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      { role: "user", content: [{ type: "text", text: "run tool" }] },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-openai-no-media",
+            toolName: "read",
+            input: { filePath: "/tmp/screenshot.png" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-openai-no-media",
+            toolName: "read",
+            output: { type: "text", value: "Screenshot read successfully" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached media from tool result:" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "screenshot.png",
+            data: `data:image/png;base64,${png}`,
           },
         ],
       },
