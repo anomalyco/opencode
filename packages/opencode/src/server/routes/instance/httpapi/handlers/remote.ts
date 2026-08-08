@@ -115,7 +115,9 @@ export const remoteHandlers = HttpApiBuilder.group(RemoteApi, "remote", (handler
             messages: messages.map((message) => ({
               info: { role: message.info.role },
               parts: message.parts.flatMap((part) => {
-                if (part.type === "text") return [{ type: "text" as const, text: part.text }]
+                if (part.type === "text" && !part.synthetic && !part.ignored) {
+                  return [{ type: "text" as const, text: part.text }]
+                }
                 if (part.type === "tool") {
                   return [{ type: "tool" as const, tool: part.tool, state: { status: part.state.status } }]
                 }

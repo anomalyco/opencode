@@ -91,6 +91,25 @@ describe("remote HttpApi", () => {
         expect(createdOther.status).toBe(200)
         const other = Schema.decodeUnknownSync(SessionResponse)(yield* createdOther.json)
 
+        const seeded = yield* requestInDirectory(
+          `/session/${session.id}/message`,
+          directory,
+          jsonBody(
+            {
+              agent: "build",
+              model: { providerID: "test", modelID: "test" },
+              noReply: true,
+              parts: [
+                { type: "text", text: "visible phone text" },
+                { type: "text", text: "hidden synthetic file contents", synthetic: true },
+                { type: "text", text: "hidden ignored text", ignored: true },
+              ],
+            },
+            { method: "POST" },
+          ),
+        )
+        expect(seeded.status).toBe(200)
+
         const paired = yield* requestInDirectory(`/session/${session.id}/remote`, directory, { method: "POST" })
         expect(paired.status).toBe(200)
         const pairing = Schema.decodeUnknownSync(PairingResponse)(yield* paired.json)
@@ -113,13 +132,21 @@ describe("remote HttpApi", () => {
 
         const bootstrap = yield* request(`/remote/session/${session.id}`, bearer(grant.token))
         expect(bootstrap.status).toBe(200)
-        expect(yield* bootstrap.json).toMatchObject({
+        const bootstrapBody = yield* bootstrap.json
+        expect(bootstrapBody).toMatchObject({
           session: { title: session.title },
-          messages: [],
+          messages: [
+            {
+              info: { role: "user" },
+              parts: [{ type: "text", text: "visible phone text" }],
+            },
+          ],
           status: { type: "idle" },
           permissions: [],
           questions: [],
         })
+        expect(JSON.stringify(bootstrapBody)).not.toContain("hidden synthetic file contents")
+        expect(JSON.stringify(bootstrapBody)).not.toContain("hidden ignored text")
 
         const crossSession = yield* request(`/remote/session/${other.id}`, bearer(grant.token))
         expect(crossSession.status).toBe(401)
