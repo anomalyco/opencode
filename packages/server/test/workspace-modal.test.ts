@@ -8,7 +8,7 @@ import { Workspace } from "@opencode-ai/core/workspace"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
-import { modalWorkspaceRegistryNode } from "../src/workspace/modal-workspace"
+import { modalWorkspaceDriver, provider } from "../src/workspace/modal-workspace"
 
 const enabled =
   !!process.env.OPENCODE_TEST_MODAL &&
@@ -17,7 +17,10 @@ const enabled =
 
 const testLayer = Layer.provideMerge(
   AppNodeBuilder.build(Workspace.configured({ idleThreshold: "1 minute", pollInterval: "1 minute" }), [
-    [WorkspaceDriver.node, modalWorkspaceRegistryNode({ app: "opencode-workspace-tests" })],
+    [
+      WorkspaceDriver.node,
+      WorkspaceDriver.registryNode({ [provider]: modalWorkspaceDriver({ app: "opencode-workspace-tests" }) }),
+    ],
   ]),
   TestClock.layer(),
 )
@@ -30,7 +33,7 @@ modalTest(
       Effect.gen(function* () {
         const workspace = yield* Workspace.Service
         yield* Effect.acquireUseRelease(
-          workspace.create("modal"),
+          workspace.create(provider),
           (created) =>
             Effect.gen(function* () {
               const environment = yield* workspace.connect(created.id)

@@ -44,7 +44,7 @@ import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
-import { modalWorkspaceRegistryNode } from "./workspace/modal-workspace"
+import { modalWorkspaceDriver, provider as modalProvider } from "./workspace/modal-workspace"
 
 const applicationServices = LayerNode.group([
   Database.node,
@@ -117,7 +117,10 @@ function makeRoutes<AuthError, AuthServices>(
     ],
     [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
     [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(pluginRuntimeCell)],
-    [WorkspaceDriver.node, modalWorkspaceRegistryNode({ app: "opencode-workspaces" })],
+    [
+      WorkspaceDriver.node,
+      WorkspaceDriver.registryNode({ [modalProvider]: modalWorkspaceDriver({ app: "opencode-workspaces" }) }),
+    ],
   ]
   const serviceLayer = options.simulation
     ? Layer.unwrap(
