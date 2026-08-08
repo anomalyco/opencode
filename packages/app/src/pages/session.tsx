@@ -83,9 +83,10 @@ import {
 } from "@/pages/session/session-panel-width"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import {
-  SIDE_CHAT_TAB_PREFIX,
   appendPromptText,
+  createSideChatTabID,
   isSideChatTab,
+  nextSideChatOrdinal,
   quoteSelection,
   type SideChatTab,
 } from "@/pages/session/side-chat"
@@ -541,7 +542,7 @@ export default function Page() {
   const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
   const [sideChats, setSideChats] = createStore({ tabs: [] as SideChatTab[] })
-  let nextSideChatOrdinal = 0
+  let nextSideChatID = 0
 
   const discardSideChat = async (sessionID: string) => {
     const api = sdk().api.session
@@ -568,8 +569,8 @@ export default function Page() {
   const openSideChat = async (selection?: string) => {
     const parentID = params.id
     if (!parentID || info()?.parentID) return
-    const ordinal = ++nextSideChatOrdinal
-    const tabID = `${SIDE_CHAT_TAB_PREFIX}${ordinal}`
+    const ordinal = nextSideChatOrdinal(sideChats.tabs)
+    const tabID = createSideChatTabID(++nextSideChatID, ordinal)
     const initialPrompt = selection
       ? quoteSelection(language.t("session.sideChat.quoteSource.main"), selection)
       : undefined

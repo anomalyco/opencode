@@ -14,6 +14,15 @@ export type SideChatTab = {
 
 export const isSideChatTab = (tab: string | undefined): tab is string => !!tab?.startsWith(SIDE_CHAT_TAB_PREFIX)
 
+export const createSideChatTabID = (id: number, ordinal: number) => `${SIDE_CHAT_TAB_PREFIX}${id}/${ordinal}`
+
+export const sideChatTabOrdinal = (tab: string) => Number(tab.slice(tab.lastIndexOf("/") + 1)) || 1
+
+export function nextSideChatOrdinal(tabs: readonly { ordinal: number }[]) {
+  const used = new Set(tabs.map((tab) => tab.ordinal))
+  return Array.from({ length: tabs.length + 1 }, (_, index) => index + 1).find((ordinal) => !used.has(ordinal)) ?? 1
+}
+
 export function excludeSideChatHistory<T extends { id: string }>(
   messages: T[],
   initialMessageIDs: ReadonlySet<string> | undefined,

@@ -59,7 +59,7 @@ import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/session/v2/session-file-browser-tab"
 import { SideChatPanel } from "@/pages/session/side-chat-panel"
-import { isSideChatTab, type SideChatTab } from "@/pages/session/side-chat"
+import { isSideChatTab, sideChatTabOrdinal, type SideChatTab } from "@/pages/session/side-chat"
 
 type ReviewDiff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
 type RenderDiff = FileDiffInfo | (SnapshotFileDiff & { file: string }) | VcsFileDiff
@@ -926,7 +926,7 @@ function SideChatTabTrigger(props: { tab: string; onClose: (tabID: string) => vo
   const language = useLanguage()
   const command = useCommand()
   const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
-  const ordinal = () => Number(props.tab.slice(props.tab.lastIndexOf("/") + 1)) || 1
+  const ordinal = () => sideChatTabOrdinal(props.tab)
 
   return (
     <Tabs.Trigger

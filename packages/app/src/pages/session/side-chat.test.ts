@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { appendPromptText, excludeSideChatHistory, isSideChatTab, quoteSelection } from "./side-chat"
+import {
+  appendPromptText,
+  createSideChatTabID,
+  excludeSideChatHistory,
+  isSideChatTab,
+  nextSideChatOrdinal,
+  quoteSelection,
+  sideChatTabOrdinal,
+} from "./side-chat"
 
 describe("excludeSideChatHistory", () => {
   test("keeps new side-chat turns while hiding the inherited transcript", () => {
@@ -27,6 +35,24 @@ describe("side-chat tabs", () => {
     expect(isSideChatTab("side-chat://one")).toBe(true)
     expect(isSideChatTab("file://side-chat.ts")).toBe(false)
     expect(isSideChatTab(undefined)).toBe(false)
+  })
+
+  test("starts at one and appends after consecutive tabs", () => {
+    expect(nextSideChatOrdinal([])).toBe(1)
+    expect(nextSideChatOrdinal([{ ordinal: 1 }, { ordinal: 2 }, { ordinal: 3 }])).toBe(4)
+  })
+
+  test("reuses the lowest ordinal released by a closed tab", () => {
+    expect(nextSideChatOrdinal([{ ordinal: 1 }, { ordinal: 2 }])).toBe(3)
+    expect(nextSideChatOrdinal([{ ordinal: 1 }, { ordinal: 3 }])).toBe(2)
+  })
+
+  test("keeps internal tab IDs unique when a displayed ordinal is reused", () => {
+    const closed = createSideChatTabID(3, 3)
+    const replacement = createSideChatTabID(4, 3)
+
+    expect(replacement).not.toBe(closed)
+    expect(sideChatTabOrdinal(replacement)).toBe(3)
   })
 })
 
