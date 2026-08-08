@@ -197,6 +197,7 @@ export type Endpoint5_13Input = {
   readonly model?: Model.Ref | undefined
   readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
   readonly agents?: ReadonlyArray<AgentAttachment> | undefined
+  readonly skills?: ReadonlyArray<PromptInput.SkillAttachment> | undefined
   readonly delivery?: "steer" | "queue" | undefined
   readonly resume?: boolean | undefined
 }

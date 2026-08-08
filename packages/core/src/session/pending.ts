@@ -130,6 +130,15 @@ const promotedFromMessage = Effect.fn("SessionPending.promotedFromMessage")(func
   return yield* Effect.die(new LifecycleConflict({ id }))
 })
 
+export const existing = Effect.fn("SessionPending.existing")(function* (
+  db: DatabaseService,
+  input: PendingRef & { readonly delivery: Delivery },
+) {
+  const pending = yield* find(db, input.id)
+  if (pending !== undefined) return pending
+  return yield* promotedFromMessage(db, input.sessionID, input.id, input.delivery)
+})
+
 export const admit = Effect.fn("SessionPending.admit")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
@@ -139,13 +148,15 @@ export const admit = Effect.fn("SessionPending.admit")(function* (
     readonly input: Message
   },
 ) {
-  const existing = yield* find(db, request.id)
-  if (existing !== undefined) {
-    if (existing.type === "compaction") return yield* Effect.die(new LifecycleConflict({ id: request.id }))
-    return existing
+  const stored = yield* existing(db, {
+    id: request.id,
+    sessionID: request.sessionID,
+    delivery: request.input.delivery,
+  })
+  if (stored !== undefined) {
+    if (stored.type === "compaction") return yield* Effect.die(new LifecycleConflict({ id: request.id }))
+    return stored
   }
-  const promoted = yield* promotedFromMessage(db, request.sessionID, request.id, request.input.delivery)
-  if (promoted !== undefined) return promoted
   return yield* bus
     .publish(SessionEvent.InputAdmitted, {
       inputID: request.id,

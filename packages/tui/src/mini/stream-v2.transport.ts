@@ -373,12 +373,12 @@ const catalogEvents = new Set([
 // briefly so the output commit renders inside it.
 const SHELL_OUTPUT_GRACE_MS = 1500
 
-function skillCommit(messageID: string, name: string): StreamCommit {
+function skillCommit(messageID: string, name: string, skillID = messageID): StreamCommit {
   return {
     kind: "system",
     source: "system",
     messageID,
-    partID: `skill:${messageID}`,
+    partID: `skill:${skillID}`,
     text: `→ Skill "${name}"`,
     phase: "start",
   }
@@ -653,7 +653,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (!render) return
       if (reuseVisibleWait && waiting) return
       write([
-        ...(message.skills ?? []).map((skill) => skillCommit(message.id + ":" + skill.id, skill.name)),
+        ...(message.skills ?? []).map((skill) => skillCommit(message.id, skill.name, skill.id)),
         { kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id },
       ])
       return
@@ -1663,6 +1663,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         model: selected,
         files: attachments.files.length ? attachments.files : undefined,
         agents: agents.length ? agents : undefined,
+        skills: skills.length ? skills : undefined,
         delivery,
       },
       { signal: next.signal },

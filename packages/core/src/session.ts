@@ -144,6 +144,13 @@ type PendingInputRef = { readonly sessionID: SessionSchema.ID; readonly inputID:
 export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()("Session.SkillNotFoundError", {
   skill: Skill.ID,
 }) {}
+export class SkillAttachmentError extends Schema.TaggedErrorClass<SkillAttachmentError>()(
+  "Session.SkillAttachmentError",
+  {
+    skill: Skill.ID,
+    message: Schema.String,
+  },
+) {}
 
 export class DestinationNotFoundError extends Schema.TaggedErrorClass<DestinationNotFoundError>()(
   "Session.DestinationNotFoundError",
@@ -222,7 +229,10 @@ export interface Interface {
     metadata?: Record<string, unknown>
     delivery?: SessionPending.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionPending.User, NotFoundError | PromptConflictError | AttachmentError | SkillNotFoundError>
+  }) => Effect.Effect<
+    SessionPending.User,
+    NotFoundError | PromptConflictError | AttachmentError | SkillNotFoundError | SkillAttachmentError
+  >
   /** Generates text from current Session context without admitting input or mutating history. */
   readonly generate: (input: {
     sessionID: SessionSchema.ID
@@ -237,6 +247,7 @@ export interface Interface {
     model?: Model.Ref
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
+    skills?: PromptInput.Prompt["skills"]
     delivery?: SessionPending.Delivery
     resume?: boolean
   }) => Effect.Effect<
@@ -245,6 +256,7 @@ export interface Interface {
     | PromptConflictError
     | AttachmentError
     | SkillNotFoundError
+    | SkillAttachmentError
     | Command.NotFoundError
     | Command.EvaluationError
   >
@@ -572,16 +584,32 @@ const layer = Layer.effect(
             // image attachment actually needs the resizer.
             const image = Image.Service.pipe(Effect.provide(locations.get(session.location)))
             const skills = Skill.Service.pipe(Effect.provide(locations.get(session.location)))
+            const messageID = input.id ?? SessionMessage.ID.create()
+            const delivery = input.delivery ?? "steer"
+            const previous =
+              input.id && input.skills?.length
+                ? yield* SessionPending.existing(db, {
+                    id: messageID,
+                    sessionID: input.sessionID,
+                    delivery,
+                  }).pipe(
+                    Effect.catchDefect((defect) =>
+                      defect instanceof SessionPending.LifecycleConflict
+                        ? new PromptConflictError({ sessionID: input.sessionID, messageID })
+                        : Effect.die(defect),
+                    ),
+                  )
+                : undefined
             const prompt = yield* resolvePrompt(
               { text: input.text, files: input.files, agents: input.agents, skills: input.skills },
               image,
               skills,
+              previous?.type === "user" ? previous.data.skills : undefined,
             ).pipe(Effect.provideService(FSUtil.Service, fs))
-            const messageID = input.id ?? SessionMessage.ID.create()
             const admittedInput = SessionPending.Message.make({
               type: "user",
               data: { ...prompt, metadata: input.metadata },
-              delivery: input.delivery ?? "steer",
+              delivery,
             })
             const admitted = yield* SessionPending.admit(db, bus, {
               id: messageID,
@@ -641,6 +669,7 @@ const layer = Layer.effect(
           text: evaluated.text,
           files: input.files,
           agents: input.agents,
+          skills: input.skills,
           delivery: input.delivery,
           resume: input.resume,
         })
@@ -904,30 +933,39 @@ const resolvePrompt = Effect.fn("Session.resolvePrompt")(function* (
   input: PromptInput.Prompt,
   image: Effect.Effect<Image.Interface>,
   skills: Effect.Effect<Skill.Interface>,
+  previous: Prompt["skills"],
 ) {
   const fs = yield* FSUtil.Service
   const files = input.files
     ? yield* Effect.forEach(input.files, (file) => materializeAttachment(fs, file, image), { concurrency: 8 })
     : undefined
   const requested = input.skills
-  const selected = requested?.length
-    ? yield* Effect.gen(function* () {
-        const available = yield* (yield* skills).list()
-        const attachments = Array.from(new Map(requested.map((attachment) => [attachment.id, attachment])).values())
-        return yield* Effect.forEach(attachments, (attachment) => {
-          const skill = available.find((item) => item.id === attachment.id)
-          if (!skill) return Effect.fail(new SkillNotFoundError({ skill: attachment.id }))
-          return Skill.modelOutput(fs, skill).pipe(
-            Effect.map((output) => ({
-              id: skill.id,
-              name: skill.name,
-              text: output.output,
-              mention: attachment.mention,
-            })),
-          )
-        })
-      })
-    : undefined
+  const reusable =
+    requested &&
+    previous &&
+    JSON.stringify(requested) === JSON.stringify(previous.map((skill) => ({ id: skill.id, mention: skill.mention })))
+      ? previous
+      : undefined
+  const selected = yield* Effect.gen(function* () {
+    if (!requested?.length) return undefined
+    if (reusable) return reusable
+    const available = yield* (yield* skills).list()
+    return yield* Effect.forEach(requested, (attachment) =>
+      Effect.gen(function* () {
+        const skill = available.find((item) => item.id === attachment.id)
+        if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
+        const output = yield* Skill.modelOutput(fs, skill).pipe(
+          Effect.mapError((error) => new SkillAttachmentError({ skill: skill.id, message: String(error) })),
+        )
+        return {
+          id: skill.id,
+          name: skill.name,
+          text: output.output,
+          mention: attachment.mention,
+        }
+      }),
+    )
+  })
   return Prompt.make({ text: input.text, agents: input.agents, files, skills: selected?.length ? selected : undefined })
 })
 

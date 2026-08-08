@@ -54,6 +54,7 @@ export function Autocomplete(props: {
   fileStyleId: number
   agentStyleId: number
   skillStyleId: number
+  hasSkill: (id: string) => boolean
   promptPartTypeId: () => number
 }) {
   const editor = useEditorContext()
@@ -146,6 +147,7 @@ export function Autocomplete(props: {
       | { type: "agent"; value: NonNullable<PromptInfo["agents"]>[number] }
       | { type: "skill"; value: NonNullable<PromptInfo["skills"]>[number] },
   ) {
+    if (part.type === "skill" && props.hasSkill(part.value.id)) return
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
 

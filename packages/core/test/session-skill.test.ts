@@ -23,17 +23,16 @@ const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const projects = Layer.mock(Project.Service, {
   resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
 })
+const effectSkill = Skill.Info.make({
+  id: Skill.ID.make("effect"),
+  name: Skill.Name.make("Effect"),
+  description: "Effect guidance",
+  location: AbsolutePath.make(path.resolve("/skills/effect.md")),
+  content: "Use Effect",
+})
+let listedSkills: Skill.Info[] = [effectSkill]
 const skills = Layer.mock(Skill.Service, {
-  list: () =>
-    Effect.succeed([
-      Skill.Info.make({
-        id: Skill.ID.make("effect"),
-        name: Skill.Name.make("Effect"),
-        description: "Effect guidance",
-        location: AbsolutePath.make(path.resolve("/skills/effect.md")),
-        content: "Use Effect",
-      }),
-    ]),
+  list: () => Effect.sync(() => listedSkills),
 })
 const locations = Layer.effect(
   LocationServiceMap.Service,
@@ -56,6 +55,29 @@ const it = testEffect(
 )
 
 describe("Session.skill", () => {
+  it.effect("reconciles a promoted skill prompt after the live skill disappears", () =>
+    Effect.gen(function* () {
+      listedSkills = [effectSkill]
+      const sessions = yield* Session.Service
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const session = yield* sessions.create({ location })
+      const input = {
+        id: SessionMessage.ID.make("msg_skill_retry"),
+        sessionID: session.id,
+        text: "Apply this guidance",
+        skills: [{ id: Skill.ID.make("effect") }],
+        resume: false,
+      }
+
+      yield* sessions.prompt(input)
+      yield* SessionPending.promote(database.db, bus, session.id, "steer")
+      listedSkills = []
+
+      expect(yield* sessions.prompt(input)).toMatchObject({ id: input.id, data: { text: input.text } })
+    }).pipe(Effect.ensuring(Effect.sync(() => (listedSkills = [effectSkill])))),
+  )
+
   it.effect("attaches a resolved skill snapshot to a normal prompt", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service

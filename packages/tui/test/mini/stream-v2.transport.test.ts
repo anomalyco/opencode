@@ -2755,13 +2755,18 @@ describe("V2 mini transport", () => {
       variant: undefined,
       prompt: {
         messageID: "msg_cmd",
-        text: "/deploy prod",
+        text: "/deploy prod /api-design",
         parts: [
           {
             type: "file",
             url: "file:///tmp/mentioned.txt",
             filename: "mentioned.txt",
             source: { type: "file", text: { start: 8, end: 12, value: "prod" } },
+          },
+          {
+            type: "skill",
+            id: "api-design",
+            source: { start: 13, end: 24, value: "/api-design" },
           },
         ],
         command: { name: "deploy", arguments: "prod" },
@@ -2785,6 +2790,7 @@ describe("V2 mini transport", () => {
           mention: { start: 8, end: 12, text: "prod" },
         },
       ],
+      skills: [{ id: "api-design", mention: { start: 13, end: 24, text: "/api-design" } }],
       delivery: "steer",
     })
     // Selection rides the command payload; no separate client-side switch.

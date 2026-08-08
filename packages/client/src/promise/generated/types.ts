@@ -3520,6 +3520,10 @@ export type SessionCommandInput = {
       readonly name: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["id"]
@@ -3537,6 +3541,10 @@ export type SessionCommandInput = {
     }>
     readonly agents?: ReadonlyArray<{
       readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly delivery?: "steer" | "queue" | null
@@ -3558,6 +3566,10 @@ export type SessionCommandInput = {
       readonly name: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["arguments"]
@@ -3575,6 +3587,10 @@ export type SessionCommandInput = {
     }>
     readonly agents?: ReadonlyArray<{
       readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly delivery?: "steer" | "queue" | null
@@ -3596,6 +3612,10 @@ export type SessionCommandInput = {
       readonly name: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["model"]
@@ -3613,6 +3633,10 @@ export type SessionCommandInput = {
     }>
     readonly agents?: ReadonlyArray<{
       readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly delivery?: "steer" | "queue" | null
@@ -3634,9 +3658,36 @@ export type SessionCommandInput = {
       readonly name: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
   }["agents"]
+  readonly skills?: {
+    readonly id?: string | null
+    readonly command: string
+    readonly arguments?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly files?: ReadonlyArray<{
+      readonly uri: string
+      readonly name?: string
+      readonly description?: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly agents?: ReadonlyArray<{
+      readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+  }["skills"]
   readonly delivery?: {
     readonly id?: string | null
     readonly command: string
@@ -3651,6 +3702,10 @@ export type SessionCommandInput = {
     }>
     readonly agents?: ReadonlyArray<{
       readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly delivery?: "steer" | "queue" | null
@@ -3670,6 +3725,10 @@ export type SessionCommandInput = {
     }>
     readonly agents?: ReadonlyArray<{
       readonly name: string
+      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
+    }>
+    readonly skills?: ReadonlyArray<{
+      readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly delivery?: "steer" | "queue" | null

@@ -1117,6 +1117,7 @@ export function Prompt(props: PromptProps) {
           model,
           files: store.prompt.files,
           agents: store.prompt.agents,
+          skills: store.prompt.skills?.length ? store.prompt.skills : undefined,
           delivery,
         })
         .catch((error) => {
@@ -1724,6 +1725,7 @@ export function Prompt(props: PromptProps) {
         fileStyleId={fileStyleId}
         agentStyleId={agentStyleId}
         skillStyleId={skillStyleId}
+        hasSkill={(id) => store.prompt.skills?.some((skill) => skill.id === id) ?? false}
         promptPartTypeId={() => promptPartTypeId}
       />
     </>
