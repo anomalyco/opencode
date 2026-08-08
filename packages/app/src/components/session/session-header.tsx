@@ -575,7 +575,7 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
             onClick={props.state.onSideChatToggle}
             aria-label={props.state.sideChatLabel}
             aria-expanded={props.state.sideChatOpened}
-            aria-controls="side-chat-panel"
+            aria-controls="review-panel"
             icon={<IconV2 name="branch" />}
           />
         </TooltipV2>

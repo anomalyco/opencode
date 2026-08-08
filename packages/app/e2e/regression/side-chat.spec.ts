@@ -6,9 +6,9 @@ import { expectAppVisible } from "../utils/waits"
 const directory = "C:/OpenCode/SideChatRegression"
 const projectID = "proj_side_chat_regression"
 const parentID = "ses_side_chat_parent"
-const childID = "ses_side_chat_child"
+const childIDs = ["ses_side_chat_child_1", "ses_side_chat_child_2", "ses_side_chat_child_3"]
 
-test("keeps a side chat separate from the parent timeline and removes it on close", async ({ page }) => {
+test("integrates multiple isolated Side Chats with panel tabs, Ctrl+P, and quotes", async ({ page }) => {
   const sessions: Array<Record<string, unknown> & { id: string }> = [
     {
       id: parentID,
@@ -98,6 +98,7 @@ test("keeps a side chat separate from the parent timeline and removes it on clos
     pageMessages: (sessionID) => ({ items: messages[sessionID] ?? [] }),
     forkSession: (input) => {
       forks.push(input)
+      const childID = childIDs[forks.length - 1]!
       const child = {
         ...sessions[0]!,
         id: childID,
@@ -157,24 +158,78 @@ test("keeps a side chat separate from the parent timeline and removes it on clos
   await expectAppVisible(page.getByRole("textbox", { name: "Prompt" }))
   await expect(page.getByText("inherited parent question", { exact: true })).toBeVisible()
 
-  await page.getByRole("button", { name: "Open side chat" }).click()
-  const panel = page.getByRole("complementary", { name: "Side chat" })
-  await expect(panel).toBeVisible()
+  await page.getByRole("button", { name: "New Side Chat" }).click()
+  const firstTab = page.getByRole("tab", { name: /Side Chat 1/ })
+  const firstPanel = page.getByRole("tabpanel", { name: "Side Chat 1" })
+  await expect(firstTab).toBeVisible()
+  await expect(firstPanel).toBeVisible()
   await expect(
-    panel.getByText("Ask a focused question. This conversation won't be added to the main chat."),
+    firstPanel.getByText("Ask a focused question. This conversation won't be added to the main chat."),
   ).toBeVisible()
-  await expect(panel.getByText("inherited parent question", { exact: true })).toHaveCount(0)
+  await expect(firstPanel.getByText("inherited parent question", { exact: true })).toHaveCount(0)
   expect(forks).toEqual([{ sessionID: parentID, parentID }])
   await expect(page).toHaveURL(new RegExp(`/session/${parentID}$`))
 
-  const input = panel.getByRole("textbox")
-  await input.fill("side-only question")
-  await input.press("Enter")
-  await expect.poll(() => prompts.map((prompt) => prompt.sessionID)).toEqual([childID])
-  await expect(panel.getByText("side-only question", { exact: true })).toBeVisible()
+  const firstInput = firstPanel.getByRole("textbox")
+  await firstInput.fill("draft one")
+
+  await page.getByRole("button", { name: "Add panel tab" }).click()
+  await expect(page.getByRole("menuitem", { name: "New Side Chat" })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await page.keyboard.press("Control+Shift+N")
+  const secondTab = page.getByRole("tab", { name: /Side Chat 2/ })
+  const secondPanel = page.getByRole("tabpanel", { name: "Side Chat 2" })
+  await expect(secondTab).toBeVisible()
+  await expect(secondPanel).toBeVisible()
+  await expect(secondPanel.getByRole("textbox")).toHaveText("")
+  await expect
+    .poll(() => forks)
+    .toEqual([
+      { sessionID: parentID, parentID },
+      { sessionID: parentID, parentID },
+    ])
+
+  await page.keyboard.press("Control+P")
+  const palette = page.getByRole("dialog")
+  await expect(palette.getByRole("option", { name: /New Side Chat.*Ctrl Shift N/ })).toBeVisible()
+  await palette.getByRole("textbox").fill("Switch to Side Chat 1")
+  await palette.getByRole("option", { name: /Switch to Side Chat 1/ }).click()
+  await expect(firstPanel).toBeVisible()
+  await expect(firstInput).toHaveText("draft one")
+
+  await firstInput.fill("side-only question")
+  await firstInput.press("Enter")
+  await expect.poll(() => prompts.map((item) => item.sessionID)).toEqual([childIDs[0]!])
+  await expect(firstPanel.getByText("side-only question", { exact: true })).toBeVisible()
   await expect(page).toHaveURL(new RegExp(`/session/${parentID}$`))
 
-  await panel.getByRole("button", { name: "Close side chat" }).click()
-  await expect(panel).toHaveCount(0)
-  await expect.poll(() => removed).toEqual([childID])
+  await secondTab.click()
+  await page.keyboard.press("Control+W")
+  await expect(secondTab).toHaveCount(0)
+  await expect.poll(() => removed).toEqual([childIDs[1]!])
+
+  const parentText = page.getByText("inherited parent answer", { exact: true })
+  await parentText.selectText()
+  await parentText.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Side Chat" }).click()
+  const thirdPanel = page.getByRole("tabpanel", { name: "Side Chat 3" })
+  await expect(thirdPanel).toBeVisible()
+  await expect(thirdPanel.getByRole("textbox")).toContainText("Main Chat:")
+  await expect(thirdPanel.getByRole("textbox")).toContainText("> inherited parent answer")
+
+  await firstTab.click()
+  const sideText = firstPanel.getByText("side-only question", { exact: true })
+  await sideText.selectText()
+  await sideText.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Quote in Main Chat" }).click()
+  const mainInput = page.getByRole("textbox", { name: "Prompt" }).first()
+  await expect(mainInput).toContainText("Side Chat:")
+  await expect(mainInput).toContainText("> side-only question")
+
+  await page.getByRole("button", { name: "Close tab" }).first().click()
+  await expect(firstTab).toHaveCount(0)
+  await expect.poll(() => removed).toEqual([childIDs[1]!, childIDs[0]!])
+  await page.getByRole("button", { name: "Close tab" }).last().click()
+  await expect(thirdPanel).toHaveCount(0)
+  await expect.poll(() => removed).toEqual([childIDs[1]!, childIDs[0]!, childIDs[2]!])
 })
