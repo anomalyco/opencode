@@ -54,6 +54,40 @@ test("selecting an unhydrated session preserves its location", async () => {
   }
 })
 
+test("finds and opens an exact session ID outside the recent list", async () => {
+  const sessionID = "ses_04a7a3d82ffeIphUJgd3SnEqiv"
+  const remote = { directory: "/tmp/opencode/archive", workspaceID: "ws_archive" }
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
+    if (url.pathname !== `/api/session/${sessionID}`) return undefined
+    return json({
+      data: {
+        id: sessionID,
+        projectID: "proj_archive",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1, updated: 2 },
+        title: "TUI plugin slot API v2",
+        location: remote,
+      },
+    })
+  })
+
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Search sessions and projects"))
+    await fixture.app.mockInput.typeText(sessionID)
+    await fixture.app.waitForFrame((frame) => frame.includes("TUI plugin slot API v2"))
+
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "session")
+
+    expect(fixture.route.data).toEqual({ type: "session", sessionID })
+    expect(fixture.location.ref).toEqual(remote)
+  } finally {
+    fixture.dispose()
+  }
+})
+
 test("shows the current project and opens its root", async () => {
   const root = "/tmp/opencode/project"
   const subfolder = `${root}/packages/tui`
