@@ -30,6 +30,10 @@ import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 
+// Fish shell completion template
+const completionFishTemplate = `# opencode fish completion
+complete -f -c opencode -a '(opencode --get-yargs-completions (commandline -o)[2..-1])'`
+
 const args = hideBin(process.argv)
 
 function show(out: string) {
@@ -40,6 +44,55 @@ function show(out: string) {
     return
   }
   process.stderr.write(out)
+}
+
+// Custom completion command that supports fish shell
+const completionCommand = {
+  command: "completion [shell]",
+  describe: "generate shell completion script",
+  builder: (y: any) => {
+    return y
+      .positional("shell", {
+        describe: "shell to generate completions for (bash, zsh, fish)",
+        type: "string",
+        choices: ["bash", "zsh", "fish"],
+      })
+      .option("bash", {
+        alias: "b",
+        describe: "generate bash completions",
+        type: "boolean",
+      })
+      .option("zsh", {
+        alias: "z",
+        describe: "generate zsh completions",
+        type: "boolean",
+      })
+      .option("fish", {
+        alias: "f",
+        describe: "generate fish completions",
+        type: "boolean",
+      })
+  },
+  handler: async (argv: any) => {
+    const { showCompletionScript } = await import("@/cli/completion")
+    let shell: string | undefined
+    if (argv.shell && ["bash", "zsh", "fish"].includes(argv.shell)) {
+      shell = argv.shell
+    } else if (argv.fish) {
+      shell = "fish"
+    } else if (argv.zsh) {
+      shell = "zsh"
+    } else if (argv.bash) {
+      shell = "bash"
+    } else {
+      // Fallback to $SHELL environment variable
+      const shellEnv = process.env.SHELL || ""
+      if (shellEnv.includes("fish")) shell = "fish"
+      else if (shellEnv.includes("zsh")) shell = "zsh"
+      else shell = "bash"
+    }
+    await showCompletionScript(shell)
+  }
 }
 
 const cli = yargs(args)
@@ -77,7 +130,7 @@ const cli = yargs(args)
     process.env.OPENCODE_PID = String(process.pid)
   })
   .usage("")
-  .completion("completion", "generate shell completion script")
+  .command(completionCommand)
   .command(AcpCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)
