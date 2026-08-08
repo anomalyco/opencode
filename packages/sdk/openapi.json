@@ -21459,6 +21459,21 @@
           "layout": {
             "$ref": "#/components/schemas/LayoutConfig"
           },
+          "display": {
+            "type": "object",
+            "properties": {
+              "currency": {
+                "type": "string"
+              },
+              "exchangeRates": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
           "permission": {
             "$ref": "#/components/schemas/PermissionConfig"
           },
@@ -21695,6 +21710,9 @@
                 },
                 "required": ["read", "write"],
                 "additionalProperties": false
+              },
+              "currency": {
+                "type": "string"
               },
               "tiers": {
                 "type": "array",
