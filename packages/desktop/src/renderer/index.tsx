@@ -282,6 +282,10 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       await window.api.setDefaultServerUrl(url)
     },
 
+    startRemoteGateway: () => window.api.startRemoteGateway(),
+    stopRemoteGateway: () => window.api.stopRemoteGateway(),
+    getRemoteGatewayStatus: () => window.api.getRemoteGatewayStatus(),
+
     wslServers: wslServersApi,
 
     getDisplayBackend: async () => {
