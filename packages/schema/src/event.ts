@@ -37,6 +37,7 @@ export type DurableDefinition<
     readonly version: number
     readonly aggregate: string
   }
+  readonly global?: never
   readonly data: DataSchema
 }
 
@@ -47,6 +48,8 @@ export type EphemeralDefinition<
   readonly type: Type
   readonly durability: "ephemeral"
   readonly durable?: never
+  /** Global events describe location-independent facts: they are published untagged and reach every location. */
+  readonly global?: boolean
   readonly data: DataSchema
 }
 
@@ -77,13 +80,14 @@ type Input<Type extends string, Fields extends Readonly<Record<PropertyKey, Sche
     readonly version: number
     readonly aggregate: string
   }
+  readonly global?: boolean
   readonly schema: Fields
 }
 
 export function durable<
   const Type extends string,
   const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,
->(input: Input<Type, Fields> & { readonly durable: NonNullable<Input<Type, Fields>["durable"]> }) {
+>(input: Omit<Input<Type, Fields>, "global"> & { readonly durable: NonNullable<Input<Type, Fields>["durable"]> }) {
   const data = Schema.Struct(input.schema)
   const durable = Schema.Struct({
     aggregateID: DurableEnvelope.fields.aggregateID,
@@ -137,6 +141,7 @@ export function ephemeral<
         type: input.type,
         durability: "ephemeral" as const,
         durable: undefined,
+        global: input.global === true,
         data,
       })),
     ) satisfies EphemeralDefinition<Type, typeof data>

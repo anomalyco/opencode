@@ -75,6 +75,13 @@ const CountMessage = Bus.ephemeral({
     count: Schema.Number,
   },
 })
+const GlobalFact = Bus.ephemeral({
+  type: "test.global.fact",
+  global: true,
+  schema: {
+    text: Schema.String,
+  },
+})
 
 const VersionedMessage = Bus.durable({
   type: "test.versioned",
@@ -150,6 +157,31 @@ describe("Bus", () => {
         directory: AbsolutePath.make("project"),
         workspaceID: Workspace.ID.make("wrk_test"),
       })
+    }),
+  )
+
+  it.effect("publishes global definitions untagged so subscribers in other locations observe them", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const elsewhere = Location.Service.of(
+        location({ directory: AbsolutePath.make("elsewhere"), workspaceID: Workspace.ID.make("wrk_other") }),
+      )
+      const fiber = yield* bus
+        .subscribe([Message, GlobalFact])
+        .pipe(
+          Stream.take(1),
+          Stream.runCollect,
+          Effect.provideService(Location.Service, elsewhere),
+          Effect.forkScoped,
+        )
+      yield* Effect.yieldNow
+
+      // Location-tagged events stay invisible to other locations; the global fact reaches them.
+      yield* bus.publish(Message, { text: "tagged" })
+      const event = yield* bus.publish(GlobalFact, { text: "everywhere" })
+
+      expect(event).not.toHaveProperty("location")
+      expect(Array.from(yield* Fiber.join(fiber))).toEqual([event])
     }),
   )
 

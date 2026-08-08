@@ -88,8 +88,12 @@ const Updated = ephemeral({
   type: "integration.updated",
   schema: {},
 })
+// Credentials live in one global store shared by every location, so a
+// connection change is a location-independent fact: publish it globally so
+// every active location refreshes its provider catalog.
 const ConnectionUpdated = ephemeral({
   type: "integration.connection.updated",
+  global: true,
   schema: { integrationID: ID },
 })
 export const Event = { Updated, ConnectionUpdated, Definitions: inventory(Updated, ConnectionUpdated) }

@@ -416,11 +416,14 @@ export function configured(options?: Options) {
       function publish<D extends Event.Definition>(definition: D, data: Event.Data<D>, options?: PublishOptions) {
         return Effect.gen(function* () {
           const serviceLocation = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
-          const location =
-            options?.location ??
-            (serviceLocation
-              ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
-              : undefined)
+          // Global definitions describe location-independent facts. Never tag
+          // them, so location-filtered subscribers in every location observe them.
+          const location = definition.global
+            ? undefined
+            : (options?.location ??
+              (serviceLocation
+                ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
+                : undefined))
           return yield* publishEvent(
             definition,
             {
