@@ -2,6 +2,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { Permission } from "@/permission"
 import { Question } from "@/question"
 import { RemoteAccess } from "@/remote/access"
+import { RemoteEvent } from "@/remote/event"
 import { SessionPrompt } from "@/session/prompt"
 import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
@@ -22,17 +23,6 @@ function eventID() {
   return EventV2.ID.create()
 }
 
-function belongsToSession(value: unknown, sessionID: string) {
-  if (!value || typeof value !== "object") return false
-  const data = value as Record<string, unknown>
-  if (data.sessionID === sessionID) return true
-  for (const key of ["info", "part", "message"]) {
-    const nested = data[key]
-    if (nested && typeof nested === "object" && (nested as Record<string, unknown>).sessionID === sessionID) return true
-  }
-  return false
-}
-
 function remoteEventResponse(events: EventV2.Interface, sessionID: string) {
   return Effect.gen(function* () {
     const queue = yield* Queue.unbounded<EventV2.Payload>()
@@ -40,8 +30,8 @@ function remoteEventResponse(events: EventV2.Interface, sessionID: string) {
     yield* Effect.addFinalizer(() => unsubscribe)
 
     const output = Stream.fromQueue(queue).pipe(
-      Stream.filter((event) => belongsToSession(event.data, sessionID)),
-      Stream.map((event) => ({ id: event.id, type: event.type, properties: event.data })),
+      Stream.filter((event) => RemoteEvent.shouldForward(event, sessionID)),
+      Stream.map((event) => RemoteEvent.signal(event)),
     )
     const heartbeat = Stream.tick("10 seconds").pipe(
       Stream.drop(1),
