@@ -39,10 +39,8 @@ EXACT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 MADRID = ZoneInfo("Europe/Madrid")
 
 STATUS = {
-    # TODO: actualizar IDs una vez que las opciones custom (Detectado/Debate/Roadmap/Ejecutando/Verificando/Changelog)
-    # se añadan desde la UI de GitHub (Project Settings → Fields → Status → Edit options)
-    "Detectado": "f75ad846", "Debate": "47fc9ee4", "Roadmap": "98236657",
-    "Ejecutando": "98236657", "Verificando": "f75ad846", "Changelog": "47fc9ee4",
+    "Detectado": "ef2fdff4", "Debate": "ddac116a", "Roadmap": "0ca99905",
+    "Ejecutando": "79f82a08", "Verficando": "741a25fa", "Changelog": "f9a1286b",
 }
 
 VERSION = {
