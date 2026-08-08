@@ -20,6 +20,7 @@ type RemoteGatewayOptions = {
 
 const blockedRequestHeaders = new Set([
   "connection",
+  "forwarded",
   "host",
   "keep-alive",
   "proxy-authorization",
@@ -29,6 +30,11 @@ const blockedRequestHeaders = new Set([
   "trailer",
   "transfer-encoding",
   "upgrade",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-port",
+  "x-forwarded-proto",
+  "x-real-ip",
 ])
 
 const blockedResponseHeaders = new Set([
