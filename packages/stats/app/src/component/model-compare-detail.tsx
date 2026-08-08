@@ -31,7 +31,6 @@ import {
   applyThemePreference,
   Footer,
   getGitHubStars,
-  githubLink,
   Header,
   isThemePreference,
   themeStorageKey,
@@ -241,11 +240,7 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
         <Meta name="twitter:description" content={description()} />
         <script type="application/ld+json">{structuredData()}</script>
       </Show>
-      <Header
-        githubStars={githubStars() ?? githubLink.fallbackStars}
-        links={compareHeaderLinks}
-        brandHref={import.meta.env.BASE_URL}
-      />
+      <Header githubStars={githubStars() ?? "150K"} links={compareHeaderLinks} brandHref={import.meta.env.BASE_URL} />
       <div data-component="container">
         <div data-component="content">
           <ComparisonHero

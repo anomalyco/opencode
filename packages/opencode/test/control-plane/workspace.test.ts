@@ -19,7 +19,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { EventSequenceTable } from "@opencode-ai/core/event/sql"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideTmpdirInstance, requireInstance, TestInstance } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
@@ -1287,10 +1287,13 @@ describe("workspace sync state", () => {
 
             yield* workspace.startWorkspaceSyncing(instance.project.id)
 
-            yield* eventuallyEffect(
+            yield* pollWithTimeout(
               Effect.gen(function* () {
-                expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe("error")
+                const status = (yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status
+                return status === "error" ? true : undefined
               }),
+              "remote connection failure never set workspace status to error",
+              "20 seconds",
             )
             expect(yield* workspace.isSyncing(info.id)).toBe(false)
             yield* workspace.remove(info.id)
@@ -1328,10 +1331,13 @@ describe("workspace sync state", () => {
 
             yield* workspace.startWorkspaceSyncing(instance.project.id)
 
-            yield* eventuallyEffect(
+            yield* pollWithTimeout(
               Effect.gen(function* () {
-                expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe("error")
+                const status = (yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status
+                return status === "error" ? true : undefined
               }),
+              "remote history failure never set workspace status to error",
+              "20 seconds",
             )
             expect(yield* workspace.isSyncing(info.id)).toBe(false)
             yield* workspace.remove(info.id)

@@ -9,20 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "اپ ڈیٹ کی جانچ ناکام ہو گئی",
   "desktop.updater.checkFailed.message": "اپ ڈیٹس چیک کرنے میں ناکام",
   "desktop.updater.none.title": "کوئی اپ ڈیٹ دستیاب نہیں",
-  "desktop.updater.none.message": "آپ پہلے ہی OpenCode کا تازہ ترین ورژن استعمال کر رہے ہیں۔",
+  "desktop.updater.none.message": "آپ پہلے ہی Jarvis کا تازہ ترین ورژن استعمال کر رہے ہیں۔",
   "desktop.updater.downloadFailed.title": "اپ ڈیٹ ناکام ہو گیا۔",
   "desktop.updater.downloadFailed.message": "اپ ڈیٹ ڈاؤن لوڈ کرنے میں ناکام",
   "desktop.updater.downloaded.title": "اپ ڈیٹ ڈاؤن لوڈ ہو گیا۔",
   "desktop.updater.downloaded.prompt":
-    "OpenCode کا ورژن {{version}} ڈاؤن لوڈ ہو چکا ہے، کیا آپ اسے انسٹال کر کے دوبارہ لانچ کرنا چاہیں گے؟",
+    "Jarvis کا ورژن {{version}} ڈاؤن لوڈ ہو چکا ہے، کیا آپ اسے انسٹال کر کے دوبارہ لانچ کرنا چاہیں گے؟",
   "desktop.updater.installFailed.title": "اپ ڈیٹ ناکام ہو گیا۔",
   "desktop.updater.installFailed.message": "اپ ڈیٹ انسٹال کرنے میں ناکام",
   "desktop.cli.installed.title": "CLI انسٹال ہو گئی",
   "desktop.cli.installed.message":
-    "CLI کو {{path}} پر انسٹال کر دیا گیا۔\n\n'opencode' کمانڈ استعمال کرنے کے لیے اپنا ٹرمینل دوبارہ شروع کریں۔",
+    "CLI کو {{path}} پر انسٹال کر دیا گیا۔\n\n'jarvis' کمانڈ استعمال کرنے کے لیے اپنا ٹرمینل دوبارہ شروع کریں۔",
   "desktop.cli.failed.title": "تنصیب ناکام ہو گئی۔",
   "desktop.cli.failed.message": "CLI انسٹال کرنے میں ناکام: {{error}}",
-
-  "desktop.error.dev.rootNotFound":
-    "روٹ عنصر نہیں ملا۔ کیا آپ اسے اپنے index.html میں شامل کرنا بھول گئے؟ یا ہو سکتا ہے کہ آئی ڈی وصف کی ہجے غلط ہو گئی ہو؟",
 }

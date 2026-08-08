@@ -6,7 +6,7 @@ import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app, BrowserWindow } from "electron"
+import { app } from "electron"
 
 import { Deferred, Effect, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
@@ -18,6 +18,7 @@ import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { createMenu } from "./menu"
+import { clearDeviceSessions, githubStartupHook } from "./connectors"
 import {
   finishFirstLaunchOnboarding,
   initializeOldLayoutEligibility,
@@ -51,14 +52,14 @@ import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
 
 const APP_NAMES: Record<string, string> = {
-  dev: "OpenCode Dev",
-  beta: "OpenCode Beta",
-  prod: "OpenCode",
+  dev: "Jarvis Dev",
+  beta: "Jarvis Beta",
+  prod: "Jarvis",
 }
 const APP_IDS: Record<string, string> = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
+  dev: "ai.jarvis.desktop.dev",
+  beta: "ai.jarvis.desktop.beta",
+  prod: "ai.jarvis.desktop",
 }
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const SIDECAR_VERSION = process.env.OPENCODE_SIDECAR_V2 === "1" ? "v2" : "v1"
@@ -122,7 +123,7 @@ const main = Effect.gen(function* () {
 
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
-  const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
+  const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.jarvis.desktop.dev"
   const onboardingTestRoot = ((): string | undefined => {
     if (!TEST_ONBOARDING) return
 
@@ -138,7 +139,7 @@ const main = Effect.gen(function* () {
     process.env.XDG_STATE_HOME = join(root, "state")
     return root
   })()
-  app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
+  app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "Jarvis Dev")
   app.setAppUserModelId(appId)
   app.setPath(
     "userData",
@@ -203,7 +204,7 @@ const main = Effect.gen(function* () {
   const shellEnv = preferAppEnv(app.getPath("userData"))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
-    const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
+    const urls = argv.filter((arg: string) => arg.startsWith("jarvis://"))
     if (urls.length) {
       logger.log("deep link received via second-instance", { urls })
       emitDeepLinks(urls)
@@ -229,6 +230,7 @@ const main = Effect.gen(function* () {
   app.on("will-quit", () => {
     setAppQuitting()
     void stopSidecars()
+    clearDeviceSessions()
   })
 
   app.on("child-process-gone", (_event, details) => {
@@ -268,7 +270,7 @@ const main = Effect.gen(function* () {
       }),
     ),
   )
-  app.setAsDefaultProtocolClient("opencode")
+  app.setAsDefaultProtocolClient("jarvis")
   registerRendererProtocol()
   setDockIcon()
   const updater = setupAutoUpdater(stopSidecars)
@@ -280,6 +282,8 @@ const main = Effect.gen(function* () {
     checkForUpdates: () => void showUpdaterDialog(updater, true),
     relaunch,
   }
+  githubStartupHook()
+
   registerIpcHandlers({
     killSidecar: () => killSidecar(),
     relaunch,
@@ -386,7 +390,7 @@ const main = Effect.gen(function* () {
     server = listener
     yield* Deferred.succeed(serverReady, {
       url,
-      username: "opencode",
+      username: "jarvis",
       password,
     })
 
@@ -407,15 +411,6 @@ const main = Effect.gen(function* () {
   }).pipe(forwardInitializationFailure(serverReady), Effect.forkChild)
 
   yield* Fiber.await(loadingTask)
-
-  app.on("window-all-closed", () => {
-    if (process.platform === "darwin") return
-    app.quit()
-  })
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length > 0) return
-    restoreMainWindows()
-  })
 
   const windows = restoreMainWindows()
   if (windows.length) createMenu(menuDeps)

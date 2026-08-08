@@ -1851,9 +1851,7 @@ export default function Page() {
 
       const session = sdk().api.session
       const target = sync()
-      const index = userMessages().findIndex((item) => item.id === id)
-      if (index < 0) return
-      const next = userMessages()[index + 1]
+      const next = userMessages().find((item) => item.id > id)
       const last = target.session.get(sessionID)?.revert
 
       await runPromptRollbackMutation({
@@ -1893,10 +1891,8 @@ export default function Page() {
   const rolled = createMemo(() => {
     const id = revertMessageID()
     if (!id) return []
-    const index = userMessages().findIndex((item) => item.id === id)
-    if (index < 0) return []
     return userMessages()
-      .slice(index)
+      .filter((item) => item.id >= id)
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 

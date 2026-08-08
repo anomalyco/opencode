@@ -1,5 +1,4 @@
 import { usePlatform } from "@/context/platform"
-import { useLanguage } from "@/context/language"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -15,7 +14,6 @@ export type DialogGoUpsellProps = {
 
 export function DialogUsageExceeded(props: DialogGoUpsellProps) {
   const dialog = useDialog()
-  const language = useLanguage()
   const platform = usePlatform()
 
   const runAction = () => {
@@ -34,7 +32,7 @@ export function DialogUsageExceeded(props: DialogGoUpsellProps) {
       <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
         <div class="flex justify-end gap-2">
           <Button variant="ghost" size="large" onClick={dismiss}>
-            {language.t("dialog.usageExceeded.dontShowAgain")}
+            Don't show again
           </Button>
           <Button variant="primary" size="large" onClick={runAction}>
             {props.actionLabel}

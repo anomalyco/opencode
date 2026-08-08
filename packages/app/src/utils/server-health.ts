@@ -106,7 +106,7 @@ export async function checkServerHealth(
 
     return createSdkForServer({ server, fetch, signal })
       .global.health()
-      .then((x) => (x.error ? next(count, x.error) : { healthy: x.data?.healthy === true, version: x.data?.version }))
+      .then((x) => (x.error ? next(count, x.error) : { healthy:  x.data?.healthy, version: x.data?.version }))
       .catch((error) => next(count, error))
   }
   return attempt(0).finally(() => timeout?.clear?.())

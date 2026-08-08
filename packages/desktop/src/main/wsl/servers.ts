@@ -3,7 +3,7 @@ import type {
   WslInstalledDistro,
   WslJob,
   WslOnlineDistro,
-  WslOpencodeCheck,
+  WslJarvisCheck,
   WslRuntimeCheck,
   WslServerConfig,
   WslServerItem,
@@ -13,12 +13,12 @@ import type {
 } from "../../preload/types"
 import { WSL_SERVERS_KEY } from "../store-keys"
 import { getStore } from "../store"
-import { expectOpencodeVersion, pendingRestartAfterWslInstall, wslServerIdsToStartOnInitialize } from "./startup"
+import { expectJarvisVersion, pendingRestartAfterWslInstall, wslServerIdsToStartOnInitialize } from "./startup"
 import { clearWslDistroState, wslServerIdToRestart } from "./policy"
 import { nativeT } from "../native-translations"
 import {
   installWslDistro,
-  installWslOpencode,
+  installWslJarvis,
   installWslRuntimeElevated,
   listInstalledWslDistros,
   listOnlineWslDistros,
@@ -26,7 +26,7 @@ import {
   probeWslDistro,
   probeWslRuntime,
   readWslCommandVersion,
-  resolveWslOpencode,
+  resolveWslJarvis,
   summarize,
 } from "./runtime"
 
@@ -49,7 +49,7 @@ type WslServersControllerOptions = {
   readServers?: () => WslServerConfig[]
   writeServers?: (servers: WslServerConfig[]) => void
   probeDistro?: typeof probeWslDistro
-  resolveOpencode?: typeof resolveWslOpencode
+  resolveOpencode?: typeof resolveWslJarvis
   readCommandVersion?: typeof readWslCommandVersion
 }
 
@@ -122,17 +122,17 @@ export function createWslServersController(
     updateServer(id, (item) => ({ ...item, runtime }))
   }
 
-  const setOpencodeCheck = (distro: string, check: WslOpencodeCheck) => {
+  const setOpencodeCheck = (distro: string, check: WslJarvisCheck) => {
     setState({
-      opencodeChecks: {
-        ...state.opencodeChecks,
+      jarvisChecks: {
+        ...state.jarvisChecks,
         [distro]: check,
       },
     })
   }
 
   const checkOpencode = async (distro: string, opts?: { signal?: AbortSignal }) => {
-    const resolved = await (options?.resolveOpencode ?? resolveWslOpencode)(distro, opts)
+    const resolved = await (options?.resolveOpencode ?? resolveWslJarvis)(distro, opts)
     const version = resolved
       ? await (options?.readCommandVersion ?? readWslCommandVersion)(resolved, distro, opts)
       : null
@@ -154,14 +154,14 @@ export function createWslServersController(
       setState({ distroProbes: { ...state.distroProbes, ...Object.fromEntries(distroProbes) } })
     }
 
-    const opencodeChecks = await Promise.all(
+    const jarvisChecks = await Promise.all(
       unique
         .filter((distro) => distroProbeReady(state.distroProbes[distro]))
-        .filter((distro) => !state.opencodeChecks[distro])
+        .filter((distro) => !state.jarvisChecks[distro])
         .map(async (distro) => [distro, await checkOpencode(distro, opts)] as const),
     )
-    if (opencodeChecks.length) {
-      setState({ opencodeChecks: { ...state.opencodeChecks, ...Object.fromEntries(opencodeChecks) } })
+    if (jarvisChecks.length) {
+      setState({ jarvisChecks: { ...state.jarvisChecks, ...Object.fromEntries(jarvisChecks) } })
     }
   }
 
@@ -360,14 +360,14 @@ export function createWslServersController(
       })
     },
 
-    async installOpencode(name: string) {
-      await runJob({ kind: "install-opencode", distro: name, startedAt: Date.now() }, async (abort) => {
-        const result = await installWslOpencode(appVersion, name, { signal: abort.signal })
+    async installJarvis(name: string) {
+      await runJob({ kind: "install-jarvis", distro: name, startedAt: Date.now() }, async (abort) => {
+        const result = await installWslJarvis(appVersion, name, { signal: abort.signal })
         if (result.code !== 0) {
           throw new Error(summarize(result.stderr || result.stdout) || nativeT("desktop.wsl.error.installOpencode"))
         }
         await refreshOpencodeCheck(name, { signal: abort.signal })
-        expectOpencodeVersion(state.opencodeChecks[name]?.version ?? null, appVersion, name)
+        expectJarvisVersion(state.jarvisChecks[name]?.version ?? null, appVersion, name)
         const id = wslServerIdToRestart(state.servers, name)
         if (id) await startServer(id)
       })
@@ -402,7 +402,7 @@ export function createWslServersController(
       persistServers(remaining)
       setState({
         servers: state.servers.filter((item) => item.config.id !== id),
-        ...(distro ? clearWslDistroState(state.distroProbes, state.opencodeChecks, distro) : {}),
+        ...(distro ? clearWslDistroState(state.distroProbes, state.jarvisChecks, distro) : {}),
       })
     },
 
@@ -428,7 +428,7 @@ function initialState(): WslServersState {
     installed: [],
     online: [],
     distroProbes: {},
-    opencodeChecks: {},
+    jarvisChecks: {},
     pendingRestart: false,
     servers: [],
     job: null,
@@ -469,7 +469,7 @@ function opencodeCheck(
   resolvedPath: string | null,
   version: string | null,
   expectedVersion: string,
-): WslOpencodeCheck {
+): WslJarvisCheck {
   if (!resolvedPath) {
     return {
       distro,
@@ -514,7 +514,7 @@ export type {
   WslOnlineDistro,
   WslRuntimeCheck,
   WslDistroProbe,
-  WslOpencodeCheck,
+  WslJarvisCheck,
   WslServerConfig,
   WslServerItem,
   WslServerRuntime,

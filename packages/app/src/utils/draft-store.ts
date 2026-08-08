@@ -115,7 +115,7 @@ export function createBrowserDraftStore(): DraftStore {
         blobs.addEventListener("success", () => {
           const cursor = blobs.result
           if (!cursor) return
-          if (!used.has(String(cursor.key))) cursor.delete()
+          if (!used.has(/* oxlint false positive: IDBValidKey is string|number|Date|ArrayBuffer, all safe with String() */ String(cursor.key))) cursor.delete()
           cursor.continue()
         })
       })

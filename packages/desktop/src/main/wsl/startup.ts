@@ -4,7 +4,7 @@ export function wslServerIdsToStartOnInitialize(servers: { id: string }[]) {
   return servers.map((server) => server.id)
 }
 
-export function expectOpencodeVersion(installed: string | null, expected: string, distro = "Debian") {
+export function expectJarvisVersion(installed: string | null, expected: string, distro = "Debian") {
   if (installed === expected) return
   throw new Error(
     nativeT("desktop.wsl.error.updateVersion", {

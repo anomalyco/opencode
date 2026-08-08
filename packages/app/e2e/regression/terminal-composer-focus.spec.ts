@@ -27,7 +27,7 @@ test.beforeEach(async ({ page }) => {
       all: [
         {
           id: "opencode",
-          name: "OpenCode",
+          name: "Jarvis",
           models: { test: { id: "test", name: "Test", limit: { context: 200_000 } } },
         },
       ],
@@ -205,7 +205,7 @@ test("focuses a terminal created from the new-terminal button", async ({ page })
 function seedCachedTerminal(page: Page) {
   return page.addInitScript(
     ({ terminalKey, ptyID }) => {
-      localStorage.setItem("opencode.global.dat:layout", JSON.stringify({ terminal: { height: 320, opened: true } }))
+      localStorage.setItem("jarvis.global.dat:layout", JSON.stringify({ terminal: { height: 320, opened: true } }))
       localStorage.setItem(
         terminalKey,
         JSON.stringify({

@@ -337,11 +337,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const target = session
             ? Persist.serverSession(scope, dir, session, entry.key)
             : Persist.serverWorkspace(scope, dir, entry.key)
-          void removePersisted(target, platform)
+           removePersisted(target, platform)
 
           if (scope !== ServerScope.local) continue
           const legacyKey = `${dir}/${entry.legacy}${session ? "/" + session : ""}.${entry.version}`
-          void removePersisted({ key: legacyKey }, platform)
+           removePersisted({ key: legacyKey }, platform)
         }
       }
     }

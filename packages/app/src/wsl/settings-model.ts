@@ -2,7 +2,7 @@ import fuzzysort from "fuzzysort"
 import type {
   WslInstalledDistro,
   WslOnlineDistro,
-  WslOpencodeCheck,
+  WslJarvisCheck,
   WslServersPlatform,
   WslServerRuntime,
   WslServersState,
@@ -24,7 +24,7 @@ export type AddServerPrimaryButton = {
   variant: "neutral" | "contrast"
   label: AddServerText
   disabled: boolean
-  action: "install-opencode" | "add" | null
+  action: "install-jarvis" | "add" | null
   loading: boolean
   width: string | null
 }
@@ -51,7 +51,7 @@ function isHiddenDistro(name: string) {
 export const wslRuntimeRetryable = (runtime: WslServerRuntime) =>
   runtime.kind === "failed" || runtime.kind === "stopped"
 
-export function wslOpencodeAction(check?: WslOpencodeCheck) {
+export function wslOpencodeAction(check?: WslJarvisCheck) {
   if (!check) return
   if (!check.resolvedPath) return "wsl.onboarding.installOpencode"
   if (check.matchesDesktop === false) return "wsl.onboarding.updateOpencode"
@@ -80,7 +80,7 @@ export function addServerViewModel(input: {
   const existingServerDistros = new Set((state?.servers ?? []).map((item) => item.config.distro))
   const addableInstalledDistros = visibleInstalledDistros.filter((item) => !existingServerDistros.has(item.name))
   const selectedDistro = addServerSelectedDistro(input.selectedDistro, visibleInstalledDistros, addableInstalledDistros)
-  const opencodeCheck = selectedDistro ? (state?.opencodeChecks[selectedDistro] ?? null) : null
+  const opencodeCheck = selectedDistro ? (state?.jarvisChecks[selectedDistro] ?? null) : null
   const installableDistros = addServerInstallableDistros(visibleInstalledDistros, visibleOnlineDistros)
   const filteredInstallableDistros = addServerFilteredInstallableDistros(installableDistros, input.catalogSearch)
   const catalogTarget = addServerCatalogTarget(input.catalogTarget, filteredInstallableDistros)
@@ -165,7 +165,7 @@ function addServerDistroStatus(input: {
   if (!probe.hasBash || !probe.hasCurl) {
     return { label: { key: "wsl.onboarding.distroStatus.missingTools" }, tone: "warning" }
   }
-  const check = input.state?.opencodeChecks[input.name]
+  const check = input.state?.jarvisChecks[input.name]
   if (!check) {
     if (input.probingAddable || (job?.kind === "probe-addable" && job.distros.includes(input.name))) {
       return checkingStatus()
@@ -185,7 +185,7 @@ function checkingStatus(): DistroStatus {
 function addServerPrimaryButton(input: {
   state: WslServersState | undefined
   selectedDistro: string | null
-  opencodeCheck: WslOpencodeCheck | null
+  opencodeCheck: WslJarvisCheck | null
   adding: boolean
   probingAddable: boolean
 }): AddServerPrimaryButton {
@@ -199,7 +199,7 @@ function addServerPrimaryButton(input: {
           input.state?.job?.kind === "probe-addable" &&
           input.state.job.distros.includes(input.selectedDistro))))
   const installingOpencode =
-    input.state?.job?.kind === "install-opencode" && input.state.job.distro === input.selectedDistro
+    input.state?.job?.kind === "install-jarvis" && input.state.job.distro === input.selectedDistro
   if (!ready || probingOpencode) {
     return {
       variant: "contrast",
@@ -220,7 +220,7 @@ function addServerPrimaryButton(input: {
           ? { key: "wsl.onboarding.updateOpencode" }
           : { key: "wsl.onboarding.installOpencode" },
       disabled: !!input.state?.job || input.adding,
-      action: "install-opencode",
+      action: "install-jarvis",
       loading: installingOpencode,
       width: update ? "138px" : "129px",
     }
@@ -235,7 +235,7 @@ function addServerPrimaryButton(input: {
   }
 }
 
-function addServerOpencodeReady(check: WslOpencodeCheck | null) {
+function addServerOpencodeReady(check: WslJarvisCheck | null) {
   return !!check?.resolvedPath && check.matchesDesktop !== false && !check.error
 }
 
@@ -245,7 +245,7 @@ function addServerSelectedDistroSettled(state: WslServersState | undefined, sele
   if (installed?.version === 1) return false
   if (!state?.distroProbes[selectedDistro]) return false
   if (!wslDistroReady(state, selectedDistro)) return true
-  return !!state.opencodeChecks[selectedDistro]
+  return !!state.jarvisChecks[selectedDistro]
 }
 
 function addServerInstallableDistros(installedDistros: WslInstalledDistro[], onlineDistros: WslOnlineDistro[]) {
@@ -286,7 +286,7 @@ export function addableProbePlan(input: {
   const pending = ordered.flatMap((item) => {
     if (item.version === 1) return []
     if (!state.distroProbes[item.name]) return [`distro:${item.name}`]
-    if (wslDistroReady(state, item.name) && !state.opencodeChecks[item.name]) return [`opencode:${item.name}`]
+    if (wslDistroReady(state, item.name) && !state.jarvisChecks[item.name]) return [`opencode:${item.name}`]
     return []
   })
   if (!pending.length) return

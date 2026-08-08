@@ -33,59 +33,72 @@ describe("RepositoryCache", () => {
     ),
   )
 
-  it.live("serializes concurrent materialization for the same checkout", () =>
-    withRemote((fixture) =>
-      Effect.gen(function* () {
-        const cache = yield* RepositoryCache.Service
-        const results = yield* Effect.all(
-          [cache.ensure({ reference: fixture.reference }), cache.ensure({ reference: fixture.reference })],
-          { concurrency: "unbounded" },
-        )
+  it.live(
+    "serializes concurrent materialization for the same checkout",
+    () =>
+      withRemote((fixture) =>
+        Effect.gen(function* () {
+          const cache = yield* RepositoryCache.Service
+          const results = yield* Effect.all(
+            [cache.ensure({ reference: fixture.reference }), cache.ensure({ reference: fixture.reference })],
+            { concurrency: "unbounded" },
+          )
 
-        expect(results.map((result) => result.status).toSorted()).toEqual(["cached", "cloned"])
-        expect(results[0].localPath).toBe(results[1].localPath)
-      }).pipe(Effect.provide(cacheLayer(fixture.root))),
-    ),
+          expect(results.map((result) => result.status).toSorted()).toEqual(["cached", "cloned"])
+          expect(results[0].localPath).toBe(results[1].localPath)
+        }).pipe(Effect.provide(cacheLayer(fixture.root))),
+      ),
+    // Windows CI runners have slow git/IO (antivirus). Default bun timeout (5s)
+    // flakes on the multiple git commit/clone/push round-trips this test performs.
+    30_000,
   )
 
-  it.live("replaces an existing checkout whose origin does not match", () =>
-    withRemote((fixture) =>
-      Effect.gen(function* () {
-        const cache = yield* RepositoryCache.Service
-        const initial = yield* cache.ensure({ reference: fixture.reference })
-        yield* Effect.promise(async () => {
-          await git(initial.localPath, "config", "remote.origin.url", "https://github.com/other/repo.git")
-          await fs.writeFile(path.join(initial.localPath, "stale.txt"), "stale")
-        })
+  it.live(
+    "replaces an existing checkout whose origin does not match",
+    () =>
+      withRemote((fixture) =>
+        Effect.gen(function* () {
+          const cache = yield* RepositoryCache.Service
+          const initial = yield* cache.ensure({ reference: fixture.reference })
+          yield* Effect.promise(async () => {
+            await git(initial.localPath, "config", "remote.origin.url", "https://github.com/other/repo.git")
+            await fs.writeFile(path.join(initial.localPath, "stale.txt"), "stale")
+          })
 
-        const replaced = yield* cache.ensure({ reference: fixture.reference })
+          const replaced = yield* cache.ensure({ reference: fixture.reference })
 
-        expect(replaced.status).toBe("cloned")
-        expect(yield* exists(path.join(replaced.localPath, "stale.txt"))).toBe(false)
-      }).pipe(Effect.provide(cacheLayer(fixture.root))),
-    ),
+          expect(replaced.status).toBe("cloned")
+          expect(yield* exists(path.join(replaced.localPath, "stale.txt"))).toBe(false)
+        }).pipe(Effect.provide(cacheLayer(fixture.root))),
+      ),
+    // Windows CI: multiple git operations (config + clone) exceed bun's 5s default.
+    30_000,
   )
 
-  it.live("keeps branch checkouts isolated from branchless refreshes", () =>
-    withRemote((fixture) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(() => branch(fixture.source, "feature", "two\n"))
-        const cache = yield* RepositoryCache.Service
+  it.live(
+    "keeps branch checkouts isolated from branchless refreshes",
+    () =>
+      withRemote((fixture) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => branch(fixture.source, "feature", "two\n"))
+          const cache = yield* RepositoryCache.Service
 
-        const featured = yield* cache.ensure({ reference: fixture.reference, branch: "feature" })
-        expect(featured.branch).toBe("feature")
-        expect(featured.localPath.endsWith("repo@feature")).toBe(true)
-        expect(yield* read(path.join(featured.localPath, "README.md"))).toBe("two\n")
+          const featured = yield* cache.ensure({ reference: fixture.reference, branch: "feature" })
+          expect(featured.branch).toBe("feature")
+          expect(featured.localPath.endsWith("repo@feature")).toBe(true)
+          expect(yield* read(path.join(featured.localPath, "README.md"))).toBe("two\n")
 
-        const refreshed = yield* cache.ensure({ reference: fixture.reference, refresh: true })
-        expect(refreshed.localPath).not.toBe(featured.localPath)
-        expect(yield* read(path.join(refreshed.localPath, "README.md"))).toBe("one\n")
+          const refreshed = yield* cache.ensure({ reference: fixture.reference, refresh: true })
+          expect(refreshed.localPath).not.toBe(featured.localPath)
+          expect(yield* read(path.join(refreshed.localPath, "README.md"))).toBe("one\n")
 
-        const cached = yield* cache.ensure({ reference: fixture.reference, branch: "feature" })
-        expect(cached.status).toBe("cached")
-        expect(yield* read(path.join(cached.localPath, "README.md"))).toBe("two\n")
-      }).pipe(Effect.provide(cacheLayer(fixture.root))),
-    ),
+          const cached = yield* cache.ensure({ reference: fixture.reference, branch: "feature" })
+          expect(cached.status).toBe("cached")
+          expect(yield* read(path.join(cached.localPath, "README.md"))).toBe("two\n")
+        }).pipe(Effect.provide(cacheLayer(fixture.root))),
+      ),
+    // Windows CI: branch creation + multiple clone/refresh round-trips exceed 5s default.
+    30_000,
   )
 
   it.live("does not mistake an enclosing repository for the cache checkout", () =>

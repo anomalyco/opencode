@@ -92,7 +92,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const question = createMemo(() => questions()[store.tab])
   const options = createMemo(() => question()?.options ?? [])
   const input = createMemo(() => store.custom[store.tab] ?? "")
-  const on = createMemo(() => store.customOn[store.tab] === true)
+  const on = createMemo(() =>  store.customOn[store.tab])
   const multi = createMemo(() => question()?.multiple === true)
   const count = createMemo(() => options().length + 1)
 
@@ -154,7 +154,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const pickFocus = (tab: number = store.tab) => {
     const list = questions()[tab]?.options ?? []
-    if (store.customOn[tab] === true) return list.length
+    if (store.customOn[tab]) return list.length
     return Math.max(
       0,
       list.findIndex((item) => store.answers[tab]?.includes(item.label) ?? false),
@@ -263,7 +263,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const answered = (i: number) => {
     if ((store.answers[i]?.length ?? 0) > 0) return true
-    return store.customOn[i] === true && (store.custom[i] ?? "").trim().length > 0
+    return  store.customOn[i] && (store.custom[i] ?? "").trim().length > 0
   }
 
   const picked = (answer: string) => store.answers[store.tab]?.includes(answer) ?? false

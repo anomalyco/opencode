@@ -115,7 +115,7 @@ describe("persist localStorage resilience", () => {
   test("workspace storage sanitizes Windows filename characters", () => {
     const result = persistTesting.workspaceStorage("C:\\Users\\foo")
 
-    expect(result).toStartWith("opencode.workspace.")
+    expect(result).toStartWith("jarvis.workspace.")
     expect(result.endsWith(".dat")).toBeTrue()
     expect(/[:\\/]/.test(result)).toBeFalse()
   })
@@ -200,7 +200,7 @@ describe("persist localStorage resilience", () => {
   test("server global target preserves local key and isolates remote keys", () => {
     expect(Persist.serverGlobal(ServerScope.local, "notification")).toEqual(Persist.global("notification"))
     expect(Persist.serverGlobal("https://debian.example" as ServerScope, "notification")).toEqual({
-      storage: "opencode.global.dat",
+      storage: "jarvis.global.dat",
       key: "https://debian.example\0notification",
     })
   })

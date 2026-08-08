@@ -73,7 +73,7 @@ function compareVersions(a: string, b: string) {
   const right = parse(b)
   if (!left || !right) return
   const index = left.findIndex((part, index) => part !== right[index])
-  return index === -1 ? 0 : left[index]! - right[index]!
+  return index === -1 ? 0 : left[index] - right[index]
 }
 
 export function isAppUpgrade(previous: string | undefined, current: string | undefined) {

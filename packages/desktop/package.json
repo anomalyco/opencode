@@ -1,13 +1,13 @@
 {
-  "name": "@opencode-ai/desktop",
+  "name": "@jarvis-ai/desktop",
   "private": true,
-  "version": "1.18.15",
+  "version": "0.1.4",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://opencode.ai",
+  "homepage": "https://jarvis.ai",
   "author": {
-    "name": "OpenCode",
-    "email": "hello@opencode.ai"
+    "name": "Jarvis",
+    "email": "hello@jarvis.ai"
   },
   "scripts": {
     "typecheck": "tsgo -b",

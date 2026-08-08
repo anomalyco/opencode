@@ -69,7 +69,7 @@ export function flattenFileTreeV2(model: FileTreeV2Model, expanded: (path: strin
     if (row.node.type !== "directory" || !expanded(row.node.path)) continue
     const children = model.children.get(row.node.path) ?? []
     for (let index = children.length - 1; index >= 0; index--) {
-      stack.push({ node: children[index]!, level: row.level + 1 })
+      stack.push({ node: children[index], level: row.level + 1 })
     }
   }
 
@@ -91,7 +91,7 @@ export function flattenLiveFileTreeV2(
     if (row.node.type !== "directory" || !expanded(row.node.path)) continue
     const nested = children(row.node.originalPath)
     for (let index = nested.length - 1; index >= 0; index--) {
-      stack.push({ node: toLiveNode(nested[index]!), level: row.level + 1 })
+      stack.push({ node: toLiveNode(nested[index]), level: row.level + 1 })
     }
   }
 

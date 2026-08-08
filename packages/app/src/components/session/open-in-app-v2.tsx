@@ -58,7 +58,7 @@ export function OpenInAppV2(props: { directory: () => string }) {
                 <MenuV2.RadioGroup
                   value={state.current().id}
                   onChange={(value) => {
-                    state.selectApp(value as OpenApp)
+                    state.selectApp(value)
                   }}
                 >
                   <For each={state.options()}>

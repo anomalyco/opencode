@@ -1,6 +1,6 @@
-# OpenCode Desktop
+# Jarvis Desktop
 
-The OpenCode Desktop app, built with Electron.
+The Jarvis Desktop app, built with Electron.
 
 ## Development
 

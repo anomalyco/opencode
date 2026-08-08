@@ -54,7 +54,7 @@ export async function exportDebugLogs() {
     await netLog.stopLogging().catch((error) => write("network", "failed to stop net log", { error }))
   }
 
-  const output = join(app.getPath("downloads"), `opencode-debug-${stamp()}.zip`)
+  const output = join(app.getPath("downloads"), `jarvis-debug-${stamp()}.zip`)
   try {
     write("main", "exporting debug logs", { output })
     await writeZip(output, [

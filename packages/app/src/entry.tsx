@@ -3,7 +3,6 @@
 import * as Sentry from "@sentry/solid"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
-import { loadInitialLocale } from "@/context/language"
 import { type Platform, PlatformProvider } from "@/context/platform"
 import { createBrowserDraftStore } from "@/utils/draft-store"
 import { dict as en } from "@/i18n/en"
@@ -12,7 +11,7 @@ import { authFromToken } from "@/utils/server"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
 
-const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
+const DEFAULT_SERVER_URL_KEY = "jarvis.settings.dat:defaultServerUrl"
 
 const getLocale = () => {
   if (typeof navigator !== "object") return "en" as const
@@ -70,7 +69,7 @@ const notify: Platform["notify"] = async (title, description, onClick) => {
 
   const notification = new Notification(title, {
     body: description ?? "",
-    icon: "https://opencode.ai/favicon-96x96-v3.png",
+    icon: "https://jarvis.ai/favicon-96x96-v3.png",
   })
 
   notification.onclick = () => {
@@ -150,31 +149,29 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 }
 
 if (root instanceof HTMLElement) {
-  void loadInitialLocale().then((locale) => {
-    const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
-    clearAuthToken()
-    const server: ServerConnection.Http = {
-      type: "http",
-      authToken: !!auth,
-      http: {
-        url: getCurrentUrl(),
-        ...auth,
-      },
-    }
-    render(
-      () => (
-        <PlatformProvider value={platform}>
-          <AppBaseProviders locale={locale}>
-            <AppInterface
-              defaultServer={ServerConnection.Key.make(getDefaultUrl())}
-              canonicalLocalServer={ServerConnection.key(server)}
-              servers={[server]}
-              disableHealthCheck
-            />
-          </AppBaseProviders>
-        </PlatformProvider>
-      ),
-      root,
-    )
-  })
+  const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
+  clearAuthToken()
+  const server: ServerConnection.Http = {
+    type: "http",
+    authToken: !!auth,
+    http: {
+      url: getCurrentUrl(),
+      ...auth,
+    },
+  }
+  render(
+    () => (
+      <PlatformProvider value={platform}>
+        <AppBaseProviders>
+          <AppInterface
+            defaultServer={ServerConnection.Key.make(getDefaultUrl())}
+            canonicalLocalServer={ServerConnection.key(server)}
+            servers={[server]}
+            disableHealthCheck
+          />
+        </AppBaseProviders>
+      </PlatformProvider>
+    ),
+    root,
+  )
 }

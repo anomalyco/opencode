@@ -144,7 +144,7 @@ export async function setupTimeline(
   }, input.settings ?? {})
   if (input.locale) {
     await page.addInitScript((locale) => {
-      localStorage.setItem("opencode.global.dat:language", JSON.stringify({ locale }))
+      localStorage.setItem("jarvis.global.dat:language", JSON.stringify({ locale }))
     }, input.locale)
   }
   if (input.reducedMotion) await page.emulateMedia({ reducedMotion: "reduce" })
@@ -558,7 +558,7 @@ function provider() {
     all: [
       {
         id: "opencode",
-        name: "OpenCode",
+        name: "Jarvis",
         models: { "claude-opus-4-6": { id: "claude-opus-4-6", name: "Claude Opus 4.6", limit: { context: 200_000 } } },
       },
     ],

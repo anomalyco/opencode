@@ -4,5 +4,6 @@ dist-*
 gen
 app.log
 script/build-*.ts
+!script/build-node.ts
 temporary-*.md
 .artifacts

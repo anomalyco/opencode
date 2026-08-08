@@ -22,7 +22,7 @@ import { OpenApi } from "effect/unstable/httpapi"
 import { TestLLMServer } from "../../lib/llm-server"
 import path from "path"
 import { array, boolean, check, isRecord, message, object, stable } from "./assertions"
-import { controlledPtyInput, http, route } from "./dsl"
+import { controlledPtyInput, http, ptyShell, route } from "./dsl"
 import {
   cleanupExercisePaths,
   exerciseConfigDirectory,
@@ -442,7 +442,7 @@ const scenarios: Scenario[] = [
       (body, ctx) => {
         object(body)
         check(body.title === "HTTP API PTY", "PTY create should return requested title")
-        check(body.command === "/bin/sh", "PTY create should use controlled shell command")
+        check(body.command === ptyShell().command, "PTY create should use controlled shell command")
         check(body.cwd === ctx.directory, "PTY create should default cwd to scenario directory")
       },
       "status",

@@ -91,7 +91,7 @@ export function createPromptProjectController(input: {
     ]
   }
   const initialActive = () => {
-    const selectedKey = selected() ? projectKey(selected()!) : undefined
+    const selectedKey = selected() ? projectKey(selected()) : undefined
     const options = keys()
     if (selectedKey && options.includes(selectedKey)) return selectedKey
     return options[0] ?? ""
@@ -493,7 +493,7 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
         )}
       </Show>
       <span class="min-w-0 truncate leading-5">
-        {project() ? displayName(project()!) : local.controller.labels.new()}
+        {project() ? displayName(project()) : local.controller.labels.new()}
       </span>
       <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
     </button>

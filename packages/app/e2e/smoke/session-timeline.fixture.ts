@@ -254,7 +254,7 @@ export const fixture = {
     all: [
       {
         id: "opencode",
-        name: "OpenCode",
+        name: "Jarvis",
         models: { "claude-opus-4-6": { id: "claude-opus-4-6", name: "Claude Opus 4.6", limit: { context: 200_000 } } },
       },
     ],

@@ -114,7 +114,7 @@ test.describe("regression: session timeline local row state", () => {
     await expectExpanded(wrapper, true)
 
     await wrapper.evaluate((element) => {
-      ;(element as HTMLElement).dataset.regressionMarker = "before-stream"
+      ;element.dataset.regressionMarker = "before-stream"
     })
     await wrapper.locator('[data-slot="collapsible-trigger"]').first().click()
     await expectExpanded(wrapper, false)
@@ -319,7 +319,7 @@ async function markDiffProbe(page: Page) {
     .locator(`[data-timeline-part-id="${editPartID}"]`)
     .first()
     .evaluate((element) => {
-      const tool = element as HTMLElement
+      const tool = element
       const file = tool.querySelector<HTMLElement>('[data-component="file"][data-mode="diff"]')
       const row = tool.closest<HTMLElement>("[data-timeline-key]")
       const frame = tool.closest<HTMLElement>("[data-timeline-row]")
@@ -340,7 +340,7 @@ async function readDiffProbe(page: Page) {
     .locator(`[data-timeline-part-id="${editPartID}"]`)
     .first()
     .evaluate((element) => {
-      const tool = element as HTMLElement
+      const tool = element
       const file = tool.querySelector<HTMLElement>('[data-component="file"][data-mode="diff"]')
       const row = tool.closest<HTMLElement>("[data-timeline-key]")
       const frame = tool.closest<HTMLElement>("[data-timeline-row]")
@@ -425,7 +425,7 @@ function provider() {
     all: [
       {
         id: "opencode",
-        name: "OpenCode",
+        name: "Jarvis",
         models: { "claude-opus-4-6": { id: "claude-opus-4-6", name: "Claude Opus 4.6", limit: { context: 200_000 } } },
       },
     ],

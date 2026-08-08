@@ -57,7 +57,9 @@ test("shows a comment button when a line number is hovered", async ({ page }) =>
     await expect(comment).toHaveCSS("pointer-events", "auto")
     await comment.focus()
     await expect(comment).toBeFocused()
-  }).toPass({ timeout: 10_000 })
+  // 20s: hover + focus sequence can be slow on busy CI runners; the assertion
+  // set is unchanged, only the margin grows.
+  }).toPass({ timeout: 20_000 })
   await comment.press("Enter")
   await expect(review.getByRole("textbox")).toBeVisible()
   await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 1")

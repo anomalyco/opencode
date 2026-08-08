@@ -25,9 +25,9 @@ type PersistTarget = {
 }
 
 const LEGACY_STORAGE = "default.dat"
-const GLOBAL_STORAGE = "opencode.global.dat"
-const WINDOW_STORAGE = "opencode.window"
-const LOCAL_PREFIX = "opencode."
+const GLOBAL_STORAGE = "jarvis.global.dat"
+const WINDOW_STORAGE = "jarvis.window"
+const LOCAL_PREFIX = "jarvis."
 const fallback = new Map<string, boolean>()
 
 const CACHE_MAX_ENTRIES = 500
@@ -47,7 +47,7 @@ function cacheDelete(key: string) {
 function cachePrune() {
   for (;;) {
     if (cache.size <= CACHE_MAX_ENTRIES && cacheTotal.bytes <= CACHE_MAX_BYTES) return
-    const oldest = cache.keys().next().value as string | undefined
+    const oldest = cache.keys().next().value
     if (!oldest) return
     cacheDelete(oldest)
   }
@@ -187,9 +187,9 @@ function merge(defaults: unknown, value: unknown): unknown {
     const result: Record<string, unknown> = { ...defaults }
     for (const key of Object.keys(value)) {
       if (key in defaults) {
-        result[key] = merge((defaults as Record<string, unknown>)[key], (value as Record<string, unknown>)[key])
+        result[key] = merge((defaults)[key], (value)[key])
       } else {
-        result[key] = (value as Record<string, unknown>)[key]
+        result[key] = (value)[key]
       }
     }
     return result
@@ -349,13 +349,13 @@ async function migrateLegacyAsync(input: {
 function workspaceStorage(dir: string) {
   const head = (dir.slice(0, 12) || "workspace").replace(/[^a-zA-Z0-9._-]/g, "-")
   const sum = checksum(dir) ?? "0"
-  return `opencode.workspace.${head}.${sum}.dat`
+  return `jarvis.workspace.${head}.${sum}.dat`
 }
 
 function draftStorage(draftID: string) {
   const head = (draftID.slice(0, 12) || "draft").replace(/[^a-zA-Z0-9._-]/g, "-")
   const sum = checksum(draftID) ?? "0"
-  return `opencode.draft.${head}.${sum}.dat`
+  return `jarvis.draft.${head}.${sum}.dat`
 }
 
 function windowStorage(windowID: string) {
@@ -697,7 +697,7 @@ export function persisted<T>(
     state,
     setState,
     init,
-    Object.assign(() => (ready.loading ? false : ready.latest === true), {
+    Object.assign(() => (ready.loading ? false :  ready.latest), {
       promise: init instanceof Promise ? init : undefined,
     }),
   ]

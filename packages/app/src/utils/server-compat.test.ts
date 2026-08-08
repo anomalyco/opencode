@@ -80,8 +80,8 @@ describe("createCompatibleApi", () => {
       ],
     })
 
-    expect(new URL(requests[0]!.url).pathname).toBe("/session/ses_1/prompt_async")
-    const body = await requests[0]!.json()
+    expect(new URL(requests[0].url).pathname).toBe("/session/ses_1/prompt_async")
+    const body = await requests[0].json()
     expect(body).toMatchObject({
       messageID: "msg_1",
       agent: "build",
@@ -123,7 +123,7 @@ describe("createCompatibleApi", () => {
       ],
     })
 
-    expect((await requests[0]!.json()).parts).toEqual([
+    expect((await requests[0].json()).parts).toEqual([
       { id: "prt_text", type: "text", text: "look" },
       { id: "prt_image", type: "file", mime: "image/png", url: "data:image/png;base64,AAAA", filename: "image.png" },
     ])
@@ -161,7 +161,7 @@ describe("createCompatibleApi", () => {
     const { api, requests } = setup("v1")
     await api.session.list({ parentID: null, search: "session", limit: 50 })
 
-    expect(new URL(requests[0]!.url).pathname).toBe("/experimental/session")
+    expect(new URL(requests[0].url).pathname).toBe("/experimental/session")
   })
 
   /*
@@ -178,7 +178,7 @@ describe("createCompatibleApi", () => {
     const { api, requests } = setup("v1")
     await api.file.find({ location: { directory: "/repo" }, query: "src", type: "file", limit: 20 })
 
-    const url = new URL(requests[0]!.url)
+    const url = new URL(requests[0].url)
     expect(url.pathname).toBe("/find/file")
     expect(url.searchParams.get("dirs")).toBe("false")
     expect(url.searchParams.get("limit")).toBe("20")
@@ -193,8 +193,8 @@ describe("createCompatibleApi", () => {
       location: { directory: "/other" },
     })
 
-    expect(new URL(requests[0]!.url).pathname).toBe("/session/ses_1/permissions/permission_1")
-    expect(new URL(requests[0]!.url).searchParams.get("directory")).toBe("/other")
+    expect(new URL(requests[0].url).pathname).toBe("/session/ses_1/permissions/permission_1")
+    expect(new URL(requests[0].url).searchParams.get("directory")).toBe("/other")
   })
 
   test("disposes the V1 instance after connecting a provider", async () => {
@@ -211,8 +211,8 @@ describe("createCompatibleApi", () => {
       "/instance/dispose",
       "/instance/dispose",
     ])
-    expect(requests[1]!.headers.get("x-opencode-directory")).toBe("%2Frepo")
-    expect(requests[2]!.headers.get("x-opencode-directory")).toBeNull()
+    expect(requests[1].headers.get("x-opencode-directory")).toBe("%2Frepo")
+    expect(requests[2].headers.get("x-opencode-directory")).toBeNull()
   })
 
   test("disposes the V1 instance after completing provider OAuth", async () => {
@@ -230,7 +230,7 @@ describe("createCompatibleApi", () => {
       "/instance/dispose",
       "/instance/dispose",
     ])
-    expect(requests[1]!.headers.get("x-opencode-directory")).toBe("%2Frepo")
-    expect(requests[2]!.headers.get("x-opencode-directory")).toBeNull()
+    expect(requests[1].headers.get("x-opencode-directory")).toBe("%2Frepo")
+    expect(requests[2].headers.get("x-opencode-directory")).toBeNull()
   })
 })

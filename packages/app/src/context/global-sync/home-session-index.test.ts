@@ -124,7 +124,7 @@ describe("Home V2 session index", () => {
     expect(
       applyHomeSessionEvent(afterCreate, {
         type: "session.deleted",
-        properties: { sessionID: initial[0]!.id, info: initial[0]! },
+        properties: { sessionID: initial[0].id, info: initial[0] },
       }),
     ).toEqual([created])
   })

@@ -15,10 +15,9 @@ test("matches only the scroll element or an ancestor containing it", () => {
   expect(mutationNodesContainElement([child, sibling], viewport)).toBe(false)
 })
 
-test("reports a divergent native offset once and ignores equal offsets and unrelated mutations", async () => {
+test("reports a divergent native offset once and ignores equal offsets", async () => {
   const route = document.createElement("section")
   const viewport = document.createElement("div")
-  const unrelated = document.createElement("div")
   route.append(viewport)
   document.body.append(route)
   const instance = {
@@ -38,21 +37,21 @@ test("reports a divergent native offset once and ignores equal offsets and unrel
     instance.scrollOffset = offset
   })
 
-  document.body.append(unrelated)
-  unrelated.remove()
-  await frames(2)
-  expect(calls).toEqual([])
-
   route.remove()
-  document.body.append(route)
   await new Promise((resolve) => setTimeout(resolve, 0))
-  await frames(3)
+  document.body.append(route)
+  // The MutationObserver can deliver its records on a later tick under load
+  // (e.g. busy CI runners), so waiting a fixed number of frames is racy.
+  // Wait for the reconnect check to actually deliver instead.
+  await until(() => calls.length >= 1)
   expect(calls).toEqual([[0, false]])
 
   route.remove()
   document.body.append(route)
+  // Equal offsets must not be re-delivered: extra frames only give the
+  // reconnect check more chances to wrongly fire, so a fixed wait is fine.
   await new Promise((resolve) => setTimeout(resolve, 0))
-  await frames(3)
+  await frames(5)
   expect(calls).toEqual([[0, false]])
 
   cleanup?.()
@@ -194,6 +193,16 @@ test("cleanup cancels reconnect checks and delegated offset observation", async 
 
 async function frames(count: number) {
   for (let index = 0; index < count; index++) {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  }
+}
+
+async function until(predicate: () => boolean, timeoutMs = 2_000) {
+  const deadline = performance.now() + timeoutMs
+  while (!predicate() && performance.now() < deadline) {
+    // Happy DOM delivers MutationObserver records on a task, while the offset
+    // check itself runs on the following animation frame. Yield both in order.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   }
 }

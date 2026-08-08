@@ -19,7 +19,7 @@ function readyState(input: Partial<WslServersState> = {}): WslServersState {
     installed: [],
     online: [],
     distroProbes: {},
-    opencodeChecks: {},
+    jarvisChecks: {},
     pendingRestart: false,
     servers: [],
     job: null,
@@ -188,7 +188,7 @@ describe("WSL server settings presentation", () => {
         distroProbes: {
           Debian: { name: "Debian", canExecute: true, hasBash: true, hasCurl: true, error: null },
         },
-        opencodeChecks: {
+        jarvisChecks: {
           Debian: {
             distro: "Debian",
             resolvedPath: "/home/me/.opencode/bin/opencode",
@@ -211,7 +211,7 @@ describe("WSL server settings presentation", () => {
       label: { key: "wsl.onboarding.installOpencode" },
       tone: "warning",
     })
-    expect(model.primaryButton.action).toBe("install-opencode")
+    expect(model.primaryButton.action).toBe("install-jarvis")
   })
 
   test("delegates addable probe plans to one batch command", async () => {

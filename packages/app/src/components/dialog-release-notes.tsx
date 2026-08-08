@@ -127,14 +127,14 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
         {/* Right side - Media content (edge to edge) */}
         {feature()?.media && (
           <div class="flex-1 min-w-0 bg-surface-base overflow-hidden rounded-r-xl">
-            {feature()!.media!.type === "image" ? (
+            {feature().media!.type === "image" ? (
               <img
-                src={feature()!.media!.src}
-                alt={feature()!.media!.alt ?? feature()?.title ?? language.t("dialog.releaseNotes.media.alt")}
+                src={feature().media!.src}
+                alt={feature().media!.alt ?? feature()?.title ?? language.t("dialog.releaseNotes.media.alt")}
                 class="w-full h-full object-cover"
               />
             ) : (
-              <video src={feature()!.media!.src} autoplay loop muted playsinline class="w-full h-full object-cover" />
+              <video src={feature().media!.src} autoplay loop muted playsinline class="w-full h-full object-cover" />
             )}
           </div>
         )}

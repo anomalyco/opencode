@@ -338,8 +338,8 @@ function useWslAddServerController(props: DialogWslServerProps) {
     const distro = model().selectedDistro
     const action = button.action
     if (!distro || !action) return
-    if (action === "install-opencode") {
-      await run(() => api.installOpencode(distro))
+    if (action === "install-jarvis") {
+      await run(() => api.installJarvis(distro))
       return
     }
     setStore("adding", true)

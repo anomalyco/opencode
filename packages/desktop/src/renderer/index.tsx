@@ -34,7 +34,7 @@ import { useTheme } from "@opencode-ai/ui/theme/context"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
-  throw new Error(t("desktop.error.dev.rootNotFound"))
+  throw new Error(t("error.dev.rootNotFound"))
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {
@@ -63,7 +63,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 const [updaterState, setUpdaterState] = createSignal<UpdaterState>({ status: "disabled" })
 void window.api.updater.subscribe(setUpdaterState)
 
-const deepLinkEvent = "opencode:deep-link"
+const deepLinkEvent = "jarvis:deep-link"
 
 type DesktopWindowState = {
   id?: string
@@ -71,9 +71,9 @@ type DesktopWindowState = {
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
-  window.__OPENCODE__ ??= {}
-  const pending = window.__OPENCODE__.deepLinks ?? []
-  window.__OPENCODE__.deepLinks = [...pending, ...urls]
+  window.__JARVIS__ ??= {}
+  const pending = window.__JARVIS__.deepLinks ?? []
+  window.__JARVIS__.deepLinks = [...pending, ...urls]
   window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
 }
 
@@ -83,7 +83,7 @@ const listenForDeepLinks = () => {
 }
 
 function windowLastActiveUrlKey(windowID: string) {
-  return `opencode.desktop.window.${windowID}.last-active-url`
+  return `jarvis.desktop.window.${windowID}.last-active-url`
 }
 
 function getLastActiveUrl(windowID: string) {
@@ -240,6 +240,16 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       install: () => window.api.updater.install(),
     },
 
+    connector: {
+      github: {
+        getStatus: () => window.api.connector.github.getStatus(),
+        setEnabled: (enabled) => window.api.connector.github.setEnabled(enabled),
+        startDeviceFlow: () => window.api.connector.github.startDeviceFlow(),
+        pollDeviceFlow: (sessionId) => window.api.connector.github.pollDeviceFlow(sessionId),
+        disconnect: () => window.api.connector.github.disconnect(),
+      },
+    },
+
     exportDebugLogs: () => window.api.exportDebugLogs(),
 
     setForceFocus: (enabled) => window.api.setForceFocus(enabled),
@@ -257,7 +267,7 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
 
       const notification = new Notification(title, {
         body: description ?? "",
-        icon: "https://opencode.ai/favicon-96x96-v3.png",
+        icon: "https://jarvis.ai/favicon-96x96-v3.png",
       })
       notification.onclick = () => {
         void window.api.showWindow()
@@ -334,7 +344,7 @@ function LoadingSplash() {
 function DesktopRoot(props: { windowState: DesktopWindowState }) {
   const platform = createPlatform(props.windowState)
   const loadLocale = async () => {
-    const current = await platform.storage?.("opencode.global.dat").getItem("language")
+    const current = await platform.storage?.("jarvis.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
     const raw = current ?? legacy
     if (!raw) return

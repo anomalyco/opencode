@@ -24,7 +24,7 @@ test("unmounts the terminal panel while it is hidden", async ({ page }) => {
       all: [
         {
           id: "opencode",
-          name: "OpenCode",
+          name: "Jarvis",
           models: { test: { id: "test", name: "Test", limit: { context: 200_000 } } },
         },
       ],

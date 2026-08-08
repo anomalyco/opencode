@@ -13,9 +13,9 @@ test("closing the active server's last tab opens the remaining server tab", asyn
   await page.addInitScript(
     ({ serverB, sessionA, sessionB }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-      localStorage.setItem("opencode.global.dat:server", JSON.stringify({ list: [serverB] }))
+      localStorage.setItem("jarvis.global.dat:server", JSON.stringify({ list: [serverB] }))
       localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
+        "jarvis.window.browser.dat:tabs",
         JSON.stringify([
           { type: "session", server: "http://127.0.0.1:4096", sessionId: sessionA },
           { type: "session", server: serverB, sessionId: sessionB },
@@ -51,9 +51,9 @@ test("legacy session routes preserve an existing tab's server", async ({ page })
   await page.addInitScript(
     ({ serverB, sessionB }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-      localStorage.setItem("opencode.global.dat:server", JSON.stringify({ list: [serverB] }))
+      localStorage.setItem("jarvis.global.dat:server", JSON.stringify({ list: [serverB] }))
       localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
+        "jarvis.window.browser.dat:tabs",
         JSON.stringify([{ type: "session", server: serverB, sessionId: sessionB }]),
       )
     },

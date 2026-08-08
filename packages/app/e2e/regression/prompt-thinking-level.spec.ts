@@ -22,7 +22,7 @@ test("shows the V2 thinking level control while relevant", async ({ page }) => {
       all: [
         {
           id: "opencode",
-          name: "OpenCode",
+          name: "Jarvis",
           models: {
             "thinking-model": {
               id: "thinking-model",

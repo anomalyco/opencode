@@ -24,7 +24,7 @@ test("shows loaded sessions before the directory path request resolves", async (
 
   await page.addInitScript((directory) => {
     localStorage.setItem(
-      "opencode.global.dat:server",
+      "jarvis.global.dat:server",
       JSON.stringify({
         projects: { local: [{ worktree: directory, expanded: true }] },
         lastProject: { local: directory },

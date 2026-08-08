@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jarvis — AI Desktop Assistant</title>
+  <meta name="description" content="Jarvis — open source AI desktop assistant. Multi-model, cross-platform, free forever.">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    .container { max-width: 780px; text-align: center; }
+    .logo {
+      width: 96px; height: 96px;
+      margin-bottom: 1.5rem;
+      border-radius: 22px;
+      box-shadow: 0 0 60px rgba(99, 102, 241, 0.3);
+      margin-left: auto; margin-right: auto;
+    }
+    h1 {
+      font-size: 3rem; font-weight: 800;
+      background: linear-gradient(135deg, #e2e8f0, #a5b4fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.25rem; letter-spacing: -1px;
+    }
+    .tagline { font-size: 1.15rem; color: #8b949e; margin-bottom: 1.25rem; }
+    .badges { margin-bottom: 2rem; display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
+    .badges img { height: 20px; }
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem; margin-bottom: 2rem;
+    }
+    .feature {
+      background: #161b22; border: 1px solid #30363d;
+      border-radius: 10px; padding: 1rem 1.1rem; text-align: left;
+    }
+    .feature .icon { font-size: 1.3rem; margin-bottom: 0.35rem; }
+    .feature h3 { font-size: 0.9rem; color: #e2e8f0; margin-bottom: 0.15rem; }
+    .feature p { font-size: 0.82rem; color: #8b949e; }
+    .downloads { margin-bottom: 2rem; }
+    .downloads h2 { font-size: 1rem; color: #8b949e; margin-bottom: 0.75rem; font-weight: 600; }
+    .dl-buttons { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.65rem 1.5rem; border-radius: 8px;
+      font-size: 0.9rem; font-weight: 600; text-decoration: none;
+      transition: all 0.2s; border: 1px solid transparent;
+    }
+    .btn-primary { background: #6366f1; color: white; box-shadow: 0 4px 14px rgba(99,102,241,0.4); }
+    .btn-primary:hover { background: #5457e5; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99,102,241,0.5); }
+    .btn-outline { background: transparent; color: #a5b4fc; border-color: #3730a3; }
+    .btn-outline:hover { background: #1e1b4b; transform: translateY(-1px); }
+    .btn-ghost { background: #21262d; color: #c9d1d9; border-color: #30363d; }
+    .btn-ghost:hover { background: #30363d; transform: translateY(-1px); }
+    .links { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-bottom: 3rem; }
+    .footer { font-size: 0.78rem; color: #484f58; }
+    .footer a { color: #8b949e; text-decoration: none; }
+    .footer a:hover { color: #c9d1d9; }
+    @media (max-width: 600px) {
+      h1 { font-size: 2rem; }
+      .features { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img class="logo" src="icon.png" alt="Jarvis" width="96" height="96">
+    <h1>Jarvis</h1>
+    <p class="tagline">Your AI-powered desktop assistant &mdash; open source, free forever.</p>
+
+    <div class="badges">
+      <a href="https://github.com/jaminsmoke/Jarvis/releases/latest"><img src="https://img.shields.io/github/v/release/jaminsmoke/Jarvis?color=6366f1&style=flat-square" alt="Latest release"></a>
+      <a href="https://github.com/jaminsmoke/Jarvis/blob/dev/LICENSE"><img src="https://img.shields.io/badge/license-MIT-6366f1?style=flat-square" alt="MIT License"></a>
+      <a href="https://github.com/jaminsmoke/Jarvis/releases"><img src="https://img.shields.io/github/downloads/jaminsmoke/Jarvis/total?color=6366f1&style=flat-square" alt="Downloads"></a>
+      <a href="https://github.com/jaminsmoke/Jarvis"><img src="https://img.shields.io/github/stars/jaminsmoke/Jarvis?color=6366f1&style=flat-square" alt="Stars"></a>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <div class="icon">🤖</div>
+        <h3>Multi-model AI</h3>
+        <p>Claude, GPT, Gemini, GLM &mdash; bring your own keys or use free models.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">⚡</div>
+        <h3>Blazing fast</h3>
+        <p>Built with Bun + SolidJS. Native desktop performance on Windows, macOS &amp; Linux.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🔧</div>
+        <h3>Agentic tools</h3>
+        <p>File operations, terminal access, git integration &mdash; all from chat.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🔄</div>
+        <h3>Auto-updating</h3>
+        <p>Always on the latest version. One-click install and restart.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🌐</div>
+        <h3>25+ languages</h3>
+        <p>Fully localized: &#x627;&#x644;&#x639;&#x631;&#x628;&#x64A;&#x629;, &#x4E2D;&#x6587;, &#x939;&#x93F;&#x928;&#x94D;&#x926;&#x940;, &#x65E5;&#x672C;&#x8A9E;, &#x440;&#x443;&#x441;&#x441;&#x43A;&#x438;&#x439;, espa&ntilde;ol &amp; more.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🆓</div>
+        <h3>Free &amp; open source</h3>
+        <p>MIT licensed. Forked from OpenCode, built by the community.</p>
+      </div>
+    </div>
+
+    <div class="downloads">
+      <h2>Download</h2>
+      <div class="dl-buttons">
+        <a href="https://github.com/jaminsmoke/Jarvis/releases/latest" class="btn btn-primary">&#x2B07; Windows (.exe)</a>
+        <a href="https://github.com/jaminsmoke/Jarvis/releases/latest" class="btn btn-outline">&#x1F5A5; macOS (.dmg)</a>
+        <a href="https://github.com/jaminsmoke/Jarvis/releases/latest" class="btn btn-outline">&#x1F427; Linux (.deb)</a>
+      </div>
+    </div>
+
+    <div class="links">
+      <a href="install.html" class="btn btn-primary">&#x1F4C1; Documentation</a>
+      <a href="https://github.com/jaminsmoke/Jarvis" class="btn btn-ghost">&#x2B50; Star on GitHub</a>
+      <a href="https://github.com/jaminsmoke/Jarvis/wiki" class="btn btn-ghost">📖 Wiki</a>
+      <a href="https://github.com/jaminsmoke/Jarvis/issues" class="btn btn-ghost">&#x1F41B; Report Bug</a>
+    </div>
+
+    <div class="footer">
+      <p>
+        <a href="https://github.com/jaminsmoke/Jarvis/wiki">Wiki</a> &middot;
+        <a href="https://github.com/jaminsmoke/Jarvis">GitHub</a> &middot;
+        <a href="https://github.com/jaminsmoke/Jarvis/releases">Releases</a> &middot;
+        <a href="changelog.html">Changelog</a> &middot;
+        <a href="https://github.com/jaminsmoke/Jarvis/discussions">Discussions</a> &middot;
+        MIT Licensed
+      </p>
+    </div>
+  </div>
+</body>
+</html>

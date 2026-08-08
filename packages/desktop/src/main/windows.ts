@@ -19,7 +19,7 @@ import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
-const rendererProtocol = "oc"
+const rendererProtocol = "jr"
 const rendererHost = "renderer"
 const clipboardWritePermission = "clipboard-sanitized-write"
 const notificationPermission = "notifications"
@@ -180,7 +180,7 @@ export function createMainWindow(id: string = randomUUID()) {
     height: state.height,
     show: false,
     autoHideMenuBar: true,
-    title: "OpenCode",
+    title: "Jarvis",
     icon: iconPath(),
     backgroundColor: backgroundColor ?? defaultBackgroundColor(),
     ...(process.platform === "darwin"
@@ -285,7 +285,7 @@ function windowStateFile(id: string) {
 // Mirrors windowStorage() in packages/app/src/utils/persist.ts, which names
 // the per-window renderer store this window persists its tabs into.
 function windowDataFile(id: string) {
-  return `opencode.window.${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.dat`
+  return `jarvis.window.${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.dat`
 }
 
 export function registerRendererProtocol() {

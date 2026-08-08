@@ -56,6 +56,7 @@ import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
 import { TabsInfoPopup } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
+import { UpdateAvailableToast } from "@/components/update-available-toast"
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { ServerConnection, useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
@@ -1106,7 +1107,7 @@ export default function LegacyLayout(props: ParentProps) {
     const run = ++dialogRun
     void import("@/components/dialog-select-server").then((x) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSelectServer />)
+      void dialog.show(() => <x.DialogSelectServer />)
     })
   }
 
@@ -1117,7 +1118,7 @@ export default function LegacyLayout(props: ParentProps) {
       : import("@/components/dialog-settings")
     void module.then((x) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSettings />)
+      void dialog.show(() => <x.DialogSettings />)
     })
   }
 
@@ -1164,7 +1165,7 @@ export default function LegacyLayout(props: ParentProps) {
     rememberSessionRoute(directory, id, root)
     notification.session.markViewed(id)
     const expanded = untrack(() => store.workspaceExpanded[directory])
-    if (expanded === false) {
+    if (!expanded) {
       setStore("workspaceExpanded", directory, true)
     }
     requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
@@ -1361,7 +1362,7 @@ export default function LegacyLayout(props: ParentProps) {
     const run = ++dialogRun
     void import("@/components/dialog-edit-project").then((x) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogEditProject server={conn} project={project} />)
+      void dialog.show(() => <x.DialogEditProject server={conn} project={project} />)
     })
   }
 
@@ -2249,7 +2250,7 @@ export default function LegacyLayout(props: ParentProps) {
       settingsKeybind={() => command.keybind("settings.open")}
       onOpenSettings={openSettings}
       helpLabel={() => language.t("sidebar.help")}
-      onOpenHelp={() => platform.openExternal("https://opencode.ai/desktop-feedback")}
+      onOpenHelp={() => platform.openExternal("https://github.com/jaminsmoke/Jarvis/wiki")}
       renderPanel={() =>
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }
@@ -2420,36 +2421,3 @@ export default function LegacyLayout(props: ParentProps) {
   )
 }
 
-function UpdateAvailableToast(props: {
-  version: string
-  install: () => void
-  language: ReturnType<typeof useLanguage>
-}) {
-  let toastId: number | undefined
-
-  onMount(() => {
-    toastId = showToast({
-      persistent: true,
-      icon: "download",
-      title: props.language.t("toast.update.title"),
-      description: props.language.t("toast.update.description", { version: props.version }),
-      actions: [
-        {
-          label: props.language.t("toast.update.action.installRestart"),
-          onClick: props.install,
-        },
-        {
-          label: props.language.t("toast.update.action.notYet"),
-          onClick: "dismiss",
-        },
-      ],
-    })
-  })
-
-  onCleanup(() => {
-    if (toastId === undefined) return
-    dismissToast(toastId)
-  })
-
-  return null
-}

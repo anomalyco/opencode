@@ -37,9 +37,9 @@ export function useDirectoryPicker() {
       if (!selected) input.onSelect(null)
     }
     if (platform.platform === "desktop" && settings.general.newLayoutDesigns()) {
-      dialog.show(() => <DialogSelectDirectoryV2 {...input} onSelect={onSelect} />, cancel)
+      void dialog.show(() => <DialogSelectDirectoryV2 {...input} onSelect={onSelect} />, cancel)
       return
     }
-    dialog.show(() => <DialogSelectDirectory {...input} onSelect={onSelect} />, cancel)
+    void dialog.show(() => <DialogSelectDirectory {...input} onSelect={onSelect} />, cancel)
   }
 }

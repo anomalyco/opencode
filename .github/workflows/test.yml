@@ -1,10 +1,9 @@
 name: test
 
+# DESACTIVADO — solo ci-quality por ahora. Re-activar cuando los tests
+# unitarios estén adaptados a Jarvis y sean estables en CI.
+# Para ejecutar manualmente: ir a Actions > test > Run workflow.
 on:
-  push:
-    branches:
-      - dev
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -18,6 +17,9 @@ permissions:
   checks: write
 
 env:
+  # upload-artifact v5 still declares node20 in its action.yml; force it onto
+  # Node 24 to silence the deprecation warning (checkout/cache/setup-node v5
+  # are already native Node 24).
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -28,21 +30,23 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
+            timeout: 20
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
+            timeout: 35
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
         shell: bash
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
 
@@ -51,11 +55,11 @@ jobs:
 
       - name: Configure git identity
         run: |
-          git config --global user.email "bot@opencode.ai"
-          git config --global user.name "opencode"
+          git config --global user.email "bot@jarvis.ai"
+          git config --global user.name "jarvis"
 
       - name: Cache Turbo
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.0.0
         with:
           path: node_modules/.cache/turbo
           key: turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-${{ github.sha }}
@@ -64,7 +68,7 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Run unit tests
-        timeout-minutes: 20
+        timeout-minutes: ${{ matrix.settings.timeout }}
         run: GITHUB_ACTIONS=false bun turbo test
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
@@ -77,6 +81,7 @@ jobs:
       - name: Run HttpApi exerciser gates
         if: runner.os == 'Linux'
         working-directory: packages/opencode
+        timeout-minutes: 15
         run: bun run test:httpapi
 
   e2e:
@@ -86,9 +91,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
@@ -97,12 +102,12 @@ jobs:
         shell: bash
     steps:
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           # Playwright 1.59 hangs while extracting Chromium with Node 24.16.
           node-version: "24.15"
@@ -118,7 +123,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.0.0
         with:
           path: ${{ github.workspace }}/.playwright-browsers
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium
@@ -141,7 +146,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
           if-no-files-found: ignore

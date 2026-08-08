@@ -201,10 +201,15 @@ export function route(template: string, params: Record<string, string>) {
   )
 }
 
+export function ptyShell() {
+  return process.platform === "win32"
+    ? { command: "cmd.exe", args: ["/c", "sleep 30"] }
+    : { command: "/bin/sh", args: ["-c", "sleep 30"] }
+}
+
 export function controlledPtyInput(title: string | undefined) {
   return {
-    command: "/bin/sh",
-    args: ["-c", "sleep 30"],
+    ...ptyShell(),
     ...(title ? { title } : {}),
   }
 }

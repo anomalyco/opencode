@@ -39,7 +39,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
       all: [
         {
           id: "opencode",
-          name: "OpenCode",
+          name: "Jarvis",
           models: { test: { id: "test", name: "Test", limit: { context: 200_000 } } },
         },
       ],
@@ -141,7 +141,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   await page.addInitScript(() => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
     localStorage.setItem(
-      "opencode.global.dat:layout",
+      "jarvis.global.dat:layout",
       JSON.stringify({ review: { diffStyle: "split", panelOpened: true } }),
     )
   })

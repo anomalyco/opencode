@@ -32,14 +32,14 @@ test("matches the rounded panel corners to the dark new-session background", asy
       localStorage.setItem("opencode-theme-id", "oc-2")
       localStorage.setItem("opencode-color-scheme", "dark")
       localStorage.setItem(
-        "opencode.global.dat:server",
+        "jarvis.global.dat:server",
         JSON.stringify({
           projects: { local: [{ worktree: directory, expanded: true }] },
           lastProject: { local: directory },
         }),
       )
       localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
+        "jarvis.window.browser.dat:tabs",
         JSON.stringify([{ type: "draft", draftID, server, directory }]),
       )
     },

@@ -10,6 +10,8 @@ import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
+import { SettingsIntegrationsV2 } from "./integrations"
+import { SettingsConnectorsV2 } from "./connectors"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/context/layout"
 import { useTabs } from "@/context/tabs"
@@ -65,6 +67,14 @@ export const DialogSettings: Component<{
                       <Icon name="keyboard" />
                       {language.t("settings.tab.shortcuts")}
                     </TabsV2.Trigger>
+                    <TabsV2.Trigger value="integrations">
+                      <Icon name="puzzle" />
+                      {language.t("settings.tab.integrations")}
+                    </TabsV2.Trigger>
+                    <TabsV2.Trigger value="connectors">
+                      <Icon name="nodes" />
+                      {language.t("settings.tab.connectors")}
+                    </TabsV2.Trigger>
                   </div>
                 </div>
 
@@ -107,6 +117,12 @@ export const DialogSettings: Component<{
         </TabsV2.Content>
         <TabsV2.Content value="models" class="settings-v2-panel">
           <SettingsModelsV2 />
+        </TabsV2.Content>
+        <TabsV2.Content value="integrations" class="settings-v2-panel">
+          <SettingsIntegrationsV2 />
+        </TabsV2.Content>
+        <TabsV2.Content value="connectors" class="settings-v2-panel">
+          <SettingsConnectorsV2 />
         </TabsV2.Content>
       </TabsV2>
     </Dialog>

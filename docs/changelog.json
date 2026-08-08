@@ -1,0 +1,64 @@
+{
+  "releases": [
+    {
+      "tag": "v0.1.5",
+      "highlights": [
+        {
+          "source": "desktop",
+          "items": [
+            {
+              "title": "Seguridad: resolver alerta abierta de Secret Scanning",
+              "description": "GitHub Secret Scanning mantiene una alerta abierta que debe resolverse explícitamente incluso si el valor pertenece a una fixture de pruebas. Cerrar correctamente la alerta forma parte de la trazabilidad de seguridad."
+            },
+            {
+              "title": "Release: impedir publicaciones cuando la CI no esté verde",
+              "description": "Publicar una versión convierte el estado del repositorio en software distribuido. El workflow de release debe depender explícitamente de los mismos controles que consideramos obligatorios para integrar código."
+            },
+            {
+              "title": "Seguridad de dependencias: reducir 70 alertas Dependabot",
+              "description": "Las dependencias del fork heredan una superficie grande de OpenCode y del stack de escritorio/web. La remediación debe priorizar exposición real y evitar una actualización masiva sin control."
+            },
+            {
+              "title": "GitHub: proteger dev y endurecer permisos de Actions",
+              "description": "`dev` es la rama por defecto y concentra el desarrollo del fork. Su configuración debe impedir integraciones accidentales y reducir el alcance de credenciales de GitHub Actions."
+            },
+            {
+              "title": "CI y tests: adaptar tests de OpenCode a Jarvis (branding) y estabilizar flakes Windows",
+              "description": "El workflow `test` corre unit + e2e en linux y windows. Tras los fixes de #74 (ripgrep cold-start, timing CLI, MutationObserver, actions v5) y #78 (hang del exerciser), linux queda verde pero windows sigue fallando por causas distintas a las ya corregidas."
+            },
+            {
+              "title": "Kanban: auditar versión objetivo e histórica contra releases",
+              "description": "El campo `Versión` alimenta tanto la planificación activa como el changelog público. Su significado debe ser estable: en trabajo activo indica la próxima release objetivo; en trabajo ya terminado indica la primera release que contiene realmente el cambio."
+            },
+            {
+              "title": "i18n: traducir 23 keys de Integraciones/Conectores al árabe (parity de ar.ts)",
+              "description": "La feature de Integraciones y Conectores (v0.1.4) añadió ~23 keys nuevas de i18n a `en.ts` y `es.ts`, pero el locale `ar` (árabe) nunca las recibió. El test de parity detecta el desajuste y falla en local."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tag": "v0.1.4",
+      "highlights": [
+        {
+          "source": "desktop",
+          "items": [
+            {
+              "title": "Ajustes > Desktop > Integraciones: nueva subseccion para gestionar extensiones del runtime",
+              "description": "Crear panel placeholder \"Integraciones\" en Ajustes > Desktop, con icono de puzzle y mensaje de estado vacio."
+            },
+            {
+              "title": "Ajustes > Desktop > Conectores: nueva subseccion para gestionar APIs de terceros (Gmail, WhatsApp, Slack, Notion, etc.)",
+              "description": "Crear panel placeholder \"Conectores\" en Ajustes > Desktop, con icono de nodos/conexion y mensaje de estado vacio."
+            },
+            {
+              "title": "Script kanban-sync.py: automatizar transiciones del flujo de items + regeneracion de changelog.html",
+              "description": "Crear script Python unificado `scripts/kanban-sync.py` con comandos:"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

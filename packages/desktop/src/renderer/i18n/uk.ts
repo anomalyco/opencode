@@ -11,21 +11,18 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Не вдалося перевірити оновлення",
   "desktop.updater.checkFailed.message": "Не вдалося перевірити наявність оновлень",
   "desktop.updater.none.title": "Немає доступних оновлень",
-  "desktop.updater.none.message": "Ви вже використовуєте найновішу версію OpenCode",
+  "desktop.updater.none.message": "Ви вже використовуєте найновішу версію Jarvis",
   "desktop.updater.downloadFailed.title": "Помилка оновлення",
   "desktop.updater.downloadFailed.message": "Не вдалося завантажити оновлення",
   "desktop.updater.downloaded.title": "Оновлення завантажено",
   "desktop.updater.downloaded.prompt":
-    "Версію {{version}} OpenCode завантажено. Бажаєте встановити її та перезапустити?",
+    "Версію {{version}} Jarvis завантажено. Бажаєте встановити її та перезапустити?",
   "desktop.updater.installFailed.title": "Помилка оновлення",
   "desktop.updater.installFailed.message": "Не вдалося встановити оновлення",
 
   "desktop.cli.installed.title": "CLI встановлено",
   "desktop.cli.installed.message":
-    "CLI встановлено за шляхом {{path}}\n\nПерезапустіть термінал, щоб використовувати команду 'opencode'.",
+    "CLI встановлено за шляхом {{path}}\n\nПерезапустіть термінал, щоб використовувати команду 'jarvis'.",
   "desktop.cli.failed.title": "Не вдалося встановити",
   "desktop.cli.failed.message": "Не вдалося встановити CLI: {{error}}",
-
-  "desktop.error.dev.rootNotFound":
-    "Кореневий елемент не знайдено. Ви забули додати його до index.html? Або, можливо, атрибут id було написано з помилкою?",
 }

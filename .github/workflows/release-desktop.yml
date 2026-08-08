@@ -1,0 +1,419 @@
+name: release-desktop
+
+# Publica Jarvis Desktop al empujar un tag v* (Windows por defecto).
+# Uso: git tag v0.2.0 && git push origin v0.2.0
+# Linux/macOS: workflow_dispatch con platforms=all
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release (e.g. v0.1.1). Leave empty to use the selected ref."
+        required: false
+        type: string
+      platforms:
+        description: "Platforms to build"
+        required: false
+        type: choice
+        default: windows
+        options:
+          - windows
+          - all
+      skip-ci-check:
+        description: "Bypass CI verification gate (emergency only)"
+        required: false
+        type: boolean
+        default: false
+      reason:
+        description: "Reason for bypassing CI check (required if skip-ci-check is true)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-desktop-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  verify-ci:
+    name: Verify CI green for tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.skip-ci-check)
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+
+      - name: Extract tag SHA
+        id: tag
+        shell: bash
+        run: |
+          TAG_REF="${{ github.ref }}"
+          TAG="${TAG_REF#refs/tags/}"
+          SHA="$(git rev-list -n 1 "$TAG")"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Verify ci-quality passed for tag SHA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Checking ci-quality for ${{ steps.tag.outputs.sha }}..."
+          
+          RUNS=$(gh run list --repo jaminsmoke/Jarvis --workflow ci-quality --branch dev --limit 10 --json headSha,conclusion)
+          echo "Recent ci-quality runs: $RUNS"
+          
+          MATCH=$(echo "$RUNS" | jq -r --arg SHA "${{ steps.tag.outputs.sha }}" '.[] | select(.headSha == $SHA) | .conclusion')
+          
+          if [ -z "$MATCH" ]; then
+            echo "ERROR: No ci-quality run found for SHA ${{ steps.tag.outputs.sha }}"
+            echo "Push to dev first and wait for ci-quality to pass, or push the tag from a commit that passed CI."
+            exit 1
+          fi
+          
+          if [ "$MATCH" != "success" ]; then
+            echo "ERROR: ci-quality for this SHA has conclusion '$MATCH' (expected 'success')"
+            exit 1
+          fi
+          
+          echo "OK: ci-quality passed for ${{ steps.tag.outputs.sha }}"
+
+  build-windows:
+    name: Build Windows installer
+    needs: [verify-ci]
+    if: |
+      !failure() &&
+      (needs.verify-ci.result == 'success' || needs.verify-ci.result == 'skipped')
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.0.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          RAW_REF="${{ inputs.tag || github.ref_name }}"
+          TAG="${RAW_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing Jarvis $VERSION from tag $TAG"
+
+      - name: Sync package version with tag
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node -e "const fs=require('fs');const p='packages/desktop/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version=process.env.RELEASE_VERSION;fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')"
+          node -e "const fs=require('fs');const p='packages/desktop/package.json';console.log('desktop version ->', JSON.parse(fs.readFileSync(p,'utf8')).version)"
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          HUSKY: "0"
+        run: bun install --frozen-lockfile
+
+      - name: Azure login (code signing)
+        if: env.AZURE_CLIENT_ID != ''
+        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac # v2.2.0
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure release exists (idempotent)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" --json id >/dev/null 2>&1; then
+            echo "Reusing existing release $TAG: $(gh release view "$TAG" --json id --jq .id)"
+          else
+            if gh release create "$TAG" --draft --title "$TAG" --notes "Jarvis $TAG"; then
+              echo "Created release $TAG"
+            else
+              echo "Release create raced; verifying it now exists"
+              gh release view "$TAG" --json id >/dev/null
+            fi
+          fi
+
+      - name: Build and package (prod, publish to GitHub release)
+        shell: bash
+        env:
+          OPENCODE_CHANNEL: prod
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+        run: |
+          cd packages/desktop
+          bun run build
+          bun run package:win -- --publish always
+
+      - name: Verify release assets (idempotency + completeness)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -la packages/desktop/dist/*.exe packages/desktop/dist/latest.yml
+          TAG="${{ steps.version.outputs.tag }}"
+          # Solo una release para el tag
+          COUNT=$(gh api "repos/jaminsmoke/Jarvis/releases" --paginate --jq "[.[] | select(.tag_name==\"$TAG\")] | length")
+          echo "releases for $TAG: $COUNT"
+          test "$COUNT" -eq 1 || { echo "ERROR: $COUNT releases para el tag $TAG (se esperaba 1)"; exit 1; }
+          # Conjunto de assets completo (EXE + blockmap + latest.yml)
+          ASSETS=$(gh release view "$TAG" --json assets --jq '[.assets[].name] | join(",")')
+          echo "assets: $ASSETS"
+          for a in jarvis-desktop-win-x64.exe jarvis-desktop-win-x64.exe.blockmap latest.yml; do
+            echo "$ASSETS" | grep -q "$a" || { echo "ERROR: falta asset $a en $TAG"; exit 1; }
+          done
+          echo "--- Release: https://github.com/jaminsmoke/Jarvis/releases/tag/$TAG"
+
+      - name: Publish release (electron-builder may leave it as draft)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ steps.version.outputs.tag }}" --draft=false --latest
+
+  build-linux:
+    name: Build Linux packages (AppImage/deb/rpm)
+    needs: [verify-ci]
+    if: |
+      github.event_name == 'workflow_dispatch' && inputs.platforms == 'all' &&
+      !failure() &&
+      (needs.verify-ci.result == 'success' || needs.verify-ci.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.0.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          RAW_REF="${{ inputs.tag || github.ref_name }}"
+          TAG="${RAW_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing Jarvis $VERSION from tag $TAG"
+
+      - name: Sync package version with tag
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node -e "const fs=require('fs');const p='packages/desktop/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version=process.env.RELEASE_VERSION;fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')"
+          node -e "const fs=require('fs');const p='packages/desktop/package.json';console.log('desktop version ->', JSON.parse(fs.readFileSync(p,'utf8')).version)"
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          HUSKY: "0"
+        run: bun install --frozen-lockfile
+
+      - name: Install libfuse2 (required to build AppImage on Ubuntu 24.04)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2
+
+      - name: Ensure release exists (idempotent)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" --json id >/dev/null 2>&1; then
+            echo "Reusing existing release $TAG: $(gh release view "$TAG" --json id --jq .id)"
+          else
+            if gh release create "$TAG" --draft --title "$TAG" --notes "Jarvis $TAG"; then
+              echo "Created release $TAG"
+            else
+              echo "Release create raced; verifying it now exists"
+              gh release view "$TAG" --json id >/dev/null
+            fi
+          fi
+
+      - name: Build and package (prod, publish to GitHub release)
+        shell: bash
+        env:
+          OPENCODE_CHANNEL: prod
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd packages/desktop
+          bun run build
+          bun run package:linux -- --publish always
+
+      - name: Verify release assets (idempotency + completeness)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -la packages/desktop/dist/*.AppImage packages/desktop/dist/*.deb packages/desktop/dist/*.rpm packages/desktop/dist/latest-linux.yml
+          TAG="${{ steps.version.outputs.tag }}"
+          COUNT=$(gh api "repos/jaminsmoke/Jarvis/releases" --paginate --jq "[.[] | select(.tag_name==\"$TAG\")] | length")
+          echo "releases for $TAG: $COUNT"
+          test "$COUNT" -eq 1 || { echo "ERROR: $COUNT releases para el tag $TAG (se esperaba 1)"; exit 1; }
+          ASSETS=$(gh release view "$TAG" --json assets --jq '[.assets[].name] | join(",")')
+          echo "assets: $ASSETS"
+          echo "$ASSETS" | grep -q "latest-linux.yml" || { echo "ERROR: falta latest-linux.yml en $TAG"; exit 1; }
+          echo "--- Release: https://github.com/jaminsmoke/Jarvis/releases/tag/$TAG"
+
+      - name: Publish release (electron-builder may leave it as draft)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ steps.version.outputs.tag }}" --draft=false --latest
+
+  build-mac:
+    name: Build macOS packages (${{ matrix.settings.arch }})
+    needs: [verify-ci]
+    if: |
+      github.event_name == 'workflow_dispatch' && inputs.platforms == 'all' &&
+      !failure() &&
+      (needs.verify-ci.result == 'success' || needs.verify-ci.result == 'skipped')
+    runs-on: ${{ matrix.settings.host }}
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          # macos-13 fue retirado por GitHub (dic 2025); macos-15-intel es el runner Intel actual
+          - host: macos-15-intel
+            arch: x64
+            platform_flag: --mac --x64
+            bun_install_flags: --os=darwin --cpu=x64
+          - host: macos-14
+            arch: arm64
+            platform_flag: --mac --arm64
+            bun_install_flags: --os=darwin --cpu=arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.0.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          RAW_REF="${{ inputs.tag || github.ref_name }}"
+          TAG="${RAW_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing Jarvis $VERSION from tag $TAG"
+
+      - name: Sync package version with tag
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node -e "const fs=require('fs');const p='packages/desktop/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version=process.env.RELEASE_VERSION;fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')"
+          node -e "const fs=require('fs');const p='packages/desktop/package.json';console.log('desktop version ->', JSON.parse(fs.readFileSync(p,'utf8')).version)"
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          HUSKY: "0"
+        run: bun install --frozen-lockfile ${{ matrix.settings.bun_install_flags }}
+
+      - name: Ensure release exists (idempotent)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" --json id >/dev/null 2>&1; then
+            echo "Reusing existing release $TAG: $(gh release view "$TAG" --json id --jq .id)"
+          else
+            if gh release create "$TAG" --draft --title "$TAG" --notes "Jarvis $TAG"; then
+              echo "Created release $TAG"
+            else
+              echo "Release create raced; verifying it now exists"
+              gh release view "$TAG" --json id >/dev/null
+            fi
+          fi
+
+      - name: Build and package (prod, publish to GitHub release)
+        shell: bash
+        env:
+          OPENCODE_CHANNEL: prod
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: --max-old-space-size=8192
+          # Sin identidad de firma configurada, electron-builder genera una
+          # firma ad-hoc: la app funciona pero macOS la trata como no verificada.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          cd packages/desktop
+          bun run build
+          bun run package:mac -- --publish always ${{ matrix.settings.platform_flag }}
+
+      - name: Verify release assets (idempotency + completeness)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -la packages/desktop/dist/*.dmg packages/desktop/dist/*.zip packages/desktop/dist/latest-mac.yml
+          TAG="${{ steps.version.outputs.tag }}"
+          COUNT=$(gh api "repos/jaminsmoke/Jarvis/releases" --paginate --jq "[.[] | select(.tag_name==\"$TAG\")] | length")
+          echo "releases for $TAG: $COUNT"
+          test "$COUNT" -eq 1 || { echo "ERROR: $COUNT releases para el tag $TAG (se esperaba 1)"; exit 1; }
+          ASSETS=$(gh release view "$TAG" --json assets --jq '[.assets[].name] | join(",")')
+          echo "assets: $ASSETS"
+          echo "$ASSETS" | grep -q "latest-mac.yml" || { echo "ERROR: falta latest-mac.yml en $TAG"; exit 1; }
+          echo "--- Release: https://github.com/jaminsmoke/Jarvis/releases/tag/$TAG"
+
+      - name: Publish release (electron-builder may leave it as draft)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ steps.version.outputs.tag }}" --draft=false --latest

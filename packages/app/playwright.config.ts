@@ -13,7 +13,12 @@ export default defineConfig({
   outputDir: "./e2e/test-results",
   timeout: 60_000,
   expect: {
-    timeout: 10_000,
+    // Default is 10s. On slow Windows CI runners, rendering content
+    // (review panel diffs, file projections, patches) can exceed 10s and
+    // flake as `toBeVisible` "element(s) not found". Widen the margin in CI
+    // only (same approach as #74's timing fixes); local runs keep 10s so
+    // genuine regressions still surface fast. Test timeout is 60s.
+    timeout: process.env.CI ? 30_000 : 10_000,
   },
   fullyParallel: process.env.PLAYWRIGHT_FULLY_PARALLEL === "1",
   forbidOnly: !!process.env.CI,

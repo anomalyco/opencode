@@ -39,7 +39,7 @@ export function NewSessionView(props: {
       >
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
+            <WordmarkV2 class="h-auto w-full" />
             <div class="mt-8 flex flex-col gap-8">
               <PromptInputV2Composer controller={props.input} />
               <Show when={props.project.empty()}>

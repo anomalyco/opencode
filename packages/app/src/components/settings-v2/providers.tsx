@@ -248,7 +248,7 @@ export const SettingsProvidersV2: Component<{
                   variant="neutral"
                   icon="plus"
                   onClick={() => {
-                    dialog.show(() => <DialogCustomProvider onBack={dialog.close} />)
+                    void dialog.show(() => <DialogCustomProvider onBack={dialog.close} />)
                   }}
                 >
                   {language.t("common.connect")}

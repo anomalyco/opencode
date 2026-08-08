@@ -50,7 +50,7 @@ export async function readAttachment(filePath: string, maxBytes = MAX_ATTACHMENT
       if (result.bytesRead === 0) break
       offset += result.bytesRead
     }
-    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + offset) as ArrayBuffer
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + offset)
   } finally {
     await file.close()
   }

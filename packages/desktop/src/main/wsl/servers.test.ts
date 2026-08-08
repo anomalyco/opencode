@@ -7,7 +7,7 @@ import {
   wslTerminalArgs,
 } from "./policy"
 import {
-  expectOpencodeVersion,
+  expectJarvisVersion,
   pendingRestartAfterWslInstall,
   pollWslHealth,
   wslServerIdsToStartOnInitialize,
@@ -27,13 +27,13 @@ test("starts every configured WSL server on initialization", () => {
 })
 
 test("rejects an update that did not install the desktop version", () => {
-  expect(() => expectOpencodeVersion("1.16.2", "1.16.2")).not.toThrow()
-  expect(() => expectOpencodeVersion("1.14.35", "1.16.2")).toThrow(
-    "OpenCode update finished but Debian still reports 1.14.35; expected 1.16.2",
+  expect(() => expectJarvisVersion("1.16.2", "1.16.2")).not.toThrow()
+  expect(() => expectJarvisVersion("1.14.35", "1.16.2")).toThrow(
+    "Jarvis update finished but Debian still reports 1.14.35; expected 1.16.2",
   )
 })
 
-test("restarts an existing distro server after updating OpenCode", () => {
+test("restarts an existing distro server after updating Jarvis", () => {
   expect(
     wslServerIdToRestart(
       [
@@ -64,7 +64,7 @@ test("clears cached distro probes when removing a WSL server", () => {
       },
       "Debian",
     ),
-  ).toEqual({ distroProbes: {}, opencodeChecks: {} })
+  ).toEqual({ distroProbes: {}, jarvisChecks: {} })
 })
 
 test("opens terminals for distro names containing spaces", () => {
@@ -104,7 +104,7 @@ test("derives a required Windows restart from the post-install runtime probe", (
   expect(pendingRestartAfterWslInstall({ available: true, version: "WSL version: 2.6.1", error: null })).toBe(false)
 })
 
-test("ignores stale background OpenCode checks after removing a WSL server", async () => {
+test("ignores stale background Jarvis checks after removing a WSL server", async () => {
   persistedServers = []
   releaseOpencodeResolve = undefined
   const controller = createWslServersController(
@@ -115,7 +115,7 @@ test("ignores stale background OpenCode checks after removing a WSL server", asy
         onExit: () => undefined,
       },
       url: "http://127.0.0.1:4096",
-      username: "opencode",
+      username: "jarvis",
       password: "secret",
     }),
     testControllerOptions(),
@@ -128,10 +128,10 @@ test("ignores stale background OpenCode checks after removing a WSL server", asy
   await new Promise((resolve) => setTimeout(resolve, 0))
 
   expect(controller.getState().servers).toEqual([])
-  expect(controller.getState().opencodeChecks).toEqual({})
+  expect(controller.getState().jarvisChecks).toEqual({})
 })
 
-test("ignores stale startup OpenCode checks after removing a WSL server", async () => {
+test("ignores stale startup Jarvis checks after removing a WSL server", async () => {
   persistedServers = [{ id: "wsl:Debian", distro: "Debian" }]
   releaseOpencodeResolve = undefined
   const controller = createWslServersController(
@@ -147,10 +147,10 @@ test("ignores stale startup OpenCode checks after removing a WSL server", async 
   await new Promise((resolve) => setTimeout(resolve, 0))
 
   expect(controller.getState().servers).toEqual([])
-  expect(controller.getState().opencodeChecks).toEqual({})
+  expect(controller.getState().jarvisChecks).toEqual({})
 })
 
-test("probes addable distros in parallel before checking OpenCode", async () => {
+test("probes addable distros in parallel before checking Jarvis", async () => {
   persistedServers = []
   const started: string[] = []
   const release = new Map<string, () => void>()
@@ -178,10 +178,10 @@ test("probes addable distros in parallel before checking OpenCode", async () => 
 
   expect(Object.keys(controller.getState().distroProbes)).toEqual(["Debian", "Ubuntu"])
   expect(opencode).toEqual(["Debian", "Ubuntu"])
-  expect(Object.keys(controller.getState().opencodeChecks)).toEqual(["Debian", "Ubuntu"])
+  expect(Object.keys(controller.getState().jarvisChecks)).toEqual(["Debian", "Ubuntu"])
 })
 
-test("does not check OpenCode in addable distros that cannot execute commands", async () => {
+test("does not check Jarvis in addable distros that cannot execute commands", async () => {
   persistedServers = []
   const opencode: string[] = []
   const controller = createWslServersController("1.16.2", async () => new Promise<never>(() => undefined), {
@@ -203,7 +203,7 @@ test("does not check OpenCode in addable distros that cannot execute commands", 
 
   expect(Object.keys(controller.getState().distroProbes)).toEqual(["Debian", "Ubuntu"])
   expect(opencode).toEqual(["Debian"])
-  expect(Object.keys(controller.getState().opencodeChecks)).toEqual(["Debian"])
+  expect(Object.keys(controller.getState().jarvisChecks)).toEqual(["Debian"])
 })
 
 async function waitFor(check: () => boolean) {

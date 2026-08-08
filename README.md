@@ -1,17 +1,13 @@
 <p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
+  <a href="https://github.com/jaminsmoke/Jarvis">
+    <img src="packages/desktop/icons/prod/1024x1024.png" alt="Jarvis logo" width="160">
   </a>
 </p>
-<p align="center">The open source AI coding agent.</p>
+<p align="center"><strong>Jarvis</strong> — your personal AI assistant.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://github.com/jaminsmoke/Jarvis/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/jaminsmoke/Jarvis?style=flat-square" /></a>
+  <a href="https://github.com/jaminsmoke/Jarvis"><img alt="License" src="https://img.shields.io/github/license/jaminsmoke/Jarvis?style=flat-square" /></a>
+  <a href="https://github.com/jaminsmoke/Jarvis/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/jaminsmoke/Jarvis?style=flat-square" /></a>
 </p>
 
 <p align="center">
@@ -39,67 +35,36 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![Jarvis Desktop](packages/web/src/assets/lander/screenshot.png)](https://github.com/jaminsmoke/Jarvis)
 
 ---
 
 ### Installation
 
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
+**Jarvis Desktop (Windows)**
 
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
-```
+Download the latest installer from the [releases page](https://github.com/jaminsmoke/Jarvis/releases).
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+| Platform               | Download                                    |
+| ---------------------- | ------------------------------------------- |
+| Windows x64            | `jarvis-desktop-win-x64.exe`                |
+| Linux                  | `.deb`, `.rpm`, or `.AppImage`              |
+| macOS (Apple Silicon)  | `jarvis-desktop-mac-arm64.dmg`              |
+| macOS (Intel)          | `jarvis-desktop-mac-x64.dmg`                |
 
-### Desktop App (BETA)
-
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
-
-| Platform              | Download                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
+**From source**
 
 ```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
-```
-
-#### Installation Directory
-
-The install script respects the following priority order for the installation path:
-
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
-
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+git clone https://github.com/jaminsmoke/Jarvis.git
+cd Jarvis
+bun install
+bun --cwd packages/desktop dev                # run the desktop app in dev mode
+bun --cwd packages/desktop run package:win    # build the Windows installer (dist/)
 ```
 
 ### Agents
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+Jarvis includes two built-in agents you can switch between with the `Tab` key.
 
 - **build** - Default, full-access agent for development work
 - **plan** - Read-only agent for analysis and code exploration
@@ -114,16 +79,18 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 ### Documentation
 
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
+Jarvis is a fork of [OpenCode](https://opencode.ai), so most of the [**OpenCode documentation**](https://opencode.ai/docs) applies to Jarvis.
 
 ### Contributing
 
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
+If you're interested in contributing to Jarvis, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
 
-### Building on OpenCode
+### Fork of OpenCode
 
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
+Jarvis is a fork of [OpenCode](https://opencode.ai), the open source AI coding agent. It is an independent project and is not affiliated with the OpenCode team.
+
+Third-party services such as **OpenCode Zen** and the **free models provided by OpenCode** remain available inside Jarvis.
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Project links** [GitHub](https://github.com/jaminsmoke/Jarvis) · [Releases](https://github.com/jaminsmoke/Jarvis/releases)

@@ -24,6 +24,6 @@ dist-ssr
 *.sw?
 out/
 
-resources/opencode-cli*
+resources/jarvis-cli*
 resources/icons
 resources/*.metainfo.xml

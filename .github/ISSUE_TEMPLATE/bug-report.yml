@@ -19,10 +19,10 @@ body:
       required: false
 
   - type: input
-    id: opencode-version
+    id: jarvis-version
     attributes:
-      label: OpenCode version
-      description: What version of OpenCode are you using?
+      label: Jarvis version
+      description: What version of Jarvis are you using?
     validations:
       required: false
 

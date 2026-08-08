@@ -600,7 +600,7 @@ export const Terminal = (props: TerminalProps) => {
           }
           if (disposed) return
           tries += 1
-          open()
+          void open()
         }, ms)
       }
 
@@ -702,7 +702,7 @@ export const Terminal = (props: TerminalProps) => {
         socket.addEventListener("close", handleClose)
       }
 
-      open()
+      void open()
     }
 
     void run().catch((err) => {

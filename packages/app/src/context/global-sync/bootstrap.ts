@@ -371,7 +371,7 @@ export async function bootstrapDirectory(input: {
   const revKey = ScopedKey.from(input.scope, input.directory)
   const rev = (providerRev.get(revKey) ?? 0) + 1
   providerRev.set(revKey, rev)
-  ;(async () => {
+  void (async () => {
     const slow = [
       () => Promise.resolve(input.loadSessions(input.directory)),
       () =>
@@ -487,7 +487,7 @@ export async function bootstrapDirectory(input: {
           })().then((questions) => {
             const ids = questions.map((question) => question.sessionID)
             const grouped = groupBySession(
-              questions.filter((question) => !!question.id && !!question.sessionID) as QuestionRequest[],
+              questions.filter((question) => !!question.id && !!question.sessionID),
             )
             const warm = input.session
               ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)

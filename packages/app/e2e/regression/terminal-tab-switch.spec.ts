@@ -80,7 +80,7 @@ async function setup(page: Page) {
       all: [
         {
           id: "opencode",
-          name: "OpenCode",
+          name: "Jarvis",
           models: { test: { id: "test", name: "Test", limit: { context: 200_000 } } },
         },
       ],
@@ -124,14 +124,14 @@ async function setup(page: Page) {
     ({ directory, server, sessions }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
-        "opencode.global.dat:server",
+        "jarvis.global.dat:server",
         JSON.stringify({
           projects: { local: [{ worktree: directory, expanded: true }] },
           lastProject: { local: directory },
         }),
       )
       localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
+        "jarvis.window.browser.dat:tabs",
         JSON.stringify(sessions.map((sessionId: string) => ({ type: "session", server, sessionId }))),
       )
     },

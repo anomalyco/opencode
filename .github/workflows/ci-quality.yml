@@ -1,0 +1,144 @@
+name: ci-quality
+
+# CI de calidad: typecheck, tests del desktop, tests de la app y lint.
+# Corre en cada push a dev, en pull requests y manualmente.
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Typecheck (desktop + app)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.0.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          HUSKY: "0"
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck desktop
+        working-directory: packages/desktop
+        run: bun run typecheck
+
+      - name: Typecheck app
+        working-directory: packages/app
+        run: bun run typecheck
+
+  test-desktop:
+    name: Tests desktop (unit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.0.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          HUSKY: "0"
+        run: bun install --frozen-lockfile
+
+      # draft-store.test.ts se salta bajo bun (node:sqlite solo existe en Node/Electron,
+      # el runtime de la app empaquetada). Runner Linux por consistencia con los demás jobs.
+      - name: Run desktop unit tests
+        working-directory: packages/desktop
+        run: bun test
+
+  test-app:
+    name: Tests app (unit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.0.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          HUSKY: "0"
+        run: bun install --frozen-lockfile
+
+      # Sin --only-failures: en CI siempre se ejecuta la suite completa.
+      # El parity de i18n CORRE en CI desde #89: se quitó describe.skipIf(CI) para que
+      # cualquier key nueva sin traducir rompa honestamente (fail rápido).
+      - name: Run app unit tests
+        working-directory: packages/app
+        run: bun test --conditions=solid --preload ./happydom.ts ./src
+
+  lint:
+    name: Lint (oxlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.0.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          HUSKY: "0"
+        run: bun install --frozen-lockfile
+
+      - name: Run lint
+        run: bun lint
+
+  changelog:
+    name: Regenerate changelog
+    runs-on: ubuntu-latest
+    needs: [typecheck, test-desktop, test-app, lint]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+
+      - name: Regenerate changelog.html + changelog.json
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          python scripts/kanban-sync.py changelog
+          if ! git diff --quiet docs/; then
+            git config user.name "jarvis"
+            git config user.email "bot@jarvis.ai"
+            git add docs/changelog.html docs/changelog.json
+            git commit -m "docs: auto-regenerate changelog [skip ci]"
+            git push origin dev
+          fi

@@ -11,20 +11,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Comprobación de actualizaciones fallida",
   "desktop.updater.checkFailed.message": "No se pudieron buscar actualizaciones",
   "desktop.updater.none.title": "No hay actualizaciones disponibles",
-  "desktop.updater.none.message": "Ya estás usando la versión más reciente de OpenCode",
+  "desktop.updater.none.message": "Ya estás usando la versión más reciente de Jarvis",
   "desktop.updater.downloadFailed.title": "Actualización fallida",
   "desktop.updater.downloadFailed.message": "No se pudo descargar la actualización",
   "desktop.updater.downloaded.title": "Actualización descargada",
   "desktop.updater.downloaded.prompt":
-    "Se ha descargado la versión {{version}} de OpenCode. ¿Quieres instalarla y reiniciar?",
+    "Se ha descargado la versión {{version}} de Jarvis. ¿Quieres instalarla y reiniciar?",
   "desktop.updater.installFailed.title": "Actualización fallida",
   "desktop.updater.installFailed.message": "No se pudo instalar la actualización",
 
   "desktop.cli.installed.title": "CLI instalada",
-  "desktop.cli.installed.message": "CLI instalada en {{path}}\n\nReinicia tu terminal para usar el comando 'opencode'.",
+  "desktop.cli.installed.message": "CLI instalada en {{path}}\n\nReinicia tu terminal para usar el comando 'jarvis'.",
   "desktop.cli.failed.title": "Instalación fallida",
   "desktop.cli.failed.message": "No se pudo instalar la CLI: {{error}}",
-
-  "desktop.error.dev.rootNotFound":
-    "Elemento raíz no encontrado. ¿Olvidaste añadirlo a tu index.html? ¿O tal vez el atributo id está mal escrito?",
 }

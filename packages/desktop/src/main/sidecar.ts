@@ -59,9 +59,9 @@ async function start(command: StartCommand) {
     listener = await Server.listen({
       port: command.port,
       hostname: command.hostname,
-      username: "opencode",
+      username: "jarvis",
       password: command.password,
-      cors: ["oc://renderer"],
+      cors: ["jr://renderer"],
     })
     parentPort.postMessage({ type: "ready" })
   } catch (error) {
@@ -82,7 +82,7 @@ async function stop() {
 
 function prepareSidecarEnv(password: string, userDataPath: string) {
   Object.assign(process.env, {
-    OPENCODE_SERVER_USERNAME: "opencode",
+    OPENCODE_SERVER_USERNAME: "jarvis",
     OPENCODE_SERVER_PASSWORD: password,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })

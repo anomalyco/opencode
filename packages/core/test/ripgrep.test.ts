@@ -11,8 +11,13 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(LayerNode.compile(Ripgrep.node))
 
 describe("Ripgrep", () => {
-  it.live("keeps ignored files out of catch-all find results", () =>
-    Effect.acquireUseRelease(
+  // 30s timeout: the first Ripgrep.Service use downloads the ripgrep binary
+  // on cold CI runners (Expand-Archive on Windows > 5s), which exceeds the
+  // default bun:test 5s timeout.
+  it.live(
+    "keeps ignored files out of catch-all find results",
+    () =>
+      Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
         Effect.gen(function* () {
@@ -29,6 +34,7 @@ describe("Ripgrep", () => {
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
+    30_000,
   )
 
   it.live("never includes git metadata", () =>
@@ -61,5 +67,6 @@ describe("Ripgrep", () => {
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
+    30_000,
   )
 })

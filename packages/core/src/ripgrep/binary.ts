@@ -56,17 +56,33 @@ export namespace RipgrepBinary {
         const dir = yield* fs.makeTempDirectoryScoped({ directory: Global.Path.bin, prefix: "ripgrep-" })
 
         if (config.extension === "zip") {
-          const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
-          const result = yield* run(shell, [
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
-          ])
-          if (result.code !== 0)
-            throw new Error(
-              result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
-            )
+          // Prefer Windows' native bsdtar (C:\Windows\System32\tar.exe, ships
+          // with Windows 10 1803+): it extracts zips in <1s, whereas PowerShell
+          // Expand-Archive takes >30s on cold CI runners (tripping test
+          // timeouts). Do NOT resolve `tar` via PATH: Git Bash's GNU tar is
+          // found first there and misparses Windows paths (`C:\...`) as remote
+          // hosts. Fall back to Expand-Archive when the native tar is absent.
+          const systemTar = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe")
+          const tarAvailable = yield* fs.isFile(systemTar).pipe(Effect.orDie)
+          if (tarAvailable) {
+            const result = yield* run(systemTar, ["-xf", archive, "-C", dir])
+            if (result.code !== 0)
+              throw new Error(
+                result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
+              )
+          } else {
+            const shell = (yield* Effect.sync(() => which("powershell.exe") ?? which("pwsh.exe"))) ?? "powershell.exe"
+            const result = yield* run(shell, [
+              "-NoProfile",
+              "-NonInteractive",
+              "-Command",
+              `$global:ProgressPreference = 'SilentlyContinue'; Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${dir.replaceAll("'", "''")}' -Force`,
+            ])
+            if (result.code !== 0)
+              throw new Error(
+                result.stderr.trim() || result.stdout.trim() || `ripgrep extraction failed with code ${result.code}`,
+              )
+          }
         }
 
         if (config.extension === "tar.gz") {

@@ -2,12 +2,13 @@ import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
+import type { GitHubConnectorStatus, DeviceFlowStart, DeviceFlowPoll } from "@opencode-ai/app/connectors/types"
 export type {
   WslDistroProbe,
   WslInstalledDistro,
   WslJob,
   WslOnlineDistro,
-  WslOpencodeCheck,
+  WslJarvisCheck,
   WslRuntimeCheck,
   WslServerConfig,
   WslServerItem,
@@ -113,4 +114,14 @@ export type ElectronAPI = {
   setForceFocus: (enabled: boolean) => Promise<void>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
   setNativeTranslations: (bundle: DesktopNativeBundle) => Promise<void>
+
+  connector: {
+    github: {
+      getStatus: () => Promise<GitHubConnectorStatus>
+      setEnabled: (enabled: boolean) => Promise<GitHubConnectorStatus>
+      startDeviceFlow: () => Promise<DeviceFlowStart>
+      pollDeviceFlow: (sessionId: string) => Promise<DeviceFlowPoll>
+      disconnect: () => Promise<GitHubConnectorStatus>
+    }
+  }
 }

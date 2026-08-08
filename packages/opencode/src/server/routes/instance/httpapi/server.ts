@@ -51,6 +51,7 @@ import { Worktree } from "@/worktree"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
+import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
@@ -83,6 +84,7 @@ import { EventApi } from "./groups/event"
 import { PtyConnectApi } from "./groups/pty"
 import { eventHandlers } from "./handlers/event"
 import { configHandlers } from "./handlers/config"
+import { connectorHandlers } from "./handlers/connector"
 import { controlHandlers } from "./handlers/control"
 import { controlPlaneHandlers } from "./handlers/control-plane"
 import { experimentalHandlers } from "./handlers/experimental"
@@ -154,6 +156,7 @@ const ptyConnectApiRoutes = HttpApiBuilder.layer(PtyConnectApi).pipe(
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   Layer.provide([
     configHandlers,
+    connectorHandlers,
     experimentalHandlers,
     fileHandlers,
     instanceHandlers,
@@ -266,6 +269,7 @@ const app = LayerNode.group([
   ProjectV2.node,
   ProjectCopy.node,
   PtyTicket.node,
+  Credential.node,
 ])
 
 export function createRoutes(

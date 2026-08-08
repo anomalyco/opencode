@@ -1,17 +1,17 @@
 <p align="center">
-  <a href="https://opencode.ai">
+  <a href="https://jaminsmoke.github.io/Jarvis">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="Jarvis logo">
     </picture>
   </a>
 </p>
 <p align="center">開源的 AI Coding Agent。</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+  <a href="https://jaminsmoke.github.io/Jarvis/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://github.com/jaminsmoke/Jarvis/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/jaminsmoke/Jarvis/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 <p align="center">
@@ -39,7 +39,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![Jarvis Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://jaminsmoke.github.io/Jarvis)
 
 ---
 
@@ -47,7 +47,7 @@
 
 ```bash
 # 直接安裝 (YOLO)
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://jaminsmoke.github.io/Jarvis/install | bash
 
 # 套件管理員
 npm i -g opencode-ai@latest        # 也可使用 bun/pnpm/yarn
@@ -58,7 +58,7 @@ brew install opencode              # macOS 與 Linux（官方 brew formula，更
 sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (Latest from AUR)
 mise use -g opencode               # 任何作業系統
-nix run nixpkgs#opencode           # 或使用 github:anomalyco/opencode 以取得最新開發分支
+nix run nixpkgs#opencode           # 或使用 github:jaminsmoke/Jarvis 以取得最新開發分支
 ```
 
 > [!TIP]
@@ -66,7 +66,7 @@ nix run nixpkgs#opencode           # 或使用 github:anomalyco/opencode 以取�
 
 ### 桌面應用程式 (BETA)
 
-OpenCode 也提供桌面版應用程式。您可以直接從 [發佈頁面 (releases page)](https://github.com/anomalyco/opencode/releases) 或 [opencode.ai/download](https://opencode.ai/download) 下載。
+Jarvis 也提供桌面版應用程式。您可以直接從 [發佈頁面 (releases page)](https://github.com/jaminsmoke/Jarvis/releases) 或 [opencode.ai/download](https://jaminsmoke.github.io/Jarvis/download) 下載。
 
 | 平台                  | 下載連結                           |
 | --------------------- | ---------------------------------- |
@@ -93,13 +93,13 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 ```bash
 # 範例
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://jaminsmoke.github.io/Jarvis/install | bash
+XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://jaminsmoke.github.io/Jarvis/install | bash
 ```
 
 ### Agents
 
-OpenCode 內建了兩種 Agent，您可以使用 `Tab` 鍵快速切換。
+Jarvis 內建了兩種 Agent，您可以使用 `Tab` 鍵快速切換。
 
 - **build** - 預設模式，具備完整權限的 Agent，適用於開發工作。
 - **plan** - 唯讀模式，適用於程式碼分析與探索。
@@ -107,21 +107,21 @@ OpenCode 內建了兩種 Agent，您可以使用 `Tab` 鍵快速切換。
   - 執行 bash 指令前會詢問權限。
   - 非常適合用來探索陌生的程式碼庫或規劃變更。
 
-此外，OpenCode 還包含一個 **general** 子 Agent，用於處理複雜搜尋與多步驟任務。此 Agent 供系統內部使用，亦可透過在訊息中輸入 `@general` 來呼叫。
+此外，Jarvis 還包含一個 **general** 子 Agent，用於處理複雜搜尋與多步驟任務。此 Agent 供系統內部使用，亦可透過在訊息中輸入 `@general` 來呼叫。
 
-了解更多關於 [Agents](https://opencode.ai/docs/agents) 的資訊。
+了解更多關於 [Agents](https://jaminsmoke.github.io/Jarvis/docs/agents) 的資訊。
 
 ### 線上文件
 
-關於如何設定 OpenCode 的詳細資訊，請參閱我們的 [**官方文件**](https://opencode.ai/docs)。
+關於如何設定 Jarvis 的詳細資訊，請參閱我們的 [**官方文件**](https://jaminsmoke.github.io/Jarvis/docs)。
 
 ### 參與貢獻
 
-如果您有興趣參與 OpenCode 的開發，請在提交 Pull Request 前先閱讀我們的 [貢獻指南 (Contributing Docs)](./CONTRIBUTING.md)。
+如果您有興趣參與 Jarvis 的開發，請在提交 Pull Request 前先閱讀我們的 [貢獻指南 (Contributing Docs)](./CONTRIBUTING.md)。
 
-### 基於 OpenCode 進行開發
+### 基於 Jarvis 進行開發
 
-如果您正在開發與 OpenCode 相關的專案，並在名稱中使用了 "opencode"（例如 "opencode-dashboard" 或 "opencode-mobile"），請在您的 README 中加入聲明，說明該專案並非由 OpenCode 團隊開發，且與我們沒有任何隸屬關係。
+如果您正在開發與 Jarvis 相關的專案，並在名稱中使用了 "opencode"（例如 "opencode-dashboard" 或 "opencode-mobile"），請在您的 README 中加入聲明，說明該專案並非由 Jarvis 團隊開發，且與我們沒有任何隸屬關係。
 
 ---
 

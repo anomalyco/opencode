@@ -66,7 +66,7 @@ export function useUsageExceededDialogs() {
       if (goUpsellState[keys.dontShow]) return
 
       if (action.reason === "free_tier_limit") {
-        dialog.show(() => (
+        void dialog.show(() => (
           <DialogUsageExceeded
             title={isEnglish() ? action.title : t("dialog.usageExceeded.freeTier.title")}
             description={isEnglish() ? action.message : t("dialog.usageExceeded.freeTier.description")}
@@ -86,7 +86,7 @@ export function useUsageExceededDialogs() {
           />
         ))
       } else if (action.reason === "account_rate_limit") {
-        dialog.show(() => (
+        void dialog.show(() => (
           <DialogUsageExceeded
             title={isEnglish() ? action.title : t("dialog.usageExceeded.accountRateLimit.title")}
             description={isEnglish() ? action.message : t("dialog.usageExceeded.accountRateLimit.description")}

@@ -58,7 +58,7 @@ async function setup(page: Page, events?: () => EventPayload[]) {
       all: [
         {
           id: "opencode",
-          name: "OpenCode",
+          name: "Jarvis",
           models: {
             "claude-opus-4-6": { id: "claude-opus-4-6", name: "Claude Opus 4.6", limit: { context: 200_000 } },
           },
@@ -185,13 +185,13 @@ async function configurePage(page: Page) {
     ({ directory, server, sessionId }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
-        "opencode.global.dat:server",
+        "jarvis.global.dat:server",
         JSON.stringify({
           projects: { local: [{ worktree: directory, expanded: true }] },
           lastProject: { local: directory },
         }),
       )
-      localStorage.setItem("opencode.window.browser.dat:tabs", JSON.stringify([{ type: "session", server, sessionId }]))
+      localStorage.setItem("jarvis.window.browser.dat:tabs", JSON.stringify([{ type: "session", server, sessionId }]))
     },
     { directory, server, sessionId: parentID },
   )

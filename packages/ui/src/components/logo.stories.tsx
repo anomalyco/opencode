@@ -2,24 +2,24 @@
 import * as mod from "./logo"
 
 const docs = `### Overview
-OpenCode logo assets: mark, splash, and wordmark.
+Jarvis logo assets: mark, splash, and wordmark.
 
 Use Mark for compact spaces, Logo for headers, Splash for hero sections.
 
 ### API
-- \`Mark\`, \`Splash\`, and \`Logo\` components accept standard SVG props.
+- \`Mark\`, \`Splash\`, and \`Logo\` components accept image class props.
 
 ### Variants and states
 - Multiple logo variants for different contexts.
 
 ### Behavior
-- Pure SVG rendering.
+- Renders brand PNG assets.
 
 ### Accessibility
 - Provide title/aria-label when logos convey meaning.
 
 ### Theming/tokens
-- Uses theme color tokens via CSS variables.
+- Raster brand art; contrast is authored into the PNGs.
 
 `
 

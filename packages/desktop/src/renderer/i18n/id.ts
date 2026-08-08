@@ -11,21 +11,18 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Pemeriksaan pembaruan gagal",
   "desktop.updater.checkFailed.message": "Gagal memeriksa pembaruan",
   "desktop.updater.none.title": "Tidak ada pembaruan",
-  "desktop.updater.none.message": "Anda sudah menggunakan versi terbaru OpenCode",
+  "desktop.updater.none.message": "Anda sudah menggunakan versi terbaru Jarvis",
   "desktop.updater.downloadFailed.title": "Pembaruan gagal",
   "desktop.updater.downloadFailed.message": "Gagal mengunduh pembaruan",
   "desktop.updater.downloaded.title": "Pembaruan diunduh",
   "desktop.updater.downloaded.prompt":
-    "OpenCode versi {{version}} telah diunduh. Apakah Anda ingin menginstalnya dan menjalankan ulang aplikasi?",
+    "Jarvis versi {{version}} telah diunduh. Apakah Anda ingin menginstalnya dan menjalankan ulang aplikasi?",
   "desktop.updater.installFailed.title": "Pembaruan gagal",
   "desktop.updater.installFailed.message": "Gagal menginstal pembaruan",
 
   "desktop.cli.installed.title": "CLI terinstal",
   "desktop.cli.installed.message":
-    "CLI terinstal di {{path}}\n\nMulai ulang terminal Anda untuk menggunakan perintah 'opencode'.",
+    "CLI terinstal di {{path}}\n\nMulai ulang terminal Anda untuk menggunakan perintah 'jarvis'.",
   "desktop.cli.failed.title": "Instalasi gagal",
   "desktop.cli.failed.message": "Gagal menginstal CLI: {{error}}",
-
-  "desktop.error.dev.rootNotFound":
-    "Elemen root tidak ditemukan. Apakah Anda lupa menambahkannya ke index.html? Atau mungkin atribut id salah eja?",
 }

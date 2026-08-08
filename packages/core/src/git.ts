@@ -195,8 +195,11 @@ const layer = Layer.effect(
       const commonDir = yield* git(["rev-parse", "--git-common-dir"])
       if (gitDir.exitCode !== 0 || commonDir.exitCode !== 0) return undefined
 
+      const worktree = topLevel.exitCode === 0 ? resolvePath(cwd, topLevel.text) : cwd
+      if (!FSUtil.contains(worktree, input)) return undefined
+
       return new Repository({
-        worktree: AbsolutePath.make(topLevel.exitCode === 0 ? resolvePath(cwd, topLevel.text) : cwd),
+        worktree: AbsolutePath.make(worktree),
         gitDirectory: AbsolutePath.make(resolvePath(cwd, gitDir.text)),
         commonDirectory: AbsolutePath.make(resolvePath(cwd, commonDir.text)),
       })

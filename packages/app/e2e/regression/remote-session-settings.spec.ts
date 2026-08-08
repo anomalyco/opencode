@@ -154,8 +154,8 @@ async function configureServers(page: Page, tabs: { type: "session"; server: str
   await page.addInitScript(
     ({ serverB, tabs }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-      localStorage.setItem("opencode.global.dat:server", JSON.stringify({ list: [serverB] }))
-      localStorage.setItem("opencode.window.browser.dat:tabs", JSON.stringify(tabs))
+      localStorage.setItem("jarvis.global.dat:server", JSON.stringify({ list: [serverB] }))
+      localStorage.setItem("jarvis.window.browser.dat:tabs", JSON.stringify(tabs))
     },
     { serverB, tabs },
   )

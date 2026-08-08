@@ -50,8 +50,8 @@ export function registerWslIpcHandlers(controller: WslServersController) {
   ipcMain.handle("wsl-servers-probe-addable", (_event: IpcMainInvokeEvent, distros: string[]) =>
     controller.probeAddable(requireWslIpcStrings("distro", distros)),
   )
-  ipcMain.handle("wsl-servers-install-opencode", (_event: IpcMainInvokeEvent, name: string) =>
-    controller.installOpencode(requireWslIpcString("distro", name)),
+  ipcMain.handle("wsl-servers-install-jarvis", (_event: IpcMainInvokeEvent, name: string) =>
+    controller.installJarvis(requireWslIpcString("distro", name)),
   )
   ipcMain.handle("wsl-servers-open-terminal", (_event: IpcMainInvokeEvent, name: string) =>
     controller.openTerminal(requireWslIpcString("distro", name)),
@@ -80,7 +80,7 @@ function registerUnavailableWslIpcHandlers() {
     installed: [],
     online: [],
     distroProbes: {},
-    opencodeChecks: {},
+    jarvisChecks: {},
     pendingRestart: false,
     servers: [],
     job: null,
@@ -96,7 +96,7 @@ function registerUnavailableWslIpcHandlers() {
   ipcMain.handle("wsl-servers-install-wsl", unavailable)
   ipcMain.handle("wsl-servers-install-distro", unavailable)
   ipcMain.handle("wsl-servers-probe-addable", unavailable)
-  ipcMain.handle("wsl-servers-install-opencode", unavailable)
+  ipcMain.handle("wsl-servers-install-jarvis", unavailable)
   ipcMain.handle("wsl-servers-open-terminal", unavailable)
   ipcMain.handle("wsl-servers-add", unavailable)
   ipcMain.handle("wsl-servers-remove", unavailable)

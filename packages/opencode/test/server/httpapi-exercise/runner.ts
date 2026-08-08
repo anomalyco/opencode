@@ -18,13 +18,13 @@ export function runScenario(options: Options) {
   return (scenario: Scenario) => {
     if (scenario.kind === "todo") return Effect.succeed({ status: "skip", scenario } as Result)
     return runActive(options, scenario).pipe(
+      Effect.scoped,
       Effect.timeoutOrElse({
         duration: options.scenarioTimeout,
         orElse: () => Effect.die(new Error(`scenario timed out after ${Duration.format(options.scenarioTimeout)}`)),
       }),
       Effect.as({ status: "pass", scenario } as Result),
       Effect.catchCause((cause) => Effect.succeed({ status: "fail" as const, scenario, message: Cause.pretty(cause) })),
-      Effect.scoped,
     )
   }
 }

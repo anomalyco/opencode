@@ -12,9 +12,9 @@ test("tab busy indicator reflects the tab server's own session status", async ({
   await page.addInitScript(
     ({ serverA, serverB, sessionA, sessionB }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-      localStorage.setItem("opencode.global.dat:server", JSON.stringify({ list: [serverB] }))
+      localStorage.setItem("jarvis.global.dat:server", JSON.stringify({ list: [serverB] }))
       localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
+        "jarvis.window.browser.dat:tabs",
         JSON.stringify([
           { type: "session", server: serverA, sessionId: sessionA },
           { type: "session", server: serverB, sessionId: sessionB },

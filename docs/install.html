@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Install — Jarvis</title>
+  <meta name="description" content="Install Jarvis on Windows, macOS or Linux. Requirements, downloads and first-run tips.">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      min-height: 100vh;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    .container { max-width: 780px; margin: 0 auto; }
+    .topbar {
+      display: flex; align-items: center; gap: 0.75rem;
+      margin-bottom: 2.5rem; font-size: 0.9rem;
+    }
+    .topbar img {
+      width: 28px; height: 28px; border-radius: 6px;
+    }
+    .topbar a { color: #a5b4fc; text-decoration: none; }
+    .topbar a:hover { text-decoration: underline; }
+    .topbar .brand { font-weight: 700; color: #e2e8f0; }
+    .topbar .spacer { flex: 1; }
+    h1 {
+      font-size: 2.4rem; font-weight: 800; letter-spacing: -1px;
+      background: linear-gradient(135deg, #e2e8f0, #a5b4fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+    }
+    .lead { font-size: 1.1rem; color: #8b949e; margin-bottom: 2rem; }
+    h2 { font-size: 1.3rem; color: #e2e8f0; margin: 2rem 0 0.75rem; }
+    p { margin-bottom: 0.9rem; }
+    ul { margin: 0 0 0.9rem 1.4rem; }
+    li { margin-bottom: 0.3rem; }
+    code {
+      background: #161b22; border: 1px solid #30363d;
+      border-radius: 6px; padding: 0.15rem 0.4rem;
+      font-size: 0.85em; color: #a5b4fc;
+    }
+    pre {
+      background: #161b22; border: 1px solid #30363d;
+      border-radius: 10px; padding: 1rem 1.1rem;
+      overflow-x: auto; margin-bottom: 1.2rem;
+    }
+    pre code { background: none; border: none; padding: 0; color: #c9d1d9; }
+    .steps { counter-reset: step; list-style: none; margin-left: 0; }
+    .steps li {
+      counter-increment: step;
+      position: relative; padding-left: 2.2rem; margin-bottom: 1.1rem;
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute; left: 0; top: 0;
+      width: 1.6rem; height: 1.6rem; line-height: 1.6rem;
+      text-align: center; border-radius: 50%;
+      background: #1e1b4b; color: #a5b4fc; border: 1px solid #3730a3;
+      font-size: 0.8rem; font-weight: 700;
+    }
+    .note {
+      background: #161b22; border: 1px solid #3730a3;
+      border-left: 4px solid #6366f1;
+      border-radius: 8px; padding: 0.8rem 1rem;
+      font-size: 0.9rem; color: #8b949e; margin-bottom: 1.2rem;
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.65rem 1.5rem; border-radius: 8px;
+      font-size: 0.9rem; font-weight: 600; text-decoration: none;
+      transition: all 0.2s; border: 1px solid transparent;
+    }
+    .btn-primary { background: #6366f1; color: white; box-shadow: 0 4px 14px rgba(99,102,241,0.4); }
+    .btn-primary:hover { background: #5457e5; transform: translateY(-1px); }
+    .btn-outline { background: transparent; color: #a5b4fc; border-color: #3730a3; }
+    .btn-outline:hover { background: #1e1b4b; transform: translateY(-1px); }
+    .back { margin-top: 2.5rem; }
+    .footer { margin-top: 3rem; font-size: 0.78rem; color: #484f58; border-top: 1px solid #21262d; padding-top: 1.5rem; }
+    .footer a { color: #8b949e; text-decoration: none; }
+    .footer a:hover { color: #c9d1d9; }
+    @media (max-width: 600px) {
+      h1 { font-size: 1.8rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <img src="icon.png" alt="Jarvis">
+      <span class="brand">Jarvis</span>
+      <span class="spacer"></span>
+      <a href="index.html">Home</a>
+    </div>
+
+    <h1>Installation</h1>
+    <p class="lead">Get Jarvis running on your machine in minutes. Windows, macOS and Linux are supported.</p>
+
+    <h2>System requirements</h2>
+    <ul>
+      <li><strong>Windows</strong> 10 or later (64-bit)</li>
+      <li><strong>macOS</strong> 12 or later (Intel &amp; Apple Silicon)</li>
+      <li><strong>Linux</strong> Ubuntu 20.04 / Debian 11 or later (x64)</li>
+      <li>4&nbsp;GB RAM recommended</li>
+    </ul>
+
+    <h2>Download</h2>
+    <p>Grab the installer for your platform from the <a href="https://github.com/jaminsmoke/Jarvis/releases/latest">latest release</a>:</p>
+    <div class="dl-buttons" style="margin-bottom:1.2rem;">
+      <a href="https://github.com/jaminsmoke/Jarvis/releases/latest" class="btn btn-primary">&#x2B07; Windows (.exe)</a>
+      <a href="https://github.com/jaminsmoke/Jarvis/releases/latest" class="btn btn-outline">&#x1F5A5; macOS (.dmg)</a>
+      <a href="https://github.com/jaminsmoke/Jarvis/releases/latest" class="btn btn-outline">&#x1F427; Linux (.deb)</a>
+    </div>
+
+    <h2>Windows</h2>
+    <ol class="steps">
+      <li>Run the <code>.exe</code> installer you downloaded.</li>
+      <li>Allow the setup to finish and click <strong>Finish</strong>.</li>
+      <li>Launch <strong>Jarvis</strong> from the Start menu.</li>
+    </ol>
+
+    <h2>macOS</h2>
+    <ol class="steps">
+      <li>Open the <code>.dmg</code> file.</li>
+      <li>Drag <strong>Jarvis</strong> into your <strong>Applications</strong> folder.</li>
+      <li>Launch it from Launchpad. On first open you may need to right-click the app and select <strong>Open</strong> to bypass Gatekeeper.</li>
+    </ol>
+
+    <h2>Linux</h2>
+    <ol class="steps">
+      <li>Install the <code>.deb</code> package:
+        <pre><code>sudo apt install ./jarvis_*.deb</code></pre>
+      </li>
+      <li>Launch <strong>Jarvis</strong> from your application menu.</li>
+    </ol>
+
+    <div class="note">
+      <strong>Auto-updates:</strong> Jarvis checks for updates automatically and restarts to install them with one click. No manual updates needed.
+    </div>
+
+    <h2>First run</h2>
+    <p>On first launch Jarvis will ask you to sign in. Bring your own API keys, or use the free models available inside the app.</p>
+
+    <div class="back">
+      <a href="index.html" class="btn btn-outline">&#x2190; Back to home</a>
+    </div>
+
+    <div class="footer">
+      <p>
+        <a href="https://github.com/jaminsmoke/Jarvis">GitHub</a> &middot;
+        <a href="https://github.com/jaminsmoke/Jarvis/releases">Releases</a> &middot;
+        MIT Licensed
+      </p>
+    </div>
+  </div>
+</body>
+</html>

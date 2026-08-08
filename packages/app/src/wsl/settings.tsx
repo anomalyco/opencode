@@ -28,7 +28,7 @@ export function AddServerMenu(props: { onAddServer: () => void }) {
   const dialog = useDialog()
   const language = useLanguage()
   const openAddWsl = () => {
-    dialog.push(() => <DialogAddWslServer />)
+    void dialog.push(() => <DialogAddWslServer />)
   }
   return (
     <Show
@@ -94,9 +94,9 @@ export function WslServerSettings(props: {
       <For each={props.servers()}>
         {(item) => {
           const key = ServerConnection.Key.make(item.config.id)
-          const check = () => wsl.data?.opencodeChecks[item.config.distro]
+          const check = () => wsl.data?.jarvisChecks[item.config.distro]
           const opencodeAction = () => wslOpencodeAction(check())
-          const busy = () => wsl.data?.job?.kind === "install-opencode" && wsl.data.job.distro === item.config.distro
+          const busy = () => wsl.data?.job?.kind === "install-jarvis" && wsl.data.job.distro === item.config.distro
           return (
             <div class="settings-v2-servers-row">
               <div class="settings-v2-servers-lead">
@@ -122,7 +122,7 @@ export function WslServerSettings(props: {
                     <ButtonV2
                       size="small"
                       disabled={busy() || request.isPending}
-                      onClick={() => api && request.mutate(() => api.installOpencode(item.config.distro))}
+                      onClick={() => api && request.mutate(() => api.installJarvis(item.config.distro))}
                     >
                       {busy() ? language.t("wsl.server.updating") : language.t(label())}
                     </ButtonV2>

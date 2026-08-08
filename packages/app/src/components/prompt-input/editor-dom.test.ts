@@ -52,8 +52,8 @@ describe("prompt-input editor dom", () => {
     container.appendChild(document.createElement("br"))
     container.appendChild(document.createTextNode("cd"))
 
-    expect(getNodeLength(container.childNodes[0]!)).toBe(2)
-    expect(getNodeLength(container.childNodes[1]!)).toBe(1)
+    expect(getNodeLength(container.childNodes[0])).toBe(2)
+    expect(getNodeLength(container.childNodes[1])).toBe(1)
     expect(getTextLength(container)).toBe(5)
   })
 

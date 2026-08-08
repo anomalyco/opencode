@@ -727,3 +727,274 @@
   line-height: 1;
   color: var(--v2-state-fg-danger);
 }
+
+/* Placeholder for empty settings panels */
+.settings-v2-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 64px 40px;
+  gap: 20px;
+  min-height: 240px;
+}
+
+.settings-v2-placeholder-icon {
+  color: var(--v2-text-text-muted);
+  opacity: 0.5;
+}
+
+.settings-v2-placeholder-text {
+  font-size: 14px;
+  font-weight: 440;
+  line-height: 1.55;
+  color: var(--v2-text-text-muted);
+  max-width: 340px;
+}
+
+/* ── Connectors ─────────────────────────────────────────────── */
+
+[data-component="connector-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 40px 40px;
+}
+
+[data-component="connector-card"] {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--v2-border-border-default);
+  border-radius: 12px;
+  background: var(--v2-background-bg-base);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+}
+
+[data-component="connector-card"]:hover {
+  border-color: var(--v2-border-border-strong);
+  background: var(--v2-background-bg-hover);
+  box-shadow: var(--v2-elevation-raised);
+}
+
+[data-component="connector-card"]:focus-visible {
+  outline: 2px solid var(--v2-border-focus-ring, var(--v2-accent-accent));
+  outline-offset: 2px;
+}
+
+[data-slot="connector-card-icon"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--v2-background-bg-hover);
+  color: var(--v2-text-text-muted);
+  flex-shrink: 0;
+}
+
+[data-component="connector-card"].is-enabled [data-slot="connector-card-icon"] {
+  color: var(--v2-text-text-primary);
+}
+
+[data-slot="connector-card-copy"] {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+[data-slot="connector-card-title"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 560;
+  color: var(--v2-text-text-primary);
+}
+
+[data-slot="connector-card-badge"] {
+  font-size: 10.5px;
+  font-weight: 520;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--v2-text-text-muted);
+  background: var(--v2-background-bg-hover);
+}
+
+[data-slot="connector-card-badge"].is-connected {
+  color: var(--v2-state-fg-success);
+  background: var(--v2-state-bg-success);
+}
+
+[data-slot="connector-card-badge"].is-disabled {
+  opacity: 0.7;
+}
+
+[data-slot="connector-card-description"] {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--v2-text-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-slot="connector-card-user"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--v2-text-text-secondary);
+}
+
+[data-slot="connector-card-user"] img {
+  border-radius: 50%;
+}
+
+[data-slot="connector-card-control"] {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Modal body */
+
+[data-component="connector-modal"] {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 4px;
+}
+
+[data-slot="connector-modal-title"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-slot="connector-modal-connected"] {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--v2-border-border-default);
+  border-radius: 12px;
+  background: var(--v2-background-bg-hover);
+}
+
+[data-slot="connector-modal-avatar"] {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+[data-slot="connector-modal-user"] {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--v2-text-text-primary);
+}
+
+[data-slot="connector-modal-connected-text"] {
+  font-size: 12.5px;
+  color: var(--v2-text-text-muted);
+  margin-top: 2px;
+}
+
+[data-slot="connector-modal-detail"] {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--v2-text-text-secondary);
+}
+
+[data-slot="connector-modal-permissions"] {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--v2-text-text-muted);
+}
+
+[data-slot="connector-modal-flow"] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 12px;
+  text-align: center;
+}
+
+[data-slot="connector-modal-instructions"] {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--v2-text-text-secondary);
+}
+
+[data-slot="connector-modal-instructions"] a {
+  color: var(--v2-accent-accent);
+  text-decoration: none;
+}
+
+[data-slot="connector-modal-instructions"] a:hover {
+  text-decoration: underline;
+}
+
+[data-slot="connector-modal-code"] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  padding: 10px 22px;
+  border: 1px dashed var(--v2-border-border-strong);
+  border-radius: 10px;
+  color: var(--v2-text-text-primary);
+  background: var(--v2-background-bg-hover);
+  user-select: text;
+}
+
+[data-slot="connector-modal-waiting"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--v2-text-text-muted);
+}
+
+[data-slot="connector-modal-spinner"] {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--v2-border-border-default);
+  border-top-color: var(--v2-accent-accent);
+  animation: connector-spin 0.8s linear infinite;
+}
+
+@keyframes connector-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+[data-slot="connector-modal-error"] {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--v2-state-fg-danger);
+  background: var(--v2-state-bg-danger, rgba(248, 81, 73, 0.12));
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+[data-slot="connector-modal-flow-actions"] {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+[data-component="connector-modal"] + [data-slot="dialog-footer"] {
+  justify-content: space-between;
+}

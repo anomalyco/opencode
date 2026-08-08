@@ -9,20 +9,17 @@ export const dict = {
   "desktop.updater.checkFailed.title": "अद्यतन जांच विफल",
   "desktop.updater.checkFailed.message": "अद्यतनों की जाँच करने में विफल",
   "desktop.updater.none.title": "कोई अपडेट उपलब्ध नहीं",
-  "desktop.updater.none.message": "आप पहले से ही OpenCode का नवीनतम संस्करण उपयोग कर रहे हैं",
+  "desktop.updater.none.message": "आप पहले से ही Jarvis का नवीनतम संस्करण उपयोग कर रहे हैं",
   "desktop.updater.downloadFailed.title": "अपडेट विफल",
   "desktop.updater.downloadFailed.message": "अद्यतन डाउनलोड करने में विफल",
   "desktop.updater.downloaded.title": "अद्यतन डाउनलोड किया गया",
   "desktop.updater.downloaded.prompt":
-    "OpenCode का संस्करण {{version}} डाउनलोड हो गया है। क्या आप इसे इंस्टॉल करके ऐप को फिर से खोलना चाहेंगे?",
+    "Jarvis का संस्करण {{version}} डाउनलोड हो गया है। क्या आप इसे इंस्टॉल करके ऐप को फिर से खोलना चाहेंगे?",
   "desktop.updater.installFailed.title": "अपडेट विफल",
   "desktop.updater.installFailed.message": "अद्यतन स्थापित करने में विफल",
   "desktop.cli.installed.title": "CLI स्थापित",
   "desktop.cli.installed.message":
-    "CLI को {{path}} पर इंस्टॉल किया गया\n\n'opencode' कमांड का उपयोग करने के लिए अपना टर्मिनल पुनः आरंभ करें।",
+    "CLI को {{path}} पर इंस्टॉल किया गया\n\n'jarvis' कमांड का उपयोग करने के लिए अपना टर्मिनल पुनः आरंभ करें।",
   "desktop.cli.failed.title": "स्थापना विफल",
   "desktop.cli.failed.message": "CLI इंस्टॉल करने में विफल: {{error}}",
-
-  "desktop.error.dev.rootNotFound":
-    "मूल तत्व नहीं मिला. क्या आप इसे अपने index.html में जोड़ना भूल गए? या हो सकता है कि आईडी विशेषता गलत वर्तनी हो गई हो?",
 }

@@ -36,13 +36,13 @@ const channel = (() => {
 })()
 
 const APP_IDS = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
+  dev: "ai.jarvis.desktop.dev",
+  beta: "ai.jarvis.desktop.beta",
+  prod: "ai.jarvis.desktop",
 } as const
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  artifactName: "jarvis-desktop-${os}-${arch}.${ext}",
   directories: {
     output: "dist",
     buildResources: "resources",
@@ -55,14 +55,14 @@ const getBase = (appId: string): Configuration => ({
   extraMetadata: {
     desktopName: `${appId}.desktop`,
   },
-  files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
+  files: ["out/**/*", "resources/**/*", "!resources/jarvis-cli*"],
   extraResources: [
     ...(channel === "dev"
       ? [
           {
             from: "resources/",
             to: "",
-            filter: ["opencode-cli*"],
+            filter: ["jarvis-cli*"],
           },
         ]
       : []),
@@ -74,20 +74,21 @@ const getBase = (appId: string): Configuration => ({
   ],
   mac: {
     category: "public.app-category.developer-tools",
-    icon: `resources/icons/icon.icns`,
+    icon: `resources/icons/1024x1024.png`,
     hardenedRuntime: true,
     gatekeeperAssess: false,
     entitlements: "resources/entitlements.plist",
     entitlementsInherit: "resources/entitlements.plist",
-    notarize: true,
+    notarize: Boolean(process.env.APPLE_API_KEY),
     target: ["dmg", "zip"],
   },
   dmg: {
-    sign: true,
+    // Only sign the DMG when a certificate is configured (CSC_LINK / Apple ID).
+    sign: Boolean(process.env.CSC_LINK || process.env.APPLE_ID),
   },
   protocols: {
-    name: "OpenCode",
-    schemes: ["opencode"],
+    name: "Jarvis",
+    schemes: ["jarvis"],
   },
   win: {
     icon: `resources/icons/icon.ico`,
@@ -127,31 +128,44 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "OpenCode Dev",
+        productName: "Jarvis Dev",
         deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-dev", fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "jarvis-dev", fpm: [metainfoFpm(appId)] },
       }
     }
     case "beta": {
       return {
         ...base,
         appId,
-        productName: "OpenCode Beta",
-        protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
+        productName: "Jarvis Beta",
+        protocols: { name: "Jarvis Beta", schemes: ["jarvis"] },
+        publish: {
+          provider: "github",
+          owner: "jaminsmoke",
+          repo: "Jarvis",
+          channel: "beta",
+          releaseType: "release",
+        },
         deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-beta", fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "jarvis-beta", fpm: [metainfoFpm(appId)] },
       }
     }
     case "prod": {
       return {
         ...base,
         appId,
-        productName: "OpenCode",
-        protocols: { name: "OpenCode", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        productName: "Jarvis",
+        protocols: { name: "Jarvis", schemes: ["jarvis"] },
+        publish: {
+          provider: "github",
+          owner: "jaminsmoke",
+          repo: "Jarvis",
+          channel: "latest",
+          // Publish immediately so /releases/latest points here for electron-updater.
+          releaseType: "release",
+        },
         deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
-        rpm: { packageName: "opencode", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
+        rpm: { packageName: "jarvis", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
       }
     }
   }

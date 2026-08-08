@@ -25,7 +25,7 @@ function modelKey(model: ModelKey) {
 export const { use: useModels, provider: ModelsProvider } = createSimpleContext({
   name: "Models",
   gate: false,
-  init: (props: { directory?: Accessor<string | undefined> } = {}) => {
+  init: (props: { directory?: Accessor<string | undefined> }) => {
     const providers = useProviders(() => props.directory?.())
 
     const [store, setStore, _, ready] = persisted(
@@ -161,7 +161,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       visible,
       setVisibility,
       recent: {
-        list: () => recentModels()!,
+        list: () => recentModels(),
         push,
       },
       variant: {

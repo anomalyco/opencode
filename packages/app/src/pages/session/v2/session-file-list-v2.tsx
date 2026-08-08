@@ -22,7 +22,7 @@ export function applyFileListKeyDown(
     const delta = event.key === "ArrowDown" ? 1 : -1
     const start = currentIndex === -1 ? (delta > 0 ? 0 : files.length - 1) : currentIndex + delta
     const index = Math.max(0, Math.min(files.length - 1, start))
-    options.onHighlight(files[index]!)
+    options.onHighlight(files[index])
     event.preventDefault()
     return
   }

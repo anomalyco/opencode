@@ -495,7 +495,7 @@ function ProviderConnection(props: {
     )
   }
 
-  const method = createMemo(() => (store.methodIndex !== undefined ? methods().at(store.methodIndex!) : undefined))
+  const method = createMemo(() => (store.methodIndex !== undefined ? methods().at(store.methodIndex) : undefined))
 
   const methodLabel = (value?: { type?: string; label?: string }) => {
     if (!value) return ""

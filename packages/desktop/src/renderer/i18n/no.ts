@@ -11,21 +11,18 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Oppdateringssjekk mislyktes",
   "desktop.updater.checkFailed.message": "Kunne ikke se etter oppdateringer",
   "desktop.updater.none.title": "Ingen oppdatering tilgjengelig",
-  "desktop.updater.none.message": "Du bruker allerede den nyeste versjonen av OpenCode",
+  "desktop.updater.none.message": "Du bruker allerede den nyeste versjonen av Jarvis",
   "desktop.updater.downloadFailed.title": "Oppdatering mislyktes",
   "desktop.updater.downloadFailed.message": "Kunne ikke laste ned oppdateringen",
   "desktop.updater.downloaded.title": "Oppdatering lastet ned",
   "desktop.updater.downloaded.prompt":
-    "Versjon {{version}} av OpenCode er lastet ned. Vil du installere den og starte på nytt?",
+    "Versjon {{version}} av Jarvis er lastet ned. Vil du installere den og starte på nytt?",
   "desktop.updater.installFailed.title": "Oppdatering mislyktes",
   "desktop.updater.installFailed.message": "Kunne ikke installere oppdateringen",
 
   "desktop.cli.installed.title": "CLI installert",
   "desktop.cli.installed.message":
-    "CLI installert i {{path}}\n\nStart terminalen på nytt for å bruke 'opencode'-kommandoen.",
+    "CLI installert i {{path}}\n\nStart terminalen på nytt for å bruke 'jarvis'-kommandoen.",
   "desktop.cli.failed.title": "Installasjon mislyktes",
   "desktop.cli.failed.message": "Kunne ikke installere CLI: {{error}}",
-
-  "desktop.error.dev.rootNotFound":
-    "Rotelement ikke funnet. Glemte du å legge det til i index.html? Eller kanskje id-attributtet er feilstavet?",
 }

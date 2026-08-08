@@ -1,0 +1,56 @@
+name: triage
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 1
+
+      - name: Check exempt issue author
+        id: author
+        run: |
+          LOGIN="${{ github.event.issue.user.login }}"
+          ASSOCIATION="${{ github.event.issue.author_association }}"
+
+          if [ "$LOGIN" = "opencode-agent[bot]" ] ||
+             [ "$ASSOCIATION" = "OWNER" ] ||
+             [ "$ASSOCIATION" = "MEMBER" ] ||
+             grep -qxiF "$LOGIN" .github/TEAM_MEMBERS; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping issue automation for exempt author: $LOGIN ($ASSOCIATION)"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Bun
+        if: steps.author.outputs.skip != 'true'
+        uses: ./.github/actions/setup-bun
+
+      - name: Install opencode
+        if: steps.author.outputs.skip != 'true'
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Triage issue
+        if: steps.author.outputs.skip != 'true'
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          opencode run --agent triage "The following issue was just opened, triage it:
+
+          Title: $ISSUE_TITLE
+
+          $ISSUE_BODY"

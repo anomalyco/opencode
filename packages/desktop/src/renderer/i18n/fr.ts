@@ -11,21 +11,18 @@ export const dict = {
   "desktop.updater.checkFailed.title": "Échec de la vérification des mises à jour",
   "desktop.updater.checkFailed.message": "Impossible de vérifier les mises à jour",
   "desktop.updater.none.title": "Aucune mise à jour disponible",
-  "desktop.updater.none.message": "Vous utilisez déjà la dernière version d'OpenCode",
+  "desktop.updater.none.message": "Vous utilisez déjà la dernière version d'Jarvis",
   "desktop.updater.downloadFailed.title": "Échec de la mise à jour",
   "desktop.updater.downloadFailed.message": "Impossible de télécharger la mise à jour",
   "desktop.updater.downloaded.title": "Mise à jour téléchargée",
   "desktop.updater.downloaded.prompt":
-    "La version {{version}} d'OpenCode a été téléchargée. Voulez-vous l'installer et relancer l'application ?",
+    "La version {{version}} d'Jarvis a été téléchargée. Voulez-vous l'installer et relancer l'application ?",
   "desktop.updater.installFailed.title": "Échec de la mise à jour",
   "desktop.updater.installFailed.message": "Impossible d'installer la mise à jour",
 
   "desktop.cli.installed.title": "Interface en ligne de commande installée",
   "desktop.cli.installed.message":
-    "Interface en ligne de commande installée dans {{path}}\n\nRedémarrez votre terminal pour utiliser la commande 'opencode'.",
+    "Interface en ligne de commande installée dans {{path}}\n\nRedémarrez votre terminal pour utiliser la commande 'jarvis'.",
   "desktop.cli.failed.title": "Échec de l'installation",
   "desktop.cli.failed.message": "Impossible d'installer l'interface en ligne de commande : {{error}}",
-
-  "desktop.error.dev.rootNotFound":
-    "Élément racine introuvable. Avez-vous oublié de l'ajouter à votre index.html ? Ou peut-être que l'attribut id est mal orthographié ?",
 }

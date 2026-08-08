@@ -43,7 +43,7 @@ test("animates todo lifecycle without replaying it across session tabs", async (
       all: [
         {
           id: "opencode",
-          name: "OpenCode",
+          name: "Jarvis",
           models: {
             "claude-opus-4-6": {
               id: "claude-opus-4-6",
@@ -76,7 +76,9 @@ test("animates todo lifecycle without replaying it across session tabs", async (
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
 
   await page.waitForTimeout(700)
-  const opening = sampleDock(page, 1_000)
+  // Generous sampling windows: session switches + re-render must fit inside,
+  // and busy CI runners are slower than dev machines.
+  const opening = sampleDock(page, 1_500)
   todos[sourceID] = activeTodos
   events.push(todoEvent(sourceID, activeTodos))
   await expect(dock).toBeVisible()
@@ -86,7 +88,7 @@ test("animates todo lifecycle without replaying it across session tabs", async (
   await switchSession(page, otherID, otherTitle)
   await expect(dock).toHaveCount(0)
 
-  const returningOpen = sampleDock(page, 700)
+  const returningOpen = sampleDock(page, 1_500)
   await switchSession(page, sourceID, sourceTitle)
   const openSamples = (await returningOpen).filter((sample) => sample.present)
   expect(openSamples.length).toBeGreaterThan(0)
@@ -95,7 +97,7 @@ test("animates todo lifecycle without replaying it across session tabs", async (
   await expect(dock.locator('[data-state="in_progress"]')).toHaveCount(1)
 
   const completedTodos = activeTodos.map((todo) => ({ ...todo, status: "completed" }))
-  const closing = sampleDock(page, 1_000)
+  const closing = sampleDock(page, 1_500)
   todos[sourceID] = completedTodos
   events.push(todoEvent(sourceID, completedTodos))
   await expect(dock).toHaveCount(0)
@@ -104,7 +106,7 @@ test("animates todo lifecycle without replaying it across session tabs", async (
   events.push(todoEvent(sourceID, []))
 
   await switchSession(page, otherID, otherTitle)
-  const returningEmpty = sampleDock(page, 700)
+  const returningEmpty = sampleDock(page, 1_500)
   await switchSession(page, sourceID, sourceTitle)
   await expect(dock).toHaveCount(0)
   expect((await returningEmpty).every((sample) => !sample.present)).toBe(true)
@@ -142,14 +144,14 @@ async function configurePage(page: Page) {
     ({ directory, dirBase64, server, sessionIDs }) => {
       localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
-        "opencode.global.dat:server",
+        "jarvis.global.dat:server",
         JSON.stringify({
           projects: { local: [{ worktree: directory, expanded: true }] },
           lastProject: { local: directory },
         }),
       )
       localStorage.setItem(
-        "opencode.window.browser.dat:tabs",
+        "jarvis.window.browser.dat:tabs",
         JSON.stringify(sessionIDs.map((sessionId) => ({ type: "session", server, dirBase64, sessionId }))),
       )
     },

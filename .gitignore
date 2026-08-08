@@ -24,6 +24,7 @@ Session.vim
 a.out
 target
 .scripts
+__pycache__/
 .direnv/
 
 # Local dev files
@@ -32,3 +33,4 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+packages/opencode/config.json

@@ -287,9 +287,7 @@ export function MessageTimeline(props: {
     const visible = new Set(props.userMessages.map((message) => message.id))
     const boundary = sessionMessages().find((message) => message.role === "user" && !visible.has(message.id))?.id
     const messages = sync().data.session_message[id] ?? []
-    if (!boundary) return messages
-    const index = messages.findIndex((message) => message.id === boundary)
-    return index < 0 ? messages : messages.slice(0, index)
+    return boundary ? messages.filter((message) => message.id < boundary) : messages
   })
   const info = createMemo(() => {
     const id = sessionID()
@@ -803,7 +801,7 @@ export function MessageTimeline(props: {
       return
     }
     if (params.serverKey) {
-      tabs.newDraft({ server: requireServerKey(params.serverKey), directory: sdk().directory })
+      void tabs.newDraft({ server: requireServerKey(params.serverKey), directory: sdk().directory })
       return
     }
     navigate(`/${params.dir}/session`)
@@ -1498,7 +1496,7 @@ export function MessageTimeline(props: {
                           event.stopPropagation()
                           if (event.key === "Enter") {
                             event.preventDefault()
-                            void saveTitleEditor()
+                             saveTitleEditor()
                             return
                           }
                           if (event.key === "Escape") {

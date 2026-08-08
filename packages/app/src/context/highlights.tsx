@@ -7,7 +7,7 @@ import { useSettings } from "@/context/settings"
 import { persisted } from "@/utils/persist"
 import { DialogReleaseNotes, type Highlight } from "@/components/dialog-release-notes"
 
-const CHANGELOG_URL = "https://opencode.ai/changelog.json"
+const CHANGELOG_URL = "https://jaminsmoke.github.io/Jarvis/changelog.json"
 
 type Store = {
   version?: string
@@ -195,7 +195,7 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
           timer = setTimeout(() => {
             timer = undefined
             markSeen()
-            dialog.show(() => <DialogReleaseNotes highlights={highlights} />)
+            void dialog.show(() => <DialogReleaseNotes highlights={highlights} />)
           }, 500)
         })
         .catch(() => undefined)

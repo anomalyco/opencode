@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "opencode",
+  "name": "jarvis",
   "description": "AI-powered development tool",
   "private": true,
   "type": "module",
@@ -60,7 +60,7 @@
       "@solid-primitives/storage": "4.3.3",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
-      "dompurify": "3.3.1",
+      "dompurify": "3.4.13",
       "drizzle-kit": "1.0.0-rc.2",
       "drizzle-orm": "1.0.0-rc.2",
       "effect": "4.0.0-beta.83",
@@ -119,7 +119,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/anomalyco/opencode"
+    "url": "https://github.com/jaminsmoke/Jarvis"
   },
   "license": "MIT",
   "prettier": {
