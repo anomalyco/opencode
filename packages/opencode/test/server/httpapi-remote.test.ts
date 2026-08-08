@@ -151,6 +151,27 @@ describe("remote HttpApi", () => {
         const crossSession = yield* request(`/remote/session/${other.id}`, bearer(grant.token))
         expect(crossSession.status).toBe(401)
 
+        const stalePermission = yield* request(
+          `/remote/session/${session.id}/permission/per_missing`,
+          bearer(grant.token, jsonBody({ reply: "once" }, { method: "POST" })),
+        )
+        expect(stalePermission.status).toBe(400)
+
+        const staleQuestion = yield* request(
+          `/remote/session/${session.id}/question/que_missing`,
+          bearer(grant.token, jsonBody({ answers: [["stale"]] }, { method: "POST" })),
+        )
+        expect(staleQuestion.status).toBe(400)
+
+        const staleQuestionReject = yield* request(
+          `/remote/session/${session.id}/question/que_missing/reject`,
+          bearer(grant.token, { method: "POST" }),
+        )
+        expect(staleQuestionReject.status).toBe(400)
+
+        const stillAuthorized = yield* request(`/remote/session/${session.id}`, bearer(grant.token))
+        expect(stillAuthorized.status).toBe(200)
+
         const privilegedPrompt = yield* request(
           `/remote/session/${session.id}/message`,
           bearer(

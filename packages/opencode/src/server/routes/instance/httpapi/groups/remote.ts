@@ -145,20 +145,20 @@ export const RemoteApi = HttpApi.make("remote").add(
         query: WorkspaceRoutingQuery,
         payload: RemotePermissionReply,
         success: Schema.Boolean,
-        error: [HttpApiError.BadRequest, HttpApiError.Forbidden],
+        error: HttpApiError.BadRequest,
       }),
       HttpApiEndpoint.post("question", `${remoteRoot}/session/:sessionID/question/:requestID`, {
         params: { sessionID: SessionID, requestID: QuestionID },
         query: WorkspaceRoutingQuery,
         payload: RemoteQuestionReply,
         success: Schema.Boolean,
-        error: [HttpApiError.BadRequest, HttpApiError.Forbidden],
+        error: HttpApiError.BadRequest,
       }),
       HttpApiEndpoint.post("questionReject", `${remoteRoot}/session/:sessionID/question/:requestID/reject`, {
         params: { sessionID: SessionID, requestID: QuestionID },
         query: WorkspaceRoutingQuery,
         success: Schema.Boolean,
-        error: [HttpApiError.BadRequest, HttpApiError.Forbidden],
+        error: HttpApiError.BadRequest,
       }),
     )
     .middleware(InstanceContextMiddleware)

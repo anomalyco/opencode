@@ -156,7 +156,7 @@ export const remoteHandlers = HttpApiBuilder.group(RemoteApi, "remote", (handler
       .handle("permission", (ctx) =>
         Effect.gen(function* () {
           const request = (yield* permission.list()).find((item) => item.id === ctx.params.requestID)
-          if (!request || request.sessionID !== ctx.params.sessionID) return yield* new HttpApiError.Forbidden({})
+          if (!request || request.sessionID !== ctx.params.sessionID) return yield* new HttpApiError.BadRequest({})
           yield* permission
             .reply({ requestID: ctx.params.requestID, reply: ctx.payload.reply, message: ctx.payload.message })
             .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
@@ -166,7 +166,7 @@ export const remoteHandlers = HttpApiBuilder.group(RemoteApi, "remote", (handler
       .handle("question", (ctx) =>
         Effect.gen(function* () {
           const request = (yield* question.list()).find((item) => item.id === ctx.params.requestID)
-          if (!request || request.sessionID !== ctx.params.sessionID) return yield* new HttpApiError.Forbidden({})
+          if (!request || request.sessionID !== ctx.params.sessionID) return yield* new HttpApiError.BadRequest({})
           yield* question
             .reply({ requestID: ctx.params.requestID, answers: ctx.payload.answers })
             .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
@@ -176,7 +176,7 @@ export const remoteHandlers = HttpApiBuilder.group(RemoteApi, "remote", (handler
       .handle("questionReject", (ctx) =>
         Effect.gen(function* () {
           const request = (yield* question.list()).find((item) => item.id === ctx.params.requestID)
-          if (!request || request.sessionID !== ctx.params.sessionID) return yield* new HttpApiError.Forbidden({})
+          if (!request || request.sessionID !== ctx.params.sessionID) return yield* new HttpApiError.BadRequest({})
           yield* question.reject(ctx.params.requestID).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
           return true
         }),
