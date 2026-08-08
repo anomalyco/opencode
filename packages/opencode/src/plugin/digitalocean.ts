@@ -11,6 +11,7 @@ const DO_API_BASE = "https://api.digitalocean.com"
 const DO_GENAI_API = `${DO_API_BASE}/v2/gen-ai`
 const DO_INFERENCE_BASE = "https://inference.do-ai.run/v1"
 const OAUTH_PORT = 1456
+const OAUTH_CALLBACK_HOST = "127.0.0.1"
 const OAUTH_REDIRECT_PATH = "/auth/callback"
 const OAUTH_TOKEN_PATH = "/auth/token"
 const ROUTER_REFRESH_INTERVAL_MS = 5 * 60 * 1000
@@ -126,7 +127,7 @@ async function startOAuthServer(): Promise<void> {
   })
 
   await new Promise<void>((resolve, reject) => {
-    oauthServer!.listen(OAUTH_PORT, () => {
+    oauthServer!.listen(OAUTH_PORT, OAUTH_CALLBACK_HOST, () => {
       resolve()
     })
     oauthServer!.on("error", reject)
