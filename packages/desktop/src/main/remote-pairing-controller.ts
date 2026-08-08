@@ -20,6 +20,8 @@ type PairingPayload = {
 }
 
 export function createRemotePairingController(options: RemotePairingControllerOptions) {
+  const sessions = new Set<string>()
+
   const request = async (method: "POST" | "DELETE", sessionID: string, directory: string) => {
     const sidecar = await options.getSidecar()
     const url = new URL(`/session/${encodeURIComponent(sessionID)}/remote`, sidecar.url)
@@ -36,6 +38,7 @@ export function createRemotePairingController(options: RemotePairingControllerOp
 
   const create = async (sessionID: string, directory: string): Promise<RemotePairingInfo> => {
     const existing = options.gateway.status()
+    if (!existing) sessions.clear()
     const gateway = existing ?? (await options.gateway.start())
 
     if (gateway.urls.length === 0) {
@@ -57,6 +60,7 @@ export function createRemotePairingController(options: RemotePairingControllerOp
         return `${mobile.toString()}#ticket=${encodeURIComponent(payload.ticket as string)}`
       })
 
+      sessions.add(sessionID)
       return {
         url: urls[0]!,
         urls,
@@ -71,6 +75,7 @@ export function createRemotePairingController(options: RemotePairingControllerOp
   const revoke = async (sessionID: string, directory: string) => {
     const response = await request("DELETE", sessionID, directory)
     if (!response.ok) throw new Error(`Remote revoke failed with status ${response.status}`)
+    if (sessions.delete(sessionID) && sessions.size === 0) await options.gateway.stop()
   }
 
   return { create, revoke }

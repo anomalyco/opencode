@@ -1,6 +1,5 @@
 import * as http from "node:http"
 import * as https from "node:https"
-import type { AddressInfo } from "node:net"
 import { networkInterfaces } from "node:os"
 
 export type RemoteGatewayInfo = {
@@ -16,11 +15,13 @@ type Logger = {
 type RemoteGatewayOptions = {
   upstreamUrl: string
   logger?: Logger
+  networkInterfaces?: typeof networkInterfaces
 }
 
 const blockedRequestHeaders = new Set([
   "connection",
   "host",
+  "keep-alive",
   "proxy-authorization",
   "proxy-authenticate",
   "te",
@@ -29,7 +30,14 @@ const blockedRequestHeaders = new Set([
   "upgrade",
 ])
 
-const blockedResponseHeaders = new Set(["connection", "proxy-authenticate", "trailer", "transfer-encoding", "upgrade"])
+const blockedResponseHeaders = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+])
 
 export function createRemoteGateway(options: RemoteGatewayOptions) {
   const upstream = new URL(options.upstreamUrl)
@@ -44,6 +52,10 @@ export function createRemoteGateway(options: RemoteGatewayOptions) {
     if (server && info) return info
 
     const next = http.createServer((request, response) => {
+      if (!isAllowedNetworkRequest(request)) {
+        response.writeHead(403).end()
+        return
+      }
       if (!isRemotePath(request.url)) {
         response.writeHead(404).end()
         return
@@ -75,7 +87,7 @@ export function createRemoteGateway(options: RemoteGatewayOptions) {
     server = next
     info = {
       port: address.port,
-      urls: lanUrls(address.port),
+      urls: lanUrls(address.port, (options.networkInterfaces ?? networkInterfaces)()),
     }
     options.logger?.log("remote gateway started", { port: info.port, urls: info.urls })
     return info
@@ -102,6 +114,32 @@ function isRemotePath(rawUrl: string | undefined) {
   return pathname === "/remote" || pathname.startsWith("/remote/")
 }
 
+function normalizeIPv4(address: string | undefined) {
+  if (!address) return
+  if (address.startsWith("::ffff:")) return address.slice("::ffff:".length)
+  return address
+}
+
+function isAllowedNetworkAddress(address: string | undefined) {
+  const value = normalizeIPv4(address)
+  if (!value) return false
+  if (value === "::1" || value.startsWith("127.")) return true
+  return isPrivateIPv4(value)
+}
+
+function isAllowedNetworkRequest(request: http.IncomingMessage) {
+  return isAllowedNetworkAddress(request.socket.localAddress) && isAllowedNetworkAddress(request.socket.remoteAddress)
+}
+
+function hopByHop(headers: http.IncomingHttpHeaders, fixed: Set<string>) {
+  const blocked = new Set(fixed)
+  for (const token of headers.connection?.split(",") ?? []) {
+    const name = token.trim().toLowerCase()
+    if (name) blocked.add(name)
+  }
+  return Object.fromEntries(Object.entries(headers).filter(([name]) => !blocked.has(name.toLowerCase())))
+}
+
 function proxyRequest(
   upstream: URL,
   request: http.IncomingMessage,
@@ -110,11 +148,9 @@ function proxyRequest(
 ) {
   const target = new URL(request.url ?? "/", upstream)
   const requestImpl = target.protocol === "https:" ? https.request : http.request
-  const headers = Object.fromEntries(
-    Object.entries(request.headers).filter(([name]) => !blockedRequestHeaders.has(name.toLowerCase())),
-  )
+  const headers = hopByHop(request.headers, blockedRequestHeaders)
 
-  headers["x-forwarded-host"] = request.headers.host
+  if (request.headers.host) headers["x-forwarded-host"] = request.headers.host
   headers["x-forwarded-proto"] = "http"
 
   const proxy = requestImpl(
@@ -124,9 +160,7 @@ function proxyRequest(
       headers,
     },
     (upstreamResponse) => {
-      const responseHeaders = Object.fromEntries(
-        Object.entries(upstreamResponse.headers).filter(([name]) => !blockedResponseHeaders.has(name.toLowerCase())),
-      )
+      const responseHeaders = hopByHop(upstreamResponse.headers, blockedResponseHeaders)
       response.writeHead(upstreamResponse.statusCode ?? 502, responseHeaders)
       upstreamResponse.pipe(response)
     },
@@ -145,11 +179,11 @@ function proxyRequest(
   request.pipe(proxy)
 }
 
-function lanUrls(port: number) {
+function lanUrls(port: number, interfaces: ReturnType<typeof networkInterfaces>) {
   const addresses = new Set<string>()
-  for (const entries of Object.values(networkInterfaces())) {
+  for (const entries of Object.values(interfaces)) {
     for (const entry of entries ?? []) {
-      if (entry.internal || entry.family !== "IPv4") continue
+      if (entry.internal || entry.family !== "IPv4" || !isPrivateIPv4(entry.address)) continue
       addresses.add(entry.address)
     }
   }
@@ -157,7 +191,13 @@ function lanUrls(port: number) {
 }
 
 function privateAddressRank(a: string, b: string) {
-  return Number(!isPrivateIPv4(a)) - Number(!isPrivateIPv4(b)) || a.localeCompare(b)
+  return privateRangeRank(a) - privateRangeRank(b) || a.localeCompare(b)
+}
+
+function privateRangeRank(address: string) {
+  if (address.startsWith("192.168.")) return 0
+  if (address.startsWith("10.")) return 1
+  return 2
 }
 
 function isPrivateIPv4(address: string) {

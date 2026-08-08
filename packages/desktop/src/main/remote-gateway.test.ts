@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import * as http from "node:http"
 import type { AddressInfo } from "node:net"
+import type { NetworkInterfaceInfo } from "node:os"
 import { createRemoteGateway } from "./remote-gateway"
 
 const servers: http.Server[] = []
@@ -65,6 +66,68 @@ describe("remote gateway", () => {
     await gateway.stop()
   })
 
+  test("publishes only private IPv4 LAN addresses", async () => {
+    const upstream = await listen((_request, response) => response.end("ok"))
+    const gateway = createRemoteGateway({
+      upstreamUrl: origin(upstream),
+      networkInterfaces: () => ({
+        wan: [networkAddress("203.0.113.8")],
+        docker: [networkAddress("172.17.0.1")],
+        corporate: [networkAddress("10.20.30.40")],
+        wifi: [networkAddress("192.168.50.12")],
+        loopback: [networkAddress("127.0.0.1", true)],
+      }),
+    })
+    const info = await gateway.start()
+
+    expect(info.urls).toEqual([
+      `http://192.168.50.12:${info.port}`,
+      `http://10.20.30.40:${info.port}`,
+      `http://172.17.0.1:${info.port}`,
+    ])
+
+    await gateway.stop()
+  })
+
+  test("strips Connection-declared hop-by-hop request headers", async () => {
+    let seen: http.IncomingHttpHeaders = {}
+    const upstream = await listen((request, response) => {
+      seen = request.headers
+      response.end("ok")
+    })
+    const gateway = createRemoteGateway({ upstreamUrl: origin(upstream) })
+    const info = await gateway.start()
+
+    await rawRequest(info.port, {
+      connection: "keep-alive, x-remote-hop",
+      "keep-alive": "timeout=5",
+      "x-remote-hop": "secret",
+      "x-end-to-end": "keep",
+    })
+
+    expect(seen["x-remote-hop"]).toBeUndefined()
+    expect(seen["x-end-to-end"]).toBe("keep")
+
+    await gateway.stop()
+  })
+
+  test("strips Connection-declared hop-by-hop response headers", async () => {
+    const upstream = await listen((_request, response) => {
+      response.setHeader("connection", "x-remote-hop")
+      response.setHeader("x-remote-hop", "secret")
+      response.setHeader("x-end-to-end", "keep")
+      response.end("ok")
+    })
+    const gateway = createRemoteGateway({ upstreamUrl: origin(upstream) })
+    const info = await gateway.start()
+
+    const response = await fetch(`http://127.0.0.1:${info.port}/remote/mobile`)
+    expect(response.headers.get("x-remote-hop")).toBeNull()
+    expect(response.headers.get("x-end-to-end")).toBe("keep")
+
+    await gateway.stop()
+  })
+
   test("stop closes active streaming connections", async () => {
     const upstream = await listen((_request, response) => {
       response.writeHead(200, { "content-type": "text/event-stream" })
@@ -107,4 +170,26 @@ async function listen(handler: http.RequestListener) {
 function origin(server: http.Server) {
   const address = server.address() as AddressInfo
   return `http://127.0.0.1:${address.port}`
+}
+
+function networkAddress(address: string, internal = false): NetworkInterfaceInfo {
+  return {
+    address,
+    netmask: "255.255.255.0",
+    family: "IPv4",
+    mac: "00:00:00:00:00:00",
+    internal,
+    cidr: `${address}/24`,
+  }
+}
+
+function rawRequest(port: number, headers: http.OutgoingHttpHeaders) {
+  return new Promise<void>((resolve, reject) => {
+    const request = http.request({ host: "127.0.0.1", port, path: "/remote/mobile", headers }, (response) => {
+      response.resume()
+      response.on("end", resolve)
+    })
+    request.on("error", reject)
+    request.end()
+  })
 }

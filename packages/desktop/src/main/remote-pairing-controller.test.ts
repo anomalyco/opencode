@@ -74,8 +74,9 @@ describe("remote pairing controller", () => {
     expect(gateway.stops()).toBe(1)
   })
 
-  test("revoke sends an authenticated DELETE without stopping the shared gateway", async () => {
+  test("revoke sends an authenticated DELETE without stopping an untracked shared gateway", async () => {
     const gateway = fakeGateway({ port: 4123, urls: ["http://192.168.1.10:4123"] })
+    await gateway.gateway.start()
     let request: Request | undefined
     const controller = createRemotePairingController({
       getSidecar: async () => ({
@@ -95,5 +96,38 @@ describe("remote pairing controller", () => {
     expect(request?.method).toBe("DELETE")
     expect(request?.headers.get("authorization")).toBe(`Basic ${btoa("opencode:server-secret")}`)
     expect(gateway.stops()).toBe(0)
+  })
+
+  test("stops the gateway when the last tracked remote session disconnects", async () => {
+    const gateway = fakeGateway({ port: 4123, urls: ["http://192.168.1.10:4123"] })
+    const controller = createRemotePairingController({
+      getSidecar: async () => ({ url: "http://127.0.0.1:4096", username: null, password: null }),
+      gateway: gateway.gateway,
+      fetch: async (_input, init) =>
+        init?.method === "DELETE" ? Response.json(true) : Response.json({ ticket: "ticket", expires_in: 300 }),
+    })
+
+    await controller.create("session", "/tmp/project")
+    await controller.revoke("session", "/tmp/project")
+
+    expect(gateway.stops()).toBe(1)
+  })
+
+  test("keeps the shared gateway until all tracked remote sessions disconnect", async () => {
+    const gateway = fakeGateway({ port: 4123, urls: ["http://192.168.1.10:4123"] })
+    const controller = createRemotePairingController({
+      getSidecar: async () => ({ url: "http://127.0.0.1:4096", username: null, password: null }),
+      gateway: gateway.gateway,
+      fetch: async (_input, init) =>
+        init?.method === "DELETE" ? Response.json(true) : Response.json({ ticket: "ticket", expires_in: 300 }),
+    })
+
+    await controller.create("session-a", "/tmp/a")
+    await controller.create("session-b", "/tmp/b")
+    await controller.revoke("session-a", "/tmp/a")
+    expect(gateway.stops()).toBe(0)
+
+    await controller.revoke("session-b", "/tmp/b")
+    expect(gateway.stops()).toBe(1)
   })
 })
