@@ -28,6 +28,7 @@ import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { WellKnown } from "@opencode-ai/core/wellknown"
+import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -43,6 +44,7 @@ import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
+import { modalWorkspaceRegistryNode } from "./workspace/modal-workspace"
 
 const applicationServices = LayerNode.group([
   Database.node,
@@ -115,6 +117,7 @@ function makeRoutes<AuthError, AuthServices>(
     ],
     [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
     [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(pluginRuntimeCell)],
+    [WorkspaceDriver.node, modalWorkspaceRegistryNode({ app: "opencode-workspaces" })],
   ]
   const serviceLayer = options.simulation
     ? Layer.unwrap(

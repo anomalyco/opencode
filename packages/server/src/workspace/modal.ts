@@ -3,7 +3,7 @@ import { systemError } from "effect/PlatformError"
 import type { Command, KillOptions } from "effect/unstable/process/ChildProcess"
 import { ExitCode, make, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
 import type { Driver } from "@opencode-ai/core/environment"
-import type { ModalClientParams, Sandbox, SandboxCreateParams } from "modal"
+import type { Image, ModalClient, ModalClientParams, Sandbox, SandboxCreateParams } from "modal"
 
 const INNER_WRAPPER = `
 pidfile=$1
@@ -66,23 +66,33 @@ export const ubuntuImage: ModalImageSpec = {
 export const createModalSandbox = async (options: ModalSandboxOptions) => {
   const { ModalClient } = await import("modal")
   const client = new ModalClient(options.client)
-  const app = await client.apps.fromName(options.app, { createIfMissing: true })
-  const imageSpec = options.image ?? ubuntuImage
-  const image = client.images.fromRegistry(imageSpec.registry).dockerfileCommands([...imageSpec.dockerfileCommands])
-  // Always Modal's Full-VM runtime (beta, enabled per account): a real kernel
-  // with real device nodes, so workspaces can run Docker and other
-  // kernel-dependent workloads. Costs versus gVisor, measured Aug 2026:
-  // per-exec floor ~285-535ms versus ~90-165ms, and filesystem snapshots only
-  // (no memory snapshots — acceptable; fs-snapshot is the persistence design).
-  const sandbox = await client.sandboxes.create(app, image, {
-    ...options.sandbox,
-    experimentalOptions: { ...options.sandbox?.experimentalOptions, vm_runtime: true },
-  })
+  const sandbox = await createModalSandboxWithClient(client, options)
   return {
     driver: makeModalDriver(sandbox),
     sandbox,
     terminate: () => sandbox.terminate(),
   }
+}
+
+export const createModalSandboxWithClient = async (
+  client: ModalClient,
+  options: ModalSandboxOptions,
+  existingImage?: Image,
+) => {
+  const app = await client.apps.fromName(options.app, { createIfMissing: true })
+  const imageSpec = options.image ?? ubuntuImage
+  const image =
+    existingImage ??
+    client.images.fromRegistry(imageSpec.registry).dockerfileCommands([...imageSpec.dockerfileCommands])
+  // Always Modal's Full-VM runtime (beta, enabled per account): a real kernel
+  // with real device nodes, so workspaces can run Docker and other
+  // kernel-dependent workloads. Costs versus gVisor, measured Aug 2026:
+  // per-exec floor ~285-535ms versus ~90-165ms, and filesystem snapshots only
+  // (no memory snapshots — acceptable; fs-snapshot is the persistence design).
+  return client.sandboxes.create(app, image, {
+    ...options.sandbox,
+    experimentalOptions: { ...options.sandbox?.experimentalOptions, vm_runtime: true },
+  })
 }
 
 /**
