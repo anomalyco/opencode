@@ -613,6 +613,21 @@ flowchart LR
     expect(grid.getCell(junction.x, junction.y)?.style).toBe("edge")
   })
 
+  test("distributes short source fades before the first corner", () => {
+    const content = `flowchart TD
+  C[Files contract<br/>read / write / stat<br/>errors: Failed] -->|implemented by| ED[exec-defaults<br/>fused scripts<br/>one process]`
+    const layout = layoutFlowchartDiagram(content)
+    const grid = drawFlowchartDiagramGrid(content)
+    const firstCorner = layout.routes[0]!.points[1]!
+    const fadeStyles = new Set(
+      grid.rows.flatMap((row) => row.map((cell) => cell.style)).filter((style) => style?.startsWith("nodeEdgeFade")),
+    )
+
+    expect(fadeStyles.has("nodeEdgeFade1")).toBe(false)
+    expect(fadeStyles.has("nodeEdgeFade5")).toBe(true)
+    expect(grid.getCell(firstCorner.x, firstCorner.y)?.style).toBe("edge")
+  })
+
   test("tracks nested Mermaid subgraphs", () => {
     const diagram = parseMermaidFlowchartDiagram(`
 flowchart LR

@@ -1,6 +1,12 @@
 import { BorderChars, type BorderCharacters, type BorderStyle } from "@opentui/core"
 import { DiagramCanvas, type DiagramCanvasCell } from "../core/canvas.js"
-import { diagramArrowHead, diagramLineGlyph, drawDiagramFrame, mergeDiagramLineGlyph } from "../core/drawing.js"
+import {
+  diagramArrowHead,
+  diagramLineGlyph,
+  drawDiagramFrame,
+  fillDiagramFrameInterior,
+  mergeDiagramLineGlyph,
+} from "../core/drawing.js"
 import {
   createStateDiagramLayout,
   expandCompositeBoundsForFeedback,
@@ -86,19 +92,11 @@ function drawBox(
     return
   }
   const style: StateCellStyle = "state"
-  fillBoxInterior(grid, bounds, style)
+  fillDiagramFrameInterior(bounds, (x, y) => setCell(grid, x, y, " ", style))
   drawStateFrame(grid, bounds, BorderChars[borderStyle], style)
   lines.forEach((line, index) => {
     setText(grid, bounds.left + 2, bounds.top + 1 + index, line, style)
   })
-}
-
-function fillBoxInterior(grid: StateGrid, bounds: BoxBounds, style: StateCellStyle): void {
-  for (let y = bounds.top + 1; y < bounds.top + bounds.height - 1; y++) {
-    for (let x = bounds.left + 1; x < bounds.left + bounds.width - 1; x++) {
-      setCell(grid, x, y, " ", style)
-    }
-  }
 }
 
 function drawStateFrame(grid: StateGrid, bounds: BoxBounds, chars: BorderCharacters, style: StateCellStyle): void {

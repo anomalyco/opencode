@@ -5,6 +5,7 @@ import {
   parseColor,
   type ColorInput,
   type MarkdownOptions,
+  type MarkdownCodeBlockRenderer,
   type MouseEvent,
   type RenderContext,
   type RGBA,
@@ -169,31 +170,36 @@ export function createMermaidMarkdownRenderer(
   ctx: RenderContext,
   input: MermaidMarkdownRendererOptions | (() => MermaidMarkdownRendererOptions) = {},
 ): NonNullable<MarkdownOptions["renderNode"]> {
-  const lastGood = new Map<string, LastGoodDiagram>()
-  return createMarkdownCodeBlockRenderer({
-    mermaid: (token, context) => {
-      const kind = detectMermaidDiagram(token.text)
-      if (!kind) return undefined
-      // OpenTUI's default block ID is the stable identity available for this fence across streaming updates.
-      const key = context.defaultRender()?.id
-      const options = typeof input === "function" ? input() : input
+  return createMarkdownCodeBlockRenderer({ mermaid: createMermaidCodeBlockRenderer(ctx, input) })!
+}
 
-      try {
-        const diagram = renderDiagram(ctx, kind, token.text, options)
-        if (key) claimLastGood(key, { kind, source: token.text }, diagram, lastGood)
+export function createMermaidCodeBlockRenderer(
+  ctx: RenderContext,
+  input: MermaidMarkdownRendererOptions | (() => MermaidMarkdownRendererOptions) = {},
+): MarkdownCodeBlockRenderer {
+  const lastGood = new Map<string, LastGoodDiagram>()
+  return (token, context) => {
+    const kind = detectMermaidDiagram(token.text)
+    if (!kind) return undefined
+    // OpenTUI's default block ID is the stable identity available for this fence across streaming updates.
+    const key = context.defaultRender()?.id
+    const options = typeof input === "function" ? input() : input
+
+    try {
+      const diagram = renderDiagram(ctx, kind, token.text, options)
+      if (key) claimLastGood(key, { kind, source: token.text }, diagram, lastGood)
+      return diagram
+    } catch (error) {
+      if (error instanceof MermaidSyntaxError) {
+        const previous = key ? lastGood.get(key) : undefined
+        if (!previous || previous.kind !== kind) return undefined
+        const diagram = renderDiagram(ctx, previous.kind, previous.source, options)
+        claimLastGood(key!, previous, diagram, lastGood)
         return diagram
-      } catch (error) {
-        if (error instanceof MermaidSyntaxError) {
-          const previous = key ? lastGood.get(key) : undefined
-          if (!previous || previous.kind !== kind) return undefined
-          const diagram = renderDiagram(ctx, previous.kind, previous.source, options)
-          claimLastGood(key!, previous, diagram, lastGood)
-          return diagram
-        }
-        throw error
       }
-    },
-  })!
+      throw error
+    }
+  }
 }
 
 function claimLastGood(

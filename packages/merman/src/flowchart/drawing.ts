@@ -9,6 +9,7 @@ import {
   diagramLineGlyph,
   drawDiagramDiamond,
   drawDiagramFrame,
+  fillDiagramFrameInterior,
   drawOrthogonalPath,
   mergeDiagramLineGlyph,
 } from "../core/drawing.js"
@@ -53,14 +54,6 @@ function setNodeText(grid: FlowchartGrid, x: number, y: number, text: string, st
   grid.setText(x, y, text, style)
 }
 
-function fillNodeInterior(grid: FlowchartGrid, bounds: FlowchartNodeBounds, style: FlowchartCellStyle): void {
-  for (let y = bounds.top + 1; y < bounds.top + bounds.height - 1; y++) {
-    for (let x = bounds.left + 1; x < bounds.left + bounds.width - 1; x++) {
-      grid.setCell(x, y, " ", style)
-    }
-  }
-}
-
 function drawNode(
   grid: FlowchartGrid,
   node: FlowchartNode,
@@ -77,13 +70,13 @@ function drawNode(
       diagramDiamondCharactersFromBorder(chars),
     )
   } else if (node.shape === "subroutine") {
-    fillNodeInterior(grid, bounds, style)
+    fillDiagramFrameInterior(bounds, (x, y) => grid.setCell(x, y, " ", style))
     drawSubroutineNode(grid, bounds, chars, style)
   } else if (node.shape === "database") {
-    fillNodeInterior(grid, bounds, style)
+    fillDiagramFrameInterior(bounds, (x, y) => grid.setCell(x, y, " ", style))
     drawDatabaseNode(grid, bounds, chars, style)
   } else {
-    fillNodeInterior(grid, bounds, style)
+    fillDiagramFrameInterior(bounds, (x, y) => grid.setCell(x, y, " ", style))
     drawDiagramFrame(bounds, chars, (x, y, char) => grid.setCell(x, y, char, style))
   }
 
@@ -186,11 +179,9 @@ function sourceFadeStyles(sourceStyle: "node" | "database"): readonly FlowchartE
   return sourceStyle === "database" ? DATABASE_EDGE_FADE_STYLES : NODE_EDGE_FADE_STYLES
 }
 
-function styleExistingEdgeCell(grid: FlowchartGrid, x: number, y: number, style: FlowchartEdgeFadeStyle): boolean {
+function styleExistingEdgeCell(grid: FlowchartGrid, x: number, y: number, style: FlowchartEdgeFadeStyle): void {
   const cell = grid.getCell(x, y)
-  if (!cell || !"─━│┃".includes(cell.char) || cell.style === "label") return false
-  grid.setCell(x, y, cell.char, style)
-  return true
+  if (cell) grid.setCell(x, y, cell.char, style)
 }
 
 function routeCellOccupancy(routes: readonly FlowchartEdgeRoute[]): Map<string, number> {
@@ -209,21 +200,30 @@ function routeCellOccupancy(routes: readonly FlowchartEdgeRoute[]): Map<string, 
 
 function fadeSourcePath(
   grid: FlowchartGrid,
+  connector: FlowchartPoint,
   points: FlowchartPoint[],
   styles: readonly FlowchartEdgeFadeStyle[],
   occupancy: ReadonlyMap<string, number>,
 ): void {
-  let styleIndex = 1
   const from = points[0]
   const to = points[1]
   if (!from || !to) return
+  const privateCells = [connector]
 
   walkOrthogonalSegment(from, to, true, (point) => {
-    if (styleIndex >= styles.length) return false
     const key = `${point.x}:${point.y}`
-    if (occupancy.get(key) === 1 && styleExistingEdgeCell(grid, point.x, point.y, styles[styleIndex]!)) styleIndex += 1
-    return styleIndex < styles.length
+    const cell = grid.getCell(point.x, point.y)
+    if (occupancy.get(key) !== 1 || !cell || !"─━│┃".includes(cell.char) || cell.style === "label") return false
+    privateCells.push(point)
   })
+
+  for (const [index, point] of privateCells.entries()) {
+    const styleIndex = Math.min(
+      styles.length - 1,
+      Math.floor(((index + 1) * styles.length) / (privateCells.length + 1)),
+    )
+    styleExistingEdgeCell(grid, point.x, point.y, styles[styleIndex]!)
+  }
 }
 
 function drawSourceConnectors(
@@ -241,7 +241,7 @@ function drawSourceConnectors(
     if (!from || !sourcePoint) continue
     const styles = sourceFadeStyles(flowchartNodeStyle(nodesById.get(route.edge.from)))
     const connector = flowchartSourceConnector(from, sourcePoint)
-    grid.setCell(connector.x, connector.y, connector.char, styles[0])
+    grid.setCell(connector.x, connector.y, connector.char, "edge")
     const routeDirection = route.points[1] ? flowchartDirectionBetween(sourcePoint, route.points[1]!) : undefined
     const connectorDirection = flowchartDirectionBetween(sourcePoint, connector)
     if (routeDirection && connectorDirection) {
@@ -255,7 +255,7 @@ function drawSourceConnectors(
         cell.style = "edge"
       }
     }
-    fadeSourcePath(grid, route.points, styles, occupancy)
+    fadeSourcePath(grid, connector, route.points, styles, occupancy)
   }
 }
 

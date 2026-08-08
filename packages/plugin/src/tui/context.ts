@@ -22,7 +22,7 @@ import type {
   VcsInfo,
 } from "@opencode-ai/client"
 import type { ResolvedTheme } from "@opencode-ai/theme/tui"
-import type { CliRenderer, KeyEvent, MarkdownOptions, Renderable } from "@opentui/core"
+import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"
 
@@ -407,7 +407,7 @@ export interface Context {
   readonly attention: Attention
   readonly theme: ResolvedTheme
   readonly markdown: {
-    registerCodeBlockRenderer(language: string, render: NonNullable<MarkdownOptions["renderNode"]>): () => void
+    registerCodeBlockRenderer(language: string, render: MarkdownCodeBlockRenderer): () => void
   }
   readonly keymap: Keymap
   readonly storage: Storage

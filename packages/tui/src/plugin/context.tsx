@@ -1,5 +1,5 @@
 import type { Plugin } from "@opencode-ai/plugin/tui"
-import { createMarkdownCodeBlockRenderer, type MarkdownOptions } from "@opentui/core"
+import { createMarkdownCodeBlockRenderer, type MarkdownCodeBlockRenderer, type MarkdownOptions } from "@opentui/core"
 import {
   batch,
   createContext,
@@ -63,7 +63,7 @@ type Registration = {
   active: boolean
   routes: Record<string, Page>
   slots: Record<string, Slot>
-  markdown: Record<string, NonNullable<MarkdownOptions["renderNode"]>>
+  markdown: Record<string, MarkdownCodeBlockRenderer>
   cleanups: Dispose[]
 }
 
@@ -73,9 +73,9 @@ type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "
 const PluginContext = createContext<Value>()
 
 export function combineMarkdownRenderers(
-  sources: ReadonlyArray<Readonly<Record<string, NonNullable<MarkdownOptions["renderNode"]>>>>,
+  sources: ReadonlyArray<Readonly<Record<string, MarkdownCodeBlockRenderer>>>,
 ): MarkdownOptions["renderNode"] {
-  const renderers = new Map<string, NonNullable<MarkdownOptions["renderNode"]>>()
+  const renderers = new Map<string, MarkdownCodeBlockRenderer>()
   for (const source of sources) {
     for (const [language, render] of Object.entries(source)) renderers.set(language, render)
   }
@@ -119,11 +119,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       owned,
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
-        set: (
-          kind: "routes" | "slots" | "markdown",
-          name: string,
-          value: Page | Slot | NonNullable<MarkdownOptions["renderNode"]>,
-        ) => setStore("registrations", id, kind, name, () => value),
+        set: (kind: "routes" | "slots" | "markdown", name: string, value: Page | Slot | MarkdownCodeBlockRenderer) =>
+          setStore("registrations", id, kind, name, () => value),
         remove: (kind, name) =>
           setStore(
             "registrations",

@@ -1,5 +1,5 @@
 import { RGBA } from "@opentui/core"
-import { createColorRampTheme, type DiagramRgb } from "../core/color/style.js"
+import { createColorRampTheme, rgba, type DiagramRgb } from "../core/color/style.js"
 import type { BaseStateCellStyle, NoteConnectorRampStyle, StateCellStyle, StateDepartureRampStyle } from "./types.js"
 
 const DEFAULT_THEME_RGB = {
@@ -30,16 +30,16 @@ export function resolveStateStyleColors(
   colors: Partial<Record<BaseStateCellStyle, RGBA | undefined>> = {},
 ): StateStyleColors {
   const resolved = {
-    state: colors.state ?? RGBA.fromInts(...DEFAULT_THEME_RGB.state, 255),
-    composite: colors.composite ?? RGBA.fromInts(...DEFAULT_THEME_RGB.composite, 255),
-    transition: colors.transition ?? RGBA.fromInts(...DEFAULT_THEME_RGB.transition, 255),
-    label: colors.label ?? RGBA.fromInts(...DEFAULT_THEME_RGB.label, 255),
-    noteBorder: colors.noteBorder ?? RGBA.fromInts(...DEFAULT_THEME_RGB.noteBorder, 255),
-    noteText: colors.noteText ?? RGBA.fromInts(...DEFAULT_THEME_RGB.noteText, 255),
-    noteConnector: colors.noteConnector ?? RGBA.fromInts(...DEFAULT_THEME_RGB.noteConnector, 255),
-    start: colors.start ?? RGBA.fromInts(...DEFAULT_THEME_RGB.start, 255),
-    end: colors.end ?? RGBA.fromInts(...DEFAULT_THEME_RGB.end, 255),
-    choice: colors.choice ?? RGBA.fromInts(...DEFAULT_THEME_RGB.choice, 255),
+    state: colors.state ?? rgba(DEFAULT_THEME_RGB.state),
+    composite: colors.composite ?? rgba(DEFAULT_THEME_RGB.composite),
+    transition: colors.transition ?? rgba(DEFAULT_THEME_RGB.transition),
+    label: colors.label ?? rgba(DEFAULT_THEME_RGB.label),
+    noteBorder: colors.noteBorder ?? rgba(DEFAULT_THEME_RGB.noteBorder),
+    noteText: colors.noteText ?? rgba(DEFAULT_THEME_RGB.noteText),
+    noteConnector: colors.noteConnector ?? rgba(DEFAULT_THEME_RGB.noteConnector),
+    start: colors.start ?? rgba(DEFAULT_THEME_RGB.start),
+    end: colors.end ?? rgba(DEFAULT_THEME_RGB.end),
+    choice: colors.choice ?? rgba(DEFAULT_THEME_RGB.choice),
   }
   return {
     ...resolved,

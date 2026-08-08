@@ -218,6 +218,12 @@ export function drawDiagramFrame(
   }
 }
 
+export function fillDiagramFrameInterior(bounds: DiagramBounds, setCell: (x: number, y: number) => void): void {
+  for (let y = bounds.top + 1; y < bounds.top + bounds.height - 1; y++) {
+    for (let x = bounds.left + 1; x < bounds.left + bounds.width - 1; x++) setCell(x, y)
+  }
+}
+
 export function drawDiagramDiamond(
   bounds: DiagramBounds,
   setCell: (x: number, y: number, char: string) => void,

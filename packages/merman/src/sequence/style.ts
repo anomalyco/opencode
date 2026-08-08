@@ -1,5 +1,11 @@
 import { RGBA } from "@opentui/core"
-import { createColorRampTheme, DIAGRAM_FADE_STEPS, numberedStyleKeys, type DiagramRgb } from "../core/color/style.js"
+import {
+  createColorRampTheme,
+  DIAGRAM_FADE_STEPS,
+  numberedStyleKeys,
+  rgba,
+  type DiagramRgb,
+} from "../core/color/style.js"
 import type { FadeStyle, LifelineRampStyle, SequenceCellStyle } from "./types.js"
 
 export interface SequenceStyleColors {
@@ -36,26 +42,23 @@ const DEFAULT_THEME_RGB = {
 export function resolveSequenceStyleColors(
   colors: SequenceStyleColors = {},
 ): Required<SequenceStyleColors> & Record<FadeStyle | LifelineRampStyle, RGBA> {
-  const lifeline = colors.lifeline ?? RGBA.fromInts(...DEFAULT_THEME_RGB.lifeline, 255)
-  const request = colors.request ?? RGBA.fromInts(...DEFAULT_THEME_RGB.request, 255)
-  const response = colors.response ?? RGBA.fromInts(...DEFAULT_THEME_RGB.response, 255)
+  const participant = colors.participant ?? rgba(DEFAULT_THEME_RGB.participant)
+  const lifeline = colors.lifeline ?? rgba(DEFAULT_THEME_RGB.lifeline)
+  const request = colors.request ?? rgba(DEFAULT_THEME_RGB.request)
+  const response = colors.response ?? rgba(DEFAULT_THEME_RGB.response)
   return {
-    participant: colors.participant ?? RGBA.fromInts(...DEFAULT_THEME_RGB.participant, 255),
+    participant,
     lifeline,
-    group: colors.group ?? RGBA.fromInts(...DEFAULT_THEME_RGB.group, 255),
+    group: colors.group ?? rgba(DEFAULT_THEME_RGB.group),
     request,
     response,
-    fragment: colors.fragment ?? RGBA.fromInts(...DEFAULT_THEME_RGB.fragment, 255),
-    fragmentLabelBg: colors.fragmentLabelBg ?? RGBA.fromInts(...DEFAULT_THEME_RGB.fragmentLabelBg, 255),
-    note: colors.note ?? RGBA.fromInts(...DEFAULT_THEME_RGB.noteFg, 255),
-    noteBg: colors.noteBg ?? RGBA.fromInts(...DEFAULT_THEME_RGB.noteBg, 255),
+    fragment: colors.fragment ?? rgba(DEFAULT_THEME_RGB.fragment),
+    fragmentLabelBg: colors.fragmentLabelBg ?? rgba(DEFAULT_THEME_RGB.fragmentLabelBg),
+    note: colors.note ?? rgba(DEFAULT_THEME_RGB.noteFg),
+    noteBg: colors.noteBg ?? rgba(DEFAULT_THEME_RGB.noteBg),
     ...createColorRampTheme(numberedStyleKeys("requestFade", SEQUENCE_FADE_STEPS), lifeline, request),
     ...createColorRampTheme(numberedStyleKeys("responseFade", SEQUENCE_FADE_STEPS), lifeline, response),
-    ...createColorRampTheme(
-      LIFELINE_RAMP_STYLES,
-      colors.participant ?? RGBA.fromInts(...DEFAULT_THEME_RGB.participant, 255),
-      lifeline,
-    ),
+    ...createColorRampTheme(LIFELINE_RAMP_STYLES, participant, lifeline),
   }
 }
 

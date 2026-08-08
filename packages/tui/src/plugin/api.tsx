@@ -1,7 +1,7 @@
 import { PluginContextProvider } from "@opencode-ai/plugin/tui"
 import type { JSX } from "solid-js"
 import type { Context, Dialog, Page, Slot, SlotMap, Toast } from "@opencode-ai/plugin/tui/context"
-import { infoStringToFiletype, type MarkdownOptions } from "@opentui/core"
+import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { useClient } from "../context/client"
 import { useData } from "../context/data"
@@ -30,7 +30,7 @@ export type Registry = {
   has(kind: "routes" | "slots" | "markdown", name: string): boolean
   set(kind: "routes", name: string, page: Page): void
   set(kind: "slots", name: string, slot: Slot): void
-  set(kind: "markdown", name: string, render: NonNullable<MarkdownOptions["renderNode"]>): void
+  set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
   remove(kind: "routes" | "slots" | "markdown", name: string): void
   active(): boolean
 }
