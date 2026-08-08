@@ -204,11 +204,11 @@ describe("enrichProject", () => {
     })
   })
 
-  test("ignores stale local projectMeta for projects with a server id", () => {
+  test("applies local projectMeta for projects with a server id", () => {
     const base: Base = { worktree: "/repo", name: "opencode_configaaa" }
     expect(enrichProject(base, { name: "opencode_config" }, undefined, true)).toEqual({
       worktree: "/repo",
-      name: "opencode_configaaa",
+      name: "opencode_config",
     })
   })
 
@@ -216,7 +216,7 @@ describe("enrichProject", () => {
     const base: Base = { worktree: "/repo", name: "opencode_configaaa" }
     expect(enrichProject(base, { name: "opencode_config" }, "data:legacy", true)).toEqual({
       worktree: "/repo",
-      name: "opencode_configaaa",
+      name: "opencode_config",
       icon: { override: "data:legacy" },
     })
   })

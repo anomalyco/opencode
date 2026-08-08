@@ -179,17 +179,15 @@ type ProjectMetaShape = {
 
 // Merge local per-workspace overrides (name, commands, icon) from the localStorage
 // cache (childStore.projectMeta) over the base project, then apply the legacy
-// childStore.icon override. For projects with a server registration the server is the
-// source of truth, so their local projectMeta is ignored to avoid a stale local name
-// overriding the persisted one. Without this, projects without a server registration
-// would ignore their renamed name, startup command, and icon.
+// childStore.icon override. Local projectMeta applies to all projects so user renames
+// and custom settings display consistently.
 export function enrichProject<T extends ProjectMetaShape>(
   base: T,
   local: ProjectMeta | undefined,
   icon: string | undefined,
-  hasServerId: boolean,
+  _hasServerId?: boolean,
 ): T {
-  const merged = hasServerId ? base : mergeProjectMeta(base, local)
+  const merged = mergeProjectMeta(base, local)
   if (icon) return { ...merged, icon: { ...merged.icon, override: icon } }
   return merged
 }
