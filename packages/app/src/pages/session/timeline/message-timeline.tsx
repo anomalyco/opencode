@@ -287,7 +287,9 @@ export function MessageTimeline(props: {
     const visible = new Set(props.userMessages.map((message) => message.id))
     const boundary = sessionMessages().find((message) => message.role === "user" && !visible.has(message.id))?.id
     const messages = sync().data.session_message[id] ?? []
-    return boundary ? messages.filter((message) => message.id < boundary) : messages
+    if (!boundary) return messages
+    const index = messages.findIndex((message) => message.id === boundary)
+    return index < 0 ? messages : messages.slice(0, index)
   })
   const info = createMemo(() => {
     const id = sessionID()
