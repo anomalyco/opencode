@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { ModelID, ProviderID, ProviderMetadata, RouteID } from "./ids"
 
-export const ProviderFailureClassification = Schema.Literal("context-overflow")
+export const ProviderFailureClassification = Schema.Literals(["context-overflow", "transient-upstream-http2"])
 export type ProviderFailureClassification = typeof ProviderFailureClassification.Type
 
 export class HttpRequestDetails extends Schema.Class<HttpRequestDetails>("LLM.HttpRequestDetails")({

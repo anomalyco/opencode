@@ -1343,6 +1343,40 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("classifies upstream HTTP/2 stream errors", () =>
+    Effect.gen(function* () {
+      const events = [
+        {
+          type: "error",
+          code: "upstream_http2_stream_error",
+          message: "Upstream HTTP/2 stream failed",
+        },
+        {
+          type: "error",
+          error: {
+            type: "upstream_error",
+            code: "upstream_http2_stream_error",
+            message: "Upstream HTTP/2 stream failed",
+          },
+        },
+      ]
+      yield* Effect.forEach(events, (event) =>
+        Effect.gen(function* () {
+          const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(sseEvents(event))))
+          expect(response.events).toEqual([
+            {
+              type: "provider-error",
+              message: "upstream_http2_stream_error: Upstream HTTP/2 stream failed",
+              classification: "transient-upstream-http2",
+              retryable: true,
+              providerMetadata: { openai: { code: "upstream_http2_stream_error" } },
+            },
+          ])
+        }),
+      )
+    }),
+  )
+
   it.effect("falls back to error code when no message is present", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
