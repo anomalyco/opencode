@@ -18,7 +18,6 @@ export interface ModalWorkspaceOptions {
 }
 
 export const modalWorkspaceDriver = (options: ModalWorkspaceOptions): WorkspaceDriver.Interface => {
-  const name = (workspaceID: string) => `ws-${workspaceID}`
   const decodeBinding = Schema.decodeUnknownOption(ModalBinding)
   let clientPromise: Promise<ModalClient> | undefined
   let appPromise: Promise<App> | undefined
@@ -49,7 +48,7 @@ export const modalWorkspaceDriver = (options: ModalWorkspaceOptions): WorkspaceD
     }
     // Name fallback is valid only before the first snapshot; afterward a live named sandbox is stale by design.
     if (value.snapshotImageId) return
-    return live(() => modalClient.sandboxes.fromName(options.app, name(workspaceID)))
+    return live(() => modalClient.sandboxes.fromName(options.app, workspaceID))
   }
 
   const createSandbox = async (workspaceID: string, image?: Image) => {
@@ -61,14 +60,14 @@ export const modalWorkspaceDriver = (options: ModalWorkspaceOptions): WorkspaceD
       {
         image: options.image,
         sandbox: {
-          name: name(workspaceID),
+          name: workspaceID,
           tags: { workspace: workspaceID },
           timeoutMs: 24 * 60 * 60 * 1000,
         },
       },
       image,
     ).catch((error) => {
-      if (error instanceof AlreadyExistsError) return modalClient.sandboxes.fromName(options.app, name(workspaceID))
+      if (error instanceof AlreadyExistsError) return modalClient.sandboxes.fromName(options.app, workspaceID)
       throw error
     })
   }
