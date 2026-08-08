@@ -13,6 +13,7 @@ export function createRemoteGatewayController(options: RemoteGatewayControllerOp
   let stopping: Promise<void> | undefined
 
   const start = async () => {
+    if (stopping) await stopping
     if (gateway?.status()) return gateway.status()!
     if (starting) return starting
 

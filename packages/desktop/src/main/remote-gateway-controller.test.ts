@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { RemoteGatewayInfo } from "./remote-gateway"
 import { createRemoteGatewayController } from "./remote-gateway-controller"
 
-function fakeGateway(info: RemoteGatewayInfo) {
+function fakeGateway(info: RemoteGatewayInfo, beforeStop?: Promise<void>) {
   let running: RemoteGatewayInfo | undefined
   let starts = 0
   let stops = 0
@@ -15,6 +15,7 @@ function fakeGateway(info: RemoteGatewayInfo) {
       },
       stop: async () => {
         stops += 1
+        await beforeStop
         running = undefined
       },
       status: () => running,
@@ -22,6 +23,14 @@ function fakeGateway(info: RemoteGatewayInfo) {
     starts: () => starts,
     stops: () => stops,
   }
+}
+
+function deferred() {
+  let resolve!: () => void
+  const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
 }
 
 describe("remote gateway controller", () => {
@@ -67,6 +76,36 @@ describe("remote gateway controller", () => {
 
     await controller.start()
     expect(created).toHaveLength(2)
+    expect(created[1]?.starts()).toBe(1)
+  })
+
+  test("start waits for an in-flight stop before replacing the gateway", async () => {
+    const gate = deferred()
+    const created: ReturnType<typeof fakeGateway>[] = []
+    const controller = createRemoteGatewayController({
+      getUpstreamUrl: async () => "http://127.0.0.1:4096",
+      createGateway: () => {
+        const fake = fakeGateway(
+          { port: 7000 + created.length, urls: [] },
+          created.length === 0 ? gate.promise : undefined,
+        )
+        created.push(fake)
+        return fake.gateway
+      },
+    })
+
+    await controller.start()
+    const stopping = controller.stop()
+    const restarting = controller.start()
+    await Promise.resolve()
+
+    expect(created).toHaveLength(1)
+    gate.resolve()
+    await stopping
+
+    expect(await restarting).toEqual({ port: 7001, urls: [] })
+    expect(created).toHaveLength(2)
+    expect(created[0]?.stops()).toBe(1)
     expect(created[1]?.starts()).toBe(1)
   })
 

@@ -12,6 +12,7 @@ afterEach(async () => {
         new Promise<void>((resolve) => {
           server.close(() => resolve())
           server.closeIdleConnections()
+          server.closeAllConnections()
         }),
     ),
   )
@@ -62,6 +63,22 @@ describe("remote gateway", () => {
     expect(await response.json()).toEqual({ ticket: "one-time" })
 
     await gateway.stop()
+  })
+
+  test("stop closes active streaming connections", async () => {
+    const upstream = await listen((_request, response) => {
+      response.writeHead(200, { "content-type": "text/event-stream" })
+      response.write("data: connected\n\n")
+    })
+    const gateway = createRemoteGateway({ upstreamUrl: origin(upstream) })
+    const info = await gateway.start()
+
+    const response = await fetch(`http://127.0.0.1:${info.port}/remote/session/test/events`)
+    expect(response.status).toBe(200)
+    expect(response.body).not.toBeNull()
+
+    await gateway.stop()
+    await response.body?.cancel().catch(() => undefined)
   })
 
   test("start and stop are idempotent", async () => {
