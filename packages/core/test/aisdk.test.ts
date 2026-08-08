@@ -272,6 +272,140 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   }),
 )
 
+it.effect("strips stale Azure item IDs before stateless AI SDK serialization", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const messages = [
+      Message.assistant([
+        {
+          type: "reasoning" as const,
+          text: "Think",
+          providerMetadata: {
+            azure: { itemId: "rs_123", reasoningEncryptedContent: "encrypted" },
+          },
+        },
+        {
+          type: "tool-call" as const,
+          id: "call_1",
+          name: "lookup",
+          input: { query: "Effect" },
+          providerMetadata: { azure: { itemId: "fc_123", otherOption: "value" } },
+        },
+      ]),
+    ]
+    const resolved = yield* aisdk.model(model("@ai-sdk/azure", { store: false }))
+    const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({
+        model: resolved,
+        messages,
+      }),
+    )
+
+    expect(prepared.body.prompt).toEqual([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Think",
+            providerOptions: { azure: { reasoningEncryptedContent: "encrypted" } },
+          },
+          {
+            type: "tool-call",
+            toolCallId: "call_1",
+            toolName: "lookup",
+            input: { query: "Effect" },
+            providerExecuted: undefined,
+            providerOptions: { azure: { otherOption: "value" } },
+          },
+        ],
+      },
+    ])
+
+    const stateful = yield* aisdk.model(model("@ai-sdk/azure", { store: true }))
+    const statefulPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({ model: stateful, messages }),
+    )
+    expect(statefulPrepared.body.prompt[0]).toMatchObject({
+      role: "assistant",
+      content: [
+        { providerOptions: { azure: { itemId: "rs_123" } } },
+        { providerOptions: { azure: { itemId: "fc_123" } } },
+      ],
+    })
+
+    const copilot = yield* aisdk.model(model("@ai-sdk/github-copilot", { store: false }))
+    const copilotPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+      LLM.request({
+        model: copilot,
+        messages: [
+          Message.assistant([
+            {
+              type: "reasoning",
+              text: "Think",
+              providerMetadata: {
+                copilot: { itemId: "rs_123", reasoningEncryptedContent: "encrypted" },
+              },
+            },
+          ]),
+        ],
+      }),
+    )
+    expect(copilotPrepared.body.prompt[0]).toMatchObject({
+      role: "assistant",
+      content: [
+        {
+          providerOptions: { copilot: { reasoningEncryptedContent: "encrypted" } },
+        },
+      ],
+    })
+  }),
+)
+
+it.effect("does not corrupt AI SDK item reference payloads", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    let sent: unknown
+    const server = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          async fetch(request) {
+            sent = await request.json()
+            return new Response(null, { status: 200 })
+          },
+        }),
+      ),
+      (server) => Effect.sync(() => server.stop(true)),
+    )
+    let wrapped: typeof fetch | undefined
+    yield* aisdk.hook.sdk((event) => {
+      wrapped = event.options.fetch
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    yield* aisdk.language(model("@ai-sdk/azure"))
+    yield* Effect.promise(() =>
+      wrapped!(new URL("responses", server.url), {
+        method: "POST",
+        body: JSON.stringify({
+          store: false,
+          input: [{ type: "item_reference", id: "fc_123" }],
+        }),
+      }),
+    )
+
+    expect(sent).toEqual({
+      store: false,
+      input: [{ type: "item_reference", id: "fc_123" }],
+    })
+  }),
+)
+
 it.effect("emits malformed AI SDK tool input without executing it", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service

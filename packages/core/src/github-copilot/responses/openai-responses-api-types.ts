@@ -205,7 +205,7 @@ export type OpenAIResponsesTool =
 
 export type OpenAIResponsesReasoning = {
   type: "reasoning"
-  id: string
+  id?: string
   encrypted_content?: string | null
   summary: Array<{
     type: "summary_text"

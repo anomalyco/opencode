@@ -163,7 +163,35 @@ describe("convertToOpenAIResponsesInput", () => {
     ])
   })
 
-  test("drops reasoning items with no copilot itemId and warns, as before", async () => {
+  test("preserves encrypted reasoning with no copilot itemId", async () => {
+    const { input, warnings } = await convertToOpenAIResponsesInput({
+      prompt: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "reasoning",
+              text: "thinking...",
+              providerOptions: { copilot: { reasoningEncryptedContent: "enc_1" } },
+            },
+          ],
+        },
+      ],
+      systemMessageMode: "system",
+      store: false,
+    })
+
+    expect(warnings).toEqual([])
+    expect(input).toEqual([
+      {
+        type: "reasoning",
+        encrypted_content: "enc_1",
+        summary: [{ type: "summary_text", text: "thinking..." }],
+      },
+    ])
+  })
+
+  test("drops reasoning with neither a copilot itemId nor encrypted content", async () => {
     const { input, warnings } = await convertToOpenAIResponsesInput({
       prompt: [
         {
