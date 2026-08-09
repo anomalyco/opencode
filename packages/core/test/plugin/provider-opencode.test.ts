@@ -163,6 +163,21 @@ describe("OpencodePlugin", () => {
     }),
   )
 
+  it.effect("rejects non-string OpenCode servers", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const error = yield* (yield* Integration.Service).oauth
+        .connect({
+          integrationID: Integration.ID.make("opencode"),
+          methodID: Integration.MethodID.make("device"),
+          answers: { server: true },
+        })
+        .pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Integration.AuthorizationError)
+      expect(String(error.cause)).toContain("Invalid OpenCode server URL: expected string")
+    }),
+  )
+
   it.live("loads providers and models from the connected OpenCode server", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

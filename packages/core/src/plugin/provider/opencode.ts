@@ -45,7 +45,7 @@ function oauth(http: HttpClient.HttpClient) {
     },
     authorize: (answers) =>
       Effect.gen(function* () {
-        const server = yield* normalizeServer(typeof answers.server === "string" ? answers.server : defaultServer)
+        const server = yield* normalizeServer(answers.server ?? defaultServer)
         const device = yield* post(http, `${server}/auth/device/code`, { client_id: clientID }, Device)
         const verification = URL.canParse(device.verification_uri_complete)
           ? new URL(device.verification_uri_complete)
@@ -226,9 +226,10 @@ function withoutCredentials(body: Readonly<Record<string, unknown>> | undefined)
   return Object.fromEntries(Object.entries(body ?? {}).filter(([key]) => key !== "apiKey" && key !== "headers"))
 }
 
-function normalizeServer(input: string) {
+function normalizeServer(input: unknown) {
   return Effect.try({
     try: () => {
+      if (typeof input !== "string") throw new Error("expected string")
       const url = new URL(input)
       if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("expected HTTP(S)")
       return `${url.origin}${url.pathname.replace(/\/+$/, "")}`
