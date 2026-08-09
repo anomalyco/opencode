@@ -53,7 +53,7 @@ const promptSchema = {
   message: z.string().describe("The task or question to send to the session"),
 } as any
 
-function formatParts(role: string, parts: Array<Part>): string[] {
+export function formatParts(role: string, parts: Array<Part>): string[] {
   const lines: string[] = []
 
   for (const part of parts) {
@@ -74,7 +74,7 @@ function formatParts(role: string, parts: Array<Part>): string[] {
   return lines
 }
 
-function formatMessages(messages: Array<{ info: Message; parts: Array<Part> }>): string {
+export function formatMessages(messages: Array<{ info: Message; parts: Array<Part> }>): string {
   const lines: string[] = []
 
   for (const { info, parts } of messages) {
