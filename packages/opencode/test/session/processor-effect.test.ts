@@ -251,6 +251,38 @@ const retrySuccessLLM = Layer.succeed(
 const retrySuccessEnv = LayerNode.compile(root, [...replacements, [LLM.node, retrySuccessLLM]])
 const itRetrySuccess = testEffect(retrySuccessEnv)
 
+let reasoningRetryCalls = 0
+const reasoningRetryLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () => {
+      reasoningRetryCalls++
+      if (reasoningRetryCalls <= 2)
+        return Stream.make(
+          LLMEvent.reasoningStart({ id: `reasoning-failed-${reasoningRetryCalls}` }),
+          LLMEvent.reasoningDelta({
+            id: `reasoning-failed-${reasoningRetryCalls}`,
+            text: `Discarded reasoning ${reasoningRetryCalls}`,
+          }),
+          LLMEvent.reasoningEnd({ id: `reasoning-failed-${reasoningRetryCalls}` }),
+          LLMEvent.providerError({ message: upstreamHTTP2Error }),
+        )
+      return Stream.make(
+        LLMEvent.reasoningStart({ id: "reasoning-recovered" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-recovered", text: "Retained reasoning" }),
+        LLMEvent.reasoningEnd({ id: "reasoning-recovered" }),
+        LLMEvent.textStart({ id: "text-recovered-after-reasoning" }),
+        LLMEvent.textDelta({ id: "text-recovered-after-reasoning", text: "Recovered" }),
+        LLMEvent.textEnd({ id: "text-recovered-after-reasoning" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      )
+    },
+  }),
+)
+const reasoningRetryEnv = LayerNode.compile(root, [...replacements, [LLM.node, reasoningRetryLLM]])
+const itReasoningRetry = testEffect(reasoningRetryEnv)
+
 let retryExhaustedCalls = 0
 const retryExhaustedLLM = Layer.succeed(
   LLM.Service,
@@ -1203,6 +1235,47 @@ itRetrySuccess.live("session.processor retries upstream HTTP/2 stream errors twi
         expect(yield* MessageV2.parts(msg.id)).toEqual(
           expect.arrayContaining([expect.objectContaining({ type: "text", text: "Recovered" })]),
         )
+      }),
+    { config: cfg },
+  ),
+)
+
+itReasoningRetry.live("session.processor removes partial reasoning before retrying upstream HTTP/2 errors", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        reasoningRetryCalls = 0
+        const { processors, session, provider } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "retry after reasoning")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        const result = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "retry after reasoning" }],
+          tools: {},
+        })
+
+        expect(result).toBe("continue")
+        expect(reasoningRetryCalls).toBe(3)
+        expect(yield* MessageV2.parts(msg.id)).toEqual([
+          expect.objectContaining({ type: "reasoning", text: "Retained reasoning" }),
+          expect.objectContaining({ type: "text", text: "Recovered" }),
+          expect.objectContaining({ type: "step-finish" }),
+        ])
       }),
     { config: cfg },
   ),

@@ -114,6 +114,7 @@ const layer = Layer.effect(
       }
       let aborted = false
       let replaySafe = true
+      const attemptReasoningParts = new Set<PartID>()
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {
@@ -279,7 +280,6 @@ const layer = Layer.effect(
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         if (
           value.type === "text-start" ||
-          value.type === "reasoning-start" ||
           value.type === "tool-input-start" ||
           value.type === "tool-input-delta" ||
           value.type === "tool-input-end" ||
@@ -300,6 +300,7 @@ const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            attemptReasoningParts.add(ctx.reasoningMap[value.id].id)
             yield* session.updatePart(ctx.reasoningMap[value.id])
             return
 
@@ -675,6 +676,18 @@ const layer = Layer.effect(
                 provider: input.model.providerID,
                 parse,
                 replaySafe: () => replaySafe,
+                prepareReplay: () =>
+                  Effect.gen(function* () {
+                    yield* Effect.forEach(attemptReasoningParts, (partID) =>
+                      session.removePart({
+                        sessionID: ctx.assistantMessage.sessionID,
+                        messageID: ctx.assistantMessage.id,
+                        partID,
+                      }),
+                    )
+                    attemptReasoningParts.clear()
+                    ctx.reasoningMap = {}
+                  }),
                 set: (info) => {
                   return status.set(ctx.sessionID, {
                     type: "retry",

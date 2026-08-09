@@ -179,6 +179,7 @@ export function policy(opts: {
   provider: string
   parse: (error: unknown) => Err
   replaySafe?: () => boolean
+  prepareReplay?: () => Effect.Effect<void>
   set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
 }) {
   return Schedule.fromStepWithMetadata(
@@ -191,6 +192,7 @@ export function policy(opts: {
       if (upstreamHTTP2 && (meta.attempt > UPSTREAM_HTTP2_MAX_RETRIES || opts.replaySafe?.() === false))
         return Cause.done(meta.attempt)
       return Effect.gen(function* () {
+        if (upstreamHTTP2 && opts.prepareReplay) yield* opts.prepareReplay()
         const wait = upstreamHTTP2
           ? UPSTREAM_HTTP2_RETRY_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, meta.attempt - 1)
           : delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
