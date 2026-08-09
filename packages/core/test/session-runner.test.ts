@@ -856,6 +856,101 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("first prompt after a durable switchAgent runs with the new agent system", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const agent = yield* AgentV2.Service
+      yield* agent.transform((editor) => {
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.system = "Build agent instructions"
+          agent.mode = "primary"
+        })
+        editor.update(AgentV2.ID.make("reviewer"), (agent) => {
+          agent.system = "Reviewer instructions"
+          agent.mode = "primary"
+        })
+      })
+      yield* db
+        .update(SessionTable)
+        .set({ agent: "build" })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      const session = yield* SessionV2.Service
+      // Establish a build turn so the SessionContextEpoch is initialized under build.
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First" }), resume: false })
+      response = fragmentFixture("text", "text-build", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Build agent instructions", "Initial context"])
+
+      // TUI Tab-equivalent: durable switch to reviewer (AgentSwitched -> projector).
+      yield* session.switchAgent({ sessionID, agent: AgentV2.ID.make("reviewer") })
+      expect(yield* session.get(sessionID)).toMatchObject({ agent: "reviewer" })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-reviewer-first", ["Reviewing"]).completeEvents
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First message after switch" }) })
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([
+        "Reviewer instructions",
+        "Initial context",
+      ])
+    }),
+  )
+
+  it.effect("first message after a durable switchAgent while the drain is mid-turn uses the new agent", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const agent = yield* AgentV2.Service
+      yield* agent.transform((editor) => {
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.system = "Build agent instructions"
+          agent.mode = "primary"
+        })
+        editor.update(AgentV2.ID.make("reviewer"), (agent) => {
+          agent.system = "Reviewer instructions"
+          agent.mode = "primary"
+        })
+      })
+      yield* db
+        .update(SessionTable)
+        .set({ agent: "build" })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      const session = yield* SessionV2.Service
+      // Mid-turn gate: the build drain is streaming when the switch lands.
+      const gate = yield* Deferred.make<void>()
+      streamGate = gate
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First" }), resume: false })
+      response = fragmentFixture("text", "text-build", ["Build answer"]).completeEvents
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      while (requests.length < 1) yield* Effect.yieldNow
+
+      // TUI Tab-equivalent, happening while the drain is mid-stream.
+      yield* session.switchAgent({ sessionID, agent: AgentV2.ID.make("reviewer") })
+      expect(yield* session.get(sessionID)).toMatchObject({ agent: "reviewer" })
+
+      streamGate = undefined
+      yield* Deferred.succeed(gate, undefined)
+      yield* Fiber.await(run)
+
+      // First message after the switch, processed by the same drain.
+      requests.length = 0
+      response = fragmentFixture("text", "text-reviewer-first", ["Reviewing"]).completeEvents
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First message after switch" }) })
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([
+        "Reviewer instructions",
+        "Initial context",
+      ])
+    }),
+  )
+
   it.effect("updates selected-agent skill guidance after an agent switch", () =>
     Effect.gen(function* () {
       yield* setup

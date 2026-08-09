@@ -1171,13 +1171,27 @@ const layer = Layer.effect(
             continue
           }
 
-          const agent = yield* agents.get(lastUser.agent)
+          // The turn's agent comes from the live session selection (durable
+          // switchAgent / Tab), not the stamp on the last user message, which
+          // may predate the switch. Re-read the session so a switch landing
+          // mid-loop is observed; fall back to the message's agent only when
+          // the session has none set.
+          const current = yield* sessions.get(sessionID).pipe(Effect.orDie)
+          let agent = current.agent ? yield* agents.get(current.agent) : undefined
+          if (!agent && lastUser.agent !== current.agent) {
+            agent = yield* agents.get(lastUser.agent)
+          }
           if (!agent) {
-            const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
-            const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-            const error = new NamedError.Unknown({ message: `Agent not found: "${lastUser.agent}".${hint}` })
-            yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
-            throw error
+            if (current.agent) {
+              // current.agent refers to a removed/nonexistent agent — degrade to the default instead of failing.
+              agent = yield* agents.defaultInfo()
+            } else {
+              const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+              const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+              const error = new NamedError.Unknown({ message: `Agent not found: "${lastUser.agent}".${hint}` })
+              yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+              throw error
+            }
           }
           const maxSteps = agent.steps ?? Infinity
           const isLastStep = step >= maxSteps
