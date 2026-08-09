@@ -118,7 +118,7 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("creates the bundled Copilot SDK for the GitHub Copilot package", () =>
+  it.effect("creates the Copilot SDK for OpenAI and Anthropic endpoints", () =>
     Effect.gen(function* () {
       const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
@@ -141,8 +141,18 @@ describe("GithubCopilotPlugin", () => {
         package: "@ai-sdk/github-copilot",
         options: { name: "github-copilot" },
       })
+      const messages = yield* aisdk.runSDK({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("claude-haiku-4.5")),
+          modelID: Model.ID.make("claude-haiku-4.5"),
+          package: Provider.aisdk("@ai-sdk/github-copilot"),
+        }),
+        package: "@ai-sdk/github-copilot",
+        options: { name: "github-copilot", endpoint: "messages" },
+      })
       expect(ignored.sdk).toBeUndefined()
       expect(result.sdk).toBeDefined()
+      expect(messages.sdk).toBeDefined()
     }),
   )
 

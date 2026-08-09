@@ -202,7 +202,12 @@ export const GithubCopilotPlugin = define({
           if (!loaded.models.has(Model.ID.make(id))) evt.model.remove(item.provider.id, id)
         }
         for (const [id, model] of loaded.models) {
-          evt.model.update(item.provider.id, id, (draft) => Object.assign(draft, structuredClone(model)))
+          evt.model.update(item.provider.id, id, (draft) => {
+            Object.assign(draft, structuredClone(model))
+            if (Provider.packageName(draft.package) === "@ai-sdk/anthropic") {
+              draft.package = Provider.aisdk("@ai-sdk/github-copilot")
+            }
+          })
         }
       } else if (loaded.baseURL) {
         for (const id of item.models.keys()) {
@@ -230,14 +235,15 @@ export const GithubCopilotPlugin = define({
       "sdk",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== Provider.ID.githubCopilot) return
-        if (evt.package !== "@ai-sdk/github-copilot" && evt.package !== "@ai-sdk/anthropic") return
+        if (evt.package !== "@ai-sdk/github-copilot") return
+        const anthropic = evt.options.endpoint === "messages"
         evt.options.fetch = copilotFetch(
           typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined,
           evt.options.fetch,
-          evt.package === "@ai-sdk/anthropic",
+          anthropic,
           ctx.app,
         )
-        if (evt.package === "@ai-sdk/anthropic") {
+        if (anthropic) {
           evt.options.headers = {
             ...evt.options.headers,
             "anthropic-beta": "interleaved-thinking-2025-05-14",
