@@ -86,6 +86,27 @@ it.instance("over-budget send (M) fails with AbuseError", () =>
   }),
 )
 
+it.instance("sibling-session enqueue is not limited by the subagent outbound budget", () =>
+  Effect.gen(function* () {
+    const m = yield* Messaging.Service
+    const to = SessionID.make("ses_sibling_target_xxxxxxxxxx")
+    const from = SessionID.make("ses_sibling_sender_xxxxxxxxxx")
+    yield* m.registerSlug("sibling-target", to)
+
+    for (let i = 0; i < 21; i++) {
+      yield* m.enqueue({
+        target: to,
+        from,
+        fromSlug: "sibling-peer",
+        body: `sibling-${i}`,
+        source: "sibling-session",
+      })
+    }
+
+    expect((yield* m.drain(to)).length).toBe(21)
+  }),
+)
+
 it.instance("awaitInbox returns true when inbox already has items", () =>
   Effect.gen(function* () {
     const m = yield* Messaging.Service
