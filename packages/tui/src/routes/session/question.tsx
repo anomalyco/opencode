@@ -22,6 +22,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
   const tabs = createMemo(() => (single() ? 1 : questions().length + 1)) // questions + confirm tab (no confirm for single select)
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
+  const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()
   const [store, setStore] = createStore({
     tab: 0,
     answers: [] as QuestionAnswer[],
@@ -131,6 +132,8 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   })
 
   useBindings(() => ({
+    target: textareaTarget,
+    priority: 1,
     mode: QUESTION_MODE,
     enabled: store.editing && !confirm(),
     commands: [
@@ -427,6 +430,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                       <textarea
                         ref={(val: TextareaRenderable) => {
                           textarea = val
+                          setTextareaTarget(val)
                           val.traits = { status: "ANSWER" }
                           queueMicrotask(() => {
                             val.focus()
