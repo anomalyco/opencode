@@ -30,7 +30,7 @@ import {
   type ToolDefinition,
   type UsageInput,
 } from "@opencode-ai/ai"
-import { Auth, Endpoint, type AnyRoute } from "@opencode-ai/ai/route"
+import { Auth, Endpoint, RequestExecutor, type AnyRoute } from "@opencode-ai/ai/route"
 import { ProviderShared } from "@opencode-ai/ai/protocols/shared"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
 import type { ID, Info } from "./model"
@@ -724,7 +724,15 @@ function llmError(method: string, error: unknown) {
   const reason =
     error instanceof AIError
       ? new InvalidProviderOutputReason({ message: error.message })
-      : new UnknownProviderReason({ message: unknownErrorMessage(error) })
+      : APICallError.isInstance(error)
+        ? RequestExecutor.classifyHttpFailure({
+            message: unknownErrorMessage(error),
+            url: error.url,
+            status: error.statusCode,
+            responseHeaders: error.responseHeaders,
+            responseBody: error.responseBody,
+          })
+        : new UnknownProviderReason({ message: unknownErrorMessage(error) })
   return new AIError({
     module: "AISDK",
     method,

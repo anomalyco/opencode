@@ -185,15 +185,15 @@ const secretValues = (request: HttpClientRequest.HttpClientRequest) => {
 // Two passes: structural (redact `"name": "value"` and `name=value` patterns
 // for any field name that looks sensitive) plus literal (replace any actual
 // secret values we sent in the request, in case the response echoes one back).
-const redactBody = (body: string, request: HttpClientRequest.HttpClientRequest) =>
-  Array.from(secretValues(request)).reduce(
+const redactBody = (body: string, secrets: ReadonlySet<string>) =>
+  Array.from(secrets).reduce(
     (text, secret) => text.split(secret).join(REDACTED),
     body.replace(REDACT_JSON_FIELD, `$1"${REDACTED}"`).replace(REDACT_QUERY_FIELD, `$1${REDACTED}`),
   )
 
-const responseBody = (body: string | void, request: HttpClientRequest.HttpClientRequest) => {
+const responseBody = (body: string | void, secrets: ReadonlySet<string>) => {
   if (body === undefined) return {}
-  const redacted = redactBody(body, request)
+  const redacted = redactBody(body, secrets)
   if (redacted.length <= BODY_LIMIT) return { body: redacted }
   return { body: redacted.slice(0, BODY_LIMIT), bodyTruncated: true }
 }
@@ -240,7 +240,7 @@ const statusError =
       const headers = normalizedHeaders(response.headers)
       const retryAfter = retryAfterMs(headers)
       const rateLimit = rateLimitDetails(headers, retryAfter)
-      const details = responseBody(body, request)
+      const details = responseBody(body, secretValues(request))
       return yield* new AIError({
         module: "RequestExecutor",
         method: "execute",
@@ -260,6 +260,40 @@ const statusError =
         }),
       })
     })
+
+// Classifies an HTTP failure captured outside the executor (for example by the
+// AI SDK's own fetch) onto the same reason types and redacted HttpContext that
+// executor-driven requests produce. The originating request is not available on
+// that path, so the method is assumed (language model calls are always POST),
+// request headers are empty, and only structural body redaction applies.
+export const classifyHttpFailure = (input: {
+  readonly message: string
+  readonly url: string
+  readonly status?: number | undefined
+  readonly responseHeaders?: Record<string, string> | undefined
+  readonly responseBody?: string | undefined
+}) => {
+  const headers = normalizedHeaders(Headers.fromInput(input.responseHeaders))
+  const retryAfter = retryAfterMs(headers)
+  const rateLimit = rateLimitDetails(headers, retryAfter)
+  const details = responseBody(input.responseBody ?? undefined, new Set<string>())
+  return classifyProviderFailure({
+    message: input.message,
+    status: input.status,
+    retryAfterMs: retryAfter,
+    rateLimit,
+    http: new HttpContext({
+      request: new HttpRequestDetails({ method: "POST", url: redactUrl(input.url), headers: {} }),
+      response:
+        input.status === undefined
+          ? undefined
+          : new HttpResponseDetails({ status: input.status, headers: redactHeaders(Headers.fromInput(headers), []) }),
+      ...details,
+      requestId: requestId(headers),
+      rateLimit,
+    }),
+  })
+}
 
 const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: unknown) => {
   const transportError = (input: {

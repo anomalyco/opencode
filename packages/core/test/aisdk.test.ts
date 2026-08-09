@@ -392,8 +392,38 @@ it.effect("derives status and code when the AI SDK error message is empty", () =
     expect(error.reason.message).not.toContain("secret-token")
     expect(error.reason.message).not.toContain("private prompt")
     const projected = toSessionError(error)
-    expect(projected.type).toBe("provider.unknown")
+    expect(projected.type).toBe("provider.invalid-request")
+    expect(projected.status).toBe(404)
     expect(projected.message).not.toBe("")
+  }),
+)
+
+it.effect("persists redacted HTTP context from AI SDK call errors", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 404,
+        responseBody: '{"error":{"message":"","code":"not_found"}}',
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
+    const http = "http" in error.reason ? error.reason.http : undefined
+    expect(http?.request.url).toBe("https://api.example.com/chat")
+    expect(http?.response?.status).toBe(404)
+    expect(http?.response?.headers["authorization"]).toBe("<redacted>")
+    expect(http?.body).toBe('{"error":{"message":"","code":"not_found"}}')
+  }),
+)
+
+it.effect("classifies retryable AI SDK failures with retry-after details", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 429,
+        responseHeaders: { "retry-after": "7" },
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "RateLimit", retryAfterMs: 7000 })
   }),
 )
 
@@ -417,6 +447,7 @@ it.effect("falls back to the status alone for malformed response bodies", () =>
         responseBody: "<html>Bad Gateway</html>",
       }),
     )
+    expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status: 502 })
     expect(error.reason.message).toBe("Provider request failed with HTTP 502")
   }),
 )
