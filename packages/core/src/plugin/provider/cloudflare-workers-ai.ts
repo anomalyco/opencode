@@ -14,7 +14,7 @@ export const CloudflareWorkersAIPlugin = define({
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
     const form = iife(() => {
-      if (concreteBaseURL(configured?.baseURL) || resolveAccountId(configured ?? {})) return
+      if (typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})) return
       return Form.Fields.make([
         {
           type: "string",
@@ -42,8 +42,7 @@ export const CloudflareWorkersAIPlugin = define({
         if (!Provider.isAISDK(provider.package)) return
         if (typeof provider.settings?.baseURL === "string") return
         const accountId = resolveAccountId(provider.settings ?? {})
-        if (!accountId) return
-        provider.settings = { ...provider.settings, baseURL: workersEndpoint(accountId) }
+        if (accountId) provider.settings = { ...provider.settings, baseURL: workersEndpoint(accountId) }
       })
     })
     yield* ctx.aisdk.hook(
@@ -59,12 +58,7 @@ export const CloudflareWorkersAIPlugin = define({
           sdkOptions(
             {
               ...evt.options,
-              baseURL:
-                typeof evt.options.baseURL === "string"
-                  ? expandAccountId(evt.options.baseURL, accountId)
-                  : accountId
-                    ? workersEndpoint(accountId)
-                    : undefined,
+              baseURL: evt.options.baseURL ?? (accountId ? workersEndpoint(accountId) : undefined),
             },
             ctx.app,
           ) as any,
@@ -99,6 +93,7 @@ function hasWorkersEndpoint(model: {
 function sdkOptions(options: Record<string, any>, app: App.Info) {
   return {
     ...options,
+    baseURL: expandAccountId(options.baseURL),
     apiKey: process.env.CLOUDFLARE_API_KEY ?? options.apiKey,
     headers: {
       "User-Agent": `${App.useragent(app)} cloudflare-workers-ai (${os.platform()} ${os.release()}; ${os.arch()})`,
@@ -108,12 +103,9 @@ function sdkOptions(options: Record<string, any>, app: App.Info) {
   }
 }
 
-function concreteBaseURL(baseURL: unknown) {
-  return typeof baseURL === "string" && !baseURL.includes("${CLOUDFLARE_ACCOUNT_ID}")
-}
-
-function expandAccountId(baseURL: string, accountId?: string) {
-  return baseURL.replaceAll("${CLOUDFLARE_ACCOUNT_ID}", accountId ?? "${CLOUDFLARE_ACCOUNT_ID}")
+function expandAccountId(baseURL: unknown) {
+  if (typeof baseURL !== "string") return baseURL
+  return baseURL.replaceAll("${CLOUDFLARE_ACCOUNT_ID}", process.env.CLOUDFLARE_ACCOUNT_ID ?? "${CLOUDFLARE_ACCOUNT_ID}")
 }
 
 function stringOption(options: Record<string, unknown>, key: string) {

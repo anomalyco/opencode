@@ -7,7 +7,6 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { GoogleVertexPlugin } from "@opencode-ai/core/plugin/provider/google-vertex"
 import { Provider } from "@opencode-ai/core/provider"
-import { Integration } from "@opencode-ai/core/integration"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -88,30 +87,6 @@ void mock.module("google-auth-library", () => ({
 }))
 
 describe("GoogleVertexPlugin", () => {
-  it.effect("removes generic API key authentication and keeps ADC environment discovery", () =>
-    Effect.gen(function* () {
-      const integrations = yield* Integration.Service
-      yield* integrations.transform((draft) => {
-        draft.method.update({ integrationID: Integration.ID.make(Provider.ID.googleVertex), method: { type: "key" } })
-        draft.method.update({
-          integrationID: Integration.ID.make(Provider.ID.googleVertex),
-          method: {
-            type: "env",
-            names: ["GOOGLE_VERTEX_PROJECT", "GOOGLE_VERTEX_LOCATION", "GOOGLE_APPLICATION_CREDENTIALS"],
-          },
-        })
-      })
-      yield* addPlugin()
-
-      expect((yield* integrations.get(Integration.ID.make(Provider.ID.googleVertex)))?.methods).toEqual([
-        {
-          type: "env",
-          names: ["GOOGLE_VERTEX_PROJECT", "GOOGLE_VERTEX_LOCATION", "GOOGLE_APPLICATION_CREDENTIALS"],
-        },
-      ])
-    }),
-  )
-
   it.effect("ignores OpenAI-compatible providers that are not Google Vertex", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
@@ -324,13 +299,12 @@ describe("GoogleVertexPlugin", () => {
               package: "aisdk:@ai-sdk/google-vertex",
             }),
             package: "@ai-sdk/google-vertex",
-            options: { name: "google-vertex", apiKey: "vertex-api-key" },
+            options: { name: "google-vertex" },
           })
           expect(vertexOptions).toHaveLength(1)
           expect(vertexOptions[0].project).toBe("env-project")
           expect(vertexOptions[0].location).toBe("env-location")
           expect(vertexOptions[0].fetch).toBeUndefined()
-          expect(vertexOptions[0].apiKey).toBe("vertex-api-key")
         }),
     ),
   )
@@ -368,7 +342,6 @@ describe("GoogleVertexPlugin", () => {
           if (evt.model.providerID !== "google-vertex") return
           if (evt.package !== "@ai-sdk/openai-compatible") return
           expect(typeof evt.options.fetch).toBe("function")
-          expect(evt.options.apiKey).toBe("vertex-api-key")
           await evt.options.fetch("https://vertex.example", {
             headers: { "x-test": "1" },
           })
@@ -392,11 +365,7 @@ describe("GoogleVertexPlugin", () => {
               package: "aisdk:@ai-sdk/openai-compatible",
             }),
             package: "@ai-sdk/openai-compatible",
-            options: {
-              name: "google-vertex",
-              baseURL: "https://vertex.example/v1",
-              apiKey: "vertex-api-key",
-            },
+            options: { name: "google-vertex" },
           }),
         () =>
           Effect.sync(() => {

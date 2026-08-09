@@ -54,28 +54,9 @@ function authFetch(fetchWithRuntimeOptions?: unknown) {
   }
 }
 
-function isEnvironmentConnectionValue(value: unknown) {
-  return (
-    typeof value === "string" &&
-    [
-      process.env.GOOGLE_VERTEX_PROJECT,
-      process.env.GOOGLE_CLOUD_PROJECT,
-      process.env.GCP_PROJECT,
-      process.env.GCLOUD_PROJECT,
-      process.env.GOOGLE_VERTEX_LOCATION,
-      process.env.GOOGLE_CLOUD_LOCATION,
-      process.env.VERTEX_LOCATION,
-      process.env.GOOGLE_APPLICATION_CREDENTIALS,
-    ].includes(value)
-  )
-}
-
 export const GoogleVertexPlugin = define({
   id: "opencode.provider.google-vertex",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.integration.transform((draft) => {
-      draft.method.remove(Provider.ID.googleVertex, { type: "key" })
-    })
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
         if (!Provider.isAISDK(item.provider.package)) continue
@@ -97,6 +78,9 @@ export const GoogleVertexPlugin = define({
             ...(typeof provider.settings?.baseURL === "string"
               ? { baseURL: replaceVertexVars(provider.settings.baseURL, project, location) }
               : {}),
+            ...(Provider.packageName(provider.package)?.includes("@ai-sdk/openai-compatible")
+              ? { fetch: authFetch(provider.settings?.fetch) }
+              : {}),
           }
         })
       }
@@ -105,14 +89,6 @@ export const GoogleVertexPlugin = define({
       "sdk",
       Effect.fn(function* (evt) {
         if (evt.model.providerID === Provider.ID.googleVertex && evt.package.includes("@ai-sdk/openai-compatible")) {
-          const project = resolveProject(evt.options)
-          if (!project && String(evt.options.baseURL).includes("${GOOGLE_VERTEX_PROJECT}"))
-            throw new Error("Google Vertex project is missing; configure project or GOOGLE_VERTEX_PROJECT")
-          const location = String(resolveLocation(evt.options))
-          if (typeof evt.options.baseURL === "string") {
-            evt.options.baseURL = replaceVertexVars(evt.options.baseURL, project, location)
-          }
-          if (isEnvironmentConnectionValue(evt.options.apiKey)) delete evt.options.apiKey
           evt.options.fetch = authFetch(evt.options.fetch)
           return
         }
@@ -138,7 +114,6 @@ export const GoogleVertexPlugin = define({
         const location = resolveLocation(evt.options)
         const options = { ...evt.options }
         delete options.fetch
-        if (isEnvironmentConnectionValue(options.apiKey)) delete options.apiKey
         evt.sdk = mod.createVertex({
           ...options,
           project,

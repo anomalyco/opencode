@@ -64,13 +64,6 @@ describe("AzurePlugin", () => {
   it.effect("registers a resource name form when the environment does not provide one", () =>
     withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
       Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
-        yield* catalog.transform((catalog) =>
-          catalog.provider.update(Provider.ID.azure, (provider) => {
-            provider.package = Provider.aisdk("@ai-sdk/azure")
-            provider.settings = { baseURL: "https://${AZURE_RESOURCE_NAME}.openai.azure.com/openai/v1" }
-          }),
-        )
         yield* addPlugin()
         expect((yield* (yield* Integration.Service).get(Integration.ID.make("azure")))?.methods).toContainEqual({
           type: "key",
@@ -119,7 +112,7 @@ describe("AzurePlugin", () => {
     ),
   )
 
-  it.effect("retains resource URL templates for request-time expansion", () =>
+  it.effect("expands provider and model resource URLs", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env", AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: "legacy-env" }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
@@ -142,13 +135,13 @@ describe("AzurePlugin", () => {
 
         expect(required(yield* catalog.provider.get(Provider.ID.azure)).settings).toMatchObject({
           resourceName: "from-env",
-          baseURL: "https://${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
+          baseURL: "https://from-env.cognitiveservices.azure.com/openai",
         })
         expect(
           required(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("anthropic"))).settings,
         ).toMatchObject({
           resourceName: "model-resource",
-          baseURL: "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1",
+          baseURL: "https://model-resource.services.ai.azure.com/anthropic/v1",
         })
       }),
     ),
