@@ -29,8 +29,18 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { generateCompletionScriptForArgs, isCompletionShell } from "./cli/completion"
 
 const args = hideBin(process.argv)
+
+// yargs' built-in completion only knows bash/zsh and picks the template from
+// $SHELL, ignoring the shell positional argument. Handle an explicit shell
+// ourselves so `completion fish` (and `completion zsh` under a bash $SHELL)
+// emit the right script.
+if (args[0] === "completion" && isCompletionShell(args[1])) {
+  process.stdout.write(generateCompletionScriptForArgs(args[1]) + EOL)
+  process.exit(0)
+}
 
 function show(out: string) {
   const text = out.trimStart()
