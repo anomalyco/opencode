@@ -15,6 +15,8 @@ import type { PluginInternal } from "../internal"
 const clientID = "Ov23li8tweQw6odWQebz"
 const apiVersion = "2026-06-01"
 const userApiVersion = "2025-04-01"
+const copilotVersion = "0.26.7"
+const editorVersion = "vscode/1.99.3"
 const pollingSafetyMargin = 3000
 const methodID = Integration.MethodID.make("device")
 
@@ -197,6 +199,22 @@ export const GithubCopilotPlugin = define({
     yield* ctx.catalog.transform((evt) => {
       const item = evt.provider.get(Provider.ID.githubCopilot)
       if (!item) return
+      evt.provider.update(item.provider.id, (provider) => {
+        if (Provider.packageName(provider.package) === "@ai-sdk/openai-compatible") {
+          provider.package = Provider.aisdk(CopilotModels.Package.OpenAI)
+        }
+      })
+      for (const model of item.models.values()) {
+        evt.model.update(item.provider.id, model.id, (draft) => {
+          const packageName = Provider.packageName(draft.package)
+          if (packageName === "@ai-sdk/openai-compatible") {
+            draft.package = Provider.aisdk(CopilotModels.Package.OpenAI)
+          }
+          if (packageName === "@ai-sdk/anthropic") {
+            draft.package = Provider.aisdk(CopilotModels.Package.Anthropic)
+          }
+        })
+      }
       if (loaded.models) {
         for (const id of item.models.keys()) {
           if (!loaded.models.has(Model.ID.make(id))) evt.model.remove(item.provider.id, id)
@@ -230,14 +248,14 @@ export const GithubCopilotPlugin = define({
       "sdk",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== Provider.ID.githubCopilot) return
-        if (evt.package !== "@ai-sdk/github-copilot" && evt.package !== "@ai-sdk/anthropic") return
+        if (evt.package !== CopilotModels.Package.OpenAI && evt.package !== CopilotModels.Package.Anthropic) return
+        const anthropic = evt.package === CopilotModels.Package.Anthropic
         evt.options.fetch = copilotFetch(
           typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined,
           evt.options.fetch,
-          evt.package === "@ai-sdk/anthropic",
-          ctx.app,
+          anthropic,
         )
-        if (evt.package === "@ai-sdk/anthropic") {
+        if (anthropic) {
           evt.options.headers = {
             ...evt.options.headers,
             "anthropic-beta": "interleaved-thinking-2025-05-14",
@@ -316,12 +334,7 @@ function request(url: string, init: RequestInit) {
 
 type Fetch = (input: Parameters<typeof fetch>[0], init?: RequestInit) => Promise<Response>
 
-export function copilotFetch(
-  token: string | undefined,
-  upstream: Fetch | undefined,
-  anthropic: boolean,
-  app: App.Info,
-): Fetch {
+export function copilotFetch(token: string | undefined, upstream: Fetch | undefined, anthropic: boolean): Fetch {
   const send = upstream ?? fetch
   return async (input, init) => {
     const requestHeaders = new Headers(init?.headers)
@@ -330,7 +343,10 @@ export function copilotFetch(
       requestHeaders.delete("x-api-key")
       requestHeaders.set("Authorization", `Bearer ${token}`)
     }
-    requestHeaders.set("User-Agent", App.useragent(app))
+    requestHeaders.set("User-Agent", `GitHubCopilotChat/${copilotVersion}`)
+    requestHeaders.set("Editor-Version", editorVersion)
+    requestHeaders.set("Editor-Plugin-Version", `copilot-chat/${copilotVersion}`)
+    requestHeaders.set("Copilot-Integration-Id", "vscode-chat")
     requestHeaders.set("Openai-Intent", "conversation-edits")
     requestHeaders.set("X-GitHub-Api-Version", apiVersion)
     if (anthropic) requestHeaders.set("anthropic-beta", "interleaved-thinking-2025-05-14")
