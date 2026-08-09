@@ -1,5 +1,5 @@
 import { Plugin } from "@opencode-ai/plugin/effect"
-import type { IntegrationDraft, IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import type { IntegrationMethod, IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
@@ -10,13 +10,11 @@ import { Project } from "@opencode-ai/core/project"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WebSearch } from "@opencode-ai/core/websearch"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Stream } from "effect"
 
 type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
   readonly session?: Partial<Plugin.Context["session"]>
 }
-type IntegrationMethod = ReturnType<IntegrationDraft["method"]["list"]>[number]
-
 export function host(overrides: Overrides = {}): Plugin.Context {
   return {
     app: overrides.app ?? { name: "test", version: "test", channel: "test" },
@@ -279,14 +277,14 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
           update: (id, update) => draft.update(Integration.ID.make(id), update),
           remove: (id) => draft.remove(Integration.ID.make(id)),
           method: {
-            list: (id) => draft.method.list(Integration.ID.make(id)).map(method),
+            list: (id) => draft.method.list(Integration.ID.make(id)),
             update: (input) => {
               if ("authorize" in input) {
                 const methodID = Integration.MethodID.make(input.method.id)
                 const refresh = input.refresh
                 draft.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
-                  method: oauthMethod(input.method, methodID),
+                  method: { ...input.method, id: methodID },
                   authorize: (answer) =>
                     input.authorize(answer).pipe(
                       Effect.map((authorization) => {
@@ -337,7 +335,7 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
               if (input.method.type === "env") {
                 draft.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
-                  method: { ...input.method, names: [...input.method.names] },
+                  method: input.method,
                 })
                 return
               }
@@ -347,14 +345,13 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                   method: {
                     ...input.method,
                     id: Integration.MethodID.make(input.method.id),
-                    command: [...input.method.command],
                   },
                 })
                 return
               }
               draft.method.update({
                 integrationID: Integration.ID.make(input.integrationID),
-                method: keyMethod(input.method),
+                method: input.method,
               })
             },
             remove: (id, item) => draft.method.remove(Integration.ID.make(id), internalMethod(item)),
@@ -402,63 +399,11 @@ function oauthCredential(value: Credential.OAuth) {
   return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }
 
-function method(value: Integration.Method): IntegrationMethod {
-  if (value.type === "env") return { type: value.type, names: [...value.names] }
-  if (value.type === "key") return { type: value.type, label: value.label, form: mutable(value.form) }
-  if (value.type === "command") return { ...value, command: [...value.command] }
-  return {
-    type: value.type,
-    id: value.id,
-    label: value.label,
-    form: mutable(value.form),
-  }
-}
-
 function internalMethod(value: IntegrationMethod): Integration.Method {
-  if (value.type === "env") return value
-  if (value.type === "key") return keyMethod(value)
-  if (value.type === "command") {
-    return {
-      ...value,
-      id: Integration.MethodID.make(value.id),
-      command: [...value.command],
-    }
+  if (value.type === "oauth" || value.type === "command") {
+    return { ...value, id: Integration.MethodID.make(value.id) }
   }
-  return oauthMethod(value, Integration.MethodID.make(value.id))
-}
-
-type Mutable<Value> = Value extends readonly [infer Head, ...infer Tail]
-  ? [Mutable<Head>, ...MutableTuple<Tail>]
-  : Value extends ReadonlyArray<infer Item>
-    ? Array<Mutable<Item>>
-    : Value extends object
-      ? { -readonly [Key in keyof Value]: Mutable<Value[Key]> }
-      : Value
-
-type MutableTuple<Value extends ReadonlyArray<unknown>> = {
-  -readonly [Key in keyof Value]: Mutable<Value[Key]>
-}
-
-function mutable<Value>(value: Value): Mutable<Value>
-function mutable(value: unknown): unknown {
-  return structuredClone(value)
-}
-
-function keyMethod(value: { readonly label?: string; readonly form?: unknown }) {
-  return Schema.decodeUnknownSync(Integration.KeyMethod)({
-    type: "key",
-    ...(value.label === undefined ? {} : { label: value.label }),
-    ...(value.form === undefined ? {} : { form: value.form }),
-  })
-}
-
-function oauthMethod(value: { readonly label: string; readonly form?: unknown }, id: Integration.MethodID) {
-  return Schema.decodeUnknownSync(Integration.OAuthMethod)({
-    id,
-    type: "oauth",
-    label: value.label,
-    ...(value.form === undefined ? {} : { form: value.form }),
-  })
+  return value
 }
 
 function agentInfo(value: Agent.Info) {

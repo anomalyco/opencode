@@ -261,7 +261,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
             update: (id, update) => draft.update(Integration.ID.make(id), update),
             remove: (id) => draft.remove(Integration.ID.make(id)),
             method: {
-              list: (id) => mutable(draft.method.list(Integration.ID.make(id))),
+              list: (id) => draft.method.list(Integration.ID.make(id)),
               update: (input) => draft.method.update(methodImplementation(input)),
               remove: (id, method) =>
                 draft.method.remove(Integration.ID.make(id), Schema.decodeUnknownSync(Integration.Method)(method)),
@@ -386,13 +386,13 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
   if (input.method.type === "env") {
     return {
       integrationID: Integration.ID.make(input.integrationID),
-      method: { type: "env", names: input.method.names },
+      method: input.method,
     }
   }
   if (input.method.type === "command") {
     return {
       integrationID: Integration.ID.make(input.integrationID),
-      method: Schema.decodeUnknownSync(Integration.CommandMethod)(input.method),
+      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
     }
   }
   return {
