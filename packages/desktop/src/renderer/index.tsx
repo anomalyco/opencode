@@ -10,6 +10,7 @@ import {
   type Locale,
   type Platform,
   PlatformProvider,
+  preloadSessionRoute,
   createDraftStore,
   ServerConnection,
   useCommand,
@@ -443,7 +444,9 @@ render(() => {
     const api = window.api as typeof window.api & {
       getWindowID?: () => Promise<string>
     }
-    return { id: await api.getWindowID?.() }
+    const id = await api.getWindowID?.()
+    if (/^\/server\/[^/]+\/session\/[^/]+/.test(getLastActiveUrl(id ?? "browser"))) await preloadSessionRoute()
+    return { id }
   })
 
   return (

@@ -52,10 +52,9 @@ import { DirectoryDataProvider } from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
-import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
+import { legacySessionServer, sessionHref } from "./utils/session-route"
 import { decode64 } from "@/utils/base64"
-
-import { SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
+import { TargetSessionRoute } from "@/pages/session-lazy"
 import { Home } from "@/pages/home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
@@ -74,35 +73,6 @@ const DirectoryDraftRedirect = () => {
   })
 
   return null
-}
-
-function TargetServerRoute(props: ParentProps) {
-  const params = useParams<{ serverKey: string; id: string }>()
-  const global = useGlobal()
-  const conn = createMemo(() => {
-    const key = requireServerKey(params.serverKey)
-    return global.servers.list().find((item) => ServerConnection.key(item) === key)
-  })
-
-  return (
-    // Owns the server-identity remount. Session changes must not remount this subtree.
-    <Show when={requireServerKey(params.serverKey)} keyed>
-      <ServerSDKProvider server={conn()}>
-        <ServerSyncProvider server={conn()}>{props.children}</ServerSyncProvider>
-      </ServerSDKProvider>
-    </Show>
-  )
-}
-
-function TargetSessionRoute() {
-  const params = useParams<{ serverKey: string; id: string }>()
-  return (
-    <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
-      <TargetServerRoute>
-        <TargetSessionRouteContent />
-      </TargetServerRoute>
-    </SessionRouteErrorBoundary>
-  )
 }
 
 // Wraps the non-draft routes. They are gated on (and keyed to) the globally selected
