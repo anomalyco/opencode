@@ -95,6 +95,17 @@ const registryLayer = Layer.effect(
       return registrations
     }
 
+    // Reference-compare two registration maps. Entry objects are captured at
+    // registration and reused across ApplicationTools reloads, so identity
+    // equality signals an unchanged effective set.
+    const sameRegs = (a: Map<string, Registration>, b: Map<string, Registration>) => {
+      if (a.size !== b.size) return false
+      for (const [name, registration] of a) {
+        if (b.get(name) !== registration) return false
+      }
+      return true
+    }
+
     return Service.of({
       register: Effect.fn("ToolRegistry.register")(function* (tools) {
         const entries = Object.entries(tools)
@@ -120,12 +131,16 @@ const registryLayer = Layer.effect(
         )
       }),
       materialize: Effect.fn("ToolRegistry.materialize")(function* (permissions = []) {
-        if (!cached || cached.regs.size === 0) {
-          const regs = buildRegs()
+        // Rebuild the effective registrations each call. ApplicationTools registers
+        // through its own State, which does not invalidate this cache; comparing the
+        // registrations (cheap, reference-based) against the cached snapshot lets us
+        // detect additions/removals while still skipping regenerated JSON schemas.
+        const regs = buildRegs()
+        if (!cached || !sameRegs(cached.regs, regs)) {
           const defs = Array.from(regs, ([name, registration]) => definition(name, registration.tool))
           cached = { defs, regs }
         }
-        const { defs, regs } = cached
+        const { defs } = cached
         const filtered = permissions.length > 0
           ? defs.filter((d) => {
               const reg = regs.get(d.name)

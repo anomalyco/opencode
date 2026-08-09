@@ -1661,7 +1661,6 @@ export type GlobalEvent = {
     | SyncEventSessionNextRetried
     | SyncEventSessionNextCompactionStarted
     | SyncEventSessionNextCompactionEnded
-    | SyncEventSessionNextReasoningCycleFired
     | SyncEventSessionNextRevertStaged
     | SyncEventSessionNextRevertCleared
     | SyncEventSessionNextRevertCommitted
@@ -3824,29 +3823,6 @@ export type SyncEventSessionNextCompactionEnded = {
       reason: "auto" | "manual"
       text: string
       recent: string
-    }
-  }
-}
-
-export type SyncEventSessionNextReasoningCycleFired = {
-  type: "sync"
-  id: string
-  syncEvent: {
-    type: "session.next.reasoning.cycle.fired.1"
-    id: string
-    seq: number
-    aggregateID: string
-    data: {
-      timestamp: number
-      sessionID: string
-      loop: "why" | "then"
-      gated: boolean
-      steered: boolean
-      messageID?: string
-      reason?: string
-      iterates?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      epsilon?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      approximationGap?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
     }
   }
 }
@@ -14125,7 +14101,7 @@ export type V2AutomationUpdateResponse = V2AutomationUpdateResponses[keyof V2Aut
 
 export type V2AutomationFireData = {
   body: {
-    payload?: unknown
+    payload: unknown
   }
   path: {
     id: string

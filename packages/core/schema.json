@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "207f122c-5953-4d16-9724-80a7c8ee6421",
+  "id": "a8cba6e4-a6ff-4991-9cf3-5ca7f7100211",
   "prevIds": [
-    "f14a9b18-8207-487e-a3d3-227e629ba9ad"
+    "207f122c-5953-4d16-9724-80a7c8ee6421"
   ],
   "ddl": [
     {
@@ -24,6 +24,10 @@
     },
     {
       "name": "control_account",
+      "entityType": "tables"
+    },
+    {
+      "name": "automation_run",
       "entityType": "tables"
     },
     {
@@ -384,6 +388,126 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "trigger_id",
+      "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "prompt",
+      "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "agent",
+      "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "error",
+      "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "payload",
+      "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_started",
+      "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_completed",
+      "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "automation_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
       "table": "automation_trigger"
     },
     {
@@ -453,6 +577,36 @@
       "default": null,
       "generated": null,
       "name": "last_fired",
+      "entityType": "columns",
+      "table": "automation_trigger"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "locked",
+      "entityType": "columns",
+      "table": "automation_trigger"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lock_owner",
+      "entityType": "columns",
+      "table": "automation_trigger"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "lock_expires",
       "entityType": "columns",
       "table": "automation_trigger"
     },
@@ -1618,6 +1772,21 @@
     },
     {
       "columns": [
+        "trigger_id"
+      ],
+      "tableTo": "automation_trigger",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_automation_run_trigger_id_automation_trigger_id_fk",
+      "entityType": "fks",
+      "table": "automation_run"
+    },
+    {
+      "columns": [
         "session_id"
       ],
       "tableTo": "session",
@@ -1867,6 +2036,15 @@
         "id"
       ],
       "nameExplicit": false,
+      "name": "automation_run_pk",
+      "table": "automation_run",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
       "name": "automation_trigger_pk",
       "table": "automation_trigger",
       "entityType": "pks"
@@ -1982,6 +2160,62 @@
     {
       "columns": [
         {
+          "value": "trigger_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "automation_run_trigger_idx",
+      "entityType": "indexes",
+      "table": "automation_run"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "automation_run_session_idx",
+      "entityType": "indexes",
+      "table": "automation_run"
+    },
+    {
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "automation_run_status_idx",
+      "entityType": "indexes",
+      "table": "automation_run"
+    },
+    {
+      "columns": [
+        {
+          "value": "time_started",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "automation_run_time_idx",
+      "entityType": "indexes",
+      "table": "automation_run"
+    },
+    {
+      "columns": [
+        {
           "value": "session_id",
           "isExpression": false
         }
@@ -2004,6 +2238,20 @@
       "where": null,
       "origin": "manual",
       "name": "automation_trigger_enabled_idx",
+      "entityType": "indexes",
+      "table": "automation_trigger"
+    },
+    {
+      "columns": [
+        {
+          "value": "locked",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "automation_trigger_locked_idx",
       "entityType": "indexes",
       "table": "automation_trigger"
     },

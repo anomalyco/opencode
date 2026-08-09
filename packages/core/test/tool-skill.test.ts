@@ -9,6 +9,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { SkillTool } from "@opencode-ai/core/tool/skill"
+import { Tool } from "@opencode-ai/core/tool/tool"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { tmpdir } from "./fixture/tmpdir"
@@ -78,7 +79,7 @@ describe("SkillTool", () => {
             const registry = yield* ToolRegistry.Service
             expect((yield* toolDefinitions(registry))[0]).toMatchObject({
               name: "skill",
-              description: SkillTool.description,
+              description: Tool.minifyDesc(SkillTool.description),
             })
             expect(
               yield* executeTool(registry, {

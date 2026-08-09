@@ -68,7 +68,7 @@ type Runtime = {
 
 const runtimes = new WeakMap<AnyTool, Runtime>()
 
-function minifyDesc(desc: string): string {
+export function minifyDesc(desc: string): string {
   return desc
     .replace(/\s+/g, " ")
     .trim()

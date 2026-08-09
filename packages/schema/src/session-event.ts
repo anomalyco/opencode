@@ -433,8 +433,12 @@ export namespace Compaction {
 
 export namespace ReasoningCycle {
   export const Fired = Event.define({
+    // Diagnostic bookkeeping published per reflection-loop pass and dismissed by
+    // projectors. It is never read back from durable history, so it is not durable:
+    // it broadcasts to in-memory subscribers only and must not be committed to the
+    // durable aggregate (which would require a replayable DurableDefinitions entry
+    // and duplicate the variant across the session-event OpenAPI surface).
     type: "session.next.reasoning.cycle.fired",
-    ...options,
     schema: {
       ...Base,
       loop: Schema.Literals(["why", "then"]),
