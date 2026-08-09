@@ -4,7 +4,7 @@ import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import open from "open"
 import { useTheme, useThemes } from "../../context/theme"
-import type { FormAnswer, FormField, FormValue } from "@opencode-ai/client"
+import type { FormField, FormValue } from "@opencode-ai/client"
 import type { FormWithLocation } from "../../context/data"
 import { useClient } from "../../context/client"
 import { useClipboard } from "../../context/clipboard"
@@ -44,27 +44,6 @@ function requestOptions(form: FormWithLocation) {
 
 export function FormPrompt(props: { form: FormWithLocation }) {
   const client = useClient()
-  return (
-    <FormInput
-      form={props.form}
-      onSubmit={(answer) =>
-        client.api.form.reply(
-          { sessionID: props.form.sessionID, formID: props.form.id, answer },
-          requestOptions(props.form),
-        )
-      }
-      onCancel={() =>
-        client.api.form.cancel({ sessionID: props.form.sessionID, formID: props.form.id }, requestOptions(props.form))
-      }
-    />
-  )
-}
-
-export function FormInput(props: {
-  form: Pick<FormWithLocation, "title" | "fields" | "metadata">
-  onSubmit: (answer: FormAnswer) => Promise<unknown> | void
-  onCancel: () => Promise<unknown> | void
-}) {
   const themes = useThemes()
   const theme = useTheme("elevated")
   const themeMode = themes.mode
@@ -202,14 +181,23 @@ export function FormInput(props: {
   }
 
   function replySingle(field: FormAnswerField, value: FormValue) {
-    Promise.resolve(props.onSubmit({ [field.key]: value })).catch((error: unknown) => {
-      setStore(
-        "error",
-        typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
-          ? error.message
-          : "Invalid answer",
+    client.api.form
+      .reply(
+        {
+          sessionID: props.form.sessionID,
+          formID: props.form.id,
+          answer: { [field.key]: value },
+        },
+        requestOptions(props.form),
       )
-    })
+      .catch((error: unknown) => {
+        setStore(
+          "error",
+          typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+            ? error.message
+            : "Invalid answer",
+        )
+      })
   }
 
   function pick(value: FormValue, customValue?: string) {
@@ -362,7 +350,7 @@ export function FormInput(props: {
   }
 
   function cancel() {
-    void props.onCancel()
+    void client.api.form.cancel({ sessionID: props.form.sessionID, formID: props.form.id }, requestOptions(props.form))
   }
 
   function openExternal() {
@@ -414,23 +402,28 @@ export function FormInput(props: {
       setStore("error", formValidateValue(invalid, store.answers[invalid.key]) ?? "Invalid answer")
       return
     }
-    Promise.resolve(
-      props.onSubmit(
-        Object.fromEntries(
-          fields().flatMap((field) => {
-            const value = store.answers[field.key]
-            return value === undefined ? [] : [[field.key, value] as const]
-          }),
-        ),
-      ),
-    ).catch((error: unknown) => {
-      setStore(
-        "error",
-        typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
-          ? error.message
-          : "Invalid answer",
+    client.api.form
+      .reply(
+        {
+          sessionID: props.form.sessionID,
+          formID: props.form.id,
+          answer: Object.fromEntries(
+            fields().flatMap((field) => {
+              const value = store.answers[field.key]
+              return value === undefined ? [] : [[field.key, value] as const]
+            }),
+          ),
+        },
+        requestOptions(props.form),
       )
-    })
+      .catch((error: unknown) => {
+        setStore(
+          "error",
+          typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+            ? error.message
+            : "Invalid answer",
+        )
+      })
   }
 
   onMount(() => onCleanup(keymap.mode.push(FORM_MODE)))
@@ -458,7 +451,10 @@ export function FormInput(props: {
         group: "Form",
         run: () => {
           if (textual()) {
-            void props.onCancel()
+            void client.api.form.cancel(
+              { sessionID: props.form.sessionID, formID: props.form.id },
+              requestOptions(props.form),
+            )
             return
           }
           setStore("editing", false)

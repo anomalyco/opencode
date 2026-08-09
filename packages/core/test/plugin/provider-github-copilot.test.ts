@@ -62,6 +62,32 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("removes the generic key method", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      yield* integrations.transform((draft) => {
+        draft.method.update({
+          integrationID: Integration.ID.make("github-copilot"),
+          method: { type: "key" },
+        })
+        draft.method.update({
+          integrationID: Integration.ID.make("github-copilot"),
+          method: { type: "env", names: ["GITHUB_TOKEN"] },
+        })
+      })
+      yield* addPlugin()
+      expect((yield* integrations.get(Integration.ID.make("github-copilot")))?.methods).toEqual([
+        { type: "env", names: ["GITHUB_TOKEN"] },
+        {
+          id: Integration.MethodID.make("device"),
+          type: "oauth",
+          label: "Login with GitHub Copilot",
+          form: expect.any(Array),
+        },
+      ])
+    }),
+  )
+
   it.live("adds Copilot authentication and request metadata headers", () =>
     Effect.gen(function* () {
       const requests: Headers[] = []
