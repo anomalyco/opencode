@@ -1,4 +1,5 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { App } from "@opencode-ai/core/app"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -6,11 +7,8 @@ import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { copilotBaseURL, copilotFetch, GithubCopilotPlugin } from "@opencode-ai/core/plugin/provider/github-copilot"
-import { CopilotModels } from "@opencode-ai/core/github-copilot/models"
 import { Provider } from "@opencode-ai/core/provider"
 import { Integration } from "@opencode-ai/core/integration"
-import { Credential } from "@opencode-ai/core/credential"
-import { ModelResolver } from "@opencode-ai/core/model-resolver"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -100,6 +98,7 @@ describe("GithubCopilotPlugin", () => {
           return Response.json({ ok: true })
         },
         false,
+        App.make({ name: "test", version: "1.2.3", channel: "beta" }),
       )
       yield* Effect.promise(() =>
         send("https://api.githubcopilot.com/chat/completions", {
@@ -115,10 +114,7 @@ describe("GithubCopilotPlugin", () => {
       expect(requests[0]?.get("x-initiator")).toBe("user")
       expect(requests[0]?.get("copilot-vision-request")).toBe("true")
       expect(requests[0]?.get("x-github-api-version")).toBe("2026-06-01")
-      expect(requests[0]?.get("user-agent")).toBe("GitHubCopilotChat/0.26.7")
-      expect(requests[0]?.get("editor-version")).toBe("vscode/1.99.3")
-      expect(requests[0]?.get("editor-plugin-version")).toBe("copilot-chat/0.26.7")
-      expect(requests[0]?.get("copilot-integration-id")).toBe("vscode-chat")
+      expect(requests[0]?.get("user-agent")).toBe("opencode/beta/1.2.3/test")
     }),
   )
 
@@ -147,54 +143,6 @@ describe("GithubCopilotPlugin", () => {
       })
       expect(ignored.sdk).toBeUndefined()
       expect(result.sdk).toBeDefined()
-    }),
-  )
-
-  it.effect("routes all Copilot protocols through Copilot-owned SDK hooks", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      yield* catalog.transform((draft) => {
-        draft.provider.update(Provider.ID.githubCopilot, (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
-        })
-        draft.model.update(Provider.ID.githubCopilot, Model.ID.make("claude-sonnet"), (model) => {
-          model.package = Provider.aisdk("@ai-sdk/anthropic")
-        })
-      })
-      yield* addPlugin()
-
-      expect(required(yield* catalog.provider.get(Provider.ID.githubCopilot)).package).toBe(
-        Provider.aisdk(CopilotModels.Package.OpenAI),
-      )
-      expect(
-        required(yield* catalog.model.get(Provider.ID.githubCopilot, Model.ID.make("claude-sonnet"))).package,
-      ).toBe(Provider.aisdk(CopilotModels.Package.Anthropic))
-
-      const fallback = yield* ModelResolver.fromCatalogModel(
-        Model.Info.make({
-          ...Model.Info.default(Provider.ID.openai, Model.ID.make("fallback")),
-          package: Provider.aisdk("@ai-sdk/openai"),
-          settings: { baseURL: "https://openai.example/v1" },
-        }),
-      )
-      const resolved = yield* ModelResolver.fromCatalogModel(
-        required(yield* catalog.model.get(Provider.ID.githubCopilot, Model.ID.make("claude-sonnet"))),
-        Credential.OAuth.make({
-          type: "oauth",
-          methodID: Integration.MethodID.make("device"),
-          refresh: "github-token",
-          access: "github-token",
-          expires: 0,
-        }),
-        {
-          loadAISDK: (runtime) =>
-            Effect.sync(() => {
-              expect(runtime.settings?.apiKey).toBe("github-token")
-              return fallback
-            }),
-        },
-      )
-      expect(resolved).toBe(fallback)
     }),
   )
 

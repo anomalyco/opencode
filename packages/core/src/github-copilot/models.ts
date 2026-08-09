@@ -70,11 +70,6 @@ type UsableModel = RemoteModel & {
   }
 }
 
-export const Package = {
-  OpenAI: "@ai-sdk/github-copilot",
-  Anthropic: "@ai-sdk/github-copilot/anthropic",
-} as const
-
 export async function get(baseURL: string, headers: RequestInit["headers"], existing: readonly Model.Info[]) {
   const response = await fetch(`${baseURL}/models`, {
     headers,
@@ -146,7 +141,7 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
     providerID: Provider.ID.githubCopilot,
     family: previous?.family ?? Model.Family.make(remote.capabilities.family),
     name: previous?.name ?? remote.name,
-    package: Provider.aisdk(messages ? Package.Anthropic : Package.OpenAI),
+    package: Provider.aisdk(messages ? "@ai-sdk/anthropic" : "@ai-sdk/github-copilot"),
     settings: Provider.mergeOverlay(previous?.settings, {
       baseURL: messages ? `${baseURL}/v1` : baseURL,
       ...(endpoint ? { endpoint } : {}),

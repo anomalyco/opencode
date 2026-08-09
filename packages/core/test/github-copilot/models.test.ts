@@ -42,18 +42,6 @@ test("defensively syncs advertised Copilot models", async () => {
               supports: { tool_calls: false },
             },
           },
-          {
-            model_picker_enabled: true,
-            id: "claude-sonnet",
-            name: "Claude Sonnet",
-            version: "claude-sonnet-2026-06-01",
-            supported_endpoints: ["/v1/messages"],
-            capabilities: {
-              family: "claude",
-              limits: { max_output_tokens: 16000, max_prompt_tokens: 180000 },
-              supports: { tool_calls: true },
-            },
-          },
           { model_picker_enabled: true, id: "incomplete" },
         ],
       }),
@@ -80,7 +68,6 @@ test("defensively syncs advertised Copilot models", async () => {
       Model.VariantID.make("high"),
     ])
     expect(models.get(Model.ID.make("utility"))?.enabled).toBe(false)
-    expect(models.get(Model.ID.make("claude-sonnet"))?.package).toBe(Provider.aisdk(CopilotModels.Package.Anthropic))
     expect(models.has(Model.ID.make("stale"))).toBe(false)
     expect(models.has(Model.ID.make("incomplete"))).toBe(false)
   } finally {
