@@ -1301,16 +1301,14 @@ export default function LegacyLayout(props: ParentProps) {
 
     if (project.id && project.id !== "global") {
       const sdk = serverSDK()
-      if ((await sdk.protocol) === "v1") {
-        const result = await sdk.client.project
-          .update({ projectID: project.id, directory: project.worktree, name })
-          .then((response) => response.data)
-          .catch(() => undefined)
-        if (result) {
-          serverSync().set("project", (items) =>
-            items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
-          )
-        }
+      const result = await sdk.client.project
+        .update({ projectID: project.id, directory: project.worktree, name })
+        .then((response) => response.data)
+        .catch(() => undefined)
+      if (result) {
+        serverSync().set("project", (items) =>
+          items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
+        )
       }
     }
   }

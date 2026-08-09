@@ -185,7 +185,6 @@ export function enrichProject<T extends ProjectMetaShape>(
   base: T,
   local: ProjectMeta | undefined,
   icon: string | undefined,
-  _hasServerId?: boolean,
 ): T {
   const merged = mergeProjectMeta(base, local)
   if (icon) return { ...merged, icon: { ...merged.icon, override: icon } }

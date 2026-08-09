@@ -189,7 +189,7 @@ describe("mergeProjectMeta", () => {
 describe("enrichProject", () => {
   test("applies the legacy icon override on top of projectMeta", () => {
     const base: Base = { worktree: "/repo", name: "Repo" }
-    expect(enrichProject(base, { name: "Renamed", icon: { color: "red" } }, "data:legacy", false)).toEqual({
+    expect(enrichProject(base, { name: "Renamed", icon: { color: "red" } }, "data:legacy")).toEqual({
       worktree: "/repo",
       name: "Renamed",
       icon: { color: "red", override: "data:legacy" },
@@ -198,7 +198,7 @@ describe("enrichProject", () => {
 
   test("returns merged base unchanged when there is no legacy icon", () => {
     const base: Base = { worktree: "/repo" }
-    expect(enrichProject(base, { name: "Renamed" }, undefined, false)).toEqual({
+    expect(enrichProject(base, { name: "Renamed" }, undefined)).toEqual({
       worktree: "/repo",
       name: "Renamed",
     })
@@ -206,7 +206,7 @@ describe("enrichProject", () => {
 
   test("applies local projectMeta for projects with a server id", () => {
     const base: Base = { worktree: "/repo", name: "opencode_configaaa" }
-    expect(enrichProject(base, { name: "opencode_config" }, undefined, true)).toEqual({
+    expect(enrichProject(base, { name: "opencode_config" }, undefined)).toEqual({
       worktree: "/repo",
       name: "opencode_config",
     })
@@ -214,7 +214,7 @@ describe("enrichProject", () => {
 
   test("still applies the legacy icon override for projects with a server id", () => {
     const base: Base = { worktree: "/repo", name: "opencode_configaaa" }
-    expect(enrichProject(base, { name: "opencode_config" }, "data:legacy", true)).toEqual({
+    expect(enrichProject(base, { name: "opencode_config" }, "data:legacy")).toEqual({
       worktree: "/repo",
       name: "opencode_config",
       icon: { override: "data:legacy" },

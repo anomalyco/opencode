@@ -80,22 +80,20 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
       }
 
       if (props.project.id && props.project.id !== "global") {
-        if ((await serverCtx().sdk.protocol) === "v1") {
-          const project = await serverCtx()
-            .sdk.client.project.update({
-              projectID: props.project.id,
-              directory: props.project.worktree,
-              name,
-              icon: { color: store.color || "", override: store.iconOverride || "" },
-              commands: { start },
-            })
-            .then((result) => result.data)
-            .catch(() => undefined)
-          if (project) {
-            serverCtx().sync.set("project", (items) =>
-              items.map((item) => (item.id === project.id ? normalizeProjectInfo(project) : item)),
-            )
-          }
+        const project = await serverCtx()
+          .sdk.client.project.update({
+            projectID: props.project.id,
+            directory: props.project.worktree,
+            name,
+            icon: { color: store.color || "", override: store.iconOverride || "" },
+            commands: { start },
+          })
+          .then((result) => result.data)
+          .catch(() => undefined)
+        if (project) {
+          serverCtx().sync.set("project", (items) =>
+            items.map((item) => (item.id === project.id ? normalizeProjectInfo(project) : item)),
+          )
         }
       }
 

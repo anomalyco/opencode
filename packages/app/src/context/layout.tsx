@@ -452,7 +452,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       // Preserve local per-workspace overrides (name, commands, icon) from the localStorage
       // cache (childStore.projectMeta) and the legacy childStore.icon override.
       const base = { ...metadata, ...project }
-      return enrichProject(base, childStore.projectMeta, childStore.icon, Boolean(projectID) && projectID !== "global")
+      return enrichProject(base, childStore.projectMeta, childStore.icon)
     }
 
     const roots = createMemo(() => {

@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { rename } from "node:fs/promises"
 import { Project } from "@/project/project"
 import { $ } from "bun"
 import path from "path"
@@ -232,6 +233,21 @@ describe("Project.fromDirectory", () => {
         (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
           ?.project_id,
       ).toBe(remoteID)
+    }),
+  )
+
+  it.live("updates project worktree when directory on disk is renamed", () =>
+    Effect.gen(function* () {
+      const projects = yield* Project.Service
+      const tmp1 = yield* tmpdirScoped({ git: true })
+      const initial = yield* projects.fromDirectory(tmp1)
+
+      const tmp2 = `${tmp1}-renamed`
+      yield* Effect.promise(() => rename(tmp1, tmp2))
+
+      const updated = yield* projects.fromDirectory(tmp2)
+      expect(updated.project.id).toBe(initial.project.id)
+      expect(updated.project.worktree).toBe(tmp2)
     }),
   )
 })
