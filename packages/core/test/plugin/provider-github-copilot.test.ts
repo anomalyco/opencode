@@ -350,24 +350,6 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("defaults bundled Copilot models to stateless responses without model sync", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(Provider.ID.githubCopilot, () => {})
-        catalog.model.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.4"), (model) => {
-          model.package = Provider.aisdk("@ai-sdk/github-copilot")
-          model.settings = { endpoint: "responses" }
-        })
-      })
-      yield* addPlugin()
-      expect(required(yield* catalog.model.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5.4"))).settings).toEqual({
-        endpoint: "responses",
-        store: false,
-      })
-    }),
-  )
-
   it.effect("does not disable gpt-5-chat-latest for non-Copilot providers", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

@@ -198,12 +198,13 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       providerOptions,
       schema: openaiResponsesProviderOptionsSchema,
     })
+    const store = openaiOptions?.store ?? false
 
     const { input, warnings: inputWarnings } = await convertToOpenAIResponsesInput({
       prompt,
       systemMessageMode: modelConfig.systemMessageMode,
       fileIdPrefixes: this.config.fileIdPrefixes,
-      store: openaiOptions?.store ?? true,
+      store,
       hasLocalShellTool: hasOpenAITool("openai.local_shell"),
     })
 
@@ -218,7 +219,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       include = include != null ? [...include, key] : [key]
     }
 
-    if (openaiOptions?.store === false) addInclude("reasoning.encrypted_content")
+    addInclude("reasoning.encrypted_content")
 
     function hasOpenAITool(id: string) {
       return tools?.find((tool) => tool.type === "provider" && tool.id === id) != null
@@ -285,7 +286,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       metadata: openaiOptions?.metadata,
       parallel_tool_calls: openaiOptions?.parallelToolCalls,
       previous_response_id: openaiOptions?.previousResponseId,
-      store: openaiOptions?.store,
+      store,
       user: openaiOptions?.user,
       instructions: openaiOptions?.instructions,
       service_tier: openaiOptions?.serviceTier,

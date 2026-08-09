@@ -210,12 +210,6 @@ export const GithubCopilotPlugin = define({
           })
         }
       }
-      for (const [id, model] of loaded.models ?? item.models) {
-        if (Provider.packageName(model.package) !== "@ai-sdk/github-copilot") continue
-        evt.model.update(item.provider.id, id, (draft) => {
-          draft.settings = Provider.mergeOverlay(draft.settings, { store: false })
-        })
-      }
       if (item.models.has(Model.ID.make("gpt-5-chat-latest"))) {
         evt.model.update(item.provider.id, Model.ID.make("gpt-5-chat-latest"), (model) => {
           // This chat-only alias conflicts with the Copilot GPT-5 Responses route,

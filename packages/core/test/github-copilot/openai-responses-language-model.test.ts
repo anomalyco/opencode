@@ -88,7 +88,7 @@ describe("doGenerate", () => {
     expect(providerMetadata?.openai).toBeUndefined()
   })
 
-  test("serializes previousResponseId only when explicitly provided", async () => {
+  test("defaults to stateless encrypted reasoning and keeps previousResponseId opt-in", async () => {
     const requests: Array<Record<string, unknown>> = []
     const fetchFn = mock(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       requests.push(JSON.parse(init?.body as string))
@@ -111,10 +111,20 @@ describe("doGenerate", () => {
       includeRawChunks: false,
       providerOptions: { copilot: { previousResponseId: "resp_previous", store: false } },
     } as any)
+    await model.doGenerate({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+      providerOptions: { copilot: { store: true } },
+    } as any)
 
     expect(requests[0]?.previous_response_id).toBeUndefined()
+    expect(requests[0]?.store).toBe(false)
+    expect(requests[0]?.include).toEqual(["reasoning.encrypted_content"])
     expect(requests[1]?.previous_response_id).toBe("resp_previous")
+    expect(requests[1]?.store).toBe(false)
     expect(requests[1]?.include).toEqual(["reasoning.encrypted_content"])
+    expect(requests[2]?.store).toBe(true)
+    expect(requests[2]?.include).toEqual(["reasoning.encrypted_content"])
   })
 })
 
