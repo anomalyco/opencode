@@ -363,12 +363,7 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
     const refresh = input.refresh
     return {
       integrationID: Integration.ID.make(input.integrationID),
-      method: Schema.decodeUnknownSync(Integration.OAuthMethod)({
-        id: Integration.MethodID.make(input.method.id),
-        type: "oauth",
-        label: input.method.label,
-        ...(input.method.forms === undefined ? {} : { forms: input.method.forms }),
-      }),
+      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
       authorize: (answers) =>
         input.authorize(answers).pipe(
           Effect.map((authorization) => {
@@ -402,11 +397,7 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
   }
   return {
     integrationID: Integration.ID.make(input.integrationID),
-    method: Schema.decodeUnknownSync(Integration.KeyMethod)({
-      type: "key",
-      ...(input.method.label === undefined ? {} : { label: input.method.label }),
-      ...(input.method.forms === undefined ? {} : { forms: input.method.forms }),
-    }),
+    method: input.method,
   }
 }
 
