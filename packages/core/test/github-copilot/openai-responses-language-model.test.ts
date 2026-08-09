@@ -87,6 +87,45 @@ describe("doGenerate", () => {
     expect(providerMetadata?.copilot?.responseId).toBe("resp_1")
     expect(providerMetadata?.openai).toBeUndefined()
   })
+
+  test("defaults to stateless encrypted reasoning and keeps previousResponseId opt-in", async () => {
+    const requests: Array<Record<string, unknown>> = []
+    const fetchFn = mock(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      requests.push(JSON.parse(init?.body as string))
+      return new Response(
+        JSON.stringify({
+          id: "resp_1",
+          created_at: 0,
+          model: "gpt-5.5",
+          output: [],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    })
+    const model = createModel(fetchFn)
+
+    await model.doGenerate({ prompt: TEST_PROMPT, includeRawChunks: false } as any)
+    await model.doGenerate({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+      providerOptions: { copilot: { previousResponseId: "resp_previous", store: false } },
+    } as any)
+    await model.doGenerate({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+      providerOptions: { copilot: { store: true } },
+    } as any)
+
+    expect(requests[0]?.previous_response_id).toBeUndefined()
+    expect(requests[0]?.store).toBe(false)
+    expect(requests[0]?.include).toEqual(["reasoning.encrypted_content"])
+    expect(requests[1]?.previous_response_id).toBe("resp_previous")
+    expect(requests[1]?.store).toBe(false)
+    expect(requests[1]?.include).toEqual(["reasoning.encrypted_content"])
+    expect(requests[2]?.store).toBe(true)
+    expect(requests[2]?.include).toEqual(["reasoning.encrypted_content"])
+  })
 })
 
 describe("doStream", () => {
@@ -117,7 +156,11 @@ describe("doStream", () => {
         },
       ]),
     )
-    const result = await model.doStream({ prompt: TEST_PROMPT, includeRawChunks: false } as any)
+    const result = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+      providerOptions: { copilot: { store: false } },
+    } as any)
     const reader = result.stream.getReader()
     const events: LanguageModelV3StreamPart[] = []
     while (true) {
@@ -143,14 +186,74 @@ describe("doStream", () => {
       {
         type: "reasoning-end",
         id: "rs_1:1",
-        providerMetadata: { copilot: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        providerMetadata: { copilot: { itemId: "rs_rotated", reasoningEncryptedContent: "encrypted-state" } },
       },
     ])
+
+    const deltas = new Map(
+      events.filter((event) => event.type === "reasoning-delta").map((event) => [event.id, event.delta] as const),
+    )
+    const { input } = await convertToOpenAIResponsesInput({
+      prompt: [
+        {
+          role: "assistant",
+          content: events
+            .filter((event) => event.type === "reasoning-end")
+            .map((event) => ({
+              type: "reasoning" as const,
+              text: deltas.get(event.id) ?? "",
+              providerOptions: event.providerMetadata,
+            })),
+        },
+      ],
+      systemMessageMode: "system",
+      store: false,
+    })
+    expect(input).toEqual([
+      {
+        type: "reasoning",
+        id: "rs_rotated",
+        encrypted_content: "encrypted-state",
+        summary: [],
+      },
+    ])
+  })
+
+  test("closes reasoning when a Copilot stream ends before output_item.done", async () => {
+    const model = createModel(
+      createStreamFetch([
+        {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+        },
+        { type: "response.reasoning_summary_text.delta", item_id: "rs_rotated", summary_index: 0, delta: "First" },
+      ]),
+    )
+    const result = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+      providerOptions: { copilot: { store: false } },
+    } as any)
+    const reader = result.stream.getReader()
+    const events: LanguageModelV3StreamPart[] = []
+    while (true) {
+      const item = await reader.read()
+      if (item.done) break
+      if (item.value.type.startsWith("reasoning-")) events.push(item.value)
+    }
+
+    expect(events.map((event) => event.type)).toEqual(["reasoning-start", "reasoning-delta", "reasoning-end"])
+    expect(events.at(-1)).toMatchObject({
+      type: "reasoning-end",
+      id: "rs_1:0",
+      providerMetadata: { copilot: { itemId: "rs_1" } },
+    })
   })
 })
 
 describe("convertToOpenAIResponsesInput", () => {
-  test("echoes a stale tool-call itemId from the copilot namespace as the function_call id", async () => {
+  test("omits response item IDs from stateless function calls", async () => {
     const { input } = await convertToOpenAIResponsesInput({
       prompt: [
         {
@@ -176,12 +279,11 @@ describe("convertToOpenAIResponsesInput", () => {
         call_id: "call_1",
         name: "bash",
         arguments: JSON.stringify({ command: "ls" }),
-        id: "fc_999",
       },
     ])
   })
 
-  test("omits the function_call id once the stale copilot itemId has been stripped", async () => {
+  test("preserves response item IDs for stored function calls", async () => {
     const { input } = await convertToOpenAIResponsesInput({
       prompt: [
         {
@@ -192,16 +294,16 @@ describe("convertToOpenAIResponsesInput", () => {
               toolCallId: "call_1",
               toolName: "bash",
               input: { command: "ls" },
-              providerOptions: {},
+              providerOptions: { copilot: { itemId: "fc_999" } },
             },
           ],
         },
       ],
       systemMessageMode: "system",
-      store: false,
+      store: true,
     })
 
-    expect((input[0] as any).id).toBeUndefined()
+    expect((input[0] as any).id).toBe("fc_999")
   })
 
   test("preserves reasoning items keyed by the copilot namespace instead of dropping them", async () => {
@@ -228,12 +330,12 @@ describe("convertToOpenAIResponsesInput", () => {
         type: "reasoning",
         id: "rs_1",
         encrypted_content: "enc_1",
-        summary: [{ type: "summary_text", text: "thinking..." }],
+        summary: [],
       },
     ])
   })
 
-  test("preserves encrypted reasoning with no copilot itemId", async () => {
+  test("drops encrypted reasoning with no completed copilot itemId", async () => {
     const { input, warnings } = await convertToOpenAIResponsesInput({
       prompt: [
         {
@@ -251,14 +353,8 @@ describe("convertToOpenAIResponsesInput", () => {
       store: false,
     })
 
-    expect(warnings).toEqual([])
-    expect(input).toEqual([
-      {
-        type: "reasoning",
-        encrypted_content: "enc_1",
-        summary: [{ type: "summary_text", text: "thinking..." }],
-      },
-    ])
+    expect(input).toEqual([])
+    expect(warnings).toHaveLength(1)
   })
 
   test("drops reasoning with neither a copilot itemId nor encrypted content", async () => {
