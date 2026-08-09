@@ -19,8 +19,7 @@ const daemon = Effect.gen(function* () {
   let lastFullDay = ""
   const pass = Effect.gen(function* () {
     const today = new Date().toISOString().slice(0, 10)
-    const full = lastFullDay !== today
-    if (!full) return yield* syncStats({ full: false })
+    if (lastFullDay === today) return yield* syncStats({ full: false })
 
     const completed = yield* syncStats({ full: true }).pipe(
       Effect.as(true),
