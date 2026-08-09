@@ -13,6 +13,16 @@ describe("file path helpers", () => {
     expect(path.pathFromTab("other://src/app.ts")).toBeUndefined()
   })
 
+  test("preserves URL punctuation in raw filesystem paths", () => {
+    const path = createPathHelpers(() => "/repo")
+    const literal = "notes/why%20now#draft?.md"
+    const tab = "file://notes/why%2520now%23draft%3F.md"
+
+    expect(path.normalize(literal)).toBe(literal)
+    expect(path.tab(literal)).toBe(tab)
+    expect(path.pathFromTab(tab)).toBe(literal)
+  })
+
   test("normalizes Windows absolute paths with mixed separators", () => {
     const path = createPathHelpers(() => "C:\\repo")
     expect(path.normalize("C:\\repo\\src\\app.ts")).toBe("src\\app.ts")
