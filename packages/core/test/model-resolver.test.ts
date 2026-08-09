@@ -766,41 +766,6 @@ describe("ModelResolver", () => {
     }),
   )
 
-  it.effect("defers Copilot AISDK packages to the Copilot loader", () =>
-    Effect.gen(function* () {
-      const native = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/openai"), {
-          settings: { baseURL: "https://openai.example/v1" },
-        }),
-      )
-      yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/anthropic"), {
-          providerID: Provider.ID.githubCopilot,
-          settings: { baseURL: "https://api.githubcopilot.com/v1", toolStreaming: false },
-        }),
-        Credential.OAuth.make({
-          type: "oauth",
-          methodID: Integration.MethodID.make("device"),
-          refresh: "github-token",
-          access: "github-token",
-          expires: 0,
-        }),
-        {
-          loadAISDK: (runtime) =>
-            Effect.sync(() => {
-              expect(runtime.package).toBe(Provider.aisdk("@ai-sdk/anthropic"))
-              expect(runtime.settings).toEqual({
-                baseURL: "https://api.githubcopilot.com/v1",
-                toolStreaming: false,
-                apiKey: "github-token",
-              })
-              return native
-            }),
-        },
-      )
-    }),
-  )
-
   it.effect("rejects AISDK packages without an available loader", () =>
     Effect.gen(function* () {
       const failure = yield* ModelResolver.fromCatalogModel(

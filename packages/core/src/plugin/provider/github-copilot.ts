@@ -201,12 +201,7 @@ export const GithubCopilotPlugin = define({
           if (!loaded.models.has(Model.ID.make(id))) evt.model.remove(item.provider.id, id)
         }
         for (const [id, model] of loaded.models) {
-          evt.model.update(item.provider.id, id, (draft) => {
-            Object.assign(draft, structuredClone(model))
-            if (Provider.packageName(draft.package) === "@ai-sdk/anthropic") {
-              draft.settings = Provider.mergeOverlay(draft.settings, { toolStreaming: false })
-            }
-          })
+          evt.model.update(item.provider.id, id, (draft) => Object.assign(draft, structuredClone(model)))
         }
       } else if (loaded.baseURL) {
         for (const id of item.models.keys()) {
@@ -234,24 +229,24 @@ export const GithubCopilotPlugin = define({
       "sdk",
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== Provider.ID.githubCopilot) return
-        if (evt.package !== "@ai-sdk/github-copilot" && evt.package !== "@ai-sdk/anthropic") return
+        if (evt.package !== "@ai-sdk/github-copilot") return
         evt.options.fetch = copilotFetch(
           typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined,
           evt.options.fetch,
-          evt.package === "@ai-sdk/anthropic",
           ctx.app,
         )
-        if (evt.package === "@ai-sdk/anthropic") {
-          evt.options.headers = {
-            ...evt.options.headers,
-            "anthropic-beta": "interleaved-thinking-2025-05-14",
-          }
-          const mod = yield* Effect.promise(() => import("@ai-sdk/anthropic"))
-          evt.sdk = mod.createAnthropic(evt.options)
-          return
-        }
         const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider"))
         evt.sdk = mod.createOpenaiCompatible(evt.options)
+      }),
+    )
+    yield* ctx.session.hook("http.request", (evt) =>
+      Effect.gen(function* () {
+        if (evt.model.providerID !== Provider.ID.githubCopilot) return
+        const token = evt.request.headers.get("x-api-key")
+        if (!token) return
+        const text = yield* Effect.promise(() => evt.request.clone().text())
+        const body = Option.getOrUndefined(decodeBody(text))
+        applyHeaders(evt.request.headers, token, ctx.app, requestMetadata(evt.request.url, body), true)
       }),
     )
     yield* ctx.aisdk.hook(
@@ -322,33 +317,38 @@ function request(url: string, init: RequestInit) {
 
 type Fetch = (input: Parameters<typeof fetch>[0], init?: RequestInit) => Promise<Response>
 
-export function copilotFetch(
-  token: string | undefined,
-  upstream: Fetch | undefined,
-  anthropic: boolean,
-  app: App.Info,
-): Fetch {
+export function copilotFetch(token: string | undefined, upstream: Fetch | undefined, app: App.Info): Fetch {
   const send = upstream ?? fetch
   return async (input, init) => {
     const requestHeaders = new Headers(init?.headers)
-    if (token) {
-      requestHeaders.delete("authorization")
-      requestHeaders.delete("x-api-key")
-      requestHeaders.set("Authorization", `Bearer ${token}`)
-    }
-    requestHeaders.set("User-Agent", App.useragent(app))
-    requestHeaders.set("Openai-Intent", "conversation-edits")
-    requestHeaders.set("X-GitHub-Api-Version", apiVersion)
-    if (anthropic) requestHeaders.set("anthropic-beta", "interleaved-thinking-2025-05-14")
-
     const url = input instanceof URL ? input.href : typeof input === "string" ? input : input.url
     const body = typeof init?.body === "string" ? Option.getOrUndefined(decodeBody(init.body)) : undefined
-    const metadata = requestMetadata(url, body)
-    requestHeaders.set("x-initiator", metadata.agent ? "agent" : "user")
-    if (metadata.vision) requestHeaders.set("Copilot-Vision-Request", "true")
+    applyHeaders(requestHeaders, token, app, requestMetadata(url, body), false)
     return send(input, { ...init, headers: requestHeaders })
   }
 }
+
+function applyHeaders(
+  headers: Headers,
+  token: string | undefined,
+  app: App.Info,
+  metadata: RequestMetadata,
+  anthropic: boolean,
+) {
+  if (token) {
+    headers.delete("authorization")
+    headers.delete("x-api-key")
+    headers.set("Authorization", `Bearer ${token}`)
+  }
+  headers.set("User-Agent", App.useragent(app))
+  headers.set("Openai-Intent", "conversation-edits")
+  headers.set("X-GitHub-Api-Version", apiVersion)
+  headers.set("x-initiator", metadata.agent ? "agent" : "user")
+  if (metadata.vision) headers.set("Copilot-Vision-Request", "true")
+  if (anthropic) headers.set("anthropic-beta", "interleaved-thinking-2025-05-14")
+}
+
+type RequestMetadata = ReturnType<typeof requestMetadata>
 
 function requestMetadata(url: string, body: unknown) {
   if (!record(body)) return { agent: false, vision: false }
