@@ -194,6 +194,32 @@ test("concurrent TUIs do not alternate shared tab titles from divergent session 
   }
 })
 
+test("closing an inactive tab from another TUI does not reopen it on the active TUI", async () => {
+  await using temporary = await tmpdir()
+  const first = await renderSessionTabs("first", {
+    state: temporary.path,
+    persisted: ["first", "second"],
+  })
+  let second: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
+
+  try {
+    await wait(() => first.tabs.tabs().length === 2 && first.tabs.current() === "first")
+    second = await renderSessionTabs("second", { state: temporary.path })
+    await wait(() => second!.tabs.tabs().length === 2)
+    expect(first.tabs.current()).toBe("first")
+    expect(second.tabs.current()).toBe("second")
+
+    second.tabs.close("first")
+    await wait(() => !second!.tabs.tabs().some((tab) => tab.sessionID === "first"))
+    await Bun.sleep(100)
+
+    expect(first.tabs.tabs().some((tab) => tab.sessionID === "first")).toBe(false)
+  } finally {
+    await first.destroy()
+    await second?.destroy()
+  }
+})
+
 test("user prompt admissions pulse an already-busy background tab", async () => {
   const setup = await renderSessionTabs("background")
   const admitted = (sessionID: string, inputID: string): OpenCodeEvent => ({

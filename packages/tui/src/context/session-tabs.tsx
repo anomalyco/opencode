@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
@@ -126,22 +126,40 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       })
     }
 
+    createEffect(
+      on(
+        [
+          () => (enabled() && route.data.type === "session" ? route.data.sessionID : undefined),
+          () => config.tabs.scope,
+          () => paths.cwd,
+        ],
+        ([routed]) => {
+          if (!routed || routed === "dummy") return
+          const sessionID = root(routed)
+          history = recordSessionTabHistory(history, sessionID)
+          const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
+          update((draft) => {
+            draft.tabs = openSessionTab(draft.tabs, {
+              sessionID,
+              title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
+            })
+            delete draft.unread[sessionID]
+          })
+        },
+      ),
+    )
+
     createEffect(() => {
-      if (!enabled()) return
-      if (route.data.type !== "session" || route.data.sessionID === "dummy") return
+      if (!enabled() || route.data.type !== "session" || route.data.sessionID === "dummy") return
       const sessionID = root(route.data.sessionID)
-      history = recordSessionTabHistory(history, sessionID)
-      const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
-      const tabs = openSessionTab(state().tabs, {
-        sessionID,
-        title: title(sessionID, state().tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
-      })
-      if (tabs === state().tabs && !state().unread[sessionID]) return
+      const tab = state().tabs.find((tab) => tab.sessionID === sessionID)
+      if (!tab) return
+      const nextTitle = title(sessionID, tab.title)
+      if ((!nextTitle || nextTitle === tab.title) && !state().unread[sessionID]) return
       update((draft) => {
-        draft.tabs = openSessionTab(draft.tabs, {
-          sessionID,
-          title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
-        })
+        const tab = draft.tabs.find((tab) => tab.sessionID === sessionID)
+        if (!tab) return
+        draft.tabs = openSessionTab(draft.tabs, { sessionID, title: title(sessionID, tab.title) })
         delete draft.unread[sessionID]
       })
     })
