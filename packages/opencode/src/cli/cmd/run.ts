@@ -254,6 +254,12 @@ export const RunCommand = effectCmd({
         hidden: true,
         default: false,
       })
+      .option("full-yolo", {
+        type: "boolean",
+        hidden: true,
+        default: false,
+        describe: "bypass all permissions including deny rules (ultra-dangerous!)",
+      })
       .option("demo", {
         type: "boolean",
         default: false,
