@@ -214,8 +214,11 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
     let include: OpenAIResponsesIncludeOptions = openaiOptions?.include
 
     function addInclude(key: OpenAIResponsesIncludeValue) {
+      if (include?.includes(key)) return
       include = include != null ? [...include, key] : [key]
     }
+
+    if (openaiOptions?.store === false) addInclude("reasoning.encrypted_content")
 
     function hasOpenAITool(id: string) {
       return tools?.find((tool) => tool.type === "provider" && tool.id === id) != null
@@ -840,7 +843,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
       {
         canonicalId: string // the item.id from output_item.added
         encryptedContent?: string | null
-        summaryParts: number[]
+        summaryParts: Record<number, "active" | "can-conclude" | "concluded">
       }
     > = {}
 
@@ -960,11 +963,14 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                   },
                 })
               } else if (isResponseOutputItemAddedReasoningChunk(value)) {
-                if (activeReasoning[value.output_index]) return
+                if (activeReasoning[value.output_index]) {
+                  currentReasoningOutputIndex = value.output_index
+                  return
+                }
                 activeReasoning[value.output_index] = {
                   canonicalId: value.item.id,
                   encryptedContent: value.item.encrypted_content,
-                  summaryParts: [0],
+                  summaryParts: { 0: "active" },
                 }
                 currentReasoningOutputIndex = value.output_index
 
@@ -1118,14 +1124,14 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
               } else if (isResponseOutputItemDoneReasoningChunk(value)) {
                 const activeReasoningPart = activeReasoning[value.output_index]
                 if (activeReasoningPart) {
-                  const summaryIndex = activeReasoningPart.summaryParts.at(-1)
-                  if (summaryIndex !== undefined) {
+                  for (const [summaryIndex, status] of Object.entries(activeReasoningPart.summaryParts)) {
+                    if (status === "concluded") continue
                     controller.enqueue({
                       type: "reasoning-end",
                       id: `${activeReasoningPart.canonicalId}:${summaryIndex}`,
                       providerMetadata: {
                         copilot: {
-                          itemId: activeReasoningPart.canonicalId,
+                          itemId: value.item.id,
                           reasoningEncryptedContent: value.item.encrypted_content ?? null,
                         },
                       },
@@ -1230,18 +1236,19 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 currentReasoningOutputIndex !== null ? activeReasoning[currentReasoningOutputIndex] : null
 
               // the first reasoning start is pushed in isResponseOutputItemAddedReasoningChunk.
-              if (activeItem && value.summary_index > 0 && !activeItem.summaryParts.includes(value.summary_index)) {
-                const previousSummaryIndex = activeItem.summaryParts.at(-1)
-                if (previousSummaryIndex !== undefined) {
+              if (activeItem && value.summary_index > 0 && activeItem.summaryParts[value.summary_index] === undefined) {
+                for (const [summaryIndex, status] of Object.entries(activeItem.summaryParts)) {
+                  if (status !== "can-conclude") continue
                   controller.enqueue({
                     type: "reasoning-end",
-                    id: `${activeItem.canonicalId}:${previousSummaryIndex}`,
+                    id: `${activeItem.canonicalId}:${summaryIndex}`,
                     providerMetadata: {
                       copilot: { itemId: activeItem.canonicalId },
                     },
                   })
+                  activeItem.summaryParts[Number(summaryIndex)] = "concluded"
                 }
-                activeItem.summaryParts.push(value.summary_index)
+                activeItem.summaryParts[value.summary_index] = "active"
 
                 controller.enqueue({
                   type: "reasoning-start",
@@ -1254,6 +1261,22 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                   },
                 })
               }
+            } else if (isResponseReasoningSummaryPartDoneChunk(value)) {
+              const activeItem =
+                currentReasoningOutputIndex !== null ? activeReasoning[currentReasoningOutputIndex] : null
+              if (!activeItem || activeItem.summaryParts[value.summary_index] !== "active") return
+              if (body.store === false) {
+                activeItem.summaryParts[value.summary_index] = "can-conclude"
+                return
+              }
+              controller.enqueue({
+                type: "reasoning-end",
+                id: `${activeItem.canonicalId}:${value.summary_index}`,
+                providerMetadata: {
+                  copilot: { itemId: activeItem.canonicalId },
+                },
+              })
+              activeItem.summaryParts[value.summary_index] = "concluded"
             } else if (isResponseReasoningSummaryTextDeltaChunk(value)) {
               const activeItem =
                 currentReasoningOutputIndex !== null ? activeReasoning[currentReasoningOutputIndex] : null
@@ -1315,6 +1338,16 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
             if (currentTextId) {
               controller.enqueue({ type: "text-end", id: currentTextId })
               currentTextId = null
+            }
+            for (const activeItem of Object.values(activeReasoning)) {
+              for (const [summaryIndex, status] of Object.entries(activeItem.summaryParts)) {
+                if (status === "concluded") continue
+                controller.enqueue({
+                  type: "reasoning-end",
+                  id: `${activeItem.canonicalId}:${summaryIndex}`,
+                  providerMetadata: { copilot: { itemId: activeItem.canonicalId } },
+                })
+              }
             }
 
             const providerMetadata: SharedV3ProviderMetadata = {
@@ -1564,6 +1597,12 @@ const responseReasoningSummaryTextDeltaSchema = z.object({
   delta: z.string(),
 })
 
+const responseReasoningSummaryPartDoneSchema = z.object({
+  type: z.literal("response.reasoning_summary_part.done"),
+  item_id: z.string(),
+  summary_index: z.number(),
+})
+
 const openaiResponsesChunkSchema = z.union([
   textDeltaChunkSchema,
   responseFinishedChunkSchema,
@@ -1576,6 +1615,7 @@ const openaiResponsesChunkSchema = z.union([
   responseCodeInterpreterCallCodeDoneSchema,
   responseAnnotationAddedSchema,
   responseReasoningSummaryPartAddedSchema,
+  responseReasoningSummaryPartDoneSchema,
   responseReasoningSummaryTextDeltaSchema,
   errorChunkSchema,
   z.object({ type: z.string() }).loose(), // fallback for unknown chunks
@@ -1662,6 +1702,12 @@ function isResponseReasoningSummaryPartAddedChunk(
   chunk: z.infer<typeof openaiResponsesChunkSchema>,
 ): chunk is z.infer<typeof responseReasoningSummaryPartAddedSchema> {
   return chunk.type === "response.reasoning_summary_part.added"
+}
+
+function isResponseReasoningSummaryPartDoneChunk(
+  chunk: z.infer<typeof openaiResponsesChunkSchema>,
+): chunk is z.infer<typeof responseReasoningSummaryPartDoneSchema> {
+  return chunk.type === "response.reasoning_summary_part.done"
 }
 
 function isResponseReasoningSummaryTextDeltaChunk(
