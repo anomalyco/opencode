@@ -4024,17 +4024,17 @@ export type IntegrationConnectKeyInput = {
   }["location"]
   readonly key: {
     readonly key: string
-    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
     readonly label?: string | undefined
   }["key"]
-  readonly answer: {
+  readonly answer?: {
     readonly key: string
-    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
     readonly label?: string | undefined
   }["answer"]
   readonly label?: {
     readonly key: string
-    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
     readonly label?: string | undefined
   }["label"]
 }
@@ -4048,17 +4048,17 @@ export type IntegrationOauthConnectInput = {
   }["location"]
   readonly methodID: {
     readonly methodID: string
-    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
     readonly label?: string | undefined
   }["methodID"]
-  readonly answer: {
+  readonly answer?: {
     readonly methodID: string
-    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
     readonly label?: string | undefined
   }["answer"]
   readonly label?: {
     readonly methodID: string
-    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
     readonly label?: string | undefined
   }["label"]
 }

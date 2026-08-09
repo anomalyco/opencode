@@ -1054,7 +1054,7 @@ export type Endpoint10_3Input = {
   readonly integrationID: Integration.ID
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly key: string
-  readonly answer: Form.Answer
+  readonly answer?: Form.Answer | undefined
   readonly label?: string | undefined
 }
 export type Endpoint10_3Output = void
@@ -1066,7 +1066,7 @@ export type Endpoint10_4Input = {
   readonly integrationID: Integration.ID
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly methodID: Integration.MethodID
-  readonly answer: Form.Answer
+  readonly answer?: Form.Answer | undefined
   readonly label?: string | undefined
 }
 export type Endpoint10_4Output = { readonly location: Location.Info; readonly data: Integration.Attempt }

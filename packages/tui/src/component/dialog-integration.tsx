@@ -200,7 +200,9 @@ async function beginKey(
   dialog: ReturnType<typeof useDialog>,
   onConnected?: OnIntegrationConnected,
 ) {
-  const answer = method.form ? await formAnswer(dialog, method.label ?? `Connect ${integration.name}`, method.form) : {}
+  const answer = method.form
+    ? await formAnswer(dialog, method.label ?? `Connect ${integration.name}`, method.form)
+    : undefined
   if (answer === null) return
   dialog.replace(() => (
     <KeyMethod integration={integration} method={method} answer={answer} onConnected={onConnected} />
@@ -352,7 +354,7 @@ function CommandView(props: { title: string; output: string; message: string }) 
 function KeyMethod(props: {
   integration: IntegrationInfo
   method: Extract<ConnectMethod, { type: "key" }>
-  answer: FormAnswer
+  answer?: FormAnswer
   onConnected?: OnIntegrationConnected
 }) {
   const data = useData()
@@ -373,7 +375,7 @@ function KeyMethod(props: {
             integrationID: props.integration.id,
             location: location(data),
             key,
-            answer: props.answer,
+            ...(props.answer ? { answer: props.answer } : {}),
           })
           .then(() => connected(props.integration, data, dialog, toast, props.onConnected))
           .catch((cause) => setError(message(cause)))
@@ -391,7 +393,7 @@ async function beginOAuth(
   dialog: ReturnType<typeof useDialog>,
   onConnected?: OnIntegrationConnected,
 ) {
-  const answer = method.form ? await formAnswer(dialog, method.label, method.form) : {}
+  const answer = method.form ? await formAnswer(dialog, method.label, method.form) : undefined
   if (answer === null) return
   dialog.replace(() => (
     <OAuthStarting integration={integration} method={method} answer={answer} onConnected={onConnected} />
@@ -401,7 +403,7 @@ async function beginOAuth(
 function OAuthStarting(props: {
   integration: IntegrationInfo
   method: IntegrationOAuthMethod
-  answer: FormAnswer
+  answer?: FormAnswer
   onConnected?: OnIntegrationConnected
 }) {
   const data = useData()
@@ -415,7 +417,7 @@ function OAuthStarting(props: {
         integrationID: props.integration.id,
         location: location(data),
         methodID: props.method.id,
-        answer: props.answer,
+        ...(props.answer ? { answer: props.answer } : {}),
       })
       .then((result) => {
         if (result.data.mode === "code") {

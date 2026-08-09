@@ -148,7 +148,7 @@ test("experimental wellknown integration add uses the public HTTP contract", asy
   expect(await request?.json()).toEqual({ url: "https://example.com" })
 })
 
-test("integration connections submit form answers", async () => {
+test("integration connections optionally submit a form answer", async () => {
   const requests: Request[] = []
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
@@ -179,12 +179,16 @@ test("integration connections submit form answers", async () => {
     methodID: "device",
     answer: { deploymentType: "enterprise", enabled: true, scopes: ["read:user"] },
   })
+  await client.integration.connect.key({ integrationID: "openai", key: "secret" })
+  await client.integration.oauth.connect({ integrationID: "openai", methodID: "device" })
 
   expect(await requests[0].json()).toEqual({ key: "secret", answer: { accountId: "account" } })
   expect(await requests[1].json()).toEqual({
     methodID: "device",
     answer: { deploymentType: "enterprise", enabled: true, scopes: ["read:user"] },
   })
+  expect(await requests[2].json()).toEqual({ key: "secret" })
+  expect(await requests[3].json()).toEqual({ methodID: "device" })
 })
 
 test("health.stop sends exact replacement identity", async () => {

@@ -58,7 +58,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       query: LocationQuery,
       payload: Schema.Struct({
         key: Schema.String,
-        answer: Form.Answer,
+        answer: Schema.optional(Form.Answer),
         label: Schema.optional(Schema.String),
       }),
       success: HttpApiSchema.NoContent,
@@ -79,7 +79,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       query: LocationQuery,
       payload: Schema.Struct({
         methodID: Integration.MethodID,
-        answer: Form.Answer,
+        answer: Schema.optional(Form.Answer),
         label: Schema.optional(Schema.String),
       }),
       success: Location.response(Integration.Attempt),

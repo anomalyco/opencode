@@ -445,7 +445,7 @@ function ProviderConnection(props: {
     | { type: "method.select"; index: number }
     | { type: "method.reset" }
     | { type: "auth.form" }
-    | { type: "auth.answer"; answer: FormAnswer }
+    | { type: "auth.answer"; answer: FormAnswer | undefined }
     | { type: "auth.pending" }
     | { type: "auth.complete"; authorization: IntegrationOauthConnectOutput["data"] }
     | { type: "auth.error"; error: string }
@@ -547,7 +547,7 @@ function ProviderConnection(props: {
       return
     }
     if (method.type === "key") {
-      dispatch({ type: "auth.answer", answer: answer ?? {} })
+      dispatch({ type: "auth.answer", answer })
       return
     }
     if (method.type === "oauth") {
@@ -560,7 +560,7 @@ function ProviderConnection(props: {
         .api.integration.oauth.connect({
           integrationID: props.provider,
           methodID: method.id,
-          answer: answer ?? {},
+          ...(answer ? { answer } : {}),
           location: location(),
         })
         .then((x) => {
@@ -831,7 +831,7 @@ function ProviderConnection(props: {
         integrationID: props.provider,
         location: location(),
         key: apiKey,
-        answer: store.formAnswer ?? {},
+        ...(store.formAnswer ? { answer: store.formAnswer } : {}),
       })
       await complete()
     }

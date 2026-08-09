@@ -153,7 +153,7 @@ describe("Integration", () => {
       yield* Effect.yieldNow
 
       expect(
-        yield* integrations.connection.key({ integrationID, key: "secret", answer: {} }).pipe(
+        yield* integrations.connection.key({ integrationID, key: "secret" }).pipe(
           Effect.flip,
           Effect.map((error) => error.cause),
         ),
@@ -255,7 +255,6 @@ describe("Integration", () => {
       const attempt = yield* integrations.oauth.connect({
         integrationID,
         methodID,
-        answer: {},
         label: "Personal",
       })
       expect(attempt.mode).toBe("code")
@@ -301,7 +300,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.oauth.connect({ integrationID, methodID, answer: {} })
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
       expect(
         yield* integrations.oauth.complete({ integrationID, attemptID: attempt.attemptID }).pipe(Effect.flip),
       ).toBeInstanceOf(Integration.CodeRequiredError)
@@ -339,7 +338,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.oauth.connect({ integrationID, methodID, answer: {} })
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
       yield* Effect.yieldNow
       expect(yield* integrations.oauth.status({ integrationID, attemptID: attempt.attemptID })).toEqual({
         status: "complete",
@@ -377,7 +376,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.oauth.connect({ integrationID, methodID, answer: {} })
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
       const exit = yield* integrations.oauth
         .complete({ integrationID, attemptID: attempt.attemptID, code: "1234" })
         .pipe(Effect.exit)
@@ -413,7 +412,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.oauth.connect({ integrationID, methodID, answer: {} })
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
       expect(attempt.time.expires - attempt.time.created).toBe(Duration.toMillis(Duration.minutes(10)))
       yield* TestClock.adjust(Duration.minutes(10))
       yield* Effect.yieldNow
@@ -454,7 +453,7 @@ describe("Integration", () => {
             }),
           )
 
-          const attempt = yield* integrations.oauth.connect({ integrationID, methodID, answer: {} })
+          const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
           expect(attempt.time).toEqual({ created, expires: expiresAt })
         })
       })

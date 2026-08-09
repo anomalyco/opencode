@@ -668,7 +668,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
             const attempt = await serverSDK.api.integration.oauth.connect({
               integrationID: server.integrationID,
               methodID: method.id,
-              answer: {},
               location: { directory: key },
             })
             platform.openLink(attempt.data.url)

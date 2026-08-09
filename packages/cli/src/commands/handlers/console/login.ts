@@ -50,7 +50,7 @@ const login = Effect.fn("cli.console.login.run")(function* (timeline: TimelineHo
       {
         integrationID,
         methodID: method.id,
-        answer: server ? { server } : {},
+        ...(server ? { answer: { server } } : {}),
         location,
       },
       { signal },

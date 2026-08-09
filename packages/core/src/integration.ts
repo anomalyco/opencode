@@ -162,7 +162,7 @@ export interface Interface extends State.Transformable<Draft> {
       /** Secret entered by the user. */
       readonly key: string
       /** Values collected from the method's form fields. */
-      readonly answer: Form.Answer
+      readonly answer?: Form.Answer
       /** User-facing label for the stored credential. */
       readonly label?: string
     }) => Effect.Effect<void, AuthorizationError>
@@ -179,7 +179,7 @@ export interface Interface extends State.Transformable<Draft> {
     readonly connect: (input: {
       readonly integrationID: ID
       readonly methodID: MethodID
-      readonly answer: Form.Answer
+      readonly answer?: Form.Answer
       readonly label?: string
     }) => Effect.Effect<Attempt, AuthorizationError>
     /** Returns the current state of an OAuth attempt. */
@@ -535,19 +535,20 @@ const layer = Layer.effect(
     const connectOAuth = Effect.fn("Integration.oauth.connect")(function* (input: {
       readonly integrationID: ID
       readonly methodID: MethodID
-      readonly answer: Form.Answer
+      readonly answer?: Form.Answer
       readonly label?: string
     }) {
       const method = state.get().integrations.get(input.integrationID)?.implementations.get(input.methodID)
       if (!method) {
         return yield* Effect.die(new Error(`OAuth method not found: ${input.integrationID}/${input.methodID}`))
       }
+      const answer = input.answer ?? {}
       if (method.method.form) {
-        const invalid = Form.validateFields(method.method.form) ?? Form.validateAnswer(method.method.form, input.answer)
+        const invalid = Form.validateFields(method.method.form) ?? Form.validateAnswer(method.method.form, answer)
         if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
       }
       const attemptScope = yield* Scope.fork(scope)
-      const authorization = yield* authorize(method.authorize(input.answer)).pipe(
+      const authorization = yield* authorize(method.authorize(answer)).pipe(
         Scope.provide(attemptScope),
         Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(attemptScope, exit) : Effect.void)),
       )
@@ -693,11 +694,12 @@ const layer = Layer.effect(
             .integrations.get(input.integrationID)
             ?.methods.find((method) => method.type === "key")
           if (!method) return yield* Effect.die(new Error(`Key method not found: ${input.integrationID}`))
+          const answer = input.answer ?? {}
           if (method.type === "key" && method.form) {
-            const invalid = Form.validateFields(method.form) ?? Form.validateAnswer(method.form, input.answer)
+            const invalid = Form.validateFields(method.form) ?? Form.validateAnswer(method.form, answer)
             if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
           }
-          if (method.type === "key" && !method.form && Object.keys(input.answer).length > 0) {
+          if (method.type === "key" && !method.form && Object.keys(answer).length > 0) {
             return yield* new AuthorizationError({ cause: new Error("Key method does not accept a form answer") })
           }
           yield* credentials.create({
@@ -706,7 +708,7 @@ const layer = Layer.effect(
             value: Credential.Key.make({
               type: "key",
               key: input.key,
-              ...(Object.keys(input.answer).length > 0 ? { configuration: input.answer } : {}),
+              ...(Object.keys(answer).length > 0 ? { configuration: answer } : {}),
             }),
           })
           yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: input.integrationID })
