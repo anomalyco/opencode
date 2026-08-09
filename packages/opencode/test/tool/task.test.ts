@@ -894,6 +894,68 @@ describe("tool.task", () => {
     }),
   )
 
+  it.instance("uses a fallback when a foreground task error string is blank", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      let error = ""
+      const fakeBackground: BackgroundJob.Interface = {
+        list: () => Effect.succeed([]),
+        get: () => Effect.succeed(undefined),
+        start: (input) =>
+          Effect.succeed({
+            id: input.id ?? "task",
+            type: input.type,
+            title: input.title,
+            status: "running",
+            started_at: 0,
+            metadata: input.metadata,
+          }),
+        extend: () => Effect.succeed(false),
+        wait: () => Effect.succeed({ timedOut: false, info: { id: "task", type: "task", status: "error", started_at: 0, error } }),
+        waitForPromotion: () => Effect.never,
+        promote: () => Effect.succeed(undefined),
+        cancel: () => Effect.succeed(undefined),
+      }
+      const task = yield* TaskTool.pipe(Effect.provideService(BackgroundJob.Service, fakeBackground))
+      const def = yield* task.init()
+      const execute = () =>
+        def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps() },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+      const blank = yield* execute().pipe(Effect.exit)
+      expect(Exit.isFailure(blank)).toBe(true)
+      if (Exit.isFailure(blank)) {
+        const failure = Cause.squash(blank.cause)
+        expect(failure).toBeInstanceOf(Error)
+        if (failure instanceof Error) expect(failure.message).toBe("Task failed")
+      }
+
+      error = "real task error"
+      const real = yield* execute().pipe(Effect.exit)
+      expect(Exit.isFailure(real)).toBe(true)
+      if (Exit.isFailure(real)) {
+        const failure = Cause.squash(real.cause)
+        expect(failure).toBeInstanceOf(Error)
+        if (failure instanceof Error) expect(failure.message).toBe("real task error")
+      }
+    }),
+  )
+
   background.instance("background task completion does not wait for the parent async prompt", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service

@@ -257,7 +257,7 @@ export const TaskTool = Tool.define(
         yield* background.wait({ id: jobID }).pipe(
           Effect.flatMap((result) => {
             if (result.info?.status === "completed") return inject("completed", result.info.output ?? "")
-            if (result.info?.status === "error") return inject("error", result.info.error ?? "")
+            if (result.info?.status === "error") return inject("error", result.info.error || "Task failed")
             return Effect.void
           }),
           Effect.forkIn(scope, { startImmediately: true }),
@@ -336,7 +336,7 @@ export const TaskTool = Tool.define(
               background.waitForPromotion(nextSession.id),
             )
             if (result?.metadata?.background === true) return backgroundResult()
-            if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
+            if (result?.status === "error") return yield* Effect.fail(new Error(result.error || "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
             return {
               title: params.description,
