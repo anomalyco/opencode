@@ -285,7 +285,9 @@ export function applyDirectoryEvent(input: {
         "message",
         info.sessionID,
         produce((draft) => {
-          draft.splice(result.index, 0, info)
+          const existing = draft.findIndex((message) => message.id === info.id)
+          if (existing >= 0) draft.splice(existing, 1)
+          draft.splice(Binary.search(draft, messageKey(info), messageKey).index, 0, info)
         }),
       )
       break

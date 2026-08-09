@@ -111,7 +111,7 @@ function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) {
   const observed: { messageID: string; parts: Part[] }[] = []
   for (const item of items) {
     const result = Binary.search(session, messageKey(item.message), messageKey)
-    const found = result.found
+    const found = result.found || session.some((message) => message.id === item.message.id)
     if (!found) session.splice(result.index, 0, item.message)
     const current = part.get(item.message.id)
     const confirmed = found ? item.parts.filter((part) => current?.some((value) => value.id === part.id)) : []
@@ -1054,8 +1054,8 @@ export function createServerSession(
         if (result.found) setData("message", info.sessionID, result.index, reconcile(info))
         if (!result.found)
           setData("message", info.sessionID, (value = []) => {
-            const next = value.slice()
-            next.splice(result.index, 0, info)
+            const next = value.filter((message) => message.id !== info.id)
+            next.splice(Binary.search(next, messageKey(info), messageKey).index, 0, info)
             return next
           })
         return
