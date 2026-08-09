@@ -633,14 +633,19 @@ const layer = Layer.effect(
     })
 
     const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
-      const agentName = input.agent
-      const ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
+      const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      const agentName = input.agent ?? current.agent
+      let ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!ag) {
-        const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
-        const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-        const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
-        yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
-        throw error
+        if (input.agent) {
+          const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+          const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+          const error = new NamedError.Unknown({ message: `Agent not found: "${input.agent}".${hint}` })
+          yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+          throw error
+        }
+        // session.agent refers to a removed/nonexistent agent — degrade to the default instead of failing.
+        ag = yield* agents.defaultInfo()
       }
 
       const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
@@ -669,7 +674,6 @@ const layer = Layer.effect(
         format: input.format,
       }
 
-      const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       if (
         current.agent !== info.agent ||
         current.model?.providerID !== info.model.providerID ||
