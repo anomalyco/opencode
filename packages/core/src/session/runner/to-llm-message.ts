@@ -86,7 +86,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
           ? [{ type: "text", text: item.text }]
           : []
     const call = toolCall(item, reuseProviderMetadata ? item.provider?.metadata : undefined)
-    if (item.provider?.executed !== true) return [call]
+    if (item.provider?.executed !== true) return reuseProviderMetadata ? [call] : []
     const result = toolResult(
       item,
       reuseProviderMetadata ? (item.provider.resultMetadata ?? item.provider.metadata) : undefined,

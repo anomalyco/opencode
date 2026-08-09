@@ -9,7 +9,7 @@ import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
 import { ApplicationTools } from "./application-tools"
-import { definition, permission, settle, validateName, type AnyTool, type RegistrationError } from "./tool"
+import { definition, permission, settle, validateName, validateTool, type AnyTool, type RegistrationError } from "./tool"
 import { Tools } from "./tools"
 import { makeLocationNode } from "../effect/app-node"
 
@@ -86,6 +86,17 @@ const registryLayer = Layer.effect(
         const entries = Object.entries(tools)
         if (entries.length === 0) return
         yield* Effect.forEach(entries, ([name]) => validateName(name), { discard: true })
+        const invalid: Array<[string, AnyTool]> = []
+        yield* Effect.forEach(
+          entries,
+          ([name, tool]) =>
+            validateTool(tool).pipe(
+              Effect.tapError(() => {
+                invalid.push([name, tool])
+              }),
+            ),
+        )
+        if (invalid.length > 0) return
         yield* Effect.uninterruptible(
           Effect.gen(function* () {
             const token = {}

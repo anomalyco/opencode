@@ -57,6 +57,8 @@ export interface Interface extends State.Transformable<Draft> {
     readonly default: () => Effect.Effect<ModelV2.Info | undefined>
     readonly small: (providerID: ProviderV2.ID) => Effect.Effect<ModelV2.Info | undefined>
   }
+  /** Waits for all initial catalog-producing plugins (models-dev, providers, etc.) to settle. */
+  readonly readiness: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Catalog") {}
@@ -67,6 +69,8 @@ const layer = Layer.effect(
     const events = yield* EventV2.Service
     const policy = yield* Policy.Service
     const integrations = yield* Integration.Service
+    let ready = false
+    const readyDeferred = yield* Deferred.make<void>()
 
     const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined) => {
       if (provider.disabled) return false
@@ -166,6 +170,8 @@ const layer = Layer.effect(
           }
         }
         yield* events.publish(Event.Updated, {})
+        ready = true
+        Deferred.succeed(readyDeferred, undefined).pipe(Effect.ignore)
       }),
     })
     const result: Interface = {
@@ -287,7 +293,10 @@ const layer = Layer.effect(
       },
     }
 
-    return Service.of(result)
+    return Service.of({
+      ...result,
+      readiness: ready ? Effect.void : Deferred.await(readyDeferred),
+    })
   }),
 )
 
