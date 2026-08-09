@@ -157,7 +157,13 @@ export const TerminalTool = Tool.define(
           if (action === "input") {
             const data = params.data ?? ""
             if (!data && !params.enter) throw new Error('terminal "input" requires `data` or `enter: true`')
-            yield* scoped(Pty.Service.use((service) => service.write(id, data + (params.enter ? "\r" : ""))))
+            // Windows consoles expect CR (not LF) to submit a line; normalize any
+            // \n / \r\n the model sends so keystrokes never appear "lost".
+            const send = data.replace(/\r?\n/g, "\r") + (params.enter ? "\r" : "")
+            yield* scoped(Pty.Service.use((service) => service.write(id, send)))
+            // Give the PTY a moment to echo/produce output before reading so the
+            // result doesn't seem to be missing.
+            yield* Effect.sleep("120 millis")
             const next = yield* readMore(id)
             return {
               title: "terminal input",
