@@ -1,5 +1,6 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { App } from "@opencode-ai/core/app"
+import { Message } from "@opencode-ai/ai"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Session } from "@opencode-ai/schema/session"
 import { describe, expect, test } from "bun:test"
@@ -138,6 +139,43 @@ describe("GithubCopilotPlugin", () => {
       expect(event.request.headers.get("x-initiator")).toBe("user")
       expect(event.request.headers.get("anthropic-beta")).toBe("interleaved-thinking-2025-05-14")
       expect(event.request.headers.get("x-github-api-version")).toBe("2026-06-01")
+    }),
+  )
+
+  it.effect("strips stale Copilot item IDs before serialization", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* (yield* PluginHooks.Service).trigger("session", "context", {
+        sessionID: Session.ID.make("ses_test"),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4") }),
+        system: [],
+        messages: [
+          Message.assistant([
+            {
+              type: "reasoning",
+              text: "thinking",
+              providerMetadata: {
+                copilot: { itemId: "rs_1", reasoningEncryptedContent: "encrypted" },
+              },
+            },
+            {
+              type: "tool-call",
+              id: "call_1",
+              name: "read",
+              input: {},
+              providerMetadata: { copilot: { itemId: "fc_1", other: "value" } },
+            },
+          ]),
+        ],
+        tools: {},
+      })
+      expect(event.messages[0]?.content).toMatchObject([
+        { providerMetadata: { copilot: { reasoningEncryptedContent: "encrypted" } } },
+        { providerMetadata: { copilot: { other: "value" } } },
+      ])
+      expect(event.messages[0]?.content).not.toHaveProperty("0.providerMetadata.copilot.itemId")
+      expect(event.messages[0]?.content).not.toHaveProperty("1.providerMetadata.copilot.itemId")
     }),
   )
 

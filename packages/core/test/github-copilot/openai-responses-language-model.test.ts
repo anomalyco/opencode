@@ -1,13 +1,23 @@
 import { OpenAIResponsesLanguageModel } from "@opencode-ai/core/github-copilot/responses/openai-responses-language-model"
 import { convertToOpenAIResponsesInput } from "@opencode-ai/core/github-copilot/responses/convert-to-openai-responses-input"
 import { describe, test, expect, mock } from "bun:test"
-import type { LanguageModelV3Prompt } from "@ai-sdk/provider"
+import type { LanguageModelV3Prompt, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 
 const TEST_PROMPT: LanguageModelV3Prompt = [{ role: "user", content: [{ type: "text", text: "Hello" }] }]
 
 function createMockFetch(body: unknown) {
   return mock(
     async () => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } }),
+  )
+}
+
+function createStreamFetch(events: ReadonlyArray<Record<string, unknown>>) {
+  return mock(
+    async () =>
+      new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
   )
 }
 
@@ -76,6 +86,66 @@ describe("doGenerate", () => {
 
     expect(providerMetadata?.copilot?.responseId).toBe("resp_1")
     expect(providerMetadata?.openai).toBeUndefined()
+  })
+})
+
+describe("doStream", () => {
+  test("streams sequential Copilot reasoning summary blocks", async () => {
+    const model = createModel(
+      createStreamFetch([
+        {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+        },
+        {
+          type: "response.output_item.added",
+          output_index: 0,
+          item: { type: "reasoning", id: "rs_rotated", encrypted_content: null },
+        },
+        { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+        { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+        { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
+        { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
+        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 1, delta: "Second" },
+        { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 1 },
+        {
+          type: "response.output_item.done",
+          output_index: 0,
+          item: { type: "reasoning", id: "rs_rotated", encrypted_content: "encrypted-state" },
+        },
+      ]),
+    )
+    const result = await model.doStream({ prompt: TEST_PROMPT, includeRawChunks: false } as any)
+    const reader = result.stream.getReader()
+    const events: LanguageModelV3StreamPart[] = []
+    while (true) {
+      const item = await reader.read()
+      if (item.done) break
+      if (item.value.type.startsWith("reasoning-")) events.push(item.value)
+    }
+
+    expect(events).toMatchObject([
+      {
+        type: "reasoning-start",
+        id: "rs_1:0",
+        providerMetadata: { copilot: { itemId: "rs_1", reasoningEncryptedContent: null } },
+      },
+      { type: "reasoning-delta", id: "rs_1:0", delta: "First" },
+      { type: "reasoning-end", id: "rs_1:0", providerMetadata: { copilot: { itemId: "rs_1" } } },
+      {
+        type: "reasoning-start",
+        id: "rs_1:1",
+        providerMetadata: { copilot: { itemId: "rs_1", reasoningEncryptedContent: null } },
+      },
+      { type: "reasoning-delta", id: "rs_1:1", delta: "Second" },
+      {
+        type: "reasoning-end",
+        id: "rs_1:1",
+        providerMetadata: { copilot: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+      },
+    ])
   })
 })
 
@@ -163,7 +233,35 @@ describe("convertToOpenAIResponsesInput", () => {
     ])
   })
 
-  test("drops reasoning items with no copilot itemId and warns, as before", async () => {
+  test("preserves encrypted reasoning with no copilot itemId", async () => {
+    const { input, warnings } = await convertToOpenAIResponsesInput({
+      prompt: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "reasoning",
+              text: "thinking...",
+              providerOptions: { copilot: { reasoningEncryptedContent: "enc_1" } },
+            },
+          ],
+        },
+      ],
+      systemMessageMode: "system",
+      store: false,
+    })
+
+    expect(warnings).toEqual([])
+    expect(input).toEqual([
+      {
+        type: "reasoning",
+        encrypted_content: "enc_1",
+        summary: [{ type: "summary_text", text: "thinking..." }],
+      },
+    ])
+  })
+
+  test("drops reasoning with neither a copilot itemId nor encrypted content", async () => {
     const { input, warnings } = await convertToOpenAIResponsesInput({
       prompt: [
         {

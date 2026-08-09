@@ -1,4 +1,5 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import { Message } from "@opencode-ai/ai"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
@@ -201,7 +202,12 @@ export const GithubCopilotPlugin = define({
           if (!loaded.models.has(Model.ID.make(id))) evt.model.remove(item.provider.id, id)
         }
         for (const [id, model] of loaded.models) {
-          evt.model.update(item.provider.id, id, (draft) => Object.assign(draft, structuredClone(model)))
+          evt.model.update(item.provider.id, id, (draft) => {
+            Object.assign(draft, structuredClone(model))
+            if (Provider.packageName(draft.package) === "@ai-sdk/github-copilot") {
+              draft.settings = Provider.mergeOverlay(draft.settings, { store: false })
+            }
+          })
         }
       } else if (loaded.baseURL) {
         for (const id of item.models.keys()) {
@@ -247,6 +253,28 @@ export const GithubCopilotPlugin = define({
         const text = yield* Effect.promise(() => evt.request.clone().text())
         const body = Option.getOrUndefined(decodeBody(text))
         applyHeaders(evt.request.headers, token, ctx.app, requestMetadata(evt.request.url, body), true)
+      }),
+    )
+    yield* ctx.session.hook("context", (evt) =>
+      Effect.sync(() => {
+        if (evt.model.providerID !== Provider.ID.githubCopilot) return
+        evt.messages = evt.messages.map(
+          (message) =>
+            new Message({
+              ...message,
+              content: message.content.map((part) => {
+                if (!("providerMetadata" in part)) return part
+                const metadata = part.providerMetadata?.copilot
+                if (metadata === undefined || !("itemId" in metadata)) return part
+                const next = { ...metadata }
+                delete next.itemId
+                return {
+                  ...part,
+                  providerMetadata: { ...part.providerMetadata, copilot: next },
+                }
+              }),
+            }),
+        )
       }),
     )
     yield* ctx.aisdk.hook(

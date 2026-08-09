@@ -960,6 +960,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                   },
                 })
               } else if (isResponseOutputItemAddedReasoningChunk(value)) {
+                if (activeReasoning[value.output_index]) return
                 activeReasoning[value.output_index] = {
                   canonicalId: value.item.id,
                   encryptedContent: value.item.encrypted_content,
@@ -1117,7 +1118,8 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
               } else if (isResponseOutputItemDoneReasoningChunk(value)) {
                 const activeReasoningPart = activeReasoning[value.output_index]
                 if (activeReasoningPart) {
-                  for (const summaryIndex of activeReasoningPart.summaryParts) {
+                  const summaryIndex = activeReasoningPart.summaryParts.at(-1)
+                  if (summaryIndex !== undefined) {
                     controller.enqueue({
                       type: "reasoning-end",
                       id: `${activeReasoningPart.canonicalId}:${summaryIndex}`,
@@ -1228,7 +1230,17 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
                 currentReasoningOutputIndex !== null ? activeReasoning[currentReasoningOutputIndex] : null
 
               // the first reasoning start is pushed in isResponseOutputItemAddedReasoningChunk.
-              if (activeItem && value.summary_index > 0) {
+              if (activeItem && value.summary_index > 0 && !activeItem.summaryParts.includes(value.summary_index)) {
+                const previousSummaryIndex = activeItem.summaryParts.at(-1)
+                if (previousSummaryIndex !== undefined) {
+                  controller.enqueue({
+                    type: "reasoning-end",
+                    id: `${activeItem.canonicalId}:${previousSummaryIndex}`,
+                    providerMetadata: {
+                      copilot: { itemId: activeItem.canonicalId },
+                    },
+                  })
+                }
                 activeItem.summaryParts.push(value.summary_index)
 
                 controller.enqueue({

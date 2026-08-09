@@ -237,10 +237,19 @@ export async function convertToOpenAIResponsesInput({
                   }
                 }
               } else {
-                warnings.push({
-                  type: "other",
-                  message: `Non-OpenAI reasoning parts are not supported. Skipping reasoning part: ${JSON.stringify(part)}.`,
-                })
+                const encryptedContent = providerOptions?.reasoningEncryptedContent
+                if (encryptedContent != null) {
+                  input.push({
+                    type: "reasoning",
+                    encrypted_content: encryptedContent,
+                    summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
+                  })
+                } else {
+                  warnings.push({
+                    type: "other",
+                    message: `Non-OpenAI reasoning parts are not supported. Skipping reasoning part: ${JSON.stringify(part)}.`,
+                  })
+                }
               }
               break
             }
