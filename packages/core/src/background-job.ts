@@ -107,9 +107,9 @@ function snapshot(job: Active): Info {
 
 function errorText(error: unknown) {
   if (error instanceof Error) {
-    if (error.message.trim()) return error.message
+    if (typeof error.message === "string" && error.message.trim()) return error.message
     if ("_tag" in error && typeof error._tag === "string" && error._tag.trim()) return error._tag
-    if (error.name.trim()) return error.name
+    if (typeof error.name === "string" && error.name.trim()) return error.name
   }
   const text = String(error)
   return text.trim() ? text : "Unknown error"
