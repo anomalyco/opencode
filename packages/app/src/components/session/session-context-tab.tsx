@@ -123,7 +123,8 @@ export function SessionContextTab() {
     () => {
       const revert = info()?.revert?.messageID
       if (!revert) return userMessages()
-      return userMessages().filter((m) => m.id < revert)
+      const boundary = userMessages().findIndex((message) => message.id === revert)
+      return boundary < 0 ? userMessages() : userMessages().slice(0, boundary)
     },
     emptyUserMessages,
     { equals: same },

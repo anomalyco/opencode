@@ -238,6 +238,38 @@ describe("Session", () => {
     }),
   )
 
+  it.instance("forks the chronological prefix across mixed message ID ordering", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({}), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const ids = ["msg_z9-before", "msg_z1-before-wrap", "msg_a0-after-wrap", "msg_a1-after"]
+      for (const [index, id] of ids.entries()) {
+        yield* session.updateMessage({
+          id: MessageID.make(id),
+          sessionID: created.id,
+          role: "user",
+          time: { created: index + 1 },
+          agent: "user",
+          model: { providerID: "test", modelID: "test" },
+        } as SessionV1.User)
+      }
+
+      const beforeWrap = yield* Effect.acquireRelease(
+        session.fork({ sessionID: created.id, messageID: MessageID.make(ids[1]!) }),
+        (info) => session.remove(info.id).pipe(Effect.ignore),
+      )
+      const afterWrap = yield* Effect.acquireRelease(
+        session.fork({ sessionID: created.id, messageID: MessageID.make(ids[2]!) }),
+        (info) => session.remove(info.id).pipe(Effect.ignore),
+      )
+
+      expect((yield* session.messages({ sessionID: beforeWrap.id })).map((msg) => msg.info.time.created)).toEqual([1])
+      expect((yield* session.messages({ sessionID: afterWrap.id })).map((msg) => msg.info.time.created)).toEqual([1, 2])
+    }),
+  )
+
   it.instance("omits metadata when not provided", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service
