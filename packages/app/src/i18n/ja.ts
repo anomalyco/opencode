@@ -1085,7 +1085,7 @@ export const dict = {
   "session.review.noVcs.createGit.description": "このプロジェクトの変更を追跡、レビュー、元に戻す",
   "session.review.noVcs.createGit.actionLoading": "Git リポジトリを作成中...",
   "session.review.noVcs.createGit.action": "Git リポジトリを作成",
-  "session.todo.progress": "{{done}} 個中 {{total}} 個の Todo が完了",
+  "session.todo.progress": "{{total}} 個中 {{done}} 個の Todo が完了",
   "session.question.progress": "{{total}} 問中 {{current}} 問",
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "エクスプローラー",

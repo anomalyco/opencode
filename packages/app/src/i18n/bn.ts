@@ -737,7 +737,7 @@ export const dict: Record<string, string> = {
   "session.todo.title": "টোডোস",
   "session.todo.collapse": "সঙ্কুচিত",
   "session.todo.expand": "প্রসারিত করুন",
-  "session.todo.progress": "{{done}} এর মধ্যে {{total}} todos সম্পন্ন হয়েছে",
+  "session.todo.progress": "{{total}} এর মধ্যে {{done}} todos সম্পন্ন হয়েছে",
   "session.question.progress": "{{total}} প্রশ্নের {{current}}",
   "session.question.minimize": "প্রশ্ন ছোট করুন",
   "session.question.restore": "প্রশ্ন পুনরুদ্ধার করুন",
