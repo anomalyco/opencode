@@ -4,7 +4,6 @@ import { ModelStatRepo } from "@opencode-ai/stats-core/domain/model"
 import { layer as statsLayer } from "@opencode-ai/stats-core/runtime"
 import { syncStats } from "@opencode-ai/stats-core/stat-sync"
 import { Cause, Duration, Effect, Layer, Schedule } from "effect"
-import { runSyncPass } from "./stat-sync-pass"
 
 const SYNC_INTERVAL = "1 hour"
 const SYNC_INTERVAL_MS = 3_600_000
@@ -20,11 +19,19 @@ const daemon = Effect.gen(function* () {
   let lastFullDay = ""
   const pass = Effect.gen(function* () {
     const today = new Date().toISOString().slice(0, 10)
-    lastFullDay = yield* runSyncPass({
-      today,
-      lastFullDay,
-      sync: (full) => syncStats({ full }),
-    })
+    const full = lastFullDay !== today
+    if (!full) return yield* syncStats({ full: false })
+
+    const completed = yield* syncStats({ full: true }).pipe(
+      Effect.as(true),
+      Effect.catchCause((cause) =>
+        Effect.logWarning(`full stats sync failed; falling back to incremental sync ${Cause.pretty(cause)}`).pipe(
+          Effect.as(false),
+        ),
+      ),
+    )
+    if (!completed) yield* syncStats({ full: false })
+    lastFullDay = today
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning(`stats sync failed ${JSON.stringify({ cause: Cause.pretty(cause) })}`),
