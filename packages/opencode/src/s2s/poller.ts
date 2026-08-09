@@ -54,6 +54,9 @@ import { registerWakeBody } from "@/s2s/wake-registry"
 
 const REAPER_WINDOW_MS_DEFAULT = 60_000
 const MIN_REAPER_MS = 1
+const MAX_ROW_FAILURES = 3
+const rowFailures = new Map<string, number>()
+const abandonedRows = new Set<string>()
 
 export interface Interface {
   readonly pollOnce: () => Effect.Effect<void>
@@ -65,6 +68,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/S2
 // `claimForServices` returns rows in the order the SQL engine picks; we
 // don't care about that here, only that each row is processed once.
 const processRow = Effect.fn("S2SPoller.processRow")(function* (row: S2SStore.InboxRow) {
+  if (abandonedRows.has(row.id)) return
   const messaging = yield* Messaging.Service
   const store = yield* S2SStore.Service
 
@@ -158,7 +162,19 @@ export const pollOnceImpl = Effect.fn("S2SPoller.pollOnce")(function* () {
     // prevent subsequent rows from being processed. Failures are caught
     // and logged so the loop always continues to the next row.
     yield* processRow(row).pipe(
-      Effect.catch((e) => Effect.logWarning("S2SPoller: row processing failed", e)),
+      Effect.catch((e) =>
+        Effect.gen(function* () {
+          const failures = (rowFailures.get(row.id) ?? 0) + 1
+          rowFailures.set(row.id, failures)
+          if (failures < MAX_ROW_FAILURES) return
+          abandonedRows.add(row.id)
+          yield* Effect.logWarning("S2SPoller: giving up on row for this process lifetime", {
+            rowID: row.id,
+            failures,
+            error: e,
+          })
+        }),
+      ),
     )
   }
 })

@@ -300,7 +300,10 @@ export const layer = Layer.effect(
       if (v.treeTotal.count >= TREE_MESSAGE_CAP)
         return yield* new AbuseError({ detail: "task-tree message cap reached; coordinators must synthesize and end" })
       const used = v.outbound.get(input.from) ?? 0
-      if (used >= INBOX_OUTBOUND_BUDGET)
+      // S2S has its own hourly sender cap and durable recipient inbox cap;
+      // this budget is specifically for spawned-subagent abuse and must not
+      // add a second, process-local limit to consented peer traffic.
+      if (input.source !== "sibling-session" && used >= INBOX_OUTBOUND_BUDGET)
         return yield* new AbuseError({ detail: `per-agent outbound budget (${INBOX_OUTBOUND_BUDGET}) reached` })
       // Lazily init the recipient queue. The inbox no longer depends on a prior
       // registerSlug/registerLocal having pre-created it — s2s addresses peers
