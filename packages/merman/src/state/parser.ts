@@ -1,4 +1,4 @@
-import { firstMeaningfulMermaidLine, numberedMermaidLines } from "../core/mermaid.js"
+import { decodeMermaidText, firstMeaningfulMermaidLine, numberedMermaidLines } from "../core/mermaid.js"
 import { splitDiagramLines } from "../core/text-lines.js"
 import { MermaidSyntaxError } from "../diagnostics.js"
 import { normalizeStateDiagramEndpoint, stateDiagramEndMarkerId, stateDiagramStartMarkerId } from "./endpoint.js"
@@ -96,7 +96,7 @@ export function parseMermaidStateDiagram(content: string): StateDiagram {
         notes.push({
           target: pendingNote.target,
           position: pendingNote.position,
-          lines: pendingNote.lines,
+          lines: pendingNote.lines.map(decodeMermaidText),
         })
         pendingNote = undefined
       } else if (line || pendingNote.lines.length > 0) {
@@ -119,6 +119,9 @@ export function parseMermaidStateDiagram(content: string): StateDiagram {
 
     const directionMatch = line.match(DIRECTION_RE)
     if (directionMatch) {
+      if (parentStack.length > 0) {
+        throw new MermaidSyntaxError("state", source.lineNumber, line, "Composite-local direction is not supported")
+      }
       direction = normalizeDirection(directionMatch[1])
       continue
     }
@@ -128,7 +131,7 @@ export function parseMermaidStateDiagram(content: string): StateDiagram {
       notes.push({
         position: inlineNoteMatch[1]!.toLowerCase() as "left" | "right",
         target: inlineNoteMatch[2]!,
-        lines: splitDiagramLines(inlineNoteMatch[3]!.trim()),
+        lines: splitDiagramLines(decodeMermaidText(inlineNoteMatch[3]!.trim())),
       })
       continue
     }
@@ -150,7 +153,7 @@ export function parseMermaidStateDiagram(content: string): StateDiagram {
       const id = compositeMatch[2]!
       composites.push({
         id,
-        label: compositeMatch[1] ?? id,
+        label: decodeMermaidText(compositeMatch[1] ?? id),
         ...(parentId ? { parentId } : {}),
       })
       parentStack.push({ id, lineNumber: source.lineNumber, sourceLine: line })
@@ -159,13 +162,13 @@ export function parseMermaidStateDiagram(content: string): StateDiagram {
 
     const stateMatch = line.match(STATE_RE)
     if (stateMatch) {
-      ensureState(states, stateMatch[2]!, stateMatch[1]!, "state", parentId)
+      ensureState(states, stateMatch[2]!, decodeMermaidText(stateMatch[1]!), "state", parentId)
       continue
     }
 
     const choiceMatch = line.match(CHOICE_STATE_RE)
     if (choiceMatch) {
-      ensureState(states, choiceMatch[1]!, "┼", "choice", parentId)
+      ensureState(states, choiceMatch[1]!, "", "choice", parentId)
       continue
     }
 
@@ -177,7 +180,7 @@ export function parseMermaidStateDiagram(content: string): StateDiagram {
       const to = normalizeStateDiagramEndpoint(rawTo, "to", parentId)
       ensureState(states, from, rawFrom === "[*]" ? "●" : from, rawFrom === "[*]" ? "start" : "state", parentId)
       ensureState(states, to, rawTo === "[*]" ? "◎" : to, rawTo === "[*]" ? "end" : "state", parentId)
-      transitions.push({ from, to, label: transitionMatch[3]?.trim() ?? "" })
+      transitions.push({ from, to, label: decodeMermaidText(transitionMatch[3]?.trim() ?? "") })
       continue
     }
 

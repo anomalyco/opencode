@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { diagramTextWidth } from "../core/text.js"
 import { expectDiagram } from "../test/diagram.js"
 import { renderSequenceDiagram } from "./diagram.js"
 import { drawSequenceDiagramGrid } from "./drawing.js"
@@ -28,6 +29,18 @@ sequenceDiagram
     ])
   })
 
+  test("decodes HTML entities in participant, message, and note labels", () => {
+    const diagram = parseMermaidSequenceDiagram(`sequenceDiagram
+  participant A as Worker &amp; signer
+  participant B
+  A->>B: ack &lt;3s
+  Note over A,B: result &#8805; 1`)
+
+    expect(diagram.participants[0]?.label).toBe("Worker & signer")
+    expect(diagram.messages[0]?.label).toBe("ack <3s")
+    expect(diagram.steps.find((step) => step.type === "note")?.note.label).toBe("result ≥ 1")
+  })
+
   test("renders a terminal sequence diagram", () => {
     const output = renderSequenceDiagram(`
 sequenceDiagram
@@ -42,11 +55,11 @@ sequenceDiagram
       │ Browser │       │ Server │
       ╰────┬────╯       ╰────┬───╯
            │                 │
-           │ GET /           │
-           ├─────────────────▶
+           │     GET /       │
+           ├─────────────────►
            │                 │
-           │ 401 WWW-Auth    │
-           ◀─────────────────┤
+           │  401 WWW-Auth   │
+           ◄─────────────────┤
            │                 │
     `)
   })
@@ -70,15 +83,15 @@ sequenceDiagram
     expectDiagram(output).toEqualDiagram(`
       leaf tool                       LocationMutation             FileMutation
           │                                   │                          │
-          ├─ resolve(path) ───────────────────▶                          │
+          ├───────── resolve(path) ───────────►                          │
           │                                   │                          │
-          ◀─ Plan(target, authority anchor) ──┤                          │
+          ◄─ Plan(target, authority anchor) ──┤                          │
           │                                   │                          │
-          ├─ commit(plan) ───────────────────────────────────────────────▶
+          ├─────────────────────── commit(plan) ─────────────────────────►
           │                                   │                          │
-          │                                   ◀─ revalidate(plan) ───────┤
+          │                                   ◄─── revalidate(plan) ─────┤
           │                                   │                          │
-          │                                   ├─ same target or reject ──▶
+          │                                   ├─ same target or reject ──►
           │                                   │                          │
     `)
   })
@@ -109,7 +122,7 @@ sequenceDiagram
     const lines = output.split("\n")
 
     expect(lines.findIndex((line) => line.includes("deliberately"))).toBeLessThan(
-      lines.findIndex((line) => line.includes("▶")),
+      lines.findIndex((line) => line.includes("►")),
     )
   })
 
@@ -245,16 +258,27 @@ sequenceDiagram
     ])
   })
 
-  test("parses activation syntax without rendering activation bars", () => {
+  test("renders activation syntax as visible intervals", () => {
     const output = renderSequenceDiagram(`
 sequenceDiagram
   Browser->>+Server: request
   Server-->>-Browser: response
 `)
 
-    expect(output).not.toContain("┃")
+    expect(output).toContain("┃")
     expect(output).toContain("request")
     expect(output).toContain("response")
+  })
+
+  test("renders br-delimited participant aliases on separate lines", () => {
+    const output = renderSequenceDiagram(`sequenceDiagram
+  participant A as First line<br/>Second line
+  participant B as Normal
+  A->>B: hello`)
+
+    expect(output).not.toContain("<br")
+    expect(output).toContain("│ First line  │")
+    expect(output).toContain("│ Second line │")
   })
 
   test("parses Mermaid arrow head variants", () => {
@@ -294,22 +318,22 @@ sequenceDiagram
       │ A │              │ B │
       ╰─┬─╯              ╰─┬─╯
         │                  │
-        │ open solid       │
+        │   open solid     │
         ├─────────────────>│
         │                  │
-        │ open dashed      │
+        │   open dashed    │
         │<─────────────────┤
         │                  │
-        │ failed solid     │
+        │  failed solid    │
         ├─────────────────✕│
         │                  │
-        │ failed dashed    │
+        │  failed dashed   │
         │✕─────────────────┤
         │                  │
-        │ async solid      │
+        │   async solid    │
         ├─────────────────)│
         │                  │
-        │ async dashed     │
+        │  async dashed    │
         │(─────────────────┤
         │                  │"
     `)
@@ -533,7 +557,7 @@ sequenceDiagram
     const fragmentMessageRow = fragment.split("\n").find((line) => line.includes("this non adjacent message"))!
     expect(groupMessageRow.trimEnd().endsWith("│")).toBe(true)
     expect(fragmentMessageRow).toContain("this non adjacent message is deliberately much wider than the frame")
-    expect(fragmentMessageRow.match(/│/g)?.length).toBe(3)
+    expect(fragmentMessageRow.match(/│/g)?.length).toBe(2)
   })
 
   test("keeps long notes inside groups and nested fragment frames intact", () => {
@@ -581,6 +605,42 @@ sequenceDiagram
     expect(externalHeaderLeft).toBeGreaterThan(groupBorderRight)
   })
 
+  test("keeps adjacent wide participant group frames separate", () => {
+    const output = renderSequenceDiagram(
+      `sequenceDiagram
+  box First very wide group heading
+    participant A
+  end
+  box Second very wide group heading
+    participant B
+  end
+  A->>B: hi`,
+      { compact: true },
+    )
+    const topRow = output.split("\n")[0]!
+
+    expect(topRow).toContain("First very wide group heading")
+    expect(topRow).toContain("Second very wide group heading")
+    expect(topRow.indexOf("╮")).toBeLessThan(topRow.lastIndexOf("╭"))
+  })
+
+  test("renders many adjacent wide participant groups without excessive canvas growth", () => {
+    const groupCount = 16
+    const output = renderSequenceDiagram(
+      `sequenceDiagram
+${Array.from(
+  { length: groupCount },
+  (_, index) => `  box Group ${index} has a deliberately wide heading
+    participant P${index}
+  end`,
+).join("\n")}
+  P0->>P15: hi`,
+      { compact: true },
+    )
+
+    expect(Math.max(...output.split("\n").map(diagramTextWidth))).toBeLessThan(groupCount * 60)
+  })
+
   test("renders full-height participant group boxes", () => {
     const output = renderSequenceDiagram(`
 sequenceDiagram
@@ -600,11 +660,11 @@ sequenceDiagram
       │ Browser │        │ │ API │          │ Cache │          │ DB │ │
       ╰────┬────╯        │ ╰──┬──╯          ╰───┬───╯          ╰──┬─╯ │
            │             │    │                 │                 │   │
-           │ GET /users/42    │                 │                 │   │
-           ├──────────────────▶                 │                 │   │
+           │  GET /users/42   │                 │                 │   │
+           ├──────────────────►                 │                 │   │
            │             │    │                 │                 │   │
-           │             │    │ get user:42     │                 │   │
-           │             │    ├─────────────────▶                 │   │
+           │             │    │  get user:42    │                 │   │
+           │             │    ├─────────────────►                 │   │
            │             │    │                 │                 │   │
                          ╰────────────────────────────────────────────╯"
     `)
@@ -619,10 +679,23 @@ sequenceDiagram
   end
   Browser->>API: GET /users/42
 `)
-    const arrowLine = output.split("\n").find((line) => line.includes("▶"))!
+    const arrowLine = output.split("\n").find((line) => line.includes("►"))!
 
-    expect(arrowLine).toContain("───────────────▶")
+    expect(arrowLine).toContain("───────────────►")
     expect(arrowLine).not.toContain("┼")
+  })
+
+  test("keeps filled arrowheads to one terminal column", () => {
+    const output = renderSequenceDiagram(`sequenceDiagram
+  box Backend
+    participant A
+    participant B
+    A->>B: request
+  end`)
+    const lines = output.split("\n")
+    const frameWidth = diagramTextWidth(lines.at(-1)!)
+
+    expect(Math.max(...lines.map(diagramTextWidth))).toBe(frameWidth)
   })
 
   test("renders self messages as loopback arrows", () => {
@@ -639,12 +712,12 @@ sequenceDiagram
            │
            ├────────────────────╮
            │ Check Permissions  │
-           ◀────────────────────╯
+           ◄────────────────────╯
            │"
     `)
   })
 
-  test("places two spacer rows above note badges and one below", () => {
+  test("frames notes in their reserved rows", () => {
     const output = renderSequenceDiagram(`
 sequenceDiagram
   Browser->>Server: one
@@ -656,9 +729,11 @@ sequenceDiagram
     const nextMessageRow = lines.findIndex((line) => line.includes("two"))
 
     expect(noteRow).toBeGreaterThan(0)
-    expect(lines[noteRow - 1]?.trim()).toBe("│                 │")
-    expect(lines[noteRow - 2]?.trim()).toBe("│                 │")
-    expect(lines[noteRow + 1]?.trim()).toBe("│                 │")
+    expect(lines[noteRow - 1]).toContain("╭")
+    expect(lines[noteRow - 1]).toContain("╮")
+    expect(lines[noteRow]).toContain("│ phase │")
+    expect(lines[noteRow + 1]).toContain("╰")
+    expect(lines[noteRow + 1]).toContain("╯")
     expect(nextMessageRow).toBe(noteRow + 2)
   })
 

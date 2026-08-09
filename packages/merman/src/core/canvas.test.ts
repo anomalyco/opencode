@@ -7,6 +7,18 @@ describe("DiagramCanvas", () => {
     expect(() => new DiagramCanvas(2_000, 1_000)).toThrow(DiagramCanvasSizeError)
   })
 
+  test("rejects invalid canvas dimensions", () => {
+    for (const [width, height] of [
+      [-1, 10],
+      [10, -1],
+      [1.5, 10],
+      [Number.NaN, 10],
+      [Number.POSITIVE_INFINITY, 10],
+    ]) {
+      expect(() => new DiagramCanvas(width, height)).toThrow(DiagramCanvasSizeError)
+    }
+  })
+
   test("writes cells and text while clipping out-of-bounds positions", () => {
     const canvas = new DiagramCanvas<"label">(5, 2)
 
@@ -24,6 +36,21 @@ describe("DiagramCanvas", () => {
 
     expect(canvas.toString()).toBe("a界b")
     expect(stringWidth(canvas.toString())).toBe(4)
+  })
+
+  test("keeps custom measurement for ASCII text", () => {
+    let measurements = 0
+    const canvas = new DiagramCanvas<"label">(5, 1, {
+      measure: () => {
+        measurements += 1
+        return 2
+      },
+    })
+
+    canvas.setText(0, 0, "ab", "label")
+
+    expect(measurements).toBe(2)
+    expect(canvas.getCell(2, 0)?.char).toBe("b")
   })
 
   test("preserves combined graphemes while placing later text", () => {
@@ -48,6 +75,9 @@ describe("DiagramCanvas", () => {
     canvas.setCell(1, 0, "│", "line")
 
     expect(canvas.toString()).toBe(" ┼")
+
+    canvas.replaceCell(1, 0, "│", "line")
+    expect(canvas.toString()).toBe(" │")
   })
 
   test("iterates style and metadata runs", () => {
@@ -92,5 +122,62 @@ describe("DiagramCanvas", () => {
 
     expect(canvas.toString({ trimTop: true })).toBe("end")
     expect(canvas.getTextSize({ trimTop: true })).toEqual({ width: 3, height: 1 })
+  })
+
+  test("measures trim-aware text height without measuring row width", () => {
+    let measurements = 0
+    const canvas = new DiagramCanvas(8, 5, {
+      measure: (text) => {
+        measurements += 1
+        return stringWidth(text)
+      },
+    })
+    canvas.setText(1, 2, "middle")
+    measurements = 0
+
+    expect(canvas.getTextHeight({ trimTop: true, trimBottom: true })).toBe(1)
+    expect(measurements).toBe(0)
+  })
+
+  test("updates tracked row extents when the last visible cell is cleared", () => {
+    const canvas = new DiagramCanvas(8, 1)
+    canvas.setText(1, 0, "abc")
+    canvas.setCell(3, 0, " ")
+
+    expect(canvas.toString()).toBe(" ab")
+    expect(canvas.getTextSize()).toEqual({ width: 3, height: 1 })
+  })
+
+  test("keeps tracked extents equivalent to scanning after mixed writes", () => {
+    const canvas = new DiagramCanvas<"line">(20, 10, {
+      mergeCell: (_existing, incoming) => incoming,
+    })
+    let seed = 42
+    const next = (limit: number) => {
+      seed = (seed * 1_664_525 + 1_013_904_223) >>> 0
+      return seed % limit
+    }
+
+    for (let index = 0; index < 200; index++) {
+      const x = next(canvas.width)
+      const y = next(canvas.height)
+      const char = [" ", "x", "─"][next(3)]!
+      if (next(2) === 0) canvas.setCell(x, y, char, "line")
+      else canvas.replaceCell(x, y, char, "line")
+    }
+
+    const scanned = canvas.rows.map((row) => {
+      let end = row.length
+      while (end > 0 && row[end - 1]?.char === " ") end -= 1
+      return row
+        .slice(0, end)
+        .map((cell) => cell.char)
+        .join("")
+    })
+    const first = scanned.findIndex((line) => line.length > 0)
+    const last = scanned.findLastIndex((line) => line.length > 0)
+
+    expect(canvas.toString()).toBe(scanned.join("\n"))
+    expect(canvas.getTextHeight({ trimTop: true, trimBottom: true })).toBe(first < 0 ? 0 : last - first + 1)
   })
 })

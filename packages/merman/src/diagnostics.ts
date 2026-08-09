@@ -1,6 +1,6 @@
 export type MermaidDiagramKind = "flowchart" | "sequence" | "state"
 
-/** An otherwise valid diagram contains syntax that merman does not support. */
+/** An otherwise valid diagram contains syntax that this renderer does not support. */
 export class MermaidSyntaxError extends Error {
   readonly _tag = "MermaidSyntaxError"
 

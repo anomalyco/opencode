@@ -1,4 +1,4 @@
-import type { DiagramBounds, DiagramDirection, DiagramPoint } from "../core/geometry.js"
+import type { DiagramAxis, DiagramBounds, DiagramDirection, DiagramPoint } from "../core/geometry.js"
 
 export type FlowchartDirection = "TB" | "TD" | "BT" | "LR" | "RL"
 export type FlowchartNodeShape = "box" | "rounded" | "database" | "decision" | "subroutine"
@@ -16,6 +16,7 @@ export interface FlowchartEdge {
   label: string
   style?: FlowchartEdgeStyle
   arrowhead?: false
+  sourceArrowhead?: true
   orderOnly?: boolean
 }
 
@@ -55,6 +56,7 @@ export type FlowchartPoint = DiagramPoint
 export interface FlowchartEdgeRoute {
   edge: FlowchartEdge
   points: FlowchartPoint[]
+  labelAxis?: DiagramAxis
 }
 
 export type FlowchartEdgeDirection = DiagramDirection

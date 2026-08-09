@@ -1,5 +1,6 @@
 import { BorderChars, type BorderStyle } from "@opentui/core"
 import { DiagramCanvas } from "../core/canvas.js"
+import { diagramTextWidth } from "../core/text.js"
 import { DEFAULT_FRAGMENT_BORDER_STYLE } from "./options.js"
 import {
   createSequencePlacementPlan,
@@ -19,6 +20,10 @@ import type {
 
 const SEQUENCE_BORDER = BorderChars.rounded
 
+function centeredStart(center: number, text: string): number {
+  return center - Math.floor(diagramTextWidth(text) / 2)
+}
+
 function arrowHeadChar(head: SequenceArrowHead | undefined, direction: 1 | -1): string {
   switch (head) {
     case "open":
@@ -28,7 +33,7 @@ function arrowHeadChar(head: SequenceArrowHead | undefined, direction: 1 | -1): 
     case "async":
       return direction === 1 ? ")" : "("
     default:
-      return direction === 1 ? "▶" : "◀"
+      return direction === 1 ? "►" : "◄"
   }
 }
 
@@ -185,6 +190,32 @@ function renderSelfMessage(
   setCell(grid, rightX, bottomRow, SEQUENCE_BORDER.bottomRight, style)
 }
 
+function renderNote(grid: SequenceGrid, placement: Extract<SequenceStepPlacement, { type: "note" }>): void {
+  const width = Math.max(...placement.textLines.map(diagramTextWidth))
+  const left = placement.textX
+  const right = left + width - 1
+  const top = placement.textY - 1
+  const bottom = placement.textY + placement.textLines.length
+
+  for (let x = left + 1; x < right; x++) {
+    setCell(grid, x, top, SEQUENCE_BORDER.horizontal, "note")
+    setCell(grid, x, bottom, SEQUENCE_BORDER.horizontal, "note")
+  }
+  for (let y = top + 1; y < bottom; y++) {
+    setCell(grid, left, y, SEQUENCE_BORDER.vertical, "note")
+    setCell(grid, right, y, SEQUENCE_BORDER.vertical, "note")
+  }
+  setCell(grid, left, top, SEQUENCE_BORDER.topLeft, "note")
+  setCell(grid, right, top, SEQUENCE_BORDER.topRight, "note")
+  setCell(grid, left, bottom, SEQUENCE_BORDER.bottomLeft, "note")
+  setCell(grid, right, bottom, SEQUENCE_BORDER.bottomRight, "note")
+  placement.textLines.forEach((line, index) => setText(grid, left, placement.textY + index, line, "noteBadge"))
+  for (let y = placement.textY; y < bottom; y++) {
+    setCell(grid, left, y, SEQUENCE_BORDER.vertical, "note")
+    setCell(grid, right, y, SEQUENCE_BORDER.vertical, "note")
+  }
+}
+
 export function drawSequenceDiagramGrid(
   diagram: SequenceDiagram,
   options: SequenceDiagramRenderOptions = {},
@@ -197,11 +228,13 @@ export function drawSequenceDiagramGrid(
   if (plan.groups.length > 0) renderParticipantGroups(grid, plan.groups, plan.height - 1)
 
   for (const placement of plan.participants) {
-    const { participant, centerX: center, headerLeftX, headerRightX, labelX } = placement
+    const { centerX: center, headerLeftX, headerRightX, labelLines } = placement
     const { participantHeaderTopY, participantHeaderY, participantRuleY, lifelineStartY, lifelineEndY } = plan.rows
 
     if (options.compact) {
-      setText(grid, labelX, participantHeaderY, participant.label, "participant")
+      labelLines.forEach((line, index) =>
+        setText(grid, centeredStart(center, line), participantHeaderY + index, line, "participant"),
+      )
     } else {
       for (let x = headerLeftX; x <= headerRightX; x++) {
         setCell(grid, x, participantHeaderTopY, SEQUENCE_BORDER.horizontal, "participant")
@@ -210,11 +243,15 @@ export function drawSequenceDiagramGrid(
 
       setCell(grid, headerLeftX, participantHeaderTopY, SEQUENCE_BORDER.topLeft, "participant")
       setCell(grid, headerRightX, participantHeaderTopY, SEQUENCE_BORDER.topRight, "participant")
-      setCell(grid, headerLeftX, participantHeaderY, SEQUENCE_BORDER.vertical, "participant")
-      setCell(grid, headerRightX, participantHeaderY, SEQUENCE_BORDER.vertical, "participant")
+      for (let y = participantHeaderY; y < participantRuleY; y++) {
+        setCell(grid, headerLeftX, y, SEQUENCE_BORDER.vertical, "participant")
+        setCell(grid, headerRightX, y, SEQUENCE_BORDER.vertical, "participant")
+      }
       setCell(grid, headerLeftX, participantRuleY, SEQUENCE_BORDER.bottomLeft, "participant")
       setCell(grid, headerRightX, participantRuleY, SEQUENCE_BORDER.bottomRight, "participant")
-      setText(grid, labelX, participantHeaderY, participant.label, "participant")
+      labelLines.forEach((line, index) =>
+        setText(grid, centeredStart(center, line), participantHeaderY + index, line, "participant"),
+      )
       setCell(grid, center, participantRuleY, SEQUENCE_BORDER.topT, "participant")
     }
 
@@ -227,9 +264,7 @@ export function drawSequenceDiagramGrid(
 
   for (const placement of plan.steps) {
     if (placement.type === "note") {
-      for (let lineIndex = 0; lineIndex < placement.textLines.length; lineIndex++) {
-        setText(grid, placement.textX, placement.textY + lineIndex, placement.textLines[lineIndex]!, "noteBadge")
-      }
+      renderNote(grid, placement)
       continue
     }
 
@@ -268,6 +303,14 @@ export function drawSequenceDiagramGrid(
     setArrowDepartureFade(grid, placement.fromX, placement.arrowY, placement.direction, messageStyle)
     setCell(grid, placement.headX, placement.arrowY, arrowHeadChar(message.head, placement.direction), messageStyle)
     if (placement.inlineLabel) setText(grid, placement.labelX, placement.labelY, placement.inlineLabel, messageStyle)
+  }
+
+  for (const activation of plan.activations) {
+    for (let y = activation.startY; y <= activation.endY; y++) {
+      if (grid.getCell(activation.centerX, y)?.char === SEQUENCE_BORDER.vertical) {
+        setCell(grid, activation.centerX, y, "┃", "lifeline")
+      }
+    }
   }
 
   return grid

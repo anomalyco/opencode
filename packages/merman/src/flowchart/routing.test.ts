@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { diagramTextWidth } from "../core/text.js"
+import { flowchartEdgeLabelLayout } from "./labels.js"
 import type { FlowchartDiagram, FlowchartNodeBounds } from "./types.js"
 import { routeFlowchartEdges } from "./routing.js"
 
@@ -19,6 +21,31 @@ function bounds(id: string, left: number, top: number): FlowchartNodeBounds {
 
 function diagram(direction: FlowchartDiagram["direction"], edges: FlowchartDiagram["edges"]): FlowchartDiagram {
   return { direction, nodes: [], edges, subgraphs: [] }
+}
+
+function routeIntersectsBounds(
+  points: readonly { x: number; y: number }[],
+  nodeBounds: { left: number; top: number; width: number; height: number },
+): boolean {
+  const right = nodeBounds.left + nodeBounds.width - 1
+  const bottom = nodeBounds.top + nodeBounds.height - 1
+  return points.slice(1).some((to, index) => {
+    const from = points[index]!
+    if (from.x === to.x) {
+      return (
+        from.x >= nodeBounds.left &&
+        from.x <= right &&
+        Math.max(from.y, to.y) >= nodeBounds.top &&
+        Math.min(from.y, to.y) <= bottom
+      )
+    }
+    return (
+      from.y >= nodeBounds.top &&
+      from.y <= bottom &&
+      Math.max(from.x, to.x) >= nodeBounds.left &&
+      Math.min(from.x, to.x) <= right
+    )
+  })
 }
 
 describe("flowchart routing", () => {
@@ -268,5 +295,80 @@ describe("flowchart routing", () => {
         ],
       },
     ])
+  })
+
+  test("does not route a fallback through its own source node", () => {
+    const labeled = { from: "A", to: "B", label: "route" }
+    const crossing = { from: "C", to: "D", label: "" }
+    const nodeBounds = new Map([
+      ["A", bounds("A", 0, 0)],
+      ["B", bounds("B", 100, 0)],
+      ["C", bounds("C", 48, -12)],
+      ["D", bounds("D", 48, 12)],
+    ])
+    const routes = routeFlowchartEdges(diagram("LR", [labeled, crossing]), nodeBounds, undefined, new Map())
+    const route = routes.find((candidate) => candidate.edge === labeled)!
+
+    expect(routeIntersectsBounds(route.points, nodeBounds.get("A")!)).toBe(false)
+    expect(routeIntersectsBounds(route.points, nodeBounds.get("B")!)).toBe(false)
+  })
+
+  test("ignores zero-width blank label interiors as route obstacles", () => {
+    const blankLabel = { from: "A", to: "B", label: "<br/>" }
+    const crossing = { from: "C", to: "D", label: "" }
+    const routes = routeFlowchartEdges(
+      diagram("TD", [blankLabel, crossing]),
+      new Map([
+        ["A", bounds("A", 0, 0)],
+        ["B", bounds("B", 0, 100)],
+        ["C", bounds("C", -20, 50)],
+        ["D", bounds("D", 20, 50)],
+      ]),
+      (edge) => (edge === blankLabel ? "TD" : "LR"),
+      new Map(),
+    )
+
+    expect(routes.find((route) => route.edge === blankLabel)!.points).toEqual([
+      { x: 2, y: 3 },
+      { x: 2, y: 99 },
+    ])
+  })
+
+  test("checks earlier labels against finalized later fallback routes", () => {
+    const edges = [
+      { from: "C", to: "B", label: "alpha" },
+      { from: "A", to: "F", label: "beta long" },
+      { from: "C", to: "D", label: "gamma" },
+      { from: "A", to: "B", label: "" },
+    ]
+    const directions = ["TD", "RL", "LR", "BT"] as const
+    const routes = routeFlowchartEdges(
+      diagram("LR", edges),
+      new Map([
+        ["A", bounds("A", -24, 6)],
+        ["B", bounds("B", 48, 24)],
+        ["C", bounds("C", -24, 24)],
+        ["D", bounds("D", -24, -18)],
+        ["F", bounds("F", -16, -6)],
+      ]),
+      (edge) => directions[edges.indexOf(edge)]!,
+      new Map(),
+    )
+    const labeled = routes.find((route) => route.edge === edges[0])!
+    const laterFallback = routes.find((route) => route.edge === edges[3])!
+    const label = flowchartEdgeLabelLayout(labeled.points, labeled.edge.label, diagramTextWidth)
+
+    expect(labeled.points).toEqual([
+      { x: -19, y: 25 },
+      { x: 47, y: 25 },
+    ])
+    expect(
+      routeIntersectsBounds(laterFallback.points, {
+        left: label.point.x + 1,
+        top: label.point.y,
+        width: label.width - 2,
+        height: label.height,
+      }),
+    ).toBe(false)
   })
 })

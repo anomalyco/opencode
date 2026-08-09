@@ -148,7 +148,7 @@ function drawSubgraphLabel(grid: FlowchartGrid, bounds: FlowchartSubgraphBounds)
 }
 
 function drawEdgeLabel(grid: FlowchartGrid, route: FlowchartEdgeRoute, style: FlowchartCellStyle): void {
-  const label = flowchartEdgeLabelLayout(route.points, route.edge.label, visualLength)
+  const label = flowchartEdgeLabelLayout(route.points, route.edge.label, visualLength, route.labelAxis)
   for (const [index, line] of label.lines.entries()) {
     grid.setText(label.point.x, label.point.y + index, line, style)
   }
@@ -249,15 +249,22 @@ function drawSourceConnectors(
     if (routeDirection && connectorDirection) {
       const cell = grid.getCell(sourcePoint.x, sourcePoint.y)
       if (cell) {
-        cell.char = diagramLineGlyph(
-          new Set([routeDirection, connectorDirection]),
-          "rounded",
-          route.edge.style === "thick" ? "heavy" : "single",
+        grid.replaceCell(
+          sourcePoint.x,
+          sourcePoint.y,
+          diagramLineGlyph(
+            new Set([routeDirection, connectorDirection]),
+            "rounded",
+            route.edge.style === "thick" ? "heavy" : "single",
+          ),
+          "edge",
         )
-        cell.style = "edge"
       }
     }
     fadeSourcePath(grid, connector, route.points, styles, occupancy)
+    if (route.edge.sourceArrowhead && route.points[1]) {
+      grid.setCell(sourcePoint.x, sourcePoint.y, diagramArrowHeadBetween(route.points[1], sourcePoint), "edge")
+    }
   }
 }
 

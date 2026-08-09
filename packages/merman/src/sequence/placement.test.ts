@@ -90,6 +90,25 @@ describe("createSequencePlacementPlan", () => {
     expect(external.headerLeftX).toBeGreaterThan(group.rightX)
   })
 
+  test("keeps many adjacent wide groups at a linear width", () => {
+    const groupCount = 16
+    const source = `sequenceDiagram
+${Array.from(
+  { length: groupCount },
+  (_, index) => `  box Group ${index} has a deliberately wide heading
+    participant P${index}
+  end`,
+).join("\n")}
+  P0->>P15: hi`
+    const plan = createSequencePlacementPlan(parseMermaidSequenceDiagram(source), { compact: true })
+
+    expect(plan.groups).toHaveLength(groupCount)
+    for (let index = 1; index < plan.groups.length; index++) {
+      expect(plan.groups[index]!.leftX).toBeGreaterThan(plan.groups[index - 1]!.rightX)
+    }
+    expect(plan.width).toBeLessThan(groupCount * 60)
+  })
+
   test("expands group and fragment frames around contained long content", () => {
     const groupPlan = createSequencePlacementPlan(
       parseMermaidSequenceDiagram(`sequenceDiagram
@@ -168,5 +187,35 @@ describe("createSequencePlacementPlan", () => {
       .filter((step) => step.fragment.kind === "alt" || step.fragment.kind === "loop")
 
     expect(starts[0]!.bounds.rightX).toBeGreaterThan(starts[1]!.bounds.rightX)
+  })
+
+  test("aligns explicit and shorthand activation intervals to message events", () => {
+    const shorthand = createSequencePlacementPlan(
+      parseMermaidSequenceDiagram(`sequenceDiagram
+  A->>+B: request
+  B-->>-A: response`),
+    )
+    const explicit = createSequencePlacementPlan(
+      parseMermaidSequenceDiagram(`sequenceDiagram
+  A->>B: request
+  activate B
+  B-->>A: response
+  deactivate B`),
+    )
+
+    expect(explicit.activations).toEqual(shorthand.activations)
+  })
+
+  test("centers message label blocks over their arrow span", () => {
+    const plan = createSequencePlacementPlan(
+      parseMermaidSequenceDiagram(`sequenceDiagram
+  participant A
+  participant B
+  A->>B: short<br/>a much longer line`),
+    )
+    const message = plan.steps.find((step) => step.type === "message")!
+    const labelWidth = Math.max(...message.labelLines.map(diagramTextWidth))
+
+    expect(message.labelX * 2 + labelWidth).toBe(message.leftX + message.rightX)
   })
 })

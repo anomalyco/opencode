@@ -26,6 +26,21 @@ describe("parser diagnostics", () => {
     ).toThrow('Unsupported syntax in flowchart diagram at line 3: "A --o B"')
   })
 
+  test("does not partially parse unsupported flowchart syntax", () => {
+    for (const statement of ["A & B --> C", "A((Start)) --> B", "A-->B; B-->C"]) {
+      expect(() => parseMermaidFlowchartDiagram(`flowchart LR\n  ${statement}`)).toThrow(MermaidSyntaxError)
+    }
+  })
+
+  test("does not treat arrows inside flowchart node labels as edges", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  A["send --> receive"] --> B`)
+
+    expect(diagram.nodes.map((node) => node.id)).toEqual(["A", "B"])
+    expect(diagram.nodes[0]?.label).toBe("send --> receive")
+    expect(diagram.edges).toHaveLength(1)
+  })
+
   test("exposes structured syntax errors through top-level rendering", () => {
     try {
       renderSequenceDiagram(`sequenceDiagram
@@ -41,6 +56,12 @@ describe("parser diagnostics", () => {
     }
   })
 
+  test("rejects unsupported bidirectional sequence arrows without phantom participants", () => {
+    for (const message of ["A<<->>B: hello", "A<<-->>B: hello"]) {
+      expect(() => parseMermaidSequenceDiagram(`sequenceDiagram\n  ${message}`)).toThrow(MermaidSyntaxError)
+    }
+  })
+
   test("reports unclosed state constructs at their opening line", () => {
     expect(() =>
       parseMermaidStateDiagram(`stateDiagram-v2
@@ -53,6 +74,17 @@ describe("parser diagnostics", () => {
     expect(() => parseMermaidStateDiagram(`stateDiagram-v2\n  hide empty description`)).toThrow(
       'Unsupported syntax in state diagram at line 2: "hide empty description"',
     )
+  })
+
+  test("rejects unsupported composite-local state directions", () => {
+    expect(() =>
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction LR
+  state Parent {
+    direction TB
+    A --> B
+  }`),
+    ).toThrow("Composite-local direction is not supported")
   })
 
   test("reports malformed sequence block endings", () => {

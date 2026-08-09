@@ -27,6 +27,7 @@ import type {
 
 export const DEFAULT_MIN_NODE_GAP = 5
 export const DEFAULT_MIN_BRANCH_LABEL_GAP = 12
+const DEFAULT_MAX_UNLABELED_RANK_WIDTH = 120
 export const DEFAULT_MIN_RANK_GAP = 7
 export const DEFAULT_MIN_VERTICAL_RANK_GAP = 4
 export const COMPACT_MIN_RANK_GAP = 4
@@ -316,7 +317,7 @@ function pathBounds(points: readonly { x: number; y: number }[]): FlowchartBound
 
 function labelBounds(route: FlowchartEdgeRoute): FlowchartBounds | undefined {
   if (!route.edge.label) return undefined
-  const label = flowchartEdgeLabelLayout(route.points, route.edge.label, visualLength)
+  const label = flowchartEdgeLabelLayout(route.points, route.edge.label, visualLength, route.labelAxis)
   const { point, width, height } = label
   return {
     left: point.x,
@@ -358,9 +359,6 @@ function layoutRankedNodes(
     if (edge.label)
       widestPaddedEdgeLabel = Math.max(widestPaddedEdgeLabel, flowchartLabelWidth(edge.label, visualLength))
   }
-  const rankNodeGap = horizontal
-    ? minNodeGap
-    : Math.max(minNodeGap, DEFAULT_MIN_BRANCH_LABEL_GAP, flowchartVerticalBranchLabelGap(widestPaddedEdgeLabel))
   const ranks = rankNodes(diagram)
   const maxRank = Math.max(0, ...ranks.values())
   const ranksByIndex = new Map<number, FlowchartNode[]>()
@@ -374,6 +372,23 @@ function layoutRankedNodes(
     nodes.push(node)
     ranksByIndex.set(normalizedRank, nodes)
   }
+
+  const spaciousNodeGap = Math.max(minNodeGap, DEFAULT_MIN_BRANCH_LABEL_GAP)
+  const widestUnlabeledRank = Math.max(
+    0,
+    ...[...ranksByIndex.values()].map(
+      (nodes) =>
+        nodes.reduce((total, node) => total + sizes.get(node.id)!.width, 0) +
+        Math.max(0, nodes.length - 1) * spaciousNodeGap,
+    ),
+  )
+  const rankNodeGap = horizontal
+    ? minNodeGap
+    : widestPaddedEdgeLabel > 0
+      ? Math.max(spaciousNodeGap, flowchartVerticalBranchLabelGap(widestPaddedEdgeLabel))
+      : widestUnlabeledRank > DEFAULT_MAX_UNLABELED_RANK_WIDTH
+        ? minNodeGap
+        : spaciousNodeGap
 
   const rankKeys = [...ranksByIndex.keys()].sort((a, b) => a - b)
   const horizontalGaps = horizontal ? horizontalRankGaps(diagram, normalizedRanks, rankKeys, requestedMinRankGap) : []

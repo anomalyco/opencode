@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { parseColor } from "@opentui/core"
 import stringWidth from "string-width"
-import { colorsEqual } from "../core/color/style.js"
 import { expectDiagram } from "../test/diagram.js"
 import { drawFlowchartDiagramGrid as drawParsedFlowchartDiagramGrid } from "./drawing.js"
 import {
@@ -9,6 +8,7 @@ import {
   DEFAULT_MIN_VERTICAL_RANK_GAP,
   layoutFlowchartDiagram as layoutParsedFlowchartDiagram,
 } from "./layout.js"
+import { flowchartEdgeLabelLayout } from "./labels.js"
 import { parseMermaidFlowchartDiagram } from "./parser.js"
 import { renderFlowchartDiagram } from "./render.js"
 import { renderGridStyledText, resolveFlowchartStyleColors } from "./style.js"
@@ -53,6 +53,63 @@ function routeRunsAlongVerticalBorder(
     if (Math.max(from.y, to.y) >= top && Math.min(from.y, to.y) <= bottom) return true
   }
   return false
+}
+
+function routeIntersectsBounds(
+  route: { points: readonly { x: number; y: number }[] },
+  bounds: { left: number; top: number; width: number; height: number },
+): boolean {
+  const right = bounds.left + bounds.width - 1
+  const bottom = bounds.top + bounds.height - 1
+  for (let index = 1; index < route.points.length; index++) {
+    const from = route.points[index - 1]!
+    const to = route.points[index]!
+    if (from.x === to.x) {
+      if (
+        from.x >= bounds.left &&
+        from.x <= right &&
+        Math.max(from.y, to.y) >= bounds.top &&
+        Math.min(from.y, to.y) <= bottom
+      ) {
+        return true
+      }
+    } else if (
+      from.y >= bounds.top &&
+      from.y <= bottom &&
+      Math.max(from.x, to.x) >= bounds.left &&
+      Math.min(from.x, to.x) <= right
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+function terminalPointsTowardBounds(
+  route: { points: readonly { x: number; y: number }[] },
+  bounds: { left: number; top: number; width: number; height: number },
+): boolean {
+  const before = route.points.at(-2)!
+  const end = route.points.at(-1)!
+  const right = bounds.left + bounds.width - 1
+  const bottom = bounds.top + bounds.height - 1
+  if (end.x === bounds.left - 1 && end.y >= bounds.top && end.y <= bottom) return before.x < end.x && before.y === end.y
+  if (end.x === right + 1 && end.y >= bounds.top && end.y <= bottom) return before.x > end.x && before.y === end.y
+  if (end.y === bounds.top - 1 && end.x >= bounds.left && end.x <= right) return before.y < end.y && before.x === end.x
+  if (end.y === bottom + 1 && end.x >= bounds.left && end.x <= right) return before.y > end.y && before.x === end.x
+  return false
+}
+
+function boundsIntersect(
+  left: { left: number; top: number; width: number; height: number },
+  right: { left: number; top: number; width: number; height: number },
+): boolean {
+  return (
+    left.left <= right.left + right.width - 1 &&
+    left.left + left.width - 1 >= right.left &&
+    left.top <= right.top + right.height - 1 &&
+    left.top + left.height - 1 >= right.top
+  )
 }
 
 describe("FlowchartDiagram", () => {
@@ -208,6 +265,67 @@ describe("FlowchartDiagram", () => {
     `)
   })
 
+  test("keeps vertical feedback labels clear of unrelated nodes", () => {
+    const content = `flowchart TD
+  S[Source] --> A[Alpha]
+  S --> B{Beta?}
+  S --> C[(Store)]
+  A --> J[[Join]]
+  B --> J
+  C --> J
+  J -->|cycle back| S`
+    const layout = layoutFlowchartDiagram(content)
+    const feedback = layout.routes.find((route) => route.edge.from === "J" && route.edge.to === "S")!
+    const label = flowchartEdgeLabelLayout(feedback.points, feedback.edge.label, stringWidth)
+    const labelBounds = { left: label.point.x, top: label.point.y, width: label.width, height: label.height }
+
+    for (const id of ["A", "B", "C"]) expect(boundsIntersect(labelBounds, layout.bounds.get(id)!)).toBe(false)
+    expect(renderFlowchartDiagram(content)).toContain("cycle back")
+  })
+
+  test("routes horizontal feedback edges around sibling nodes", () => {
+    for (const direction of ["LR", "RL"] as const) {
+      const layout = layoutFlowchartDiagram(`flowchart ${direction}
+  S[Start] --> D{Ready?}
+  D --> O[Output]
+  D --> R[Retry]
+  R --> S`)
+      const feedback = layout.routes.find((route) => route.edge.from === "R" && route.edge.to === "S")!
+
+      expect(routeIntersectsBounds(feedback, layout.bounds.get("O")!)).toBe(false)
+    }
+  })
+
+  test("keeps compact vertical fan-in arrowheads pointed at the target", () => {
+    const content = `flowchart TD
+  A[Left] -->|left| C[Merge]
+  B[Right] -->|right| C`
+    const layout = layoutFlowchartDiagram(content, { compact: true })
+
+    for (const route of layout.routes) {
+      const beforeTarget = route.points.at(-2)!
+      const target = route.points.at(-1)!
+      expect(beforeTarget.x).toBe(target.x)
+      expect(beforeTarget.y).toBeLessThan(target.y)
+    }
+    expect(renderFlowchartDiagram(content, { compact: true })).toContain("▼")
+  })
+
+  test("routes same-rank vertical-flow edges into the target side", () => {
+    const layout = layoutFlowchartDiagram(`flowchart TD
+  B[Start] --> D{Choose}
+  D --> E[[Primary]]
+  D --> F[Fallback]
+  E --> B
+  F --> E`)
+    const route = layout.routes.find((candidate) => candidate.edge.from === "F" && candidate.edge.to === "E")!
+    const beforeTarget = route.points.at(-2)!
+    const target = route.points.at(-1)!
+
+    expect(beforeTarget.y).toBe(target.y)
+    expect(beforeTarget.x).toBeGreaterThan(target.x)
+  })
+
   test("renders parallel same-endpoint edges without losing labels", () => {
     const content = `flowchart LR
   A[Source] -->|first| B[Target]
@@ -236,6 +354,36 @@ describe("FlowchartDiagram", () => {
     for (const label of ["first lane", "first two", "second lane", "second two", "third lane", "third two"]) {
       expect(vertical).toContain(label)
     }
+  })
+
+  test("keeps five parallel multiline edge labels distinct", () => {
+    const output = renderFlowchartDiagram(`flowchart TD
+  A[Source] -->|one alpha<br/>one beta| B[Target]
+  A -->|two alpha<br/>two beta| B
+  A -->|three alpha<br/>three beta| B
+  A -->|four alpha<br/>four beta| B
+  A -->|five alpha<br/>five beta| B`)
+
+    for (const number of ["one", "two", "three", "four", "five"]) {
+      expect(output.match(new RegExp(`${number} alpha`, "g"))).toHaveLength(1)
+      expect(output.match(new RegExp(`${number} beta`, "g"))).toHaveLength(1)
+    }
+  })
+
+  test("does not reserve label gaps for unlabeled fan-out", () => {
+    const output = renderFlowchartDiagram(`flowchart TD
+  S[The Boss] --> A[A]
+  S --> B[B]
+  S --> C[C]
+  S --> D[D]
+  S --> E[E]
+  S --> F[F]
+  S --> G[G]
+  S --> H[H]
+  S --> I[I]
+  S --> J[J]`)
+
+    expect(Math.max(...output.split("\n").map((line) => stringWidth(line)))).toBeLessThanOrEqual(100)
   })
 
   test("keeps transitive targets below intermediate vertical stages", () => {
@@ -389,6 +537,14 @@ flowchart TD
     ])
   })
 
+  test("decodes HTML entities in node and edge labels", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  A[HMAC verify &lt;3s &amp; continue] -->|result &#x2265; 1| B[Done]`)
+
+    expect(diagram.nodes.find((node) => node.id === "A")?.label).toBe("HMAC verify <3s & continue")
+    expect(diagram.edges[0]?.label).toBe("result ≥ 1")
+  })
+
   test("parses and renders each edge in a chained flowchart statement", () => {
     const content = `flowchart LR
   API --> Worker --> DB[(Database)]`
@@ -432,6 +588,25 @@ flowchart TD
       { from: "A", to: "B", label: "", arrowhead: false },
       { from: "B", to: "C", label: "", arrowhead: false },
     ])
+  })
+
+  test("parses labeled undirected dashed and bidirectional edges", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  DB[(Durable Object SQLite)]
+  API[Slack API]
+  DB -. no shared transaction .- API
+  API <--> DB`)
+
+    expect(diagram.edges).toEqual([
+      { from: "DB", to: "API", label: "no shared transaction", style: "dashed", arrowhead: false },
+      { from: "API", to: "DB", label: "", sourceArrowhead: true },
+    ])
+    const dashedOutput = renderFlowchartDiagram(`flowchart LR
+  DB[(Durable Object SQLite)] -. no shared transaction .- API[Slack API]`)
+    const bidirectionalOutput = renderFlowchartDiagram(`flowchart LR
+  DB[(Durable Object SQLite)] <--> API[Slack API]`)
+    expect(dashedOutput).toContain("no shared transaction")
+    expect(bidirectionalOutput.match(/[◀▶▲▼]/g)?.length).toBeGreaterThanOrEqual(2)
   })
 
   test("renders the volume persistence diagram with an undirected solid edge", () => {
@@ -884,6 +1059,94 @@ flowchart TD
     expect(route.points[0]!.y).toBe(route.points[route.points.length - 1]!.y)
   })
 
+  test("routes cross-subgraph edges around local-direction siblings", () => {
+    const layout = layoutFlowchartDiagram(`flowchart TD
+  subgraph Workers
+    direction TD
+    A[Worker one] --> B[Worker two]
+  end
+  subgraph Peer
+    direction RL
+    C[Store] --> D[Transform]
+  end
+  B --> D`)
+    const route = layout.routes.find((candidate) => candidate.edge.from === "B" && candidate.edge.to === "D")!
+
+    expect(routeIntersectsBounds(route, layout.bounds.get("C")!)).toBe(false)
+  })
+
+  test.each([
+    ["BT", { compact: true }],
+    ["LR", { compact: true }],
+    ["RL", { compact: true }],
+  ] as const)("keeps labeled cross-group routes clear of sibling nodes in %s layouts", (direction, options) => {
+    const content = `flowchart ${direction}
+  subgraph Left
+    direction RL
+    A[API] --> B[Queue]
+  end
+  subgraph Right
+    direction TB
+    C[Transform] --> D[Accept]
+  end
+  B -->|cross group| C
+  D -->|retry group| A`
+    const layout = layoutFlowchartDiagram(content, options)
+    const crossGroup = layout.routes.find((route) => route.edge.from === "B" && route.edge.to === "C")!
+
+    if (direction !== "LR") expect(routeIntersectsBounds(crossGroup, layout.bounds.get("A")!)).toBe(false)
+    expect(renderFlowchartDiagram(content, options)).toContain("cross group")
+    expect(renderFlowchartDiagram(content, options)).toContain("retry group")
+  })
+
+  test.each(["LR", "RL"] as const)(
+    "keeps nested result labels and target-facing entry routes in %s layouts",
+    (direction) => {
+      const content = `flowchart ${direction}
+  I[Input] --> A
+  subgraph Outer
+    direction LR
+    subgraph Inner
+      direction BT
+      A[Parse] --> B[Valid]
+      B --> C[Cache]
+      C --> B
+    end
+    B --> D[Dispatch]
+  end
+  D -->|result path| O[Output]`
+      const layout = layoutFlowchartDiagram(content)
+      const entry = layout.routes.find((route) => route.edge.from === "I" && route.edge.to === "A")!
+
+      expect(renderFlowchartDiagram(content)).toContain("result path")
+      expect(terminalPointsTowardBounds(entry, layout.bounds.get("A")!)).toBe(true)
+    },
+  )
+
+  test("routes nested RL local edges around outer siblings", () => {
+    const layout = layoutFlowchartDiagram(
+      `flowchart RL
+  I([Input λ]) --> A
+  subgraph Outer [Outer group 長い]
+    direction LR
+    subgraph Inner [Inner<br/>工程]
+      direction BT
+      A[Parse request] -->|inner edge| B{Valid?}
+      B --> C[(Cache Ω)]
+      C --> B
+    end
+    B --> D[[Dispatch work]]
+  end
+  D -.->|result path| O([Output μ])`,
+      { compact: true },
+    )
+
+    for (const route of layout.routes.filter((route) => ["A", "B", "C"].includes(route.edge.from))) {
+      if (route.edge.to === "D") continue
+      expect(routeIntersectsBounds(route, layout.bounds.get("D")!)).toBe(false)
+    }
+  })
+
   test("compacts stacked subgraph-local direction rows", () => {
     const layout = layoutFlowchartDiagram(`
 flowchart TD
@@ -1311,6 +1574,6 @@ flowchart LR
     const node = parseColor("#ff0000")
     const styled = renderGridStyledText(grid, resolveFlowchartStyleColors({ node }))
 
-    expect(styled.chunks.some((chunk) => chunk.text.includes("Alpha") && colorsEqual(chunk.fg, node))).toBe(true)
+    expect(styled.chunks.some((chunk) => chunk.text.includes("Alpha") && chunk.fg?.equals(node))).toBe(true)
   })
 })
