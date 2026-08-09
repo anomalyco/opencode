@@ -1,5 +1,4 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import { shouldUseResponsesApi } from "@opencode-ai/ai/providers/github-copilot"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
@@ -272,7 +271,9 @@ export const GithubCopilotPlugin = define({
           return
         }
         const id = evt.model.modelID ?? evt.model.id
-        evt.language = shouldUseResponsesApi(id) ? evt.sdk.responses(id) : evt.sdk.chat(id)
+        const match = /^gpt-(\d+)/.exec(id)
+        evt.language =
+          match && Number(match[1]) >= 5 && !id.startsWith("gpt-5-mini") ? evt.sdk.responses(id) : evt.sdk.chat(id)
       }),
     )
   }),
