@@ -4,7 +4,7 @@ Unlike the `bash` tool, which runs non-interactively with stdin disabledags and 
 
 The session persists between tool calls. Use the `terminal` tool repeatedly with the returned `ptyID` to:
 
-- `open` — start a new interactive command. Provide `command` and optional `workdir` and `title`. Returns the `ptyID` and any initial output.
+- `open` — start a new interactive command. Provide `command` and optional `workdir`, `shell`, and `title`. Returns the `ptyID` and any initial output. `shell` may be `"powershell"`, `"cmd"`, or `"bash"`; it defaults to PowerShell on Windows and bash elsewhere.
 - `read` — fetch any new output that has been produced since the last read.
 - `input` — send keystrokes to the running command. Provide `ptyID` and `data`; set `enter: true` to append a newline (needed to submit a prompt or password). Returns new output.
 - `close` — terminate the session. Provide `ptyID`.
