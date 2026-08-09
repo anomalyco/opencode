@@ -5,19 +5,21 @@ import type {
   Dialog,
   Page,
   RegionClaim,
+  RegionMap,
   RegionName,
-  Slot,
-  SlotMap,
-  SlotName,
   Toast,
 } from "@opencode-ai/plugin/tui/context"
 import type { Placement } from "./structure"
+
+// Region inputs erased to their union: the registry stores one render shape
+// regardless of which region a claim targets.
+export type RegionRender = (input: RegionMap[RegionName]["input"]) => JSX.Element
 
 // A registered claim as stored by the plugin provider's registry.
 export type SlotClaim = {
   readonly region: RegionName
   readonly placement: Placement
-  readonly render: Slot
+  readonly render: RegionRender
 }
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
@@ -53,20 +55,7 @@ export type Registry = {
   active(): boolean
 }
 
-// Position-encoded legacy slot names map onto the region model. Append
-// slots become end-edge claims. Host-declared "replace" slots on partless
-// regions become root takeovers, reproducing their old last-registrant-wins
-// semantics exactly. One deliberate change: "prompt.footer.end" was also
-// last-registrant-wins, but maps to an end-edge claim — chips from several
-// plugins now coexist instead of silently shadowing each other.
-const legacySlots: Record<SlotName, { readonly region: RegionName; readonly placement: Placement }> = {
-  app: { region: "app", placement: { at: "end" } },
-  "home.footer": { region: "home.footer", placement: { replace: "home.footer" } },
-  "prompt.footer.end": { region: "prompt.footer", placement: { at: "end" } },
-  "session.composer.top": { region: "session.composer.top", placement: { at: "end" } },
-  "sidebar.content": { region: "sidebar.content", placement: { at: "end" } },
-  "sidebar.footer": { region: "sidebar.footer", placement: { replace: "sidebar.footer" } },
-}
+
 
 // The host services a plugin context adapts. Collected once by the provider
 // (hooks must run during component setup) and shared by every activation.
@@ -218,25 +207,9 @@ export function createPluginContext(input: {
           return true
         },
       },
-      slot(name: SlotName | RegionName, value: Slot | RegionClaim) {
-        // Legacy form: position-encoded name plus a bare render function.
-        if (typeof value === "function") {
-          if (input.registry.has("slots", name)) throw new Error(`Slot already registered: ${name}`)
-          const mapped = legacySlots[name as SlotName]
-          // Reachable only from untyped plugin code; fail with the name
-          // instead of a property access on undefined.
-          if (!mapped) throw new Error(`Unknown slot: ${name}`)
-          input.registry.set("slots", name, {
-            region: mapped.region,
-            placement: mapped.placement,
-            // The registration map erases the slot-specific input type.
-            render: ((slotInput: SlotMap[SlotName]) => provide(() => value(slotInput))) as Slot,
-          })
-          return registration("slots", name)
-        }
-        // Region form: a placement plus render. Keys are counter-suffixed so
-        // one plugin may claim several places in the same region; order
-        // within the plugin is registration order.
+      slot(name: RegionName, value: RegionClaim) {
+        // Keys are counter-suffixed so one plugin may claim several places
+        // in the same region; order within the plugin is registration order.
         const key = `${name}#${claims++}`
         // Rebuilt field-by-field rather than rest-spread so malformed input
         // from untyped plugins normalizes to exactly one placement key — a
@@ -250,11 +223,10 @@ export function createPluginContext(input: {
                 ? { after: value.after }
                 : { replace: value.replace }
         input.registry.set("slots", key, {
-          // The overloads correlate the second argument's shape with the
-          // name: an object value implies a region name.
-          region: name as RegionName,
+          region: name,
           placement,
-          render: ((slotInput: SlotMap[SlotName]) => provide(() => value.render(slotInput))) as Slot,
+          // The registration map erases the region-specific input type.
+          render: (slotInput) => provide(() => (value.render as RegionRender)(slotInput)),
         })
         return registration("slots", key)
       },

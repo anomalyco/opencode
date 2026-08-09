@@ -85,6 +85,6 @@ function Commands(props: { context: Plugin.Context }) {
 export default Plugin.define({
   id,
   setup(context) {
-    context.ui.slot("app", () => <Commands context={context} />)
+    context.ui.slot("app", { at: "end", render: () => <Commands context={context} /> })
   },
 })

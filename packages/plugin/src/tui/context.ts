@@ -150,25 +150,6 @@ export interface Page {
   readonly render: (input: { readonly data?: Record<string, any> }) => JSX.Element
 }
 
-export interface SlotMap {
-  readonly app: Readonly<Record<string, never>>
-  readonly "home.footer": Readonly<Record<string, never>>
-  readonly "prompt.footer.end": {
-    readonly sessionID?: string
-    readonly mode: "normal" | "shell"
-  }
-  readonly "session.composer.top": {
-    readonly sessionID: string
-  }
-  readonly "sidebar.content": {
-    readonly sessionID: string
-  }
-  readonly "sidebar.footer": Readonly<Record<string, never>>
-}
-
-export type SlotName = keyof SlotMap
-export type Slot<Name extends SlotName = SlotName> = (props: SlotMap[Name]) => JSX.Element
-
 /**
  * The host UI's extensible regions. Each region publishes an input (reactive
  * props passed to every claim render) and a part vocabulary: the stable ids
@@ -443,16 +424,8 @@ export interface UI {
     /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
     close(sessionID?: string): boolean
   }
-  readonly slot: {
-    /**
-     * @deprecated Position-encoded slot names are the legacy surface; use
-     * the region + placement form. `slot("prompt.footer.end", render)` is
-     * `slot("prompt.footer", { at: "end", render })`.
-     */
-    <Name extends SlotName>(name: Name, render: Slot<Name>): () => void
-    /** Claims a place in a region's structure; see RegionPlacement. */
-    <Name extends RegionName>(region: Name, claim: RegionClaim<Name>): () => void
-  }
+  /** Claims a place in a region's structure; see RegionPlacement. */
+  readonly slot: <Name extends RegionName>(region: Name, claim: RegionClaim<Name>) => () => void
 }
 
 export interface Context {

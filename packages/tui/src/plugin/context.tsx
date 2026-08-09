@@ -14,7 +14,7 @@ import {
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import type { Page, Slot } from "@opencode-ai/plugin/tui/context"
+import type { Page } from "@opencode-ai/plugin/tui/context"
 import type { Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
 import { isDeepEqual } from "remeda"
@@ -23,7 +23,7 @@ import { useConfig } from "../config"
 import { useTuiLifecycle } from "../context/runtime"
 import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
-import { createPluginContext, usePluginHost, type Dispose, type SlotClaim } from "./api"
+import { createPluginContext, usePluginHost, type Dispose, type RegionRender, type SlotClaim } from "./api"
 import { createSourceWatcher } from "./watch"
 import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
 
@@ -47,7 +47,7 @@ type Value = {
   readonly list: () => ReadonlyArray<State>
   readonly registered: () => ReadonlyArray<RegisteredPlugin>
   readonly route: (id: string, name: string) => Page["render"] | undefined
-  readonly claims: (region: string) => ReadonlyArray<Claim<Slot>>
+  readonly claims: (region: string) => ReadonlyArray<Claim<RegionRender>>
   readonly markdown: () => MarkdownOptions["renderNode"]
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
@@ -386,7 +386,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         host.toast.show({ variant: "error", title: "Plugin", message: `${state.target}: ${state.error}` })
     setStore("states", reconcileStore(states))
   }
-  const slotItems = new WeakMap<Slot, Claim<Slot>>()
+  const slotItems = new WeakMap<RegionRender, Claim<RegionRender>>()
   createEffect(
     on(
       () => JSON.stringify(config.data.plugins ?? []),

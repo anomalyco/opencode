@@ -62,6 +62,8 @@ function View(props: { context: Plugin.Context }) {
 export default Plugin.define({
   id: "opencode.home-footer",
   setup(context) {
-    context.ui.slot("home.footer", () => <View context={context} />)
+    // Root takeover: an external plugin replacing home.footer wins (last-
+    // enabled) and this builtin shows as suppressed, not silently gone.
+    context.ui.slot("home.footer", { replace: "home.footer", render: () => <View context={context} /> })
   },
 })
