@@ -1,5 +1,6 @@
 import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { LLM, AIError, LLMEvent, Message } from "@opencode-ai/ai"
@@ -335,5 +336,79 @@ it.effect("keeps malformed provider-executed AI SDK input terminal", () =>
 
     expect(error).toBeInstanceOf(AIError)
     expect(error.message).toContain("Invalid JSON input for aisdk tool call web_search")
+  }),
+)
+
+const failingModel = (failure: unknown): LanguageModelV3 => ({
+  specificationVersion: "v3",
+  provider: "test",
+  modelId: "test",
+  supportedUrls: {},
+  doGenerate: () => Promise.reject(new Error("Unexpected non-streaming request")),
+  doStream: () => Promise.reject(failure),
+})
+
+const streamFailure = (failure: unknown) =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => failingModel(failure) }
+    })
+    const resolved = yield* aisdk.model(model("test-ai-sdk"))
+    return yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Effect.provide(client),
+      Effect.flip,
+    )
+  })
+
+it.effect("preserves non-empty AI SDK error messages", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(new Error("Bad Request"))
+    expect(error).toBeInstanceOf(AIError)
+    expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "Bad Request" })
+  }),
+)
+
+it.effect("derives status and code when the AI SDK error message is empty", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      Object.assign(new Error(""), {
+        statusCode: 404,
+        responseBody: '{"error":{"message":"","code":"not_found"}}',
+        data: { error: { message: "", code: "not_found" } },
+        responseHeaders: { authorization: "Bearer secret-token" },
+        requestBodyValues: { messages: [{ role: "user", content: "private prompt" }] },
+      }),
+    )
+    expect(error.reason.message).toBe("Provider request failed with HTTP 404: not_found")
+    expect(error.reason.message).not.toContain("secret-token")
+    expect(error.reason.message).not.toContain("private prompt")
+    const projected = toSessionError(error)
+    expect(projected.type).toBe("provider.unknown")
+    expect(projected.message).not.toBe("")
+  }),
+)
+
+it.effect("prefers a structured provider message over the code fallback", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      Object.assign(new Error(""), {
+        statusCode: 404,
+        data: { error: { message: "The requested model does not exist", code: "not_found" } },
+      }),
+    )
+    expect(error.reason.message).toBe("The requested model does not exist")
+  }),
+)
+
+it.effect("falls back to the status alone for malformed response bodies", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      Object.assign(new Error(""), {
+        statusCode: 502,
+        responseBody: "<html>Bad Gateway</html>",
+      }),
+    )
+    expect(error.reason.message).toBe("Provider request failed with HTTP 502")
   }),
 )

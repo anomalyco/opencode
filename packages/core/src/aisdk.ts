@@ -723,12 +723,37 @@ function llmError(method: string, error: unknown) {
   const reason =
     error instanceof AIError
       ? new InvalidProviderOutputReason({ message: error.message })
-      : new UnknownProviderReason({ message: error instanceof Error ? error.message : String(error) })
+      : new UnknownProviderReason({ message: unknownErrorMessage(error) })
   return new AIError({
     module: "AISDK",
     method,
     reason,
   })
+}
+
+const decodeErrorJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+
+// AI SDK errors such as AI_APICallError can carry an empty message while still
+// holding structured provider details. Derive a safe non-empty fallback from
+// recognized error fields only; never surface the raw response payload.
+function unknownErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.trim() !== "") return message
+  const record = isRecord(error) ? error : {}
+  const status = typeof record.statusCode === "number" ? record.statusCode : undefined
+  const data = isRecord(record.data)
+    ? record.data
+    : typeof record.responseBody === "string"
+      ? Option.getOrUndefined(decodeErrorJson(record.responseBody))
+      : undefined
+  const detail = isRecord(data) ? (isRecord(data.error) ? data.error : data) : {}
+  if (typeof detail.message === "string" && detail.message.trim() !== "") return detail.message
+  const prefix = status === undefined ? "Provider request failed" : `Provider request failed with HTTP ${status}`
+  return typeof detail.code === "string" && detail.code.trim() !== "" ? `${prefix}: ${detail.code}` : prefix
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
 }
 
 export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })
