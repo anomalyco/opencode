@@ -2,9 +2,8 @@ import os from "os"
 import { App } from "../../app"
 import { Effect, Option, Schema } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import type { Form } from "@opencode-ai/schema/form"
+import { Form } from "@opencode-ai/schema/form"
 import { Provider } from "../../provider"
-import type { DeepMutable } from "../../schema"
 import { iife } from "../../util/iife"
 import { configuredSettings } from "./configured"
 
@@ -14,7 +13,7 @@ export const CloudflareAIGatewayPlugin = define({
   id: "opencode.provider.cloudflare-ai-gateway",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
-    const forms = iife((): DeepMutable<Form.Fields> | undefined => {
+    const forms = iife(() => {
       if (typeof configured?.baseURL === "string") return
       const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || stringOption(configured ?? {}, "accountId")
       const gatewayId =
@@ -22,23 +21,23 @@ export const CloudflareAIGatewayPlugin = define({
         stringOption(configured ?? {}, "gatewayId") ||
         stringOption(configured ?? {}, "gateway")
       if (accountId && gatewayId) return
-      const accountIdForm = {
+      const accountIdForm = Form.StringField.make({
         type: "string",
         key: "accountId",
         title: "Enter your Cloudflare Account ID",
         placeholder: "e.g. 1234567890abcdef1234567890abcdef",
         required: true,
-      } satisfies DeepMutable<Form.Field>
-      const gatewayIdForm = {
+      })
+      const gatewayIdForm = Form.StringField.make({
         type: "string",
         key: "gatewayId",
         title: "Enter your Cloudflare AI Gateway ID",
         placeholder: "e.g. my-gateway",
         required: true,
-      } satisfies DeepMutable<Form.Field>
-      if (accountId) return [gatewayIdForm]
-      if (gatewayId) return [accountIdForm]
-      return [accountIdForm, gatewayIdForm]
+      })
+      if (accountId) return Form.Fields.make([gatewayIdForm])
+      if (gatewayId) return Form.Fields.make([accountIdForm])
+      return Form.Fields.make([accountIdForm, gatewayIdForm])
     })
     yield* ctx.integration.transform((draft) => {
       draft.method.update({

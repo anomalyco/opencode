@@ -1,8 +1,7 @@
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import type { Form } from "@opencode-ai/schema/form"
+import { Form } from "@opencode-ai/schema/form"
 import { Provider } from "../../provider"
-import type { DeepMutable } from "../../schema"
 import { iife } from "../../util/iife"
 import { configuredSettings } from "./configured"
 
@@ -18,9 +17,9 @@ export const AzurePlugin = define({
   id: "opencode.provider.azure",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(Provider.ID.azure)
-    const forms = iife((): DeepMutable<Form.Fields> | undefined => {
+    const forms = iife(() => {
       if (resolveResourceName(configured) || typeof configured?.baseURL === "string") return
-      return [
+      return Form.Fields.make([
         {
           type: "string",
           key: "resourceName",
@@ -28,7 +27,7 @@ export const AzurePlugin = define({
           placeholder: "e.g. my-models",
           required: true,
         },
-      ]
+      ])
     })
     yield* ctx.integration.transform((draft) => {
       draft.method.update({

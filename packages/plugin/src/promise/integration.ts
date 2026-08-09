@@ -30,7 +30,7 @@ export type IntegrationOAuthAuthorization = {
 
 export type IntegrationOAuthMethodRegistration = {
   readonly integrationID: string
-  readonly method: IntegrationOAuthMethod
+  readonly method: Omit<IntegrationOAuthMethod, "forms"> & { readonly forms?: Form.Fields }
   readonly authorize: (answers: Form.Answer) => Promise<IntegrationOAuthAuthorization>
   readonly refresh?: (credential: Credential.OAuth) => Promise<Credential.OAuth>
   readonly label?: (credential: Credential.OAuth) => string | undefined
@@ -39,7 +39,10 @@ export type IntegrationOAuthMethodRegistration = {
 export type IntegrationMethodRegistration =
   | IntegrationOAuthMethodRegistration
   | { readonly integrationID: string; readonly method: IntegrationCommandMethod }
-  | { readonly integrationID: string; readonly method: IntegrationKeyMethod }
+  | {
+      readonly integrationID: string
+      readonly method: Omit<IntegrationKeyMethod, "forms"> & { readonly forms?: Form.Fields }
+    }
   | { readonly integrationID: string; readonly method: IntegrationEnvMethod }
 
 export interface IntegrationDraft {
