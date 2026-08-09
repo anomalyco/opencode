@@ -1,3 +1,4 @@
+import { APICallError } from "@ai-sdk/provider"
 import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
@@ -369,15 +370,22 @@ it.effect("preserves non-empty AI SDK error messages", () =>
   }),
 )
 
+const apiCallError = (input: Partial<ConstructorParameters<typeof APICallError>[0]>) =>
+  new APICallError({
+    message: "",
+    url: "https://api.example.com/chat",
+    requestBodyValues: { messages: [{ role: "user", content: "private prompt" }] },
+    responseHeaders: { authorization: "Bearer secret-token" },
+    ...input,
+  })
+
 it.effect("derives status and code when the AI SDK error message is empty", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(
-      Object.assign(new Error(""), {
+      apiCallError({
         statusCode: 404,
         responseBody: '{"error":{"message":"","code":"not_found"}}',
         data: { error: { message: "", code: "not_found" } },
-        responseHeaders: { authorization: "Bearer secret-token" },
-        requestBodyValues: { messages: [{ role: "user", content: "private prompt" }] },
       }),
     )
     expect(error.reason.message).toBe("Provider request failed with HTTP 404: not_found")
@@ -392,7 +400,7 @@ it.effect("derives status and code when the AI SDK error message is empty", () =
 it.effect("prefers a structured provider message over the code fallback", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(
-      Object.assign(new Error(""), {
+      apiCallError({
         statusCode: 404,
         data: { error: { message: "The requested model does not exist", code: "not_found" } },
       }),
@@ -404,7 +412,7 @@ it.effect("prefers a structured provider message over the code fallback", () =>
 it.effect("falls back to the status alone for malformed response bodies", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(
-      Object.assign(new Error(""), {
+      apiCallError({
         statusCode: 502,
         responseBody: "<html>Bad Gateway</html>",
       }),

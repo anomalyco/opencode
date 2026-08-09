@@ -1,6 +1,7 @@
 export * as AISDK from "./aisdk"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { APICallError } from "@ai-sdk/provider"
 import type {
   JSONSchema7,
   JSONValue,
@@ -731,7 +732,18 @@ function llmError(method: string, error: unknown) {
   })
 }
 
-const decodeErrorJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const ProviderErrorBody = Schema.Struct({
+  message: Schema.optionalKey(Schema.String),
+  code: Schema.optionalKey(Schema.String),
+  error: Schema.optionalKey(
+    Schema.Struct({
+      message: Schema.optionalKey(Schema.String),
+      code: Schema.optionalKey(Schema.String),
+    }),
+  ),
+})
+const decodeErrorData = Schema.decodeUnknownOption(ProviderErrorBody)
+const decodeErrorBody = Schema.decodeUnknownOption(Schema.fromJsonString(ProviderErrorBody))
 
 // AI SDK errors such as AI_APICallError can carry an empty message while still
 // holding structured provider details. Derive a safe non-empty fallback from
@@ -739,21 +751,14 @@ const decodeErrorJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 function unknownErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   if (message.trim() !== "") return message
-  const record = isRecord(error) ? error : {}
-  const status = typeof record.statusCode === "number" ? record.statusCode : undefined
-  const data = isRecord(record.data)
-    ? record.data
-    : typeof record.responseBody === "string"
-      ? Option.getOrUndefined(decodeErrorJson(record.responseBody))
-      : undefined
-  const detail = isRecord(data) ? (isRecord(data.error) ? data.error : data) : {}
-  if (typeof detail.message === "string" && detail.message.trim() !== "") return detail.message
-  const prefix = status === undefined ? "Provider request failed" : `Provider request failed with HTTP ${status}`
-  return typeof detail.code === "string" && detail.code.trim() !== "" ? `${prefix}: ${detail.code}` : prefix
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null
+  if (!APICallError.isInstance(error)) return "Provider request failed"
+  const body =
+    Option.getOrUndefined(decodeErrorData(error.data)) ?? Option.getOrUndefined(decodeErrorBody(error.responseBody))
+  const detail = body?.error ?? body
+  if (detail?.message) return detail.message
+  const prefix =
+    error.statusCode === undefined ? "Provider request failed" : `Provider request failed with HTTP ${error.statusCode}`
+  return detail?.code ? `${prefix}: ${detail.code}` : prefix
 }
 
 export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })
