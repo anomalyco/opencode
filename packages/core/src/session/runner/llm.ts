@@ -40,6 +40,10 @@ import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
 
+/** Strip HTML tags from provider error messages to avoid rendering raw markup in retry notices. */
+const sanitizeProviderErrorMessage = (message: string) =>
+  message.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
+
 /**
  * Runs one durable coding-agent Session until it settles.
  *
@@ -302,7 +306,7 @@ const layer = Layer.effect(
           const llmFailure = failure instanceof LLMError ? failure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
-            yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
+            yield* withPublication(publisher.failAssistant(sanitizeProviderErrorMessage(llmFailure.reason.message)))
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
