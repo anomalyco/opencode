@@ -38,6 +38,10 @@ export const Parameters = Schema.Struct({
   workdir: Schema.optional(Schema.String).annotate({
     description: 'Working directory for a new terminal (action "open"). Defaults to the project root.',
   }),
+  shell: Schema.optional(Schema.Literals(["powershell", "cmd", "bash"])).annotate({
+    description:
+      'The shell to run the command in (action "open"). Defaults to PowerShell on Windows and bash elsewhere. "bash" uses the default shell on POSIX.',
+  }),
 })
 
 export const TerminalTool = Tool.define(
@@ -98,19 +102,23 @@ export const TerminalTool = Tool.define(
             })
             const cwd = params.workdir ? path.resolve(ins.directory, params.workdir) : ins.directory
             // Pty sessions launch an executable file plus args; run the free-form
-            // command string through the platform default shell like the bash tool.
+            // command string through a shell. Default to PowerShell on Windows and
+            // bash elsewhere, but let the model pick cmd/powershell/bash explicitly.
+            const win = process.platform === "win32"
+            const kind = params.shell ?? (win ? "powershell" : "bash")
+            const systemRoot = process.env.SystemRoot ?? "C:\\Windows"
             const shell =
-              process.platform === "win32"
-                ? path.join(
-                    process.env.SystemRoot ?? "C:\\Windows",
-                    "System32",
-                    "WindowsPowerShell",
-                    "v1.0",
-                    "powershell.exe",
-                  )
-                : (process.env.SHELL ?? "/bin/bash")
+              kind === "bash" && !win
+                ? (process.env.SHELL ?? "/bin/bash")
+                : kind === "cmd"
+                  ? path.join(systemRoot, "System32", "cmd.exe")
+                  : path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
             const args =
-              process.platform === "win32" ? ["-NoLogo", "-NoProfile", "-Command", command] : ["-lc", command]
+              kind === "bash" && !win
+                ? ["-lc", command]
+                : kind === "cmd"
+                  ? ["/d", "/s", "/c", command]
+                  : ["-NoLogo", "-NoProfile", "-Command", command]
             const info = yield* scoped(Pty.Service.use((service) => service.create({ command: shell, args, cwd })))
             const attachment = yield* scoped(
               Pty.Service.use((service) =>
