@@ -55,8 +55,17 @@ import { registerWakeBody } from "@/s2s/wake-registry"
 const REAPER_WINDOW_MS_DEFAULT = 60_000
 const MIN_REAPER_MS = 1
 const MAX_ROW_FAILURES = 3
+const MAX_ROW_ENTRIES = 500
 const rowFailures = new Map<string, number>()
 const abandonedRows = new Set<string>()
+
+const evictIfNeeded = <T>(collection: Map<T, unknown> | Set<T>, max: number) => {
+  while (collection.size > max) {
+    const first = (collection instanceof Map ? collection.keys() : collection.values()).next() as IteratorResult<T>
+    if (first.done) break
+    collection.delete(first.value)
+  }
+}
 
 export interface Interface {
   readonly pollOnce: () => Effect.Effect<void>
@@ -117,6 +126,7 @@ const processRow = Effect.fn("S2SPoller.processRow")(function* (row: S2SStore.In
   // enqueue-then-delete = at-least-once: a failed enqueue throws before this
   // and leaves the row claimed for reaper retry, so no message is lost.
   yield* store.deleteInbox(row.id)
+  rowFailures.delete(row.id)
 
   yield* wakeIfIdle(row.targetSessionID)
 })
@@ -166,8 +176,10 @@ export const pollOnceImpl = Effect.fn("S2SPoller.pollOnce")(function* () {
         Effect.gen(function* () {
           const failures = (rowFailures.get(row.id) ?? 0) + 1
           rowFailures.set(row.id, failures)
+          evictIfNeeded(rowFailures, MAX_ROW_ENTRIES)
           if (failures < MAX_ROW_FAILURES) return
           abandonedRows.add(row.id)
+          evictIfNeeded(abandonedRows, MAX_ROW_ENTRIES)
           yield* Effect.logWarning("S2SPoller: giving up on row for this process lifetime", {
             rowID: row.id,
             failures,
