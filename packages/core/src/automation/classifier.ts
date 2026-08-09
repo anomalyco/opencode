@@ -1,12 +1,17 @@
 export * as AutomationClassifier from "./classifier"
 
 import { Context, Effect, Layer, Schema } from "effect"
+import { makeGlobalNode } from "../effect/app-node"
 
 export const Complexity = Schema.Literals(["low", "medium", "high"])
 export type Complexity = typeof Complexity.Type
 
+export const TaskType = Schema.Literals(["recon", "refactor", "plan", "build", "verify"])
+export type TaskType = typeof TaskType.Type
+
 export const Classification = Schema.Struct({
   complexity: Complexity,
+  taskType: TaskType,
   reason: Schema.String,
 })
 export type Classification = typeof Classification.Type
@@ -40,16 +45,24 @@ export class ClassifierError extends Schema.TaggedErrorClass<ClassifierError>()(
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/AutomationClassifier") {}
 
-const CLASSIFICATION_SYSTEM_PROMPT = `You classify automation prompts by complexity for model routing.
+const CLASSIFICATION_SYSTEM_PROMPT = `You classify automation prompts by complexity and task type for agent routing.
 
 Return a JSON object with exactly these fields:
 - "complexity": "low" | "medium" | "high"
+- "taskType": "recon" | "refactor" | "plan" | "build" | "verify"
 - "reason": brief explanation (1 sentence)
 
 Guidelines:
-- "low": short, factual, single-step tasks (summarize, list, format, simple lookup)
-- "medium": multi-step reasoning, code review, planning, moderate debugging
-- "high": complex architecture, multi-file refactors, deep debugging, novel problem-solving
+- "complexity":
+  - "low": short, factual, single-step tasks (summarize, list, format, simple lookup)
+  - "medium": multi-step reasoning, code review, planning, moderate debugging
+  - "high": complex architecture, multi-file refactors, deep debugging, novel problem-solving
+- "taskType":
+  - "recon": exploration, searching symbols/files, reading code, gathering context
+  - "refactor": well-bounded bulk or repetitive edits, boilerplate, type fixes across isolated modules
+  - "plan": designing features, architecture, schema or protocol changes, no side effects yet
+  - "build": intricate implementation, state machines, service wiring, migrations, SDK generation
+  - "verify": review, testing, validating existing work, checking convergence
 
 Respond with ONLY the JSON object, no markdown, no explanation.`
 
@@ -124,4 +137,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = layer
+export const node = makeGlobalNode({ service: Service, layer, deps: [] })
