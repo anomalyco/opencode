@@ -1316,7 +1316,15 @@ export function write(
         }).pipe(Effect.flatMap((content) => fs.writeFileString(join(directory, file.path), content))),
       { concurrency: 8, discard: true },
     )
-    yield* fs.writeFileString(manifest, JSON.stringify(output.files.map((file) => file.path).sort(), null, 2) + "\n")
+    // Format the manifest with the same prettier settings as the repo-wide
+    // format pass, so `check:generated` stays clean after the generate bot
+    // reformats the tree.
+    const manifestJson = JSON.stringify(output.files.map((file) => file.path).sort())
+    const manifestContent = yield* Effect.tryPromise({
+      try: () => format(manifestJson, { filepath: manifest, parser: "json", printWidth: 120 }),
+      catch: (error) => new GenerationError({ reason: `Failed to format ${manifest}: ${String(error)}` }),
+    })
+    yield* fs.writeFileString(manifest, manifestContent)
   })
 }
 
