@@ -202,7 +202,12 @@ export const GithubCopilotPlugin = define({
           if (!loaded.models.has(Model.ID.make(id))) evt.model.remove(item.provider.id, id)
         }
         for (const [id, model] of loaded.models) {
-          evt.model.update(item.provider.id, id, (draft) => Object.assign(draft, structuredClone(model)))
+          evt.model.update(item.provider.id, id, (draft) => {
+            Object.assign(draft, structuredClone(model))
+            if (Provider.packageName(draft.package) === "@ai-sdk/anthropic") {
+              draft.settings = Provider.mergeOverlay(draft.settings, { toolStreaming: false })
+            }
+          })
         }
       } else if (loaded.baseURL) {
         for (const id of item.models.keys()) {

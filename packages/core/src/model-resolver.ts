@@ -151,6 +151,18 @@ export const fromCatalogModel = (
   const key = apiKey(resolved, credential)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
 
+  if (resolved.providerID === Provider.ID.githubCopilot && Provider.isAISDK(resolved.package)) {
+    if (!dependencies?.loadAISDK) return Effect.fail(unsupported(resolved))
+    const runtime = produce(resolved, (draft) => {
+      draft.settings = Provider.mergeOverlay(draft.settings, {
+        ...nativeCredentialSettings(resolved.package ?? "", credential),
+        ...credential?.metadata,
+        ...configuration,
+      })
+    })
+    return dependencies.loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))
+  }
+
   if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/openai") {
     return Effect.succeed(
       withDefaults(resolved, OpenAIResponses.route)
