@@ -84,6 +84,7 @@ import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { PluginSlot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
+import { undoMessage } from "./undo"
 import {
   cacheReuseDrop,
   createSessionRows,
@@ -656,19 +657,24 @@ export function Session() {
       group: "Session",
       slash: { name: "undo" },
       run: () => {
+        const admitted = pendingUsers().at(-1)
         const boundary = session()?.revert?.messageID
-        const message = messages().findLast(
-          (message): message is SessionMessageUser =>
-            message.type === "user" && !!message.text.trim() && (!boundary || message.id < boundary),
-        )
+        const message = admitted
+          ? { id: admitted.id, ...admitted.data }
+          : messages().findLast(
+              (message): message is SessionMessageUser =>
+                message.type === "user" && !!message.text.trim() && (!boundary || message.id < boundary),
+            )
         if (!message) {
           toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
           dialog.clear()
           return
         }
-        void client.api.session.revert
-          .stage({ sessionID: route.sessionID, messageID: message.id })
-          .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
+        void undoMessage(client.api, {
+          sessionID: route.sessionID,
+          messageID: message.id,
+          pending: admitted !== undefined,
+        }).catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
         prompt()?.set({
           ...projectedPromptInput(message),
           pasted: [],
