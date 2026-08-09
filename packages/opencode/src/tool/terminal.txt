@@ -2,6 +2,8 @@ Open and drive an interactive terminal (a real PTY) for running commands that ne
 
 Unlike the `bash` tool, which runs non-interactively with stdin disabledags and cannot receive user input, this tool lets the user type directly into the running command. The terminal is rendered in the user's IDE terminal when available, so they can answer password and confirmation prompts in real time.
 
+Prefer non-interactive execution when no real interactivity is needed: for one-shot remote commands or queries where nobody needs to type into a live TTY, use `bash` (or a single non-interactive SSH invocation such as `plink -pw`) and read the result — it is more reliable than multi-step interactive input. Reserve `terminal` for genuinely interactive work (password/confirmation prompts, shells, daemons that must stay alive).
+
 The session persists between tool calls. Use the `terminal` tool repeatedly with the returned `ptyID` to:
 
 - `open` — start a new interactive command. Provide `command` and optional `workdir`, `shell`, and `title`. Returns the `ptyID` and any initial output. `shell` may be `"powershell"`, `"cmd"`, or `"bash"`; it defaults to PowerShell on Windows and bash elsewhere.
