@@ -1,0 +1,7 @@
+Language/framework: Swift with SwiftUI for the iOS app; Supabase is planned for the backend.
+Deployment target: None — just CI for now. Future releases will likely use TestFlight/App Store and Supabase, which aren’t among the listed options.
+Delivery preference: Continuous Delivery — validate changes automatically, deploy to staging, and require manual approval for production.
+Test/build commands: Not established yet. Once the Xcode project exists, use xcodebuild build and xcodebuild test.
+Trigger branch: main. No Dockerfile currently exists.
+Secrets/registries: None are documented in the repository yet. Supabase credentials and Apple signing/App Store Connect secrets will eventually be needed.
+The repository is still in the MVP planning/foundation stage, so the workflow should initially be a lightweight CI starter that can expand once source code and tests are added.
