@@ -20,13 +20,16 @@ export const ModelsDevPlugin = define({
           integrationID,
           method: { type: "key" },
         })
-        integrations.method.update({
-          integrationID,
-          method: {
-            type: "env",
-            names: environmentNames(provider),
-          },
-        })
+        const names = environmentNames(provider)
+        if (names.length > 0) {
+          integrations.method.update({
+            integrationID,
+            method: {
+              type: "env",
+              names,
+            },
+          })
+        }
       }
     })
     yield* ctx.catalog.transform((catalog) => {
@@ -54,9 +57,23 @@ export const ModelsDevPlugin = define({
 })
 
 function environmentNames(provider: ModelsDev.Snapshot) {
-  if (provider.info.id !== Provider.ID.azure) return [...provider.environment]
-  return [...provider.environment.filter((name) => name.endsWith("_API_KEY")), "AZURE_COGNITIVE_SERVICES_API_KEY"]
+  const names = provider.environment.filter((name) => !configurationEnvironmentNames.has(name))
+  if (provider.info.id === Provider.ID.azure) names.push("AZURE_COGNITIVE_SERVICES_API_KEY")
+  return names
 }
+
+const configurationEnvironmentNames = new Set([
+  "AWS_REGION",
+  "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME",
+  "AZURE_RESOURCE_NAME",
+  "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_GATEWAY_ID",
+  "DATABRICKS_HOST",
+  "INFOMANIAK_PRODUCT_ID",
+  "NEON_AI_GATEWAY_BASE_URL",
+  "SNOWFLAKE_ACCOUNT",
+  "WATSONX_AI_PROJECT_ID",
+])
 
 function snapshots(data: readonly ModelsDev.Snapshot[]) {
   return structuredClone(data).filter(

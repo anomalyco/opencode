@@ -18,7 +18,7 @@ export const AzurePlugin = define({
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(Provider.ID.azure)
     const form = iife(() => {
-      if (resolveResourceName(configured) || typeof configured?.baseURL === "string") return
+      if (resolveResourceName(configured) || concreteBaseURL(configured?.baseURL)) return
       return Form.Fields.make([
         {
           type: "string",
@@ -49,20 +49,8 @@ export const AzurePlugin = define({
           provider.settings = {
             ...provider.settings,
             resourceName,
-            ...(typeof provider.settings?.baseURL === "string"
-              ? { baseURL: expandResourceName(provider.settings.baseURL, resourceName) }
-              : {}),
           }
         })
-        for (const model of item.models.values()) {
-          evt.model.update(item.provider.id, model.id, (draft) => {
-            if (typeof draft.settings?.baseURL !== "string") return
-            draft.settings.baseURL = expandResourceName(
-              draft.settings.baseURL,
-              resolveResourceName(draft.settings, resourceName) ?? resourceName,
-            )
-          })
-        }
       }
     })
     yield* ctx.aisdk.hook(
@@ -102,8 +90,10 @@ function resolveResourceName(settings: Readonly<Record<string, unknown>> | undef
   return fallback ?? process.env.AZURE_RESOURCE_NAME ?? process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME
 }
 
-function expandResourceName(baseURL: string, resourceName: string) {
-  return baseURL
-    .replaceAll("${AZURE_RESOURCE_NAME}", resourceName)
-    .replaceAll("${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}", resourceName)
+function concreteBaseURL(baseURL: unknown) {
+  return (
+    typeof baseURL === "string" &&
+    !baseURL.includes("${AZURE_RESOURCE_NAME}") &&
+    !baseURL.includes("${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}")
+  )
 }

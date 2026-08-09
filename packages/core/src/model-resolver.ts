@@ -142,14 +142,18 @@ export const fromCatalogModel = (
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ): Effect.Effect<LanguageModel, UnsupportedPackageError> => {
+  const configuration = credential?.type === "key" ? credential.configuration : undefined
   const resolved = produce(model, (draft) => {
     if (draft.settings?.apiKey === "") delete draft.settings.apiKey
     if (credential?.type === "key" && credential.metadata !== undefined)
       draft.body = Provider.mergeOverlay(draft.body, credential.metadata)
+    draft.settings = { ...draft.settings, ...credential?.metadata, ...configuration }
+    if (typeof draft.settings.baseURL === "string") {
+      draft.settings.baseURL = expandBaseURL(draft.providerID, draft.settings.baseURL, draft.settings)
+    }
   })
   const packageName = Provider.packageName(resolved.package)
   const key = apiKey(resolved, credential)
-  const configuration = credential?.type === "key" ? credential.configuration : undefined
 
   if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/openai") {
     return Effect.succeed(
@@ -168,6 +172,7 @@ export const fromCatalogModel = (
   if (
     Provider.isAISDK(resolved.package) &&
     packageName === "@ai-sdk/openai-compatible" &&
+    resolved.providerID !== Provider.ID.googleVertex &&
     typeof resolved.settings?.baseURL === "string"
   ) {
     return Effect.succeed(
@@ -176,11 +181,10 @@ export const fromCatalogModel = (
         .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
     )
   }
-  const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
   const mapping = Provider.isAISDK(resolved.package)
     ? AISDKNative.map({
         packageName,
-        settings: configured,
+        settings: resolved.settings ?? {},
         modelID: resolved.modelID ?? resolved.id,
       })
     : undefined
@@ -189,9 +193,7 @@ export const fromCatalogModel = (
     if (!dependencies?.loadAISDK) return Effect.fail(unsupported(resolved))
     const runtime = produce(resolved, (draft) => {
       draft.settings = Provider.mergeOverlay(draft.settings, {
-        ...nativeCredentialSettings(resolved.package ?? "", credential),
-        ...credential?.metadata,
-        ...configuration,
+        ...nativeCredentialSettings(resolved.package ?? "", credential, resolved.providerID),
       })
     })
     return dependencies.loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))
@@ -203,10 +205,10 @@ export const fromCatalogModel = (
     const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
       Effect.mapError(() => unsupported(resolved)),
     )
-    const mapped = mapping?.settings ?? configured
+    const mapped = mapping?.settings ?? resolved.settings ?? {}
     const settings = {
       ...(credential ? withoutNativeAuthSettings(mapped) : mapped),
-      ...nativeCredentialSettings(specifier, credential),
+      ...nativeCredentialSettings(specifier, credential, resolved.providerID),
       headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
       body: Provider.mergeOverlay(mapping?.body, resolved.body),
       limits: { context: resolved.limit.context, input: resolved.limit.input, output: resolved.limit.output },
@@ -226,9 +228,79 @@ export const fromCatalogModel = (
   })
 }
 
-const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {
+function expandBaseURL(providerID: Provider.ID, value: string, settings: Readonly<Record<string, unknown>>) {
+  const variables = providerVariables(providerID, settings)
+  return value.replace(/\$\{([^}]+)\}/g, (match, name: string) => variables[name] ?? process.env[name] ?? match)
+}
+
+function providerVariables(
+  providerID: Provider.ID,
+  settings: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, string>> {
+  if (providerID === Provider.ID.azure) {
+    const resourceName =
+      stringSetting(settings, "resourceName") ??
+      process.env.AZURE_RESOURCE_NAME ??
+      process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME
+    return resourceName
+      ? { AZURE_RESOURCE_NAME: resourceName, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: resourceName }
+      : {}
+  }
+  if (providerID === Provider.ID.googleVertex) {
+    const project =
+      stringSetting(settings, "project") ??
+      process.env.GOOGLE_VERTEX_PROJECT ??
+      process.env.GOOGLE_CLOUD_PROJECT ??
+      process.env.GCP_PROJECT ??
+      process.env.GCLOUD_PROJECT
+    const location =
+      stringSetting(settings, "location") ??
+      process.env.GOOGLE_VERTEX_LOCATION ??
+      process.env.GOOGLE_CLOUD_LOCATION ??
+      process.env.VERTEX_LOCATION ??
+      "us-central1"
+    return {
+      ...(project ? { GOOGLE_VERTEX_PROJECT: project } : {}),
+      GOOGLE_VERTEX_LOCATION: location,
+      GOOGLE_VERTEX_ENDPOINT:
+        location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`,
+    }
+  }
+  if (providerID === Provider.ID.make("cloudflare-workers-ai")) {
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID ?? stringSetting(settings, "accountId")
+    return accountId ? { CLOUDFLARE_ACCOUNT_ID: accountId } : {}
+  }
+  return {}
+}
+
+function stringSetting(settings: Readonly<Record<string, unknown>>, key: string) {
+  const value = settings[key]
+  return typeof value === "string" && value.trim() !== "" ? value : undefined
+}
+
+const nativeCredentialSettings = (
+  specifier: string,
+  credential: Credential.Value | undefined,
+  providerID?: Provider.ID,
+) => {
   if (!credential) return {}
-  if (credential.type === "key") return { apiKey: credential.key }
+  if (credential.type === "key") {
+    if (
+      providerID === Provider.ID.googleVertex &&
+      [
+        process.env.GOOGLE_VERTEX_PROJECT,
+        process.env.GOOGLE_CLOUD_PROJECT,
+        process.env.GCP_PROJECT,
+        process.env.GCLOUD_PROJECT,
+        process.env.GOOGLE_VERTEX_LOCATION,
+        process.env.GOOGLE_CLOUD_LOCATION,
+        process.env.VERTEX_LOCATION,
+        process.env.GOOGLE_APPLICATION_CREDENTIALS,
+      ].includes(credential.key)
+    )
+      return {}
+    return { apiKey: credential.key }
+  }
   if (
     specifier === "@opencode-ai/ai/providers/anthropic" ||
     specifier === "@opencode-ai/ai/providers/anthropic-compatible"

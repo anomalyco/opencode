@@ -42,6 +42,27 @@ const model = (packageName: string | undefined, options: ModelOptions = {}) =>
     limit: options.limit ?? { context: 100, output: 20 },
   })
 
+function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Object.fromEntries(Object.keys(variables).map((key) => [key, process.env[key]]))
+      Object.entries(variables).forEach(([key, value]) => {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      })
+      return previous
+    }),
+    effect,
+    (previous) =>
+      Effect.sync(() => {
+        Object.entries(previous).forEach(([key, value]) => {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        })
+      }),
+  )
+}
+
 describe("ModelResolver", () => {
   it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
     Effect.gen(function* () {
@@ -228,6 +249,113 @@ describe("ModelResolver", () => {
       expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
       expect(resolved.route.defaults.http?.body).toEqual({})
     }),
+  )
+
+  it.effect("expands generic environment URL variables for native routes", () =>
+    withEnv({ TEST_PROVIDER_HOST: "runtime.example" }, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+            settings: { baseURL: "https://${TEST_PROVIDER_HOST}/v1" },
+            headers: {},
+            body: {},
+          }),
+        )
+
+        expect(resolved.route.endpoint.baseURL).toBe("https://runtime.example/v1")
+      }),
+    ),
+  )
+
+  it.effect("expands Cloudflare URLs from key configuration", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined }, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+            providerID: Provider.ID.make("cloudflare-workers-ai"),
+            settings: {
+              baseURL: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+            },
+            headers: {},
+            body: {},
+          }),
+          Credential.Key.make({
+            type: "key",
+            key: "secret",
+            configuration: { accountId: "configured-account" },
+          }),
+        )
+
+        expect(resolved.route.endpoint.baseURL).toBe(
+          "https://api.cloudflare.com/client/v4/accounts/configured-account/ai/v1",
+        )
+        expect(resolved.route.defaults.providerOptions).toEqual({
+          openai: { accountId: "configured-account" },
+        })
+      }),
+    ),
+  )
+
+  it.effect("expands Azure URLs from key configuration", () =>
+    withEnv({ AZURE_RESOURCE_NAME: "ambient-resource", AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/anthropic"), {
+            providerID: Provider.ID.azure,
+            settings: { baseURL: "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1" },
+            headers: {},
+            body: {},
+          }),
+          Credential.Key.make({
+            type: "key",
+            key: "secret",
+            configuration: { resourceName: "configured-resource" },
+          }),
+        )
+
+        expect(resolved.route.endpoint.baseURL).toBe("https://configured-resource.services.ai.azure.com/anthropic/v1")
+      }),
+    ),
+  )
+
+  it.effect("expands Vertex model URLs from environment aliases and uses the AISDK hook path", () =>
+    withEnv(
+      {
+        GOOGLE_VERTEX_PROJECT: undefined,
+        GOOGLE_CLOUD_PROJECT: "configured-project",
+        GOOGLE_VERTEX_LOCATION: undefined,
+        GOOGLE_CLOUD_LOCATION: undefined,
+        VERTEX_LOCATION: "europe-west4",
+      },
+      () =>
+        Effect.gen(function* () {
+          const fallback = yield* ModelResolver.fromCatalogModel(
+            model(Provider.aisdk("@ai-sdk/openai"), { settings: { baseURL: "https://openai.example/v1" } }),
+          )
+          const resolved = yield* ModelResolver.fromCatalogModel(
+            model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+              providerID: Provider.ID.googleVertex,
+              settings: {
+                baseURL:
+                  "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}/endpoints/openapi",
+              },
+            }),
+            Credential.Key.make({ type: "key", key: "configured-project" }),
+            {
+              loadAISDK: (runtime) =>
+                Effect.sync(() => {
+                  expect(runtime.settings?.baseURL).toBe(
+                    "https://europe-west4-aiplatform.googleapis.com/v1/projects/configured-project/locations/europe-west4/endpoints/openapi",
+                  )
+                  expect(runtime.settings).not.toHaveProperty("apiKey")
+                  return fallback
+                }),
+            },
+          )
+
+          expect(resolved).toBe(fallback)
+        }),
+    ),
   )
 
   it.effect("overlays selected OpenAI variant settings and bodies", () =>

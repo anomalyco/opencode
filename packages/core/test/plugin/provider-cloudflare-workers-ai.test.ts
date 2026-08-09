@@ -13,6 +13,7 @@ import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
+const providerID = Provider.ID.make("cloudflare-workers-ai")
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
@@ -83,6 +84,15 @@ describe("CloudflareWorkersAIPlugin", () => {
   it.effect("registers an account form when the environment does not provide one", () =>
     withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined }, () =>
       Effect.gen(function* () {
+        const catalog = yield* Catalog.Service
+        yield* catalog.transform((catalog) =>
+          catalog.provider.update(providerID, (provider) => {
+            provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+            provider.settings = {
+              baseURL: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+            }
+          }),
+        )
         yield* addPlugin()
         expect(
           (yield* (yield* Integration.Service).get(Integration.ID.make("cloudflare-workers-ai")))?.methods,
