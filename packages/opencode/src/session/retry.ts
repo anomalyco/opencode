@@ -48,7 +48,7 @@ export function delay(attempt: number, error?: SessionV1.APIError) {
       const retryAfterMs = headers["retry-after-ms"]
       if (retryAfterMs) {
         const parsedMs = Number.parseFloat(retryAfterMs)
-        if (!Number.isNaN(parsedMs)) {
+        if (!Number.isNaN(parsedMs) && parsedMs >= 0) {
           return cap(parsedMs)
         }
       }
@@ -56,7 +56,7 @@ export function delay(attempt: number, error?: SessionV1.APIError) {
       const retryAfter = headers["retry-after"]
       if (retryAfter) {
         const parsedSeconds = Number.parseFloat(retryAfter)
-        if (!Number.isNaN(parsedSeconds)) {
+        if (!Number.isNaN(parsedSeconds) && parsedSeconds >= 0) {
           // convert seconds to milliseconds
           return cap(Math.ceil(parsedSeconds * 1000))
         }
