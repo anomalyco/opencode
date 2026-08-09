@@ -1,10 +1,11 @@
 export * as QuestionTool from "./question"
 
 import { ToolFailure } from "@opencode-ai/llm"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema, Option } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { PermissionV2 } from "../permission"
 import { QuestionV2 } from "../question"
+import { AutoClarifyService, AutoClarifyLayer, node as AutoClarifyNode } from "../auto-clarify"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -71,15 +72,32 @@ const layer = Layer.effectDiscard(
               .pipe(
                 Effect.mapError(() => new ToolFailure({ message: "Permission denied: question" })),
                 Effect.andThen(
-                  question
-                    .ask({
+                  Effect.gen(function* () {
+                    const autoClarify = yield* Effect.serviceOption(AutoClarifyService)
+                    if (Option.isSome(autoClarify)) {
+                      const result = yield* autoClarify.value.clarify({
+                        sessionID: context.sessionID,
+                        questions: input.questions,
+                        toolContext: {
+                          messageID: context.assistantMessageID,
+                          callID: context.toolCallID,
+                          agent: context.agent,
+                        },
+                      }).pipe(
+                        Effect.mapError((e) => new ToolFailure({ message: e.message }))
+                      )
+                      return { answers: result.answers }
+                    }
+                    return yield* question.ask({
                       sessionID: context.sessionID,
                       questions: input.questions,
                       tool: { messageID: context.assistantMessageID, callID: context.toolCallID },
-                    })
-                    .pipe(Effect.orDie),
+                    }).pipe(
+                      Effect.map((answers) => ({ answers })),
+                      Effect.catchTag("QuestionV2.RejectedError", (e) => Effect.fail(new ToolFailure({ message: e.message }))),
+                    )
+                  }),
                 ),
-                Effect.map((answers) => ({ answers })),
               ),
         }),
       })
@@ -90,5 +108,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/question",
   layer,
-  deps: [ToolRegistry.node, PermissionV2.node, QuestionV2.node],
+  deps: [ToolRegistry.node, PermissionV2.node, QuestionV2.node, AutoClarifyNode],
 })
