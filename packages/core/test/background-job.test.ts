@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { BackgroundJob } from "@opencode-ai/core/background-job"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Deferred, Effect, Exit, Schema, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Schema, Scope } from "effect"
 import { it } from "./lib/effect"
 
 const jobsLayer = LayerNode.compile(BackgroundJob.node)
@@ -17,6 +17,21 @@ describe("BackgroundJob", () => {
 
       expect((yield* jobs.wait({ id: tagged.id })).info?.error).toBe("MessageLessError")
       expect((yield* jobs.wait({ id: withMessage.id })).info?.error).toBe("real message")
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("renders TimeoutError when a timed-out job settles", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const job = yield* jobs.start({
+        type: "test",
+        run: Effect.timeoutOrElse(Effect.never, {
+          duration: "1 millis",
+          orElse: () => Effect.fail(new Cause.TimeoutError()),
+        }),
+      })
+
+      expect((yield* jobs.wait({ id: job.id, timeout: 1_000 })).info?.error).toBe("TimeoutError")
     }).pipe(Effect.provide(jobsLayer)),
   )
 
