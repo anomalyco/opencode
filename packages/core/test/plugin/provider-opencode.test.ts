@@ -128,7 +128,7 @@ describe("OpencodePlugin", () => {
           const attempt = yield* integrations.oauth.connect({
             integrationID,
             methodID: Integration.MethodID.make("device"),
-            answers: { server: `${server.url.origin}/console///?ignored=true#ignored` },
+            answer: { server: `${server.url.origin}/console///?ignored=true#ignored` },
           })
           expect(attempt.url).toBe(`${server.url.origin}/verify`)
           yield* eventually(
@@ -155,7 +155,7 @@ describe("OpencodePlugin", () => {
         .connect({
           integrationID: Integration.ID.make("opencode"),
           methodID: Integration.MethodID.make("device"),
-          answers: { server: "ftp://console.example.com" },
+          answer: { server: "ftp://console.example.com" },
         })
         .pipe(Effect.flip)
       expect(error).toBeInstanceOf(Integration.AuthorizationError)
@@ -170,7 +170,7 @@ describe("OpencodePlugin", () => {
         .connect({
           integrationID: Integration.ID.make("opencode"),
           methodID: Integration.MethodID.make("device"),
-          answers: { server: true },
+          answer: { server: true },
         })
         .pipe(Effect.flip)
       expect(error).toBeInstanceOf(Integration.AuthorizationError)

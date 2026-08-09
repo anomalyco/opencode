@@ -68,7 +68,7 @@ describe("AzurePlugin", () => {
         expect((yield* (yield* Integration.Service).get(Integration.ID.make("azure")))?.methods).toContainEqual({
           type: "key",
           label: "API key",
-          forms: [
+          form: [
             {
               type: "string",
               key: "resourceName",

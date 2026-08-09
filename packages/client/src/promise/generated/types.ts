@@ -1921,9 +1921,9 @@ export type SessionMessageAssistant = {
   retry?: SessionMessageAssistantRetry
 }
 
-export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string; forms?: FormFields }
+export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string; form?: FormFields }
 
-export type IntegrationKeyMethod = { type: "key"; label?: string; forms?: FormFields }
+export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
 
 export type FormInfo = { id: string; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
 
@@ -4024,17 +4024,17 @@ export type IntegrationConnectKeyInput = {
   }["location"]
   readonly key: {
     readonly key: string
-    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
     readonly label?: string | undefined
   }["key"]
-  readonly answers: {
+  readonly answer: {
     readonly key: string
-    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
     readonly label?: string | undefined
-  }["answers"]
+  }["answer"]
   readonly label?: {
     readonly key: string
-    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
     readonly label?: string | undefined
   }["label"]
 }
@@ -4048,17 +4048,17 @@ export type IntegrationOauthConnectInput = {
   }["location"]
   readonly methodID: {
     readonly methodID: string
-    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
     readonly label?: string | undefined
   }["methodID"]
-  readonly answers: {
+  readonly answer: {
     readonly methodID: string
-    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
     readonly label?: string | undefined
-  }["answers"]
+  }["answer"]
   readonly label?: {
     readonly methodID: string
-    readonly answers: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
+    readonly answer: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> }
     readonly label?: string | undefined
   }["label"]
 }

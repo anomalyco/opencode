@@ -32,7 +32,7 @@ export default Runtime.handler(
       return yield* Effect.fail(new Error(`MCP server "${input.name}" is not an OAuth-capable remote server`))
 
     const started = yield* Effect.promise(() =>
-      client.integration.oauth.connect({ integrationID: integration.id, methodID: method.id, answers: {}, location }),
+      client.integration.oauth.connect({ integrationID: integration.id, methodID: method.id, answer: {}, location }),
     )
     const attempt = started.data
     if (attempt.mode === "code")

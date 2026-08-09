@@ -180,8 +180,8 @@ export function fromPromise(plugin: Plugin) {
                         const refresh = input.refresh
                         draft.method.update({
                           ...input,
-                          authorize: (answers) =>
-                            Effect.promise(() => input.authorize(answers)).pipe(
+                          authorize: (answer) =>
+                            Effect.promise(() => input.authorize(answer)).pipe(
                               Effect.map((authorization) =>
                                 authorization.mode === "auto"
                                   ? {

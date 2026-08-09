@@ -287,8 +287,8 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 draft.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: oauthMethod(input.method, methodID),
-                  authorize: (answers) =>
-                    input.authorize(answers).pipe(
+                  authorize: (answer) =>
+                    input.authorize(answer).pipe(
                       Effect.map((authorization) => {
                         if (authorization.mode === "auto") {
                           return {
@@ -404,13 +404,13 @@ function oauthCredential(value: Credential.OAuth) {
 
 function method(value: Integration.Method): IntegrationMethod {
   if (value.type === "env") return { type: value.type, names: [...value.names] }
-  if (value.type === "key") return { type: value.type, label: value.label, forms: mutable(value.forms) }
+  if (value.type === "key") return { type: value.type, label: value.label, form: mutable(value.form) }
   if (value.type === "command") return { ...value, command: [...value.command] }
   return {
     type: value.type,
     id: value.id,
     label: value.label,
-    forms: mutable(value.forms),
+    form: mutable(value.form),
   }
 }
 
@@ -444,20 +444,20 @@ function mutable(value: unknown): unknown {
   return structuredClone(value)
 }
 
-function keyMethod(value: { readonly label?: string; readonly forms?: unknown }) {
+function keyMethod(value: { readonly label?: string; readonly form?: unknown }) {
   return Schema.decodeUnknownSync(Integration.KeyMethod)({
     type: "key",
     ...(value.label === undefined ? {} : { label: value.label }),
-    ...(value.forms === undefined ? {} : { forms: value.forms }),
+    ...(value.form === undefined ? {} : { form: value.form }),
   })
 }
 
-function oauthMethod(value: { readonly label: string; readonly forms?: unknown }, id: Integration.MethodID) {
+function oauthMethod(value: { readonly label: string; readonly form?: unknown }, id: Integration.MethodID) {
   return Schema.decodeUnknownSync(Integration.OAuthMethod)({
     id,
     type: "oauth",
     label: value.label,
-    ...(value.forms === undefined ? {} : { forms: value.forms }),
+    ...(value.form === undefined ? {} : { form: value.form }),
   })
 }
 

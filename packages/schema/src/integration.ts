@@ -20,7 +20,7 @@ export const OAuthMethod = Schema.Struct({
   id: MethodID,
   type: Schema.Literal("oauth"),
   label: Schema.String,
-  forms: optional(Form.Fields),
+  form: optional(Form.Fields),
 }).annotate({ identifier: "Integration.OAuthMethod" })
 
 export interface CommandMethod extends Schema.Schema.Type<typeof CommandMethod> {}
@@ -35,7 +35,7 @@ export interface KeyMethod extends Schema.Schema.Type<typeof KeyMethod> {}
 export const KeyMethod = Schema.Struct({
   type: Schema.Literal("key"),
   label: optional(Schema.String),
-  forms: optional(Form.Fields),
+  form: optional(Form.Fields),
 }).annotate({ identifier: "Integration.KeyMethod" })
 
 export interface EnvMethod extends Schema.Schema.Type<typeof EnvMethod> {}

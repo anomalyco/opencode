@@ -47,7 +47,7 @@ const oauth = (app: App.Info) =>
       id: methodID,
       type: "oauth",
       label: "Login with GitHub Copilot",
-      forms: [
+      form: [
         {
           type: "string",
           key: "deploymentType",
@@ -68,10 +68,10 @@ const oauth = (app: App.Info) =>
         },
       ],
     },
-    authorize: (answers) =>
+    authorize: (answer) =>
       Effect.gen(function* () {
-        const enterprise = answers.deploymentType === "enterprise"
-        const enterpriseUrl = typeof answers.enterpriseUrl === "string" ? answers.enterpriseUrl : undefined
+        const enterprise = answer.deploymentType === "enterprise"
+        const enterpriseUrl = typeof answer.enterpriseUrl === "string" ? answer.enterpriseUrl : undefined
         if (enterprise && !enterpriseUrl) return yield* Effect.fail(new Error("Enterprise URL is required"))
         const domain = enterprise ? normalizeDomain(enterpriseUrl ?? "") : "github.com"
         const urls = oauthURLs(domain)

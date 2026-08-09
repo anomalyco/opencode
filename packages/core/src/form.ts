@@ -227,12 +227,12 @@ export const locationLayer = layer
 
 export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node] })
 
-export function validateAnswer(forms: ReadonlyArray<Form.Field>, answer: Answer) {
-  const fields = new Map(forms.map((field) => [field.key, field] as const))
+export function validateAnswer(form: ReadonlyArray<Form.Field>, answer: Answer) {
+  const fields = new Map(form.map((field) => [field.key, field] as const))
   for (const key of Object.keys(answer)) {
     if (!fields.has(key)) return `Unknown form field: ${key}`
   }
-  for (const field of forms) {
+  for (const field of form) {
     const value = answer[field.key]
     if (field.type === "external") {
       if (value !== true) return `External form field must be acknowledged: ${field.key}`

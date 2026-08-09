@@ -13,7 +13,7 @@ export const CloudflareWorkersAIPlugin = define({
   id: "opencode.provider.cloudflare-workers-ai",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
-    const forms = iife(() => {
+    const form = iife(() => {
       if (typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})) return
       return Form.Fields.make([
         {
@@ -31,7 +31,7 @@ export const CloudflareWorkersAIPlugin = define({
         method: {
           type: "key",
           label: "API key",
-          forms,
+          form,
         },
       })
     })

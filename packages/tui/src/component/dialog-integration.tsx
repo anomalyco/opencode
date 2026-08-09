@@ -200,12 +200,10 @@ async function beginKey(
   dialog: ReturnType<typeof useDialog>,
   onConnected?: OnIntegrationConnected,
 ) {
-  const answers = method.forms
-    ? await formAnswers(dialog, method.label ?? `Connect ${integration.name}`, method.forms)
-    : {}
-  if (answers === null) return
+  const answer = method.form ? await formAnswer(dialog, method.label ?? `Connect ${integration.name}`, method.form) : {}
+  if (answer === null) return
   dialog.replace(() => (
-    <KeyMethod integration={integration} method={method} answers={answers} onConnected={onConnected} />
+    <KeyMethod integration={integration} method={method} answer={answer} onConnected={onConnected} />
   ))
 }
 
@@ -354,7 +352,7 @@ function CommandView(props: { title: string; output: string; message: string }) 
 function KeyMethod(props: {
   integration: IntegrationInfo
   method: Extract<ConnectMethod, { type: "key" }>
-  answers: FormAnswer
+  answer: FormAnswer
   onConnected?: OnIntegrationConnected
 }) {
   const data = useData()
@@ -375,7 +373,7 @@ function KeyMethod(props: {
             integrationID: props.integration.id,
             location: location(data),
             key,
-            answers: props.answers,
+            answer: props.answer,
           })
           .then(() => connected(props.integration, data, dialog, toast, props.onConnected))
           .catch((cause) => setError(message(cause)))
@@ -393,17 +391,17 @@ async function beginOAuth(
   dialog: ReturnType<typeof useDialog>,
   onConnected?: OnIntegrationConnected,
 ) {
-  const answers = method.forms ? await formAnswers(dialog, method.label, method.forms) : {}
-  if (answers === null) return
+  const answer = method.form ? await formAnswer(dialog, method.label, method.form) : {}
+  if (answer === null) return
   dialog.replace(() => (
-    <OAuthStarting integration={integration} method={method} answers={answers} onConnected={onConnected} />
+    <OAuthStarting integration={integration} method={method} answer={answer} onConnected={onConnected} />
   ))
 }
 
 function OAuthStarting(props: {
   integration: IntegrationInfo
   method: IntegrationOAuthMethod
-  answers: FormAnswer
+  answer: FormAnswer
   onConnected?: OnIntegrationConnected
 }) {
   const data = useData()
@@ -417,7 +415,7 @@ function OAuthStarting(props: {
         integrationID: props.integration.id,
         location: location(data),
         methodID: props.method.id,
-        answers: props.answers,
+        answer: props.answer,
       })
       .then((result) => {
         if (result.data.mode === "code") {
@@ -641,12 +639,12 @@ function OAuthView(props: {
   )
 }
 
-async function formAnswers(dialog: ReturnType<typeof useDialog>, title: string, forms: FormFields) {
+async function formAnswer(dialog: ReturnType<typeof useDialog>, title: string, fields: FormFields) {
   return new Promise<FormAnswer | null>((resolve) => {
     dialog.replace(
       () => (
         <FormInput
-          form={{ title, fields: forms }}
+          form={{ title, fields }}
           onSubmit={resolve}
           onCancel={() => {
             dialog.clear()

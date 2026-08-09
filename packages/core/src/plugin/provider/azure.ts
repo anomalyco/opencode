@@ -17,7 +17,7 @@ export const AzurePlugin = define({
   id: "opencode.provider.azure",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(Provider.ID.azure)
-    const forms = iife(() => {
+    const form = iife(() => {
       if (resolveResourceName(configured) || typeof configured?.baseURL === "string") return
       return Form.Fields.make([
         {
@@ -35,7 +35,7 @@ export const AzurePlugin = define({
         method: {
           type: "key",
           label: "API key",
-          forms,
+          form,
         },
       })
     })

@@ -113,7 +113,7 @@ describe("CloudflareAIGatewayPlugin", () => {
         ).toContainEqual({
           type: "key",
           label: "Gateway API token",
-          forms: [
+          form: [
             expect.objectContaining({ type: "string", key: "accountId", required: true }),
             expect.objectContaining({ type: "string", key: "gatewayId", required: true }),
           ],

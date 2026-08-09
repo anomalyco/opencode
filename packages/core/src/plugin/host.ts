@@ -190,7 +190,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
           integration.connection.key({
             integrationID: Integration.ID.make(input.integrationID),
             key: input.key,
-            answers: input.answers,
+            answer: input.answer,
             label: input.label,
           }),
       },
@@ -200,7 +200,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
             integration.oauth.connect({
               integrationID: Integration.ID.make(input.integrationID),
               methodID: Integration.MethodID.make(input.methodID),
-              answers: input.answers,
+              answer: input.answer,
               label: input.label,
             }),
           ),
@@ -364,8 +364,8 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
     return {
       integrationID: Integration.ID.make(input.integrationID),
       method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
-      authorize: (answers) =>
-        input.authorize(answers).pipe(
+      authorize: (answer) =>
+        input.authorize(answer).pipe(
           Effect.map((authorization) => {
             if (authorization.mode === "auto") {
               return {

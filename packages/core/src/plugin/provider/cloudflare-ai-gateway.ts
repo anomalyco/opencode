@@ -13,7 +13,7 @@ export const CloudflareAIGatewayPlugin = define({
   id: "opencode.provider.cloudflare-ai-gateway",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
-    const forms = iife(() => {
+    const form = iife(() => {
       if (typeof configured?.baseURL === "string") return
       const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || stringOption(configured ?? {}, "accountId")
       const gatewayId =
@@ -45,7 +45,7 @@ export const CloudflareAIGatewayPlugin = define({
         method: {
           type: "key",
           label: "Gateway API token",
-          forms,
+          form,
         },
       })
     })

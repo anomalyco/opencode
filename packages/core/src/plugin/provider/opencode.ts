@@ -43,9 +43,9 @@ function oauth(http: HttpClient.HttpClient) {
       type: "oauth",
       label: "OpenCode Console account",
     },
-    authorize: (answers) =>
+    authorize: (answer) =>
       Effect.gen(function* () {
-        const server = yield* normalizeServer(answers.server ?? defaultServer)
+        const server = yield* normalizeServer(answer.server ?? defaultServer)
         const device = yield* post(http, `${server}/auth/device/code`, { client_id: clientID }, Device)
         const verification = URL.canParse(device.verification_uri_complete)
           ? new URL(device.verification_uri_complete)

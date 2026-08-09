@@ -30,8 +30,8 @@ export type IntegrationOAuthAuthorization = {
 )
 export type IntegrationOAuthMethodRegistration = {
   readonly integrationID: string
-  readonly method: Omit<IntegrationOAuthMethod, "forms"> & { readonly forms?: Form.Fields }
-  readonly authorize: (answers: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
+  readonly method: Omit<IntegrationOAuthMethod, "form"> & { readonly form?: Form.Fields }
+  readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
@@ -43,7 +43,7 @@ export type IntegrationMethodRegistration =
     }
   | {
       readonly integrationID: string
-      readonly method: Omit<IntegrationKeyMethod, "forms"> & { readonly forms?: Form.Fields }
+      readonly method: Omit<IntegrationKeyMethod, "form"> & { readonly form?: Form.Fields }
     }
   | {
       readonly integrationID: string

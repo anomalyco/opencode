@@ -40,7 +40,7 @@ import { decode64 } from "@/utils/base64"
 
 const CUSTOM_ID = "_custom"
 type ConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
-type IntegrationForm = NonNullable<ConnectMethod["forms"]>[number]
+type IntegrationForm = NonNullable<ConnectMethod["form"]>[number]
 type StringForm = Extract<IntegrationForm, { type: "string" }>
 
 export function useProviderConnectController(options: { onBack?: () => void } = {}) {
@@ -436,7 +436,7 @@ function ProviderConnection(props: {
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | IntegrationOauthConnectOutput["data"],
-    formAnswers: undefined as FormAnswer | undefined,
+    formAnswer: undefined as FormAnswer | undefined,
     state: "pending" as undefined | "pending" | "complete" | "error" | "form",
     error: undefined as string | undefined,
   })
@@ -445,7 +445,7 @@ function ProviderConnection(props: {
     | { type: "method.select"; index: number }
     | { type: "method.reset" }
     | { type: "auth.form" }
-    | { type: "auth.answers"; answers: FormAnswer }
+    | { type: "auth.answer"; answer: FormAnswer }
     | { type: "auth.pending" }
     | { type: "auth.complete"; authorization: IntegrationOauthConnectOutput["data"] }
     | { type: "auth.error"; error: string }
@@ -456,7 +456,7 @@ function ProviderConnection(props: {
         if (action.type === "method.select") {
           draft.methodIndex = action.index
           draft.authorization = undefined
-          draft.formAnswers = undefined
+          draft.formAnswer = undefined
           draft.state = undefined
           draft.error = undefined
           return
@@ -464,7 +464,7 @@ function ProviderConnection(props: {
         if (action.type === "method.reset") {
           draft.methodIndex = undefined
           draft.authorization = undefined
-          draft.formAnswers = undefined
+          draft.formAnswer = undefined
           draft.state = undefined
           draft.error = undefined
           return
@@ -474,8 +474,8 @@ function ProviderConnection(props: {
           draft.error = undefined
           return
         }
-        if (action.type === "auth.answers") {
-          draft.formAnswers = action.answers
+        if (action.type === "auth.answer") {
+          draft.formAnswer = action.answer
           draft.state = undefined
           draft.error = undefined
           return
@@ -533,7 +533,7 @@ function ProviderConnection(props: {
     return fallback
   }
 
-  async function selectMethod(index: number, answers?: FormAnswer) {
+  async function selectMethod(index: number, answer?: FormAnswer) {
     if (timer.current !== undefined) {
       clearTimeout(timer.current)
       timer.current = undefined
@@ -542,16 +542,16 @@ function ProviderConnection(props: {
     const method = methods()[index]
     dispatch({ type: "method.select", index })
 
-    if (method.forms?.length && !answers) {
+    if (method.form?.length && !answer) {
       dispatch({ type: "auth.form" })
       return
     }
     if (method.type === "key") {
-      dispatch({ type: "auth.answers", answers: answers ?? {} })
+      dispatch({ type: "auth.answer", answer: answer ?? {} })
       return
     }
     if (method.type === "oauth") {
-      if (method.forms?.some((field) => field.type !== "string")) {
+      if (method.form?.some((field) => field.type !== "string")) {
         dispatch({ type: "auth.error", error: "This authentication form contains unsupported fields" })
         return
       }
@@ -560,7 +560,7 @@ function ProviderConnection(props: {
         .api.integration.oauth.connect({
           integrationID: props.provider,
           methodID: method.id,
-          answers: answers ?? {},
+          answer: answer ?? {},
           location: location(),
         })
         .then((x) => {
@@ -574,15 +574,15 @@ function ProviderConnection(props: {
     }
   }
 
-  function AuthFormsView() {
+  function AuthFormView() {
     const [formStore, setFormStore] = createStore({
       value: {} as Record<string, string>,
       index: 0,
     })
 
-    const forms = createMemo<StringForm[]>(() => {
+    const fields = createMemo<StringForm[]>(() => {
       const value = method()
-      return (value?.forms ?? []).flatMap((field) => (field.type === "string" ? [field] : []))
+      return (value?.form ?? []).flatMap((field) => (field.type === "string" ? [field] : []))
     })
     const matches = (field: StringForm, value: Record<string, string>) => {
       return (field.when ?? []).every((condition) => {
@@ -592,7 +592,7 @@ function ProviderConnection(props: {
       })
     }
     const current = createMemo(() => {
-      const all = forms()
+      const all = fields()
       const index = all.findIndex((field, index) => index >= formStore.index && matches(field, formStore.value))
       if (index === -1) return
       return {
@@ -609,7 +609,7 @@ function ProviderConnection(props: {
 
     async function next(index: number, value: Record<string, string>) {
       if (store.methodIndex === undefined) return
-      const next = forms().findIndex((field, i) => i > index && matches(field, value))
+      const next = fields().findIndex((field, i) => i > index && matches(field, value))
       if (next !== -1) {
         setFormStore("index", next)
         return
@@ -831,7 +831,7 @@ function ProviderConnection(props: {
         integrationID: props.provider,
         location: location(),
         key: apiKey,
-        answers: store.formAnswers ?? {},
+        answer: store.formAnswer ?? {},
       })
       await complete()
     }
@@ -1156,7 +1156,7 @@ function ProviderConnection(props: {
               </div>
             </Match>
             <Match when={store.state === "form"}>
-              <AuthFormsView />
+              <AuthFormView />
             </Match>
             <Match when={store.state === "error"}>
               <div class="text-14-regular text-text-base">

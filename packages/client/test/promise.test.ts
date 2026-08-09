@@ -172,18 +172,18 @@ test("integration connections submit form answers", async () => {
   await client.integration.connect.key({
     integrationID: "cloudflare-workers-ai",
     key: "secret",
-    answers: { accountId: "account" },
+    answer: { accountId: "account" },
   })
   await client.integration.oauth.connect({
     integrationID: "github-copilot",
     methodID: "device",
-    answers: { deploymentType: "enterprise", enabled: true, scopes: ["read:user"] },
+    answer: { deploymentType: "enterprise", enabled: true, scopes: ["read:user"] },
   })
 
-  expect(await requests[0].json()).toEqual({ key: "secret", answers: { accountId: "account" } })
+  expect(await requests[0].json()).toEqual({ key: "secret", answer: { accountId: "account" } })
   expect(await requests[1].json()).toEqual({
     methodID: "device",
-    answers: { deploymentType: "enterprise", enabled: true, scopes: ["read:user"] },
+    answer: { deploymentType: "enterprise", enabled: true, scopes: ["read:user"] },
   })
 })
 

@@ -67,7 +67,7 @@ describe("built-in web search providers", () => {
         name: "Exa",
         methods: [{ type: "key" }, { type: "env", names: ["EXA_API_KEY"] }],
       })
-      yield* integrations.connection.key({ integrationID: Integration.ID.make("exa"), key: "exa secret", answers: {} })
+      yield* integrations.connection.key({ integrationID: Integration.ID.make("exa"), key: "exa secret", answer: {} })
       expect(yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("exa") })).toEqual(
         new WebSearch.Response({
           providerID: WebSearch.ID.make("exa"),
@@ -132,7 +132,7 @@ describe("built-in web search providers", () => {
       yield* integrations.connection.key({
         integrationID: Integration.ID.make("parallel"),
         key: "parallel-secret",
-        answers: {},
+        answer: {},
       })
 
       const output = yield* websearch.query({

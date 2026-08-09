@@ -89,7 +89,7 @@ describe("CloudflareWorkersAIPlugin", () => {
         ).toContainEqual({
           type: "key",
           label: "API key",
-          forms: [
+          form: [
             {
               type: "string",
               key: "accountId",
