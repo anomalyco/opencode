@@ -12,7 +12,6 @@ const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 const tmp = path.join(os.tmpdir(), app)
-const resolvedTmp: { value?: string } = {}
 
 const paths = {
   get home() {
@@ -25,12 +24,7 @@ const paths = {
   cache,
   config,
   state,
-  get tmp() {
-    if (resolvedTmp.value) return resolvedTmp.value
-    fs.mkdirSync(tmp, { recursive: true })
-    resolvedTmp.value = fs.realpathSync(tmp)
-    return resolvedTmp.value
-  },
+  tmp,
 }
 
 export const Path = paths
@@ -52,6 +46,7 @@ export interface Interface {
 }
 
 export function make(input: Partial<Interface> = {}): Interface {
+  // The acquired service canonicalizes default tmp; use it instead of Path.tmp for path comparisons.
   return {
     home: Path.home,
     data: Path.data,
@@ -76,7 +71,8 @@ const acquire = (input: Partial<Interface>) =>
         ),
       ),
     )
-    return service
+    const canonicalTmp = yield* Effect.promise(() => fs.promises.realpath(service.tmp))
+    return Service.of({ ...service, tmp: input.tmp ?? canonicalTmp })
   })
 
 const layer = Layer.effect(
