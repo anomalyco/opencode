@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "opencode",
-  "description": "AI-powered development tool",
+  "description": "moks — TUI-first agent harness for engineering TAs (OpenCode fork)",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.14",
@@ -119,7 +119,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/anomalyco/opencode"
+    "url": "https://github.com/artemysone/moks"
   },
   "license": "MIT",
   "prettier": {

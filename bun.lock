@@ -561,6 +561,7 @@
       "name": "opencode",
       "version": "1.18.16",
       "bin": {
+        "moks": "./bin/moks",
         "opencode": "./bin/opencode",
       },
       "dependencies": {

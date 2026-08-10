@@ -25,8 +25,9 @@ const archMap = {
 const platform = platformMap[os.platform()] ?? os.platform()
 const arch = archMap[os.arch()] ?? os.arch()
 const base = `opencode-${platform}-${arch}`
-const sourceBinary = platform === "windows" ? "opencode.exe" : "opencode"
-const targetBinary = path.join(__dirname, "bin", "opencode.exe")
+const sourceBinary = platform === "windows" ? "moks.exe" : "moks"
+const sourceBinaryFallback = platform === "windows" ? "opencode.exe" : "opencode"
+const targetBinary = path.join(__dirname, "bin", "moks.exe")
 
 function supportsAvx2() {
   if (arch !== "x64") return false
@@ -116,11 +117,17 @@ function packageNames() {
   return [base]
 }
 
+function packageBinary(dir) {
+  for (const name of [sourceBinary, sourceBinaryFallback]) {
+    const binaryPath = path.join(dir, "bin", name)
+    if (fs.existsSync(binaryPath)) return binaryPath
+  }
+  throw new Error(`Binary not found in ${path.join(dir, "bin")}`)
+}
+
 function resolveBinary(name) {
   const packageJsonPath = require.resolve(`${name}/package.json`)
-  const binaryPath = path.join(path.dirname(packageJsonPath), "bin", sourceBinary)
-  if (!fs.existsSync(binaryPath)) throw new Error(`Binary not found at ${binaryPath}`)
-  return binaryPath
+  return packageBinary(path.dirname(packageJsonPath))
 }
 
 function installPackage(name) {
@@ -136,7 +143,7 @@ function installPackage(name) {
     )
     if (result.status !== 0) return
     const packageDir = path.join(temp, "node_modules", name)
-    copyBinary(path.join(packageDir, "bin", sourceBinary), targetBinary)
+    copyBinary(packageBinary(packageDir), targetBinary)
     return true
   } finally {
     fs.rmSync(temp, { recursive: true, force: true })
@@ -175,7 +182,7 @@ function main() {
   }
 
   throw new Error(
-    `It seems your package manager failed to install the right opencode CLI package. Try manually installing ${packageNames()
+    `It seems your package manager failed to install the right moks CLI package. Try manually installing ${packageNames()
       .map((name) => JSON.stringify(name))
       .join(" or ")}.`,
   )

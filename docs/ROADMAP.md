@@ -26,10 +26,10 @@ We mold the OpenCode fork — we do not rebuild the harness from zero.
 
 ### 1. Identity (thin, early)
 
-- [ ] Ship user-facing name **`moks`** (bin / help / TUI chrome / README)
-- [ ] Install story aimed at eng-TA (rough OK)
-- [ ] MIT + upstream copyright kept; no official OpenCode affiliation
-- [ ] Do **not** mass-rename internal packages yet
+- [x] Ship user-facing name **`moks`** (bin / help / TUI chrome / README)
+- [x] Install story aimed at eng-TA (rough OK) — source install in README; `./install` is moks-branded stub (no upstream binary download)
+- [x] MIT + upstream copyright kept; no official OpenCode affiliation — LICENSE + README
+- [x] Do **not** mass-rename internal packages yet
 
 ### 2. Decision discipline (before any ATS write)
 
