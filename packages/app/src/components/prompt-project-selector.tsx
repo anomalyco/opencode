@@ -18,6 +18,7 @@ import { useLanguage } from "@/context/language"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
 import { pathKey } from "@/utils/path-key"
 import { handleDocumentSearchKeydown } from "@/utils/search-keydown"
+import { createMenuDismissController } from "@/utils/menu-dismiss-controller"
 
 export type PromptProject = {
   name?: string
@@ -197,8 +198,8 @@ export function PromptProjectSelector(props: {
 }) {
   const [triggerReady, setTriggerReady] = createSignal(false)
   let contentRef: HTMLDivElement | undefined
+  const dismiss = createMenuDismissController(() => contentRef)
   let triggerFrame: number | undefined
-  let restoreTrigger = true
 
   // Floating UI requires a connected anchor; route transitions can construct this trigger before adoption.
   const setTriggerRef = (element: HTMLButtonElement) => {
@@ -221,25 +222,15 @@ export function PromptProjectSelector(props: {
     props.controller.active()
       ? contentRef?.querySelector<HTMLElement>(`[data-option-key="${CSS.escape(props.controller.active())}"]`)
       : undefined
-  const afterClose = (callback: () => void) => {
-    const complete = () => {
-      if (contentRef?.isConnected) {
-        requestAnimationFrame(complete)
-        return
-      }
-      requestAnimationFrame(() => requestAnimationFrame(callback))
-    }
-    requestAnimationFrame(complete)
-  }
   const selectProject = (project: PromptProject) => {
-    restoreTrigger = false
+    dismiss.preventTriggerRestore()
     props.controller.setOpen(false)
-    afterClose(() => props.controller.select(project))
+    dismiss.afterClose(() => props.controller.select(project))
   }
   const selectAction = (server?: string) => {
-    restoreTrigger = false
+    dismiss.preventTriggerRestore()
     props.controller.setOpen(false)
-    afterClose(() => props.controller.add(server))
+    dismiss.afterClose(() => props.controller.add(server))
   }
   const selectActive = () => {
     const project = props.controller.activeProject()
@@ -267,7 +258,7 @@ export function PromptProjectSelector(props: {
     )
       .filter((element) => !contentRef?.contains(element) && !element.hasAttribute("data-focus-trap"))
       .findLast((element) => element.offsetParent !== null)
-    restoreTrigger = false
+    dismiss.preventTriggerRestore()
     target?.focus()
     queueMicrotask(() => {
       if (props.controller.open()) props.controller.setOpen(false)
@@ -291,7 +282,10 @@ export function PromptProjectSelector(props: {
       placement={props.placement ?? "bottom"}
       gutter={4}
       modal={false}
-      onOpenChange={(open) => props.controller.setOpen(open)}
+      onOpenChange={(open) => {
+        if (open) dismiss.allowTriggerRestore()
+        props.controller.setOpen(open)
+      }}
     >
       <DropdownMenu.Trigger as={ProjectTrigger} ref={setTriggerRef} controller={props.controller} />
       <DropdownMenu.Portal>
@@ -300,11 +294,9 @@ export function PromptProjectSelector(props: {
           id="prompt-project-menu"
           class="w-[243px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none [&[data-closed]]:!animate-none"
           onOpenAutoFocus={(event) => event.preventDefault()}
-          onPointerDownOutside={() => (restoreTrigger = false)}
-          onFocusOutside={() => (restoreTrigger = false)}
-          onCloseAutoFocus={(event) => {
-            if (!restoreTrigger) event.preventDefault()
-          }}
+          onPointerDownOutside={dismiss.preventTriggerRestore}
+          onFocusOutside={dismiss.preventTriggerRestore}
+          onCloseAutoFocus={dismiss.onCloseAutoFocus}
         >
           <div class="flex flex-col p-0.5">
             <div class="flex h-7 items-center gap-2 rounded-sm pl-3 pr-2.5 text-v2-icon-icon-muted">
@@ -364,41 +356,45 @@ export function PromptProjectSelector(props: {
                 </button>
               </Show>
             </div>
-            <Show
-              when={props.controller.servers().length > 1}
-              fallback={
-                <DropdownMenu.RadioGroup value={selectedValue()}>
-                  <For each={props.controller.projects()}>
-                    {(project) => (
-                      <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
-                    )}
-                  </For>
-                </DropdownMenu.RadioGroup>
-              }
-            >
-              <For
-                each={props.controller
-                  .servers()
-                  .filter((server) =>
-                    props.controller.projects().some((project) => project.server?.key === server!.key),
-                  )}
+            <div class="max-h-[224px] overflow-y-auto">
+              <Show
+                when={props.controller.servers().length > 1}
+                fallback={
+                  <DropdownMenu.RadioGroup value={selectedValue()}>
+                    <For each={props.controller.projects()}>
+                      {(project) => (
+                        <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
+                      )}
+                    </For>
+                  </DropdownMenu.RadioGroup>
+                }
               >
-                {(server) => (
-                  <div>
-                    <div class="flex h-7 select-none items-center pl-1.5 pr-3 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-faint">
-                      {server!.name}
+                <For
+                  each={props.controller
+                    .servers()
+                    .filter((server) =>
+                      props.controller.projects().some((project) => project.server?.key === server!.key),
+                    )}
+                >
+                  {(server) => (
+                    <div>
+                      <div class="flex h-7 select-none items-center pl-1.5 pr-3 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-faint">
+                        {server!.name}
+                      </div>
+                      <DropdownMenu.RadioGroup value={selectedValue()}>
+                        <For
+                          each={props.controller.projects().filter((project) => project.server?.key === server!.key)}
+                        >
+                          {(project) => (
+                            <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
+                          )}
+                        </For>
+                      </DropdownMenu.RadioGroup>
                     </div>
-                    <DropdownMenu.RadioGroup value={selectedValue()}>
-                      <For each={props.controller.projects().filter((project) => project.server?.key === server!.key)}>
-                        {(project) => (
-                          <ProjectItem project={project} controller={props.controller} onSelect={selectProject} />
-                        )}
-                      </For>
-                    </DropdownMenu.RadioGroup>
-                  </div>
-                )}
-              </For>
-            </Show>
+                  )}
+                </For>
+              </Show>
+            </div>
           </div>
           <div class="h-px bg-v2-border-border-muted" />
           <div class="flex flex-col p-0.5">

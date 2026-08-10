@@ -252,6 +252,8 @@ it.instance(
     const provider = providers[ProviderV2.ID.make("custom-provider")]
     expect(provider.models["deepseek-r1"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
     expect(provider.models["deepseek-details"].capabilities.interleaved).toEqual({ field: "reasoning_details" })
+    expect(provider.models["deepseek-text"].capabilities.interleaved).toEqual({ field: "reasoning_text" })
+    expect(provider.models["custom-reasoning"].capabilities.interleaved).toEqual({ field: "vendor_reasoning" })
     expect(provider.models["custom-model"].capabilities.interleaved).toBe(false)
     expect(
       providers[ProviderV2.ID.make("custom-anthropic-provider")].models["deepseek-r1"].capabilities.interleaved,
@@ -267,6 +269,8 @@ it.instance(
           models: {
             "deepseek-r1": { name: "DeepSeek R1" },
             "deepseek-details": { name: "DeepSeek Details", interleaved: { field: "reasoning_details" } },
+            "deepseek-text": { name: "DeepSeek Text", interleaved: "reasoning_text" },
+            "custom-reasoning": { name: "Custom Reasoning", interleaved: { field: "vendor_reasoning" } },
             "custom-model": { name: "Custom Model" },
           },
           options: { apiKey: "custom-key" },
@@ -1462,6 +1466,7 @@ test("models.dev normalization fills required response fields", () => {
         id: "gpt-5.4",
         name: "GPT-5.4",
         family: "gpt",
+        interleaved: "reasoning_text",
         cost: { input: 2.5, output: 15 },
         limit: { context: 1_050_000, input: 922_000, output: 128_000 },
       },
@@ -1474,6 +1479,7 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.capabilities.reasoning).toBe(false)
   expect(model.capabilities.attachment).toBe(false)
   expect(model.capabilities.toolcall).toBe(true)
+  expect(model.capabilities.interleaved).toEqual({ field: "reasoning_text" })
   expect(model.release_date).toBe("")
 })
 

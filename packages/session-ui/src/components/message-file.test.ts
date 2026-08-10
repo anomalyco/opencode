@@ -21,7 +21,7 @@ describe("message-file", () => {
     expect(attached(file())).toBe(false)
   })
 
-  test("treats only non-attachment source ranges as inline references", () => {
+  test("keeps data-backed file mentions inline", () => {
     expect(
       inline(
         file({
@@ -34,18 +34,16 @@ describe("message-file", () => {
       ),
     ).toBe(true)
 
-    expect(
-      inline(
-        file({
-          url: "data:text/plain;base64,SGVsbG8=",
-          source: {
-            type: "file",
-            path: "/repo/README.txt",
-            text: { value: "@README.txt", start: 0, end: 11 },
-          },
-        }),
-      ),
-    ).toBe(false)
+    const mentioned = file({
+      url: "data:text/plain;base64,SGVsbG8=",
+      source: {
+        type: "file",
+        path: "/repo/README.txt",
+        text: { value: "@README.txt", start: 0, end: 11 },
+      },
+    })
+    expect(inline(mentioned)).toBe(true)
+    expect(attached(mentioned)).toBe(false)
   })
 
   test("separates image and file attachment kinds", () => {
@@ -54,12 +52,12 @@ describe("message-file", () => {
   })
 
   test("labels attachment types from the basename extension", () => {
-    expect(typeLabel("list.md", "text/plain")).toBe("Markdown")
-    expect(typeLabel("/repo/src/main.ts", "text/plain")).toBe("TypeScript")
-    expect(typeLabel("/tmp/report.pdf", "application/pdf")).toBe("PDF")
-    expect(typeLabel("notes.xyz", "text/plain")).toBe("XYZ")
-    expect(typeLabel("/home/user/my.project/Makefile", "text/plain")).toBe("File")
-    expect(typeLabel(".gitignore", "text/plain")).toBe("File")
-    expect(typeLabel("/repo/.env", "text/plain")).toBe("File")
+    expect(typeLabel("list.md", "text/plain", "File")).toBe("Markdown")
+    expect(typeLabel("/repo/src/main.ts", "text/plain", "File")).toBe("TypeScript")
+    expect(typeLabel("/tmp/report.pdf", "application/pdf", "File")).toBe("PDF")
+    expect(typeLabel("notes.xyz", "text/plain", "File")).toBe("XYZ")
+    expect(typeLabel("/home/user/my.project/Makefile", "text/plain", "File")).toBe("File")
+    expect(typeLabel(".gitignore", "text/plain", "File")).toBe("File")
+    expect(typeLabel("/repo/.env", "text/plain", "File")).toBe("File")
   })
 })
