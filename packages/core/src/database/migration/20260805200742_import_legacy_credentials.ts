@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { sql } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
@@ -41,9 +42,9 @@ export default migration
 
 export function importLegacyCredentials(tx: Parameters<DatabaseMigration.Migration["up"]>[0], filepath: string) {
   return Effect.gen(function* () {
-    const file = Bun.file(filepath)
-    if (!(yield* Effect.promise(() => file.exists()))) return
-    const input = Option.getOrUndefined(decodeJson(yield* Effect.promise(() => file.text())))
+    const content = yield* Effect.promise(() => readFile(filepath, "utf8").catch(() => undefined))
+    if (content === undefined) return
+    const input = Option.getOrUndefined(decodeJson(content))
     if (typeof input !== "object" || input === null || Array.isArray(input)) {
       return yield* Effect.fail(new Error("Legacy credential file must contain an object"))
     }

@@ -164,6 +164,20 @@ describe("DatabaseMigration", () => {
     expect(await Bun.file(source).text()).toBe(content)
   })
 
+  test("skips legacy credential import when the source file is absent", async () => {
+    await using tmp = await tmpdir()
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        yield* db.transaction((tx) => importLegacyCredentials(tx, path.join(tmp.path, "missing-auth.json")))
+
+        expect(yield* db.all(sql`SELECT id FROM credential`)).toEqual([])
+      }),
+    )
+  })
+
   test("rolls back a failed migration without recording it", async () => {
     await run(
       Effect.gen(function* () {
