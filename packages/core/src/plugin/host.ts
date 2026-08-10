@@ -290,8 +290,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
       transform: (callback) =>
         skill.transform((draft) => {
           callback({
-            source: (source) => draft.source(Schema.decodeUnknownSync(Skill.Source)(source)),
-            list: draft.list,
+            list: () => mutable(draft.list()),
+            add: (value) => draft.add(Schema.decodeUnknownSync(Skill.Info)(value)),
+            update: draft.update,
+            remove: draft.remove,
           })
         }),
     },

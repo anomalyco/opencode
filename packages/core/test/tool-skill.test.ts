@@ -81,7 +81,6 @@ describe("SkillTool", () => {
             Skill.Service.of({
               transform: (_transform) => Effect.die("unused"),
               reload: () => Effect.die("unused"),
-              sources: () => Effect.die("unused"),
               list: () => Effect.succeed(current),
             }),
           )

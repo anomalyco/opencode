@@ -28,29 +28,23 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const reportContent = yield* reportContentWithDiagnostics(ctx.app)
     yield* ctx.skill.transform((draft) => {
-      draft.source(
-        Skill.EmbeddedSource.make({
-          type: "embedded",
-          skill: Skill.Info.make({
-            id: Skill.ID.make("opencode"),
-            name: Skill.Name.make("OpenCode"),
-            description: OpencodeDescription,
-            location: AbsolutePath.make("/builtin/opencode.md"),
-            content: OpencodeContent,
-          }),
+      draft.add(
+        Skill.Info.make({
+          id: Skill.ID.make("opencode"),
+          name: Skill.Name.make("OpenCode"),
+          description: OpencodeDescription,
+          location: AbsolutePath.make("/builtin/opencode.md"),
+          content: OpencodeContent,
         }),
       )
-      draft.source(
-        Skill.EmbeddedSource.make({
-          type: "embedded",
-          skill: Skill.Info.make({
-            id: Skill.ID.make("report"),
-            name: Skill.Name.make("Report"),
-            description: REPORT_DESCRIPTION,
-            slash: true,
-            location: AbsolutePath.make("/builtin/report.md"),
-            content: reportContent,
-          }),
+      draft.add(
+        Skill.Info.make({
+          id: Skill.ID.make("report"),
+          name: Skill.Name.make("Report"),
+          description: REPORT_DESCRIPTION,
+          slash: true,
+          location: AbsolutePath.make("/builtin/report.md"),
+          content: reportContent,
         }),
       )
     })

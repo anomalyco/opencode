@@ -39,6 +39,8 @@ import { Ripgrep } from "../ripgrep"
 import { SessionInstructions } from "../session/instructions"
 import { Shell } from "../shell"
 import { Skill } from "../skill"
+import { SkillDiscovery } from "../skill/discovery"
+import { Watcher } from "../filesystem/watcher"
 import { PatchTool } from "../tool/plugin/patch"
 import { EditTool } from "../tool/plugin/edit"
 import { GlobTool } from "../tool/plugin/glob"
@@ -97,7 +99,9 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const instructions = yield* SessionInstructions.Service
   const shell = yield* Shell.Service
   const skill = yield* Skill.Service
+  const skillDiscovery = yield* SkillDiscovery.Service
   const tools = yield* Tool.Service
+  const watcher = yield* Watcher.Service
   const wellknown = yield* WellKnown.Service
   return Context.mergeAll(
     Context.make(Agent.Service, agent),
@@ -130,7 +134,9 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(SessionInstructions.Service, instructions),
     Context.make(Shell.Service, shell),
     Context.make(Skill.Service, skill),
+    Context.make(SkillDiscovery.Service, skillDiscovery),
     Context.make(Tool.Service, tools),
+    Context.make(Watcher.Service, watcher),
     Context.make(WellKnown.Service, wellknown),
   )
 })
@@ -170,7 +176,9 @@ export const requirements = LayerNode.group([
   SessionInstructions.node,
   Shell.node,
   Skill.node,
+  SkillDiscovery.node,
   Tool.node,
+  Watcher.node,
   WellKnown.node,
 ])
 
