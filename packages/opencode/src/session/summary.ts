@@ -124,6 +124,12 @@ const layer = Layer.effect(
       const msgDiffs = yield* computeDiff({ messages })
       target.info.summary = { ...target.info.summary, diffs: msgDiffs }
       yield* sessions.updateMessage(target.info)
+      const additions = msgDiffs.reduce((sum, x) => sum + x.additions, 0)
+      const deletions = msgDiffs.reduce((sum, x) => sum + x.deletions, 0)
+      yield* sessions.setSummary({
+        sessionID: input.sessionID,
+        summary: { additions, deletions, files: msgDiffs.length },
+      })
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
