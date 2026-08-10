@@ -1,6 +1,5 @@
 import { describe, expect } from "bun:test"
 import os from "os"
-import path from "path"
 import { Effect, Layer } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -18,7 +17,7 @@ const directory = AbsolutePath.make(FSUtil.resolve("/repo/packages/core"))
 const projectDirectory = AbsolutePath.make(FSUtil.resolve("/repo"))
 const timestamp = Date.parse("2026-06-03T12:00:00.000Z")
 const sessionID = SessionSchema.ID.make("ses_builtin_test")
-const temporary = path.join(os.tmpdir(), "opencode-instruction-builtins-test")
+const temporary = os.tmpdir()
 const localDate = (time: number) => new Date(time).toDateString()
 const locationLayer = Layer.succeed(
   Location.Service,
@@ -32,7 +31,7 @@ const locationLayer = Layer.succeed(
 const it = testEffect(
   AppNodeBuilder.build(InstructionBuiltIns.node, [
     [Location.node, locationLayer],
-    [Global.node, Global.layerWith({ config: path.join(temporary, "config"), tmp: temporary })],
+    [Global.node, Global.layerWith({ config: temporary, tmp: temporary })],
   ]),
 )
 

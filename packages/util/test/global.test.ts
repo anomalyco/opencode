@@ -7,8 +7,8 @@ import { Effect, Layer } from "effect"
 import { Global } from "../src/global.js"
 
 describe("global", () => {
-  test("importing the module does not create directories", async () => {
-    const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-global-import-"))
+  test("importing the module does not create directories", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-global-import-"))
     const directories = ["data", "cache", "config", "state", "tmp"].map((directory) => path.join(root, directory))
     const module = pathToFileURL(path.join(import.meta.dir, "../src/global.ts")).href
     const result = Bun.spawnSync({
@@ -26,10 +26,11 @@ describe("global", () => {
 
     expect(result.exitCode, result.stderr.toString()).toBe(0)
     directories.forEach((directory) => expect(fs.existsSync(path.join(directory, "opencode"))).toBe(false))
+    fs.rmSync(root, { recursive: true, force: true })
   })
 
   test("building the layer creates service directories", async () => {
-    const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-global-layer-"))
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-global-layer-"))
     const directories = {
       data: path.join(root, "data"),
       config: path.join(root, "config"),
@@ -42,10 +43,7 @@ describe("global", () => {
 
     await Effect.runPromise(Effect.scoped(Layer.build(Global.layerWith(directories))))
 
-    await Promise.all(
-      Object.values(directories).map(async (directory) => {
-        expect((await fs.promises.stat(directory)).isDirectory()).toBe(true)
-      }),
-    )
+    Object.values(directories).forEach((directory) => expect(fs.statSync(directory).isDirectory()).toBe(true))
+    fs.rmSync(root, { recursive: true, force: true })
   })
 })

@@ -58,7 +58,7 @@ export function make(input: Partial<Interface> = {}): Interface {
     cache: Path.cache,
     config: Path.config,
     state: Path.state,
-    tmp: Path.tmp,
+    tmp: input.tmp ?? Path.tmp,
     bin: Path.bin,
     log: Path.log,
     repos: Path.repos,
@@ -70,15 +70,11 @@ const acquire = (input: Partial<Interface>) =>
   Effect.gen(function* () {
     const service = Service.of(make(input))
     yield* Effect.promise(() =>
-      Promise.all([
-        fs.promises.mkdir(service.data, { recursive: true }),
-        fs.promises.mkdir(service.config, { recursive: true }),
-        fs.promises.mkdir(service.state, { recursive: true }),
-        fs.promises.mkdir(service.log, { recursive: true }),
-        fs.promises.mkdir(service.bin, { recursive: true }),
-        fs.promises.mkdir(service.repos, { recursive: true }),
-        fs.promises.mkdir(service.tmp, { recursive: true }),
-      ]),
+      Promise.all(
+        [service.data, service.config, service.state, service.log, service.bin, service.repos, service.tmp].map(
+          (directory) => fs.promises.mkdir(directory, { recursive: true }),
+        ),
+      ),
     )
     return service
   })
