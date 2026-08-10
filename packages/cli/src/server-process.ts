@@ -158,7 +158,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       if (options.mode === "web") {
         const target = new URL(url)
         if (target.hostname === "0.0.0.0" || target.hostname === "::") target.hostname = "localhost"
-        target.searchParams.set("auth_token", Buffer.from(`opencode:${password}`).toString("base64"))
+        target.username = "opencode"
+        target.password = password
         yield* Effect.promise(() => open(target.toString()).catch(() => undefined))
       }
       const updater = yield* Updater.Service
