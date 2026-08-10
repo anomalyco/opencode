@@ -131,6 +131,9 @@ export const Info = Schema.Struct({
       grouping: Schema.optional(Schema.Literals(["auto", "none"])).annotate({
         description: "Group related transcript items automatically or render each item separately",
       }),
+      image_preview: Schema.optional(Schema.Boolean).annotate({
+        description: "Show user attachment and tool-result images in the session transcript",
+      }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
       }),

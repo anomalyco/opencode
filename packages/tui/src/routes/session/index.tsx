@@ -24,7 +24,7 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { createSyntaxStyleMemo, ThemeContextProvider, useTheme, useThemes } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   ModelInfo,
@@ -54,6 +54,7 @@ import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { DialogImagePreview } from "../../component/dialog-image-preview"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
@@ -1592,8 +1593,9 @@ function SessionGroupView(props: {
           </InlineToolRow>
         </Show>
         <Show when={expanded() && grouped().length > 0}>
-          <For each={grouped()}>{(part) => <ToolPart part={part} />}</For>
+          <For each={grouped()}>{(part) => <ToolPart part={part} images={false} />}</For>
         </Show>
+        <ToolImages parts={grouped()} />
         <For each={pending()}>{(part) => <ToolPart part={part} />}</For>
       </Show>
     </Show>
@@ -1897,6 +1899,11 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const local = useLocal()
   const files = createMemo(() => props.message.files ?? [])
   const skills = createMemo(() => props.message.skills ?? [])
+  const images = createMemo(() =>
+    files().flatMap((file) =>
+      file.mime.startsWith("image/") ? [{ uri: `data:${file.mime};base64,${file.data}` }] : [],
+    ),
+  )
   const themes = useThemes()
   const theme = useTheme("elevated")
   const mode = themes.mode
@@ -1918,6 +1925,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
         borderColor={delivery() ? theme.border.default : color()}
         customBorderChars={SplitBorder.customBorderChars}
       >
+        <SessionImages images={images()} paddingLeft={2} />
         <box
           onMouseOver={() => {
             setHover(true)
@@ -2210,7 +2218,7 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
 
 // Pending messages moved to individual tool pending functions
 
-function ToolPart(props: { part: SessionMessageAssistantTool }) {
+function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }) {
   const display = createMemo(() => toolDisplay(props.part.name))
 
   const toolprops = {
@@ -2234,7 +2242,7 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
     },
   }
 
-  return (
+  const content = (
     <Switch>
       <Match when={display() === "shell"}>
         <Shell {...toolprops} />
@@ -2279,6 +2287,87 @@ function ToolPart(props: { part: SessionMessageAssistantTool }) {
         <GenericTool {...toolprops} />
       </Match>
     </Switch>
+  )
+  return [
+    content,
+    <Show when={props.images !== false}>
+      <ToolImages parts={[props.part]} />
+    </Show>,
+  ]
+}
+
+function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {
+  const images = createMemo(() => props.parts.flatMap(inlineToolImages))
+  return <SessionImages images={images()} />
+}
+
+function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?: number }) {
+  const ctx = use()
+  const dialog = useDialog()
+  const dimensions = useTerminalDimensions()
+  const images = createMemo(() => (ctx.config.session?.image_preview ? props.images : []))
+  const height = createMemo(() => Math.max(4, Math.min(8, Math.floor(dimensions().height / 4))))
+  const visible = createMemo(() => images().slice(0, 3))
+
+  return (
+    <Show when={visible().length > 0}>
+      <box
+        flexDirection="row"
+        flexShrink={0}
+        paddingTop={1}
+        paddingLeft={props.paddingLeft ?? 3}
+        paddingRight={2}
+        paddingBottom={1}
+        gap={1}
+      >
+        <For each={visible()}>
+          {(image, index) => {
+            const [failed, setFailed] = createSignal(false)
+            return (
+              <box
+                width={height() * 2}
+                height={height()}
+                flexBasis={height() * 2}
+                flexShrink={1}
+                alignItems="center"
+                justifyContent="center"
+                onMouseUp={(event: MouseEvent) => {
+                  if (event.button !== 0) return
+                  event.stopPropagation()
+                  dialog.replace(() => <DialogImagePreview images={images()} initial={index()} />)
+                }}
+              >
+                <Show when={!failed()} fallback={<text>No preview</text>}>
+                  <image
+                    source={image.uri}
+                    fit="cover"
+                    protocol="auto"
+                    width="100%"
+                    height="100%"
+                    onError={() => setFailed(true)}
+                  />
+                </Show>
+              </box>
+            )
+          }}
+        </For>
+        <Show when={images().length > visible().length}>
+          <box width={8} height={height()} flexShrink={1} alignItems="center" justifyContent="center">
+            <text wrapMode="none" truncate>
+              +{images().length - visible().length} more
+            </text>
+          </box>
+        </Show>
+      </box>
+    </Show>
+  )
+}
+
+function inlineToolImages(part: SessionMessageAssistantTool) {
+  return toolDisplayContent(part.state).flatMap((content) =>
+    content.type === "file" && content.mime.startsWith("image/") && content.uri.startsWith("data:image/")
+      ? [{ uri: content.uri }]
+      : [],
   )
 }
 
