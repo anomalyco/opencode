@@ -348,6 +348,15 @@ export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheU
   return drop > 0 ? drop : undefined
 }
 
+export function turnDuration(message: SessionMessageAssistant, messages: SessionMessageInfo[]) {
+  if (message.time.completed === undefined) return 0
+  const index = messages.findIndex((item) => item.id === message.id)
+  const input = messages
+    .slice(0, index === -1 ? messages.length : index)
+    .findLast((item) => item.type === "user" || item.type === "synthetic")
+  return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
+}
+
 function hasTokenUsage(
   message: SessionMessageAssistant,
 ): message is SessionMessageAssistant & { tokens: NonNullable<SessionMessageAssistant["tokens"]> } {

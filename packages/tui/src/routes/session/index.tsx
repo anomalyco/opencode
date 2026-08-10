@@ -89,6 +89,7 @@ import {
   createSessionRows,
   messageBoundaryIDs,
   resolvePart,
+  turnDuration,
   type CacheUsage,
   type PartRef,
   type SessionRow,
@@ -1597,6 +1598,7 @@ function SessionGroupView(props: {
 
 function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const ctx = use()
+  const data = useData()
   const local = useLocal()
   const dimensions = useTerminalDimensions()
   const theme = useTheme("elevated")
@@ -1607,9 +1609,7 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
         .find((model) => model.providerID === props.message.model.providerID && model.id === props.message.model.id)
         ?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
   )
-  const duration = createMemo(() =>
-    props.message.time.completed ? props.message.time.completed - props.message.time.created : 0,
-  )
+  const duration = createMemo(() => turnDuration(props.message, data.session.message.list(ctx.sessionID)))
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   return (
     <>
