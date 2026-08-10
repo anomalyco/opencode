@@ -24,6 +24,7 @@ import { SkillGuidance } from "../../skill/guidance"
 import { ReferenceGuidance } from "../../reference/guidance"
 import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
+import { UserContext } from "@opencode-ai/schema/user-context"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
@@ -166,9 +167,13 @@ const layer = Layer.effect(
       new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
 
     const loadSystemContext = (agent: AgentV2.Selection) =>
-      Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
-        concurrency: "unbounded",
-      }).pipe(Effect.map(SystemContext.combine))
+      Effect.gen(function* () {
+        const userContext = yield* Effect.serviceOption(UserContext.Service)
+        return yield* Effect.all(
+          [systemContext.load(), skillGuidance.load(agent, Option.getOrUndefined(userContext)), referenceGuidance.load()],
+          { concurrency: "unbounded" },
+        ).pipe(Effect.map(SystemContext.combine))
+      })
 
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,

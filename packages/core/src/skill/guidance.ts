@@ -6,6 +6,7 @@ import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
 import { SkillV2 } from "../skill"
 import { SystemContext } from "../system-context/index"
+import { UserContext } from "@opencode-ai/schema/user-context"
 
 const Summary = Schema.Struct({
   name: Schema.String,
@@ -32,7 +33,7 @@ const render = (skills: ReadonlyArray<Summary>) =>
   ].join("\n")
 
 export interface Interface {
-  readonly load: (agent: AgentV2.Selection) => Effect.Effect<SystemContext.SystemContext>
+  readonly load: (agent: AgentV2.Selection, userContext?: UserContext.Info) => Effect.Effect<SystemContext.SystemContext>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SkillGuidance") {}
@@ -43,10 +44,10 @@ const layer = Layer.effect(
     const skills = yield* SkillV2.Service
 
     return Service.of({
-      load: Effect.fn("SkillGuidance.load")(function* (selection) {
+      load: Effect.fn("SkillGuidance.load")(function* (selection, userContext?) {
         const agent = selection.info
         if (!agent) return SystemContext.empty
-        const permitted = SkillV2.available(yield* skills.list(), agent)
+        const permitted = SkillV2.available(yield* skills.list(userContext), agent)
         if (permitted.length === 0 && PermissionV2.evaluate("skill", "*", agent.permissions).effect === "deny")
           return SystemContext.empty
         const available = permitted
