@@ -60,6 +60,7 @@ export function toToolKind(toolName: string): ToolKind {
       return "search"
 
     case "read":
+    case "skill":
       return "read"
 
     case "task":
