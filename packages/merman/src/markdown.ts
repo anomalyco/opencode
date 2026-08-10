@@ -134,7 +134,6 @@ function prepareDiagram(kind: DiagramKind, source: string, options: MermaidMarkd
           resolveSequenceStyleColors({
             participant: color(colors.primary),
             lifeline: color(colors.muted),
-            lifelineEnd: color(colors.background),
             group: color(colors.secondary),
             request: color(colors.request ?? colors.primary),
             response: color(colors.response ?? colors.primary),

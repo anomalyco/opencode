@@ -1,5 +1,5 @@
 import { diagramTextWidth } from "../core/text.js"
-import { normalizeSequenceMinParticipantGap, SEQUENCE_LIFELINE_FADE_STEPS } from "./options.js"
+import { normalizeSequenceMinParticipantGap } from "./options.js"
 import type {
   SequenceDiagram,
   SequenceDiagramRenderOptions,
@@ -531,10 +531,7 @@ export function createSequencePlacementPlan(
   const stepStartY = lifelineStartY + 1
   const width = Math.max(contentBounds.rightX + 1, ...groups.map((group) => group.rightX + 1), fragments.rightX + 1)
   const baseHeight =
-    stepStartY +
-    diagram.steps.reduce((total, step) => total + getStepHeight(step, centers, indexes, compact), 0) +
-    SEQUENCE_LIFELINE_FADE_STEPS.length -
-    1
+    stepStartY + diagram.steps.reduce((total, step) => total + getStepHeight(step, centers, indexes, compact), 0)
   const height = hasGroups ? Math.max(5, baseHeight + 1) : Math.max(3, baseHeight)
   const lifelineEndY = hasGroups ? height - 2 : height - 1
   const participants = diagram.participants.map((participant, index) => {

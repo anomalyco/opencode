@@ -1,7 +1,7 @@
 import { BorderChars, type BorderStyle } from "@opentui/core"
 import { DiagramCanvas } from "../core/canvas.js"
 import { diagramTextWidth } from "../core/text.js"
-import { DEFAULT_FRAGMENT_BORDER_STYLE, SEQUENCE_LIFELINE_FADE_STEPS } from "./options.js"
+import { DEFAULT_FRAGMENT_BORDER_STYLE } from "./options.js"
 import {
   createSequencePlacementPlan,
   type SequenceGroupPlacement,
@@ -227,13 +227,7 @@ export function drawSequenceDiagramGrid(
 
     for (let y = lifelineStartY; y <= lifelineEndY; y++) {
       const distance = y - lifelineStartY
-      const fadeDistance = y - (lifelineEndY - SEQUENCE_LIFELINE_FADE_STEPS.length + 1)
-      const style =
-        fadeDistance >= 0
-          ? (`lifelineFade${fadeDistance + 1}` as SequenceCellStyle)
-          : !options.compact && distance < 3
-            ? (`lifelineRamp${distance + 1}` as SequenceCellStyle)
-            : "lifeline"
+      const style = !options.compact && distance < 3 ? (`lifelineRamp${distance + 1}` as SequenceCellStyle) : "lifeline"
       setCell(grid, center, y, SEQUENCE_BORDER.vertical, style)
     }
   }
