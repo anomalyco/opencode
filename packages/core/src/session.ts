@@ -1,7 +1,7 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { Effect, Layer, Schema, Context, Stream, Scope } from "effect"
+import { Effect, Layer, Schema, Context, RcMap, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { Project } from "./project.js"
@@ -27,6 +27,7 @@ import { fromRow } from "./session/info.js"
 import { SessionRunner } from "./session/runner/index.js"
 import { SessionStore } from "./session/store.js"
 import { SessionExecution } from "./session/execution.js"
+import { SessionModelTransport } from "./session/model-transport.js"
 import { ForkEmptyError, MessageDecodeError, NotFoundError } from "./session/error.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { LocationServiceMap } from "./location-service-map.js"
@@ -306,6 +307,16 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const activeShells = new Set<SessionSchema.ID>()
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
+    const closeTransport = Effect.fn("Session.closeTransport")(function* (session: SessionSchema.Info) {
+      const location = Location.Ref.make({
+        directory: session.location.directory,
+        workspaceID: session.location.workspaceID,
+      })
+      if (!(yield* RcMap.has(locations.rcMap, location))) return
+      yield* SessionModelTransport.Service.use((transport) => transport.close(session.id)).pipe(
+        Effect.provide(locations.get(location)),
+      )
+    })
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
@@ -437,9 +448,10 @@ const layer = Layer.effect(
         return session
       }),
       remove: Effect.fn("Session.remove")(function* (sessionID) {
-        yield* result.get(sessionID)
+        const session = yield* result.get(sessionID)
         yield* execution.interrupt(sessionID)
         yield* execution.awaitIdle(sessionID)
+        yield* closeTransport(session)
         const children = yield* result.list({ parentID: sessionID })
         yield* Effect.forEach(children.data, (child) => result.remove(child.id), { concurrency: 1, discard: true })
         yield* bus.publish(SessionEvent.Deleted, { sessionID })

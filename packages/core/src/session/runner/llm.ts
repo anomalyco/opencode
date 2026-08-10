@@ -19,6 +19,7 @@ import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
 import { SessionModelRequest } from "../model-request.js"
+import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
@@ -108,6 +109,7 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const context = yield* SessionContext.Service
     const modelRequests = yield* SessionModelRequest.Service
+    const modelTransport = yield* SessionModelTransport.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
@@ -553,6 +555,7 @@ const layer = Layer.effect(
             (yield* SessionInbox.nextSteer(db, sessionID)) ??
             (promotable === "input" ? yield* SessionInbox.nextQueued(db, sessionID) : undefined)
           if (pending?.type !== "move") return false
+          yield* modelTransport.close(sessionID)
           yield* bus.publishAll([
             [SessionEvent.InboxDelivered, { sessionID, inboxID: pending.id }],
             [
@@ -623,6 +626,7 @@ export const node = makeLocationNode({
     llmClient,
     SessionContext.node,
     SessionModelRequest.node,
+    SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
     SessionTitle.node,

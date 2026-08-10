@@ -7,7 +7,7 @@ import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAI from "../src/providers/openai.js"
 import { dynamicResponse, fixedResponse, systemError } from "./lib/http.js"
 import { deltaChunk } from "./lib/openai-chunks.js"
-import { sseRaw } from "./lib/sse.js"
+import { sseEvents, sseRaw } from "./lib/sse.js"
 import { it } from "./lib/effect.js"
 
 const request = HttpClientRequest.post("https://provider.test/v1/chat?api_key=secret&key=secret&debug=1").pipe(
@@ -561,16 +561,37 @@ describe("WebSocket channel execution", () => {
     }),
   )
 
-  it.effect("requires a per-call WebSocket executor", () =>
+  it.effect("rejects a closed socket before attempting to send", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse("")), Effect.flip)
+      class ClosedBeforeSend extends EventTarget {
+        readyState = globalThis.WebSocket.OPEN
+        sends = 0
+        send() {
+          this.sends++
+        }
+        close() {}
+      }
+      const socket = new ClosedBeforeSend()
+      const connection = yield* WebSocketTransport.fromWebSocket(
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        socket as unknown as globalThis.WebSocket,
+        { url: "wss://api.openai.test/v1/responses", headers: Headers.empty },
+      )
+      socket.readyState = globalThis.WebSocket.CLOSED
 
-      expect(error.reason).toMatchObject({
-        _tag: "Transport",
-        phase: "prepare",
-        delivery: "not-sent",
-      })
-      expect(error.message).toContain("StreamOptions.webSocket")
+      const error = yield* connection.sendText("create").pipe(Effect.flip)
+
+      expect(error.reason).toMatchObject({ _tag: "Transport", phase: "send", delivery: "not-sent" })
+      expect(socket.sends).toBe(0)
+      yield* connection.close
+    }),
+  )
+
+  it.effect("uses HTTP when no per-call WebSocket executor is provided", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(sseEvents(...frames))))
+
+      expect(response.text).toBe("Hi")
     }),
   )
 

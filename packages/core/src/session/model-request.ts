@@ -7,6 +7,7 @@ import { Cause, Config, Context, Effect, Layer, Result } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app.js"
 import { Model } from "../model.js"
+import { Provider } from "../provider.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
@@ -14,6 +15,7 @@ import { Tool } from "../tool.js"
 import { SessionContext } from "./context.js"
 import { SessionModelHeaders } from "./model-headers.js"
 import { SessionModelHttp } from "./model-http.js"
+import { SessionModelTransport } from "./model-transport.js"
 import { SessionPromptCacheKey } from "./prompt-cache-key.js"
 import { PromptCacheDiagnostics } from "./prompt-cache-diagnostics.js"
 import { MAX_STEPS_PROMPT } from "./runner/max-steps.js"
@@ -166,7 +168,12 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
+    const transport = yield* SessionModelTransport.Service
     const app = yield* App.Metadata
+    const webSocket = yield* Config.boolean("OPENCODE_EXPERIMENTAL_OPENAI_RESPONSES_WEBSOCKET").pipe(
+      Config.withDefault(false),
+      Effect.orDie,
+    )
     const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
       Config.withDefault(false),
       Effect.orDie,
@@ -229,15 +236,22 @@ export const layer = Layer.effect(
       })
       const webSocketEligible =
         !(yield* hooks.has("session", "http.request")) && !(yield* hooks.has("session", "http.response"))
-      const options: StreamOptions = webSocketEligible
-        ? {}
-        : {
-            http: SessionModelHttp.middleware(hooks, {
+      const http = webSocketEligible
+        ? undefined
+        : SessionModelHttp.middleware(hooks, {
               sessionID: session.id,
               agent: agent.id,
               model: resolved.ref,
-            }),
-          }
+            })
+      const options: StreamOptions = {
+        ...(http ? { http } : {}),
+        ...(webSocket &&
+        webSocketEligible &&
+        resolved.ref.providerID === Provider.ID.openai &&
+        model.route.id === "openai-responses"
+          ? { webSocket: transport.bind(session.id) }
+          : {}),
+      }
       if (promptCacheSnapshots) {
         const current = PromptCacheDiagnostics.snapshot(request)
         const comparison = PromptCacheDiagnostics.compare(promptCacheSnapshots.get(session.id), current)
@@ -281,5 +295,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, App.node],
+  deps: [PluginHooks.node, SessionModelTransport.node, App.node],
 })
