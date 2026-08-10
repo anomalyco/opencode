@@ -29,20 +29,23 @@ opencode [project]
 
 #### Flags
 
-| Flag                                        | Short | Description                                                             |
-| ------------------------------------------- | ----- | ----------------------------------------------------------------------- |
-| <nobr><code>{"--continue"}</code></nobr>    | `-c`  | Continue the last session                                               |
-| <nobr><code>{"--session"}</code></nobr>     | `-s`  | Session ID to continue                                                  |
-| <nobr><code>{"--fork"}</code></nobr>        |       | Fork the session when continuing (use with `--continue` or `--session`) |
-| <nobr><code>{"--prompt"}</code></nobr>      |       | Prompt to use                                                           |
-| <nobr><code>{"--model"}</code></nobr>       | `-m`  | Model to use in the form of provider/model                              |
-| <nobr><code>{"--agent"}</code></nobr>       |       | Agent to use                                                            |
-| <nobr><code>{"--auto"}</code></nobr>        |       | Auto-approve permissions that are not explicitly denied                 |
-| <nobr><code>{"--port"}</code></nobr>        |       | Port to listen on                                                       |
-| <nobr><code>{"--hostname"}</code></nobr>    |       | Hostname to listen on                                                   |
-| <nobr><code>{"--mdns"}</code></nobr>        |       | Enable mDNS discovery                                                   |
-| <nobr><code>{"--mdns-domain"}</code></nobr> |       | Custom mDNS domain name                                                 |
-| <nobr><code>{"--cors"}</code></nobr>        |       | Additional browser origin(s) to allow CORS                              |
+| Flag                                         | Short | Description                                                             |
+| -------------------------------------------- | ----- | ----------------------------------------------------------------------- |
+| <nobr><code>{"--continue"}</code></nobr>     | `-c`  | Continue the last session                                               |
+| <nobr><code>{"--session"}</code></nobr>      | `-s`  | Session ID to continue                                                  |
+| <nobr><code>{"--fork"}</code></nobr>         |       | Fork the session when continuing (use with `--continue` or `--session`) |
+| <nobr><code>{"--prompt"}</code></nobr>       |       | Prompt to use                                                           |
+| <nobr><code>{"--model"}</code></nobr>        | `-m`  | Model to use in the form of provider/model                              |
+| <nobr><code>{"--agent"}</code></nobr>        |       | Agent to use                                                            |
+| <nobr><code>{"--auto"}</code></nobr>         |       | Auto-approve permissions that are not explicitly denied                 |
+| <nobr><code>{"--port"}</code></nobr>         |       | Port to listen on                                                       |
+| <nobr><code>{"--hostname"}</code></nobr>     |       | Hostname to listen on                                                   |
+| <nobr><code>{"--mdns"}</code></nobr>         |       | Enable mDNS discovery                                                   |
+| <nobr><code>{"--mdns-domain"}</code></nobr>  |       | Custom mDNS domain name                                                 |
+| <nobr><code>{"--cors"}</code></nobr>         |       | Additional browser origin(s) to allow CORS                              |
+| <nobr><code>{"--mini"}</code></nobr>         |       | Start the minimal interactive interface                                 |
+| <nobr><code>{"--no-replay"}</code></nobr>    |       | Disable mini session history replay on resume and after resize          |
+| <nobr><code>{"--replay-limit"}</code></nobr> |       | Cap visible mini replay to the newest N messages                        |
 
 ---
 
@@ -116,14 +119,17 @@ opencode attach http://10.20.30.40:4096
 
 #### Flags
 
-| Flag                                     | Short | Description                                                                |
-| ---------------------------------------- | ----- | -------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |       | Working directory to start TUI in                                          |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continue the last session                                                  |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`  | Session ID to continue                                                     |
-| <nobr><code>{"--fork"}</code></nobr>     |       | Fork the session when continuing (use with `--continue` or `--session`)    |
-| <nobr><code>{"--password"}</code></nobr> | `-p`  | Basic auth password (defaults to `OPENCODE_SERVER_PASSWORD`)               |
-| <nobr><code>{"--username"}</code></nobr> | `-u`  | Basic auth username (defaults to `OPENCODE_SERVER_USERNAME` or `opencode`) |
+| Flag                                         | Short | Description                                                                |
+| -------------------------------------------- | ----- | -------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>          |       | Working directory to start TUI in                                          |
+| <nobr><code>{"--continue"}</code></nobr>     | `-c`  | Continue the last session                                                  |
+| <nobr><code>{"--session"}</code></nobr>      | `-s`  | Session ID to continue                                                     |
+| <nobr><code>{"--fork"}</code></nobr>         |       | Fork the session when continuing (use with `--continue` or `--session`)    |
+| <nobr><code>{"--password"}</code></nobr>     | `-p`  | Basic auth password (defaults to `OPENCODE_SERVER_PASSWORD`)               |
+| <nobr><code>{"--username"}</code></nobr>     | `-u`  | Basic auth username (defaults to `OPENCODE_SERVER_USERNAME` or `opencode`) |
+| <nobr><code>{"--mini"}</code></nobr>         |       | Start the minimal interactive interface                                    |
+| <nobr><code>{"--no-replay"}</code></nobr>    |       | Disable mini session history replay on resume and after resize             |
+| <nobr><code>{"--replay-limit"}</code></nobr> |       | Cap visible mini replay to the newest N messages                           |
 
 ---
 
