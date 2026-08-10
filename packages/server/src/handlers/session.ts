@@ -15,9 +15,40 @@ import {
   UnknownError,
 } from "@opencode-ai/protocol/errors"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { DataRoot } from "@opencode-ai/server/data-root"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 
 const DefaultSessionsLimit = 50
 const DefaultSessionHistoryLimit = 50
+
+// ─── Default location derivation ───────────────────────────────────
+//
+// session.create derives the default location.directory based on auth context.
+// Priority:
+//   1. Explicit location param in request body (handled by caller)
+//   2. JWT-authenticated user → <data_root>/workspaces/<safe_userID>/
+//   3. Basic Auth / no auth → process.cwd() (legacy, migration compatibility)
+
+function deriveDefaultLocation(
+  userContext: UserContext.Info | undefined,
+): Effect.Effect<{ directory: string }, never, DataRoot.DataRootConfig | FSUtil.Service> {
+  return Effect.gen(function* () {
+    if (!userContext) {
+      return { directory: process.cwd() }
+    }
+
+    const dataRoot = yield* DataRoot.DataRootConfig
+    const dir = DataRoot.workspacePath(userContext.userID, dataRoot)
+
+    // Ensure the directory exists (mkdir -p semantics).
+    // On failure, die — the Effect runtime turns this into a 500.
+    // Once the protocol endpoint declares a ServiceUnavailableError this
+    // can become a proper 503 failure.
+    yield* FSUtil.Service.pipe(Effect.flatMap((fs) => fs.ensureDir(dir)), Effect.orDie)
+
+    return { directory: dir }
+  })
+}
 
 // ─── Ownership helpers ────────────────────────────────────────────
 
@@ -130,11 +161,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.create",
         Effect.fn(function* (ctx) {
           const userContext = Option.getOrUndefined(yield* UserContext.Service.pipe(Effect.option))
+          const loc = ctx.payload.location
+            ? ctx.payload.location
+            : yield* deriveDefaultLocation(userContext).pipe(
+                Effect.map(({ directory }) => ({ directory: AbsolutePath.make(directory) })),
+              )
           const result = yield* session.create({
             id: ctx.payload.id,
             agent: ctx.payload.agent,
             model: ctx.payload.model,
-            location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
+            location: loc,
             userID: userContext?.userID,
             userDepartmentCode: userContext?.departmentCode,
           })
