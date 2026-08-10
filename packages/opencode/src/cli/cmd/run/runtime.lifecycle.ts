@@ -195,6 +195,21 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     })
     const theme = await resolveRunTheme(renderer)
     renderer.setBackgroundColor(theme.background)
+    // Slow-path resize fallback: in environments where SIGWINCH is never
+    // delivered (Termux + proot, stdio proxies), the renderer would otherwise
+    // keep drawing at its initial size. Poll the real terminal size and push
+    // changes into the renderer so layouts adapt to keyboard/rotation/splits.
+    let lastCols = process.stdout.columns ?? 0
+    let lastRows = process.stdout.rows ?? 0
+    const resizeTimer = setInterval(() => {
+      if (renderer.isDestroyed || !process.stdout.isTTY) return
+      const columns = process.stdout.columns ?? 0
+      const rows = process.stdout.rows ?? 0
+      if (columns <= 0 || rows <= 0 || (columns === lastCols && rows === lastRows)) return
+      lastCols = columns
+      lastRows = rows
+      renderer.resize(columns, rows)
+    }, 300)
     const keymap = createDefaultOpenTuiKeymap(renderer)
     unregisterKeymap = registerOpencodeKeymap(keymap, renderer, input.tuiConfig)
     const state: SplashState = {
@@ -338,6 +353,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           await renderer.idle().catch(() => {})
         }
       } finally {
+        clearInterval(resizeTimer)
         footer.close()
         await footer.idle().catch(() => {})
         footer.destroy()
