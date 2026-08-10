@@ -341,7 +341,7 @@ describe("DatabaseMigration", () => {
         yield* db.run(sql`DELETE FROM migration WHERE id = ${simplifySessionInputMigration.id}`)
         yield* DatabaseMigration.applyOnly(db, [simplifySessionInputMigration])
 
-        const database = Layer.succeed(Database.Service, { db })
+        const database = Layer.succeed(Database.Service, { db, path: ":memory:" })
         yield* EventV2.Service.use((service) =>
           service.publish(SessionV1.Event.Updated, {
             sessionID: SessionSchema.ID.make("session"),

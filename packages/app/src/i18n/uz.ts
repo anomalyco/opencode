@@ -1,4 +1,5 @@
 export const dict = {
+  ...STORAGE_FALLBACK,
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "Fayl",
   "desktop.menu.edit": "Tahrirlash",
@@ -1169,3 +1170,4 @@ export const dict = {
   "workspace.reset.note": "Bu standart filialga mos keladigan ish maydonini tiklaydi.",
   "dialog.usageExceeded.dontShowAgain": "Boshqa ko‘rsatma",
 }
+import { STORAGE_FALLBACK } from "./storage"

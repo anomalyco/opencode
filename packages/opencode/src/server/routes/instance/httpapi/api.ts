@@ -31,6 +31,7 @@ import { SessionLocationMiddleware } from "@opencode-ai/server/middleware/sessio
 import { GlobalApi } from "./groups/global"
 import { Authorization } from "./middleware/authorization"
 import { SchemaErrorMiddleware } from "./middleware/schema-error"
+import { StorageApi } from "./groups/storage"
 
 const EventSchema = Schema.Union([
   ...EventManifest.Latest.values()
@@ -55,6 +56,7 @@ export const RootHttpApi = HttpApi.make("opencode-root")
   .addHttpApi(ControlApi)
   .addHttpApi(ControlPlaneApi)
   .addHttpApi(GlobalApi)
+  .addHttpApi(StorageApi)
   .middleware(SchemaErrorMiddleware)
   .middleware(Authorization)
 

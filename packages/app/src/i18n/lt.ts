@@ -94,6 +94,7 @@ const desktop = [
 ]
 
 export const dict = {
+  ...STORAGE_FALLBACK,
   ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
   "command.category.suggested": "Siūloma",
   "command.category.view": "Rodinys",
@@ -1171,3 +1172,4 @@ export const dict = {
   "workspace.reset.note": "Tai iš naujo nustatys darbo sritį, kad ji atitiktų numatytąją šaką.",
   "dialog.usageExceeded.dontShowAgain": "Daugiau nerodyti",
 }
+import { STORAGE_FALLBACK } from "./storage"
