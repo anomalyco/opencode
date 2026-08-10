@@ -26,7 +26,7 @@ import { projectName } from "../util/project"
 import { marqueeText } from "../util/marquee"
 
 // A long title fades out over its last cells instead of cutting hard.
-const FADE_WIDTH = 4
+const FADE_WIDTH = 6
 const MARQUEE_DELAY = 600
 const MARQUEE_INTERVAL = 100
 
@@ -53,7 +53,9 @@ function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: nu
   const start = leading && index < FADE_WIDTH ? FADE_WIDTH - index : 0
   const end = index - (length - FADE_WIDTH) + 1
   const position = Math.max(start, end)
-  return position <= 0 ? color : tint(color, background, 0.2 + 0.72 * ((position - 1) / Math.max(1, FADE_WIDTH - 1)))
+  if (position <= 0) return color
+  const progress = position / FADE_WIDTH
+  return tint(color, background, 0.92 * progress * progress * (3 - 2 * progress))
 }
 
 function createMarqueeOffset(hovered: () => string | undefined) {
