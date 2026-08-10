@@ -45,11 +45,11 @@ describe("session controller invariants", () => {
   })
 
   test("selects user history strictly before the revert boundary", () => {
-    const messages: Message[] = [user("msg_1"), assistant, user("msg_3"), user("msg_5")]
+    const messages: Message[] = [user("msg_z"), assistant, user("msg_b"), user("msg_c")]
     const users = selectSessionUserMessages(messages)
 
-    expect(users.map((message) => message.id)).toEqual(["msg_1", "msg_3", "msg_5"])
-    expect(selectVisibleSessionUserMessages(users, "msg_3").map((message) => message.id)).toEqual(["msg_1"])
+    expect(users.map((message) => message.id)).toEqual(["msg_z", "msg_b", "msg_c"])
+    expect(selectVisibleSessionUserMessages(users, "msg_b").map((message) => message.id)).toEqual(["msg_z"])
     expect(selectVisibleSessionUserMessages(users)).toBe(users)
   })
 
