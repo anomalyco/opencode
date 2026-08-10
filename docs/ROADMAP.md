@@ -33,12 +33,12 @@ We mold the OpenCode fork — we do not rebuild the harness from zero.
 
 ### 2. Decision discipline (before any ATS write)
 
-- [ ] Local **decision receipts** (append-only JSONL; dry-run flag; no secrets in meta by default)
-- [ ] Receipt paths: user data dir default · `.moks/receipts/` in a moks workspace
-- [ ] Freeze shared write verbs: `propose` / `status` / `apply` (+ `--json`)
-- [ ] TUI shells those verbs — no policy/apply eligibility forked into the client
-- [ ] **Dry-run default**; **confirm-on-adverse** (reject / offer / hire)
-- [ ] Hero demo ≠ silent `advance_stage`
+- [x] Local **decision receipts** (append-only JSONL; dry-run flag; no secrets in meta by default)
+- [x] Receipt paths: user data dir default · `.moks/receipts/` in a moks workspace
+- [x] Freeze shared write verbs: `propose` / `status` / `apply` (+ `--json`)
+- [x] TUI shells those verbs — no policy/apply eligibility forked into the client
+- [x] **Dry-run default**; **confirm-on-adverse** (reject / offer / hire)
+- [x] Hero demo ≠ silent `advance_stage` (verbs record receipts only; no ATS write path)
 
 ### 3. Hiring-native agent (felt product)
 

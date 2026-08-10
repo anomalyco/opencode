@@ -58,6 +58,7 @@ import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
+import { runApplyFlow, runDecisionsFlow, runProposeFlow } from "./ui/dialog-decision"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
 import { KVProvider, useKV } from "./context/kv"
@@ -768,6 +769,46 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.replace(() => <DialogStatus />)
         },
         category: "System",
+      },
+      {
+        name: "decision.propose",
+        title: "Propose decision",
+        slashName: "propose",
+        category: "Decision",
+        run: () => {
+          void runProposeFlow({
+            dialog,
+            toast,
+            cwd: project.instance.directory() || sdk.directory || undefined,
+          })
+        },
+      },
+      {
+        name: "decision.apply",
+        title: "Apply decision",
+        slashName: "apply",
+        category: "Decision",
+        run: () => {
+          void runApplyFlow({
+            dialog,
+            toast,
+            cwd: project.instance.directory() || sdk.directory || undefined,
+          })
+        },
+      },
+      {
+        name: "decision.list",
+        title: "Decision receipts",
+        slashName: "decisions",
+        slashAliases: ["receipts"],
+        category: "Decision",
+        run: () => {
+          void runDecisionsFlow({
+            dialog,
+            toast,
+            cwd: project.instance.directory() || sdk.directory || undefined,
+          })
+        },
       },
       {
         name: "opencode.debug",
