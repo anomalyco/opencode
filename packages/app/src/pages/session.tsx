@@ -377,22 +377,13 @@ export default function Page() {
     hasReview: canReview,
     fileBrowser: (sessionID) => newSessionDesign() && isDesktop() && !!sessionID,
   })
-  const params = session.identity.params
-  const sessionKey = session.identity.sessionKey
-  const workspaceKey = session.identity.workspaceKey
-  const tabs = session.layout.tabs
-  const view = session.layout.view
-  const reviewMode = () => view().review.mode() ?? "git"
-  const reviewFile = () => view().review.file()
-  const sessionOwnership = session.ownership
-  const info = session.data.info
-  const isChildSession = session.data.isChild
-  const revertMessageID = session.data.revertMessageID
+  const reviewMode = () => session.layout.view().review.mode() ?? "git"
+  const reviewFile = () => session.layout.view().review.file()
 
   createEffect(() => {
     if (!prompt.ready()) return
     untrack(() => {
-      if (params.id) return
+      if (session.identity.params.id) return
       const text = searchParams.prompt
       if (!text) return
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
@@ -413,17 +404,19 @@ export default function Page() {
 
   const composer = createSessionComposerController()
   const inputController = createPromptInputController({
-    sessionKey,
-    sessionID: () => params.id,
+    sessionKey: session.identity.sessionKey,
+    sessionID: () => session.identity.params.id,
     queryOptions: serverSync().queryOptions,
   })
 
-  const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
-  const sessionPanelKey = createMemo(() => (params.id ? `${serverSDK().scope}\0${params.id}` : undefined))
+  const workspaceTabs = createMemo(() => layout.tabs(session.identity.workspaceKey))
+  const sessionPanelKey = createMemo(() =>
+    session.identity.params.id ? `${serverSDK().scope}\0${session.identity.params.id}` : undefined,
+  )
 
   createEffect(
     on(
-      () => params.id,
+      () => session.identity.params.id,
       (id, prev) => {
         if (!id) return
         if (prev) return
@@ -443,13 +436,13 @@ export default function Page() {
         const from = workspaceTabs().tabs()
         if (from.all.length === 0 && !from.active) return
 
-        const current = tabs().tabs()
+        const current = session.layout.tabs().tabs()
         if (current.all.length > 0 || current.active) return
 
         const all = session.tabs.normalizeAll(from.all)
         const active = from.active ? session.tabs.normalize(from.active) : undefined
-        tabs().setAll(all)
-        tabs().setActive(active && all.includes(active) ? active : all[0])
+        session.layout.tabs().setAll(all)
+        session.layout.tabs().setActive(active && all.includes(active) ? active : all[0])
 
         workspaceTabs().setAll([])
         workspaceTabs().setActive(undefined)
@@ -459,9 +452,11 @@ export default function Page() {
   )
 
   const size = createSizing()
-  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const desktopV2ReviewOpen = createMemo(() => newSessionDesign() && desktopReviewOpen() && !!params.id)
-  const terminalOpen = createMemo(() => view().terminal.opened())
+  const desktopReviewOpen = createMemo(() => isDesktop() && session.layout.view().reviewPanel.opened())
+  const desktopV2ReviewOpen = createMemo(
+    () => newSessionDesign() && desktopReviewOpen() && !!session.identity.params.id,
+  )
+  const terminalOpen = createMemo(() => session.layout.view().terminal.opened())
   const desktopTerminalOpen = createMemo(() => isDesktop() && terminalOpen())
   const desktopInlineTerminalOnlyOpen = createMemo(
     () => newSessionDesign() && desktopTerminalOpen() && !desktopV2ReviewOpen(),
@@ -523,11 +518,9 @@ export default function Page() {
   )
 
   const openReviewPanel = () => {
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
+    if (!session.layout.view().reviewPanel.opened()) session.layout.view().reviewPanel.open()
   }
 
-  const activeTab = session.tabs.activeTab
-  const activeFileTab = session.tabs.activeFileTab
   const timeline = createTimelineModel({ session })
   const historyLoading = timeline.history.loading
   const historyMore = timeline.history.more
@@ -538,7 +531,7 @@ export default function Page() {
   const visibleUserMessages = timeline.visibleUserMessages
 
   createEffect(() => {
-    const tab = activeFileTab()
+    const tab = session.tabs.activeFileTab()
     if (!tab) return
 
     const path = file.pathFromTab(tab)
@@ -558,7 +551,7 @@ export default function Page() {
 
   let restoredModelSession: string | undefined
   createEffect(() => {
-    const id = params.id
+    const id = session.identity.params.id
     if (!id || !prompt.ready() || !local.session.ready()) return
     if (restoredModelSession !== id) {
       restoredModelSession = id
@@ -569,7 +562,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => ({ dir: sdk().directory, id: params.id }),
+      () => ({ dir: sdk().directory, id: session.identity.params.id }),
       (next, prev) => {
         if (!prev) return
         if (next.dir === prev.dir && next.id === prev.id) return
@@ -601,10 +594,10 @@ export default function Page() {
   )
 
   createComputed((prev) => {
-    const key = sessionKey()
+    const key = session.identity.sessionKey()
     if (key !== prev) {
       setStore("deferRender", true)
-      const owner = sessionOwnership.capture()
+      const owner = session.ownership.capture()
       requestAnimationFrame(() => {
         setTimeout(() => owner.run(() => setStore("deferRender", false)), 0)
       })
@@ -651,7 +644,8 @@ export default function Page() {
   const wantsReview = createMemo(() =>
     isDesktop()
       ? desktopFileTreeOpen() ||
-        (desktopReviewOpen() && (activeTab() === "review" || (newSessionDesign() && !!activeFileTab())))
+        (desktopReviewOpen() &&
+          (session.tabs.activeTab() === "review" || (newSessionDesign() && !!session.tabs.activeFileTab())))
       : store.mobileTab === "changes",
   )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
@@ -885,7 +879,7 @@ export default function Page() {
   createEffect(
     on(
       () => {
-        const id = params.id
+        const id = session.identity.params.id
         return [
           sdk().directory,
           id,
@@ -906,7 +900,7 @@ export default function Page() {
           todoFrame = undefined
           todoTimer = window.setTimeout(() => {
             todoTimer = undefined
-            if (sdk().directory !== dir || params.id !== id) return
+            if (sdk().directory !== dir || session.identity.params.id !== id) return
             untrack(() => {
               void sync().session.todo(id, cached ? { force: true } : undefined)
             })
@@ -931,7 +925,7 @@ export default function Page() {
 
   createEffect(
     on(
-      sessionKey,
+      session.identity.sessionKey,
       () => {
         setStore(sessionViewState())
         setUi("pendingMessage", undefined)
@@ -1052,7 +1046,7 @@ export default function Page() {
     }
 
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
-      if (composer.blocked() || isChildSession()) return
+      if (composer.blocked() || session.data.isChild()) return
       const input = inputRef
       if (!input) return
       input.focus()
@@ -1069,12 +1063,12 @@ export default function Page() {
     if (list.includes(mode)) return
     const next = list[0]
     if (!next) return
-    view().review.setMode(next)
+    session.layout.view().review.setMode(next)
   })
 
   createEffect(
     on(
-      () => sync().data.session_status[params.id ?? ""]?.type,
+      () => sync().data.session_status[session.identity.params.id ?? ""]?.type,
       (next, prev) => {
         if (next !== "idle" || prev === undefined || prev === "idle") return
         refreshVcs()
@@ -1093,7 +1087,7 @@ export default function Page() {
 
   createEffect(
     on(
-      sessionKey,
+      session.identity.sessionKey,
       () => {
         setTree({
           reviewScroll: undefined,
@@ -1110,7 +1104,7 @@ export default function Page() {
   }
 
   const focusInput = () => {
-    if (isChildSession()) return
+    if (session.data.isChild()) return
     inputRef?.focus()
   }
 
@@ -1133,8 +1127,8 @@ export default function Page() {
   const openReviewFile = createOpenReviewFile({
     showAllFiles,
     tabForPath: file.tab,
-    openTab: tabs().open,
-    setActive: tabs().setActive,
+    openTab: session.layout.tabs().open,
+    setActive: session.layout.tabs().setActive,
     loadFile: file.load,
   })
 
@@ -1154,7 +1148,7 @@ export default function Page() {
         options={changesOptions()}
         current={reviewMode()}
         label={changesLabel}
-        onSelect={(option) => option && view().review.setMode(option)}
+        onSelect={(option) => option && session.layout.view().review.setMode(option)}
         variant="ghost"
         size="small"
         valueClass="text-14-medium"
@@ -1175,7 +1169,7 @@ export default function Page() {
         label={changesLabel}
         placement="bottom-start"
         gutter={6}
-        onSelect={(option) => option && view().review.setMode(option)}
+        onSelect={(option) => option && session.layout.view().review.setMode(option)}
       />
     )
   }
@@ -1245,7 +1239,7 @@ export default function Page() {
         title={changesTitle()}
         empty={reviewEmpty(input)}
         diffs={reviewDiffs}
-        view={view}
+        view={session.layout.view}
         diffStyle={input.diffStyle}
         onDiffStyleChange={input.onDiffStyleChange}
         onScrollRef={(el) => setTree("reviewScroll", el)}
@@ -1351,7 +1345,7 @@ export default function Page() {
 
   createEffect(
     on(
-      activeFileTab,
+      session.tabs.activeFileTab,
       (active) => {
         if (!active) return
         if (fileTreeTab() !== "changes") return
@@ -1390,15 +1384,15 @@ export default function Page() {
     const top = reviewDiffTop(path)
     if (top === undefined) return false
 
-    view().setScroll("review", { x: root.scrollLeft, y: top })
+    session.layout.view().setScroll("review", { x: root.scrollLeft, y: top })
     root.scrollTo({ top, behavior: "auto" })
     return true
   }
 
   const focusReviewDiff = (path: string) => {
     openReviewPanel()
-    view().review.openPath(path)
-    view().review.setFile(path)
+    session.layout.view().review.openPath(path)
+    session.layout.view().review.setFile(path)
     setTree("pendingDiff", path)
   }
 
@@ -1460,7 +1454,7 @@ export default function Page() {
     on(
       () => sdk().directory,
       () => {
-        const tab = activeFileTab()
+        const tab = session.tabs.activeFileTab()
         if (!tab) return
         const path = file.pathFromTab(tab)
         if (!path) return
@@ -1476,7 +1470,7 @@ export default function Page() {
   })
   createEffect(
     on(
-      () => params.id,
+      () => session.identity.params.id,
       (id, previous) => {
         if (!id || !previous || id === previous) return
         if (location.hash || store.messageId || ui.pendingMessage) return
@@ -1568,7 +1562,7 @@ export default function Page() {
   const historyRequests = new Set<string>()
   let historyContinuationFrame: number | undefined
   const loadOlder = async () => {
-    const owner = sessionOwnership.capture()
+    const owner = session.ownership.capture()
     if (historyLoading() || historyRequests.has(owner.key)) return
     historyRequests.add(owner.key)
     const before = timeline.messages().length
@@ -1590,7 +1584,7 @@ export default function Page() {
   }
   const onHistoryScroll = () => {
     if (
-      historyRequests.has(sessionOwnership.key()) ||
+      historyRequests.has(session.ownership.key()) ||
       historyLoading() ||
       !autoScroll.userScrolled() ||
       !scroller ||
@@ -1610,7 +1604,7 @@ export default function Page() {
     fillFrame = requestAnimationFrame(() => {
       fillFrame = undefined
 
-      if (!params.id || !messagesReady()) return
+      if (!session.identity.params.id || !messagesReady()) return
       if (autoScroll.userScrolled() || historyLoading()) return
 
       const el = scroller
@@ -1626,7 +1620,7 @@ export default function Page() {
     on(
       () =>
         [
-          params.id,
+          session.identity.params.id,
           messagesReady(),
           historyMore(),
           historyLoading(),
@@ -1666,7 +1660,11 @@ export default function Page() {
     })
   }
 
-  const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"], target = sync()) => {
+  const roll = (
+    sessionID: string,
+    next: NonNullable<ReturnType<typeof session.data.info>>["revert"],
+    target = sync(),
+  ) => {
     const session = target.session.get(sessionID)
     if (!session) return
     target.session.remember({ ...session, revert: next })
@@ -1675,20 +1673,20 @@ export default function Page() {
   const busy = (sessionID: string) => sync().data.session_working(sessionID)
 
   const queuedFollowups = createMemo(() => {
-    const id = params.id
+    const id = session.identity.params.id
     if (!id) return emptyFollowups
     return followup.items[id] ?? emptyFollowups
   })
 
   const editingFollowup = createMemo(() => {
-    const id = params.id
+    const id = session.identity.params.id
     if (!id) return
     return followup.edit[id]
   })
 
   const followupMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; id: string; manual?: boolean }) => {
-      const owner = sessionOwnership.capture()
+      const owner = session.ownership.capture()
       const item = (followup.items[input.sessionID] ?? []).find((entry) => entry.id === input.id)
       if (!item) return
 
@@ -1718,16 +1716,21 @@ export default function Page() {
     followupMutation.isPending && followupMutation.variables?.sessionID === sessionID
 
   const sendingFollowup = createMemo(() => {
-    const id = params.id
+    const id = session.identity.params.id
     if (!id) return
     if (!followupBusy(id)) return
     return followupMutation.variables?.id
   })
 
   const queueEnabled = createMemo(() => {
-    const id = params.id
+    const id = session.identity.params.id
     if (!id) return false
-    return settings.general.followup() === "queue" && session.data.working() && !composer.blocked() && !isChildSession()
+    return (
+      settings.general.followup() === "queue" &&
+      session.data.working() &&
+      !composer.blocked() &&
+      !session.data.isChild()
+    )
   })
 
   const followupText = (item: FollowupDraft) => {
@@ -1768,7 +1771,7 @@ export default function Page() {
   }
 
   const editFollowup = (id: string) => {
-    const sessionID = params.id
+    const sessionID = session.identity.params.id
     if (!sessionID) return
     if (followupBusy(sessionID)) return
 
@@ -1785,7 +1788,7 @@ export default function Page() {
   }
 
   const clearFollowupEdit = () => {
-    const id = params.id
+    const id = session.identity.params.id
     if (!id) return
     setFollowup("edit", id, undefined)
   }
@@ -1799,7 +1802,7 @@ export default function Page() {
 
   const revertMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; messageID: string }) => {
-      const session = sdk().api.session
+      const api = sdk().api.session
       const target = sync()
       const last = target.session.get(input.sessionID)?.revert
       const value = draft(input.messageID)
@@ -1809,7 +1812,7 @@ export default function Page() {
           roll(input.sessionID, { messageID: input.messageID }, target)
           prompt.set(value)
         },
-        request: () => halt(input.sessionID).then(() => session.revert.stage(input)),
+        request: () => halt(input.sessionID).then(() => api.revert.stage(input)),
         complete: () => undefined,
         rollback: () => roll(input.sessionID, last, target),
         fail,
@@ -1819,10 +1822,10 @@ export default function Page() {
 
   const restoreMutation = useMutation(() => ({
     mutationFn: async (id: string) => {
-      const sessionID = params.id
+      const sessionID = session.identity.params.id
       if (!sessionID) return
 
-      const session = sdk().api.session
+      const api = sdk().api.session
       const target = sync()
       const index = userMessages().findIndex((item) => item.id === id)
       if (index < 0) return
@@ -1841,8 +1844,10 @@ export default function Page() {
         },
         request: () =>
           !next
-            ? halt(sessionID).then(() => session.revert.clear({ sessionID }))
-            : halt(sessionID).then(() => session.revert.stage({ sessionID, messageID: next.id }).then(() => undefined)),
+            ? halt(sessionID).then(() => api.revert.clear({ sessionID }))
+            : halt(sessionID).then(() =>
+                api.revert.stage({ sessionID, messageID: next.id }).then(() => undefined),
+              ),
         complete: () => undefined,
         rollback: () => roll(sessionID, last, target),
         fail,
@@ -1859,12 +1864,12 @@ export default function Page() {
   }
 
   const restore = (id: string) => {
-    if (!params.id || reverting()) return
+    if (!session.identity.params.id || reverting()) return
     return restoreMutation.mutateAsync(id)
   }
 
   const rolled = createMemo(() => {
-    const id = revertMessageID()
+    const id = session.data.revertMessageID()
     if (!id) return []
     const index = userMessages().findIndex((item) => item.id === id)
     if (index < 0) return []
@@ -1899,7 +1904,7 @@ export default function Page() {
   const actions = { revert, openAttachment }
 
   createEffect(() => {
-    const sessionID = params.id
+    const sessionID = session.identity.params.id
     if (!sessionID) return
 
     const item = queuedFollowups()[0]
@@ -1907,7 +1912,7 @@ export default function Page() {
     if (followupBusy(sessionID)) return
     if (followup.failed[sessionID] === item.id) return
     if (followup.paused[sessionID]) return
-    if (isChildSession()) return
+    if (session.data.isChild()) return
     if (composer.blocked()) return
     if (session.data.working()) return
 
@@ -1937,8 +1942,8 @@ export default function Page() {
   )
 
   const { clearMessageHash, scrollToMessage } = useSessionHashScroll({
-    sessionKey,
-    sessionID: () => params.id,
+    sessionKey: session.identity.sessionKey,
+    sessionID: () => session.identity.params.id,
     messagesReady,
     visibleUserMessages,
     historyMore,
@@ -1964,7 +1969,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
+      () => session.identity.params.id,
       (id) => {
         if (!id) requestAnimationFrame(() => inputRef?.focus())
       },
@@ -2027,19 +2032,21 @@ export default function Page() {
   )
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
-    createEffect(on(sessionKey, reset, { defer: true }))
-    return <SessionErrorFallback error={error} sessionID={params.id} />
+    createEffect(on(session.identity.sessionKey, reset, { defer: true }))
+    return <SessionErrorFallback error={error} sessionID={session.identity.params.id} />
   }
 
   const sessionPanelContent = () => (
     <>
       {sessionSync() ?? ""}
-      <Show when={!isDesktop() && !!params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()}>
+      <Show
+        when={!isDesktop() && !!session.identity.params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()}
+      >
         {mobileTabs(true)}
       </Show>
       <div class="flex-1 min-h-0 overflow-hidden">
         <Switch>
-          <Match when={params.id && mobileChanges()}>
+          <Match when={session.identity.params.id && mobileChanges()}>
             <div class="relative h-full overflow-hidden">
               {reviewContent({
                 diffStyle: "unified",
@@ -2053,8 +2060,8 @@ export default function Page() {
               })}
             </div>
           </Match>
-          <Match when={params.id}>
-            <Show when={messagesReady() ? params.id : undefined} keyed>
+          <Match when={session.identity.params.id}>
+            <Show when={messagesReady() ? session.identity.params.id : undefined} keyed>
               {(_id) => (
                 <MessageTimeline
                   session={session}
@@ -2102,25 +2109,25 @@ export default function Page() {
         </Switch>
       </div>
 
-      <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>
+      <Show when={(session.identity.params.id || !newSessionDesign()) && !mobileChanges()}>
         {(_) => {
           const controller = createSessionComposerRegionController({
             state: composer,
-            sessionKey,
-            sessionID: () => params.id,
+            sessionKey: session.identity.sessionKey,
+            sessionID: () => session.identity.params.id,
             prompt,
             ready: () => !store.deferRender && messagesReady(),
             centered,
             todo: {
-              collapsed: () => view().todoCollapsed.get(),
-              onToggle: () => view().todoCollapsed.set(!view().todoCollapsed.get()),
+              collapsed: () => session.layout.view().todoCollapsed.get(),
+              onToggle: () => session.layout.view().todoCollapsed.set(!session.layout.view().todoCollapsed.get()),
             },
             followup: () =>
-              params.id && !isChildSession()
+              session.identity.params.id && !session.data.isChild()
                 ? {
                     items: followupDock(),
                     sending: sendingFollowup(),
-                    onSend: (id) => void sendFollowup(params.id!, id, { manual: true }),
+                    onSend: (id) => void sendFollowup(session.identity.params.id!, id, { manual: true }),
                     onEdit: editFollowup,
                   }
                 : undefined,
@@ -2138,8 +2145,8 @@ export default function Page() {
               const id = session.data.parentID()
               if (!id) return
               navigate(
-                params.serverKey
-                  ? sessionHref(requireServerKey(params.serverKey), id)
+                session.identity.params.serverKey
+                  ? sessionHref(requireServerKey(session.identity.params.serverKey), id)
                   : legacySessionHref(sdk().directory, id),
               )
             },
@@ -2173,7 +2180,7 @@ export default function Page() {
                       shouldQueue={queueEnabled}
                       onQueue={queueFollowup}
                       onAbort={() => {
-                        const id = params.id
+                        const id = session.identity.params.id
                         if (!id) return
                         setFollowup("paused", id, true)
                       }}
@@ -2203,7 +2210,7 @@ export default function Page() {
                       shouldQueue: queueEnabled,
                       onQueue: queueFollowup,
                       onAbort: () => {
-                        const id = params.id
+                        const id = session.identity.params.id
                         if (!id) return
                         setFollowup("paused", id, true)
                       },
@@ -2216,7 +2223,7 @@ export default function Page() {
           )
         }}
       </Show>
-      <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
+      <Show when={!!session.identity.params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
     </>
   )
 
@@ -2230,7 +2237,9 @@ export default function Page() {
           "gap-2 p-2": settings.general.newLayoutDesigns(),
         }}
       >
-        <Show when={!isDesktop() && !!params.id && !settings.general.newLayoutDesigns()}>{mobileTabs()}</Show>
+        <Show when={!isDesktop() && !!session.identity.params.id && !settings.general.newLayoutDesigns()}>
+          {mobileTabs()}
+        </Show>
 
         <div
           classList={{
@@ -2245,13 +2254,13 @@ export default function Page() {
           {settings.general.newLayoutDesigns() ? (
             <Show when={sessionPanelKey()} keyed>
               {(_) => (
-                <SessionPanelFrame newLayout raised={!!params.id}>
+                <SessionPanelFrame newLayout raised={!!session.identity.params.id}>
                   <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
                 </SessionPanelFrame>
               )}
             </Show>
           ) : (
-            <SessionPanelFrame newLayout={false} raised={!!params.id}>
+            <SessionPanelFrame newLayout={false} raised={!!session.identity.params.id}>
               {sessionPanelContent()}
             </SessionPanelFrame>
           )}
@@ -2338,7 +2347,7 @@ export default function Page() {
                       size.touch()
                       layout.terminal.resize(height)
                     }}
-                    onCollapse={() => view().terminal.close()}
+                    onCollapse={() => session.layout.view().terminal.close()}
                   />
                 </div>
               </Show>

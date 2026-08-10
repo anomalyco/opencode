@@ -51,37 +51,33 @@ export function createTimelineController(input: {
   const dialog = useDialog()
   const language = useLanguage()
   const platform = usePlatform()
-  const params = input.session.identity.params
-  const sessionKey = input.session.identity.sessionKey
-  const sessionID = input.session.identity.sessionID
-  const status = input.session.data.status
-  const messages = input.session.history.messages
   const projectedMessages = createMemo(() => {
-    const id = sessionID()
+    const id = input.session.identity.sessionID()
     if (!id) return []
     const visible = new Set(input.userMessages().map((message) => message.id))
-    const boundary = messages().find((message) => message.role === "user" && !visible.has(message.id))?.id
+    const boundary = input.session.history
+      .messages()
+      .find((message) => message.role === "user" && !visible.has(message.id))?.id
     const projected = sync().data.session_message[id] ?? []
     if (!boundary) return projected
     const index = projected.findIndex((message) => message.id === boundary)
     return index < 0 ? projected : projected.slice(0, index)
   })
-  const info = input.session.data.info
-  const titleValue = createMemo(() => info()?.title)
+  const titleValue = createMemo(() => input.session.data.info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const shareUrl = (): string | undefined => undefined
   const shareEnabled = () => false
-  const parentID = input.session.data.parentID
-  const parent = input.session.data.parent
   const parentMessages = createMemo(() => {
-    const id = parentID()
+    const id = input.session.data.parentID()
     return id ? (sync().data.message[id] ?? emptyMessages) : emptyMessages
   })
-  const parentTitle = createMemo(() => sessionTitle(parent()?.title) ?? language.t("command.session.new"))
+  const parentTitle = createMemo(
+    () => sessionTitle(input.session.data.parent()?.title) ?? language.t("command.session.new"),
+  )
   const parts = (messageID: string) => sync().data.part[messageID] ?? emptyParts
   const part = (messageID: string, partID: string) => parts(messageID).find((item) => item.id === partID)
   const childTaskDescription = createMemo(() => {
-    const id = sessionID()
+    const id = input.session.identity.sessionID()
     if (!id) return undefined
     return parentMessages()
       .flatMap((message) => parts(message.id))
@@ -90,19 +86,19 @@ export function createTimelineController(input: {
   })
   const childTitle = createMemo(() => {
     return timelineChildTitle({
-      parentID: parentID(),
+      parentID: input.session.data.parentID(),
       taskDescription: childTaskDescription(),
       title: titleLabel(),
       fallback: language.t("command.session.new"),
     })
   })
-  const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const showHeader = createMemo(() => !!(titleValue() || input.session.data.parentID()))
   const projection = createTimelineProjection({
-    messages,
+    messages: input.session.history.messages,
     userMessages: input.userMessages,
     sessionMessages: projectedMessages,
     parts,
-    status,
+    status: input.session.data.status,
     showReasoningSummaries: settings.general.showReasoningSummaries,
     inlineComments: settings.general.newLayoutDesigns,
   })
@@ -117,7 +113,7 @@ export function createTimelineController(input: {
     return language.t("common.requestFailed")
   }
   const rename = async (title: string) => {
-    const id = sessionID()
+    const id = input.session.identity.sessionID()
     if (!id || pending.rename) return false
     const next = title.trim()
     if (!next || next === (titleLabel() ?? "")) return true
@@ -140,22 +136,27 @@ export function createTimelineController(input: {
     return true
   }
   const share = async () => {
-    const id = sessionID()
+    const id = input.session.identity.sessionID()
     if (!id || pending.share || !shareEnabled()) return
   }
   const unshare = async () => {
-    const id = sessionID()
+    const id = input.session.identity.sessionID()
     if (!id || pending.unshare || !shareEnabled()) return
   }
   const href = (id: string) =>
-    params.serverKey ? sessionHref(requireServerKey(params.serverKey), id) : legacySessionHref(sdk().directory, id)
+    input.session.identity.params.serverKey
+      ? sessionHref(requireServerKey(input.session.identity.params.serverKey), id)
+      : legacySessionHref(sdk().directory, id)
   const navigateAfterRemoval = (id: string, parent?: string, next?: string) => {
-    if (params.id !== id) return
+    if (input.session.identity.params.id !== id) return
     if (parent) return navigate(href(parent))
     if (next) return navigate(href(next))
-    if (params.serverKey)
-      return tabs.newDraft({ server: requireServerKey(params.serverKey), directory: sdk().directory })
-    navigate(`/${params.dir}/session`)
+    if (input.session.identity.params.serverKey)
+      return tabs.newDraft({
+        server: requireServerKey(input.session.identity.params.serverKey),
+        directory: sdk().directory,
+      })
+    navigate(`/${input.session.identity.params.dir}/session`)
   }
   const exportSession = async (id: string) => {
     try {
@@ -248,7 +249,7 @@ export function createTimelineController(input: {
 
   createEffect(
     on(
-      () => [parentID(), childTaskDescription()] as const,
+      () => [input.session.data.parentID(), childTaskDescription()] as const,
       ([id, description]) => {
         if (!id || description || sync().data.message[id] !== undefined) return
         void sync().session.sync(id)
@@ -259,14 +260,14 @@ export function createTimelineController(input: {
 
   return {
     data: {
-      sessionKey,
-      sessionID,
-      status,
+      sessionKey: input.session.identity.sessionKey,
+      sessionID: input.session.identity.sessionID,
+      status: input.session.data.status,
       titleValue,
       titleLabel,
       shareUrl,
       shareEnabled,
-      parentID,
+      parentID: input.session.data.parentID,
       parentTitle,
       childTitle,
       showHeader,
@@ -290,7 +291,7 @@ export function createTimelineController(input: {
       export: exportSession,
       showDelete: (id: string) => dialog.show(() => <DeleteDialog sessionID={id} />),
       navigateParent: () => {
-        const id = parentID()
+        const id = input.session.data.parentID()
         if (id) navigate(href(id))
       },
       viewShare: () => {

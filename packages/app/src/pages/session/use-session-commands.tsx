@@ -56,12 +56,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const layout = useLayout()
   const local = useLocal()
   const navigate = useNavigate()
-  const params = actions.session.identity.params
-  const tabs = actions.session.layout.tabs
-  const view = actions.session.layout.view
-  const sessionOwnership = actions.session.ownership
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
-    const owner = sessionOwnership.capture()
+    const owner = actions.session.ownership.capture()
     const value = await load()
     owner.run(() => show(value))
   }
@@ -77,13 +73,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     input.owner.run(input.updateViewport)
   }
 
-  const info = actions.session.data.info
-  const activeFileTab = actions.session.tabs.activeFileTab
-  const closableTab = actions.session.tabs.closableTab
   const shown = settings.visibility.fileTree
-
-  const userMessages = actions.session.history.userMessages
-  const visibleUserMessages = actions.session.history.visibleUserMessages
 
   const showAllFiles = () => {
     if (layout.fileTree.tab() !== "changes") return
@@ -102,7 +92,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const canAddSelectionContext = () => {
-    const tab = activeFileTab()
+    const tab = actions.session.tabs.activeFileTab()
     if (!tab) return false
     const path = file.pathFromTab(tab)
     if (!path) return false
@@ -122,7 +112,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
   const isAutoAcceptActive = () => {
-    const sessionID = params.id
+    const sessionID = actions.session.identity.params.id
     if (sessionID) return permission.isAutoAccepting(sessionID, sdk().directory)
     return permission.isAutoAcceptingDirectory(sdk().directory)
   }
@@ -167,7 +157,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const share = async () => {
-    const sessionID = params.id
+    const sessionID = actions.session.identity.params.id
     if (!sessionID) return
 
     const existing = undefined
@@ -191,7 +181,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const unshare = async () => {
-    const sessionID = params.id
+    const sessionID = actions.session.identity.params.id
     if (!sessionID) return
 
     // TODO: Restore unsharing when the V2 client exposes a session sharing API.
@@ -203,7 +193,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const exportSession = async () => {
-    const sessionID = params.id
+    const sessionID = actions.session.identity.params.id
     if (!sessionID) return
     try {
       const data = await fetchSessionExport({
@@ -235,13 +225,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const closeTab = () => {
-    const tab = closableTab()
+    const tab = actions.session.tabs.closableTab()
     if (!tab) return
-    tabs().close(tab)
+    actions.session.layout.tabs().close(tab)
   }
 
   const addSelection = () => {
-    const tab = activeFileTab()
+    const tab = actions.session.tabs.activeFileTab()
     if (!tab) return
 
     const path = file.pathFromTab(tab)
@@ -262,7 +252,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const openTerminal = () => {
     if (terminal.all().length > 0) terminal.new({ focus: true })
     if (terminal.all().length === 0) terminal.requestFocus()
-    view().terminal.open()
+    actions.session.layout.view().terminal.open()
   }
 
   const closeTerminal = () => {
@@ -270,7 +260,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!id) return
     const last = terminal.all().length === 1
     void terminal.close(id)
-    if (last) view().terminal.close()
+    if (last) actions.session.layout.view().terminal.close()
   }
 
   const chooseMcp = () => {
@@ -281,7 +271,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const toggleAutoAccept = () => {
-    const sessionID = params.id
+    const sessionID = actions.session.identity.params.id
     if (sessionID) permission.toggleAutoAccept(sessionID, sdk().directory)
     else permission.toggleAutoAcceptDirectory(sdk().directory)
 
@@ -299,14 +289,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const undo = async () => {
-    const sessionID = params.id
+    const sessionID = actions.session.identity.params.id
     if (!sessionID) return
-    const owner = sessionOwnership.capture()
+    const owner = actions.session.ownership.capture()
     const session = sdk().api.session
     const directory = sdk().directory
     const promptSession = prompt.capture()
     const revert = actions.session.data.revertMessageID()
-    const messages = userMessages()
+    const messages = actions.session.history.userMessages()
     const boundary = revert ? messages.findIndex((message) => message.id === revert) : messages.length
     if (boundary < 0) return
     const message = messages[boundary - 1]
@@ -329,11 +319,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const redo = async () => {
-    const sessionID = params.id
+    const sessionID = actions.session.identity.params.id
     if (!sessionID) return
-    const owner = sessionOwnership.capture()
+    const owner = actions.session.ownership.capture()
     const session = sdk().api.session
-    const messages = userMessages()
+    const messages = actions.session.history.userMessages()
     const promptSession = prompt.capture()
 
     const revertMessageID = actions.session.data.revertMessageID()
@@ -363,7 +353,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const compact = async () => {
-    const sessionID = params.id
+    const sessionID = actions.session.identity.params.id
     if (!sessionID) return
 
     await sdk().api.session.compact({ sessionID })
@@ -384,12 +374,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     return [
       sessionCommand({
         id: "session.share",
-        title: info()?.share?.url ? language.t("session.share.copy.copyLink") : language.t("command.session.share"),
-        description: info()?.share?.url
+        title: actions.session.data.info()?.share?.url
+          ? language.t("session.share.copy.copyLink")
+          : language.t("command.session.share"),
+        description: actions.session.data.info()?.share?.url
           ? language.t("toast.session.share.success.description")
           : language.t("command.session.share.description"),
         slash: "share",
-        disabled: !params.id,
+        disabled: !actions.session.identity.params.id,
         onSelect: share,
       }),
       sessionCommand({
@@ -397,7 +389,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         title: language.t("command.session.unshare"),
         description: language.t("command.session.unshare.description"),
         slash: "unshare",
-        disabled: !params.id || !info()?.share?.url,
+        disabled: !actions.session.identity.params.id || !actions.session.data.info()?.share?.url,
         onSelect: unshare,
       }),
     ]
@@ -415,7 +407,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           command.trigger("tab.new", source)
           return
         }
-        navigate(`/${params.dir}/session`)
+        navigate(`/${actions.session.identity.params.dir}/session`)
       },
     }),
     sessionCommand({
@@ -423,7 +415,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.undo"),
       description: language.t("command.session.undo.description"),
       slash: "undo",
-      disabled: !params.id || visibleUserMessages().length === 0,
+      disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
       onSelect: undo,
     }),
     sessionCommand({
@@ -431,7 +423,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.redo"),
       description: language.t("command.session.redo.description"),
       slash: "redo",
-      disabled: !params.id || !info()?.revert?.messageID,
+      disabled: !actions.session.identity.params.id || !actions.session.data.info()?.revert?.messageID,
       onSelect: redo,
     }),
     sessionCommand({
@@ -439,7 +431,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.compact"),
       description: language.t("command.session.compact.description"),
       slash: "compact",
-      disabled: !params.id || visibleUserMessages().length === 0,
+      disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
       onSelect: compact,
     }),
     sessionCommand({
@@ -447,7 +439,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.fork"),
       description: language.t("command.session.fork.description"),
       slash: "fork",
-      disabled: !params.id || visibleUserMessages().length === 0,
+      disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
       onSelect: fork,
     }),
     sessionCommand({
@@ -455,13 +447,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.export"),
       description: language.t("command.session.export.description"),
       slash: "export",
-      disabled: !params.id,
+      disabled: !actions.session.identity.params.id,
       onSelect: exportSession,
     }),
   ]
 
   const fileCmds = () => {
-    const tab = closableTab()
+    const tab = actions.session.tabs.closableTab()
     return [
       fileCommand({
         id: "file.open",
@@ -499,20 +491,20 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "ctrl+`",
       slash: "terminal",
       onSelect: () => {
-        if (view().terminal.opened()) {
+        if (actions.session.layout.view().terminal.opened()) {
           terminal.cancelFocus()
-          view().terminal.close()
+          actions.session.layout.view().terminal.close()
           return
         }
         terminal.requestFocus(terminal.active())
-        view().terminal.open()
+        actions.session.layout.view().terminal.open()
       },
     }),
     viewCommand({
       id: "review.toggle",
       title: language.t("command.review.toggle"),
       keybind: "mod+shift+r",
-      onSelect: () => view().reviewPanel.toggle(),
+      onSelect: () => actions.session.layout.view().reviewPanel.toggle(),
     }),
     ...(shown()
       ? [
@@ -556,7 +548,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.message.previous"),
       description: language.t("command.message.previous.description"),
       keybind: "mod+alt+[",
-      disabled: !params.id,
+      disabled: !actions.session.identity.params.id,
       onSelect: () => navigateMessageByOffset(-1),
     }),
     sessionCommand({
@@ -564,7 +556,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.message.next"),
       description: language.t("command.message.next.description"),
       keybind: "mod+alt+]",
-      disabled: !params.id,
+      disabled: !actions.session.identity.params.id,
       onSelect: () => navigateMessageByOffset(1),
     }),
   ]
