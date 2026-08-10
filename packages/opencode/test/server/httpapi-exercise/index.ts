@@ -89,6 +89,15 @@ const scenarios: Scenario[] = [
       check(typeof body.reusableBytes === "number", "storage status should report reusable bytes")
     }),
   http.protected
+    .get("/global/storage/progress", "storage.progress")
+    .global()
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.phase === "string", "storage progress should report a phase")
+      check(typeof body.completed === "number", "storage progress should report completed work")
+      check(typeof body.workers === "number", "storage progress should report workers")
+    }),
+  http.protected
     .post("/global/storage/analyze", "storage.analyze")
     .global()
     .json(200, (body) => {
@@ -142,6 +151,7 @@ const scenarios: Scenario[] = [
       object(body.backup)
       check(body.backup.integrity === "ok", "vacuum should create a verified backup")
       check(typeof body.bytesReclaimed === "number", "vacuum should report reclaimed bytes")
+      check(typeof body.checkpointBusy === "number", "vacuum should report final checkpoint state")
     }),
   http.protected
     .patch("/global/config", "global.config.update")
