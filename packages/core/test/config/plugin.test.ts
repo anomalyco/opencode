@@ -24,6 +24,11 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node])),
 )
+const staticIt = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+    [PluginSupervisor.node, PluginSupervisor.configured({ dynamic: false })],
+  ]),
+)
 
 describe("PluginSupervisor config", () => {
   it.live("applies selectors in order", () =>
@@ -155,6 +160,29 @@ describe("PluginSupervisor config", () => {
       }),
       true,
     ),
+  )
+
+  staticIt.live("uses only internal and SDK plugins when dynamic imports are disabled", () =>
+    Effect.gen(function* () {
+      const sdk = yield* SdkPlugins.Service
+      yield* sdk.register(EffectPlugin.define({ id: "static-sdk", effect: () => Effect.void }))
+      yield* withLocation(
+        { plugins: ["-*", path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")] },
+        Effect.gen(function* () {
+          yield* ready()
+          const plugins = yield* Plugin.Service
+          const ids = (yield* plugins.list()).map((plugin) => String(plugin.id))
+          expect(ids).toContain("opencode.agent")
+          expect(ids).toContain("static-sdk")
+          expect(ids).not.toContain("config-promise-plugin")
+
+          const agents = yield* Agent.Service
+          expect(yield* agents.get(Agent.ID.make("directory"))).toBeUndefined()
+          expect(yield* agents.get(Agent.ID.make("configured"))).toBeUndefined()
+        }),
+        true,
+      )
+    }),
   )
 
   it.live("reloads an auto-discovered plugin when its file changes", () =>
