@@ -1,7 +1,7 @@
-import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { SummaryDiff } from "./timeline-row"
 
-export function uniqueSummaryDiffs(diffs: SnapshotFileDiff[] | undefined) {
+export function uniqueSummaryDiffs(diffs: FileDiffInfo[] | undefined) {
   const files = new Set<string>()
   return (diffs ?? [])
     .reduceRight<SummaryDiff[]>((result, diff) => {
@@ -15,6 +15,6 @@ export function uniqueSummaryDiffs(diffs: SnapshotFileDiff[] | undefined) {
     .reverse()
 }
 
-function isSummaryDiff(diff: SnapshotFileDiff): diff is SummaryDiff {
+function isSummaryDiff(diff: FileDiffInfo): diff is SummaryDiff {
   return typeof diff.file === "string"
 }

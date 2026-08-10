@@ -98,12 +98,12 @@ const paths = Effect.gen(function* () {
   }
 })
 
-export const options = Effect.fnUntraced(function* () {
+export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
   const { file, legacyRegistrationFiles } = yield* paths
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
   return {
     file,
-    version: OPENCODE_VERSION,
+    version: input.checkVersion ? OPENCODE_VERSION : undefined,
     command: [...selfCommand(), "serve", "--service"],
   }
 })

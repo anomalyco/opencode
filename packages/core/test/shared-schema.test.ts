@@ -17,6 +17,7 @@ import { Connection } from "@opencode-ai/schema/connection"
 import { Credential } from "@opencode-ai/schema/credential"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Integration } from "@opencode-ai/schema/integration"
+import { AI } from "@opencode-ai/schema/ai"
 import { LLM } from "@opencode-ai/schema/llm"
 import { Permission } from "@opencode-ai/schema/permission"
 import { Pty } from "@opencode-ai/schema/pty"
@@ -34,7 +35,7 @@ test("Core reuses the canonical shared schemas", async () => {
     coreFileSystem,
     coreIntegration,
     coreLocation,
-    coreLLM,
+    coreAI,
     coreModel,
     corePermission,
     corePermissionV1,
@@ -89,19 +90,14 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreFileSystem.Match, FileSystem.Match],
     [coreIntegration.ID, Integration.ID],
     [coreIntegration.MethodID, Integration.MethodID],
-    [coreIntegration.When, Integration.When],
-    [coreIntegration.TextPrompt, Integration.TextPrompt],
-    [coreIntegration.SelectPrompt, Integration.SelectPrompt],
-    [coreIntegration.Prompt, Integration.Prompt],
     [coreIntegration.OAuthMethod, Integration.OAuthMethod],
     [coreIntegration.KeyMethod, Integration.KeyMethod],
     [coreIntegration.EnvMethod, Integration.EnvMethod],
     [coreIntegration.Method, Integration.Method],
-    [coreIntegration.Inputs, Integration.Inputs],
     [coreIntegration.Ref, Integration.Ref],
     [coreLocation.Ref, Location.Ref],
-    [coreLLM.ProviderMetadata, LLM.ProviderMetadata],
-    [coreLLM.FinishReason, LLM.FinishReason],
+    [coreAI.ProviderMetadata, AI.ProviderMetadata],
+    [coreAI.FinishReason, LLM.FinishReason],
     [coreModel.ID, Model.ID],
     [coreModel.VariantID, Model.VariantID],
     [coreModel.Ref, Model.Ref],
@@ -165,7 +161,7 @@ test("Core reuses the canonical shared schemas", async () => {
   ]
   for (const [core, shared] of schemas) expect(core).toBe(shared)
 
-  expect(Agent.Info.empty(Agent.ID.make("test"))).toEqual(Agent.Info.empty(Agent.ID.make("test")))
+  expect(Agent.Info.default(Agent.ID.make("test"))).toEqual(Agent.Info.default(Agent.ID.make("test")))
   expect(coreModel.Info.default(coreProvider.ID.make("test"), coreModel.ID.make("model"))).toEqual(
     Model.Info.default(Provider.ID.make("test"), Model.ID.make("model")),
   )

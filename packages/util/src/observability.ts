@@ -45,7 +45,7 @@ export function layer(
         Layer.orDie,
         Layer.merge(Layer.succeed(References.MinimumLogLevel, Logging.minimumLogLevel())),
       )
-      return Layer.merge(logs, yield* Effect.promise(() => Otlp.tracingLayer(options, app)))
+      return Layer.merge(logs, yield* Otlp.tracingLayer(options, app))
     }),
   ).pipe(Layer.catchCause(() => local))
 }

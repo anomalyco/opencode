@@ -22,6 +22,7 @@ import { Snapshot } from "./snapshot.js"
 import { TokenUsage } from "./token-usage.js"
 import { SessionPending } from "./session-pending.js"
 import { Project } from "./project.js"
+import { SessionFork } from "./session-fork.js"
 
 export { FileAttachment }
 
@@ -44,6 +45,24 @@ const options = {
     version: 1,
   },
 } as const
+export const Created = Event.durable({
+  type: "session.created",
+  ...options,
+  schema: {
+    ...Base,
+    projectID: Project.ID,
+    location: Location.Ref,
+    subpath: RelativePath.pipe(optional),
+    parentID: SessionID.pipe(optional),
+    slug: Schema.String,
+    title: Schema.String.pipe(optional),
+    agent: Agent.ID.pipe(optional),
+    model: Model.Ref.pipe(optional),
+    version: Schema.String,
+  },
+})
+export type Created = typeof Created.Type
+
 export const AgentSelected = Event.durable({
   type: "session.agent.selected",
   ...options,
@@ -127,19 +146,21 @@ export const Forked = Event.durable({
   schema: {
     ...Base,
     parentID: SessionID,
-    parentSeq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(-1)),
-    from: SessionMessage.ID.pipe(optional),
+    boundary: SessionFork.Boundary,
+    instructions: Instruction.Values.pipe(optional),
   },
 })
 export type Forked = typeof Forked.Type
 
+const InputRef = {
+  ...Base,
+  inputID: SessionMessage.ID,
+}
+
 export const InputPromoted = Event.durable({
   type: "session.input.promoted",
   ...options,
-  schema: {
-    sessionID: SessionID,
-    inputID: SessionMessage.ID,
-  },
+  schema: InputRef,
 })
 export type InputPromoted = typeof InputPromoted.Type
 
@@ -147,12 +168,32 @@ export const InputAdmitted = Event.durable({
   type: "session.input.admitted",
   ...options,
   schema: {
-    ...Base,
-    inputID: SessionMessage.ID,
+    ...InputRef,
     input: SessionPending.Message,
   },
 })
 export type InputAdmitted = typeof InputAdmitted.Type
+
+export const InputCancelled = Event.durable({
+  type: "session.input.cancelled",
+  ...options,
+  schema: InputRef,
+})
+export type InputCancelled = typeof InputCancelled.Type
+
+export const InputSteered = Event.durable({
+  type: "session.input.steered",
+  ...options,
+  schema: InputRef,
+})
+export type InputSteered = typeof InputSteered.Type
+
+export const InputQueued = Event.durable({
+  type: "session.input.queued",
+  ...options,
+  schema: InputRef,
+})
+export type InputQueued = typeof InputQueued.Type
 
 export namespace Execution {
   export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
@@ -185,6 +226,11 @@ export const InstructionsUpdated = Event.durable({
   schema: {
     ...Base,
     delta: Instruction.Delta,
+    /**
+     * The rendered chronological update shown to the model, frozen at emit time.
+     * Absent for the initial baseline observation and for deltas that render empty.
+     */
+    text: Schema.String.pipe(optional),
   },
 })
 export type InstructionsUpdated = typeof InstructionsUpdated.Type
@@ -364,7 +410,7 @@ export namespace Tool {
   const ToolBase = {
     ...Base,
     assistantMessageID: SessionMessage.ID,
-    callID: Schema.String,
+    id: Schema.String,
   }
 
   export namespace Input {
@@ -546,6 +592,7 @@ export namespace RevertEvent {
 }
 
 export const Definitions = Event.inventory(
+  Created,
   AgentSelected,
   ModelSelected,
   Moved,
@@ -555,6 +602,9 @@ export const Definitions = Event.inventory(
   Forked,
   InputPromoted,
   InputAdmitted,
+  InputCancelled,
+  InputSteered,
+  InputQueued,
   Execution.Started,
   Execution.Succeeded,
   Execution.Failed,
@@ -596,13 +646,16 @@ export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
 )
+export const EphemeralDefinitions = Event.inventory(
+  ...Definitions.filter((definition) => definition.durability === "ephemeral"),
+)
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Session.Event.Durable" })
 export type DurableEvent = typeof Durable.Type
 
-export const All = Schema.Union(Event.inventory(...Definitions, UsageRecorded), { mode: "oneOf" }).pipe(
+export const All = Schema.Union([Durable, ...EphemeralDefinitions], { mode: "oneOf" }).pipe(
   Schema.toTaggedUnion("type"),
 )
 export type Event = typeof All.Type

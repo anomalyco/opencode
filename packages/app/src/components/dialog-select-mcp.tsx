@@ -10,7 +10,6 @@ const statusLabels = {
   connected: "mcp.status.connected",
   failed: "mcp.status.failed",
   needs_auth: "mcp.status.needs_auth",
-  needs_client_registration: "mcp.status.needs_client_registration",
   disabled: "mcp.status.disabled",
 } as const
 
@@ -57,7 +56,7 @@ export const DialogSelectMcp: Component = () => {
           }
           const error = () => {
             const s = mcpStatus()
-            if (s?.status === "failed" || s?.status === "needs_client_registration") return s.error
+            if (s?.status === "failed") return s.error
           }
           const enabled = () => status() === "connected"
           return (

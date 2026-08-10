@@ -3,7 +3,8 @@ import { Message } from "@opencode-ai/ai"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { AgentAttachment, Base64, FileAttachment } from "@opencode-ai/schema/prompt"
+import { AgentAttachment, Base64, FileAttachment, SkillAttachment } from "@opencode-ai/schema/prompt"
+import { Skill } from "@opencode-ai/schema/skill"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { Agent } from "@opencode-ai/core/agent"
 import { Shell } from "@opencode-ai/schema/shell"
@@ -180,6 +181,40 @@ Recent work
           text: "\n\nAttached file: main.ts\n\nexport const value = 1",
           metadata: { attachment: { source: file.source, name: "main.ts" } },
         },
+      ],
+    })
+  })
+
+  test("lowers selected skill instructions with the original user prompt", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-skill"),
+          type: "user",
+          text: "Design this API",
+          skills: [
+            SkillAttachment.make({
+              id: Skill.ID.make("api-design"),
+              name: Skill.Name.make("API design"),
+              text: "Start from the ideal call site.",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({
+      id: id("user-skill"),
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "Start from the ideal call site.",
+        },
+        { type: "text", text: "Design this API" },
       ],
     })
   })

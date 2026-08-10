@@ -300,7 +300,7 @@ export async function runNonInteractivePrompt(input: Input) {
 
       if (event.type === "session.tool.input.started") {
         flushStep()
-        tools.set(toolKey(event.data.assistantMessageID, event.data.callID), {
+        tools.set(toolKey(event.data.assistantMessageID, event.data.id), {
           id: partID(event.id),
           timestamp: time,
           assistantMessageID: event.data.assistantMessageID,
@@ -312,18 +312,18 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.tool.input.ended") {
-        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.callID))
+        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.id))
         if (current) current.raw = event.data.text
         continue
       }
       if (event.type === "session.tool.input.delta") {
-        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.callID))
+        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.id))
         if (current) current.raw = (current.raw ?? "") + event.data.delta
         continue
       }
       if (event.type === "session.tool.called") {
         flushStep()
-        const key = toolKey(event.data.assistantMessageID, event.data.callID)
+        const key = toolKey(event.data.assistantMessageID, event.data.id)
         const current = tools.get(key)
         tools.set(key, {
           id: current?.id ?? partID(event.id),
@@ -340,18 +340,18 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.tool.progress") {
-        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.callID))
+        const current = tools.get(toolKey(event.data.assistantMessageID, event.data.id))
         if (current) {
           current.metadata = event.data.metadata
         }
         continue
       }
       if (event.type === "session.tool.success") {
-        const key = toolKey(event.data.assistantMessageID, event.data.callID)
+        const key = toolKey(event.data.assistantMessageID, event.data.id)
         const current = tools.get(key) ?? fallbackTool(event)
         const tool: SessionMessageAssistantTool = {
           type: "tool",
-          id: event.data.callID,
+          id: event.data.id,
           name: current.tool,
           executed: event.data.executed,
           providerState: current.providerState,
@@ -365,11 +365,11 @@ export async function runNonInteractivePrompt(input: Input) {
           time: { created: current.timestamp, ran: current.timestamp, completed: time },
         }
         const part: MiniToolPart = {
-          id: current.id,
+          partID: current.id,
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
           type: "tool",
-          callID: event.data.callID,
+          id: event.data.id,
           tool: current.tool,
           state: {
             status: "completed",
@@ -392,14 +392,14 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.tool.failed") {
-        const key = toolKey(event.data.assistantMessageID, event.data.callID)
+        const key = toolKey(event.data.assistantMessageID, event.data.id)
         const current = tools.get(key) ?? fallbackTool(event)
         const error = event.data.error.message
         const metadata = event.data.metadata ?? current.metadata
         const content = event.data.content ?? nonEmptyToolContent(current.content)
         const tool: SessionMessageAssistantTool = {
           type: "tool",
-          id: event.data.callID,
+          id: event.data.id,
           name: current.tool,
           executed: event.data.executed,
           providerState: current.providerState,
@@ -414,11 +414,11 @@ export async function runNonInteractivePrompt(input: Input) {
           time: { created: current.timestamp, ran: current.timestamp, completed: time },
         }
         const part: MiniToolPart = {
-          id: current.id,
+          partID: current.id,
           sessionID: input.sessionID,
           messageID: event.data.assistantMessageID,
           type: "tool",
-          callID: event.data.callID,
+          id: event.data.id,
           tool: current.tool,
           state: {
             status: "error",
@@ -468,10 +468,7 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.step.failed") {
-        if (
-          input.compatibility === "v1" &&
-          event.data.error.message === "Provider stream ended without a terminal finish event"
-        ) {
+        if (input.compatibility === "v1" && event.data.error.message === "The provider response ended unexpectedly.") {
           pendingStep = undefined
           v1InvalidOutput = true
           continue
@@ -578,11 +575,11 @@ export async function runNonInteractivePrompt(input: Input) {
         const key = toolKey(message.id, item.id)
         if (renderedTools.has(key) || item.state.status === "streaming" || item.state.status === "running") continue
         const part: MiniToolPart = {
-          id: projectedPartID(message.id, `tool-${item.id}`),
+          partID: projectedPartID(message.id, `tool-${item.id}`),
           sessionID: input.sessionID,
           messageID: message.id,
           type: "tool",
-          callID: item.id,
+          id: item.id,
           tool: item.name,
           state:
             item.state.status === "completed"
@@ -771,8 +768,8 @@ function partID(eventID: string) {
   return `prt_${eventID.replace(/^evt_/, "")}`
 }
 
-function toolKey(messageID: string, callID: string) {
-  return `${messageID}\u0000${callID}`
+function toolKey(messageID: string, id: string) {
+  return `${messageID}\u0000${id}`
 }
 
 function contentKey(messageID: string, ordinal: number) {
@@ -786,7 +783,7 @@ function projectedPartID(messageID: string, part: string) {
 function fallbackTool(event: {
   id: string
   created: number
-  data: { assistantMessageID: string; callID: string }
+  data: { assistantMessageID: string; id: string }
 }): ToolState {
   return {
     id: partID(event.id),

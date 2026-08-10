@@ -33,7 +33,7 @@ type CollectedFiles = {
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
-  "Run JavaScript to orchestrate tool calls and compose their results through `{ code }` in a confined Code Mode runtime.",
+  "Run JavaScript in a confined Code Mode runtime to orchestrate tool calls and compose their results.",
   "Imports, direct filesystem access, and timers are unavailable. Do not use `fetch`; all external access goes through `tools`.",
   "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by `search`. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
   'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
@@ -43,14 +43,9 @@ const description = [
 
 export const create = (
   registrations: ReadonlyMap<string, Info>,
-  executeTool: (
-    name: string,
-    tool: Info,
-    input: unknown,
-    context: Context,
-  ) => Effect.Effect<Result, Error>,
+  executeTool: (name: string, tool: Info, input: unknown, context: Context) => Effect.Effect<Result, Error>,
 ) => {
-  return ({
+  return {
     name: "execute",
     description,
     input: CodeMode.Input,
@@ -76,7 +71,7 @@ export const create = (
               const content =
                 typeof executed.content === "string"
                   ? [{ type: "text" as const, text: executed.content }]
-                  : executed.content ?? []
+                  : (executed.content ?? [])
               const outputFileParts = outputFiles(content)
               if (outputFileParts.length > 0)
                 yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
@@ -134,11 +129,18 @@ export const create = (
           metadata,
         }
       }),
-  }) satisfies Info
+  } satisfies Info
 }
 
 export const catalog = (registrations: ReadonlyMap<string, Info>) => {
-  return runtime(registrations, () => Effect.fail(toolError("Execute context is unavailable"))).catalog()
+  const pinned = new Set(
+    Array.from(registrations.values())
+      .filter((registration) => registration.options?.pinned === true)
+      .map(qualifiedName),
+  )
+  return runtime(registrations, () => Effect.fail(toolError("Execute context is unavailable")))
+    .catalog()
+    .map((entry) => ({ ...entry, pinned: pinned.has(entry.path) }))
 }
 
 function runtime(
@@ -149,11 +151,7 @@ function runtime(
   const tools: Record<string, Tool.Tool<never>> = {}
   for (const [name, registration] of registrations) {
     const child = definition(registration)
-    const normalized = registration.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-    const path =
-      registration.options?.namespace === undefined
-        ? normalized
-        : `${registration.options.namespace}.${normalized}`
+    const path = qualifiedName(registration)
     tools[path] = Tool.make({
       description: child.description,
       input: child.inputSchema,
@@ -162,6 +160,12 @@ function runtime(
     })
   }
   return CodeMode.make<typeof tools>({ tools, ...hooks })
+}
+
+function qualifiedName(registration: Info) {
+  const normalized = registration.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+  if (registration.options?.namespace === undefined) return normalized
+  return `${registration.options.namespace}.${normalized}`
 }
 
 // Tool inputs arrive as parsed JSON, so the JSON value cast is a boundary fact.

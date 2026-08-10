@@ -1,4 +1,5 @@
-import type { Message, Part, PermissionRequest, QuestionRequest, SessionStatus, Todo } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, Todo } from "@/types"
+import type { PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/client/promise"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 

@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { asc, eq } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Agent } from "@opencode-ai/core/agent"
@@ -18,7 +19,11 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionTable, SessionMessageTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(LayerNode.compile(LayerNode.group([Database.node, Bus.node, SessionProjector.node])))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
+    [Bus.node, Bus.configured({ persist: true })],
+  ]),
+)
 const timestamp = DateTime.makeUnsafe(1)
 const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }
 
@@ -65,18 +70,18 @@ describe("Tool.Metadata", () => {
         if (!row) return yield* Effect.die("Missing projected assistant")
         return Schema.decodeUnknownSync(SessionMessage.Assistant)({ ...row.data, id: row.id, type: row.type })
       })
-      const start = (callID: string) =>
+      const start = (id: string) =>
         Effect.gen(function* () {
           yield* service.publish(SessionEvent.Tool.Input.Started, {
             sessionID,
             assistantMessageID,
-            callID,
+            id,
             name: "bash",
           })
           yield* service.publish(SessionEvent.Tool.Called, {
             sessionID,
             assistantMessageID,
-            callID,
+            id,
             input: { command: "pwd" },
             executed: false,
           })
@@ -90,7 +95,7 @@ describe("Tool.Metadata", () => {
       const progress = yield* service.publish(SessionEvent.Tool.Progress, {
         sessionID,
         assistantMessageID,
-        callID: "call-success",
+        id: "call-success",
         metadata: { phase: "checkpoint" },
       })
       expect((yield* readAssistant).content[0]).toMatchObject({
@@ -100,7 +105,7 @@ describe("Tool.Metadata", () => {
       const success = yield* service.publish(SessionEvent.Tool.Success, {
         sessionID,
         assistantMessageID,
-        callID: "call-success",
+        id: "call-success",
         metadata: { phase: "done" },
         content: content("complete"),
         executed: false,
@@ -113,13 +118,13 @@ describe("Tool.Metadata", () => {
       yield* service.publish(SessionEvent.Tool.Progress, {
         sessionID,
         assistantMessageID,
-        callID: "call-failed",
+        id: "call-failed",
         metadata: { phase: "checkpoint" },
       })
       const failed = yield* service.publish(SessionEvent.Tool.Failed, {
         sessionID,
         assistantMessageID,
-        callID: "call-failed",
+        id: "call-failed",
         error: { type: "unknown", message: "boom" },
         metadata: { phase: "checkpoint" },
         content: content("before failure"),

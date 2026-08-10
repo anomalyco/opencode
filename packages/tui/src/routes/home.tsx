@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "../component/prompt"
-import { createEffect, createMemo, createSignal, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount, Show, untrack } from "solid-js"
 import { Logo } from "../component/logo"
 import { useArgs } from "../context/args"
 import { useRouteData } from "../context/route"
@@ -9,7 +9,8 @@ import { useEditorContext } from "../context/editor"
 import { useData } from "../context/data"
 import { useLocation } from "../context/location"
 import { FormPrompt } from "./session/form"
-import { PluginSlot } from "../plugin/context"
+import { PluginSlot } from "../plugin/render"
+import { useTerminalDimensions } from "@opentui/solid"
 
 let once = false
 const placeholder = {
@@ -26,11 +27,19 @@ export function Home() {
   const editor = useEditorContext()
   const data = useData()
   const location = useLocation()
+  const dimensions = useTerminalDimensions()
   // Global MCP elicitations can arrive without a session route, so keep them reachable from Home.
-  const forms = createMemo(() => data.session.form.list("global", data.location.default()) ?? [])
+  const currentLocation = () => route.location ?? data.location.default()
+  const forms = createMemo(() => data.session.form.list("global", currentLocation()) ?? [])
   let sent = false
 
-  createEffect(() => location.set(data.location.default()))
+  // Track only the route location and (when absent) the default location; location.set
+  // reads other signals internally and tracking them would re-assert the route location
+  // after the user overrides it with /cd.
+  createEffect(() => {
+    const target = currentLocation()
+    untrack(() => location.set(target))
+  })
 
   onMount(() => {
     editor.clearSelection()
@@ -64,7 +73,12 @@ export function Home() {
 
   return (
     <>
-      <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
+      <box
+        flexGrow={1}
+        alignItems="center"
+        paddingLeft={dimensions().width < 44 ? 1 : 2}
+        paddingRight={dimensions().width < 44 ? 1 : 2}
+      >
         <box flexGrow={1} minHeight={0} />
         <box height={4} minHeight={0} flexShrink={1} />
         <box flexShrink={0}>

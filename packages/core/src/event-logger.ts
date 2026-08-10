@@ -4,12 +4,7 @@ import { Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "./bus"
 
-const Types = new Set([
-  "agent.updated",
-  "catalog.updated",
-  "command.updated",
-  "config.updated",
-])
+const Types = new Set(["agent.updated", "catalog.updated", "command.updated", "config.updated"])
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {

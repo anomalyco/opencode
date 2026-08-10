@@ -32,7 +32,7 @@ test("keeps the terminal session alive when switching session tabs in a workspac
   const connection = new URL(connections[0]!)
   expect(connection.pathname).toBe(`/api/pty/${ptyID}/connect`)
   expect(connection.searchParams.get("location[directory]")).toBe(directory)
-  expect(connection.searchParams.get("ticket")).toBeNull()
+  expect(connection.searchParams.get("ticket")).toBe("e2e-ticket")
   await writeProbe(page)
 
   await switchTab(page, titleB)
@@ -66,7 +66,6 @@ async function readProbe(page: Page) {
 
 async function setup(page: Page) {
   await mockOpenCodeServer(page, {
-    protocol: "v2",
     directory,
     project: {
       id: projectID,

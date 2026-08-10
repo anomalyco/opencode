@@ -15,8 +15,7 @@ export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
 
 const VERSION = "vertex-2023-10-16" as const
 
-// models.dev uses this provider id even though the API contract is Anthropic Messages.
-export const id = ProviderID.make("google-vertex-anthropic")
+export const id = ProviderID.make("google-vertex")
 
 export type Config = RouteDefaultsInput &
   GoogleVertexShared.OAuthOptions & {
@@ -91,7 +90,7 @@ export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
   return {
     id,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }
@@ -101,7 +100,10 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<Settings, AnthropicMessages.ProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) => {
   if (settings.apiKey !== undefined) throw new Error("Google Vertex Messages does not support API keys")
   return configure({
     accessToken: settings.accessToken,

@@ -428,9 +428,7 @@ type TuiConfigView = {
   }
   diff_style?: "auto" | "stacked"
   terminal?: { title?: boolean }
-  prompt?:
-    | { editor?: boolean; paste?: "compact" | "full" }
-    | { max_height?: number; max_width?: number | "auto" }
+  prompt?: { editor?: boolean; paste?: "compact" | "full" } | { max_height?: number; max_width?: number | "auto" }
   session?: {
     sidebar?: "auto" | "hide"
     scrollbar?: boolean

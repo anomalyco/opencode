@@ -119,7 +119,15 @@ function installPackage(name) {
   try {
     const result = childProcess.spawnSync(
       "npm",
-      ["install", "--ignore-scripts", "--no-save", "--loglevel=error", "--prefix", temp, `${name}@${dependencies[name]}`],
+      [
+        "install",
+        "--ignore-scripts",
+        "--no-save",
+        "--loglevel=error",
+        "--prefix",
+        temp,
+        `${name}@${dependencies[name]}`,
+      ],
       { stdio: "inherit", windowsHide: true },
     )
     if (result.status !== 0) return false
@@ -150,7 +158,9 @@ function main() {
     }
   }
 
-  throw new Error(`Failed to install OpenCode. Try manually installing ${names.map((name) => JSON.stringify(name)).join(" or ")}.`)
+  throw new Error(
+    `Failed to install OpenCode. Try manually installing ${names.map((name) => JSON.stringify(name)).join(" or ")}.`,
+  )
 }
 
 try {

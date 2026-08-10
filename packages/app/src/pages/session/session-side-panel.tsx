@@ -23,7 +23,6 @@ import { Mark } from "@opencode-ai/ui/logo"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -57,8 +56,9 @@ import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/session/v2/session-file-browser-tab"
 
-type ReviewDiff = FileDiffInfo | SnapshotFileDiff | VcsFileDiff
-type RenderDiff = FileDiffInfo | (SnapshotFileDiff & { file: string }) | VcsFileDiff
+type ReviewDiff = FileDiffInfo
+type RenderDiff = FileDiffInfo
+const FILE_TREE_WIDTH_MIN = 240
 
 function renderDiff(value: ReviewDiff): value is RenderDiff {
   return typeof value.file === "string"
@@ -104,13 +104,14 @@ export function SessionSidePanel(props: {
       }),
   )
   const open = createMemo(() => reviewOpen() || fileOpen())
+  const fileTreeWidth = createMemo(() => Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width()))
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
     if (reviewOpen()) return "auto"
-    return `${layout.fileTree.width()}px`
+    return `${fileTreeWidth()}px`
   })
-  const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
+  const treeWidth = createMemo(() => (fileOpen() ? `${fileTreeWidth()}px` : "0px"))
 
   const diffs = createMemo(() => props.diffs().filter(renderDiff))
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
@@ -845,8 +846,8 @@ export function SessionSidePanel(props: {
                     <ResizeHandle
                       direction="horizontal"
                       edge="start"
-                      size={layout.fileTree.width()}
-                      min={200}
+                      size={fileTreeWidth()}
+                      min={FILE_TREE_WIDTH_MIN}
                       max={480}
                       onResize={(width) => {
                         props.size.touch()

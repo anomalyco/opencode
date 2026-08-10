@@ -5,6 +5,8 @@ import { useData } from "./data"
 
 const context = createContext<{
   readonly current: LocationGetOutput | undefined
+  // The target location as set, available before the server-synced info in `current` arrives.
+  readonly ref: LocationRef | undefined
   set: (location?: LocationRef) => void
 }>()
 
@@ -36,6 +38,9 @@ export function LocationProvider(props: ParentProps) {
       value={{
         get current() {
           return current()
+        },
+        get ref() {
+          return ref()
         },
         set,
       }}

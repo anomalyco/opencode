@@ -3,7 +3,7 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { advance, drain } from "../lib/clock"
-import { Config as ConfigSchema } from "@opencode-ai/schema/config"
+import { Directory, Document, Event, Info } from "@opencode-ai/schema/config"
 import { Command } from "@opencode-ai/core/command"
 import { Agent } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
@@ -35,7 +35,7 @@ const it = testEffect(
     [Location.node, testLocationLayer],
   ]),
 )
-const decode = Schema.decodeUnknownSync(Config.Info)
+const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigCommandPlugin.Plugin", () => {
   it.live("loads inline and file-based commands in config order", () =>
@@ -63,7 +63,7 @@ Review files`,
 
           const command = yield* Command.Service
           const bus = yield* Bus.Service
-          const update = yield* bus.publish(ConfigSchema.Event.Updated, {})
+          const update = yield* bus.publish(Event.Updated, {})
           const updates = yield* PubSub.unbounded<typeof update>()
           yield* ConfigCommandPlugin.Plugin.effect(
             host({
@@ -77,11 +77,11 @@ Review files`,
           ).pipe(
             Effect.provide(
               Config.testLayer([
-                new Config.Document({
+                new Document({
                   type: "document",
                   info: decode({ commands: { review: { template: "Inline review" } } }),
                 }),
-                new Config.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
+                new Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
               ]),
             ),
           )
@@ -333,7 +333,7 @@ function watchReady(config: Config.Interface, directory: string) {
 }
 
 function directoryEntry(directory: string) {
-  return new Config.Directory({ type: "directory", path: AbsolutePath.make(directory) })
+  return new Directory({ type: "directory", path: AbsolutePath.make(directory) })
 }
 
 function sourceCases() {

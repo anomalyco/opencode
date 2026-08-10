@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ImageInput, LLM, LLMClient, Provider } from "@opencode-ai/ai"
+import { AIError, ImageInput, LanguageModel, LLM, LLMClient, Provider } from "@opencode-ai/ai"
 import { Route, Protocol } from "@opencode-ai/ai/route"
 import { Provider as ProviderSubpath } from "@opencode-ai/ai/provider"
 import {
@@ -10,7 +10,6 @@ import {
   OpenRouter,
   XAI,
 } from "@opencode-ai/ai/providers"
-import * as GitHubCopilot from "@opencode-ai/ai/providers/github-copilot"
 import {
   OpenAIChat,
   OpenAICompatibleChat,
@@ -26,6 +25,8 @@ describe("public exports", () => {
     expect(LLM.request).toBeFunction()
     expect(LLMClient.Service).toBeFunction()
     expect(LLMClient.layer).toBeDefined()
+    expect(AIError).toBeFunction()
+    expect(LanguageModel.make).toBeFunction()
     expect(ImageInput.bytes).toBeFunction()
     expect(Provider.make).toBeFunction()
     expect(ProviderSubpath.make).toBe(Provider.make)
@@ -53,30 +54,11 @@ describe("public exports", () => {
     expect(CloudflareWorkersAI.configure).toBeFunction()
     expect(CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).model).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
-    expect(OpenRouter.provider.model).toBe(OpenRouter.model)
     expect(XAI.model).toBeFunction()
-    expect(XAI.provider.model).toBe(XAI.model)
     expect(XAI.provider.responses).toBe(XAI.responses)
     expect(XAI.provider.chat).toBe(XAI.chat)
     expect(XAI.configure({ apiKey: "fixture" }).responses("grok-4.3").route.id).toBe("openai-responses")
     expect(XAI.configure({ apiKey: "fixture" }).chat("grok-4.3").route.id).toBe("openai-compatible-chat")
-    expect(
-      GitHubCopilot.configure({ baseURL: "https://api.githubcopilot.test", apiKey: "fixture" }).model,
-    ).toBeFunction()
-    expect(
-      GitHubCopilot.configure({
-        baseURL: "https://api.githubcopilot.test",
-        apiKey: "fixture",
-        endpoint: "responses",
-      }).model("mai-code-1-flash-picker").route.id,
-    ).toBe("openai-responses")
-    expect(
-      GitHubCopilot.configure({
-        baseURL: "https://api.githubcopilot.test",
-        apiKey: "fixture",
-        endpoint: "chat",
-      }).model("gpt-5").route.id,
-    ).toBe("openai-chat")
   })
 
   test("protocol barrels expose supported low-level routes", () => {

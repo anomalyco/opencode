@@ -2,29 +2,29 @@ id: no-effect-die-string
 snapshots:
   Effect.die("boom"):
     labels:
-    - source: Effect.die("boom")
-      style: primary
-      start: 0
-      end: 18
-    - source: '"boom"'
-      style: secondary
-      start: 11
-      end: 17
-    - source: ("boom")
-      style: secondary
-      start: 10
-      end: 18
+      - source: Effect.die("boom")
+        style: primary
+        start: 0
+        end: 18
+      - source: '"boom"'
+        style: secondary
+        start: 11
+        end: 17
+      - source: ("boom")
+        style: secondary
+        start: 10
+        end: 18
   Effect.die(`boom ${value}`):
     labels:
-    - source: Effect.die(`boom ${value}`)
-      style: primary
-      start: 0
-      end: 27
-    - source: '`boom ${value}`'
-      style: secondary
-      start: 11
-      end: 26
-    - source: (`boom ${value}`)
-      style: secondary
-      start: 10
-      end: 27
+      - source: Effect.die(`boom ${value}`)
+        style: primary
+        start: 0
+        end: 27
+      - source: "`boom ${value}`"
+        style: secondary
+        start: 11
+        end: 26
+      - source: (`boom ${value}`)
+        style: secondary
+        start: 10
+        end: 27

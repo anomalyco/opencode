@@ -42,9 +42,10 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     return { endpoint: yield* Standalone.start() } satisfies Resolved
   }
 
-  const options = yield* ServiceConfig.options()
+  const mismatch = args.mismatch ?? "ignore"
+  const options = yield* ServiceConfig.options({ checkVersion: mismatch !== "ignore" })
   return {
-    endpoint: yield* resolveManaged({ ...options, onStart: args.onStart }, args.mismatch ?? "replace"),
+    endpoint: yield* resolveManaged({ ...options, onStart: args.onStart }, mismatch),
     service: managedService(options),
   } satisfies Resolved
 })
@@ -61,10 +62,7 @@ function managedService(options: EnsureOptions) {
   }
 }
 
-const resolveManaged = Effect.fnUntraced(function* (
-  options: EnsureOptions,
-  mismatch: NonNullable<Args["mismatch"]>,
-) {
+const resolveManaged = Effect.fnUntraced(function* (options: EnsureOptions, mismatch: NonNullable<Args["mismatch"]>) {
   if (mismatch === "replace") return yield* Service.ensure(options)
   if (mismatch === "ignore") return yield* Service.ensure({ ...options, version: undefined })
 

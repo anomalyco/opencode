@@ -10,7 +10,7 @@
   },
   "scripts": {
     "test": "bun test --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo -b"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -20,7 +20,8 @@
     "@opencode-ai/simulation": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "drizzle-orm": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "modal": "0.9.0"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",

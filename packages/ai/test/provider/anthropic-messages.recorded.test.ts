@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMError, Message, ToolCallPart } from "../../src"
+import { LLM, AIError, Message, ToolCallPart } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as Anthropic from "../../src/providers/anthropic"
 import { weatherToolName } from "../recorded-scenarios"
@@ -37,7 +37,7 @@ describe("Anthropic Messages sad-path recorded", () => {
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(malformedToolOrderRequest).pipe(Effect.flip)
 
-      expect(error).toBeInstanceOf(LLMError)
+      expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect(error.message).toContain("HTTP 400")
     }),

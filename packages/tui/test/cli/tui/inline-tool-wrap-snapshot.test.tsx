@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
 import {
-  formatSubagentRetry,
   InlineToolRow,
   isBackgroundSubagent,
   parseApplyPatchFiles,
@@ -196,10 +195,6 @@ describe("TUI inline tool wrapping", () => {
         "a.ts",
       ),
     ).toEqual([{ message: "valid", range: { start: { line: 2, character: 3 } } }])
-  })
-
-  test("keeps retry status ahead of wrapping messages", () => {
-    expect(formatSubagentRetry(2, "Rate limited by provider")).toBe("Retrying (attempt 2) · Rate limited by provider")
   })
 
   test("labels only detached or async subagents as background", () => {

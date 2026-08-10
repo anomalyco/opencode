@@ -1,14 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:pdf",
-      "pdf",
-      "provider:google",
-      "protocol:gemini",
-      "tool",
-      "tool-result"
-    ],
+    "tags": ["prefix:pdf", "pdf", "provider:google", "protocol:gemini", "tool", "tool-result"],
     "name": "pdf/gemini-tool-result",
     "recordedAt": "2026-07-22T18:21:59.606Z"
   },

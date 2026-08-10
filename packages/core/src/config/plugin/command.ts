@@ -1,12 +1,13 @@
 export * as ConfigCommandPlugin from "./command"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Info, type Entry } from "@opencode-ai/schema/config"
+import { ConfigCommand } from "@opencode-ai/schema/config/command"
 import path from "path"
 import { Effect, Option, Schema, Stream } from "effect"
 import { Command } from "../../command"
 import { Config } from "../../config"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { ConfigCommand } from "../command"
 import { ConfigMarkdown } from "../markdown"
 
 const decodeCommand = Schema.decodeUnknownOption(ConfigCommand.Info)
@@ -27,7 +28,7 @@ export const Plugin = define({
         )
       }).pipe(Effect.map((documents) => documents.flat()))
     })
-    const loaded = { documents: [] as { commands: Config.Info["commands"] }[] }
+    const loaded = { documents: [] as { commands: Info["commands"] }[] }
     const reload = load().pipe(
       Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
       Effect.andThen(ctx.command.reload()),
@@ -75,7 +76,7 @@ const sourceDirectories = ["command", "commands"] as const
 
 // Matches anything at or under <root>/{command,commands}. No file-suffix check:
 // directory-level events such as renames carry no per-file paths.
-function isCommandSource(entries: Config.Entry[], file: string) {
+function isCommandSource(entries: Entry[], file: string) {
   return entries.some(
     (entry) =>
       entry.type === "directory" &&

@@ -1,28 +1,9 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "./migration"
 
-export default {
+const schema: Omit<DatabaseMigration.Migration, "id"> = {
   up(tx) {
     return Effect.gen(function* () {
-      yield* tx.run(`
-        CREATE TABLE \`workspace\` (
-          \`id\` text PRIMARY KEY,
-          \`type\` text NOT NULL,
-          \`name\` text DEFAULT '' NOT NULL,
-          \`branch\` text,
-          \`directory\` text,
-          \`extra\` text,
-          \`project_id\` text NOT NULL,
-          \`time_used\` integer NOT NULL,
-          CONSTRAINT \`fk_workspace_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
-        CREATE TABLE \`data_migration\` (
-          \`name\` text PRIMARY KEY,
-          \`time_completed\` integer NOT NULL
-        );
-      `)
       yield* tx.run(`
         CREATE TABLE \`account_state\` (
           \`id\` integer PRIMARY KEY,
@@ -81,7 +62,7 @@ export default {
           \`id\` text PRIMARY KEY,
           \`aggregate_id\` text NOT NULL,
           \`seq\` integer NOT NULL,
-          \`created\` integer NOT NULL,
+          \`created\` integer DEFAULT 0 NOT NULL,
           \`type\` text NOT NULL,
           \`data\` text NOT NULL,
           CONSTRAINT \`fk_event_aggregate_id_event_sequence_aggregate_id_fk\` FOREIGN KEY (\`aggregate_id\`) REFERENCES \`event_sequence\`(\`aggregate_id\`) ON DELETE CASCADE
@@ -148,7 +129,7 @@ export default {
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
           CONSTRAINT \`instruction_entry_pk\` PRIMARY KEY(\`session_id\`, \`key\`),
-          CONSTRAINT \`fk_instruction_entry_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+          CONSTRAINT \`fk_instruction_entry_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
@@ -158,28 +139,7 @@ export default {
           \`through_seq\` integer NOT NULL,
           \`initial_values\` text NOT NULL,
           \`current_values\` text NOT NULL,
-          CONSTRAINT \`fk_instruction_state_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
-        CREATE TABLE \`message\` (
-          \`id\` text PRIMARY KEY,
-          \`session_id\` text NOT NULL,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          \`data\` text NOT NULL,
-          CONSTRAINT \`fk_message_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
-      yield* tx.run(`
-        CREATE TABLE \`part\` (
-          \`id\` text PRIMARY KEY,
-          \`message_id\` text NOT NULL,
-          \`session_id\` text NOT NULL,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          \`data\` text NOT NULL,
-          CONSTRAINT \`fk_part_message_id_message_id_fk\` FOREIGN KEY (\`message_id\`) REFERENCES \`message\`(\`id\`) ON DELETE CASCADE
+          CONSTRAINT \`fk_instruction_state_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
@@ -191,7 +151,7 @@ export default {
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
           \`data\` text NOT NULL,
-          CONSTRAINT \`fk_session_message_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+          CONSTRAINT \`fk_session_message_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
@@ -203,22 +163,21 @@ export default {
           \`delivery\` text,
           \`admitted_seq\` integer NOT NULL,
           \`time_created\` integer NOT NULL,
-          CONSTRAINT \`fk_session_pending_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+          CONSTRAINT \`fk_session_pending_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`session\` (
+        CREATE TABLE \`session_v2\` (
           \`id\` text PRIMARY KEY,
           \`project_id\` text NOT NULL,
           \`workspace_id\` text,
           \`parent_id\` text,
           \`fork_session_id\` text,
-          \`fork_message_id\` text,
-          \`fork_seq\` integer,
+          \`fork_boundary\` text,
           \`slug\` text NOT NULL,
           \`directory\` text NOT NULL,
           \`path\` text,
-          \`title\` text NOT NULL,
+          \`title\` text,
           \`version\` text NOT NULL,
           \`share_url\` text,
           \`summary_additions\` integer,
@@ -241,18 +200,16 @@ export default {
           \`time_compacting\` integer,
           \`time_archived\` integer,
           \`time_suspended\` integer,
-          CONSTRAINT \`fk_session_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
+          CONSTRAINT \`fk_session_v2_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
-        CREATE TABLE \`session_share\` (
-          \`session_id\` text PRIMARY KEY,
-          \`id\` text NOT NULL,
-          \`secret\` text NOT NULL,
-          \`url\` text NOT NULL,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          CONSTRAINT \`fk_session_share_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        CREATE TABLE \`workspace\` (
+          \`id\` text PRIMARY KEY,
+          \`provider\` text NOT NULL,
+          \`binding\` text NOT NULL,
+          \`created_at\` integer NOT NULL,
+          \`last_used_at\` integer NOT NULL
         );
       `)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
@@ -260,11 +217,6 @@ export default {
       yield* tx.run(
         `CREATE UNIQUE INDEX \`permission_project_action_resource_idx\` ON \`permission\` (\`project_id\`,\`action\`,\`resource\`);`,
       )
-      yield* tx.run(
-        `CREATE INDEX \`message_session_time_created_id_idx\` ON \`message\` (\`session_id\`,\`time_created\`,\`id\`);`,
-      )
-      yield* tx.run(`CREATE INDEX \`part_message_id_id_idx\` ON \`part\` (\`message_id\`,\`id\`);`)
-      yield* tx.run(`CREATE INDEX \`part_session_idx\` ON \`part\` (\`session_id\`);`)
       yield* tx.run(
         `CREATE UNIQUE INDEX \`session_message_session_seq_idx\` ON \`session_message\` (\`session_id\`,\`seq\`);`,
       )
@@ -284,12 +236,14 @@ export default {
       yield* tx.run(
         `CREATE UNIQUE INDEX \`session_pending_session_admitted_seq_idx\` ON \`session_pending\` (\`session_id\`,\`admitted_seq\`);`,
       )
-      yield* tx.run(`CREATE INDEX \`session_project_idx\` ON \`session\` (\`project_id\`);`)
-      yield* tx.run(`CREATE INDEX \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
-      yield* tx.run(`CREATE INDEX \`session_parent_idx\` ON \`session\` (\`parent_id\`);`)
+      yield* tx.run(`CREATE INDEX \`session_v2_project_idx\` ON \`session_v2\` (\`project_id\`);`)
+      yield* tx.run(`CREATE INDEX \`session_v2_workspace_idx\` ON \`session_v2\` (\`workspace_id\`);`)
+      yield* tx.run(`CREATE INDEX \`session_v2_parent_idx\` ON \`session_v2\` (\`parent_id\`);`)
       yield* tx.run(
-        `CREATE INDEX \`session_time_suspended_idx\` ON \`session\` (\`time_suspended\`) WHERE "session"."time_suspended" is not null;`,
+        `CREATE INDEX \`session_v2_time_suspended_idx\` ON \`session_v2\` (\`time_suspended\`) WHERE "session_v2"."time_suspended" is not null;`,
       )
     })
   },
-} satisfies Omit<DatabaseMigration.Migration, "id">
+}
+
+export default schema

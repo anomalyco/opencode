@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, Project } from "@/types"
+import type { PermissionRequest, QuestionRequest, SessionInfo } from "@opencode-ai/client/promise"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
@@ -13,14 +14,14 @@ const rootSession = (input: { id: string; parentID?: string; archived?: number }
       updated: 1,
       archived: input.archived,
     },
-  }) as Session
+  }) as SessionInfo
 
-const userMessage = (id: string, sessionID: string) =>
+const userMessage = (id: string, sessionID: string, created = 1) =>
   ({
     id,
     sessionID,
     role: "user",
-    time: { created: 1 },
+    time: { created },
     agent: "assistant",
     model: { providerID: "openai", modelID: "gpt" },
   }) as Message
@@ -38,10 +39,10 @@ const permissionRequest = (id: string, sessionID: string, title = id) =>
   ({
     id,
     sessionID,
-    permission: title,
-    patterns: ["*"],
+    action: title,
+    resources: ["*"],
     metadata: {},
-    always: [],
+    save: [],
   }) as PermissionRequest
 
 const questionRequest = (id: string, sessionID: string, title = id) =>
@@ -370,13 +371,13 @@ describe("applyDirectoryEvent", () => {
     const sessionID = "ses_1"
     const [store, setStore] = createStore(
       baseState({
-        message: { [sessionID]: [userMessage("msg_1", sessionID), userMessage("msg_3", sessionID)] },
-        part: { msg_2: [textPart("prt_1", sessionID, "msg_2")] },
+        message: { [sessionID]: [userMessage("msg_z", sessionID, 1), userMessage("msg_b", sessionID, 3)] },
+        part: { msg_a: [textPart("prt_1", sessionID, "msg_a")] },
       }),
     )
 
     applyDirectoryEvent({
-      event: { type: "message.updated", properties: { info: userMessage("msg_2", sessionID) } },
+      event: { type: "message.updated", properties: { info: userMessage("msg_a", sessionID, 2) } },
       store,
       setStore,
       push() {},
@@ -384,14 +385,14 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
 
-    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_1", "msg_2", "msg_3"])
+    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_z", "msg_a", "msg_b"])
 
     applyDirectoryEvent({
       event: {
         type: "message.updated",
         properties: {
           info: {
-            ...userMessage("msg_2", sessionID),
+            ...userMessage("msg_a", sessionID, 2),
             role: "assistant",
           } as Message,
         },
@@ -403,10 +404,10 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
 
-    expect(store.message[sessionID]?.find((x) => x.id === "msg_2")?.role).toBe("assistant")
+    expect(store.message[sessionID]?.find((x) => x.id === "msg_a")?.role).toBe("assistant")
 
     applyDirectoryEvent({
-      event: { type: "message.removed", properties: { sessionID, messageID: "msg_2" } },
+      event: { type: "message.removed", properties: { sessionID, messageID: "msg_a" } },
       store,
       setStore,
       push() {},
@@ -414,8 +415,8 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
 
-    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_1", "msg_3"])
-    expect(store.part.msg_2).toBeUndefined()
+    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_z", "msg_b"])
+    expect(store.part.msg_a).toBeUndefined()
   })
 
   test("upserts and prunes message parts", () => {
@@ -512,7 +513,7 @@ describe("applyDirectoryEvent", () => {
       directory: "/tmp",
       loadLsp() {},
     })
-    expect(store.permission[sessionID]?.find((x) => x.id === "perm_2")?.permission).toBe("updated")
+    expect(store.permission[sessionID]?.find((x) => x.id === "perm_2")?.action).toBe("updated")
 
     applyDirectoryEvent({
       event: { type: "permission.replied", properties: { sessionID, requestID: "perm_2" } },

@@ -1,0 +1,269 @@
+import type {
+  FlowchartDiagram,
+  FlowchartDirection,
+  FlowchartEdge,
+  FlowchartEdgeStyle,
+  FlowchartNode,
+  FlowchartSubgraph,
+} from "./types.js"
+import { MermaidSyntaxError } from "../diagnostics.js"
+import {
+  firstMeaningfulMermaidLine,
+  meaningfulNumberedMermaidLines,
+  stripMermaidQuotes as stripQuotes,
+} from "../core/mermaid.js"
+
+const DEFAULT_DIRECTION = "TD" satisfies FlowchartDirection
+const FLOWCHART_HEADER_RE = /^(flowchart|graph)(?:\s+(TB|TD|BT|LR|RL))?$/i
+const ID_RE = "[A-Za-z_][A-Za-z0-9_.-]*"
+const SUBGRAPH_RE = /^subgraph\s+(.+)$/i
+const SUBGRAPH_WITH_LABEL_RE = new RegExp(`^(${ID_RE})\\s*\\[(.+)\\]$`)
+const SUBGRAPH_DIRECTION_RE = /^direction\s+(TB|TD|BT|LR|RL)$/i
+const IGNORED_PRESENTATION_RE = /^(?:classDef|class|style|linkStyle)\b/i
+const DATABASE_NODE_RE = new RegExp(`^(${ID_RE})\\[\\((.+)\\)\\]$`)
+const SUBROUTINE_NODE_RE = new RegExp(`^(${ID_RE})\\[\\[(.+)\\]\\]$`)
+const ROUNDED_BRACKET_NODE_RE = new RegExp(`^(${ID_RE})\\(\\[(.+)\\]\\)$`)
+const ROUNDED_NODE_RE = new RegExp(`^(${ID_RE})\\((.+)\\)$`)
+const DECISION_NODE_RE = new RegExp(`^(${ID_RE})\\{(.+)\\}$`)
+const BOX_NODE_RE = new RegExp(`^(${ID_RE})\\[(.+)\\]$`)
+const ID_ONLY_RE = new RegExp(`^${ID_RE}$`)
+const EXPLICIT_NODE_SHAPE_RE = new RegExp(`^${ID_RE}(?:\\[|\\(|\\{)`)
+const EDGE_OPERATOR_RE =
+  /(-\.(?!->)(.+?)\.->)|(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->)|(-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?/g
+
+function normalizeDirection(value?: string): FlowchartDirection {
+  const upper = value?.toUpperCase()
+  if (upper === "TB" || upper === "TD" || upper === "BT" || upper === "LR" || upper === "RL") return upper
+  return DEFAULT_DIRECTION
+}
+
+function normalizeSubgraphId(value: string, index: number): string {
+  const stripped = stripQuotes(value)
+  return ID_ONLY_RE.test(stripped) ? stripped : `subgraph_${index + 1}`
+}
+
+function parseSubgraphToken(token: string, index: number): Pick<FlowchartSubgraph, "id" | "label"> {
+  const trimmed = token
+    .trim()
+    .replace(/\s*:::.*$/, "")
+    .replace(/;$/, "")
+  const withLabel = trimmed.match(SUBGRAPH_WITH_LABEL_RE)
+  if (withLabel) {
+    return { id: withLabel[1]!, label: stripQuotes(withLabel[2]!) }
+  }
+
+  const label = stripQuotes(trimmed)
+  return { id: normalizeSubgraphId(trimmed, index), label }
+}
+
+function parseNodeToken(token: string): FlowchartNode {
+  const trimmed = token.trim().replace(/;$/, "")
+  const database = trimmed.match(DATABASE_NODE_RE)
+  if (database) return { id: database[1]!, label: stripQuotes(database[2]!), shape: "database" }
+
+  const subroutine = trimmed.match(SUBROUTINE_NODE_RE)
+  if (subroutine) return { id: subroutine[1]!, label: stripQuotes(subroutine[2]!), shape: "subroutine" }
+
+  const roundedBracket = trimmed.match(ROUNDED_BRACKET_NODE_RE)
+  if (roundedBracket) return { id: roundedBracket[1]!, label: stripQuotes(roundedBracket[2]!), shape: "rounded" }
+
+  const rounded = trimmed.match(ROUNDED_NODE_RE)
+  if (rounded) return { id: rounded[1]!, label: stripQuotes(rounded[2]!), shape: "rounded" }
+
+  const decision = trimmed.match(DECISION_NODE_RE)
+  if (decision) return { id: decision[1]!, label: stripQuotes(decision[2]!), shape: "decision" }
+
+  const box = trimmed.match(BOX_NODE_RE)
+  if (box) return { id: box[1]!, label: stripQuotes(box[2]!), shape: "box" }
+
+  return { id: trimmed, label: trimmed, shape: "box" }
+}
+
+function hasExplicitNodeShape(token: string): boolean {
+  return EXPLICIT_NODE_SHAPE_RE.test(token.trim())
+}
+
+function ensureNode(nodes: Map<string, FlowchartNode>, token: string): FlowchartNode {
+  const node = parseNodeToken(token)
+  const existing = nodes.get(node.id)
+  if (!existing) {
+    nodes.set(node.id, node)
+    return node
+  }
+
+  if (hasExplicitNodeShape(token)) {
+    existing.label = node.label
+    existing.shape = node.shape
+  }
+  return existing
+}
+
+function addNodeToSubgraph(subgraph: FlowchartSubgraph | undefined, nodeId: string): void {
+  if (!subgraph || subgraph.nodeIds.includes(nodeId)) return
+  subgraph.nodeIds.push(nodeId)
+}
+
+function stripNodeToken(token: string): string {
+  return token
+    .replace(/\s*:::.*$/, "")
+    .replace(/;$/, "")
+    .trim()
+}
+
+function edgeStyleFromArrow(...arrows: string[]): FlowchartEdgeStyle | undefined {
+  if (arrows.some((arrow) => arrow.includes("=="))) return "thick"
+  if (arrows.some((arrow) => arrow.includes("."))) return "dashed"
+  return undefined
+}
+
+function createEdge(
+  from: string,
+  to: string,
+  label: string,
+  style: FlowchartEdgeStyle | undefined,
+  arrowhead: boolean,
+): FlowchartEdge {
+  const edge: FlowchartEdge = style ? { from, to, label, style } : { from, to, label }
+  if (!arrowhead) edge.arrowhead = false
+  return edge
+}
+
+interface ParsedEdgeOperator {
+  index: number
+  end: number
+  label: string
+  style: FlowchartEdgeStyle | undefined
+  arrowhead: boolean
+  orderOnly: boolean
+}
+
+function parseEdgeOperators(line: string): ParsedEdgeOperator[] {
+  return [...line.matchAll(EDGE_OPERATOR_RE)].map((match) => {
+    const inlineDashedArrow = match[1]
+    const startArrow = inlineDashedArrow ?? match[3] ?? match[6]!
+    const endArrow = inlineDashedArrow ?? match[5] ?? match[6]!
+    return {
+      index: match.index,
+      end: match.index + match[0].length,
+      label: (match[2] ?? match[4] ?? match[7] ?? "").trim(),
+      style: edgeStyleFromArrow(startArrow, endArrow),
+      arrowhead: endArrow !== "---",
+      orderOnly: endArrow === "~~~",
+    }
+  })
+}
+
+export function isMermaidFlowchartDiagram(content: string): boolean {
+  return FLOWCHART_HEADER_RE.test(firstMeaningfulMermaidLine(content) ?? "")
+}
+
+export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram {
+  const nodes = new Map<string, FlowchartNode>()
+  const edges: FlowchartEdge[] = []
+  const subgraphs: FlowchartSubgraph[] = []
+  const subgraphStack: Array<{ subgraph: FlowchartSubgraph; lineNumber: number; sourceLine: string }> = []
+  let direction: FlowchartDirection = DEFAULT_DIRECTION
+
+  for (const source of meaningfulNumberedMermaidLines(content)) {
+    const line = source.text
+    const header = line.match(FLOWCHART_HEADER_RE)
+    if (header) {
+      direction = normalizeDirection(header[2])
+      continue
+    }
+
+    // Mermaid CSS styling does not apply to terminal theme rendering.
+    if (IGNORED_PRESENTATION_RE.test(line)) continue
+
+    const subgraphMatch = line.match(SUBGRAPH_RE)
+    if (subgraphMatch) {
+      const parsed = parseSubgraphToken(subgraphMatch[1]!, subgraphs.length)
+      const subgraph: FlowchartSubgraph = {
+        ...parsed,
+        nodeIds: [],
+        parentId: subgraphStack[subgraphStack.length - 1]?.subgraph.id,
+      }
+      subgraphs.push(subgraph)
+      subgraphStack.push({ subgraph, lineNumber: source.lineNumber, sourceLine: line })
+      continue
+    }
+
+    if (/^end$/i.test(line)) {
+      if (subgraphStack.length === 0) {
+        throw new MermaidSyntaxError("flowchart", source.lineNumber, line, 'Unexpected "end" without an open subgraph')
+      }
+      subgraphStack.pop()
+      continue
+    }
+
+    const currentSubgraph = subgraphStack[subgraphStack.length - 1]?.subgraph
+
+    const subgraphDirection = line.match(SUBGRAPH_DIRECTION_RE)
+    if (subgraphDirection) {
+      if (!currentSubgraph) {
+        throw new MermaidSyntaxError(
+          "flowchart",
+          source.lineNumber,
+          line,
+          'A "direction" statement requires an open subgraph',
+        )
+      }
+      currentSubgraph.direction = normalizeDirection(subgraphDirection[1])
+      continue
+    }
+
+    const edgeOperators = parseEdgeOperators(line)
+    if (edgeOperators.length > 0) {
+      const nodeTokens = [
+        line.slice(0, edgeOperators[0]!.index),
+        ...edgeOperators.map((operator, index) =>
+          line.slice(operator.end, edgeOperators[index + 1]?.index ?? line.length),
+        ),
+      ]
+
+      if (nodeTokens.every((token) => stripNodeToken(token).length > 0)) {
+        const chainNodeIds = nodeTokens.map((token, index) => {
+          const stripped = stripNodeToken(token)
+          const orderOnlyEndpoint = edgeOperators[index - 1]?.orderOnly || edgeOperators[index]?.orderOnly
+          if (orderOnlyEndpoint && subgraphs.some((subgraph) => subgraph.id === stripped)) return stripped
+          return ensureNode(nodes, stripped).id
+        })
+        for (const nodeId of chainNodeIds) {
+          if (nodes.has(nodeId)) addNodeToSubgraph(currentSubgraph, nodeId)
+        }
+        for (let index = 0; index < edgeOperators.length; index++) {
+          const operator = edgeOperators[index]!
+          const edge = createEdge(
+            chainNodeIds[index]!,
+            chainNodeIds[index + 1]!,
+            operator.label,
+            operator.style,
+            operator.arrowhead,
+          )
+          edges.push(operator.orderOnly ? { ...edge, orderOnly: true } : edge)
+        }
+        continue
+      }
+    }
+
+    if (hasExplicitNodeShape(line) || ID_ONLY_RE.test(stripNodeToken(line))) {
+      const node = ensureNode(nodes, line)
+      addNodeToSubgraph(currentSubgraph, node.id)
+      continue
+    }
+
+    throw new MermaidSyntaxError("flowchart", source.lineNumber, line)
+  }
+
+  const unclosedSubgraph = subgraphStack[subgraphStack.length - 1]
+  if (unclosedSubgraph) {
+    throw new MermaidSyntaxError(
+      "flowchart",
+      unclosedSubgraph.lineNumber,
+      unclosedSubgraph.sourceLine,
+      'Unclosed subgraph; expected "end"',
+    )
+  }
+
+  return { direction, nodes: [...nodes.values()], edges, subgraphs }
+}

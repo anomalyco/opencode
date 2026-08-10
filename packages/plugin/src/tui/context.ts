@@ -11,6 +11,7 @@ import type {
   OpenCodeEvent,
   PermissionSavedInfo,
   PermissionRequest,
+  Project,
   ProviderInfo,
   ReferenceInfo,
   SessionInfo,
@@ -18,9 +19,36 @@ import type {
   SessionPendingInfo,
   ShellInfo,
   SkillInfo,
+  VcsInfo,
 } from "@opencode-ai/client"
-import type { CliRenderer, KeyEvent, Renderable } from "@opentui/core"
+import type { ResolvedTheme } from "@opencode-ai/theme/tui"
+import type { CliRenderer, KeyEvent, MarkdownCodeBlockRenderer, Renderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
+import type { Store } from "solid-js/store"
+
+export interface Storage {
+  /**
+   * Durable JSON state: persisted to disk, survives hot reloads and TUI
+   * restarts, and stays live-synced across running TUI instances.
+   */
+  store<Value extends object>(
+    key: string,
+    options: {
+      readonly initial: Value
+    },
+  ): readonly [Store<Value>, (mutation: (draft: Value) => void) => Promise<void>]
+  /**
+   * Ephemeral in-memory state: survives plugin hot reloads (old and new
+   * generations share the same live store) and is gone when the TUI exits.
+   * Updates are synchronous and values need not be JSON-serializable.
+   */
+  memory<Value extends object>(
+    key: string,
+    options: {
+      readonly initial: Value
+    },
+  ): readonly [Store<Value>, (mutation: (draft: Value) => void) => void]
+}
 
 interface LocationCollection<Value> {
   list(location?: LocationRef): Value[] | undefined
@@ -66,6 +94,10 @@ export interface Data {
     }
   }
   readonly project: {
+    list(): Project[]
+    get(projectID: string): Project | undefined
+    sync(): Promise<void>
+    invalidate(): void
     readonly permission: {
       list(projectID: string): PermissionSavedInfo[] | undefined
       sync(projectID: string): Promise<void>
@@ -82,6 +114,11 @@ export interface Data {
     default(): LocationRef
     sync(location?: LocationRef): Promise<void>
     invalidate(location?: LocationRef): void
+    readonly vcs: {
+      info(location?: LocationRef): VcsInfo | undefined
+      sync(location?: LocationRef): Promise<void>
+      invalidate(location?: LocationRef): void
+    }
     readonly agent: LocationCollection<AgentInfo>
     readonly command: LocationCollection<CommandInfo>
     readonly integration: LocationCollection<IntegrationInfo>
@@ -116,6 +153,13 @@ export interface Page {
 export interface SlotMap {
   readonly app: Readonly<Record<string, never>>
   readonly "home.footer": Readonly<Record<string, never>>
+  readonly "prompt.footer.end": {
+    readonly sessionID?: string
+    readonly mode: "normal" | "shell"
+  }
+  readonly "session.composer.top": {
+    readonly sessionID: string
+  }
   readonly "sidebar.content": {
     readonly sessionID: string
   }
@@ -331,6 +375,25 @@ export interface UI {
     navigate(destination: Destination): void
     current(): Route
   }
+  readonly tabs: {
+    /** Returns whether session tabs are enabled for this TUI. */
+    enabled(): boolean
+    /** Returns the currently open root-session tabs. Reactive when read in a Solid computation. */
+    list(): readonly {
+      readonly sessionID: string
+      readonly title?: string
+      readonly active: boolean
+      readonly busy: boolean
+      readonly attention: boolean
+      readonly unread?: "activity" | "error"
+    }[]
+    /** Opens (or focuses) a tab for a session, adding it when not already open. Returns false when tabs are disabled. */
+    open(sessionID: string): boolean
+    /** Focuses an already-open tab and returns false when it is not open. */
+    focus(sessionID: string): boolean
+    /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
+    close(sessionID?: string): boolean
+  }
   readonly slot: <Name extends SlotName>(name: Name, render: Slot<Name>) => () => void
 }
 
@@ -342,7 +405,11 @@ export interface Context {
   readonly client: OpenCodeClient
   readonly data: Data
   readonly attention: Attention
-  readonly theme: any
+  readonly theme: ResolvedTheme
+  readonly markdown: {
+    registerCodeBlockRenderer(language: string, render: MarkdownCodeBlockRenderer): () => void
+  }
   readonly keymap: Keymap
+  readonly storage: Storage
   readonly ui: UI
 }

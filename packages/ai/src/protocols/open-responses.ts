@@ -3,7 +3,7 @@ import type { Content } from "@opencode-ai/schema/tool"
 import { HttpTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
-  LLMError,
+  AIError,
   LLMEvent,
   Usage,
   type FinishReason,
@@ -358,7 +358,7 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   return { type: "input_image" as const, image_url: media.dataUrl }
 })
 
-const lowerUserContent = Effect.fn("OpenResponses.lowerUserContent")(function* (
+const lowerUserContent = Effect.fnUntraced(function* (
   part: LLMRequest["messages"][number]["content"][number],
   request: LLMRequest,
   extension: Extension,
@@ -370,7 +370,7 @@ const lowerUserContent = Effect.fn("OpenResponses.lowerUserContent")(function* (
 
 // Tool results may carry structured text, images, and files. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
-const lowerToolResultContentItem = Effect.fn("OpenResponses.lowerToolResultContentItem")(function* (
+const lowerToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
   extension: Extension,
@@ -383,7 +383,7 @@ const lowerToolResultContentItem = Effect.fn("OpenResponses.lowerToolResultConte
   )
 })
 
-const lowerToolResultOutput = Effect.fn("OpenResponses.lowerToolResultOutput")(function* (
+const lowerToolResultOutput = Effect.fnUntraced(function* (
   part: ToolResultPart,
   request: LLMRequest,
   extension: Extension,
@@ -434,10 +434,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         const groups = content.reduce<Array<{ phase: MessagePhase | null | undefined; parts: TextPart[] }>>(
           (groups, part) => {
             const metadata = part.providerMetadata?.[providerMetadataKey]
-            const phase =
-              ProviderShared.isRecord(metadata)
-                ? messagePhase(metadata.phase, extension)
-                : undefined
+            const phase = ProviderShared.isRecord(metadata) ? messagePhase(metadata.phase, extension) : undefined
             const group = groups.at(-1)
             if (group && group.phase === phase) group.parts.push(part)
             else groups.push({ phase, parts: [part] })
@@ -542,7 +539,7 @@ const lowerOptions = (request: LLMRequest) => {
   return {
     ...(options.instructions ? { instructions: options.instructions } : {}),
     ...(options.store !== undefined ? { store: options.store } : {}),
-    ...(options.promptCacheKey ? { prompt_cache_key: options.promptCacheKey } : {}),
+    ...(request.promptCacheKey ? { prompt_cache_key: request.promptCacheKey } : {}),
     ...(options.include ? { include: options.include } : {}),
     ...(options.reasoningEffort || options.reasoningSummary
       ? { reasoning: { effort: options.reasoningEffort, summary: options.reasoningSummary } }
@@ -646,10 +643,7 @@ const onOutputTextDelta = (state: ParserState, event: Event, id: string): StepRe
   const phase = state.messagePhases[id]
   const metadata = phase === undefined ? undefined : providerMetadata(state, { phase })
   const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, metadata)
-  return [
-    { ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) },
-    events,
-  ]
+  return [{ ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) }, events]
 }
 
 const onOutputTextDone = (state: ParserState, event: Event, id: string): StepResult => {
@@ -975,7 +969,7 @@ const providerErrorMessage = (event: Event, fallback: string): string => {
 const providerError = (state: ParserState, event: Event, fallback: string) => {
   const code = event.code || event.error?.code || event.response?.error?.code || undefined
   const message = providerErrorMessage(event, fallback)
-  return new LLMError({
+  return new AIError({
     module: state.id,
     method: "stream",
     reason: classifyProviderFailure({ message, code }),

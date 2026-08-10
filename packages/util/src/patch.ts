@@ -1,6 +1,7 @@
 export * as Patch from "./patch.js"
 
 import { Result, Schema } from "effect"
+import { Bom } from "./bom.js"
 
 export class BoundaryError extends Schema.TaggedErrorClass<BoundaryError>()("Patch.BoundaryError", {
   boundary: Schema.Literals(["first", "last"]),
@@ -125,20 +126,19 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
 }
 
 export function derive(path: string, chunks: ReadonlyArray<UpdateFileChunk>, original: string): FileUpdate {
-  const source = splitBom(original)
+  const source = Bom.split(original)
   const lines = source.text.split("\n")
   if (lines.at(-1) === "") lines.pop()
   const replacements = computeReplacements(lines, path, chunks)
   const updated = [...lines]
   for (const [start, remove, insert] of replacements.toReversed()) updated.splice(start, remove, ...insert)
   if (updated.at(-1) !== "") updated.push("")
-  const next = splitBom(updated.join("\n"))
+  const next = Bom.split(updated.join("\n"))
   return { content: next.text, bom: source.bom || next.bom }
 }
 
 export function joinBom(text: string, bom: boolean) {
-  const stripped = splitBom(text).text
-  return bom ? `\uFEFF${stripped}` : stripped
+  return Bom.join(text, bom)
 }
 
 function parseAdd(
@@ -379,6 +379,4 @@ const normalize = (value: string) =>
     .replace(/[“”„‟]/g, '"')
     .replace(/[‐‑‒–—―−]/g, "-")
     .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ")
-const splitBom = (text: string) =>
-  text.startsWith("\uFEFF") ? { bom: true, text: text.slice(1) } : { bom: false, text }
 const stripHeredoc = (input: string) => input.match(/^(?:cat\s+)?<<(['"]?)(\w+)\1\s*\n([\s\S]*?)\n\2\s*$/)?.[3] ?? input

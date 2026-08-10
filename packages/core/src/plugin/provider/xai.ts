@@ -1,30 +1,17 @@
-import { createServer } from "node:http"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Clock, Deferred, Effect, Option, Schema } from "effect"
+import { Clock, Effect, Option, Schema } from "effect"
 import { App } from "../../app"
 import { Credential } from "../../credential"
 import { Integration } from "../../integration"
-import { OauthCallbackPage } from "../../oauth/page"
-import { Provider } from "../../provider"
 
 const clientID = "b1a00492-073a-47ea-816f-4c329264a828"
 const issuer = "https://auth.x.ai/oauth2"
 const deviceGrant = "urn:ietf:params:oauth:grant-type:device_code"
 const scope = "openid profile email offline_access grok-cli:access api:access"
-const callbackHost = "127.0.0.1"
-const callbackPort = 56121
-const callbackPath = "/callback"
-const redirectURI = `http://${callbackHost}:${callbackPort}${callbackPath}`
 const pollingSafetyMargin = 3000
-const corsOrigins = new Set(["https://accounts.x.ai", "https://auth.x.ai"])
 const browserMethodID = Integration.MethodID.make("browser")
 const deviceMethodID = Integration.MethodID.make("device")
-
-type Pkce = {
-  verifier: string
-  challenge: string
-}
 
 const Token = Schema.Struct({
   access_token: Schema.String,
@@ -48,155 +35,66 @@ const DeviceError = Schema.Struct({
 })
 const decodeDeviceError = Schema.decodeUnknownOption(Schema.fromJsonString(DeviceError))
 
-const browser = (app: App.Info) => ({
-  integrationID: Integration.ID.make("xai"),
-  method: {
-    id: browserMethodID,
-    type: "oauth",
-    label: "xAI Grok OAuth (SuperGrok Subscription)",
-  },
-  authorize: () =>
-    Effect.gen(function* () {
-      const pkce = yield* Effect.promise(generatePKCE)
-      const state = randomString(32)
-      const code = yield* Deferred.make<string, Error>()
-      const server = createServer((request, response) => {
-        const url = new URL(request.url ?? "/", redirectURI)
-        const origin = request.headers.origin
-        if (origin && corsOrigins.has(origin)) {
-          response.setHeader("Access-Control-Allow-Origin", origin)
-          response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS")
-          response.setHeader("Access-Control-Allow-Headers", "Content-Type")
-          response.setHeader("Access-Control-Allow-Private-Network", "true")
-          response.setHeader("Vary", "Origin")
-        }
-        if (request.method === "OPTIONS") {
-          response.writeHead(204).end()
-          return
-        }
-        if (url.pathname !== callbackPath) {
-          response.writeHead(404).end("Not found")
-          return
-        }
-        const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
-        const value = url.searchParams.get("code")
-        if (error) {
-          Effect.runFork(Deferred.fail(code, new Error(error)))
-          response
-            .writeHead(400, { "Content-Type": "text/html" })
-            .end(OauthCallbackPage.error(error, { provider: "xAI" }))
-          return
-        }
-        if (!value || url.searchParams.get("state") !== state) {
-          const message = value ? "Invalid OAuth state" : "Missing authorization code"
-          Effect.runFork(Deferred.fail(code, new Error(message)))
-          response
-            .writeHead(400, { "Content-Type": "text/html" })
-            .end(OauthCallbackPage.error(message, { provider: "xAI" }))
-          return
-        }
-        Effect.runFork(Deferred.succeed(code, value))
-        response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider: "xAI" }))
-      })
-      yield* Effect.callback<void, Error>((resume) => {
-        server.once("error", (error) => resume(Effect.fail(error)))
-        server.listen(callbackPort, callbackHost, () => resume(Effect.void))
-      })
-      yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
-      return {
-        mode: "auto" as const,
-        url: authorizeURL(pkce, state, randomString(32)),
-        instructions: "Complete authorization in your browser. This window will close automatically.",
-        callback: Deferred.await(code).pipe(
-          Effect.flatMap((value) => exchange(value, pkce, app)),
-          Effect.flatMap((tokens) => credential(browserMethodID, tokens)),
-        ),
-      }
-    }),
-  refresh: (value) => refresh(browserMethodID, Credential.OAuth.make({ ...value, methodID: browserMethodID }), app),
-}) satisfies IntegrationOAuthMethodRegistration
-
-const device = (app: App.Info) => ({
-  integrationID: Integration.ID.make("xai"),
-  method: {
-    id: deviceMethodID,
-    type: "oauth",
-    label: "xAI Grok OAuth (Headless / Remote / VPS)",
-  },
-  authorize: () =>
-    request(
-      `${issuer}/device/code`,
-      {
-        method: "POST",
-        headers: headers(app),
-        body: new URLSearchParams({ client_id: clientID, scope }).toString(),
-      },
-      Device,
-    ).pipe(
-      Effect.flatMap((value) =>
-        Clock.currentTimeMillis.pipe(
-          Effect.map((created) => {
-            const lifetime = positiveSeconds(value.expires_in, 0)
-            return {
-              mode: "auto" as const,
-              url: value.verification_uri_complete ?? value.verification_uri,
-              instructions: `Open ${value.verification_uri} on any device and enter code: ${value.user_code}`,
-              ...(lifetime ? { expiresAt: created + lifetime * 1000 } : {}),
-              callback: poll(value, app).pipe(Effect.flatMap((tokens) => credential(deviceMethodID, tokens))),
-            }
-          }),
+const device = (app: App.Info) =>
+  ({
+    integrationID: Integration.ID.make("xai"),
+    method: {
+      id: deviceMethodID,
+      type: "oauth",
+      label: "SuperGrok Subscription",
+    },
+    authorize: () =>
+      request(
+        `${issuer}/device/code`,
+        {
+          method: "POST",
+          headers: headers(app),
+          body: new URLSearchParams({ client_id: clientID, scope, referrer: "opencode" }).toString(),
+        },
+        Device,
+      ).pipe(
+        Effect.flatMap((value) =>
+          Clock.currentTimeMillis.pipe(
+            Effect.map((created) => {
+              const lifetime = positiveSeconds(value.expires_in, 0)
+              return {
+                mode: "auto" as const,
+                url: value.verification_uri_complete ?? value.verification_uri,
+                instructions: `Open ${value.verification_uri} on any device and enter code: ${value.user_code}`,
+                ...(lifetime ? { expiresAt: created + lifetime * 1000 } : {}),
+                callback: poll(value, app).pipe(Effect.flatMap((tokens) => credential(deviceMethodID, tokens))),
+              }
+            }),
+          ),
         ),
       ),
-    ),
-  refresh: (value) => refresh(deviceMethodID, Credential.OAuth.make({ ...value, methodID: deviceMethodID }), app),
-}) satisfies IntegrationOAuthMethodRegistration
+    refresh: (value) => refresh(deviceMethodID, Credential.OAuth.make({ ...value, methodID: deviceMethodID }), app),
+  }) satisfies IntegrationOAuthMethodRegistration
 
 export const XAIPlugin = define({
   id: "opencode.provider.xai",
   effect: Effect.fn(function* (ctx) {
+    const credentials = yield* Credential.Service
+    yield* Effect.forEach(
+      yield* credentials.list(Integration.ID.make("xai")),
+      (credential) => {
+        if (credential.value.type !== "oauth" || credential.value.methodID !== browserMethodID) return Effect.void
+        return credentials.update(credential.id, {
+          value: Credential.OAuth.make({ ...credential.value, methodID: deviceMethodID }),
+        })
+      },
+      { discard: true },
+    )
+
     yield* ctx.integration.transform((draft) => {
       draft.update("xai", (integration) => {
         integration.name = "xAI"
       })
-      draft.method.update(browser(ctx.app))
       draft.method.update(device(ctx.app))
       draft.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
     })
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/xai") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/xai"))
-        evt.sdk = mod.createXai(evt.options)
-      }),
-    )
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.make("xai")) return
-        evt.language = evt.sdk.responses(evt.model.modelID ?? evt.model.id)
-      }),
-    )
   }),
 })
-
-function exchange(code: string, pkce: Pkce, app: App.Info) {
-  return request(
-    `${issuer}/token`,
-    {
-      method: "POST",
-      headers: headers(app),
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: redirectURI,
-        client_id: clientID,
-        code_verifier: pkce.verifier,
-      }).toString(),
-    },
-    Token,
-  )
-}
 
 function refresh(methodID: Integration.MethodID, value: Credential.OAuth, app: App.Info) {
   return request(
@@ -325,32 +223,4 @@ function headers(app: App.Info) {
 function positiveSeconds(value: unknown, fallback: number) {
   const seconds = Number(value)
   return Number.isFinite(seconds) && seconds > 0 ? seconds : fallback
-}
-
-async function generatePKCE(): Promise<Pkce> {
-  const verifier = randomString(64)
-  const challenge = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))).toString(
-    "base64url",
-  )
-  return { verifier, challenge }
-}
-
-function randomString(length: number) {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-  return Array.from(crypto.getRandomValues(new Uint8Array(length)), (byte) => chars[byte % chars.length]).join("")
-}
-
-function authorizeURL(pkce: Pkce, state: string, nonce: string) {
-  return `${issuer}/authorize?${new URLSearchParams({
-    response_type: "code",
-    client_id: clientID,
-    redirect_uri: redirectURI,
-    scope,
-    code_challenge: pkce.challenge,
-    code_challenge_method: "S256",
-    state,
-    nonce,
-    plan: "generic",
-    referrer: "opencode",
-  }).toString()}`
 }

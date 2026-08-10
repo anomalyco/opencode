@@ -158,9 +158,9 @@ export type SQLiteEffectUpdateJoinFn<T extends AnySQLiteEffectUpdate> = <
 ) => T
 
 export class SQLiteEffectUpdateBuilder<
-  TTable extends SQLiteTable,
-  TRunResult,
-  TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+  in out TTable extends SQLiteTable,
+  out TRunResult,
+  out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
 > {
   static readonly [entityKind]: string = "SQLiteEffectUpdateBuilder"
 
@@ -193,13 +193,13 @@ export class SQLiteEffectUpdateBuilder<
 }
 
 export interface SQLiteEffectUpdateBase<
-  TTable extends SQLiteTable = SQLiteTable,
-  TRunResult = unknown,
-  TFrom extends SQLiteTable | Subquery | SQLiteViewBase | SQL | undefined = undefined,
-  TReturning = undefined,
-  TDynamic extends boolean = false,
+  out TTable extends SQLiteTable = SQLiteTable,
+  out TRunResult = unknown,
+  out TFrom extends SQLiteTable | Subquery | SQLiteViewBase | SQL | undefined = undefined,
+  out TReturning = undefined,
+  out TDynamic extends boolean = false,
   _TExcludedMethods extends string = never,
-  TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+  out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
 > extends SQLWrapper,
     RunnableQuery<TReturning extends undefined ? TRunResult : TReturning[], "sqlite">,
     Effect.Effect<
@@ -222,13 +222,13 @@ export interface SQLiteEffectUpdateBase<
 }
 
 export class SQLiteEffectUpdateBase<
-    TTable extends SQLiteTable = SQLiteTable,
-    TRunResult = unknown,
-    TFrom extends SQLiteTable | Subquery | SQLiteViewBase | SQL | undefined = undefined,
-    TReturning = undefined,
-    TDynamic extends boolean = false,
+    out TTable extends SQLiteTable = SQLiteTable,
+    out TRunResult = unknown,
+    out TFrom extends SQLiteTable | Subquery | SQLiteViewBase | SQL | undefined = undefined,
+    out TReturning = undefined,
+    out TDynamic extends boolean = false,
     _TExcludedMethods extends string = never,
-    TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+    out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
   >
   implements RunnableQuery<TReturning extends undefined ? TRunResult : TReturning[], "sqlite">, SQLWrapper
 {

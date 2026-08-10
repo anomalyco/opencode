@@ -12,11 +12,12 @@ describe("CodeMode", () => {
       const tools = yield* Tool.Service
       yield* tools.transform((draft) =>
         draft.add({
-            name: "echo",
-            description: "Echo text",
-            input: Schema.Struct({ text: Schema.String }),
-            output: Schema.String,
-            execute: ({ text }) => Effect.succeed({ output: text }),
+          name: "echo",
+          description: "Echo text",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.String,
+          options: { pinned: true },
+          execute: ({ text }) => Effect.succeed({ output: text }),
         }),
       )
 
@@ -27,6 +28,7 @@ describe("CodeMode", () => {
           path: "echo",
           description: "Echo text",
           signature: "tools.echo(input: {\n  text: string,\n}): Promise<string>",
+          pinned: true,
         },
       ])
     }).pipe(

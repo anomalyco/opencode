@@ -5,7 +5,6 @@ export interface OpenResponsesOptionsInput {
   readonly [key: string]: unknown
   readonly instructions?: string
   readonly store?: boolean
-  readonly promptCacheKey?: string
   readonly reasoningEffort?: ReasoningEffort
   readonly reasoningSummary?: "auto" | "concise" | "detailed"
   readonly include?: ReadonlyArray<ResponseIncludable>

@@ -50,7 +50,7 @@ export const mergeProviderOptions = (
   return Object.keys(result).length === 0 ? undefined : result
 }
 
-export class HttpOptions extends Schema.Class<HttpOptions>("LLM.HttpOptions")({
+export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   body: Schema.optional(JsonSchema),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   query: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -121,31 +121,32 @@ export const mergeGenerationOptions = (...items: ReadonlyArray<GenerationOptions
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
 
-export class ModelLimits extends Schema.Class<ModelLimits>("LLM.ModelLimits")({
+export class LanguageModelLimits extends Schema.Class<LanguageModelLimits>("LLM.LanguageModelLimits")({
   context: Schema.optional(Schema.Number),
+  input: Schema.optional(Schema.Number),
   output: Schema.optional(Schema.Number),
 }) {}
 
-export namespace ModelLimits {
-  export type Input = ModelLimits | ConstructorParameters<typeof ModelLimits>[0]
+export namespace LanguageModelLimits {
+  export type Input = LanguageModelLimits | ConstructorParameters<typeof LanguageModelLimits>[0]
 
-  /** Normalize model limit input into the canonical `ModelLimits` class. */
+  /** Normalize model limit input into the canonical `LanguageModelLimits` class. */
   export const make = (input: Input | undefined) =>
-    input instanceof ModelLimits ? input : new ModelLimits(input ?? {})
+    input instanceof LanguageModelLimits ? input : new LanguageModelLimits(input ?? {})
 }
 
-export class ModelDefaults extends Schema.Class<ModelDefaults>("LLM.ModelDefaults")({
-  limits: Schema.optional(ModelLimits),
+export class LanguageModelDefaults extends Schema.Class<LanguageModelDefaults>("LLM.LanguageModelDefaults")({
+  limits: Schema.optional(LanguageModelLimits),
   generation: Schema.optional(GenerationOptions),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
 }) {}
 
-export namespace ModelDefaults {
+export namespace LanguageModelDefaults {
   export type Input =
-    | ModelDefaults
+    | LanguageModelDefaults
     | {
-        readonly limits?: ModelLimits.Input
+        readonly limits?: LanguageModelLimits.Input
         readonly generation?: GenerationOptions.Input
         readonly providerOptions?: ProviderOptions
         readonly http?: HttpOptions.Input
@@ -153,9 +154,9 @@ export namespace ModelDefaults {
 
   /** Normalize selected-model request defaults without applying precedence. */
   export const make = (input: Input) => {
-    if (input instanceof ModelDefaults) return input
-    return new ModelDefaults({
-      limits: input.limits === undefined ? undefined : ModelLimits.make(input.limits),
+    if (input instanceof LanguageModelDefaults) return input
+    return new LanguageModelDefaults({
+      limits: input.limits === undefined ? undefined : LanguageModelLimits.make(input.limits),
       generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
       providerOptions: input.providerOptions,
       http: input.http === undefined ? undefined : HttpOptions.make(input.http),
@@ -163,29 +164,40 @@ export namespace ModelDefaults {
   }
 }
 
-export const ModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot"])
-export type ModelToolSchemaCompatibility = Schema.Schema.Type<typeof ModelToolSchemaCompatibility>
+export const LanguageModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot"])
+export type LanguageModelToolSchemaCompatibility = Schema.Schema.Type<typeof LanguageModelToolSchemaCompatibility>
 
-export class ModelCompatibility extends Schema.Class<ModelCompatibility>("LLM.ModelCompatibility")({
-  toolSchema: Schema.optional(ModelToolSchemaCompatibility),
+export const LanguageModelMaxTokensFieldCompatibility = Schema.Literals(["max_completion_tokens", "max_tokens"])
+export type LanguageModelMaxTokensFieldCompatibility = Schema.Schema.Type<
+  typeof LanguageModelMaxTokensFieldCompatibility
+>
+
+export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompatibility>(
+  "LLM.LanguageModelCompatibility",
+)({
+  toolSchema: Schema.optional(LanguageModelToolSchemaCompatibility),
   reasoningField: Schema.optional(Schema.String),
+  maxTokensField: Schema.optional(LanguageModelMaxTokensFieldCompatibility),
+  requireFinishReason: Schema.optional(Schema.Boolean),
 }) {}
 
-export namespace ModelCompatibility {
-  export type Input = ModelCompatibility | ConstructorParameters<typeof ModelCompatibility>[0]
+export namespace LanguageModelCompatibility {
+  export type Input = LanguageModelCompatibility | ConstructorParameters<typeof LanguageModelCompatibility>[0]
 
   /** Normalize model/upstream compatibility metadata without projecting requests. */
-  export const make = (input: Input) => (input instanceof ModelCompatibility ? input : new ModelCompatibility(input))
+  export const make = (input: Input) =>
+    input instanceof LanguageModelCompatibility ? input : new LanguageModelCompatibility(input)
 }
 
-export class Model {
+export class LanguageModel<Options extends ProviderOptions = ProviderOptions> {
+  declare protected readonly _ProviderOptions: Options
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: AnyRoute
-  readonly defaults?: ModelDefaults
-  readonly compatibility?: ModelCompatibility
+  readonly defaults?: LanguageModelDefaults
+  readonly compatibility?: LanguageModelCompatibility
 
-  constructor(input: Model.ConstructorInput) {
+  constructor(input: LanguageModel.ConstructorInput) {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
@@ -193,17 +205,18 @@ export class Model {
     this.compatibility = input.compatibility
   }
 
-  static make(input: Model.Input) {
-    return new Model({
+  static make<Options extends ProviderOptions = ProviderOptions>(input: LanguageModel.Input) {
+    return new LanguageModel<Options>({
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
-      defaults: input.defaults === undefined ? undefined : ModelDefaults.make(input.defaults),
-      compatibility: input.compatibility === undefined ? undefined : ModelCompatibility.make(input.compatibility),
+      defaults: input.defaults === undefined ? undefined : LanguageModelDefaults.make(input.defaults),
+      compatibility:
+        input.compatibility === undefined ? undefined : LanguageModelCompatibility.make(input.compatibility),
     })
   }
 
-  static input(model: Model): Model.ConstructorInput {
+  static input<Options extends ProviderOptions>(model: LanguageModel<Options>): LanguageModel.ConstructorInput {
     return {
       id: model.id,
       provider: model.provider,
@@ -213,35 +226,40 @@ export class Model {
     }
   }
 
-  static update(model: Model, patch: Partial<Model.Input>) {
+  static update<Options extends ProviderOptions>(model: LanguageModel<Options>, patch: Partial<LanguageModel.Input>) {
     if (Object.keys(patch).length === 0) return model
-    return Model.make({
-      ...Model.input(model),
+    return LanguageModel.make<Options>({
+      ...LanguageModel.input(model),
       ...patch,
     })
   }
 }
 
-export namespace Model {
+export namespace LanguageModel {
   export type ConstructorInput = {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: AnyRoute
-    readonly defaults?: ModelDefaults
-    readonly compatibility?: ModelCompatibility
+    readonly defaults?: LanguageModelDefaults
+    readonly compatibility?: LanguageModelCompatibility
   }
 
   export type Input = Omit<ConstructorInput, "id" | "provider" | "defaults" | "compatibility"> & {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
-    readonly defaults?: ModelDefaults.Input
-    readonly compatibility?: ModelCompatibility.Input
+    readonly defaults?: LanguageModelDefaults.Input
+    readonly compatibility?: LanguageModelCompatibility.Input
   }
 }
 
-export type ModelInput = Model.Input
+export type LanguageModelInput = LanguageModel.Input
 
-export const ModelSchema = Schema.declare((value): value is Model => value instanceof Model, { expected: "LLM.Model" })
+export type LanguageModelProviderOptions<SelectedModel> =
+  SelectedModel extends LanguageModel<infer Options> ? Options : never
+
+export const LanguageModelSchema = Schema.declare((value): value is LanguageModel => value instanceof LanguageModel, {
+  expected: "LLM.LanguageModel",
+})
 
 export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   type: Schema.Literals(["ephemeral", "persistent"]),

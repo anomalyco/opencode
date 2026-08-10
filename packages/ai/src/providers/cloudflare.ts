@@ -4,6 +4,7 @@ import { Auth } from "../route/auth"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options"
 import type { RouteDefaultsInput } from "../route/client"
 import { ProviderID, type ModelID } from "../schema"
+import type { OpenAIProviderOptionsInput } from "./openai-options"
 
 export const aiGatewayID = ProviderID.make("cloudflare-ai-gateway")
 export const workersAIID = ProviderID.make("cloudflare-workers-ai")
@@ -20,10 +21,11 @@ type GatewayURL = AtLeastOne<{
 }
 
 export type AIGatewayOptions = GatewayURL &
-  RouteDefaultsInput &
+  Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     /** Cloudflare AI Gateway authentication token. Sent as `cf-aig-authorization`. */
     readonly gatewayApiKey?: CloudflareSecret
+    readonly providerOptions?: OpenAIProviderOptionsInput
   }
 
 type WorkersAIURL = AtLeastOne<{
@@ -31,7 +33,11 @@ type WorkersAIURL = AtLeastOne<{
   readonly baseURL: string
 }>
 
-export type WorkersAIOptions = WorkersAIURL & RouteDefaultsInput & ProviderAuthOption<"optional">
+export type WorkersAIOptions = WorkersAIURL &
+  Omit<RouteDefaultsInput, "providerOptions"> &
+  ProviderAuthOption<"optional"> & {
+    readonly providerOptions?: OpenAIProviderOptionsInput
+  }
 
 export const aiGatewayBaseURL = (input: GatewayURL) => {
   if (input.baseURL) return input.baseURL
@@ -98,7 +104,7 @@ const configureAIGateway = (options: AIGatewayOptions) => {
   })
   return {
     id: aiGatewayID,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<OpenAIProviderOptionsInput>({ id: modelID }),
     configure: configureAIGateway,
   }
 }
@@ -111,7 +117,7 @@ const configureWorkersAI = (options: WorkersAIOptions) => {
   })
   return {
     id: workersAIID,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<OpenAIProviderOptionsInput>({ id: modelID }),
     configure: configureWorkersAI,
   }
 }

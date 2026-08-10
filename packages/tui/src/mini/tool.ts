@@ -125,7 +125,6 @@ type ToolName =
   | "webfetch"
   | "websearch"
   | "skill"
-  | "plan_exit"
 
 type ToolRule = {
   view: ToolView
@@ -513,15 +512,6 @@ function runLsp(p: ToolProps): ToolInline {
   return {
     icon: "→",
     title: lspTitle(p.input, { directory: p.frame.directory }),
-  }
-}
-
-function runPlanExit(p: ToolProps): ToolInline {
-  return {
-    icon: "→",
-    title: "Switching to build agent",
-    mode: "block",
-    body: p.frame.status === "completed" ? p.frame.output : undefined,
   }
 }
 
@@ -1075,16 +1065,6 @@ const TOOL_RULES = {
     run: runSkill,
     scroll: {
       start: scrollSkillStart,
-    },
-  },
-  plan_exit: {
-    view: {
-      output: true,
-      final: false,
-    },
-    run: runPlanExit,
-    scroll: {
-      start: () => "",
     },
   },
 } as const satisfies ToolRegistry

@@ -93,24 +93,43 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/experimental/console") return json({ consoleManagedProviders: [], switchableOrgCount: 0 })
     if (url.pathname === "/experimental/capabilities") return json({ backgroundSubagents: true })
     if (url.pathname === "/path") return json({ home: "", state: "", config: "", worktree, directory })
-    if (url.pathname === "/api/location") return json({ directory, project: { id: "proj_test", directory: worktree } })
+    if (url.pathname === "/api/location")
+      return json({ directory, project: { id: "proj_test", directory: worktree, canonical: worktree } })
+    if (url.pathname === "/api/vcs")
+      return json({
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
+        data: { branch: { current: "main", default: "main" } },
+      })
     if (url.pathname === "/api/fs/list")
-      return json({ location: { directory, project: { id: "proj_test", directory: worktree } }, data: [] })
+      return json({
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
+        data: [],
+      })
     if (url.pathname === "/api/project/current") return json({ id: "proj_test", directory: worktree })
+    if (url.pathname === "/api/project") return json([])
     if (url.pathname === "/api/project/proj_test/directories") return json([{ directory: worktree }])
     if (url.pathname === "/api/shell")
-      return json({ location: { directory, project: { id: "proj_test", directory: worktree } }, data: [] })
+      return json({
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
+        data: [],
+      })
     if (url.pathname === "/api/mcp")
-      return json({ location: { directory, project: { id: "proj_test", directory: worktree } }, data: [] })
+      return json({
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
+        data: [],
+      })
     if (url.pathname === "/api/mcp/resource")
       return json({
-        location: { directory, project: { id: "proj_test", directory: worktree } },
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
         data: { resources: [], templates: [] },
       })
     if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
     if (url.pathname === "/api/session/active") return json({ data: {} })
     if (url.pathname === "/api/permission/request")
-      return json({ location: { directory, project: { id: "proj_test", directory: worktree } }, data: [] })
+      return json({
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
+        data: [],
+      })
     if (url.pathname === "/api/form/request")
       return json({ location: { directory, project: { id: "proj_test", directory: worktree } }, data: [] })
     if (/^\/api\/session\/[^/]+\/form$/.test(url.pathname)) return json({ data: [] })
@@ -120,17 +139,18 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       )
     )
       return json({
-        location: { directory, project: { id: "proj_test", directory: worktree } },
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
         data: [],
       })
     if (url.pathname === "/api/reference")
-      return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+      return json({ location: { directory, project: { id: "proj_test", directory, canonical: directory } }, data: [] })
     if (url.pathname === "/api/websearch/provider") {
-      return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+      return json({ location: { directory, project: { id: "proj_test", directory, canonical: directory } }, data: [] })
     }
     if (url.pathname === "/provider") return json({ all: [], default: {}, connected: [] })
     if (url.pathname === "/session") return json([])
     if (url.pathname === "/vcs") return json({ branch: "main" })
+    if (url.pathname === "/api/experimental/migration/v1") return json({ status: "completed" })
     throw new Error(`unexpected request: ${url.pathname}`)
   }
   fetch.preconnect = () => {}

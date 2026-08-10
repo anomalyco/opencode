@@ -1,7 +1,6 @@
-import { createContext, createSignal, splitProps, useContext } from "solid-js"
+import { createContext, createSignal, useContext } from "solid-js"
 import type { JSX } from "solid-js/jsx-runtime"
 import { makeResizeObserver } from "@solid-primitives/resize-observer"
-import { IconCheckCircle, IconHashtag } from "../icons"
 
 export type ShareMessages = { locale: string } & Record<string, string>
 
@@ -39,42 +38,6 @@ export function formatCurrency(value: number, locale: string) {
 export function formatCount(value: number, locale: string, singular: string, plural: string) {
   const unit = value === 1 ? singular : plural
   return `${formatNumber(value, locale)} ${unit}`
-}
-
-interface AnchorProps extends JSX.HTMLAttributes<HTMLDivElement> {
-  id: string
-}
-export function AnchorIcon(props: AnchorProps) {
-  const [local, rest] = splitProps(props, ["id", "children"])
-  const [copied, setCopied] = createSignal(false)
-  const messages = useShareMessages()
-
-  return (
-    <div {...rest} data-element-anchor title={messages.link_to_message} data-status={copied() ? "copied" : ""}>
-      <a
-        href={`#${local.id}`}
-        onClick={(e) => {
-          e.preventDefault()
-
-          const anchor = e.currentTarget
-          const hash = anchor.getAttribute("href") || ""
-          const { origin, pathname, search } = window.location
-
-          navigator.clipboard
-            .writeText(`${origin}${pathname}${search}${hash}`)
-            .catch((err) => console.error("Copy failed", err))
-
-          setCopied(true)
-          setTimeout(() => setCopied(false), 3000)
-        }}
-      >
-        {local.children}
-        <IconHashtag width={18} height={18} />
-        <IconCheckCircle width={18} height={18} />
-      </a>
-      <span data-element-tooltip>{messages.copied}</span>
-    </div>
-  )
 }
 
 export function createOverflow() {

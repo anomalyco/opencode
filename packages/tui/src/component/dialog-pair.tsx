@@ -3,7 +3,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { renderUnicodeCompact } from "uqr"
 import { useClient } from "../context/client"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { errorMessage } from "../util/error"
 
@@ -16,7 +16,7 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
   const client = useClient()
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const [loadError, setLoadError] = createSignal<unknown>()
   const [showPassword, setShowPassword] = createSignal(false)
   const [passwordHover, setPasswordHover] = createSignal(false)

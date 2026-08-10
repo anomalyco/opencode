@@ -12,7 +12,7 @@ const context = {
   sessionID: Session.ID.make("ses_execute"),
   agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.make("msg_execute"),
-  callID: Tool.CallID.make("call_execute"),
+  id: Tool.CallID.make("call_execute"),
   progress: () => Effect.void,
 }
 
@@ -22,7 +22,7 @@ const createCodeMode = (tools: ReadonlyMap<string, Info>) =>
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [
-      "Run JavaScript to orchestrate tool calls and compose their results through `{ code }` in a confined Code Mode runtime.",
+      "Run JavaScript in a confined Code Mode runtime to orchestrate tool calls and compose their results.",
       "Imports, direct filesystem access, and timers are unavailable. Do not use `fetch`; all external access goes through `tools`.",
       "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by `search`. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
       'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
@@ -33,27 +33,27 @@ test("execute describes invariant Code Mode behavior", () => {
 })
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
-  const declared: Info = ({
+  const declared: Info = {
     name: "declared",
     description: "Declared",
     input: Schema.Struct({ value: Schema.String }),
     output: Schema.Struct({ value: Schema.String }),
     execute: ({ value }) => Effect.succeed({ output: { value } }),
-  })
+  }
   const modelOnlyInput = Schema.Struct({})
-  const modelOnly = ({
+  const modelOnly = {
     name: "model_only",
     description: "Model only",
     input: modelOnlyInput,
     execute: () => Effect.succeed({ content: "visible only", metadata: { kind: "model" } }),
-  }) satisfies Info<typeof modelOnlyInput, undefined>
-  const raw: Info = ({
+  } satisfies Info<typeof modelOnlyInput, undefined>
+  const raw: Info = {
     name: "raw",
     description: "Raw",
     input: {},
     output: {},
     execute: (input) => Effect.succeed({ output: input, content: "raw" }),
-  })
+  }
 
   expect(await Effect.runPromise(execute(declared, { value: "encoded" }, context))).toEqual({
     output: { value: "encoded" },
@@ -95,22 +95,22 @@ test("declared outputs cannot bypass validation and raw outputs stay JSON-compat
 })
 
 test("execute supports callable namespace tools", async () => {
-  const callable: Info = ({
+  const callable: Info = {
     name: "admin",
     description: "Administer Slack",
     input: Schema.Struct({}),
     output: Schema.String,
     options: { namespace: "slack" },
     execute: () => Effect.succeed({ output: "admin" }),
-  })
-  const child: Info = ({
+  }
+  const child: Info = {
     name: "create",
     description: "Create a Slack resource",
     input: Schema.Struct({}),
     output: Schema.String,
     options: { namespace: "slack.admin" },
     execute: () => Effect.succeed({ output: "created" }),
-  })
+  }
   const codeMode = createCodeMode(
     new Map([
       ["slack_admin", callable],
@@ -118,10 +118,7 @@ test("execute supports callable namespace tools", async () => {
     ]),
   )
   const result = await Effect.runPromise(
-    codeMode.execute(
-      { code: "return [await tools.slack.admin({}), await tools.slack.admin.create({})]" },
-      context,
-    ),
+    codeMode.execute({ code: "return [await tools.slack.admin({}), await tools.slack.admin.create({})]" }, context),
   )
 
   expect(result.metadata).toEqual({

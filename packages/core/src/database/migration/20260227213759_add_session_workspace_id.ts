@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260227213759_add_session_workspace_id",
   up(tx) {
     return Effect.gen(function* () {
@@ -9,4 +9,6 @@ export default {
       yield* tx.run(`CREATE INDEX \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration

@@ -12,6 +12,7 @@ export const Vcs = Schema.Literals(["git", "hg"]).annotate({ identifier: "Projec
 export const Current = Schema.Struct({
   id: ID,
   directory: AbsolutePath,
+  canonical: AbsolutePath,
 }).annotate({ identifier: "Project.Current" })
 export interface Current extends Schema.Schema.Type<typeof Current> {}
 export const Directory = Schema.Struct({
@@ -46,7 +47,7 @@ export interface Time extends Schema.Schema.Type<typeof Time> {}
 
 export const Info = Schema.Struct({
   id: ID,
-  worktree: Schema.String,
+  canonical: AbsolutePath,
   vcs: optional(Vcs),
   name: optional(Schema.String),
   icon: optional(Icon),

@@ -12,6 +12,7 @@ const lock = Semaphore.makeUnsafe(1)
 
 export type Migration = {
   id: string
+  foreignKeys?: boolean
   up: (tx: Transaction) => Effect.Effect<void, unknown>
 }
 
@@ -21,8 +22,11 @@ export function apply(db: Database) {
       const tables = yield* db.all<{ name: string }>(
         sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
       )
-      if (tables.some((table) => table.name === "session")) return yield* applyOnly(db, migrations)
+      if (tables.some((table) => table.name === "session" || table.name === "session_v2"))
+        return yield* applyOnly(db, migrations)
       if (tables.length > 0) return yield* Effect.die(new Error("Database is not empty and has no session table"))
+      const started = Date.now()
+      yield* Effect.logInfo("database schema bootstrap started", { migrations: migrations.length })
       yield* db.transaction((tx) =>
         Effect.gen(function* () {
           yield* schema.up(tx)
@@ -36,6 +40,10 @@ export function apply(db: Database) {
           )
         }),
       )
+      yield* Effect.logInfo("database schema bootstrap completed", {
+        migrations: migrations.length,
+        durationMs: Date.now() - started,
+      })
     }),
   )
 }
@@ -68,7 +76,9 @@ export function applyOnly(db: Database, input: Migration[]) {
 
     for (const migration of input) {
       if (completed.has(migration.id)) continue
-      yield* db.transaction((tx) =>
+      const started = Date.now()
+      yield* Effect.logInfo("database migration started", { migration: migration.id })
+      const apply = db.transaction((tx) =>
         Effect.gen(function* () {
           yield* migration.up(tx)
           yield* tx.run(
@@ -76,6 +86,37 @@ export function applyOnly(db: Database, input: Migration[]) {
           )
         }),
       )
+      if (migration.foreignKeys !== false) {
+        yield* apply.pipe(
+          Effect.tapError((error) =>
+            Effect.logError("database migration failed", {
+              migration: migration.id,
+              durationMs: Date.now() - started,
+              error,
+            }),
+          ),
+        )
+        yield* Effect.logInfo("database migration completed", {
+          migration: migration.id,
+          durationMs: Date.now() - started,
+        })
+        continue
+      }
+      yield* db.run(sql`PRAGMA foreign_keys = OFF`)
+      yield* apply.pipe(
+        Effect.ensuring(db.run(sql`PRAGMA foreign_keys = ON`).pipe(Effect.orDie)),
+        Effect.tapError((error) =>
+          Effect.logError("database migration failed", {
+            migration: migration.id,
+            durationMs: Date.now() - started,
+            error,
+          }),
+        ),
+      )
+      yield* Effect.logInfo("database migration completed", {
+        migration: migration.id,
+        durationMs: Date.now() - started,
+      })
     }
   })
 }

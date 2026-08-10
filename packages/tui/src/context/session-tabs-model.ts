@@ -5,6 +5,14 @@ export type SessionTab = {
 
 export type SessionTabUnread = "activity" | "error"
 
+export const NEW_SESSION_TAB_TITLE = "New session"
+
+export function sessionTabShortcutLabel(index: number) {
+  if (index >= 0 && index < 9) return String(index + 1)
+  if (index === 9) return "0"
+  return "·"
+}
+
 export type SessionTabHistory = {
   entries: readonly string[]
   index: number
@@ -17,7 +25,8 @@ export function sessionTabComplete(unread: SessionTabUnread | undefined, busy: b
 export const SESSION_TAB_WIDTH = 22
 export const SESSION_TAB_MAX_WIDTH = 32
 export const SESSION_TAB_MIN_WIDTH = 8
-export const SESSION_TAB_OVERFLOW_WIDTH = 3
+// Overflow markers reserve one gap cell beside the arrow and count, e.g. "‹12 " and " 12›".
+export const sessionTabOverflowWidth = (count: number) => String(count).length + 2
 
 export function openSessionTab(tabs: SessionTab[], tab: SessionTab): SessionTab[] {
   const index = tabs.findIndex((item) => item.sessionID === tab.sessionID)
@@ -26,25 +35,81 @@ export function openSessionTab(tabs: SessionTab[], tab: SessionTab): SessionTab[
   return tabs.map((item, position) => (position === index ? { ...item, title: tab.title } : item))
 }
 
-export function closeSessionTab(tabs: readonly SessionTab[], sessionID: string) {
+export function closeSessionTab(tabs: SessionTab[], sessionID: string) {
   const index = tabs.findIndex((tab) => tab.sessionID === sessionID)
-  if (index === -1) return { tabs: [...tabs], next: undefined }
+  // Like openSessionTab and moveSessionTab, a no-op returns the same reference so callers can
+  // detect it by identity.
+  if (index === -1) return { tabs, next: undefined }
   return {
     tabs: tabs.filter((tab) => tab.sessionID !== sessionID),
     next: tabs[index + 1]?.sessionID ?? tabs[index - 1]?.sessionID,
   }
 }
 
-export function cycleSessionTab(tabs: readonly SessionTab[], active: string | undefined, direction: 1 | -1) {
+export type ClosedSessionTab = {
+  tab: SessionTab
+  index: number
+}
+
+const CLOSED_SESSION_TAB_LIMIT = 10
+
+export function recordClosedSessionTab(
+  stack: readonly ClosedSessionTab[],
+  tab: SessionTab,
+  index: number,
+): ClosedSessionTab[] {
+  return [...stack.filter((entry) => entry.tab.sessionID !== tab.sessionID), { tab, index }].slice(
+    -CLOSED_SESSION_TAB_LIMIT,
+  )
+}
+
+/**
+ * Pop the most recently closed tab that is not already open and restore it at its original
+ * position. Entries for already-open sessions are consumed so repeated reopens walk the stack.
+ */
+export function reopenSessionTab(stack: readonly ClosedSessionTab[], tabs: readonly SessionTab[]) {
+  const remaining = [...stack]
+  while (remaining.length > 0) {
+    const entry = remaining.pop()!
+    if (tabs.some((tab) => tab.sessionID === entry.tab.sessionID)) continue
+    const next = [...tabs]
+    next.splice(Math.min(entry.index, tabs.length), 0, entry.tab)
+    return { stack: remaining, tabs: next, sessionID: entry.tab.sessionID }
+  }
+  return { stack: remaining, tabs: undefined, sessionID: undefined }
+}
+
+export function moveSessionTab(tabs: SessionTab[], sessionID: string, index: number): SessionTab[] {
+  const from = tabs.findIndex((tab) => tab.sessionID === sessionID)
+  const to = Math.max(0, Math.min(tabs.length - 1, index))
+  if (from === -1 || from === to) return tabs
+  const next = tabs.filter((tab) => tab.sessionID !== sessionID)
+  next.splice(to, 0, tabs[from])
+  return next
+}
+
+export function cycleSessionTab(
+  tabs: readonly SessionTab[],
+  active: string | undefined,
+  direction: 1 | -1,
+  matches: (tab: SessionTab) => boolean = () => true,
+) {
   if (tabs.length === 0) return
   const index = tabs.findIndex((tab) => tab.sessionID === active)
   const start = index === -1 ? (direction === 1 ? -1 : 0) : index
-  return tabs[(start + direction + tabs.length) % tabs.length]
+  return Array.from(
+    { length: tabs.length },
+    (_, offset) => tabs[(start + direction * (offset + 1) + tabs.length * 2) % tabs.length],
+  ).find(matches)
 }
+
+// In-memory navigation history is bounded so a long-lived TUI does not accumulate one entry per
+// session switch forever; the oldest entries fall off first.
+const SESSION_TAB_HISTORY_LIMIT = 100
 
 export function recordSessionTabHistory(history: SessionTabHistory, sessionID: string): SessionTabHistory {
   if (history.entries[history.index] === sessionID) return history
-  const entries = [...history.entries.slice(0, history.index + 1), sessionID]
+  const entries = [...history.entries.slice(0, history.index + 1), sessionID].slice(-SESSION_TAB_HISTORY_LIMIT)
   return { entries, index: entries.length - 1 }
 }
 
@@ -65,6 +130,38 @@ export function moveSessionTabHistory(
   )
   if (!target) return { history, sessionID: undefined }
   return { history: { ...history, index: target.index }, sessionID: target.sessionID }
+}
+
+export type SessionTabMotionValues = {
+  widths: number[]
+  selections: number[]
+  activities: number[]
+}
+
+/**
+ * Seed width motion for a visible-tab membership change: retained tabs keep their current animated
+ * values and first-seen tabs grow in from zero width. Returns undefined when nothing is retained,
+ * meaning the window was fully replaced and the strip should jump.
+ */
+export function seedSessionTabMotion(
+  previous: readonly string[],
+  ids: readonly string[],
+  current: SessionTabMotionValues,
+  next: SessionTabMotionValues,
+): SessionTabMotionValues | undefined {
+  const positions = ids.map((id) => previous.indexOf(id))
+  if (positions.every((position) => position === -1)) return undefined
+  return {
+    widths: positions.map((position, index) =>
+      position === -1 ? 0 : (current.widths[position] ?? next.widths[index] ?? 0),
+    ),
+    selections: positions.map(
+      (position, index) => (position === -1 ? next.selections[index] : current.selections[position]) ?? 0,
+    ),
+    activities: positions.map(
+      (position, index) => (position === -1 ? next.activities[index] : current.activities[position]) ?? 0,
+    ),
+  }
 }
 
 export function adaptiveSessionTabLayout(
@@ -102,8 +199,8 @@ export function adaptiveSessionTabLayout(
       tabs.length - count,
     )
     const markers =
-      (nextStart > 0 ? SESSION_TAB_OVERFLOW_WIDTH : 0) +
-      (nextStart + count < tabs.length ? SESSION_TAB_OVERFLOW_WIDTH : 0)
+      (nextStart > 0 ? sessionTabOverflowWidth(nextStart) : 0) +
+      (nextStart + count < tabs.length ? sessionTabOverflowWidth(tabs.length - nextStart - count) : 0)
     const nextCount = fit(available - markers)
     if (nextCount === count || attempts === 0) return { count, start: nextStart }
     return solve(nextCount, nextStart, attempts - 1)
@@ -114,7 +211,7 @@ export function adaptiveSessionTabLayout(
   const after = tabs.length - solved.start - solved.count
   const contentWidth = Math.max(
     1,
-    available - (before > 0 ? SESSION_TAB_OVERFLOW_WIDTH : 0) - (after > 0 ? SESSION_TAB_OVERFLOW_WIDTH : 0),
+    available - (before > 0 ? sessionTabOverflowWidth(before) : 0) - (after > 0 ? sessionTabOverflowWidth(after) : 0),
   )
   const roomy = contentWidth >= SESSION_TAB_WIDTH * visible.length
   const total = roomy ? Math.min(contentWidth, SESSION_TAB_MAX_WIDTH * visible.length) : contentWidth

@@ -12,10 +12,11 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
+import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
-import { UserMessage } from "@opencode-ai/sdk/v2"
+import type { UserMessage } from "@/types"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionOwnership } from "./session-ownership"
 import { useLocal } from "@/context/local"
@@ -99,7 +100,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const visibleUserMessages = () => {
     const revert = info()?.revert?.messageID
     if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
+    const boundary = userMessages().findIndex((message) => message.id === revert)
+    return boundary < 0 ? userMessages() : userMessages().slice(0, boundary)
   }
 
   const showAllFiles = () => {
@@ -187,16 +189,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    const existing = info()?.share?.url
+    const existing = undefined
     if (existing) {
       await copyShare(existing, true)
       return
     }
 
-    const url = await sdk()
-      .client.session.share({ sessionID })
-      .then((res) => res.data?.share?.url)
-      .catch(() => undefined)
+    // TODO: Restore sharing when the V2 client exposes a session sharing API.
+    const url = undefined
     if (!url) {
       showToast({
         title: language.t("toast.session.share.failed.title"),
@@ -213,22 +213,37 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    await sdk()
-      .client.session.unshare({ sessionID })
-      .then(() =>
-        showToast({
-          title: language.t("toast.session.unshare.success.title"),
-          description: language.t("toast.session.unshare.success.description"),
-          variant: "success",
-        }),
-      )
-      .catch(() =>
-        showToast({
-          title: language.t("toast.session.unshare.failed.title"),
-          description: language.t("toast.session.unshare.failed.description"),
-          variant: "error",
-        }),
-      )
+    // TODO: Restore unsharing when the V2 client exposes a session sharing API.
+    showToast({
+      title: language.t("toast.session.unshare.failed.title"),
+      description: language.t("toast.session.unshare.failed.description"),
+      variant: "error",
+    })
+  }
+
+  const exportSession = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
+    try {
+      const data = await fetchSessionExport({
+        sessionID,
+        api: sdk().api,
+      })
+      const filename = sessionExportFilename(data.info)
+      downloadSessionExport(filename, data)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("toast.session.export.success.title"),
+        description: language.t("toast.session.export.success.description", { filename }),
+      })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.export.failed.title"),
+        description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
+      })
+    }
   }
 
   const openFile = () => {
@@ -311,7 +326,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const promptSession = prompt.capture()
     const revert = info()?.revert?.messageID
     const messages = userMessages()
-    const message = findLast(messages, (x) => !revert || x.id < revert)
+    const boundary = revert ? messages.findIndex((message) => message.id === revert) : messages.length
+    if (boundary < 0) return
+    const message = messages[boundary - 1]
     if (!message) return
     const parts = sync().data.part[message.id]
 
@@ -326,7 +343,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       updatePrompt: (promptSession) => {
         if (parts) promptSession.set(extractPromptFromParts(parts, { directory }))
       },
-      updateViewport: () => setActiveMessage(findLast(messages, (x) => x.id < message.id)),
+      updateViewport: () => setActiveMessage(messages[boundary - 2]),
     })
   }
 
@@ -341,14 +358,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const revertMessageID = info()?.revert?.messageID
     if (!revertMessageID) return
 
-    const next = messages.find((x) => x.id > revertMessageID)
+    const boundary = messages.findIndex((message) => message.id === revertMessageID)
+    if (boundary < 0) return
+    const next = messages[boundary + 1]
     if (!next) {
       await runCommand({
         owner,
         prompt: promptSession,
         request: () => session.revert.clear({ sessionID }),
         updatePrompt: (promptSession) => promptSession.reset(),
-        updateViewport: () => setActiveMessage(findLast(messages, (x) => x.id >= revertMessageID)),
+        updateViewport: () => setActiveMessage(messages.at(-1)),
       })
       return
     }
@@ -358,7 +377,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       prompt: promptSession,
       request: () => session.revert.stage({ sessionID, messageID: next.id }),
       updatePrompt: () => undefined,
-      updateViewport: () => setActiveMessage(findLast(messages, (x) => x.id < next.id)),
+      updateViewport: () => setActiveMessage(messages[boundary]),
     })
   }
 
@@ -366,19 +385,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    const model = local.model.current()
-    if (!model) {
-      showToast({
-        title: language.t("toast.model.none.title"),
-        description: language.t("toast.model.none.description"),
-      })
-      return
-    }
-
-    await sdk().api.session.compact({
-      sessionID,
-      model: { providerID: model.provider.id, modelID: model.id },
-    })
+    await sdk().api.session.compact({ sessionID })
   }
 
   const fork = () => {
@@ -389,7 +396,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const shareCmds = () => {
-    if (sync().data.config.share === "disabled") return []
+    // TODO: Restore these commands when the V2 client exposes session sharing.
+    // if (sync().data.config.share === "disabled") return []
+    return []
+    /*
     return [
       sessionCommand({
         id: "session.share",
@@ -410,6 +420,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         onSelect: unshare,
       }),
     ]
+    */
   }
 
   const sessionCmds = () => [
@@ -457,6 +468,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: fork,
+    }),
+    sessionCommand({
+      id: "session.export",
+      title: language.t("command.session.export"),
+      description: language.t("command.session.export.description"),
+      slash: "export",
+      disabled: !params.id,
+      onSelect: exportSession,
     }),
   ]
 

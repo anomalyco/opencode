@@ -1,10 +1,10 @@
-import { Route, type RouteRoutedModelInput } from "../route/client"
+import { Route, type RouteRoutedLanguageModelInput } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { OpenResponses } from "./open-responses"
 
 const ADAPTER = "openai-compatible-responses"
 
-export type OpenAICompatibleResponsesModelInput = RouteRoutedModelInput
+export type OpenAICompatibleResponsesLanguageModelInput = RouteRoutedLanguageModelInput
 
 /**
  * Deployment adapter for providers that expose an Open Responses-compatible

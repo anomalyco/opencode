@@ -41,7 +41,7 @@ import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import type { AssistantMessage, ToolPart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, ToolPart, UserMessage } from "@/types"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { normalize } from "@opencode-ai/session-ui/session-diff"
@@ -128,10 +128,7 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
     >
       <div data-slot="session-turn-diffs-header">
         <span data-slot="session-turn-diffs-label">
-          {language.t(
-            props.diffs.length === 1 ? "ui.sessionTurn.diffs.changed.one" : "ui.sessionTurn.diffs.changed.other",
-            { count: String(props.diffs.length) },
-          )}
+          {language.plural("ui.sessionTurn.diffs.changed", props.diffs.length)}
         </span>
         <DiffChanges changes={props.diffs} />
         <Show when={overflow() > 0}>
@@ -752,7 +749,7 @@ function MessageTimelineView(
         return (
           <TimelineRowFrame row={commentStripRow}>
             <div class="w-full px-4 md:px-5 pb-2">
-              <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+              <div class="ms-auto max-w-[82%] overflow-x-auto no-scrollbar">
                 <div class="flex w-max min-w-full justify-end gap-2">
                   <Index each={comments()}>
                     {(comment) => (
@@ -1212,9 +1209,10 @@ function MessageTimelineView(
                                     </DropdownMenu.ItemLabel>
                                   </DropdownMenu.Item>
                                 </Show>
-                                <DropdownMenu.Item onSelect={() => void props.action.archive(id)}>
-                                  <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
+                                <DropdownMenu.Item onSelect={() => void props.action.export(id)}>
+                                  <DropdownMenu.ItemLabel>{language.t("common.export")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
+                                {/* TODO: Need a V2 session archive API. */}
                                 <DropdownMenu.Separator />
                                 <DropdownMenu.Item onSelect={() => props.action.showDelete(id)}>
                                   <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
@@ -1281,9 +1279,10 @@ function MessageTimelineView(
                                   {language.t("session.share.action.share")}...
                                 </MenuV2.Item>
                               </Show>
-                              <MenuV2.Item onSelect={() => void props.action.archive(id)}>
-                                {language.t("common.archive")}
+                              <MenuV2.Item onSelect={() => void props.action.export(id)}>
+                                {language.t("common.export")}...
                               </MenuV2.Item>
+                              {/* TODO: Need a V2 session archive API. */}
                               <MenuV2.Separator />
                               <MenuV2.Item onSelect={() => props.action.showDelete(id)}>
                                 {language.t("common.delete")}...

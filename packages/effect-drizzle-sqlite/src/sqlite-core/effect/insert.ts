@@ -126,9 +126,9 @@ export type SQLiteEffectInsert<
 export type AnySQLiteEffectInsert = SQLiteEffectInsertBase<any, any, any, any, any, any>
 
 export class SQLiteEffectInsertBuilder<
-  TTable extends SQLiteTable,
-  TRunResult,
-  TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+  in out TTable extends SQLiteTable,
+  out TRunResult,
+  out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
 > {
   static readonly [entityKind]: string = "SQLiteEffectInsertBuilder"
 
@@ -194,12 +194,12 @@ export class SQLiteEffectInsertBuilder<
 }
 
 export interface SQLiteEffectInsertBase<
-  TTable extends SQLiteTable,
-  TRunResult,
-  TReturning = undefined,
-  TDynamic extends boolean = false,
+  in out TTable extends SQLiteTable,
+  out TRunResult,
+  out TReturning = undefined,
+  out TDynamic extends boolean = false,
   _TExcludedMethods extends string = never,
-  TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+  out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
 > extends SQLWrapper,
     RunnableQuery<TReturning extends undefined ? TRunResult : TReturning[], "sqlite">,
     Effect.Effect<
@@ -221,12 +221,12 @@ export interface SQLiteEffectInsertBase<
 }
 
 export class SQLiteEffectInsertBase<
-    TTable extends SQLiteTable,
-    TRunResult,
-    TReturning = undefined,
-    TDynamic extends boolean = false,
+    in out TTable extends SQLiteTable,
+    out TRunResult,
+    out TReturning = undefined,
+    out TDynamic extends boolean = false,
     _TExcludedMethods extends string = never,
-    TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+    out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
   >
   implements RunnableQuery<TReturning extends undefined ? TRunResult : TReturning[], "sqlite">, SQLWrapper
 {

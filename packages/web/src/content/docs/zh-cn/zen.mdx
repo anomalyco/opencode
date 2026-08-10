@@ -86,8 +86,8 @@ OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
 | Gemini 3.5 Flash Lite  | gemini-3.5-flash-lite  | `https://opencode.ai/zen/v1/models/gemini-3.5-flash-lite` | `@ai-sdk/google`            |
 | Gemini 3.1 Pro         | gemini-3.1-pro         | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`        | `@ai-sdk/google`            |
 | Gemini 3 Flash         | gemini-3-flash         | `https://opencode.ai/zen/v1/models/gemini-3-flash`        | `@ai-sdk/google`            |
-| Grok 4.5               | grok-4.5               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Grok 4.5               | grok-4.5               | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Qwen3.7 Max            | qwen3.7-max            | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
@@ -107,7 +107,8 @@ OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Laguna S 2.1 Free      | laguna-s-2.1-free      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Ling-3.0-flash Free    | ling-3.0-flash-free    | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Ling-3.0-tiny Free     | ling-3.0-tiny-free     | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| LongCat-2.0 Free       | longcat-2.0-free       | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | North Mini Code Free   | north-mini-code-free   | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -136,7 +137,8 @@ https://opencode.ai/zen/v1/models
 | DeepSeek V4 Flash Free            | Free   | Free    | Free     | -        |
 | MiMo-V2.5 Free                    | Free   | Free    | Free     | -        |
 | Laguna S 2.1 Free                 | Free   | Free    | Free     | -        |
-| Ling-3.0-flash Free               | Free   | Free    | Free     | -        |
+| Ling-3.0-tiny Free                | Free   | Free    | Free     | -        |
+| LongCat-2.0 Free                  | Free   | Free    | Free     | -        |
 | North Mini Code Free              | Free   | Free    | Free     | -        |
 | Nemotron 3 Ultra Free             | Free   | Free    | Free     | -        |
 | MiniMax M3                        | $0.30  | $1.20   | $0.06    | -        |
@@ -177,10 +179,10 @@ https://opencode.ai/zen/v1/models
 | Grok Build 0.1                    | $1.00  | $2.00   | $0.20    | -        |
 | GPT 5.6 Sol (≤ 272K tokens)       | $5.00  | $30.00  | $0.50    | $6.25    |
 | GPT 5.6 Sol (> 272K tokens)       | $10.00 | $45.00  | $1.00    | $12.50   |
-| GPT 5.6 Terra (≤ 272K tokens)     | $2.50  | $15.00  | $0.25    | $3.125   |
-| GPT 5.6 Terra (> 272K tokens)     | $5.00  | $22.50  | $0.50    | $6.25    |
-| GPT 5.6 Luna (≤ 272K tokens)      | $1.00  | $6.00   | $0.10    | $1.25    |
-| GPT 5.6 Luna (> 272K tokens)      | $2.00  | $9.00   | $0.20    | $2.50    |
+| GPT 5.6 Terra (≤ 272K tokens)     | $2.00  | $12.00  | $0.20    | $2.50    |
+| GPT 5.6 Terra (> 272K tokens)     | $4.00  | $18.00  | $0.40    | $5.00    |
+| GPT 5.6 Luna (≤ 272K tokens)      | $0.20  | $1.20   | $0.02    | $0.25    |
+| GPT 5.6 Luna (> 272K tokens)      | $0.40  | $1.80   | $0.04    | $0.50    |
 | GPT 5.5 (≤ 272K tokens)           | $5.00  | $30.00  | $0.50    | -        |
 | GPT 5.5 (> 272K tokens)           | $10.00 | $45.00  | $1.00    | -        |
 | GPT 5.5 Pro                       | $30.00 | $180.00 | $30.00   | -        |
@@ -212,7 +214,8 @@ https://opencode.ai/zen/v1/models
 - DeepSeek V4 Flash Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - MiMo-V2.5 Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - Laguna S 2.1 Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
-- Ling-3.0-flash Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
+- Ling-3.0-tiny Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
+- LongCat-2.0 Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - North Mini Code Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - Nemotron 3 Ultra Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - Big Pickle 是一个隐身模型，目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
@@ -270,7 +273,8 @@ https://opencode.ai/zen/v1/models
 - DeepSeek V4 Flash Free：在免费期间，收集的数据可能会被用于改进模型。
 - MiMo-V2.5 Free：在免费期间，收集的数据可能会被用于改进模型。
 - Laguna S 2.1 Free：在免费期间，收集的数据可能会被用于改进模型。
-- Ling-3.0-flash Free：在免费期间，收集的数据可能会被用于改进模型。
+- Ling-3.0-tiny Free：在免费期间，收集的数据可能会被用于改进模型。
+- LongCat-2.0 Free：在免费期间，收集的数据可能会被用于改进模型。
 - North Mini Code Free：免费期间，所收集的数据可能会被保留并用于改进模型。请勿提交个人或机密数据。请参阅我们的[使用条款](https://cohere.com/terms-of-use)和[隐私政策](https://cohere.com/privacy)。
 - Nemotron 3 Ultra Free（NVIDIA 免费端点）：仅供试用 — 请勿提交个人或机密数据。出于安全目的以及为改进 NVIDIA 产品和服务，系统会记录你的使用情况。出于改进目的而记录的会话数据不会与你的身份或任何持久标识符相关联。有关我们数据处理实践的更多信息，请参阅我们的[隐私政策](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)。与此端点进行交互，即表示你同意我们收集、记录和使用此类信息，并同意 [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)。
 - OpenAI APIs：请求会根据 [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) 保留 30 天。

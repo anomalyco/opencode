@@ -1,6 +1,6 @@
-import type { Model, ModelID, ProviderID } from "./schema"
+import type { LanguageModel, ModelID, ProviderID } from "./schema"
 
-export type ModelOptions = Pick<Model.Input, "defaults" | "compatibility">
+export type LanguageModelOptions = Pick<LanguageModel.Input, "defaults" | "compatibility">
 
 /**
  * Advanced structural provider definition helper. Built-in providers should
@@ -8,23 +8,23 @@ export type ModelOptions = Pick<Model.Input, "defaults" | "compatibility">
  * chosen before model selection. The optional `apis` map remains for external
  * structural providers that expose multiple route selectors behind one provider.
  */
-export type ModelFactory<Options extends ModelOptions = ModelOptions> = (
+export type LanguageModelFactory<Options extends LanguageModelOptions = LanguageModelOptions> = (
   id: string | ModelID,
   options?: Options,
-) => Model
+) => LanguageModel
 
-type AnyModelFactory = (...args: never[]) => Model
+type AnyLanguageModelFactory = (...args: never[]) => LanguageModel
 
-export interface Definition<Factory extends AnyModelFactory = ModelFactory> {
+export interface Definition<Factory extends AnyLanguageModelFactory = LanguageModelFactory> {
   readonly id: ProviderID
   readonly model: Factory
-  readonly apis?: Record<string, AnyModelFactory>
+  readonly apis?: Record<string, AnyLanguageModelFactory>
 }
 
 type DefinitionShape = {
   readonly id: ProviderID
-  readonly model: (...args: never[]) => Model
-  readonly apis?: Record<string, (...args: never[]) => Model>
+  readonly model: (...args: never[]) => LanguageModel
+  readonly apis?: Record<string, (...args: never[]) => LanguageModel>
 }
 
 type NoExtraFields<Input, Shape> = Input & Record<Exclude<keyof Input, keyof Shape>, never>

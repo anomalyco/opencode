@@ -13,6 +13,8 @@ const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 const tmp = path.join(os.tmpdir(), app)
 
+await fs.mkdir(tmp, { recursive: true })
+
 const paths = {
   get home() {
     return process.env.OPENCODE_TEST_HOME ?? os.homedir()
@@ -24,7 +26,7 @@ const paths = {
   cache,
   config,
   state,
-  tmp,
+  tmp: await fs.realpath(tmp),
 }
 
 export const Path = paths
@@ -35,7 +37,6 @@ await Promise.all([
   fs.mkdir(Path.data, { recursive: true }),
   fs.mkdir(Path.config, { recursive: true }),
   fs.mkdir(Path.state, { recursive: true }),
-  fs.mkdir(Path.tmp, { recursive: true }),
   fs.mkdir(Path.log, { recursive: true }),
   fs.mkdir(Path.bin, { recursive: true }),
   fs.mkdir(Path.repos, { recursive: true }),

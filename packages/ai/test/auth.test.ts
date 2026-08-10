@@ -4,12 +4,12 @@ import { Headers } from "effect/unstable/http"
 import { LLM } from "../src"
 import { Auth } from "../src/route/auth"
 import * as OpenAIChat from "../src/protocols/openai-chat"
-import { Model } from "../src/schema"
+import { LanguageModel } from "../src/schema"
 import { it } from "./lib/effect"
 
 const request = LLM.request({
   id: "req_auth",
-  model: Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route }),
+  model: LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route }),
   prompt: "hello",
 })
 

@@ -29,7 +29,7 @@ import {
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit, Schema } from "effect"
-import { ConfigMCP } from "../config/mcp"
+import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -209,16 +209,13 @@ export const connect = Effect.fnUntraced(function* (
       authProvider,
     })
   })
-  const client = new Client(
-    clientInfo,
-    {
-      capabilities: {
-        ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
-        // https://github.com/anomalyco/opencode/issues/2308
-        roots: {},
-      },
+  const client = new Client(clientInfo, {
+    capabilities: {
+      ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
+      // https://github.com/anomalyco/opencode/issues/2308
+      roots: {},
     },
-  )
+  })
   client.setRequestHandler(ListRootsRequestSchema, () =>
     Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
   )

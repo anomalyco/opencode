@@ -2,7 +2,7 @@ export * as Project from "./project"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { asc, desc } from "drizzle-orm"
+import { asc, desc, isNotNull, isNull, ne, or } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema"
 import { Database } from "./database/database"
@@ -40,16 +40,14 @@ export interface Resolved {
   readonly previous?: ID
   readonly id: ID
   readonly directory: AbsolutePath
+  readonly canonical: AbsolutePath
   readonly vcs?: Vcs
 }
 
 // Keep this filesystem-only; permission checks use it and should not execute VCS commands.
-export const root = Effect.fn("Project.root")(function* (
-  fs: FSUtil.Interface,
-  input: AbsolutePath,
-) {
-  return yield* fs.up({ targets: [".git", ".hg"], start: input }).pipe(
-    Effect.map((matches) => matches[0] ? AbsolutePath.make(path.dirname(matches[0])) : undefined),
+export const root = Effect.fn("Project.root")(function* (fs: FSUtil.Interface, input: AbsolutePath) {
+  return yield* fs.up({ targets: [".git", ".hg"], start: input, mode: "first" }).pipe(
+    Effect.map((matches) => (matches[0] ? AbsolutePath.make(path.dirname(matches[0])) : undefined)),
     Effect.catch(() => Effect.succeed(undefined)),
   )
 })
@@ -58,16 +56,6 @@ export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
   readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
-  /**
-   * Temporary bridge method for writing the resolved project ID to the repo-local cache.
-   *
-   * This exists while the old opencode project service and this core project
-   * service work together: core resolves the ID, while the old service still owns
-   * database migration and persistence. The old service should call this after it
-   * finishes migrating from `resolve().previous` to `resolve().id`; once project
-   * persistence moves into core, this separate bridge method can go away.
-   */
-  readonly commit: (input: { store: AbsolutePath; id: ID }) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
@@ -83,7 +71,7 @@ function fromRow(row: typeof ProjectTable.$inferSelect): Info {
       : undefined
   return {
     id: row.id,
-    worktree: row.worktree,
+    canonical: row.worktree,
     vcs: row.vcs ?? undefined,
     name: row.name ?? undefined,
     icon,
@@ -105,6 +93,40 @@ const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const db = (yield* Database.Service).db
     const projectDirectories = yield* ProjectDirectories.Service
+
+    const persist = Effect.fnUntraced(function* (project: Resolved) {
+      yield* db
+        .transaction((tx) =>
+          Effect.gen(function* () {
+            const vcs = project.vcs?.type
+            yield* tx
+              .insert(ProjectTable)
+              .values({ id: project.id, worktree: project.canonical, vcs, sandboxes: [] })
+              .onConflictDoUpdate({
+                target: ProjectTable.id,
+                set: { worktree: project.canonical, vcs: vcs ?? null },
+                setWhere: or(
+                  ne(ProjectTable.worktree, project.canonical),
+                  vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
+                ),
+              })
+              .run()
+            if (!project.vcs) return
+            yield* projectDirectories.create({ projectID: project.id, directory: project.canonical }, tx)
+            if (project.directory === project.canonical) return
+            yield* projectDirectories.create(
+              {
+                projectID: project.id,
+                directory: project.directory,
+                strategy: project.vcs.type === "git" ? "git_worktree" : undefined,
+              },
+              tx,
+            )
+          }),
+        )
+        .pipe(Effect.orDie)
+      return project
+    })
 
     const list = Effect.fn("Project.list")(function* () {
       const rows = yield* db
@@ -189,7 +211,7 @@ const layer = Layer.effect(
     })
 
     const hgDiscover = Effect.fnUntraced(function* (input: AbsolutePath) {
-      const dotHg = yield* fs.up({ targets: [".hg"], start: input }).pipe(
+      const dotHg = yield* fs.up({ targets: [".hg"], start: input, mode: "first" }).pipe(
         Effect.map((matches) => matches[0]),
         Effect.catch(() => Effect.succeed(undefined)),
       )
@@ -211,24 +233,29 @@ const layer = Layer.effect(
       if (repo) {
         const previous = yield* cached(repo.commonDirectory)
         const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
-        return {
+        const canonical =
+          repo.gitDirectory === repo.commonDirectory
+            ? repo.worktree
+            : yield* git.worktree.list(repo).pipe(
+                Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
+                Effect.catch(() => Effect.succeed(repo.worktree)),
+              )
+        return yield* persist({
           previous,
           id: id ?? ID.global,
           directory: repo.worktree,
+          canonical,
           vcs: { type: "git" as const, store: repo.commonDirectory },
-        }
+        })
       }
 
       const hg = yield* hgDiscover(input)
-      if (hg) return hg
-      return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      if (hg) return yield* persist({ ...hg, canonical: hg.directory })
+      const directory = AbsolutePath.make(path.parse(input).root)
+      return yield* persist({ id: ID.global, directory, canonical: directory, vcs: undefined })
     })
 
-    const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {
-      yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
-    })
-
-    return Service.of({ list, directories, resolve, commit })
+    return Service.of({ list, directories, resolve })
   }),
 )
 

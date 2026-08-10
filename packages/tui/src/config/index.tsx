@@ -2,8 +2,10 @@ export * as Config from "."
 
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { Schema } from "effect"
-import { createContext, type JSX, useContext } from "solid-js"
+import { createContext, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
+import { watch } from "fs"
+import path from "path"
 import { TuiKeybind } from "./keybind"
 
 export interface Interface {
@@ -32,6 +34,15 @@ export const Plugin = Schema.Union([
     }),
   }),
 ])
+
+export const Cursor = Schema.Struct({
+  style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
+    description: "Cursor shape. Use 'default' to preserve the terminal setting",
+  }),
+  blinking: Schema.optional(Schema.Boolean).annotate({
+    description: "Whether the cursor blinks. Has no effect when style is 'default'",
+  }),
+}).annotate({ description: "Terminal cursor settings" })
 
 export const Info = Schema.Struct({
   theme: Schema.optional(
@@ -125,10 +136,16 @@ export const Info = Schema.Struct({
   tabs: Schema.optional(
     Schema.Struct({
       enabled: Schema.optional(Schema.Boolean).annotate({
-        description: "Use a persistent session tab strip instead of pinned quick-switch sessions",
+        description: "Use a persistent tab strip instead of pinned quick-switch sessions",
+      }),
+      scope: Schema.optional(Schema.Literals(["global", "cwd"])).annotate({
+        description: "Share tabs globally or keep a separate set for each working directory",
+      }),
+      layout: Schema.optional(Schema.Literals(["horizontal", "vertical"])).annotate({
+        description: "Show tabs in a horizontal strip or vertical sidebar",
       }),
     }),
-  ).annotate({ description: "Session tab settings" }),
+  ).annotate({ description: "Tab strip settings" }),
   mini: Schema.optional(
     Schema.Struct({
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
@@ -157,11 +174,6 @@ export const Info = Schema.Struct({
       }),
     }),
   ).annotate({ description: "Mini transcript presentation settings" }),
-  hints: Schema.optional(
-    Schema.Struct({
-      onboarding: Schema.optional(Schema.Boolean).annotate({ description: "Show getting-started guidance" }),
-    }),
-  ).annotate({ description: "In-product guidance settings" }),
   debug: Schema.optional(
     Schema.Struct({
       devtools: Schema.optional(Schema.Boolean).annotate({ description: "Show the DevTools debug bar" }),
@@ -173,10 +185,11 @@ export const Info = Schema.Struct({
   ).annotate({ description: "Debugging settings" }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable terminal mouse capture" }),
+  cursor: Schema.optional(Cursor),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader" | "mouse"> & {
+export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader" | "mouse" | "tabs"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -188,6 +201,15 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader" | "mouse">
   keybinds: TuiKeybind.BindingLookupView
   leader: { timeout: number }
   mouse: boolean
+  cursor?: {
+    style: "block" | "underline" | "line" | "default"
+    blinking: boolean
+  }
+  tabs: {
+    enabled: boolean
+    scope: "global" | "cwd"
+    layout: "horizontal" | "vertical"
+  }
 }
 
 export function resolve(input: Info, options: { terminalSuspend: boolean }): Resolved {
@@ -218,6 +240,18 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },
     mouse: input.mouse ?? true,
+    cursor: input.cursor
+      ? {
+          style: input.cursor.style ?? "block",
+          blinking: input.cursor.blinking ?? true,
+        }
+      : undefined,
+    tabs: {
+      ...input.tabs,
+      enabled: input.tabs?.enabled ?? true,
+      scope: input.tabs?.scope ?? "cwd",
+      layout: input.tabs?.layout ?? "horizontal",
+    },
   }
 }
 
@@ -235,12 +269,23 @@ export function ConfigProvider(props: {
 }) {
   const [config, setConfig] = createStore(props.config)
   const host = props.service
+  const apply = (info: Info) => setConfig(reconcile(resolve(info, props.options ?? { terminalSuspend: true })))
   const update = async (update: (draft: any) => void) => {
     if (!host) throw new Error("Config updates are not available")
     const info = await host.update(update)
-    setConfig(reconcile(resolve(info, props.options ?? { terminalSuspend: true })))
+    apply(info)
     return info
   }
+  let reload = Promise.resolve()
+  const watcher = host?.path
+    ? watch(path.dirname(host.path), () => {
+        reload = reload
+          .then(() => host.get())
+          .then(apply)
+          .catch(() => {})
+      })
+    : undefined
+  onCleanup(() => watcher?.close())
   return (
     <ConfigContext.Provider value={{ data: config, path: host?.path, update }}>{props.children}</ConfigContext.Provider>
   )
@@ -250,8 +295,4 @@ export function useConfig() {
   const value = useContext(ConfigContext)
   if (!value) throw new Error("ConfigProvider is missing")
   return value
-}
-
-export function useConfigOptional() {
-  return useContext(ConfigContext)
 }

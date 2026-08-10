@@ -10,7 +10,7 @@ import { ServerRowMenu } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { ServerConnection, serverName } from "@/context/server"
-import { useServerManagementController } from "../dialog-select-server"
+import { useServerCollectionController } from "../server/server-management-controller"
 import { DialogServerV2 } from "./dialog-server-v2"
 import { SettingsListV2 } from "./parts/list"
 import { AddServerMenu, isWslServer, useFilteredWslServers, WslServerSettings } from "@/wsl/settings"
@@ -19,16 +19,16 @@ import "./settings-v2.css"
 export const SettingsServersV2: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
-  const controller = useServerManagementController()
+  const controller = useServerCollectionController()
   const [store, setStore] = createStore({ filter: "" })
   const wslServers = useFilteredWslServers(() => store.filter)
 
   const showSearch = createMemo(
-    () => controller.sortedItems().filter((item) => !isWslServer(item)).length + wslServers().length > 1,
+    () => controller.collection.items().filter((item) => !isWslServer(item)).length + wslServers().length > 1,
   )
 
   const filtered = createMemo(() => {
-    const items = controller.sortedItems().filter((item) => !isWslServer(item))
+    const items = controller.collection.items().filter((item) => !isWslServer(item))
     const query = store.filter.trim()
     if (!query) return items
     return fuzzysort
@@ -39,11 +39,11 @@ export const SettingsServersV2: Component = () => {
   })
 
   const openAdd = () => {
-    dialog.push(() => <DialogServerV2 mode="add" />)
+    void dialog.push(() => <DialogServerV2 mode="add" />)
   }
 
   const openEdit = (server: ServerConnection.Http) => {
-    dialog.push(() => <DialogServerV2 mode="edit" server={server} />)
+    void dialog.push(() => <DialogServerV2 mode="edit" server={server} />)
   }
 
   return (
@@ -97,12 +97,12 @@ export const SettingsServersV2: Component = () => {
           }
         >
           <SettingsListV2>
-            <WslServerSettings controller={controller} servers={wslServers} />
+            <WslServerSettings domain={controller} servers={wslServers} />
             <For each={filtered()}>
               {(item) => {
                 const key = ServerConnection.key(item)
-                const health = () => controller.status()[key]
-                const isDefault = () => controller.defaultKey() === key
+                const health = () => controller.collection.health()[key]
+                const isDefault = () => controller.defaults.key() === key
                 return (
                   <div class="settings-v2-servers-row">
                     <div class="settings-v2-servers-lead">
@@ -122,10 +122,10 @@ export const SettingsServersV2: Component = () => {
                       </div>
                     </div>
                     <div class="settings-v2-servers-actions">
-                      <Show when={controller.canDefault() && isDefault()}>
+                      <Show when={controller.defaults.available() && isDefault()}>
                         <Tag>{language.t("dialog.server.status.default")}</Tag>
                       </Show>
-                      <ServerRowMenu server={item} controller={controller} onEdit={openEdit} />
+                      <ServerRowMenu server={item} domain={controller} onEdit={openEdit} />
                     </div>
                   </div>
                 )

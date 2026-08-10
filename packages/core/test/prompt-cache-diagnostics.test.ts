@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { GenerationOptions, LLM, LLMRequest, Message, Model, ToolDefinition } from "@opencode-ai/ai"
+import { GenerationOptions, LLM, LLMRequest, Message, LanguageModel, ToolDefinition } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { PromptCacheDiagnostics } from "@opencode-ai/core/session/prompt-cache-diagnostics"
 
-const model = Model.make({ id: "test", provider: "test", route: OpenAIChat.route })
+const model = LanguageModel.make({ id: "test", provider: "test", route: OpenAIChat.route })
 const tool = ToolDefinition.make({
   name: "read",
   description: "Read a file",

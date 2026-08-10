@@ -3,8 +3,8 @@ import { DialogSelect } from "../ui/dialog-select"
 import { createMemo, createSignal } from "solid-js"
 import { Locale } from "../util/locale"
 import { Keymap } from "../context/keymap"
-import { useThemes } from "../context/theme"
-import { usePromptStash, type StashEntry } from "./prompt/stash"
+import { useTheme } from "../context/theme"
+import { usePromptStash, type StashEntry } from "../prompt/stash"
 
 function getRelativeTime(timestamp: number): string {
   const now = Date.now()
@@ -29,7 +29,7 @@ function getStashPreview(input: string, maxLength: number = 50): string {
 export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
   const dialog = useDialog()
   const stash = usePromptStash()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const shortcuts = Keymap.useShortcuts()
 
   const [toDelete, setToDelete] = createSignal<number>()

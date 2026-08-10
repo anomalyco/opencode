@@ -59,21 +59,21 @@ Add commands under the `commands` key in any OpenCode JSON or JSONC
       "description": "Review code for correctness and missing tests",
       "template": "Review $ARGUMENTS. Report bugs first, then missing tests.",
       "agent": "plan",
-      "model": "anthropic/claude-sonnet-4-5#high"
-    }
-  }
+      "model": "anthropic/claude-sonnet-4-5#high",
+    },
+  },
 }
 ```
 
 ## Fields
 
-| Field | Required | Behavior |
-| --- | --- | --- |
-| `template` | JSON only | Prompt template. In a Markdown command, the file body supplies it. |
-| `description` | No | Text shown with the command in autocomplete. |
-| `agent` | No | Agent selected before the prompt runs. |
-| `model` | No | Model override in `provider/model` or `provider/model#variant` format. |
-| `subtask` | No | Accepted as a boolean, but currently has no execution effect in V2. |
+| Field         | Required  | Behavior                                                               |
+| ------------- | --------- | ---------------------------------------------------------------------- |
+| `template`    | JSON only | Prompt template. In a Markdown command, the file body supplies it.     |
+| `description` | No        | Text shown with the command in autocomplete.                           |
+| `agent`       | No        | Agent selected before the prompt runs.                                 |
+| `model`       | No        | Model override in `provider/model` or `provider/model#variant` format. |
+| `subtask`     | No        | Accepted as a boolean, but currently has no execution effect in V2.    |
 
 The four optional fields can be used in JSON or YAML frontmatter. Do not put
 `template` in frontmatter because the Markdown body always supplies it.
@@ -138,8 +138,8 @@ interpolation happens first, so avoid placing untrusted arguments inside shell
 interpolations.
 
 <Callout type="warning">
-  Shell interpolations run when the command is evaluated, outside the agent's
-  tool permission flow. Only use commands from sources you trust.
+  Shell interpolations run when the command is evaluated, outside the agent's tool permission flow. Only use commands
+  from sources you trust.
 </Callout>
 
 No other template interpolation is performed. In particular, an `@path`

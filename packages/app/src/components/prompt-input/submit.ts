@@ -1,4 +1,5 @@
-import type { Message, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
@@ -15,13 +16,14 @@ import { useSDK, type DirectorySDK } from "@/context/sdk"
 import { useSync, type DirectorySync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
+import { getDirectory } from "@opencode-ai/core/util/path"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
 import { ScopedKey } from "@/utils/server-scope"
 import { createPromptSubmissionState } from "./submission-state"
-import { normalizeSessionInfo } from "@/utils/session"
 import { Event } from "@opencode-ai/schema/event"
+import { blobDataUrl } from "@/utils/draft-store"
 
 type PendingPrompt = {
   abort: AbortController
@@ -44,6 +46,7 @@ type FollowupSendInput = {
   api: DirectorySDK["api"]["session"]
   serverSync: ServerSync
   sync: DirectorySync
+  session: Accessor<{ agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined>
   draft: FollowupDraft
   messageID?: string
   optimisticBusy?: boolean
@@ -95,10 +98,12 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
           providerID: input.draft.model.providerID,
           variant: input.draft.variant,
         },
-        files: images.map((attachment) => ({
-          uri: attachment.dataUrl,
-          name: attachment.filename,
-        })),
+        files: await Promise.all(
+          images.map(async (attachment) => ({
+            uri: await blobDataUrl(attachment.blob, attachment.mime),
+            name: attachment.filename,
+          })),
+        ),
       })
       return true
     } catch (err) {
@@ -108,10 +113,16 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   }
 
   const messageID = input.messageID ?? Identifier.ascending("message")
+  const encodedImages = await Promise.all(
+    images.map(async (attachment) => ({
+      ...attachment,
+      dataUrl: await blobDataUrl(attachment.blob, attachment.mime),
+    })),
+  )
   const { requestParts, optimisticParts } = buildRequestParts({
     prompt: input.draft.prompt,
     context: input.draft.context,
-    images,
+    images: encodedImages,
     text,
     sessionID: input.draft.sessionID,
     messageID,
@@ -156,13 +167,28 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       return false
     }
 
+    const session = input.session()
+    if (session?.agent !== input.draft.agent) {
+      await input.api.switchAgent({ sessionID: input.draft.sessionID, agent: input.draft.agent })
+    }
+    if (
+      session?.model?.providerID !== input.draft.model.providerID ||
+      session.model.id !== input.draft.model.modelID ||
+      (session.model.variant ?? "default") !== (input.draft.variant ?? "default")
+    ) {
+      await input.api.switchModel({
+        sessionID: input.draft.sessionID,
+        model: {
+          id: input.draft.model.modelID,
+          providerID: input.draft.model.providerID,
+          variant: input.draft.variant,
+        },
+      })
+    }
+
     await input.api.prompt({
       sessionID: input.draft.sessionID,
       id: messageID,
-      agent: input.draft.agent,
-      model: input.draft.model,
-      variant: input.draft.variant,
-      legacyParts: requestParts,
       text: requestParts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
       files: requestParts.flatMap((part) => {
         if (part.type !== "file") return []
@@ -200,7 +226,9 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
 type PromptSubmitInput = {
   prompt: ReturnType<typeof usePrompt>
-  info: Accessor<{ id: string } | undefined>
+  info: Accessor<
+    { id: string; agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined
+  >
   imageAttachments: Accessor<ImageAttachmentPart[]>
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
@@ -291,10 +319,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
   }
 
-  const seed = (dir: string, info: Session) => {
+  const seed = (dir: string, info: SessionInfo) => {
     serverSync().session.remember(info)
     const [, setStore] = serverSync().child(dir)
-    setStore("session", (list: Session[]) => {
+    setStore("session", (list: SessionInfo[]) => {
       const result = Binary.search(list, info.id, (item) => item.id)
       const next = [...list]
       if (result.found) {
@@ -348,13 +376,15 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const worktreeSelection = input.newSessionWorktree?.() || "main"
 
     let sessionDirectory = projectDirectory
-    let client = sdk().client
-
     if (isNewSession) {
       if (worktreeSelection === "create") {
-        const createdWorktree = await client.worktree
-          .create({ directory: projectDirectory })
-          .then((x) => x.data)
+        const createdWorktree = await sdk()
+          .api.projectCopy.create({
+            projectID: sync().data.project,
+            strategy: "git_worktree",
+            directory: getDirectory(projectDirectory),
+            location: { directory: projectDirectory },
+          })
           .catch((err) => {
             showToast({
               title: language.t("prompt.toast.worktreeCreateFailed.title"),
@@ -362,14 +392,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             })
             return undefined
           })
-
-        if (!createdWorktree?.directory) {
-          showToast({
-            title: language.t("prompt.toast.worktreeCreateFailed.title"),
-            description: language.t("common.requestFailed"),
-          })
-          return
-        }
+        if (!createdWorktree) return
         WorktreeState.pending(sdk().scope, createdWorktree.directory)
         sessionDirectory = createdWorktree.directory
       }
@@ -379,10 +402,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
 
       if (sessionDirectory !== projectDirectory) {
-        client = sdk().createClient({
-          directory: sessionDirectory,
-          throwOnError: true,
-        })
         serverSync().child(sessionDirectory)
       }
 
@@ -397,7 +416,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           model: { id: currentModel.id, providerID: currentModel.provider.id, variant },
           location: { directory: sessionDirectory },
         })
-        .then(normalizeSessionInfo)
         .catch((err) => {
           showToast({
             title: language.t("prompt.toast.sessionCreateFailed.title"),
@@ -487,8 +505,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           sessionID: session.id,
           id: eventID,
           command: text,
-          agent,
-          model,
         })
         .catch((err) => {
           showToast({
@@ -516,10 +532,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             arguments: args.join(" "),
             agent,
             model: { id: model.modelID, providerID: model.providerID, variant },
-            files: images.map((attachment) => ({
-              uri: attachment.dataUrl,
-              name: attachment.filename,
-            })),
+            files: await Promise.all(
+              images.map(async (attachment) => ({
+                uri: await blobDataUrl(attachment.blob, attachment.mime),
+                name: attachment.filename,
+              })),
+            ),
           })
           .catch((err) => {
             serverSync().session.set("session_status", session.id, { type: "idle" })
@@ -609,6 +627,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       api: sdk().api.session,
       sync: sync(),
       serverSync: serverSync(),
+      session: () => input.info() ?? session,
       draft,
       messageID,
       optimisticBusy: sessionDirectory === projectDirectory,

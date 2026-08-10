@@ -29,12 +29,15 @@ export const ShellHandler = HttpApiBuilder.group(Api, "server.shell", (handlers)
         Effect.fn(function* (ctx) {
           const shell = yield* Shell.Service
           return yield* response(
-            shell.get(ctx.params.id).pipe(
-              Effect.catchTag(
-                "Shell.NotFoundError",
-                () => new ShellNotFoundError({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+            shell
+              .get(ctx.params.id)
+              .pipe(
+                Effect.catchTag(
+                  "Shell.NotFoundError",
+                  () =>
+                    new ShellNotFoundError({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+                ),
               ),
-            ),
           )
         }),
       )
@@ -43,12 +46,15 @@ export const ShellHandler = HttpApiBuilder.group(Api, "server.shell", (handlers)
         Effect.fn(function* (ctx) {
           const shell = yield* Shell.Service
           return yield* response(
-            shell.timeout(ctx.params.id, ctx.payload.timeout).pipe(
-              Effect.catchTag(
-                "Shell.NotFoundError",
-                () => new ShellNotFoundError({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+            shell
+              .timeout(ctx.params.id, ctx.payload.timeout)
+              .pipe(
+                Effect.catchTag(
+                  "Shell.NotFoundError",
+                  () =>
+                    new ShellNotFoundError({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+                ),
               ),
-            ),
           )
         }),
       )
@@ -57,12 +63,15 @@ export const ShellHandler = HttpApiBuilder.group(Api, "server.shell", (handlers)
         Effect.fn(function* (ctx) {
           const shell = yield* Shell.Service
           return yield* response(
-            shell.output(ctx.params.id, { cursor: ctx.query.cursor, limit: ctx.query.limit }).pipe(
-              Effect.catchTag(
-                "Shell.NotFoundError",
-                () => new ShellNotFoundError({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+            shell
+              .output(ctx.params.id, { cursor: ctx.query.cursor, limit: ctx.query.limit })
+              .pipe(
+                Effect.catchTag(
+                  "Shell.NotFoundError",
+                  () =>
+                    new ShellNotFoundError({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+                ),
               ),
-            ),
           )
         }),
       )
@@ -70,12 +79,15 @@ export const ShellHandler = HttpApiBuilder.group(Api, "server.shell", (handlers)
         "shell.remove",
         Effect.fn(function* (ctx) {
           const shell = yield* Shell.Service
-          yield* shell.remove(ctx.params.id).pipe(
-            Effect.catchTag(
-              "Shell.NotFoundError",
-              () => new ShellNotFoundError({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
-            ),
-          )
+          yield* shell
+            .remove(ctx.params.id)
+            .pipe(
+              Effect.catchTag(
+                "Shell.NotFoundError",
+                () =>
+                  new ShellNotFoundError({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+              ),
+            )
           return HttpApiSchema.NoContent.make()
         }),
       )

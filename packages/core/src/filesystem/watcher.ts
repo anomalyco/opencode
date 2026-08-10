@@ -59,7 +59,7 @@ export interface NativeInterface {
 export class Native extends Context.Service<Native, NativeInterface>()("@opencode/Watcher/Native") {}
 
 export interface Interface {
-  readonly subscribe: (input: WatchInput) => Stream.Stream<Update>
+  readonly subscribe: (input: WatchInput) => Effect.Effect<Stream.Stream<Update>>
 }
 
 export const Options = Schema.Struct({
@@ -83,7 +83,7 @@ export const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       if (options?.enabled === false) {
-        return Service.of({ subscribe: () => Stream.empty })
+        return Service.of({ subscribe: () => Effect.succeed(Stream.empty) })
       }
       const native = yield* Native
 
@@ -92,9 +92,7 @@ export const layer = (options?: Options) =>
       const watchers = yield* RcMap.make({
         lookup: (key: Key) =>
           Effect.gen(function* () {
-            const pubsub = yield* Effect.acquireRelease(PubSub.unbounded<Update>(), (pubsub) =>
-              PubSub.shutdown(pubsub),
-            )
+            const pubsub = yield* Effect.acquireRelease(PubSub.unbounded<Update>(), (pubsub) => PubSub.shutdown(pubsub))
             const subscription = yield* Effect.acquireRelease(
               native.subscribe({
                 type: key.type,
@@ -131,11 +129,19 @@ export const layer = (options?: Options) =>
       const subscribe = (input: WatchInput) => {
         const target = path.resolve(input.path)
         const ignore = [...new Set(input.type === "directory" ? (input.ignore ?? []) : [])].toSorted()
-        return Stream.unwrap(
-          RcMap.get(watchers, { type: input.type, target, ignore }).pipe(
-            Effect.map((pubsub) => Stream.fromPubSub(pubsub)),
-          ),
-        )
+        return Effect.gen(function* () {
+          yield* Effect.logInfo("watcher subscribe", {
+            path: target,
+            type: input.type,
+            ignores: ignore.length,
+          })
+          return Stream.unwrap(
+            Effect.gen(function* () {
+              const pubsub = yield* RcMap.get(watchers, { type: input.type, target, ignore })
+              return Stream.fromPubSub(pubsub)
+            }),
+          )
+        })
       }
 
       return Service.of({ subscribe })

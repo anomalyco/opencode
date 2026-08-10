@@ -17,7 +17,6 @@ import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Money } from "@opencode-ai/schema/money"
-import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { fromRow } from "@opencode-ai/core/session/info"
@@ -32,7 +31,11 @@ import {
 import { testEffect } from "./lib/effect"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node])))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
+    [Bus.node, Bus.configured({ persist: true })],
+  ]),
+)
 const sessionsLayer = AppNodeBuilder.build(Session.node, [[SessionExecution.node, SessionExecution.noopLayer]])
 const sessionID = Session.ID.make("ses_projector_test")
 const created = DateTime.makeUnsafe(0)
@@ -114,7 +117,7 @@ describe("SessionProjector", () => {
         diff: "legacy patch",
         files: [{ path: "src/old.ts", status: "modified", additions: 1, deletions: 0, patch: "@@" }],
       })
-      yield* db.run(sql`update session set revert = ${legacy} where id = ${sessionID}`)
+      yield* db.run(sql`update session_v2 set revert = ${legacy} where id = ${sessionID}`)
       const stored = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get()
       if (!stored) return yield* Effect.die("Session row missing")
       const storedRevert = fromRow(stored).revert
@@ -123,34 +126,6 @@ describe("SessionProjector", () => {
       expect(storedRevert?.files).toEqual([
         { file: "src/old.ts", status: "modified", additions: 1, deletions: 0, patch: "@@" },
       ])
-    }),
-  )
-
-  it.effect("folds live compaction deltas into running memory state", () =>
-    Effect.gen(function* () {
-      const state = {
-        messages: [
-          SessionMessage.CompactionRunning.make({
-            id: SessionMessage.ID.make("msg_compaction"),
-            type: "compaction",
-            status: "running",
-            reason: "manual",
-            summary: "partial ",
-            recent: "recent",
-            time: { created },
-          }),
-        ],
-      }
-      yield* SessionMessageUpdater.update(
-        SessionMessageUpdater.memory(state),
-        SessionEvent.Compaction.Delta.make({
-          id: Event.ID.make("evt_delta"),
-          type: "session.compaction.delta",
-          created,
-          data: { sessionID, text: "summary" },
-        }),
-      )
-      expect(state.messages[0]).toMatchObject({ status: "running", summary: "partial summary", recent: "recent" })
     }),
   )
 
@@ -547,31 +522,6 @@ describe("SessionProjector", () => {
       expect(
         yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, id)).get().pipe(Effect.orDie),
       ).toMatchObject({ type: "synthetic" })
-    }),
-  )
-
-  it.effect("does not revive a stale incomplete in-memory assistant projection", () =>
-    Effect.gen(function* () {
-      const stale = SessionMessage.Assistant.make({
-        id: SessionMessage.ID.make("msg_assistant_stale"),
-        type: "assistant",
-        agent: build,
-        model,
-        content: [],
-        time: { created },
-      })
-      const completed = SessionMessage.Assistant.make({
-        id: SessionMessage.ID.make("msg_assistant_completed"),
-        type: "assistant",
-        agent: build,
-        model,
-        content: [],
-        time: { created: DateTime.makeUnsafe(1), completed: DateTime.makeUnsafe(2) },
-      })
-
-      expect(
-        yield* SessionMessageUpdater.memory({ messages: [stale, completed] }).getCurrentAssistant(),
-      ).toBeUndefined()
     }),
   )
 

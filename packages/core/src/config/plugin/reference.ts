@@ -1,10 +1,11 @@
 export * as ConfigReferencePlugin from "./reference"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Document } from "@opencode-ai/schema/config"
+import { ConfigReference } from "@opencode-ai/schema/config/reference"
 import path from "path"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config"
-import { ConfigReference } from "../reference"
 import { Reference } from "../../reference"
 import { AbsolutePath } from "../../schema"
 import { Global } from "@opencode-ai/util/global"
@@ -19,7 +20,7 @@ export const Plugin = define({
     const loaded = { entries: yield* config.entries() }
     yield* ctx.reference.transform((draft) => {
       const entries = new Map<string, Reference.Source>()
-      for (const doc of loaded.entries.filter((entry): entry is Config.Document => entry.type === "document")) {
+      for (const doc of loaded.entries.filter((entry): entry is Document => entry.type === "document")) {
         const directory = doc.path ? path.dirname(doc.path) : location.directory
         for (const [name, entry] of Object.entries(doc.info.references ?? {})) {
           if (!validAlias(name)) continue

@@ -4,6 +4,13 @@
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 
+## Live V2 TUI Testing
+
+- Run `bun run dev:live` from a development worktree to test its TUI against the currently elected `opencode2` background server and live sessions.
+- Pass a directory after the script when needed, for example `bun run dev:live /path/to/project`.
+- The script discovers the server with `opencode2 service status`, injects its private local credential from `opencode2 service get password`, and uses the `next` TUI storage channel so tabs and other client-local state match the installed client.
+- Prefer `dev:live` over plain `bun run dev` for this workflow. An implicit managed-service connection may replace the live server when the worktree client version differs; explicit `--server` warns and continues without replacing it.
+
 ## Branch Names
 
 Use a short branch name of at most three words, separated by hyphens. Do not use slashes or type prefixes such as `feat/` or `fix/`.

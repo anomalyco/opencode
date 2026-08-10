@@ -11,6 +11,7 @@ import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { ModelsDevPlugin } from "@opencode-ai/core/plugin/models-dev"
+import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
@@ -27,6 +28,27 @@ const layer = AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.no
 const it = testEffect(layer)
 const models = (file: string) =>
   AppNodeBuilder.build(ModelsDev.node, [[ModelsDev.node, ModelsDev.configured({ file, fetch: false })]])
+
+function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Object.fromEntries(Object.keys(variables).map((key) => [key, process.env[key]]))
+      Object.entries(variables).forEach(([key, value]) => {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      })
+      return previous
+    }),
+    effect,
+    (previous) =>
+      Effect.sync(() => {
+        Object.entries(previous).forEach(([key, value]) => {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        })
+      }),
+  )
+}
 
 describe("ModelsDevPlugin", () => {
   it.effect("projects normalized models.dev snapshots into the catalog", () =>
@@ -220,6 +242,126 @@ describe("ModelsDevPlugin", () => {
     }).pipe(Effect.provide(models(path.join(import.meta.dir, "fixtures", "models-dev.json")))),
   )
 
+  it.effect("resolves declared environment variables in provider and model URLs", () =>
+    withEnv(
+      {
+        ACME_HOST: "api.acme.test",
+        ACME_MODEL_PATH: undefined,
+        UNDECLARED_HOST: "private.example",
+      },
+      () =>
+        Effect.gen(function* () {
+          const integrations = yield* Integration.Service
+          const catalog = yield* Catalog.Service
+          const providerID = Provider.ID.make("acme")
+          const modelID = Model.ID.make("gpt-5.4")
+          yield* ModelsDevPlugin.effect(
+            host({
+              catalog: catalogHost(catalog),
+              integration: integrationHost(integrations),
+            }),
+          ).pipe(
+            Effect.provideService(
+              ModelsDev.Service,
+              ModelsDev.Service.of({
+                get: () =>
+                  Effect.succeed([
+                    {
+                      info: {
+                        id: providerID,
+                        name: "Acme",
+                        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+                        settings: { baseURL: "https://${ACME_HOST}/${UNDECLARED_HOST}/v1" },
+                      },
+                      environment: ["ACME_HOST", "ACME_MODEL_PATH", "ACME_API_KEY"],
+                      models: [
+                        {
+                          id: modelID,
+                          modelID,
+                          providerID,
+                          name: "GPT-5.4",
+                          settings: { baseURL: "https://${ACME_HOST}/${ACME_MODEL_PATH}/v1" },
+                          capabilities: { tools: true, input: [], output: [] },
+                          variants: [],
+                          time: { released: Date.parse("2026-01-01") },
+                          cost: [],
+                          status: "active",
+                          enabled: true,
+                          limit: { context: 1_050_000, output: 128_000 },
+                        },
+                      ],
+                    },
+                  ] satisfies readonly ModelsDev.Snapshot[]),
+                refresh: () => Effect.void,
+              }),
+            ),
+          )
+
+          expect((yield* catalog.provider.get(providerID))?.settings?.baseURL).toBe(
+            "https://api.acme.test/${UNDECLARED_HOST}/v1",
+          )
+          expect((yield* catalog.model.get(providerID, modelID))?.settings?.baseURL).toBe(
+            "https://api.acme.test/${ACME_MODEL_PATH}/v1",
+          )
+        }),
+    ),
+  )
+
+  it.effect("omits legacy provider aliases", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const catalog = yield* Catalog.Service
+      const snapshots = [
+        ["azure", "Azure", "AZURE_API_KEY", "@ai-sdk/azure"],
+        ["azure-cognitive-services", "Azure Cognitive Services", "AZURE_COGNITIVE_SERVICES_API_KEY", "@ai-sdk/azure"],
+        ["google-vertex", "Google Vertex", "GOOGLE_APPLICATION_CREDENTIALS", "@ai-sdk/google-vertex"],
+        [
+          "google-vertex-anthropic",
+          "Google Vertex Anthropic",
+          "GOOGLE_APPLICATION_CREDENTIALS",
+          "@ai-sdk/google-vertex/anthropic",
+        ],
+      ].map(([id, name, environment, packageName]) => ({
+        info: {
+          id: Provider.ID.make(id),
+          name,
+          package: Provider.aisdk(packageName),
+        },
+        environment: id === "azure" ? ["AZURE_RESOURCE_NAME", environment] : [environment],
+        models: [],
+      })) satisfies readonly ModelsDev.Snapshot[]
+
+      yield* ModelsDevPlugin.effect(
+        host({
+          catalog: catalogHost(catalog),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({
+            get: () => Effect.succeed(snapshots),
+            refresh: () => Effect.void,
+          }),
+        ),
+      )
+
+      expect(yield* catalog.provider.get(Provider.ID.azure)).toBeDefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("google-vertex"))).toBeDefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("azure-cognitive-services"))).toBeUndefined()
+      expect(yield* catalog.provider.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
+      expect(yield* integrations.get(Integration.ID.make("azure"))).toBeDefined()
+      expect(yield* integrations.get(Integration.ID.make("azure"))).toMatchObject({
+        methods: [{ type: "key" }, { type: "env", names: ["AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_API_KEY"] }],
+      })
+      expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toBeDefined()
+      expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
+      expect(yield* integrations.get(Integration.ID.make("google-vertex-anthropic"))).toBeUndefined()
+      expect(ProviderPlugins.map((plugin) => plugin.id)).not.toContain("opencode.provider.azure-cognitive-services")
+      expect(ProviderPlugins.map((plugin) => plugin.id)).not.toContain("opencode.provider.google-vertex-anthropic")
+    }),
+  )
+
   it.effect("converts reasoning options into settings variants", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
@@ -389,10 +531,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const openrouter = yield* catalog.model.get(
-        Provider.ID.make("openrouter"),
-        Model.ID.make("openrouter-toggle"),
-      )
+      const openrouter = yield* catalog.model.get(Provider.ID.make("openrouter"), Model.ID.make("openrouter-toggle"))
       expect(openrouter?.variants).toEqual([
         { id: Model.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
         { id: Model.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
@@ -414,10 +553,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const vertex = yield* catalog.model.get(
-        Provider.ID.make("google-vertex"),
-        Model.ID.make("gemini-2.5-flash-lite"),
-      )
+      const vertex = yield* catalog.model.get(Provider.ID.make("google-vertex"), Model.ID.make("gemini-2.5-flash-lite"))
       expect(vertex?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),

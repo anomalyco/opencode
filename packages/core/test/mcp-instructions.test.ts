@@ -12,7 +12,7 @@ import { readInitial, readUpdate } from "./lib/instructions"
 const build = Agent.ID.make("build")
 
 const selection = (permissions: Permission.Ruleset = []) => {
-  const info = Agent.Info.make({ ...Agent.Info.empty(build), permissions })
+  const info = Agent.Info.make({ ...Agent.Info.default(build), permissions })
   return { id: info.id, info }
 }
 

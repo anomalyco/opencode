@@ -1,7 +1,18 @@
 export * as Vcs from "./vcs.js"
 
 import { Schema } from "effect"
-import { NonNegativeInt } from "./schema.js"
+import { NonNegativeInt, optional } from "./schema.js"
+
+export const Branch = Schema.Struct({
+  current: optional(Schema.String),
+  default: optional(Schema.String),
+}).annotate({ identifier: "Vcs.Branch" })
+export interface Branch extends Schema.Schema.Type<typeof Branch> {}
+
+export const Info = Schema.Struct({
+  branch: Branch,
+}).annotate({ identifier: "Vcs.Info" })
+export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 export const Mode = Schema.Literals(["working", "branch"]).annotate({ identifier: "Vcs.Mode" })
 export type Mode = typeof Mode.Type

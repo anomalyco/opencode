@@ -28,7 +28,7 @@ export function Link(props: LinkProps) {
         open(props.href).catch(() => {})
       }}
     >
-      {displayText}
+      <a href={props.href}>{displayText}</a>
     </text>
   )
 }

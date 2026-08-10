@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2/client"
+import type { PermissionRequest } from "@opencode-ai/client/promise"
 import { Persist, persisted } from "@/utils/persist"
 import type { ServerSDK } from "@/context/server-sdk"
 import type { ServerSync } from "./server-sync"
@@ -13,7 +13,6 @@ import { type DraftTab, useTabs } from "./tabs"
 import { useSettings } from "./settings"
 import { requireServerKey } from "@/utils/session-route"
 import type { ServerScope } from "@/utils/server-scope"
-import { normalizePermissionRequest } from "./global-sync/utils"
 import {
   acceptKey,
   directoryAcceptKey,
@@ -133,7 +132,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       if (draft) return draft.directory
       if (!params.id) return
       if (!global.servers.list().some((conn) => ServerConnection.key(conn) === activeServer())) return
-      return selected().sync.session.lineage.peek(params.id)?.session.directory
+      return selected().sync.session.lineage.peek(params.id)?.session.location.directory
     })
 
     createEffect(() => {
@@ -212,7 +211,6 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
   )
 
   function enableConfiguredDirectory(directory: string) {
-    if (input.sdk.protocolKind() !== "v1") return
     if (meta.disposed || !ready()) return
     const [childStore] = input.sync.child(directory)
     if (childStore.config.permission !== "allow") return
@@ -250,7 +248,6 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
         sessionID: request.sessionID,
         requestID: request.permissionID,
         reply: request.response,
-        location: request.directory ? { directory: request.directory } : undefined,
       })
       .catch(() => {
         responded.delete(request.permissionID)
@@ -258,12 +255,7 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
   }
 
   const list = async (directory: string) => {
-    if ((await input.sdk.protocol) === "v1") {
-      return (await input.sdk.client.permission.list({ directory })).data ?? []
-    }
-    return input.sdk.api.permission.request
-      .list({ location: { directory } })
-      .then((result) => result.data.map(normalizePermissionRequest))
+    return input.sdk.api.permission.request.list({ location: { directory } }).then((result) => result.data)
   }
 
   function respondOnce(permission: PermissionRequest, directory?: string) {

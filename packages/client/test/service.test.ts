@@ -70,6 +70,30 @@ test("reports a failed registered service without spawning", async () => {
   expect(process.exitCode).toBe(null)
 })
 
+test("evicts an unresponsive registered service before starting its replacement", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const existing = spawn(registration, "hanging")
+  await waitForFile(registration)
+  const original = await Bun.file(registration).json()
+
+  const endpoint = await run(
+    Service.ensure({
+      file: registration,
+      version: "test",
+      command: [process.execPath, fixture, registration, "delayed", "10"],
+    }),
+  )
+  const replacement = await Bun.file(registration).json()
+
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
+  expect(await existing.exited).toBe(0)
+  expect(replacement.pid).not.toBe(original.pid)
+  expect(endpoint.url).toBe(replacement.url)
+  expect(await health(endpoint.url)).toEqual({ healthy: true, version: "test", pid: replacement.pid })
+  process.kill(replacement.pid, "SIGTERM")
+}, 20_000)
+
 test("requests graceful stop of the exact service instance", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
@@ -136,6 +160,24 @@ test("waits for a slow winner while bounding lock probes", async () => {
     expect(endpoint.url).toBe(info.url)
     expect(await health(endpoint.url)).toEqual({ healthy: true, version: "test", pid: info.pid })
     expect((await Bun.file(registration + ".starts").text()).trim().split("\n")).toHaveLength(2)
+  } finally {
+    process.kill(info.pid, "SIGTERM")
+  }
+}, 15_000)
+
+test("waits for a live contender when another contender fails", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const endpoint = await run(
+    Service.ensure({
+      file: registration,
+      version: "test",
+      command: [process.execPath, fixture, registration, "coordinated-failed-loser"],
+    }),
+  )
+  const info = await Bun.file(registration).json()
+  try {
+    expect(endpoint.url).toBe(info.url)
   } finally {
     process.kill(info.pid, "SIGTERM")
   }

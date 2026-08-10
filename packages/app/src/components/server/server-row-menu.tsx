@@ -2,13 +2,13 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { type Component, Show } from "solid-js"
-import { useServerManagementController } from "@/components/dialog-select-server"
+import type { ServerActionsController } from "@/components/server/server-management-controller"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 
 export const ServerRowMenu: Component<{
   server: ServerConnection.Any
-  controller: ReturnType<typeof useServerManagementController>
+  domain: ServerActionsController
   onEdit: (server: ServerConnection.Http) => void
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -19,13 +19,13 @@ export const ServerRowMenu: Component<{
     <ServerRowMenuView
       server={props.server}
       labels={serverMenuLabels(language)}
-      canDefault={props.controller.canDefault()}
-      isDefault={props.controller.defaultKey() === key}
-      canRemove={props.controller.canRemove(key)}
+      canDefault={props.domain.defaults.available()}
+      isDefault={props.domain.defaults.key() === key}
+      canRemove={props.domain.connection.canRemove(key)}
       onEdit={props.onEdit}
-      onSetDefault={() => props.controller.setDefault(key)}
-      onRemoveDefault={() => props.controller.setDefault(null)}
-      onRemove={() => props.controller.handleRemove(key)}
+      onSetDefault={() => props.domain.defaults.set(key)}
+      onRemoveDefault={() => props.domain.defaults.set(null)}
+      onRemove={() => props.domain.connection.remove(key)}
       open={props.open}
       onOpenChange={props.onOpenChange}
     />

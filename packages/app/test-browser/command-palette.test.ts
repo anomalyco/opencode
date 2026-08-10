@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Project } from "@opencode-ai/sdk/v2/client"
+import type { Project } from "@/types"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { createRoot } from "solid-js"
 import { createServerSessionEntries } from "@/components/command-palette"

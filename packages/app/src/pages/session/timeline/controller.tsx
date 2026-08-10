@@ -1,4 +1,4 @@
-import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2"
+import type { Message, Part, UserMessage } from "@/types"
 import { Button } from "@opencode-ai/ui/button"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
@@ -10,7 +10,6 @@ import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useServerSDK } from "@/context/server-sdk"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -18,6 +17,7 @@ import { useTabs } from "@/context/tabs"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { sessionTitle } from "@/utils/session-title"
+import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { showToast } from "@/utils/toast"
 import { timelineChildTitle, timelineRemovedSessionIDs } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
@@ -37,7 +37,6 @@ const taskDescription = (part: Part, sessionID: string): string | undefined => {
 
 export function createTimelineController(input: { userMessages: Accessor<UserMessage[]> }) {
   const navigate = useNavigate()
-  const serverSDK = useServerSDK()
   const sdk = useSDK()
   const sync = useSync()
   const settings = useSettings()
@@ -59,7 +58,9 @@ export function createTimelineController(input: { userMessages: Accessor<UserMes
     const visible = new Set(input.userMessages().map((message) => message.id))
     const boundary = messages().find((message) => message.role === "user" && !visible.has(message.id))?.id
     const projected = sync().data.session_message[id] ?? []
-    return boundary ? projected.filter((message) => message.id < boundary) : projected
+    if (!boundary) return projected
+    const index = projected.findIndex((message) => message.id === boundary)
+    return index < 0 ? projected : projected.slice(0, index)
   })
   const info = createMemo(() => {
     const id = sessionID()
@@ -67,8 +68,8 @@ export function createTimelineController(input: { userMessages: Accessor<UserMes
   })
   const titleValue = createMemo(() => info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
-  const shareUrl = createMemo(() => info()?.share?.url)
-  const shareEnabled = createMemo(() => sync().data.config.share !== "disabled")
+  const shareUrl = (): string | undefined => undefined
+  const shareEnabled = () => false
   const parentID = createMemo(() => info()?.parentID)
   const parent = createMemo(() => {
     const id = parentID()
@@ -143,20 +144,10 @@ export function createTimelineController(input: { userMessages: Accessor<UserMes
   const share = async () => {
     const id = sessionID()
     if (!id || pending.share || !shareEnabled()) return
-    setPending("share", true)
-    await serverSDK()
-      .client.session.share({ sessionID: id })
-      .catch((error) => console.error("Failed to share session", error))
-    setPending("share", false)
   }
   const unshare = async () => {
     const id = sessionID()
     if (!id || pending.unshare || !shareEnabled()) return
-    setPending("unshare", true)
-    await serverSDK()
-      .client.session.unshare({ sessionID: id })
-      .catch((error) => console.error("Failed to unshare session", error))
-    setPending("unshare", false)
   }
   const href = (id: string) =>
     params.serverKey ? sessionHref(requireServerKey(params.serverKey), id) : legacySessionHref(sdk().directory, id)
@@ -168,25 +159,24 @@ export function createTimelineController(input: { userMessages: Accessor<UserMes
       return tabs.newDraft({ server: requireServerKey(params.serverKey), directory: sdk().directory })
     navigate(`/${params.dir}/session`)
   }
-  const archive = async (id: string) => {
-    const session = sync().session.get(id)
-    if (!session || (await sdk().protocol) !== "v1") return
-    const index = sync().data.session.findIndex((item) => item.id === id)
-    const next = index === -1 ? undefined : (sync().data.session[index + 1] ?? sync().data.session[index - 1])
-    await sdk()
-      .client.session.update({ sessionID: id, directory: sdk().directory, time: { archived: Date.now() } })
-      .then(() => {
-        sync().set(
-          produce((draft) => {
-            const index = draft.session.findIndex((item) => item.id === id)
-            if (index !== -1) draft.session.splice(index, 1)
-          }),
-        )
-        sync().session.evict(id)
-        void navigateAfterRemoval(id, session.parentID, next?.id)
-        notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [id] })
+  const exportSession = async (id: string) => {
+    try {
+      const data = await fetchSessionExport({ sessionID: id, api: sdk().api })
+      const filename = sessionExportFilename(data.info)
+      downloadSessionExport(filename, data)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("toast.session.export.success.title"),
+        description: language.t("toast.session.export.success.description", { filename }),
       })
-      .catch((error) => showToast({ title: language.t("common.requestFailed"), description: errorMessage(error) }))
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.export.failed.title"),
+        description: error instanceof Error ? error.message : language.t("toast.session.export.failed.description"),
+      })
+    }
   }
   const remove = async (id: string) => {
     const session = sync().session.get(id)
@@ -299,7 +289,7 @@ export function createTimelineController(input: { userMessages: Accessor<UserMes
       rename,
       share,
       unshare,
-      archive,
+      export: exportSession,
       showDelete: (id: string) => dialog.show(() => <DeleteDialog sessionID={id} />),
       navigateParent: () => {
         const id = parentID()
@@ -307,7 +297,7 @@ export function createTimelineController(input: { userMessages: Accessor<UserMes
       },
       viewShare: () => {
         const url = shareUrl()
-        if (url) platform.openLink(url)
+        if (url) platform.openExternal(url)
       },
       copyShareUrl: async () => {
         const url = shareUrl()

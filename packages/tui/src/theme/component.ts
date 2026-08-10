@@ -1,41 +1,48 @@
 import type { RGBA } from "@opentui/core"
 import type { Accessor } from "solid-js"
-import type { Mode, ResolvedThemeView } from "@opencode-ai/theme/tui"
+import type { Mode, ResolvedTheme, ResolvedThemeTokens } from "@opencode-ai/theme/tui"
 
-export function createComponentTheme(current: Accessor<ResolvedThemeView>, mode: Accessor<Mode>) {
-  return {
+export function createComponentTheme(current: Accessor<ResolvedTheme>, mode: Accessor<Mode>) {
+  const create = (view: Accessor<ResolvedThemeTokens>) => ({
     get hue() {
-      return current().hue
+      return view().hue
     },
     get categorical() {
-      return current().categorical
+      return view().categorical
     },
     get text() {
-      return current().text
+      return view().text
     },
     get background() {
-      return current().background
+      return view().background
     },
     get border() {
-      return current().border
+      return view().border
     },
     get scrollbar() {
-      return current().scrollbar
+      return view().scrollbar
     },
     get diff() {
-      return current().diff
+      return view().diff
     },
     get syntax() {
-      return current().syntax
+      return view().syntax
     },
     get markdown() {
-      return current().markdown
+      return view().markdown
     },
-    source: (color: RGBA) => current().source(color),
-    increase: (color: RGBA, amount = 1) => current().increase(color, amount),
-    decrease: (color: RGBA, amount = 1) => current().decrease(color, amount),
-    raise: (color: RGBA) => (mode() === "light" ? current().increase(color) : current().decrease(color)),
-  }
+    source: (color: RGBA) => view().source(color),
+    increase: (color: RGBA, amount = 1) => view().increase(color, amount),
+    decrease: (color: RGBA, amount = 1) => view().decrease(color, amount),
+    raise: (color: RGBA) => (mode() === "light" ? view().increase(color) : view().decrease(color)),
+  })
+
+  return Object.assign(create(current), {
+    contextual: {
+      elevated: create(() => current().contextual.elevated),
+      overlay: create(() => current().contextual.overlay),
+    },
+  })
 }
 
 export type ComponentTheme = ReturnType<typeof createComponentTheme>

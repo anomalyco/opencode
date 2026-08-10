@@ -305,11 +305,13 @@ describe("LocationServiceMap", () => {
           )
           yield* Deferred.await(started)
 
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
+          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
             Effect.provide(context),
-            Effect.timeout("1 second"),
+            Effect.forkChild({ startImmediately: true }),
           )
+          expect(flushFiber.pollUnsafe()).toBeUndefined()
           yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(flushFiber)
           yield* Deferred.await(completed)
         }),
       ),
@@ -661,6 +663,50 @@ describe("LocationServiceMap", () => {
             providerID: "unavailable",
             modelID: "chat",
           })
+        }),
+      ),
+    ),
+  )
+
+  it.live("explains replacements for unavailable legacy provider models", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          for (const [providerID, replacement] of [
+            ["azure-cognitive-services", "azure"],
+            ["google-vertex-anthropic", "google-vertex"],
+          ] as const) {
+            const failure = yield* SessionRunnerModel.Service.use((models) =>
+              models.resolve(
+                Session.Info.make({
+                  id: Session.ID.make(`ses_removed_${providerID}`),
+                  projectID: Project.ID.global,
+                  title: "test",
+                  model: {
+                    id: Model.ID.make("chat"),
+                    providerID: Provider.ID.make(providerID),
+                  },
+                  cost: Money.USD.zero,
+                  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                  time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                  location,
+                }),
+              ),
+            ).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
+
+            expect(failure).toMatchObject({
+              _tag: "SessionRunnerModel.ModelUnavailableError",
+              providerID,
+              modelID: "chat",
+            })
+            expect(failure.message).toBe(
+              `Model unavailable: ${providerID}/chat. This provider has been deprecated; use ${replacement}/chat instead.`,
+            )
+          }
         }),
       ),
     ),

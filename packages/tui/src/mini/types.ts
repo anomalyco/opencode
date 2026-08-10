@@ -23,6 +23,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import type { Config } from "../config"
 import type { CliRenderer } from "@opentui/core"
+import type { SessionPending } from "@opencode-ai/schema/session-pending"
 
 export type RunFilePart = {
   type: "file"
@@ -46,6 +47,7 @@ export type RunPromptPart =
       }
     }
   | { type: "agent"; name: string; source?: { start: number; end: number; value: string } }
+  | { type: "skill"; id: string; source?: { start: number; end: number; value: string } }
 
 export type RunCommand = {
   name: string
@@ -71,10 +73,13 @@ export type RunProvider = {
   models: Record<string, RunProviderModel>
 }
 
+export type RunDelivery = SessionPending.Delivery
+
 export type RunPrompt = {
   messageID?: string
   text: string
   parts: RunPromptPart[]
+  delivery?: RunDelivery
   mode?: "shell"
   command?: {
     name: string
@@ -87,9 +92,10 @@ export type RunPrompt = {
 export type FooterQueuedPrompt = {
   messageID: string
   prompt: RunPrompt
-  delivery: "steer" | "queue"
-  admittedSeq: number
+  delivery: RunDelivery
 }
+
+export type QueuedPromptAction = "steer" | "cancel"
 
 export type RunAgent = {
   id: string
@@ -245,11 +251,11 @@ type MiniToolState =
 // Retained only for the noninteractive run JSON/V1 compatibility boundary.
 // Interactive Mini commits carry SessionMessageAssistantTool directly.
 export type MiniToolPart = {
-  id: string
+  partID: string
   sessionID: string
   messageID: string
   type?: "tool"
-  callID: string
+  id: string
   tool: string
   state: MiniToolState
 }

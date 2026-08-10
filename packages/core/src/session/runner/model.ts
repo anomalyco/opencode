@@ -1,7 +1,7 @@
 export * as SessionRunnerModel from "./model"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Model } from "@opencode-ai/ai"
+import { LanguageModel } from "@opencode-ai/ai"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Catalog } from "../../catalog"
 import { ModelResolver } from "../../model-resolver"
@@ -23,6 +23,10 @@ export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavaila
   { providerID: Provider.ID, modelID: ID },
 ) {
   override get message() {
+    if (this.providerID === "azure-cognitive-services")
+      return `Model unavailable: ${this.providerID}/${this.modelID}. This provider has been deprecated; use azure/${this.modelID} instead.`
+    if (this.providerID === "google-vertex-anthropic")
+      return `Model unavailable: ${this.providerID}/${this.modelID}. This provider has been deprecated; use google-vertex/${this.modelID} instead.`
     return `Model unavailable: ${this.providerID}/${this.modelID}`
   }
 }
@@ -42,7 +46,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 /** Builds a Resolved whose catalog identity mirrors the route model. Test or embedding seam. */
 export const resolved = (
-  model: Model,
+  model: LanguageModel,
   options: {
     readonly capabilities: Capabilities
     readonly variant?: VariantID

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260511173437_session-metadata",
   up(tx) {
     return Effect.gen(function* () {
@@ -13,4 +13,6 @@ export default {
       yield* tx.run(`ALTER TABLE \`session\` ADD \`metadata\` text;`)
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration

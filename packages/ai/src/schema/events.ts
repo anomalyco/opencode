@@ -1,6 +1,5 @@
 import { Schema } from "effect"
-import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, RouteID, ToolCallID } from "./ids"
-import { ModelSchema } from "./options"
+import { ContentBlockID, FinishReason, ProviderMetadata, ToolCallID } from "./ids"
 import { Message, ToolCallPart, ToolOutput, ToolResultPart, ToolResultValue, type ContentPart } from "./messages"
 import { ProviderFailureClassification } from "./errors"
 
@@ -49,7 +48,7 @@ import { ProviderFailureClassification } from "./errors"
  * — for fields we don't normalize and for billing-level audit trails.
  * Matches the same escape-hatch field on `LLMEvent`.
  */
-export class Usage extends Schema.Class<Usage>("LLM.Usage")({
+export class Usage extends Schema.Class<Usage>("AI.Usage")({
   inputTokens: Schema.optional(Schema.Number),
   outputTokens: Schema.optional(Schema.Number),
   nonCachedInputTokens: Schema.optional(Schema.Number),
@@ -313,29 +312,6 @@ export const LLMEvent = Object.assign(llmEventTagged, {
   },
 })
 export type LLMEvent = Schema.Schema.Type<typeof llmEventTagged>
-
-export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.PreparedRequest")({
-  id: Schema.String,
-  route: RouteID,
-  protocol: ProtocolID,
-  model: ModelSchema,
-  body: Schema.Unknown,
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}) {}
-
-/**
- * A `PreparedRequest` whose `body` is typed as `Body`. Use with the generic
- * on `LLMClient.prepare<Body>(...)` when the caller knows which route their
- * request will resolve to and wants its native shape statically exposed
- * (debug UIs, request previews, plan rendering).
- *
- * The runtime body is identical — the route still emits `body: unknown` — so
- * this is a type-level assertion the caller makes about what they expect to
- * find. The prepare runtime does not validate the assertion.
- */
-export type PreparedRequestOf<Body> = Omit<PreparedRequest, "body"> & {
-  readonly body: Body
-}
 
 const responseText = (events: ReadonlyArray<LLMEvent>) =>
   events

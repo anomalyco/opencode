@@ -44,8 +44,8 @@ Setting `OPENCODE_DISABLE_PROJECT_CONFIG=1` also skips project `AGENTS.md`
 discovery but does not disable the global file.
 
 <Callout type="note">
-  Current V2 discovery only recognizes `AGENTS.md`. The `CLAUDE.md` fallback
-  and related precedence described by older OpenCode documentation do not apply.
+  Current V2 discovery only recognizes `AGENTS.md`. The `CLAUDE.md` fallback and related precedence described by older
+  OpenCode documentation do not apply.
 </Callout>
 
 ### Nested instructions
@@ -68,11 +68,7 @@ The V2 config schema accepts an `instructions` array of strings:
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": [
-    "CONTRIBUTING.md",
-    "docs/guidelines/*.md",
-    "https://example.com/shared-instructions.md"
-  ]
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", "https://example.com/shared-instructions.md"],
 }
 ```
 
@@ -81,11 +77,10 @@ one config defines `instructions`, the highest-precedence, closest config's
 entire array is selected; arrays are not merged.
 
 <Callout type="warning">
-  V2 currently parses and retains this field but does not resolve its entries
-  into instruction sources. Local files, glob patterns, and HTTP or HTTPS URLs
-  in `instructions` therefore do not reach the model yet. Use `AGENTS.md` for
-  active V2 instructions. URL fetching and timeout behavior documented for V1
-  are not supported by the current V2 implementation.
+  V2 currently parses and retains this field but does not resolve its entries into instruction sources. Local files,
+  glob patterns, and HTTP or HTTPS URLs in `instructions` therefore do not reach the model yet. Use `AGENTS.md` for
+  active V2 instructions. URL fetching and timeout behavior documented for V1 are not supported by the current V2
+  implementation.
 </Callout>
 
 See [Config](/config) for config locations and general precedence.

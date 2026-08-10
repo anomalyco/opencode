@@ -18,7 +18,7 @@ const Files = Schema.Array(File)
 const key = Instructions.Key.make("core/instructions")
 
 export interface Interface {
-  readonly load: () => Effect.Effect<Instructions.Instructions>
+  readonly load: () => Effect.Effect<Instructions.List>
 }
 
 export const Options = Schema.Struct({
@@ -28,74 +28,76 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionDiscovery") {}
 
-export const layer = (options?: Options) => Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    const global = yield* Global.Service
-    const location = yield* Location.Service
+export const layer = (options?: Options) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const global = yield* Global.Service
+      const location = yield* Location.Service
 
-    const source = (value: ReadonlyArray<File> | Instructions.Unavailable | Instructions.Removed) =>
-      Instructions.make<ReadonlyArray<File>>({
-        key,
-        codec: Schema.toCodecJson(Files),
-        read: Effect.succeed(value),
-        render: {
-          initial: render,
-          changed: (_previous, current) =>
-            `These instructions replace all previously loaded ambient instructions.\n\n${render(current)}`,
-          removed: () => "Previously loaded instructions no longer apply.",
-        },
+      const source = (value: ReadonlyArray<File> | Instructions.Unavailable | Instructions.Removed) =>
+        Instructions.make<ReadonlyArray<File>>({
+          key,
+          codec: Schema.toCodecJson(Files),
+          read: Effect.succeed(value),
+          render: {
+            initial: render,
+            changed: (_previous, current) =>
+              `These instructions replace all previously loaded ambient instructions.\n\n${render(current)}`,
+            removed: () => "Previously loaded instructions no longer apply.",
+          },
+        })
+
+      const observe = Effect.fn("InstructionDiscovery.observe")(function* () {
+        const start = yield* fs.resolve(location.directory)
+        const stop = yield* fs.resolve(location.project.directory)
+        const fromProject = relative(stop, start)
+        const insideProject =
+          fromProject === "" ||
+          (fromProject !== ".." && !fromProject.startsWith(`..${sep}`) && !isAbsolute(fromProject))
+        const discovered = new Set(
+          yield* Effect.forEach(
+            options?.project === false || !insideProject
+              ? []
+              : yield* fs.up({
+                  targets: ["AGENTS.md"],
+                  start,
+                  stop,
+                }),
+            fs.resolve,
+          ),
+        )
+        const paths = Array.dedupe([yield* fs.resolve(join(global.config, "AGENTS.md")), ...discovered])
+        const files = yield* Effect.forEach(
+          paths,
+          (path) =>
+            fs
+              .readFileStringSafe(path)
+              .pipe(
+                Effect.map((content) =>
+                  content === undefined ? undefined : new File({ path: AbsolutePath.make(path), content }),
+                ),
+              ),
+          { concurrency: "unbounded" },
+        )
+        if (files.some((file, index) => file === undefined && discovered.has(paths[index])))
+          return Instructions.unavailable
+        return files.filter((file): file is File => file !== undefined)
       })
 
-    const observe = Effect.fn("InstructionDiscovery.observe")(function* () {
-      const start = yield* fs.resolve(location.directory)
-      const stop = yield* fs.resolve(location.project.directory)
-      const fromProject = relative(stop, start)
-      const insideProject =
-        fromProject === "" || (fromProject !== ".." && !fromProject.startsWith(`..${sep}`) && !isAbsolute(fromProject))
-      const discovered = new Set(
-        yield* Effect.forEach(
-          options?.project === false || !insideProject
-            ? []
-            : yield* fs.up({
-                targets: ["AGENTS.md"],
-                start,
-                stop,
-              }),
-          fs.resolve,
-        ),
-      )
-      const paths = Array.dedupe([yield* fs.resolve(join(global.config, "AGENTS.md")), ...discovered])
-      const files = yield* Effect.forEach(
-        paths,
-        (path) =>
-          fs
-            .readFileStringSafe(path)
-            .pipe(
-              Effect.map((content) =>
-                content === undefined ? undefined : new File({ path: AbsolutePath.make(path), content }),
-              ),
+      return Service.of({
+        load: () =>
+          observe().pipe(
+            Effect.map((files) =>
+              Array.isArray(files) && files.length === 0 ? source(Instructions.removed) : source(files),
             ),
-        { concurrency: "unbounded" },
-      )
-      if (files.some((file, index) => file === undefined && discovered.has(paths[index])))
-        return Instructions.unavailable
-      return files.filter((file): file is File => file !== undefined)
-    })
-
-    return Service.of({
-      load: () =>
-        observe().pipe(
-          Effect.map((files) =>
-            Array.isArray(files) && files.length === 0 ? source(Instructions.removed) : source(files),
+            Effect.catch(() => Effect.succeed(source(Instructions.unavailable))),
+            Effect.catchDefect(() => Effect.succeed(source(Instructions.unavailable))),
           ),
-          Effect.catch(() => Effect.succeed(source(Instructions.unavailable))),
-          Effect.catchDefect(() => Effect.succeed(source(Instructions.unavailable))),
-        ),
-    })
-  }),
-)
+      })
+    }),
+  )
 
 export function configured(options?: Options) {
   return makeLocationNode({

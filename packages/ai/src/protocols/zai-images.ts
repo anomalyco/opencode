@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { GeneratedImage, ImageModel, ImageResponse, type ImageRequestFor, type ImageRoute } from "../image"
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
-import { InvalidProviderOutputReason, LLMError, mergeHttpOptions, mergeJsonRecords, type HttpOptions } from "../schema"
+import { InvalidProviderOutputReason, AIError, mergeHttpOptions, mergeJsonRecords, type HttpOptions } from "../schema"
 import { ProviderShared } from "./shared"
 import { ImageInputs } from "./utils/image-input"
 
@@ -58,7 +58,7 @@ const nativeOptions = (options: ZAIImageOptions | undefined) => {
 }
 
 const invalidOutput = (message: string) =>
-  new LLMError({
+  new AIError({
     module: ADAPTER,
     method: "generate",
     reason: new InvalidProviderOutputReason({ message, route: ADAPTER }),

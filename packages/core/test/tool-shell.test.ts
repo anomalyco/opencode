@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import { realpathSync } from "node:fs"
+import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { DateTime, Deferred, Duration, Effect, Fiber, Layer, Scope, Stream } from "effect"
@@ -29,6 +30,7 @@ import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Shell } from "@opencode-ai/core/shell"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { ShellTool } from "@opencode-ai/core/tool/plugin/shell"
+import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -157,6 +159,9 @@ const mixedOutputCommand = isWindows
   ? "[Console]::Out.Write('stdout'); Start-Sleep -Milliseconds 50; [Console]::Error.Write('stderr'); Start-Sleep -Milliseconds 100"
   : "printf stdout; sleep 0.05; printf stderr >&2"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
+const timeoutOutputCommand = isWindows
+  ? "[Console]::Out.Write('before timeout'); Start-Sleep -Seconds 60"
+  : "printf 'before timeout'; sleep 60"
 const steadyProgressCommand = isWindows
   ? "[Console]::Out.Write('steady'); Start-Sleep -Milliseconds 3400"
   : "printf steady; sleep 3.4"
@@ -167,6 +172,9 @@ const overflowCommand = (bytes: number) =>
   isWindows
     ? `[Console]::Out.Write('output-start' + ('x' * ${bytes}) + 'output-end'); Start-Sleep -Milliseconds 100`
     : `printf output-start; head -c ${bytes} /dev/zero | tr '\\0' 'x'; printf output-end`
+const lineOverflowCommand = isWindows
+  ? "[Console]::Out.Write('one' + [Environment]::NewLine + 'two' + [Environment]::NewLine + 'three')"
+  : "printf 'one\\ntwo\\nthree'"
 const progressOverflowCommand = (bytes: number, release: string) =>
   isWindows
     ? `[Console]::Out.Write(('x' * ${bytes})); while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }`
@@ -219,7 +227,10 @@ describe("ShellTool", () => {
               type: "text",
               text: expect.stringContaining("Command exited with code 0."),
             })
-            expect(assertions).toMatchObject([{ sessionID, action: "shell", resources: [helloCommand] }])
+            expect(assertions).toMatchObject([
+              { sessionID, action: "shell", resources: [isWindows ? "Start-Sleep -Milliseconds 100" : helloCommand] },
+            ])
+            expect(assertions[0]?.save).toEqual([isWindows ? "Start-Sleep *" : "printf *"])
           }),
         )
       },
@@ -250,27 +261,78 @@ describe("ShellTool", () => {
     ),
   )
 
-  it.live("captures stderr-only and mixed stdout/stderr output", () =>
+  it.live("reports a missing workdir", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
         reset()
         return withSession(tmp.path, (registry) =>
-          Effect.gen(function* () {
-            const stderr = yield* executeTool(registry, call({ command: stderrCommand }, "call-stderr"))
-            expect(stderr.metadata).toMatchObject({ exit: 0, truncated: false })
-            expect(stderr.content?.[0]).toEqual({ type: "text", text: "stderr only" })
-
-            const mixed = yield* executeTool(registry, call({ command: mixedOutputCommand }, "call-mixed"))
-            expect(mixed.metadata).toMatchObject({ exit: 0, truncated: false })
-            const output = mixed.content?.[0]?.type === "text" ? mixed.content[0].text : ""
-            expect(output).toContain("stdout")
-            expect(output).toContain("stderr")
-          }),
+          executeTool(registry, call({ command: cwdCommand, workdir: "missing" })),
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() =>
+              expect(settled).toEqual({
+                status: "error",
+                error: {
+                  type: "unknown",
+                  message: `Working directory does not exist: ${path.join(tmp.path, "missing")}`,
+                },
+              }),
+            ),
+          ),
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
+  )
+
+  it.live("permissions compound commands separately", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          executeTool(registry, call({ command: "printf one && printf two" }, "call-compound")),
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions).toHaveLength(1)
+              expect(assertions[0]).toMatchObject({
+                resources: ["printf one", "printf two"],
+                save: ["printf *", "printf *"],
+              })
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
+  it.live(
+    "captures stderr-only and mixed stdout/stderr output",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const stderr = yield* executeTool(registry, call({ command: stderrCommand }, "call-stderr"))
+              expect(stderr.metadata).toMatchObject({ exit: 0, truncated: false })
+              expect(stderr.content?.[0]).toEqual({ type: "text", text: "stderr only" })
+
+              const mixed = yield* executeTool(registry, call({ command: mixedOutputCommand }, "call-mixed"))
+              expect(mixed.metadata).toMatchObject({ exit: 0, truncated: false })
+              const output = mixed.content?.[0]?.type === "text" ? mixed.content[0].text : ""
+              expect(output).toContain("stdout")
+              expect(output).toContain("stderr")
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
   )
 
   it.live("rejects a workdir that stops being a directory during approval", () =>
@@ -322,6 +384,53 @@ describe("ShellTool", () => {
     ),
   )
 
+  it.live("approves an external directory used by a directory-change command", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        const command = isWindows
+          ? `Set-Location -LiteralPath '${outside.path}'; (Get-Location).Path`
+          : `cd '${outside.path}' && pwd`
+        return withSession(active.path, (registry) =>
+          executeTool(registry, call({ command }, "call-external-cd")),
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
+              expect(assertions[0]).toMatchObject({
+                resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
+              })
+            }),
+          ),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
+    ),
+  )
+
+  it.live("approves an expanded external home directory", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const command = isWindows ? "Set-Location $HOME; (Get-Location).Path" : "cd ~ && pwd"
+        return withSession(tmp.path, (registry) => executeTool(registry, call({ command }, "call-external-home"))).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
+              expect(assertions[0]?.resources[0]).toStartWith(os.homedir().replaceAll("\\", "/"))
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   it.live("does not execute after external-directory or shell denial", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
@@ -339,33 +448,6 @@ describe("ShellTool", () => {
           yield* withSession(active.path, (registry) => executeTool(registry, call({ command: cwdCommand })))
           expect(assertions.map((item) => item.action)).toEqual(["shell"])
         }),
-      ([active, outside]) =>
-        Effect.promise(() =>
-          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
-        ),
-    ),
-  )
-
-  it.live("reports external command arguments as advisory warnings without enforcing approval", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
-      ([active, outside]) => {
-        reset()
-        denyAction = "external_directory"
-        const target = path.join(outside.path, "secret.txt")
-        return withSession(active.path, (registry) => executeTool(registry, call({ command: `cat ${target}` }))).pipe(
-          Effect.andThen((settled) =>
-            Effect.sync(() => {
-              expect(assertions.map((item) => item.action)).toEqual(["shell"])
-              expect(settled.metadata).not.toHaveProperty("warnings")
-              expect(settled.content?.[1]).toMatchObject({
-                type: "text",
-                text: expect.stringContaining("Warnings:"),
-              })
-            }),
-          ),
-        )
-      },
       ([active, outside]) =>
         Effect.promise(() =>
           Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
@@ -398,29 +480,60 @@ describe("ShellTool", () => {
     ),
   )
 
-  it.live("truncates the model view and points at the saved output file when output overflows", () =>
+  it.live(
+    "truncates the model view and points at the saved output file when output overflows",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          const bytes = ToolOutput.MAX_BYTES + 1024
+          return withSession(tmp.path, (registry) =>
+            executeTool(registry, call({ command: overflowCommand(bytes) }, "call-overflow")),
+          ).pipe(
+            Effect.andThen((settled) =>
+              Effect.sync(() => {
+                expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
+                const content = settled.content?.[0]
+                if (!content || content.type !== "text") throw new Error("Expected text content")
+                expect(content.text.includes("output-start")).toBe(false)
+                expect(content.text.includes("output-end")).toBe(true)
+                expect(content).toMatchObject({
+                  type: "text",
+                  text: expect.stringContaining("output truncated; full output saved to:"),
+                })
+              }),
+            ),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
+  it.live("uses configured line limits", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
         reset()
-        const bytes = ShellTool.MAX_CAPTURE_BYTES + 1024
-        return withSession(tmp.path, (registry) =>
-          executeTool(registry, call({ command: overflowCommand(bytes) }, "call-overflow")),
-        ).pipe(
-          Effect.andThen((settled) =>
-            Effect.sync(() => {
-              expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
-              const content = settled.content?.[0]
-              if (!content || content.type !== "text") throw new Error("Expected text content")
-              expect(content.text.includes("output-start")).toBe(false)
-              expect(content.text.includes("output-end")).toBe(true)
-              expect(content).toMatchObject({
-                type: "text",
-                text: expect.stringContaining("output truncated; full output saved to:"),
-              })
-            }),
-          ),
-        )
+        return Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({ tool_output: { max_lines: 2, max_bytes: 1_000 } }),
+            ),
+          )
+          const settled = yield* withSession(tmp.path, (registry) =>
+            executeTool(registry, call({ command: lineOverflowCommand }, "call-line-overflow")),
+          )
+          expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
+          const content = settled.content?.[0]
+          if (!content || content.type !== "text") throw new Error("Expected text content")
+          expect(content.text).not.toContain("one")
+          // Windows shells emit CRLF; the assertion targets line limits, not line endings.
+          expect(content.text.replaceAll("\r\n", "\n")).toStartWith("two\nthree")
+          expect(content.text).toContain("output truncated; full output saved to:")
+        })
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
@@ -439,10 +552,7 @@ describe("ShellTool", () => {
             Effect.gen(function* () {
               const observed = yield* Deferred.make<string>()
               yield* executeTool(registry, {
-                ...call(
-                  { command: progressOverflowCommand(ShellTool.MAX_CAPTURE_BYTES + 1024, release) },
-                  "call-progress",
-                ),
+                ...call({ command: progressOverflowCommand(ToolOutput.MAX_BYTES + 1024, release) }, "call-progress"),
                 progress: (update) =>
                   Effect.gen(function* () {
                     if (typeof update.shellID !== "string") return
@@ -484,27 +594,34 @@ describe("ShellTool", () => {
     { timeout: 10_000 },
   )
 
-  it.live("returns a useful timeout outcome", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => {
-        reset()
-        return withSession(tmp.path, (registry) =>
-          executeTool(registry, call({ command: idleCommand, timeout: 50 })),
-        ).pipe(
-          Effect.andThen((settled) =>
-            Effect.sync(() => {
-              expect(settled.metadata).toMatchObject({ timeout: true, truncated: false })
-              expect(settled.content?.[1]).toMatchObject({
-                type: "text",
-                text: expect.stringContaining("Command timed out"),
-              })
-            }),
-          ),
-        )
-      },
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
-    ),
+  it.live(
+    "returns a useful timeout outcome",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            executeTool(registry, call({ command: timeoutOutputCommand, timeout: isWindows ? 3_000 : 50 })),
+          ).pipe(
+            Effect.andThen((settled) =>
+              Effect.sync(() => {
+                expect(settled.metadata).toMatchObject({ timeout: true, truncated: false })
+                expect(settled.content?.[0]).toMatchObject({
+                  type: "text",
+                  text: expect.stringContaining("before timeout"),
+                })
+                expect(settled.content?.[1]).toMatchObject({
+                  type: "text",
+                  text: expect.stringContaining("Command timed out"),
+                })
+              }),
+            ),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
   )
 
   it.live("returns the shell id for a background command", () =>

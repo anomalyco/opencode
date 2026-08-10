@@ -6,11 +6,11 @@ description: ""
 OpenCode can add local context to a prompt as text or image media. Current V2
 sessions make these attachment types visible to the model:
 
-| Input | Model receives |
-| --- | --- |
-| UTF-8 text file | The filename and decoded text |
-| Directory | A non-recursive listing of its immediate files and directories |
-| PNG, JPEG, GIF, or WebP | Image media |
+| Input                   | Model receives                                                 |
+| ----------------------- | -------------------------------------------------------------- |
+| UTF-8 text file         | The filename and decoded text                                  |
+| Directory               | A non-recursive listing of its immediate files and directories |
+| PNG, JPEG, GIF, or WebP | Image media                                                    |
 
 SVG files are treated as text, not image media. PDF, AVIF, BMP, audio, video,
 and other binary prompt attachments are not currently included in the model
@@ -18,10 +18,9 @@ request. Some clients may let you select a PDF, but V2 does not yet make that
 PDF visible to the model.
 
 <Callout type="warning">
-  Use a model that supports image input before attaching an image. OpenCode
-  passes supported image media to the selected provider, but the provider and
-  model still enforce their own formats, dimensions, file counts, and size
-  limits. A text-only model may reject the request.
+  Use a model that supports image input before attaching an image. OpenCode passes supported image media to the selected
+  provider, but the provider and model still enforce their own formats, dimensions, file counts, and size limits. A
+  text-only model may reject the request.
 </Callout>
 
 ## Add attachments
@@ -111,31 +110,30 @@ Configure image normalization in `opencode.json` or `opencode.jsonc`:
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "attachments": {
+  "media": {
     "image": {
       "auto_resize": true,
       "max_width": 2000,
       "max_height": 2000,
-      "max_base64_bytes": 5242880
-    }
-  }
+      "max_base64_bytes": 5242880,
+    },
+  },
 }
 ```
 
 All fields are optional:
 
-| Field | Default | Behavior |
-| --- | ---: | --- |
-| `auto_resize` | `true` | Resize an image that exceeds any configured limit. If `false`, reject it. |
-| `max_width` | `2000` | Maximum width in pixels. Must be a positive integer. |
-| `max_height` | `2000` | Maximum height in pixels. Must be a positive integer. |
+| Field              |   Default | Behavior                                                                            |
+| ------------------ | --------: | ----------------------------------------------------------------------------------- |
+| `auto_resize`      |    `true` | Resize an image that exceeds any configured limit. If `false`, reject it.           |
+| `max_width`        |    `2000` | Maximum width in pixels. Must be a positive integer.                                |
+| `max_height`       |    `2000` | Maximum height in pixels. Must be a positive integer.                               |
 | `max_base64_bytes` | `5242880` | Maximum byte length of the Base64-encoded image string. Must be a positive integer. |
 
 <Callout type="note">
-  In the current V2 runtime, these settings apply to image media produced by
-  the built-in `read` tool. Images attached directly through the TUI, desktop,
-  web, CLI, or API bypass this normalization. Resize direct attachments before
-  adding them if the provider requires smaller media.
+  In the current V2 runtime, these settings apply to image media produced by the built-in `read` tool. Images attached
+  directly through the TUI, desktop, web, CLI, or API bypass this normalization. Resize direct attachments before adding
+  them if the provider requires smaller media.
 </Callout>
 
 The `read` tool recognizes PNG, JPEG, GIF, and WebP by their contents and will

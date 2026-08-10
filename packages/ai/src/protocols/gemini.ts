@@ -25,13 +25,46 @@ import { ToolSchemaProjection } from "./utils/tool-schema"
 
 const ADAPTER = "gemini"
 const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
+// Google documents this sentinel for replaying Gemini 3 function calls after their original signature was lost.
+const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+// Gemini 3 rejects replayed function calls without a thought signature. Google's SDKs avoid that in normal chats by
+// retaining complete model responses, but OpenCode reconstructs durable history and may encounter an unsigned call
+// from an older or external session. Model IDs are open-ended, so unknown Gemini aliases inherit current behavior.
+const requiresThoughtSignatureFallback = (modelID: string) => {
+  if (!/(^|\/)gemini-/i.test(modelID)) return false
+  if (/(^|\/)gemini-(?:1|2)(?:[.-]|$)/i.test(modelID)) return false
+  if (/(^|\/)gemini-pro(?:-vision)?$/i.test(modelID)) return false
+  return !/(^|\/)gemini-robotics-er-1\.5(?:[.-]|$)/i.test(modelID)
+}
 
 export interface OptionsInput {
   readonly [key: string]: unknown
+  readonly cachedContent?: string
+  readonly safetySettings?: ReadonlyArray<{
+    readonly category:
+      | "HARM_CATEGORY_UNSPECIFIED"
+      | "HARM_CATEGORY_HATE_SPEECH"
+      | "HARM_CATEGORY_DANGEROUS_CONTENT"
+      | "HARM_CATEGORY_HARASSMENT"
+      | "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+      | "HARM_CATEGORY_CIVIC_INTEGRITY"
+      | (string & {})
+    readonly threshold:
+      | "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
+      | "BLOCK_LOW_AND_ABOVE"
+      | "BLOCK_MEDIUM_AND_ABOVE"
+      | "BLOCK_ONLY_HIGH"
+      | "BLOCK_NONE"
+      | "OFF"
+      | (string & {})
+  }>
+  readonly serviceTier?: "standard" | "flex" | "priority" | (string & {})
   readonly thinkingConfig?: {
     readonly thinkingBudget?: number
     readonly includeThoughts?: boolean
+    readonly thinkingLevel?: "minimal" | "low" | "medium" | "high" | (string & {})
   }
 }
 
@@ -111,6 +144,12 @@ const GeminiToolConfig = Schema.Struct({
 const GeminiThinkingConfig = Schema.Struct({
   thinkingBudget: Schema.optional(Schema.Number),
   includeThoughts: Schema.optional(Schema.Boolean),
+  thinkingLevel: Schema.optional(Schema.String),
+})
+
+const GeminiSafetySetting = Schema.Struct({
+  category: Schema.String,
+  threshold: Schema.String,
 })
 
 const GeminiGenerationConfig = Schema.Struct({
@@ -118,12 +157,18 @@ const GeminiGenerationConfig = Schema.Struct({
   temperature: Schema.optional(Schema.Number),
   topP: Schema.optional(Schema.Number),
   topK: Schema.optional(Schema.Number),
+  frequencyPenalty: Schema.optional(Schema.Number),
+  presencePenalty: Schema.optional(Schema.Number),
+  seed: Schema.optional(Schema.Number),
   stopSequences: optionalArray(Schema.String),
   thinkingConfig: Schema.optional(GeminiThinkingConfig),
 })
 
 const GeminiBodyFields = {
+  cachedContent: Schema.optional(Schema.String),
   contents: Schema.Array(GeminiContent),
+  safetySettings: optionalArray(GeminiSafetySetting),
+  serviceTier: Schema.optional(Schema.String),
   systemInstruction: Schema.optional(GeminiSystemInstruction),
   tools: optionalArray(GeminiTool),
   toolConfig: Schema.optional(GeminiToolConfig),
@@ -172,11 +217,13 @@ interface ParserState {
 //    keys on non-object scalars. Mirrors OpenCode's historical Gemini rules.
 //
 // 2. Project — lossy mapping from JSON Schema to Gemini's schema dialect:
-//    drop empty objects, derive `nullable: true` from `type: [..., "null"]`,
-//    coerce `const` to `[const]` enum, recurse properties/items, propagate
+//    drop empty root parameter schemas while preserving nested empty objects,
+//    expand type arrays into `anyOf`, derive `nullable: true` from null members,
+//    coerce `const` to `[const]` enum, recurse properties/items, and propagate
 //    only an allowlisted set of keys (description, required, format, type,
-//    properties, items, allOf, anyOf, oneOf, minLength). Anything outside the
-//    allowlist (e.g. `additionalProperties`, `$ref`) is silently dropped.
+//    nullable, enum, properties, items, allOf, anyOf, oneOf, minLength).
+//    Anything outside the allowlist (e.g. `additionalProperties`, `$ref`) is
+//    silently dropped.
 //
 // Sanitize runs first, then project. The implementation lives in
 // `utils/gemini-tool-schema` so this protocol keeps the same shape as the other
@@ -252,6 +299,8 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
 
     if (message.role === "assistant") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
+      // Parallel Gemini 3 calls may carry one signature on the first call; unsigned sibling calls are valid.
+      let hasSignedToolCall = false
       for (const part of message.content) {
         if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
@@ -264,7 +313,17 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
           continue
         }
         if (part.type === "tool-call") {
-          parts.push(lowerToolCall(part))
+          const lowered = lowerToolCall(part)
+          const signature = lowered.thoughtSignature
+          parts.push({
+            ...lowered,
+            thoughtSignature:
+              signature ??
+              (requiresThoughtSignatureFallback(request.model.id) && !hasSignedToolCall
+                ? SKIP_THOUGHT_SIGNATURE_VALIDATOR
+                : undefined),
+          })
+          if (signature !== undefined) hasSignedToolCall = true
           continue
         }
       }
@@ -316,15 +375,36 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
 })
 
 const resolveOptions = (request: LLMRequest) => {
-  const value = request.providerOptions?.gemini?.thinkingConfig
-  if (!ProviderShared.isRecord(value)) return {}
+  const input = request.providerOptions?.gemini
+  const value = input?.thinkingConfig
   const thinkingConfig = {
-    thinkingBudget: typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
-    includeThoughts: typeof value.includeThoughts === "boolean" ? value.includeThoughts : undefined,
+    thinkingBudget:
+      ProviderShared.isRecord(value) && typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
+    includeThoughts:
+      ProviderShared.isRecord(value) && typeof value.includeThoughts === "boolean"
+        ? value.includeThoughts
+        : ProviderShared.isRecord(value)
+          ? true
+          : undefined,
+    thinkingLevel:
+      ProviderShared.isRecord(value) && typeof value.thinkingLevel === "string" ? value.thinkingLevel : undefined,
   }
   return {
+    cachedContent: typeof input?.cachedContent === "string" ? input.cachedContent : undefined,
+    safetySettings: mapSafetySettings(input?.safetySettings),
+    serviceTier: typeof input?.serviceTier === "string" ? input.serviceTier : undefined,
     thinkingConfig: Object.values(thinkingConfig).some((item) => item !== undefined) ? thinkingConfig : undefined,
   }
+}
+
+function mapSafetySettings(value: unknown) {
+  if (!Array.isArray(value)) return undefined
+  const settings = value.flatMap((item) =>
+    ProviderShared.isRecord(item) && typeof item.category === "string" && typeof item.threshold === "string"
+      ? [{ category: item.category, threshold: item.threshold }]
+      : [],
+  )
+  return settings
 }
 
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
@@ -337,12 +417,18 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     temperature: generation?.temperature,
     topP: generation?.topP,
     topK: generation?.topK,
+    frequencyPenalty: generation?.frequencyPenalty,
+    presencePenalty: generation?.presencePenalty,
+    seed: generation?.seed,
     stopSequences: generation?.stop,
     thinkingConfig: options.thinkingConfig,
   }
 
   return {
+    cachedContent: options.cachedContent,
     contents: yield* lowerMessages(request),
+    safetySettings: options.safetySettings,
+    serviceTier: options.serviceTier,
     systemInstruction:
       request.system.length === 0 ? undefined : { parts: [{ text: ProviderShared.joinText(request.system) }] },
     tools: hasTools
@@ -390,6 +476,7 @@ const mapUsage = (usage: GeminiUsage | undefined) => {
 }
 
 const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean): FinishReason => {
+  if (finishReason === undefined) return hasToolCalls ? "tool-calls" : "unknown"
   if (finishReason === "STOP") return hasToolCalls ? "tool-calls" : "stop"
   if (finishReason === "MAX_TOKENS") return "length"
   if (

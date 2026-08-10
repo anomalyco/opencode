@@ -1,7 +1,8 @@
 export * as PluginSupervisor from "./supervisor"
 
 import type { Plugin as PluginDefinition } from "@opencode-ai/plugin/effect/plugin"
-import { Event } from "@opencode-ai/schema/config"
+import { Directory, Document, Event, type Entry } from "@opencode-ai/schema/config"
+import { ConfigPlugin } from "@opencode-ai/schema/config/plugin"
 import { Context, Deferred, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
@@ -9,11 +10,13 @@ import { Agent } from "../agent"
 import { Catalog } from "../catalog"
 import { Command } from "../command"
 import { Config } from "../config"
-import { ConfigPlugin } from "../config/plugin"
+import { Credential } from "../credential"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { Bus } from "../bus"
+import { Environment } from "../environment"
 import { FileMutation } from "../file-mutation"
+import { Formatter } from "../formatter"
 import { FileSystem } from "../filesystem"
 import { Watcher } from "../filesystem/watcher"
 import { Form } from "../form"
@@ -81,15 +84,15 @@ function parse(input: ConfigPlugin.Plugin): Operation {
   return { type: "remove", target: input.slice(1) }
 }
 
-const scan = Effect.fn("PluginSupervisor.scan")(function* (entries: readonly Config.Entry[]) {
+const scan = Effect.fn("PluginSupervisor.scan")(function* (entries: readonly Entry[]) {
   const fs = yield* FSUtil.Service
   const location = yield* Location.Service
   const discovered = yield* Effect.forEach(
-    entries.filter((entry): entry is Config.Directory => entry.type === "directory"),
+    entries.filter((entry): entry is Directory => entry.type === "directory"),
     (entry) => discoverDirectory(fs, entry.path),
   ).pipe(Effect.map((items) => items.flat()))
   const configured = entries
-    .filter((entry): entry is Config.Document => entry.type === "document")
+    .filter((entry): entry is Document => entry.type === "document")
     .flatMap((entry) =>
       (entry.info.plugins ?? []).map(parse).map((operation) => {
         if (operation.type === "remove") return operation
@@ -206,7 +209,7 @@ function discoverDirectory(fs: FSUtil.Interface, directory: string) {
 
 const sourceDirectories = ["plugin", "plugins"] as const
 
-function isPluginSource(entries: readonly Config.Entry[], file: string) {
+function isPluginSource(entries: readonly Entry[], file: string) {
   return entries.some(
     (entry) =>
       entry.type === "directory" &&
@@ -230,7 +233,7 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const watcher = yield* Watcher.Service
     const fs = yield* FSUtil.Service
-    const ready = yield* Deferred.make<void>()
+    const ready = { current: yield* Deferred.make<void>() }
     let observed = 0
 
     // Configured local plugin files can live outside config roots, where the
@@ -241,7 +244,7 @@ const layer = Layer.effect(
     const configuredChanges = yield* PubSub.unbounded<void>()
     const watched = new Set<string>()
     const watchConfiguredSources = Effect.fn("PluginSupervisor.watchConfiguredSources")(function* (
-      entries: readonly Config.Entry[],
+      entries: readonly Entry[],
       operations: readonly Operation[],
     ) {
       for (const operation of operations) {
@@ -253,7 +256,8 @@ const layer = Layer.effect(
         // inside), so don't watch what can't trigger anything.
         if (yield* fs.isDir(operation.target)) continue
         watched.add(operation.target)
-        yield* watcher.subscribe({ path: operation.target, type: "file" }).pipe(
+        const updates = yield* watcher.subscribe({ path: operation.target, type: "file" })
+        yield* updates.pipe(
           Stream.runForEach(() => PubSub.publish(configuredChanges, undefined)),
           Effect.catchCause((cause) =>
             Effect.logError("configured plugin watch failed", { target: operation.target, cause }),
@@ -279,13 +283,21 @@ const layer = Layer.effect(
     })
     const updates = Stream.merge(
       config.changes().pipe(
-        Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path))),
+        Stream.filterEffect((update) =>
+          Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path)),
+        ),
         Stream.merge(Stream.fromPubSub(configuredChanges)),
       ),
       bus.subscribe([Event.Updated, SdkPlugins.Updated]),
     ).pipe(
       // Make accepted work visible to flush before coalescing the burst.
-      Stream.mapEffect(() => Effect.sync(() => ++observed)),
+      Stream.mapEffect(() =>
+        Effect.gen(function* () {
+          observed++
+          if (yield* Deferred.isDone(ready.current)) ready.current = yield* Deferred.make<void>()
+          return observed
+        }),
+      ),
     )
     yield* Stream.concat(Stream.succeed(0), updates).pipe(
       // Keep observing updates while activation runs, retaining only the latest generation request.
@@ -294,12 +306,12 @@ const layer = Layer.effect(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
           yield* activate()
-          if (observed === target) yield* Deferred.succeed(ready, undefined)
+          if (observed === target) yield* Deferred.succeed(ready.current, undefined)
         }).pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: Deferred.await(ready) })
+    return Service.of({ flush: Effect.suspend(() => Deferred.await(ready.current)) })
   }),
 )
 
@@ -315,8 +327,11 @@ export const node = makeLocationNode({
     Catalog.node,
     Command.node,
     Config.node,
+    Credential.node,
     Bus.node,
+    Environment.node,
     FileMutation.node,
+    Formatter.node,
     FileSystem.node,
     FSUtil.node,
     Global.node,

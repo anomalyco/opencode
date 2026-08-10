@@ -25,7 +25,7 @@ const layer = (ref: Ref) =>
       return Service.of({
         directory: ref.directory,
         workspaceID: ref.workspaceID,
-        project: { id: resolved.id, directory: resolved.directory },
+        project: { id: resolved.id, directory: resolved.directory, canonical: resolved.canonical },
         vcs: resolved.vcs,
       })
     }),

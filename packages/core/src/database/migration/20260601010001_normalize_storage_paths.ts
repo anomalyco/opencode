@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260601010001_normalize_storage_paths",
   up(tx) {
     return Effect.gen(function* () {
@@ -19,4 +19,6 @@ export default {
       )
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration

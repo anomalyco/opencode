@@ -13,7 +13,7 @@ Warming is disabled by default. Enable it with the default settings in any
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "warming": true
+  "warming": true,
 }
 ```
 
@@ -32,16 +32,16 @@ Use the object form to customize the prompt, idle interval, or active duration:
   "warming": {
     "prompt": "Do not perform any work. Reply with exactly: OK",
     "interval": "4 minutes",
-    "duration": "30 minutes"
-  }
+    "duration": "30 minutes",
+  },
 }
 ```
 
-| Field | Default | Description |
-| --- | --- | --- |
-| `prompt` | Keep-alive instruction | Prompt sent in each warming request. The default instructs the model to do no work and reply with `OK`. |
-| `interval` | `"4 minutes"` | Idle time between warming requests. |
-| `duration` | `"30 minutes"` | Maximum warming window after the latest non-warming model request. |
+| Field      | Default                | Description                                                                                             |
+| ---------- | ---------------------- | ------------------------------------------------------------------------------------------------------- |
+| `prompt`   | Keep-alive instruction | Prompt sent in each warming request. The default instructs the model to do no work and reply with `OK`. |
+| `interval` | `"4 minutes"`          | Idle time between warming requests.                                                                     |
+| `duration` | `"30 minutes"`         | Maximum warming window after the latest non-warming model request.                                      |
 
 `interval` and `duration` accept duration strings such as `"30 seconds"`,
 `"4 minutes"`, or `"1 hour"`. Both must be finite and greater than zero.
@@ -50,7 +50,7 @@ To disable warming explicitly:
 
 ```jsonc
 {
-  "warming": false
+  "warming": false,
 }
 ```
 

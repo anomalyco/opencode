@@ -1,11 +1,12 @@
 export * as SessionTitle from "./title"
 
-import { LLM, LLMClient, LLMError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
-import { Context, Effect, Layer, Stream } from "effect"
+import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
+import { Context, DateTime, Effect, Layer, Stream } from "effect"
 import { Agent } from "../agent"
 import { Database } from "../database/database"
 import { Bus } from "../bus"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { isExactRootFallback } from "@opencode-ai/util/session-title-fallback"
 import { App } from "../app"
 import { llmClient } from "../effect/app-node-platform"
 import { SessionEvent } from "./event"
@@ -14,35 +15,46 @@ import { SessionModelHeaders } from "./model-headers"
 import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
 import { SessionUsage } from "./usage"
+import { SessionStore } from "./store"
 
 const MAX_LENGTH = 100
+const titleChanged = Symbol("Session title changed")
 
 type Dependencies = {
   readonly app: App.Info
   readonly bus: Bus.Interface
   readonly llm: {
-    readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
+    readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, AIError>
   }
   readonly agents: Agent.Interface
   readonly models: SessionRunnerModel.Interface
+  readonly store: SessionStore.Interface
 }
 
 export interface Interface {
-  /** Generates a title from the session's first user message and renames the session. Runs at most once per session. */
-  readonly generateForFirstPrompt: (session: SessionSchema.Info) => Effect.Effect<void>
+  /** Generates a title from the session's first user message when the session remains untitled. */
+  readonly generateForFirstPrompt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTitle") {}
 
 const truncate = (value: string) => (value.length <= MAX_LENGTH ? value : `${value.slice(0, MAX_LENGTH - 3)}...`)
+const isUntitled = (session: SessionSchema.Info) =>
+  isExactRootFallback({
+    title: session.title,
+    time: { created: DateTime.toEpochMillis(session.time.created) },
+  })
 
 const make = (dependencies: Dependencies) => {
   const generateForFirstPrompt = Effect.fn("SessionTitle.generateForFirstPrompt")(function* (
     db: Database.Interface["db"],
-    session: SessionSchema.Info,
+    sessionID: SessionSchema.ID,
   ) {
+    const session = yield* dependencies.store.get(sessionID)
+    if (!session) return
     if (session.parentID) return
-    const firstUser = yield* SessionHistory.firstUserMessageIfOnly(db, session.id)
+    if (!isUntitled(session)) return
+    const firstUser = yield* SessionHistory.firstUserMessage(db, session.id)
     if (!firstUser) return
     const agent = yield* dependencies.agents.get(Agent.ID.make("title"))
     if (!agent) return
@@ -85,7 +97,7 @@ const make = (dependencies: Dependencies) => {
           return Effect.void
         }),
         Effect.as(true),
-        Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
+        Effect.catchTag("AI.Error", () => Effect.succeed(false)),
         Effect.onInterrupt(() => recordUsage.pipe(Effect.asVoid)),
       )
     yield* recordUsage
@@ -96,10 +108,19 @@ const make = (dependencies: Dependencies) => {
       .map((line) => line.trim())
       .find((line) => line.length > 0)
     if (!title) return
-    yield* dependencies.bus.publish(SessionEvent.Renamed, {
-      sessionID: session.id,
-      title: truncate(title),
-    })
+    const expectedSequence = (yield* Bus.latestSequence(db, sessionID)) + 1
+    const current = yield* dependencies.store.get(sessionID)
+    if (!current || !isUntitled(current)) return
+    yield* dependencies.bus
+      .publish(
+        SessionEvent.Renamed,
+        {
+          sessionID: session.id,
+          title: truncate(title),
+        },
+        { commit: (sequence) => (sequence === expectedSequence ? Effect.void : Effect.die(titleChanged)) },
+      )
+      .pipe(Effect.catchDefect((defect) => (defect === titleChanged ? Effect.void : Effect.die(defect))))
   })
   return { generateForFirstPrompt }
 }
@@ -111,11 +132,12 @@ export const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const agents = yield* Agent.Service
     const models = yield* SessionRunnerModel.Service
+    const store = yield* SessionStore.Service
     const database = yield* Database.Service
     const app = yield* App.Metadata
-    const title = make({ bus, llm, agents, models, app })
+    const title = make({ bus, llm, agents, models, store, app })
     return Service.of({
-      generateForFirstPrompt: (session) => title.generateForFirstPrompt(database.db, session),
+      generateForFirstPrompt: (sessionID) => title.generateForFirstPrompt(database.db, sessionID),
     })
   }),
 )
@@ -123,5 +145,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, llmClient, Agent.node, SessionRunnerModel.node, Database.node, App.node],
+  deps: [Bus.node, llmClient, Agent.node, SessionRunnerModel.node, SessionStore.node, Database.node, App.node],
 })

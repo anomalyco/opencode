@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LLMError, TransportReason } from "@opencode-ai/ai"
+import { AIError, TransportReason } from "@opencode-ai/ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -13,6 +13,7 @@ import { Session } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { UserInterruptedError } from "@opencode-ai/core/session/error"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -27,7 +28,7 @@ describe("SessionExecution lifecycle", () => {
     expect(
       SessionExecution.terminal(
         Exit.fail(
-          new LLMError({
+          new AIError({
             module: "test",
             method: "stream",
             reason: new TransportReason({ message: "Disconnected" }),
@@ -127,23 +128,34 @@ describe("SessionExecution lifecycle", () => {
   it.effect("resumes each suspended Session at most once", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
+      const bus = yield* Bus.Service
       const first = Session.ID.make("ses_resume_first")
       const second = Session.ID.make("ses_resume_second")
       yield* seedSessions(database, [first, second], { time_suspended: Date.now() })
 
       const drained: string[] = []
+      const continued: SessionEvent.Synthetic[] = []
       const scope = yield* Scope.make()
       const context = yield* buildExecution(scope, ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)))
       const execution = Context.get(context, SessionExecution.Service)
       const restart = Context.get(context, SessionRestart.Service)
+      yield* bus.project(SessionEvent.Synthetic, (event) => Effect.sync(() => void continued.push(event)))
 
       yield* restart.resumeSuspendedSessions
       yield* Effect.forEach([first, second], execution.awaitIdle, { discard: true })
       expect(drained.toSorted()).toEqual([first, second])
+      expect(continued.map((event) => event.data).toSorted((a, b) => a.sessionID.localeCompare(b.sessionID))).toEqual(
+        [first, second].map((sessionID) => ({
+          sessionID,
+          text: "The server restarted while you were working. Continue from where you left off without repeating completed work.",
+          description: "Continuing after restart",
+        })),
+      )
       expect(yield* suspensions(database)).toEqual({ [first]: false, [second]: false })
 
       yield* restart.resumeSuspendedSessions
       expect(drained.length).toBe(2)
+      expect(continued.length).toBe(2)
       yield* Scope.close(scope, Exit.void)
     }),
   )

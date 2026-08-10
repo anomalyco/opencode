@@ -29,7 +29,7 @@ const locationLayer = Layer.succeed(
 const it = testEffect(
   AppNodeBuilder.build(InstructionBuiltIns.node, [
     [Location.node, locationLayer],
-    [Global.node, Global.layerWith({ config: "/global" })],
+    [Global.node, Global.layerWith({ config: "/global", tmp: "/temporary" })],
   ]),
 )
 
@@ -44,11 +44,12 @@ describe("InstructionBuiltIns", () => {
         [
           "Here is some useful information about the environment you are running in:",
           "<env>",
-          `  Session ID: ${sessionID}`,
+          `  Current conversation session ID: ${sessionID}`,
           `  Working directory: ${directory}`,
           `  Workspace root folder: ${projectDirectory}`,
           "  Is directory a git repo: yes",
           `  Platform: ${process.platform}`,
+          "  Use /temporary for temporary work outside the workspace; it already exists and is pre-approved for external directory access.",
           "</env>",
           "",
           `Today's date: ${localDate(timestamp)}`,

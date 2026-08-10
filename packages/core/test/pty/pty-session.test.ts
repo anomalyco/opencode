@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Cause, Deferred, Effect, Exit, Layer, Queue } from "effect"
 import { Config } from "@opencode-ai/core/config"
+import { Document, Info } from "@opencode-ai/schema/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
@@ -212,9 +213,7 @@ const configuredIt = testEffect(
       Layer.mock(Config.Service)({
         entries: () =>
           Effect.succeed(
-            configuredShell
-              ? [new Config.Document({ type: "document", info: new Config.Info({ shell: configuredShell }) })]
-              : [],
+            configuredShell ? [new Document({ type: "document", info: new Info({ shell: configuredShell }) })] : [],
           ),
       }),
     ],

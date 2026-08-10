@@ -61,37 +61,57 @@ const emptyObjectSchema = (schema: Record<string, unknown>) =>
   (!isRecord(schema.properties) || Object.keys(schema.properties).length === 0) &&
   !schema.additionalProperties
 
-const projectNode = (schema: unknown): Record<string, unknown> | undefined => {
+const projectNode = (schema: unknown, nested = false): Record<string, unknown> | undefined => {
   if (!isRecord(schema)) return undefined
-  if (emptyObjectSchema(schema)) return undefined
-  return Object.fromEntries(
+  if (!nested && emptyObjectSchema(schema)) return undefined
+  const types = Array.isArray(schema.type) ? schema.type.filter((type) => type !== "null") : undefined
+  const anyOf = Array.isArray(schema.anyOf) ? schema.anyOf : undefined
+  const hasNullAnyOf = anyOf?.some((item) => isRecord(item) && item.type === "null") ?? false
+  const anyOfTypes = hasNullAnyOf ? anyOf?.filter((item) => !isRecord(item) || item.type !== "null") : anyOf
+  const flattenedAnyOf = hasNullAnyOf && anyOfTypes?.length === 1 ? projectNode(anyOfTypes[0], true) : undefined
+  const result = Object.fromEntries(
     [
       ["description", schema.description],
       ["required", schema.required],
       ["format", schema.format],
-      ["type", Array.isArray(schema.type) ? schema.type.filter((type) => type !== "null")[0] : schema.type],
-      ["nullable", Array.isArray(schema.type) && schema.type.includes("null") ? true : undefined],
+      ["type", types ? (types.length === 0 ? "null" : undefined) : schema.type],
+      [
+        "nullable",
+        (Array.isArray(schema.type) && schema.type.includes("null") && types && types.length > 0) || hasNullAnyOf
+          ? true
+          : undefined,
+      ],
       ["enum", schema.const !== undefined ? [schema.const] : schema.enum],
       [
         "properties",
         isRecord(schema.properties)
-          ? Object.fromEntries(Object.entries(schema.properties).map(([key, value]) => [key, projectNode(value)]))
+          ? Object.fromEntries(Object.entries(schema.properties).map(([key, value]) => [key, projectNode(value, true)]))
           : undefined,
       ],
       [
         "items",
         Array.isArray(schema.items)
-          ? schema.items.map(projectNode)
+          ? schema.items.map((item) => projectNode(item, true))
           : schema.items === undefined
             ? undefined
-            : projectNode(schema.items),
+            : projectNode(schema.items, true),
       ],
-      ["allOf", Array.isArray(schema.allOf) ? schema.allOf.map(projectNode) : undefined],
-      ["anyOf", Array.isArray(schema.anyOf) ? schema.anyOf.map(projectNode) : undefined],
-      ["oneOf", Array.isArray(schema.oneOf) ? schema.oneOf.map(projectNode) : undefined],
+      ["allOf", Array.isArray(schema.allOf) ? schema.allOf.map((item) => projectNode(item, true)) : undefined],
+      [
+        "anyOf",
+        anyOfTypes
+          ? hasNullAnyOf && anyOfTypes.length === 1
+            ? undefined
+            : anyOfTypes.map((item) => projectNode(item, true))
+          : types && types.length > 0
+            ? types.map((type) => ({ type }))
+            : undefined,
+      ],
+      ["oneOf", Array.isArray(schema.oneOf) ? schema.oneOf.map((item) => projectNode(item, true)) : undefined],
       ["minLength", schema.minLength],
     ].filter((entry) => entry[1] !== undefined),
   )
+  return flattenedAnyOf ? { ...result, ...flattenedAnyOf } : result
 }
 
 export const convert = (schema: unknown) => projectNode(sanitizeNode(schema))

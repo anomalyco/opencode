@@ -1,9 +1,9 @@
 import { Provider } from "../src/provider"
-import { ProviderID, type Model } from "../src/schema"
+import { ProviderID, type LanguageModel } from "../src/schema"
 
-declare const model: (id: string) => Model
-declare const requiredModel: (id: string, options: { readonly baseURL: string }) => Model
-declare const chat: (id: string, options: { readonly apiKey: string }) => Model
+declare const model: (id: string) => LanguageModel
+declare const requiredModel: (id: string, options: { readonly baseURL: string }) => LanguageModel
+declare const chat: (id: string, options: { readonly apiKey: string }) => LanguageModel
 
 Provider.make({
   id: ProviderID.make("example"),

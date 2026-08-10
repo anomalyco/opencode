@@ -109,4 +109,4 @@ const server = Bun.serve({
 })
 
 console.log(`Well-known fixture listening at ${server.url.origin}`)
-console.log(`Test with: bun run dev auth connect ${server.url.origin}`)
+console.log(`Test with: bun run dev auth login ${server.url.origin}`)

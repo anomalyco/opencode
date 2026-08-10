@@ -9,17 +9,20 @@ export * as WriteTool from "./write"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
+import { Bom } from "@opencode-ai/util/bom"
+import { Environment } from "../../environment"
 import { FileMutation } from "../../file-mutation"
+import { Formatter } from "../../formatter"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
+import { fileDiff } from "./file-diff"
 
 export const name = "write"
 
 // TODO: Revisit whether model-facing mutation schemas should prefer absolute `filePath` naming for trained-in compatibility after evaluating model behavior.
 export const Input = Schema.Struct({
   path: Schema.String.annotate({
-    description:
-      "File path to write. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval.",
+    description: "Path to the file to write to",
   }),
   content: Schema.String.annotate({ description: "Content to write to the file" }),
 })
@@ -36,7 +39,6 @@ export const toModelOutput = (output: Output) =>
   `${output.existed ? "Wrote" : "Created"} file successfully: ${output.resource}`
 
 /** Deferred write UX integrations remain visible at the model-facing seam. */
-// TODO: Add formatter integration after formatter runtime exists.
 // TODO: Publish watcher/file-edit events after watcher integration exists.
 // TODO: Add snapshots / undo after design exists.
 // TODO: Add LSP notification and diagnostics after LSP runtime exists.
@@ -45,50 +47,61 @@ export const Plugin = {
   id: "opencode.tool.write",
   effect: Effect.fn("WriteTool.Plugin")(function* (ctx: PluginContext) {
     const mutation = yield* LocationMutation.Service
-    const files = yield* FileMutation.Service
+    const fileMutation = yield* FileMutation.Service
+    const environment = yield* Environment.Service
+    const formatter = yield* Formatter.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
       .transform((draft) =>
-        draft.add(
-          ({
-              name,
-              options: { codemode: false, permission: "edit" },
-              description:
-                "Write content to one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
-              input: Input,
-              output: Output,
-              execute: (input, context) =>
-                Effect.gen(function* () {
-                  const source = {
-                    type: "tool" as const,
-                    messageID: context.messageID,
-                    callID: context.callID,
-                  }
-                  const target = yield* mutation.resolve({ path: input.path, kind: "file" })
-                  const external = target.externalDirectory
-                  if (external)
-                    yield* permission.assert({
-                      ...LocationMutation.externalDirectoryPermission(external),
-                      sessionID: context.sessionID,
-                      agent: context.agent,
-                      source,
-                    })
-                  yield* permission.assert({
-                    action: "edit",
-                    resources: [target.resource],
-                    save: ["*"],
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source,
-                  })
-                  return yield* files.writeTextPreservingBom({ target, content: input.content })
-                }).pipe(
-                  Effect.map((output) => ({ output, content: toModelOutput(output) })),
-                  Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
-                ),
-            }),
-        ),
+        draft.add({
+          name,
+          options: { codemode: false, permission: "edit" },
+          description:
+            "Writes a file to the local filesystem, overwriting if one exists.\n\nMissing parent directories are created automatically.\n\nUse this tool to create new files or overwrite existing files. For partial changes, use the edit tool instead.",
+          input: Input,
+          output: Output,
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const source = {
+                type: "tool" as const,
+                messageID: context.messageID,
+                id: context.id,
+              }
+              const target = yield* mutation.resolve({ path: input.path, kind: "file" })
+              const external = target.externalDirectory
+              if (external)
+                yield* permission.assert({
+                  ...LocationMutation.externalDirectoryPermission(external),
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source,
+                })
+              const current = yield* FileMutation.readText(environment.files, target.absolute).pipe(
+                Effect.catchTag("Environment.NotFound", () => Effect.succeed(undefined)),
+              )
+              const next = Bom.split(input.content)
+              const preview = fileDiff(target.resource, current?.text ?? "", next.text, current ? "modified" : "added")
+              yield* permission.assert({
+                action: "edit",
+                resources: [target.resource],
+                save: ["*"],
+                metadata: { files: [preview] },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source,
+              })
+              const result = yield* fileMutation.writeTextPreservingBom({ target, content: input.content })
+              const bom = (yield* FileMutation.readText(environment.files, target.absolute)).bom
+              if (yield* formatter.file(target.absolute)) {
+                yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
+              }
+              return result
+            }).pipe(
+              Effect.map((output) => ({ output, content: toModelOutput(output) })),
+              Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
+            ),
+        }),
       )
       .pipe(Effect.orDie)
   }),

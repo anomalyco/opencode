@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { displayCharAt, displaySlice, mentionTriggerIndex } from "../../src/prompt/display"
+import { displayCharAt, displaySlice, mentionTriggerIndex, slashTriggerIndex } from "../../src/prompt/display"
 
 describe("prompt display", () => {
   test("uses display-width offsets for mentions", () => {
@@ -29,5 +29,15 @@ describe("prompt display", () => {
     expect(mentionTriggerIndex("hello@")).toBeUndefined()
     expect(mentionTriggerIndex("foo@bar.com")).toBeUndefined()
     expect(mentionTriggerIndex("中文 @src file")).toBeUndefined()
+  })
+
+  test("finds slash attachments at token boundaries", () => {
+    expect(slashTriggerIndex("/")).toBe(0)
+    expect(slashTriggerIndex("Review this /api-design")).toBe(12)
+    expect(slashTriggerIndex("中文 /api-design")).toBe(5)
+    expect(slashTriggerIndex("Review /api design")).toBeUndefined()
+    expect(slashTriggerIndex("Review /tmp/file.ts")).toBeUndefined()
+    expect(slashTriggerIndex("https://opencode.ai/docs")).toBeUndefined()
+    expect(slashTriggerIndex("src/prompt/index.ts")).toBeUndefined()
   })
 })

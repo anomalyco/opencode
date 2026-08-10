@@ -5,13 +5,13 @@ import { optional, PositiveInt } from "./schema.js"
 import { IntegrationID } from "./integration-id.js"
 
 export class TimeoutConfig extends Schema.Class<TimeoutConfig>("Mcp.TimeoutConfig")({
-  startup: PositiveInt.pipe(Schema.optional).annotate({
+  startup: PositiveInt.pipe(optional).annotate({
     description: "Maximum time in milliseconds to establish and initialize the MCP server.",
   }),
-  catalog: PositiveInt.pipe(Schema.optional).annotate({
+  catalog: PositiveInt.pipe(optional).annotate({
     description: "Maximum time in milliseconds to wait for MCP discovery requests such as tools/list and prompts/list.",
   }),
-  execution: PositiveInt.pipe(Schema.optional).annotate({
+  execution: PositiveInt.pipe(optional).annotate({
     description: "Maximum time in milliseconds to wait for MCP tool and prompt execution.",
   }),
 }) {}
@@ -19,35 +19,35 @@ export class TimeoutConfig extends Schema.Class<TimeoutConfig>("Mcp.TimeoutConfi
 export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   type: Schema.Literal("local"),
   command: Schema.String.pipe(Schema.Array),
-  cwd: Schema.String.pipe(Schema.optional).annotate({
+  cwd: Schema.String.pipe(optional).annotate({
     description: "Working directory for the MCP server process. Relative paths resolve from the workspace directory.",
   }),
-  environment: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
-  disabled: Schema.Boolean.pipe(Schema.optional),
-  codemode: Schema.Boolean.pipe(Schema.optional).annotate({
+  environment: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  disabled: Schema.Boolean.pipe(optional),
+  codemode: Schema.Boolean.pipe(optional).annotate({
     description: "Expose this server's tools through Code Mode. Defaults to true.",
   }),
-  timeout: TimeoutConfig.pipe(Schema.optional),
+  timeout: TimeoutConfig.pipe(optional),
 }) {}
 
 export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
-  client_id: Schema.String.pipe(Schema.optional),
-  client_secret: Schema.String.pipe(Schema.optional),
-  scope: Schema.String.pipe(Schema.optional),
-  callback_port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).pipe(Schema.optional),
-  redirect_uri: Schema.String.pipe(Schema.optional),
+  client_id: Schema.String.pipe(optional),
+  client_secret: Schema.String.pipe(optional),
+  scope: Schema.String.pipe(optional),
+  callback_port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).pipe(optional),
+  redirect_uri: Schema.String.pipe(optional),
 }) {}
 
 export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")({
   type: Schema.Literal("remote"),
   url: Schema.String,
-  headers: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
-  oauth: Schema.Union([OAuthConfig, Schema.Literal(false)]).pipe(Schema.optional),
-  disabled: Schema.Boolean.pipe(Schema.optional),
-  codemode: Schema.Boolean.pipe(Schema.optional).annotate({
+  headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  oauth: Schema.Union([OAuthConfig, Schema.Literal(false)]).pipe(optional),
+  disabled: Schema.Boolean.pipe(optional),
+  codemode: Schema.Boolean.pipe(optional).annotate({
     description: "Expose this server's tools through Code Mode. Defaults to true.",
   }),
-  timeout: TimeoutConfig.pipe(Schema.optional),
+  timeout: TimeoutConfig.pipe(optional),
 }) {}
 
 export const ServerConfig = Schema.Union([LocalConfig, RemoteConfig]).pipe(Schema.toTaggedUnion("type"))
@@ -68,13 +68,9 @@ const Failed = Schema.Struct({ status: Schema.Literal("failed"), error: Schema.S
 const NeedsAuth = Schema.Struct({ status: Schema.Literal("needs_auth") }).annotate({
   identifier: "Mcp.Status.NeedsAuth",
 })
-const NeedsClientRegistration = Schema.Struct({
-  status: Schema.Literal("needs_client_registration"),
-  error: Schema.String,
-}).annotate({ identifier: "Mcp.Status.NeedsClientRegistration" })
 
 export type Status = typeof Status.Type
-export const Status = Schema.Union([Connected, Pending, Disabled, Failed, NeedsAuth, NeedsClientRegistration]).pipe(
+export const Status = Schema.Union([Connected, Pending, Disabled, Failed, NeedsAuth]).pipe(
   Schema.toTaggedUnion("status"),
 )
 

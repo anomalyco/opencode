@@ -18,9 +18,8 @@ calls through its HTTP router in memory. It opens no HTTP listener and adds no
 network hop between the client and server.
 
 <Callout type="warning">
-  The V2 SDK is beta and currently private to the OpenCode workspace. It is not
-  published for external installation yet, and its package name and API may
-  change before release.
+  The V2 SDK is beta and currently private to the OpenCode workspace. It is not published for external installation yet,
+  and its package name and API may change before release.
 </Callout>
 
 ## Create a host
@@ -29,11 +28,7 @@ network hop between the client and server.
 the router, location services, fibers, and scoped plugin registrations.
 
 ```ts
-import {
-  AbsolutePath,
-  Location,
-  OpenCode,
-} from "@opencode-ai/sdk-next"
+import { AbsolutePath, Location, OpenCode } from "@opencode-ai/sdk-next"
 import { Effect } from "effect"
 
 const program = Effect.scoped(
@@ -71,9 +66,7 @@ const program = Effect.gen(function* () {
   return yield* opencode.sessions.active()
 })
 
-const active = await Effect.runPromise(
-  program.pipe(Effect.provide(OpenCode.layer)),
-)
+const active = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer)))
 ```
 
 ## Register plugins

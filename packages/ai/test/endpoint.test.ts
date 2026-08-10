@@ -2,11 +2,11 @@ import { describe, expect, test } from "bun:test"
 import { LLM } from "../src"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { Endpoint } from "../src/route"
-import { Model } from "../src/schema"
+import { LanguageModel } from "../src/schema"
 
 const request = () =>
   LLM.request({
-    model: Model.make({
+    model: LanguageModel.make({
       id: "model-1",
       provider: "test",
       route: OpenAIChat.route,

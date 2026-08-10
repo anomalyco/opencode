@@ -10,7 +10,7 @@
 // back to the usual two-press exit sequence through RunFooter.requestExit().
 import path from "path"
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
-import { isDefaultTitle } from "../util/session"
+import { isFallbackTitle } from "@opencode-ai/util/session-title-fallback"
 import { monoSnapshot } from "./mono"
 import { entrySplash, exitSplash, splashMeta } from "./splash"
 import { resolveRunTheme } from "./theme"
@@ -22,6 +22,7 @@ import type {
   MiniSettings,
   MiniHost,
   PermissionReply,
+  QueuedPromptAction,
   RunAgent,
   RunInput,
   RunPrompt,
@@ -70,6 +71,7 @@ export type LifecycleInput = {
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
   onInterrupt?: () => void
   onBackground?: () => void
+  onQueuedPromptAction?: (action: QueuedPromptAction, inputID: string) => Promise<void>
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
 }
@@ -105,7 +107,7 @@ function shutdown(renderer: CliRenderer): void {
 }
 
 function splashInfo(title: string | undefined, history: RunPrompt[]) {
-  if (title && !isDefaultTitle(title)) {
+  if (title && !isFallbackTitle(title)) {
     return {
       title,
       showSession: true,
@@ -176,7 +178,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   if (mono) renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, monoSnapshot)
   const setTitle = (title?: string) => {
     if (input.host.platform !== "linux") return
-    if (!title || isDefaultTitle(title)) return renderer.setTerminalTitle("OpenCode")
+    if (!title || isFallbackTitle(title)) return renderer.setTerminalTitle("OpenCode")
     renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "..." : title}`)
   }
   setTitle(input.sessionTitle)
@@ -243,6 +245,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     onVariantSelect: input.onVariantSelect,
     onInterrupt: input.onInterrupt,
     onBackground: input.onBackground,
+    onQueuedPromptAction: input.onQueuedPromptAction,
     onEditorOpen: async ({ value }) => {
       if (closed || renderer.isDestroyed) {
         return

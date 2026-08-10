@@ -10,8 +10,7 @@ export function detect(bytes: Uint8Array) {
     return "image/webp"
   if (
     startsWith(bytes.subarray(4), [0x66, 0x74, 0x79, 0x70]) &&
-    (startsWith(bytes.subarray(8), [0x61, 0x76, 0x69, 0x66]) ||
-      startsWith(bytes.subarray(8), [0x61, 0x76, 0x69, 0x73]))
+    (startsWith(bytes.subarray(8), [0x61, 0x76, 0x69, 0x66]) || startsWith(bytes.subarray(8), [0x61, 0x76, 0x69, 0x73]))
   )
     return "image/avif"
   return isText(bytes) ? "text/plain" : "application/octet-stream"

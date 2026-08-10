@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLMClient, LLMEvent, Model, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
@@ -25,7 +25,7 @@ import { DateTime, Effect, Layer, LayerMap, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
-const model = Model.make({
+const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
   route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
@@ -34,14 +34,12 @@ const projects = Layer.succeed(
   Project.Service,
   Project.Service.of({
     list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory }),
+    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
     directories: () => Effect.succeed([]),
-    commit: () => Effect.void,
   }),
 )
 let requests: LLMRequest[] = []
 const client = Layer.mock(LLMClient.Service)({
-  prepare: () => Effect.die("unused"),
   stream: (request: LLMRequest) => {
     requests.push(request)
     return Stream.make(LLMEvent.textDelta({ id: "summary", text: "manual session summary" }))

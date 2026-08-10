@@ -1,7 +1,7 @@
 import { SyntaxStyle, type RGBA, type ThemeTokenStyle } from "@opentui/core"
-import type { Mode, ResolvedThemeView } from "./index.js"
+import type { Mode, ResolvedThemeTokens } from "./index.js"
 
-export function generateSyntax(theme: ResolvedThemeView, mode: Mode) {
+export function generateSyntax(theme: ResolvedThemeTokens, mode: Mode) {
   const step = mode === "light" ? 800 : 200
   const syntax = theme.syntax
   const markdown = theme.markdown
@@ -12,6 +12,7 @@ export function generateSyntax(theme: ResolvedThemeView, mode: Mode) {
     rule(["prompt"], theme.hue.accent[step]),
     rule(["extmark.file"], feedback.warning.default, { bold: true }),
     rule(["extmark.agent"], theme.categorical[0][step], { bold: true }),
+    rule(["extmark.skill"], theme.categorical[1][step], { bold: true }),
     // V1 migration preserves its selected/inverse foreground in this action state.
     rule(["extmark.paste"], theme.text.action.primary.focused, {
       background: feedback.warning.default,

@@ -46,9 +46,14 @@ export function createSessionRows(sessionID: Accessor<string>) {
   function reduce() {
     const messages = data.session.message.list(sessionID())
     const inputs = new Set(data.session.input.list(sessionID()))
+    const pending = data.session.pending.list(sessionID())
+    const queued = new Set(
+      pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),
+    )
+    const visible = queued.size === 0 ? messages : messages.filter((message) => !queued.has(message.id))
     const boundary = revertBoundary()
     const rows = reduceSessionRows(
-      boundary ? messages.filter((message) => message.id < boundary) : messages,
+      boundary ? visible.filter((message) => message.id < boundary) : visible,
       inputs,
       turnTokens(),
     )
@@ -57,8 +62,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
     rows.splice(
       position === -1 ? rows.length : position,
       0,
-      ...data.session.pending
-        .list(sessionID())
+      ...pending
         .filter((item) => item.type === "compaction")
         .map((item): SessionRow => ({ type: "compaction-queued", inputID: item.id })),
     )
@@ -68,7 +72,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   function pendingPermissions() {
     return new Set(
       (data.session.permission.list(sessionID()) ?? []).flatMap((request) =>
-        request.source?.type === "tool" ? [request.source.callID] : [],
+        request.source?.type === "tool" ? [request.source.id] : [],
       ),
     )
   }
@@ -97,21 +101,28 @@ export function createSessionRows(sessionID: Accessor<string>) {
     }),
   )
 
-  // Re-reduce when the revert boundary changes (stage/clear/commit).
+  // Re-reduce when the revert boundary changes (stage/clear/commit). These reactions defer
+  // their first run: the mount effect above has already reduced the same state.
   createEffect(
-    on(revertBoundary, () => {
-      setRows(reconcile(reduce()))
-    }),
+    on(
+      revertBoundary,
+      () => {
+        setRows(reconcile(reduce()))
+      },
+      { defer: true },
+    ),
   )
 
   createEffect(
     on(
       () =>
-        data.session.pending
-          .list(sessionID())
-          .filter((item) => item.type === "compaction")
-          .map((item) => item.id),
+        data.session.pending.list(sessionID()).flatMap((item) => {
+          if (item.type === "compaction") return [`${item.id}:compaction`]
+          if (item.type === "user" && item.delivery === "queue") return [`${item.id}:queue`]
+          return []
+        }),
       () => setRows(reconcile(reduce())),
+      { defer: true },
     ),
   )
 
@@ -137,12 +148,11 @@ export function createSessionRows(sessionID: Accessor<string>) {
               : [],
         ),
       () => setRows(reconcile(reduce())),
+      { defer: true },
     ),
   )
 
-  createEffect(
-    on(turnTokens, () => setRows(reconcile(reduce()))),
-  )
+  createEffect(on(turnTokens, () => setRows(reconcile(reduce())), { defer: true }))
 
   const appendMessage = (messageID: string) =>
     setRows(
@@ -250,7 +260,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
     data.on("session.tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart(
-          { messageID: event.data.assistantMessageID, partID: event.data.callID },
+          { messageID: event.data.assistantMessageID, partID: event.data.id },
           { type: "tool", name: event.data.name },
         )
     }),
@@ -276,11 +286,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   return rows
 }
 
-export function reduceSessionRows(
-  messages: SessionMessageInfo[],
-  inputs = new Set<string>(),
-  turnTokens = false,
-) {
+export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new Set<string>(), turnTokens = false) {
   const isInput = (message: SessionMessageInfo) => inputs.has(message.id)
   const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
@@ -294,8 +300,7 @@ export function reduceSessionRows(
   ].reduce<SessionRow[]>((rows, message) => {
     if (message.type !== "assistant") {
       if (message.type === "synthetic" && !message.description?.trim()) return rows
-      if (message.type === "compaction" && message.status === "completed" && usage)
-        usage.previousTurnCache = undefined
+      if (message.type === "compaction" && message.status === "completed" && usage) usage.previousTurnCache = undefined
       if (!pending.has(message.id)) completePrevious(rows)
       rows.push({ type: "message", messageID: message.id })
       return rows
@@ -379,7 +384,7 @@ function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMess
           ? row.messageID
           : row.type === "turn-usage"
             ? row.messageIDs[0]
-          : undefined
+            : undefined
   if (!messageID) return undefined
   const message = messages.get(messageID)
   if (message?.type === "assistant") return message.id

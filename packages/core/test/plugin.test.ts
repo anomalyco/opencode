@@ -250,16 +250,14 @@ describe("Plugin", () => {
         effect: (ctx) =>
           ctx.tool
             .transform((draft) =>
-              draft.add(
-                ({
-                  name: "plugin_tool",
-                  options: { codemode: false },
-                  description: "Plugin tool",
-                  input: Schema.Struct({}),
-                  output: Schema.Struct({ ok: Schema.Boolean }),
-                  execute: () => Effect.succeed({ output: { ok: true } }),
-                }),
-              ),
+              draft.add({
+                name: "plugin_tool",
+                options: { codemode: false },
+                description: "Plugin tool",
+                input: Schema.Struct({}),
+                output: Schema.Struct({ ok: Schema.Boolean }),
+                execute: () => Effect.succeed({ output: { ok: true } }),
+              }),
             )
             .pipe(Effect.orDie),
       })
@@ -276,15 +274,14 @@ describe("Plugin", () => {
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const registry = yield* Tool.Service
-      const tool = (name: string, description: string, options?: Tool.Options) =>
-        ({
-          name,
-          options,
-          description,
-          input: Schema.Struct({}),
-          output: Schema.Struct({ ok: Schema.Boolean }),
-          execute: () => Effect.succeed({ output: { ok: true } }),
-        })
+      const tool = (name: string, description: string, options?: Tool.Options) => ({
+        name,
+        options,
+        description,
+        input: Schema.Struct({}),
+        output: Schema.Struct({ ok: Schema.Boolean }),
+        execute: () => Effect.succeed({ output: { ok: true } }),
+      })
       const plugin = EffectPlugin.define({
         id: "grouped-tools",
         effect: (ctx) =>
@@ -323,17 +320,15 @@ describe("Plugin", () => {
           Effect.gen(function* () {
             yield* ctx.tool
               .transform((draft) =>
-                draft.add(
-                  ({
-                    name: "echo",
-                    options: { codemode: false },
-                    description: "Echo",
-                    input: Schema.Struct({ text: Schema.String }),
-                    output: Schema.Struct({ text: Schema.String }),
-                    execute: ({ text }) =>
-                      Effect.sync(() => executed.push({ text })).pipe(Effect.as({ output: { text } })),
-                  }),
-                ),
+                draft.add({
+                  name: "echo",
+                  options: { codemode: false },
+                  description: "Echo",
+                  input: Schema.Struct({ text: Schema.String }),
+                  output: Schema.Struct({ text: Schema.String }),
+                  execute: ({ text }) =>
+                    Effect.sync(() => executed.push({ text })).pipe(Effect.as({ output: { text } })),
+                }),
               )
               .pipe(Effect.orDie)
 
@@ -368,7 +363,8 @@ describe("Plugin", () => {
             yield* ctx.tool
               .hook("execute.after", (event) =>
                 Effect.sync(() => {
-                  if (event.status === "completed" && Array.isArray(event.result.content)) event.result.content.splice(0)
+                  if (event.status === "completed" && Array.isArray(event.result.content))
+                    event.result.content.splice(0)
                 }),
               )
               .pipe(Effect.asVoid)

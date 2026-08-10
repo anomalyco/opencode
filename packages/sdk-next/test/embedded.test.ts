@@ -71,15 +71,13 @@ it.live(
             Effect.gen(function* () {
               yield* ctx.tool
                 .transform((draft) =>
-                  draft.add(
-                    ({
-                      name: "bootstrap_sdk_tool",
-                      description: "Marks the initial Location plugin generation",
-                      input: Schema.Struct({}),
-                      output: Schema.Void,
-                      execute: () => Effect.succeed({ output: undefined }),
-                    }),
-                  ),
+                  draft.add({
+                    name: "bootstrap_sdk_tool",
+                    description: "Marks the initial Location plugin generation",
+                    input: Schema.Struct({}),
+                    output: Schema.Void,
+                    execute: () => Effect.succeed({ output: undefined }),
+                  }),
                 )
                 .pipe(Effect.orDie)
               if (yield* Ref.updateAndGet(bootCount, (count) => count + 1).pipe(Effect.map((count) => count === 2))) {
@@ -98,15 +96,13 @@ it.live(
             Effect.gen(function* () {
               yield* ctx.tool
                 .transform((draft) =>
-                  draft.add(
-                    ({
-                      name: "late_sdk_tool",
-                      description: "Tool registered after Location boot",
-                      input: Schema.Struct({}),
-                      output: Schema.Void,
-                      execute: () => Effect.succeed({ output: undefined }),
-                    }),
-                  ),
+                  draft.add({
+                    name: "late_sdk_tool",
+                    description: "Tool registered after Location boot",
+                    input: Schema.Struct({}),
+                    output: Schema.Void,
+                    execute: () => Effect.succeed({ output: undefined }),
+                  }),
                 )
                 .pipe(Effect.orDie)
               if (
@@ -207,7 +203,7 @@ it.live(
   () =>
     withEmbedded("opencode-embedded-", (fixture) =>
       Effect.gen(function* () {
-        const opencode = yield* fixture.sdk.OpenCode.create()
+        const opencode = yield* fixture.sdk.OpenCode.create({ events: { persist: true } })
         const id = sessionID(fixture)
         const model = fixture.sdk.Model.Ref.make({
           id: fixture.sdk.Model.ID.make("embedded"),
@@ -219,15 +215,13 @@ it.live(
           effect: (ctx) =>
             ctx.tool
               .transform((draft) =>
-                draft.add(
-                  ({
-                    name: "embedded_tool",
-                    description: "Embedded test tool",
-                    input: Schema.Struct({}),
-                    output: Schema.Struct({ ok: Schema.Boolean }),
-                    execute: () => Effect.succeed({ output: { ok: true } }),
-                  }),
-                ),
+                draft.add({
+                  name: "embedded_tool",
+                  description: "Embedded test tool",
+                  input: Schema.Struct({}),
+                  output: Schema.Struct({ ok: Schema.Boolean }),
+                  execute: () => Effect.succeed({ output: { ok: true } }),
+                }),
               )
               .pipe(Effect.orDie),
         })
@@ -266,7 +260,7 @@ it.live(
         const wakeContext = yield* opencode.sessions.context({ sessionID: id })
         const pendingAfterPromote = yield* opencode.sessions.pending.list({ sessionID: id })
         const event = yield* opencode.sessions.log({ sessionID: id }).pipe(
-          Stream.filter((item) => item.type !== "log.synced"),
+          Stream.filter((item) => item.type === "session.model.selected"),
           Stream.take(1),
           Stream.runHead,
           Effect.map(Option.getOrUndefined),

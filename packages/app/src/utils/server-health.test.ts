@@ -29,32 +29,6 @@ describe("checkServerHealth", () => {
     expect(request?.pathname).toBe("/api/health")
   })
 
-  test("falls back to the V1 health endpoint", async () => {
-    const paths: string[] = []
-    const fetch = (async (input: RequestInfo | URL) => {
-      const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
-      paths.push(url.pathname)
-      if (url.pathname === "/api/health") return new Response(undefined, { status: 404 })
-      return Response.json({ healthy: true, version: "1.18.4" })
-    }) as unknown as typeof globalThis.fetch
-
-    expect(await checkServerHealth(server, fetch)).toEqual({ healthy: true, version: "1.18.4" })
-    expect(paths).toEqual(["/api/health", "/global/health"])
-  })
-
-  test("falls back when the current health response is malformed", async () => {
-    const paths: string[] = []
-    const fetch = (async (input: RequestInfo | URL) => {
-      const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
-      paths.push(url.pathname)
-      if (url.pathname === "/api/health") return Response.json({})
-      return Response.json({ healthy: true, version: "1.18.4" })
-    }) as unknown as typeof globalThis.fetch
-
-    expect(await checkServerHealth(server, fetch)).toEqual({ healthy: true, version: "1.18.4" })
-    expect(paths).toEqual(["/api/health", "/global/health"])
-  })
-
   test("allows slow servers thirty seconds by default", async () => {
     const timeout = Object.getOwnPropertyDescriptor(AbortSignal, "timeout")
     let timeoutMs = 0
@@ -172,7 +146,7 @@ describe("checkServerHealth", () => {
       retryDelayMs: 1,
     })
 
-    expect(count).toBe(6)
+    expect(count).toBe(3)
     expect(result).toEqual({ healthy: false })
   })
 })

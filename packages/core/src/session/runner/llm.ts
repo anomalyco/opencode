@@ -1,6 +1,13 @@
 export * as SessionRunnerLLM from "./llm"
 
-import { LLMClient, LLMError, LLMEvent, isContextOverflowFailure, type ProviderErrorEvent, type ToolCall } from "@opencode-ai/ai"
+import {
+  LLMClient,
+  AIError,
+  LLMEvent,
+  isContextOverflowFailure,
+  type ProviderErrorEvent,
+  type ToolCall,
+} from "@opencode-ai/ai"
 import { Cause, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Stream } from "effect"
 import { Database } from "../../database/database"
 import { Bus } from "../../bus"
@@ -25,11 +32,17 @@ import { StepFailedError } from "../error"
 import { toSessionError } from "../to-session-error"
 import { SessionRunnerRetry } from "./retry"
 import { SessionUsage } from "../usage"
+import { ToolOutput } from "../../tool-output"
 
 /** How one model call ended: settled, awaiting a scheduled retry, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean; readonly step: number }
   Retry: { readonly step: number }
+  Continue: {
+    readonly cause: AIError
+    readonly error: SessionRunnerRetry.RetryableFailure["error"]
+    readonly step: number
+  }
   Restart: { readonly step: number; readonly recoveredOverflow: boolean }
 }>
 const CallOutcome = Data.taggedEnum<CallOutcome>()
@@ -60,16 +73,20 @@ const classifyToolExits = (
       : [],
   )
   const causes =
-    settled._tag === "Failure" ? [settled.cause] : exits.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
+    settled._tag === "Failure"
+      ? [settled.cause]
+      : exits.flatMap((exit) => (exit._tag === "Failure" ? [exit.cause] : []))
   // The first non-interrupt, non-decline failure, rebuilt without decline reasons so the
   // drain's error channel never carries a decline.
-  const failure = causes.flatMap((cause) => {
-    if (Cause.hasInterrupts(cause)) return []
-    const reasons = cause.reasons.flatMap((reason): Array<Cause.Reason<never>> =>
-      Cause.isFailReason(reason) ? [] : [reason],
-    )
-    return reasons.length > 0 ? [Cause.fromReasons(reasons)] : []
-  }).at(0)
+  const failure = causes
+    .flatMap((cause) => {
+      if (Cause.hasInterrupts(cause)) return []
+      const reasons = cause.reasons.flatMap(
+        (reason): Array<Cause.Reason<never>> => (Cause.isFailReason(reason) ? [] : [reason]),
+      )
+      return reasons.length > 0 ? [Cause.fromReasons(reasons)] : []
+    })
+    .at(0)
   return {
     interrupted: causes.some(Cause.hasInterrupts),
     declines,
@@ -80,6 +97,8 @@ const classifyToolExits = (
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
 const STEP_INTERRUPTED = { type: "aborted", message: "Step interrupted" } as const
 const RESULT_MISSING = { type: "tool.result-missing", message: "Provider did not return a tool result" } as const
+const CONTINUE_AFTER_INCOMPLETE_STREAM =
+  "The previous response was interrupted. Continue from where you left off without repeating completed content."
 
 const layer = Layer.effect(
   Service,
@@ -93,10 +112,10 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const title = yield* SessionTitle.Service
-    // Title generation is a side effect of the first step; it must not delay step continuation.
-    // Tracked per process so repeated wakes before the second user message arrives don't
-    // re-fire a redundant LLM call; `SessionTitle` itself is idempotent based on durable history.
-    const titleStarted = new Set<SessionSchema.ID>()
+    const toolOutput = yield* ToolOutput.Service
+    // Title generation is a side effect of a successful step; it must not delay continuation.
+    // The in-flight set coalesces overlapping steps while title presence records success durably.
+    const titlesRunning = new Set<SessionSchema.ID>()
     const forkTitle = yield* FiberSet.makeRuntime<never, void, never>()
     /**
      * Drains eligible manual compaction and user input until the Session becomes idle.
@@ -125,7 +144,7 @@ const layer = Layer.effect(
       let step = 1
       while (true) {
         const result = yield* runStep(sessionID, promotable, step)
-        yield* startTitleOnce(sessionID)
+        if (step === 1) yield* startTitle(sessionID)
         yield* runPendingCompaction(sessionID)
         if (!result.needsContinuation && !(yield* SessionPending.has(db, sessionID, "steer"))) return
         promotable = "steer"
@@ -177,6 +196,20 @@ const layer = Layer.effect(
           assistantMessageID,
         ).pipe(Effect.catchTag("SessionRunner.RetryableFailure", waitForRetry))
         if (outcome._tag === "Completed") return { needsContinuation: outcome.needsContinuation, step: outcome.step }
+        if (outcome._tag === "Continue") {
+          yield* retry(
+            new SessionRunnerRetry.RetryableFailure({
+              cause: outcome.cause,
+              error: outcome.error,
+              step: outcome.step,
+            }),
+          ).pipe(Pull.catchDone(() => Effect.fail(outcome.cause)))
+          yield* bus.publish(SessionEvent.Synthetic, {
+            sessionID,
+            text: CONTINUE_AFTER_INCOMPLETE_STREAM,
+          })
+          assistantMessageID = SessionMessage.ID.create()
+        }
         if (outcome._tag === "Restart") {
           if (outcome.recoveredOverflow) recoverOverflow = false
           assistantMessageID = SessionMessage.ID.create()
@@ -279,7 +312,7 @@ const layer = Layer.effect(
       // event durably, fork one fiber per local tool call, and hold back a virgin
       // context-overflow provider error so settlement may recover it via compaction.
       let overflowFailure: ProviderErrorEvent | undefined
-      const providerStream = llm.stream(prepared.request).pipe(
+      const providerStream = llm.stream(prepared.request, prepared.options).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
@@ -307,6 +340,7 @@ const layer = Layer.effect(
                 ).pipe(
                   // The fiber owns its call: it publishes its own completion, masked so a
                   // finished execution always reaches its durable settlement.
+                  Effect.flatMap(toolOutput.truncate),
                   Effect.flatMap((outcome) => publisher.toolExecution(event.id, event.name, outcome)),
                   Effect.catchTag("Tool.Error", (error) =>
                     publisher.failTool(event.id, toSessionError(error)).pipe(Effect.asVoid),
@@ -357,9 +391,14 @@ const layer = Layer.effect(
           if (overflowFailure) yield* publisher.publish(overflowFailure)
           // A thrown LLM failure not already recorded as the provider error either
           // escapes as a scheduled retry or fails the assistant durably.
-          const llmFailure = streamFailure instanceof LLMError ? streamFailure : undefined
+          const llmFailure = streamFailure instanceof AIError ? streamFailure : undefined
           const llmError = llmFailure && !publisher.record().providerFailed ? toSessionError(llmFailure) : undefined
-          if (llmFailure && llmError && SessionRunnerRetry.isRetryable(llmFailure) && !publisher.record().outputStarted) {
+          if (
+            llmFailure &&
+            llmError &&
+            SessionRunnerRetry.isRetryable(llmFailure) &&
+            !publisher.record().outputStarted
+          ) {
             // RetryScheduled and Step.Failed fold onto an existing assistant message, so
             // Step.Started must be durable before the failure escapes.
             yield* publisher.startAssistant()
@@ -410,6 +449,17 @@ const layer = Layer.effect(
               ...end,
             })
           }
+
+          const incompleteStream =
+            llmFailure?.reason._tag === "InvalidProviderOutput" &&
+            llmFailure.reason.classification === "incomplete-stream"
+          const toolsAllowContinuation = tools.declines.length === 0 && !tools.interrupted
+          if (llmError && incompleteStream && record.outputStarted && toolsAllowContinuation)
+            return CallOutcome.Continue({
+              cause: llmFailure,
+              error: llmError,
+              step: currentStep,
+            })
 
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (tools.declines.length > 0) return yield* Effect.interrupt
@@ -473,7 +523,7 @@ const layer = Layer.effect(
           yield* bus.publish(SessionEvent.Tool.Failed, {
             sessionID,
             assistantMessageID: message.id,
-            callID: tool.id,
+            id: tool.id,
             error: { type: "aborted", message: `Tool execution interrupted: ${tool.name}` },
             executed: tool.executed === true,
           })
@@ -481,11 +531,20 @@ const layer = Layer.effect(
       }
     })
 
-    /** Fires title generation once per process after the first step makes a user message visible. */
-    const startTitleOnce = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
-      if (titleStarted.has(sessionID)) return
-      titleStarted.add(sessionID)
-      forkTitle(title.generateForFirstPrompt(yield* getSession(sessionID)).pipe(Effect.ignore))
+    /** Starts one title request at a time after a successful step makes user input visible. */
+    const startTitle = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+      if (titlesRunning.has(sessionID)) return
+      titlesRunning.add(sessionID)
+      forkTitle(
+        title.generateForFirstPrompt(sessionID).pipe(
+          Effect.ignore,
+          Effect.ensuring(
+            Effect.sync(() => {
+              titlesRunning.delete(sessionID)
+            }),
+          ),
+        ),
+      )
     })
 
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
@@ -510,6 +569,7 @@ export const node = makeLocationNode({
     SessionCompaction.node,
     SessionTitle.node,
     Snapshot.node,
+    ToolOutput.node,
     Database.node,
   ],
 })

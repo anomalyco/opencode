@@ -5,7 +5,10 @@ import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { createSignal, onCleanup, onMount } from "solid-js"
-import type { DialogSelectOption } from "../../../src/ui/dialog-select"
+import { dialogWidth } from "../../../src/ui/dialog"
+import { dialogSelectContentWidth, type DialogSelectOption } from "../../../src/ui/dialog-select"
+import { truncateFilePath } from "../../../src/ui/file-path"
+import { stringWidth } from "../../../src/util/string-width"
 import { tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
@@ -79,7 +82,12 @@ async function renderSelect(
   return app
 }
 
-async function mountSelect(root: string, initial: DialogSelectOption<string>[]) {
+async function mountSelect(
+  root: string,
+  initial: DialogSelectOption<string>[],
+  current?: string,
+  focusCurrent?: boolean,
+) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
   const config = createTuiResolvedConfig()
@@ -114,6 +122,8 @@ async function mountSelect(root: string, initial: DialogSelectOption<string>[]) 
           <DialogSelect
             title="Mutable options"
             options={options()}
+            current={current}
+            focusCurrent={focusCurrent}
             onMove={(option) => moved.push(option.value)}
             onSelect={(option) => selected.push(option.value)}
           />
@@ -145,6 +155,28 @@ async function mountSelect(root: string, initial: DialogSelectOption<string>[]) 
   await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
   return { app, moved, replaceOptions, selected }
 }
+
+test("budgets option content for constrained and full-width large dialogs", () => {
+  expect(dialogSelectContentWidth(Math.min(dialogWidth("large"), 62 - 2)) - 7).toBe(41)
+  expect(dialogSelectContentWidth(Math.min(dialogWidth("large"), 100 - 2)) - 7).toBe(69)
+})
+
+test("renders the complete truncated footer within the option row", async () => {
+  await using tmp = await tmpdir()
+  const title = "Project"
+  const footer = truncateFilePath(
+    "/tmp/opencode/projects/a-very-long-project-directory/distinctive-tail.tsx",
+    dialogSelectContentWidth(dialogWidth("medium")) - stringWidth(title),
+  )
+  const select = await mountSelect(tmp.path, [{ title, footer, value: "project" }])
+
+  try {
+    await select.app.waitForFrame((frame) => frame.includes(footer))
+    expect(select.app.captureCharFrame()).toContain(footer)
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
 
 test("renders actions with a current selection", async () => {
   await using tmp = await tmpdir()
@@ -180,6 +212,27 @@ test("dialog actions run without options while row actions still require a selec
 
     expect(global).toBe(1)
     expect(rows).toEqual([])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("renders one gap before an empty state", async () => {
+  await using tmp = await tmpdir()
+  const app = await renderSelect(
+    tmp.path,
+    [],
+    () => {},
+    () => {},
+  )
+
+  try {
+    await app.waitForFrame((frame) => frame.includes("No items available"))
+    const lines = app
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.trim())
+    expect(lines.indexOf("No items available") - lines.indexOf("Search")).toBe(2)
   } finally {
     app.renderer.destroy()
   }
@@ -292,6 +345,44 @@ test("keeps the cursor index while options are temporarily empty", async () => {
     await select.app.waitFor(() => select.selected.length === 1)
 
     expect(select.selected).toEqual(["third"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("keeps the current option selected when options reorder", async () => {
+  await using tmp = await tmpdir()
+  const options = ["first", "current", "third"].map((value) => ({ title: value, value }))
+  const select = await mountSelect(tmp.path, options, "current")
+
+  try {
+    select.replaceOptions([options[1], options[2], options[0]])
+    await select.app.waitForFrame((frame) => frame.indexOf("current") < frame.indexOf("third"))
+    select.app.mockInput.pressEnter()
+    await select.app.waitFor(() => select.selected.length === 1)
+
+    expect(select.selected).toEqual(["current"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("keeps the first row selected when current is only a marker", async () => {
+  await using tmp = await tmpdir()
+  const project = { title: "project", value: "project" }
+  const select = await mountSelect(tmp.path, [project], "current", false)
+
+  try {
+    select.replaceOptions([
+      { title: "recent session", value: "recent" },
+      project,
+      { title: "current session", value: "current" },
+    ])
+    await select.app.waitForFrame((frame) => frame.includes("recent session"))
+    select.app.mockInput.pressEnter()
+    await select.app.waitFor(() => select.selected.length === 1)
+
+    expect(select.selected).toEqual(["recent"])
   } finally {
     select.app.renderer.destroy()
   }

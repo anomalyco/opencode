@@ -2,6 +2,7 @@ type Client = ReturnType<typeof import("./generated/client.js").make>
 
 export type AgentApi = Client["agent"]
 export type CommandApi = Client["command"]
+export type ConfigApi = Client["config"]
 export type EventApi = Client["event"]
 export type IntegrationApi = Client["integration"]
 export type ModelApi = Client["model"]

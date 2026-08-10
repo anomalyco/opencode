@@ -2,16 +2,19 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Layer, Schema } from "effect"
-import { systemError } from "effect/PlatformError"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Environment } from "@opencode-ai/core/environment"
 import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Formatter } from "@opencode-ai/core/formatter"
+import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Location } from "@opencode-ai/core/location"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Tool } from "@opencode-ai/core/tool"
 import { PatchTool } from "@opencode-ai/core/tool/plugin/patch"
+import { transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -21,7 +24,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const patchToolNode = makeLocationNode({
   name: "test/patch-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(PatchTool.Plugin)),
-  deps: [Tool.node, FSUtil.node, Location.node, Permission.node],
+  deps: [Tool.node, FileMutation.node, Environment.node, Formatter.node, Location.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_patch_tool_test")
@@ -33,6 +36,7 @@ let failWriteTarget: string | undefined
 let readsBeforeEditApproval = 0
 let editApproved = false
 let afterEditApproval = (): Effect.Effect<void> => Effect.void
+let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
 
 const permission = Layer.succeed(
   Permission.Service,
@@ -63,6 +67,10 @@ const permission = Layer.succeed(
   }),
 )
 
+const formatter = Layer.mock(Formatter.Service, {
+  file: (target) => formatFile(target),
+})
+
 const reset = () => {
   assertions.length = 0
   denyAction = undefined
@@ -72,50 +80,8 @@ const reset = () => {
   readsBeforeEditApproval = 0
   editApproved = false
   afterEditApproval = () => Effect.void
+  formatFile = () => Effect.succeed(false)
 }
-
-const filesystem = Layer.effect(
-  FSUtil.Service,
-  Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    return FSUtil.Service.of({
-      ...fs,
-      readFile: (target) =>
-        Effect.sync(() => {
-          if (!editApproved) readsBeforeEditApproval++
-        }).pipe(Effect.andThen(fs.readFile(target))),
-      remove: (target, options) => {
-        if (failRemoveTarget && path.basename(target) === failRemoveTarget) return Effect.die("forced remove failure")
-        if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget) {
-          return Effect.fail(
-            systemError({
-              _tag: "Unknown",
-              module: "FileSystem",
-              method: "remove",
-              description: "forced remove failure",
-              pathOrDescriptor: target,
-            }),
-          )
-        }
-        return fs.remove(target, options)
-      },
-      writeWithDirs: (target, content, mode) => {
-        if (failWriteTarget && path.basename(target) === failWriteTarget) {
-          return Effect.fail(
-            systemError({
-              _tag: "Unknown",
-              module: "FileSystem",
-              method: "writeWithDirs",
-              description: "forced write failure",
-              pathOrDescriptor: target,
-            }),
-          )
-        }
-        return fs.writeWithDirs(target, content, mode)
-      },
-    })
-  }),
-).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 
 const withTool = <A, E, R>(
   directory: string,
@@ -132,9 +98,30 @@ const withTool = <A, E, R>(
     return yield* body(yield* Tool.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, patchToolNode]), [
-        [FSUtil.node, filesystem],
+      AppNodeBuilder.build(LayerNode.group([Tool.node, FileMutation.node, patchToolNode]), [
+        [
+          Environment.node,
+          transformEnvironmentFiles(activeLocation, (files) => ({
+            read: (target, range) =>
+              Effect.sync(() => {
+                if (!editApproved) readsBeforeEditApproval++
+              }).pipe(Effect.andThen(files.read(target, range))),
+            remove: (target) => {
+              if (failRemoveTarget && path.basename(target) === failRemoveTarget)
+                return Effect.die("forced remove failure")
+              if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
+                return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced remove failure") }))
+              return files.remove(target)
+            },
+            write: (target, content) => {
+              if (failWriteTarget && path.basename(target) === failWriteTarget)
+                return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
+              return files.write(target, content)
+            },
+          })),
+        ],
         [Location.node, activeLocation],
+        [Formatter.node, formatter],
         [Permission.node, permission],
       ]),
     ),
@@ -221,7 +208,7 @@ describe("PatchTool", () => {
                       file: "remove.txt",
                       status: "deleted",
                       additions: 0,
-                      deletions: 2,
+                      deletions: 1,
                       patch: expect.stringContaining("-remove"),
                     },
                   ],
@@ -252,6 +239,88 @@ describe("PatchTool", () => {
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
+  )
+
+  it.live("counts deleted lines with and without a trailing newline", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          Promise.all([
+            fs.writeFile(path.join(directory, "trailing.txt"), "remove\n"),
+            fs.writeFile(path.join(directory, "unterminated.txt"), "remove"),
+          ]),
+        )
+        const settled = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Delete File: trailing.txt\n*** Delete File: unterminated.txt\n*** End Patch"),
+        )
+        expect(settled.status).toBe("completed")
+        if (settled.status !== "completed") return
+        expect(settled.output.files).toMatchObject([
+          { file: "trailing.txt", additions: 0, deletions: 1 },
+          { file: "unterminated.txt", additions: 0, deletions: 1 },
+        ])
+      }),
+    ),
+  )
+
+  it.live("serializes concurrent patch transactions", () =>
+    withTempTool((directory, registry) => {
+      const target = path.join(directory, "concurrent.txt")
+      afterEditApproval = () =>
+        assertions.filter((input) => input.action === "edit").length === 1 ? Effect.sleep("50 millis") : Effect.void
+      return Effect.promise(() => fs.writeFile(target, "one\ntwo\n")).pipe(
+        Effect.andThen(
+          Effect.all(
+            [
+              executeTool(
+                registry,
+                call(
+                  "*** Begin Patch\n*** Update File: concurrent.txt\n@@\n-one\n+ONE\n*** End Patch",
+                  "call-patch-one",
+                ),
+              ),
+              executeTool(
+                registry,
+                call(
+                  "*** Begin Patch\n*** Update File: concurrent.txt\n@@\n-two\n+TWO\n*** End Patch",
+                  "call-patch-two",
+                ),
+              ),
+            ],
+            { concurrency: "unbounded" },
+          ),
+        ),
+        Effect.andThen((results) =>
+          Effect.gen(function* () {
+            expect(results.map((result) => result.status)).toEqual(["completed", "completed"])
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("ONE\nTWO\n")
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("returns file diffs for final formatted content", () =>
+    withTempTool((directory, registry) => {
+      const target = path.join(directory, "formatted.txt")
+      formatFile = (file) =>
+        Effect.promise(async () => {
+          await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace("created", "FORMATTED"))
+          return true
+        })
+      return Effect.gen(function* () {
+        const settled = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Add File: formatted.txt\n+created\n*** End Patch"),
+        )
+        expect(settled.status).toBe("completed")
+        if (settled.status !== "completed") return
+        expect(settled.output.files[0]?.patch).toContain("+FORMATTED")
+        expect(settled.metadata?.files?.[0]?.patch).toContain("+FORMATTED")
+        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("FORMATTED\n")
+      })
+    }),
   )
 
   it.live("moves and updates a file", () =>
@@ -393,7 +462,7 @@ describe("PatchTool", () => {
             {
               file: "renamed/dir/name.txt",
               status: "modified",
-              patch: expect.stringContaining("-old content\n+new content"),
+              patch: expect.stringContaining(`Index: ${source}`),
             },
           ],
         })
@@ -552,6 +621,11 @@ describe("PatchTool", () => {
         const bom = "\uFEFF"
         const target = path.join(directory, "example.cs")
         yield* Effect.promise(() => fs.writeFile(target, `${bom}using System;\n\nclass Test {}\n`))
+        formatFile = (file) =>
+          Effect.promise(async () => {
+            await fs.writeFile(file, (await fs.readFile(file, "utf8")).replace(/^\uFEFF/, ""))
+            return true
+          })
         const settled = yield* executeTool(
           registry,
           call("*** Begin Patch\n*** Update File: example.cs\n@@\n class Test {}\n+class Next {}\n*** End Patch"),

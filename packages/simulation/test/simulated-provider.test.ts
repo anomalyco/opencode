@@ -272,14 +272,14 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
           expect(
             (yield* registry.snapshot([{ action: "simulate_lookup", resource: "*", effect: "deny" }])).definitions,
           ).not.toContainEqual(expect.objectContaining({ name: "lookup" }))
-          const secondaryToolSet = yield* Tool.Service.use((secondaryRegistry) =>
-            secondaryRegistry.snapshot(),
-          ).pipe(Effect.provide(secondary))
+          const secondaryToolSet = yield* Tool.Service.use((secondaryRegistry) => secondaryRegistry.snapshot()).pipe(
+            Effect.provide(secondary),
+          )
           expect(secondaryToolSet.definitions).toContainEqual(
             expect.objectContaining({ name: "lookup", description: "Look up a value" }),
           )
           const progress: Tool.Metadata[] = []
-          const executeCall = (callID: string, query: string) =>
+          const executeCall = (id: string, query: string) =>
             toolSet.execute({
               sessionID: Session.ID.make("ses_simulated_tools"),
               agent: Agent.ID.make("build"),
@@ -287,7 +287,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
               progress: (update) => Effect.sync(() => progress.push(update)),
               call: {
                 type: "tool-call",
-                id: callID,
+                id: id,
                 name: "lookup",
                 input: { query },
               },
@@ -302,7 +302,7 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
               sessionID: "ses_simulated_tools",
               agent: "build",
               messageID: "msg_simulated_tools",
-              callID: "call_success",
+              id: "call_success",
             },
           })
           const successID = requireString(requireRecord(successInvocation.params).id)
@@ -420,25 +420,25 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
             invocations.map((invocation) => {
               const params = requireRecord(invocation.params)
               const context = requireRecord(params.context)
-              return [requireString(context.callID), requireString(params.id)]
+              return [requireString(context.id), requireString(params.id)]
             }),
           )
-          for (const [id, callID, value] of [
+          for (const [requestID, toolID, value] of [
             [5, "call_second", "second result"],
             [6, "call_first", "first result"],
           ] as const) {
             socket.send(
               JSON.stringify({
                 jsonrpc: "2.0",
-                id,
+                id: requestID,
                 method: "tool.finish",
                 params: {
-                  id: byCall.get(callID),
+                  id: byCall.get(toolID),
                   output: { structured: value, content: [{ type: "text", text: value }] },
                 },
               }),
             )
-            expect(yield* Queue.take(messages)).toMatchObject({ id, result: { ok: true } })
+            expect(yield* Queue.take(messages)).toMatchObject({ id: requestID, result: { ok: true } })
           }
           expect(yield* Fiber.join(concurrent[0])).toMatchObject({
             output: "first result",
@@ -601,9 +601,9 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
           const replacedNames = replaced.definitions.map((definition) => definition.name)
           expect(replacedNames).toEqual(expect.arrayContaining(["github_search", "web_search"]))
           expect(replacedNames).not.toContain("lookup")
-          const secondaryReplaced = yield* Tool.Service.use((secondaryRegistry) =>
-            secondaryRegistry.snapshot(),
-          ).pipe(Effect.provide(secondary))
+          const secondaryReplaced = yield* Tool.Service.use((secondaryRegistry) => secondaryRegistry.snapshot()).pipe(
+            Effect.provide(secondary),
+          )
           const secondaryNames = secondaryReplaced.definitions.map((definition) => definition.name)
           expect(secondaryNames).toEqual(expect.arrayContaining(["github_search", "web_search"]))
           expect(secondaryNames).not.toContain("lookup")
@@ -701,12 +701,7 @@ const toolLifecycleLayer = (endpoint: string) => {
   })
   return AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, provider]),
-    [
-      [
-        Config.node,
-        Config.testLayer(),
-      ],
-    ],
+    [[Config.node, Config.testLayer()]],
   )
 }
 

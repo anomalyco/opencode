@@ -19,7 +19,9 @@ import {
   displayCharAt,
   displaySlice,
   isExitCommand,
+  isCompactCommand,
   mentionTriggerIndex,
+  slashTriggerIndex,
   isNewCommand,
   movePromptHistory,
   promptCopy,
@@ -31,7 +33,16 @@ import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.edit
 import { monoTruncateMiddle } from "./mono"
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
-import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunReference } from "./types"
+import type {
+  FooterQueuedPrompt,
+  FooterState,
+  RunAgent,
+  RunCommand,
+  RunDelivery,
+  RunPrompt,
+  RunPromptPart,
+  RunReference,
+} from "./types"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 const AUTOCOMPLETE_BOTTOM_ROWS = 1
@@ -40,7 +51,7 @@ export const TEXTAREA_MIN_ROWS = 1
 const TEXTAREA_MAX_ROWS = 6
 export const PROMPT_MAX_ROWS = TEXTAREA_MAX_ROWS + AUTOCOMPLETE_ROWS - 1 + AUTOCOMPLETE_BOTTOM_ROWS
 
-type Mention = Extract<RunPromptPart, { type: "file" | "agent" }>
+type Mention = Extract<RunPromptPart, { type: "file" | "agent" | "skill" }>
 
 type Auto = RunFooterMenuItem & {
   kind: "mention"
@@ -55,7 +66,12 @@ type SlashOption = RunFooterMenuItem & {
   action?: "skill-menu" | "editor" | "settings"
 }
 
-type PromptOption = Auto | SlashOption
+type SkillOption = RunFooterMenuItem & {
+  kind: "skill"
+  id: string
+}
+
+type PromptOption = Auto | SlashOption | SkillOption
 
 type MenuMode = false | "mention" | "slash"
 
@@ -72,6 +88,8 @@ type PromptInput = {
   theme: Accessor<RunFooterTheme>
   mono: Accessor<boolean>
   history?: Accessor<RunPrompt[]>
+  queuedPrompts: Accessor<FooterQueuedPrompt[]>
+  onQueuedPromptSteer: (inputID: string) => Promise<boolean>
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onCycle: () => void
   onInterrupt: () => boolean
@@ -112,12 +130,9 @@ function emptyPrompt(shell: boolean): RunPrompt {
 }
 
 function slashQuery(text: string, cursor: number) {
-  const head = parseSlashHead(text.slice(0, cursor))
-  if (!head || head.end !== cursor) {
-    return
-  }
-
-  return head.name
+  const at = slashTriggerIndex(text, cursor)
+  if (at === undefined) return
+  return { at, value: displaySlice(text, at + 1, cursor) }
 }
 
 function parseSlashCommand(text: string, commands: RunCommand[] | undefined) {
@@ -370,10 +385,18 @@ export function createPromptState(input: PromptInput): PromptState {
   )
   const mentionOptions = createMemo(() => [...agents(), ...files(), ...references()])
   const skillCommands = createMemo(() => (input.commands() ?? []).filter((item) => item.source === "skill"))
+  const skillOptions = createMemo<SkillOption[]>(() =>
+    skillCommands().map((item) => ({
+      kind: "skill",
+      id: item.name,
+      display: `/${item.name}`,
+      description: item.description,
+    })),
+  )
   const hasSkillsCommand = createMemo(() =>
     (input.commands() ?? []).some((item) => item.source !== "skill" && item.name === "skills"),
   )
-  const slashOptions = createMemo<SlashOption[]>(() => {
+  const slashOptions = createMemo<Array<SlashOption | SkillOption>>(() => {
     const builtins = [
       {
         kind: "slash",
@@ -394,7 +417,7 @@ export function createPromptState(input: PromptInput): PromptState {
         kind: "slash",
         name: "compact",
         display: "/compact",
-        description: "summarize the session to reduce context usage",
+        description: "compact older session context to free space",
       } satisfies SlashOption,
       { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
     ]
@@ -405,6 +428,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     return [
+      ...skillOptions(),
       ...(showSkillMenu
         ? [
             {
@@ -431,7 +455,7 @@ export function createPromptState(input: PromptInput): PromptState {
     ].sort((a, b) => a.display.localeCompare(b.display))
   })
   const options = createMemo<PromptOption[]>(() => {
-    const mixed: PromptOption[] = mode() === "slash" ? slashOptions() : mentionOptions()
+    const mixed: PromptOption[] = mode() === "slash" ? (at() === 0 ? slashOptions() : skillOptions()) : mentionOptions()
     if (!query()) {
       return mixed
     }
@@ -447,7 +471,11 @@ export function createPromptState(input: PromptInput): PromptState {
 
     return fuzzysort
       .go(next, mixed, {
-        keys: [(item) => (item.kind === "mention" ? item.value : item.name).trimEnd(), "display", "description"],
+        keys: [
+          (item) => (item.kind === "mention" ? item.value : item.kind === "skill" ? item.id : item.name).trimEnd(),
+          "display",
+          "description",
+        ],
       })
       .map((item) => item.obj)
   })
@@ -500,17 +528,19 @@ export function createPromptState(input: PromptInput): PromptState {
         continue
       }
 
-      const text = area.plainText.slice(item.start, item.end)
+      const text = displaySlice(area.plainText, item.start, item.end)
       const prev =
         part.type === "agent"
           ? (part.source?.value ?? "@" + part.name)
-          : (part.source?.text.value ?? "@" + (part.filename ?? ""))
+          : part.type === "skill"
+            ? (part.source?.value ?? "/" + part.id)
+            : (part.source?.text.value ?? "@" + (part.filename ?? ""))
       if (text !== prev) {
         continue
       }
 
       const copy = structuredClone(part)
-      if (copy.type === "agent") {
+      if (copy.type === "agent" || copy.type === "skill") {
         copy.source = {
           start: item.start,
           end: item.end,
@@ -546,7 +576,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const restoreParts = (value: RunPromptPart[]) => {
     clearParts()
     parts = value
-      .filter((item): item is Mention => item.type === "file" || item.type === "agent")
+      .filter((item): item is Mention => item.type === "file" || item.type === "agent" || item.type === "skill")
       .map((item) => structuredClone(item))
     if (!area || area.isDestroyed || type === 0) {
       return
@@ -554,8 +584,8 @@ export function createPromptState(input: PromptInput): PromptState {
 
     const box = area
     parts.forEach((item, idx) => {
-      const start = item.type === "agent" ? item.source?.start : item.source?.text.start
-      const end = item.type === "agent" ? item.source?.end : item.source?.text.end
+      const start = item.type === "file" ? item.source?.text.start : item.source?.start
+      const end = item.type === "file" ? item.source?.text.end : item.source?.end
       if (start === undefined || end === undefined) {
         return
       }
@@ -615,16 +645,16 @@ export function createPromptState(input: PromptInput): PromptState {
         return
       }
 
-      setAt(0)
-      setQuery(slash)
+      setAt(slash.at)
+      setQuery(slash.value)
       return
     }
 
     if (slash !== undefined) {
-      setAt(0)
+      setAt(slash.at)
       menu.reset()
       setMode("slash")
-      setQuery(slash)
+      setQuery(slash.value)
       return
     }
 
@@ -770,7 +800,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const cursor = area.cursorOffset
-    const startOffset = mode() === "slash" ? 0 : at()
+    const startOffset = at()
     area.cursorOffset = startOffset
     const start = area.logicalCursor
     area.cursorOffset = cursor
@@ -813,6 +843,39 @@ export function createPromptState(input: PromptInput): PromptState {
   const select = (item?: PromptOption) => {
     const next = item ?? options()[menu.selected()]
     if (!next || !area || area.isDestroyed) {
+      return
+    }
+
+    if (next.kind === "skill") {
+      if (parts.some((part) => part.type === "skill" && part.id === next.id)) {
+        cancelAutocomplete()
+        return
+      }
+      const cursor = area.cursorOffset
+      const tail = displayCharAt(area.plainText, cursor)
+      const append = `/${next.id}${tail === " " ? "" : " "}`
+      area.cursorOffset = at()
+      const start = area.logicalCursor
+      area.cursorOffset = cursor
+      const end = area.logicalCursor
+      area.deleteRange(start.row, start.col, end.row, end.col)
+      area.insertText(append)
+
+      const text = `/${next.id}`
+      const startOffset = at()
+      const endOffset = startOffset + stringWidth(text)
+      const part: Extract<RunPromptPart, { type: "skill" }> = {
+        type: "skill",
+        id: next.id,
+        source: { start: startOffset, end: endOffset, value: text },
+      }
+      const id = area.extmarks.create({ start: startOffset, end: endOffset, virtual: true, typeId: type })
+      marks.set(id, parts.length)
+      parts.push(part)
+      hide()
+      syncDraft()
+      scheduleRows()
+      area.focus()
       return
     }
 
@@ -980,8 +1043,18 @@ export function createPromptState(input: PromptInput): PromptState {
   }))
 
   Keymap.createLayer(() => ({
+    priority: 1,
     enabled: input.prompt() && !visible(),
     commands: [
+      {
+        id: "prompt.queue",
+        title: "Queue prompt",
+        group: "Prompt",
+        run() {
+          syncDraft()
+          submitPrompt(promptCopy(draft), "queue")
+        },
+      },
       {
         id: "prompt.editor",
         title: "Open editor",
@@ -1116,7 +1189,8 @@ export function createPromptState(input: PromptInput): PromptState {
     }
   }
 
-  const submitPrompt = (next: RunPrompt) => {
+  let submitting = false
+  const submitPrompt = (next: RunPrompt, delivery: RunDelivery = "steer") => {
     if (!area || area.isDestroyed) {
       draft = promptCopy(next)
     }
@@ -1130,12 +1204,34 @@ export function createPromptState(input: PromptInput): PromptState {
       hide()
     }
 
+    if (submitting) return
+
     if (!next.text.trim()) {
+      const queued = delivery === "steer" ? input.queuedPrompts()[0] : undefined
+      if (queued) {
+        submitting = true
+        void input.onQueuedPromptSteer(queued.messageID).finally(() => {
+          submitting = false
+        })
+        return
+      }
       input.onStatus(input.state().phase === "running" ? "waiting for current response" : "empty prompt ignored")
       return
     }
 
     const command = next.mode === "shell" ? undefined : selectedCommand(next.text, next.command)
+    if (
+      delivery === "queue" &&
+      (next.mode === "shell" ||
+        command?.source === "skill" ||
+        isNewCommand(next.text) ||
+        isCompactCommand(next.text) ||
+        isExitCommand(next.text) ||
+        next.text.trim().toLowerCase() === "/settings")
+    ) {
+      input.onStatus("this prompt cannot be queued")
+      return
+    }
     if (!command && next.mode !== "shell" && isExitCommand(next.text)) {
       input.onExit()
       return
@@ -1148,7 +1244,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const parsed =
-      command || next.mode === "shell" || isNewCommand(next.text)
+      command || next.parts.some((part) => part.type === "skill") || next.mode === "shell" || isNewCommand(next.text)
         ? undefined
         : parseSlashCommand(next.text, input.commands())
     if (parsed?.type === "pending") {
@@ -1157,24 +1253,28 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const submit = command
-      ? { ...next, command }
+      ? { ...next, command, delivery }
       : parsed?.type === "command"
-        ? { ...next, command: parsed.command }
-        : next
+        ? { ...next, command: parsed.command, delivery }
+        : { ...next, delivery }
     const shellMode = next.mode === "shell"
 
+    submitting = true
     resetDraft()
     queueMicrotask(async () => {
-      if (await input.onSubmit(submit)) {
-        push(next)
-        if (shellMode) {
-          setShellMode(false)
-          draft = emptyPrompt(false)
+      try {
+        if (await input.onSubmit(submit)) {
+          push(next)
+          if (shellMode) {
+            setShellMode(false)
+            draft = emptyPrompt(false)
+          }
+          return
         }
-        return
+        restore(next)
+      } finally {
+        submitting = false
       }
-
-      restore(next)
     })
   }
 

@@ -1,6 +1,6 @@
 import { createContext, useContext, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
@@ -14,7 +14,7 @@ type ToastInput = Omit<ToastOptions, "duration"> & { duration?: number }
 
 export function Toast() {
   const toast = useToast()
-  const theme = useThemes().contextual("overlay")
+  const theme = useTheme("overlay")
   const dimensions = useTerminalDimensions()
 
   return (

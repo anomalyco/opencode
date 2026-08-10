@@ -1,11 +1,11 @@
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useDialog } from "./dialog"
 
 export function DialogHelp() {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const shortcuts = Keymap.useShortcuts()
 
   Keymap.createLayer(() => ({

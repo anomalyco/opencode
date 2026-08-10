@@ -61,7 +61,7 @@ const layer = Layer.effect(
       const image = Object.assign(
         {},
         ...(yield* config.entries()).flatMap((entry) =>
-          entry.type === "document" && entry.info.attachments?.image ? [entry.info.attachments.image] : [],
+          entry.type === "document" && entry.info.media?.image ? [entry.info.media.image] : [],
         ),
       )
       const normalize = yield* loadAdapter

@@ -34,6 +34,15 @@ export type ProviderPackage = ProviderPackageDefinition
 const packages = new Map<string, Promise<unknown>>()
 const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode-ai/ai/providers/amazon-bedrock", () => import("@opencode-ai/ai/providers/amazon-bedrock")],
+  ["@opencode-ai/ai/providers/amazon-bedrock/mantle", () => import("@opencode-ai/ai/providers/amazon-bedrock/mantle")],
+  [
+    "@opencode-ai/ai/providers/amazon-bedrock/mantle/chat",
+    () => import("@opencode-ai/ai/providers/amazon-bedrock/mantle/chat"),
+  ],
+  [
+    "@opencode-ai/ai/providers/amazon-bedrock/mantle/responses",
+    () => import("@opencode-ai/ai/providers/amazon-bedrock/mantle/responses"),
+  ],
   ["@opencode-ai/ai/providers/anthropic", () => import("@opencode-ai/ai/providers/anthropic")],
   ["@opencode-ai/ai/providers/azure", () => import("@opencode-ai/ai/providers/azure")],
   ["@opencode-ai/ai/providers/azure/chat", () => import("@opencode-ai/ai/providers/azure/chat")],

@@ -105,7 +105,7 @@ async function selectSession(input: {
     return {
       session: input.fork
         ? await input.client.session
-            .fork({ sessionID: explicit.id }, ...requestOptions(input.signal))
+            .fork({ sessionID: explicit.id, boundary: { type: "through" } }, ...requestOptions(input.signal))
             .catch((error) => {
               throw new SessionTargetMutationError(error)
             })
@@ -118,9 +118,11 @@ async function selectSession(input: {
   if (!selected) return { session: undefined, location }
   return {
     session: input.fork
-      ? await input.client.session.fork({ sessionID: selected.id }, ...requestOptions(input.signal)).catch((error) => {
-          throw new SessionTargetMutationError(error)
-        })
+      ? await input.client.session
+          .fork({ sessionID: selected.id, boundary: { type: "through" } }, ...requestOptions(input.signal))
+          .catch((error) => {
+            throw new SessionTargetMutationError(error)
+          })
       : selected,
   }
 }

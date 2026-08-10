@@ -1,13 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:pdf",
-      "pdf",
-      "provider:anthropic",
-      "protocol:anthropic-messages",
-      "user-input"
-    ],
+    "tags": ["prefix:pdf", "pdf", "provider:anthropic", "protocol:anthropic-messages", "user-input"],
     "name": "pdf/anthropic-user-input",
     "recordedAt": "2026-07-22T18:15:37.979Z"
   },
