@@ -748,7 +748,7 @@ function apiCallErrorReason(error: APICallError) {
     message: reason.message,
     kind: error.name,
     url: error.url,
-    http: reason.http,
+    http: "http" in reason ? reason.http : undefined,
   })
 }
 

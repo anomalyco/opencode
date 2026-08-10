@@ -86,7 +86,7 @@ export interface ProviderFailure {
 
 // Keep HTTP failures and provider-reported stream failures on one typed path so
 // session retry policy never needs provider-specific string matching.
-export function classifyProviderFailure(input: ProviderFailure) {
+export function classifyProviderFailure(input: ProviderFailure): AIError["reason"] {
   const body = input.http?.body ?? ""
   const codes = [input.code, ...providerCodes(body), ...providerCodes(input.message)]
     .filter((code): code is string => code !== undefined)
