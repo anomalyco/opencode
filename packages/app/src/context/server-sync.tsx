@@ -671,7 +671,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
               inputs: {},
               location: { directory: key },
             })
-            platform.openLink(attempt.data.url)
+            platform.openExternal(attempt.data.url)
           },
           refresh: async () => {
             await queryClient.refetchQueries(queryOptionsApi.mcp(key))

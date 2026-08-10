@@ -4,11 +4,13 @@ import { createSignal, onMount } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "../ui/dialog"
+import { useConfig } from "../config"
 
 export function DialogProjectCopyName(props: { onConfirm: (name: string) => void }) {
   const dialog = useDialog()
   const theme = useTheme("elevated")
   const shortcuts = Keymap.useShortcuts()
+  const config = useConfig().data
   const [inputTarget, setInputTarget] = createSignal<InputRenderable>()
   let input: InputRenderable
 
@@ -55,6 +57,7 @@ export function DialogProjectCopyName(props: { onConfirm: (name: string) => void
         </text>
       </box>
       <input
+        cursorStyle={config.cursor}
         ref={(value: InputRenderable) => {
           input = value
           setInputTarget(value)

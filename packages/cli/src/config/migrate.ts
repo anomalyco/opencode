@@ -122,6 +122,7 @@ export function migrateV1(legacy: TuiConfigV1.Info | undefined, kv: Record<strin
         }),
     ...(kv.animations_enabled === undefined ? {} : { animations: kv.animations_enabled }),
     ...(legacy?.mouse === undefined ? {} : { mouse: legacy.mouse }),
+    ...(legacy?.cursor === undefined ? {} : { cursor: legacy.cursor }),
   }
 }
 

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises"
 
-const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.dev"
+const modelsUrl = process.env.OPENCODE_MODELS_URL || "https://models.opencode.ai"
 
 export const modelsData = process.env.MODELS_DEV_API_JSON
   ? await readFile(process.env.MODELS_DEV_API_JSON, "utf8")

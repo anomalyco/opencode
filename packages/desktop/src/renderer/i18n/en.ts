@@ -18,4 +18,7 @@ export const dict = {
     "Version {{version}} of OpenCode has been downloaded, would you like to install it and relaunch?",
   "desktop.updater.installFailed.title": "Update Failed",
   "desktop.updater.installFailed.message": "Failed to install update",
+
+  "desktop.error.dev.rootNotFound":
+    "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
 }

@@ -1,5 +1,5 @@
 export const dict = {
-  "desktop.menu.checkForUpdates": "Nach Updates suchen...",
+  "desktop.menu.checkForUpdates": "Nach Updates suchen…",
   "desktop.menu.reloadWebview": "Webview neu laden",
   "desktop.menu.restart": "Neustart",
 
@@ -18,4 +18,7 @@ export const dict = {
     "Version {{version}} von OpenCode wurde heruntergeladen. Möchten Sie sie installieren und neu starten?",
   "desktop.updater.installFailed.title": "Update fehlgeschlagen",
   "desktop.updater.installFailed.message": "Update konnte nicht installiert werden",
+
+  "desktop.error.dev.rootNotFound":
+    "Wurzelelement nicht gefunden. Haben Sie vergessen, es in Ihre index.html aufzunehmen? Oder wurde das ID-Attribut falsch geschrieben?",
 }

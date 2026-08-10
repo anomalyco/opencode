@@ -11,6 +11,7 @@ import { useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
 import { useToast } from "../../ui/toast"
 import { Keymap } from "../../context/keymap"
+import { useConfig } from "../../config"
 import {
   formCustom,
   formDisplayValue,
@@ -50,6 +51,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const keymap = Keymap.use()
+  const config = useConfig().data
   const clipboard = useClipboard()
   const toast = useToast()
   const configuredFields = props.form.fields.filter(isFormAnswerField)
@@ -751,6 +753,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
             <Show when={textual() ? answerField()!.key : undefined} keyed>
               <box paddingLeft={1}>
                 <textarea
+                  cursorStyle={config.cursor}
                   ref={(val: TextareaRenderable) => {
                     textarea = val
                     val.traits = { status: "ANSWER" }
@@ -866,6 +869,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                     <Show when={store.editing}>
                       <box paddingLeft={3}>
                         <textarea
+                          cursorStyle={config.cursor}
                           ref={(val: TextareaRenderable) => {
                             textarea = val
                             val.traits = { status: "ANSWER" }

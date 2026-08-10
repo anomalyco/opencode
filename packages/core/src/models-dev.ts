@@ -554,12 +554,12 @@ export const layer = (options?: Options) =>
         ),
       )
 
-      const source = options?.url || "https://models.dev"
+      const source = options?.url || "https://models.opencode.ai"
       const fetch = options?.fetch ?? true
       const userAgent = App.useragent(app)
       const filepath = path.join(
         Global.Path.cache,
-        source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
+        source === "https://models.opencode.ai" ? "models.json" : `models-${Hash.fast(source)}.json`,
       )
       const ttl = Duration.minutes(5)
       const lockKey = `models-dev:${filepath}`

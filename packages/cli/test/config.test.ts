@@ -118,6 +118,32 @@ test("migrates before the first update and does not remigrate afterward", async 
   }
 })
 
+test("preserves legacy cursor settings", async () => {
+  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  await Bun.write(
+    path.join(directory, "tui.json"),
+    JSON.stringify({ cursor: { style: "underline", blinking: false } }),
+  )
+
+  try {
+    const config = await run(
+      directory,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.get()
+      }),
+    )
+
+    expect(config.cursor).toEqual({ style: "underline", blinking: false })
+    expect((await Bun.file(path.join(directory, "cli.json")).json()).cursor).toEqual({
+      style: "underline",
+      blinking: false,
+    })
+  } finally {
+    await Bun.$`rm -rf ${directory}`
+  }
+})
+
 test("updates a config draft while preserving JSONC comments", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   await Bun.write(path.join(directory, "cli.json"), '{\n  // Keep this comment\n  "animations": true\n}\n')

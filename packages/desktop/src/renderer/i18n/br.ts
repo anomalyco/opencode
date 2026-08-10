@@ -18,4 +18,7 @@ export const dict = {
     "A versão {{version}} do OpenCode foi baixada. Você gostaria de instalá-la e reiniciar?",
   "desktop.updater.installFailed.title": "Falha na atualização",
   "desktop.updater.installFailed.message": "Falha ao instalar a atualização",
+
+  "desktop.error.dev.rootNotFound":
+    "Elemento raiz não encontrado. Você esqueceu de adicioná-lo ao seu index.html? Ou talvez o atributo id foi escrito incorretamente?",
 }

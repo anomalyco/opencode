@@ -1,6 +1,6 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "检查更新...",
-  "desktop.menu.reloadWebview": "重新加载 Webview",
+  "desktop.menu.reloadWebview": "重新加载 WebView",
   "desktop.menu.restart": "重启",
 
   "desktop.dialog.chooseFolder": "选择文件夹",
@@ -14,7 +14,9 @@ export const dict = {
   "desktop.updater.downloadFailed.title": "更新失败",
   "desktop.updater.downloadFailed.message": "无法下载更新",
   "desktop.updater.downloaded.title": "更新已下载",
-  "desktop.updater.downloaded.prompt": "已下载 OpenCode {{version}} 版本，是否安装并重启？",
+  "desktop.updater.downloaded.prompt": "OpenCode {{version}} 已下载。是否安装并重新启动？",
   "desktop.updater.installFailed.title": "更新失败",
   "desktop.updater.installFailed.message": "无法安装更新",
+
+  "desktop.error.dev.rootNotFound": "未找到根元素。你是不是忘了把它添加到 index.html？或者 id 属性拼写错了？",
 }

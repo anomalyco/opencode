@@ -1,6 +1,6 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Tjek for opdateringer...",
-  "desktop.menu.reloadWebview": "Genindlæs Webview",
+  "desktop.menu.reloadWebview": "Genindlæs webvisning",
   "desktop.menu.restart": "Genstart",
 
   "desktop.dialog.chooseFolder": "Vælg en mappe",
@@ -18,4 +18,7 @@ export const dict = {
     "Version {{version}} af OpenCode er blevet downloadet. Vil du installere den og genstarte?",
   "desktop.updater.installFailed.title": "Opdatering mislykkedes",
   "desktop.updater.installFailed.message": "Kunne ikke installere opdateringen",
+
+  "desktop.error.dev.rootNotFound":
+    "Rodelement ikke fundet. Har du glemt at tilføje det til din index.html? Eller måske er id-attributten stavet forkert?",
 }
