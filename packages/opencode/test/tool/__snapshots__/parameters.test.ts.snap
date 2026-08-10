@@ -243,6 +243,7 @@ exports[`tool parameters JSON Schema (wire shape) question 1`] = `
         ],
         "type": "object",
       },
+      "minItems": 1,
       "type": "array",
     },
   },

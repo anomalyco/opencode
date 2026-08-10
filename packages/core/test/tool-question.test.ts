@@ -12,6 +12,11 @@ import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_question_tool_test")
+const prompt = {
+  question: "What should happen?",
+  header: "Action",
+  options: [{ label: "Build", description: "Build it" }],
+}
 const assertions: PermissionV2.AssertInput[] = []
 let captured: QuestionV2.AskInput | undefined
 let reject = false
@@ -63,7 +68,12 @@ describe("QuestionTool", () => {
         yield* settleTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-question-denied", name: "question", input: { questions: [] } },
+          call: {
+            type: "tool-call",
+            id: "call-question-denied",
+            name: "question",
+            input: { questions: [prompt] },
+          },
         }),
       ).toEqual({ result: { type: "error", value: "Permission denied: question" } })
       expect(capturedInput()).toBeUndefined()
@@ -79,11 +89,7 @@ describe("QuestionTool", () => {
       deny = false
       const registry = yield* ToolRegistry.Service
       const questions = [
-        {
-          question: "What should happen?",
-          header: "Action",
-          options: [{ label: "Build", description: "Build it" }],
-        },
+        prompt,
         {
           question: "Which environment?",
           header: "Environment",
@@ -91,7 +97,9 @@ describe("QuestionTool", () => {
         },
       ]
 
-      expect((yield* toolDefinitions(registry)).map((definition) => definition.name)).toEqual(["question"])
+      expect(yield* toolDefinitions(registry)).toMatchObject([
+        { name: "question", inputSchema: { properties: { questions: { allOf: [{ minItems: 1 }] } } } },
+      ])
       expect(
         yield* settleTool(registry, {
           sessionID,
@@ -123,6 +131,23 @@ describe("QuestionTool", () => {
     }),
   )
 
+  it.effect("rejects empty questions before asking", () =>
+    Effect.gen(function* () {
+      captured = undefined
+      deny = false
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* settleTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-question-empty", name: "question", input: { questions: [] } },
+        }),
+      ).toMatchObject({ result: { type: "error", value: expect.stringContaining("Invalid tool input") } })
+      expect(capturedInput()).toBeUndefined()
+    }),
+  )
+
   it.effect("does not invent tool ownership metadata without a durable registry source", () =>
     Effect.gen(function* () {
       captured = undefined
@@ -133,11 +158,11 @@ describe("QuestionTool", () => {
       yield* executeTool(registryService, {
         sessionID,
         ...toolIdentity,
-        call: { type: "tool-call", id: "call-question", name: "question", input: { questions: [] } },
+        call: { type: "tool-call", id: "call-question", name: "question", input: { questions: [prompt] } },
       })
       expect(capturedInput()).toEqual({
         sessionID,
-        questions: [],
+        questions: [prompt],
         tool: { messageID: toolIdentity.assistantMessageID, callID: "call-question" },
       })
     }),
@@ -152,7 +177,7 @@ describe("QuestionTool", () => {
       const fiber = yield* executeTool(registryService, {
         sessionID,
         ...toolIdentity,
-        call: { type: "tool-call", id: "call-question", name: "question", input: { questions: [] } },
+        call: { type: "tool-call", id: "call-question", name: "question", input: { questions: [prompt] } },
       }).pipe(Effect.forkScoped)
 
       const exit = yield* Fiber.await(fiber)

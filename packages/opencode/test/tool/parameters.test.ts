@@ -212,6 +212,9 @@ describe("tool parameters", () => {
     test("rejects missing questions", () => {
       expect(accepts(Question, {})).toBe(false)
     })
+    test("rejects empty questions", () => {
+      expect(accepts(Question, { questions: [] })).toBe(false)
+    })
   })
 
   describe("read", () => {

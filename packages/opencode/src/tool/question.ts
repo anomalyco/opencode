@@ -4,7 +4,9 @@ import { Question } from "../question"
 import DESCRIPTION from "./question.txt"
 
 export const Parameters = Schema.Struct({
-  questions: Schema.mutable(Schema.Array(Question.Prompt)).annotate({ description: "Questions to ask" }),
+  questions: Schema.mutable(Schema.Array(Question.Prompt)).check(Schema.isMinLength(1)).annotate({
+    description: "Questions to ask",
+  }),
 })
 
 type Metadata = {
