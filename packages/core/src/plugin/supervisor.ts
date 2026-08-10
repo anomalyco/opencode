@@ -28,6 +28,7 @@ import { KV } from "../kv"
 import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { ModelsDev } from "../models-dev"
+import { MCP } from "../mcp/index"
 import { Npm } from "@opencode-ai/util/npm"
 import { Permission } from "../permission"
 import { Plugin } from "../plugin"
@@ -342,6 +343,7 @@ export const node = makeLocationNode({
     Location.node,
     LocationMutation.node,
     ModelsDev.node,
+    MCP.node,
     Npm.node,
     Permission.node,
     PluginRuntime.node,

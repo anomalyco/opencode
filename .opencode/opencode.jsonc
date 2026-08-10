@@ -12,7 +12,12 @@
       "description": "Contains opencode logs and data",
     },
   },
-  "mcp": {},
+  "mcp": {
+    "figma": {
+      "type": "remote",
+      "url": "https://mcp.figma.com/mcp",
+    },
+  },
   "tools": {
     "github-triage": false,
     "github-pr-search": false,
