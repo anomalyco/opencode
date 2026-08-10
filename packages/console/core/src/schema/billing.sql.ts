@@ -53,7 +53,6 @@ export const BillingTable = mysqlTable(
     ...workspaceIndexes(table),
     uniqueIndex("global_customer_id").on(table.customerID),
     uniqueIndex("global_subscription_id").on(table.subscriptionID),
-    uniqueIndex("global_lite_subscription_id").on(table.liteSubscriptionID),
   ],
 )
 
