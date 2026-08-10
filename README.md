@@ -26,6 +26,32 @@ bun run --conditions=browser src/index.ts
 
 Default branch is `dev`. Day-to-day workflow is Bun (`bun install` / `bun dev`) — not npm/pnpm as the primary path.
 
+## Hiring quickstart (headless)
+
+Default agent is **`ta`** (talent acquisition). Use `--agent build` for coding.
+
+```bash
+cd packages/opencode
+
+# sample JD / resume / scorecard (no ATS required)
+FIXTURES=src/product/fixtures/hiring
+
+bun run --conditions=browser src/index.ts run --agent ta \
+  -f "$FIXTURES/jd.md" -f "$FIXTURES/resume.md" -f "$FIXTURES/scorecard.md" \
+  "Score this candidate using the score-candidate skill"
+```
+
+Built-in skills: `req-context`, `score-candidate`, `draft-outreach`, `propose-disposition`.  
+Fixtures + copy-paste commands: [`packages/opencode/src/product/fixtures/hiring/README.md`](packages/opencode/src/product/fixtures/hiring/README.md).
+
+Record a disposition (receipts only — no ATS write):
+
+```bash
+bun run --conditions=browser src/index.ts propose --action advance \
+  --target-kind candidate --target-id jordan-lee \
+  --reason "strong event + postgres signal"
+```
+
 ### Optional: install script
 
 `./install` is a moks-branded stub. It does **not** download upstream OpenCode binaries. Prefer source install above until moks ships its own releases.

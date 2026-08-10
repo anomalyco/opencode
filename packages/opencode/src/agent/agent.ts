@@ -14,6 +14,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_TA from "@/product/agents/ta.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
@@ -138,9 +139,25 @@ const layer = Layer.effect(
         const user = Permission.fromConfig(cfg.permission ?? {})
 
         const agents: Record<string, Info> = {
+          ta: {
+            name: "ta",
+            description: "Talent acquisition agent. Hiring workflows over local req fixtures and decision verbs.",
+            prompt: PROMPT_TA,
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                question: "allow",
+                plan_enter: "allow",
+              }),
+              user,
+            ),
+            mode: "primary",
+            native: true,
+          },
           build: {
             name: "build",
-            description: "The default agent. Executes tools based on configured permissions.",
+            description: "The default coding agent. Executes tools based on configured permissions.",
             options: {},
             permission: Permission.merge(
               defaults,
@@ -319,7 +336,7 @@ const layer = Layer.effect(
             agents,
             values(),
             sortBy(
-              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "ta"), "desc"],
               [(x) => x.name, "asc"],
             ),
           )

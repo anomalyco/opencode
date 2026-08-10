@@ -42,14 +42,14 @@ We mold the OpenCode fork — we do not rebuild the harness from zero.
 
 ### 3. Hiring-native agent (felt product)
 
-- [ ] Default agents/skills for TA (not coding defaults)
-- [ ] Prompt packs v0:
-  - [ ] `req-context`
-  - [ ] `score-candidate`
-  - [ ] `draft-outreach`
-  - [ ] `propose-disposition`
-- [ ] Fixture mode: JD / resume / scorecard as local files so loops work without ATS
-- [ ] One provider path E2E in the moks-branded binary
+- [x] Default agents/skills for TA (not coding defaults) — native `ta` default; monorepo `.opencode` keeps `default_agent: build`
+- [x] Prompt packs v0:
+  - [x] `req-context`
+  - [x] `score-candidate`
+  - [x] `draft-outreach`
+  - [x] `propose-disposition`
+- [x] Fixture mode: JD / resume / scorecard as local files so loops work without ATS — `packages/opencode/src/product/fixtures/hiring/`
+- [x] One provider path E2E in the moks-branded binary — `test/product/hiring-e2e.test.ts` (TestLLMServer / cli-process)
 
 ### 4. Edges (read-first)
 

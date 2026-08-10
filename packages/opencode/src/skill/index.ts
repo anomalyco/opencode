@@ -17,6 +17,7 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import { Discovery } from "./discovery"
 import { isRecord } from "@/util/record"
 import { escapeHtml } from "@/util/html"
+import { HiringSkills } from "@/product/hiring-skills"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
@@ -280,6 +281,14 @@ const layer = Layer.effect(
           description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
           location: "<built-in>",
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+        }
+        for (const item of HiringSkills) {
+          s.skills[item.name] = {
+            name: item.name,
+            description: item.description,
+            location: "<built-in>",
+            content: item.content,
+          }
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), events)
         return s

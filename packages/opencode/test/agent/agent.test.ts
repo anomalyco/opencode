@@ -48,6 +48,7 @@ it.instance("returns default native agents when no config", () =>
   Effect.gen(function* () {
     const agents = yield* load((svc) => svc.list())
     const names = agents.map((a) => a.name)
+    expect(names).toContain("ta")
     expect(names).toContain("build")
     expect(names).toContain("plan")
     expect(names).toContain("general")
@@ -55,6 +56,19 @@ it.instance("returns default native agents when no config", () =>
     expect(names).toContain("compaction")
     expect(names).toContain("title")
     expect(names).toContain("summary")
+  }),
+)
+
+it.instance("ta agent has correct default properties", () =>
+  Effect.gen(function* () {
+    const ta = yield* load((svc) => svc.get("ta"))
+    expect(ta).toBeDefined()
+    expect(ta?.mode).toBe("primary")
+    expect(ta?.native).toBe(true)
+    expect(ta?.prompt).toBeTruthy()
+    expect(evalPerm(ta, "edit")).toBe("allow")
+    expect(evalPerm(ta, "bash")).toBe("allow")
+    expect(evalPerm(ta, "question")).toBe("allow")
   }),
 )
 
@@ -646,19 +660,33 @@ it.instance(
   },
 )
 
-it.instance("defaultAgent returns build when no default_agent config", () =>
+it.instance("defaultAgent returns ta when no default_agent config", () =>
   Effect.gen(function* () {
     const agent = yield* load((svc) => svc.defaultAgent())
-    expect(agent).toBe("build")
+    expect(agent).toBe("ta")
   }),
 )
 
-it.instance("defaultInfo returns resolved build agent when no default_agent config", () =>
+it.instance("defaultInfo returns resolved ta agent when no default_agent config", () =>
   Effect.gen(function* () {
     const agent = yield* load((svc) => svc.defaultInfo())
-    expect(agent.name).toBe("build")
+    expect(agent.name).toBe("ta")
     expect(agent.mode).toBe("primary")
   }),
+)
+
+it.instance(
+  "defaultAgent respects default_agent config set to build",
+  () =>
+    Effect.gen(function* () {
+      const agent = yield* load((svc) => svc.defaultAgent())
+      expect(agent).toBe("build")
+    }),
+  {
+    config: {
+      default_agent: "build",
+    },
+  },
 )
 
 it.instance(
@@ -725,17 +753,16 @@ it.instance(
 )
 
 it.instance(
-  "defaultAgent returns plan when build is disabled and default_agent not set",
+  "defaultAgent returns build when ta is disabled and default_agent not set",
   () =>
     Effect.gen(function* () {
       const agent = yield* load((svc) => svc.defaultAgent())
-      // build is disabled, so it should return plan (next primary agent)
-      expect(agent).toBe("plan")
+      expect(agent).toBe("build")
     }),
   {
     config: {
       agent: {
-        build: { disable: true },
+        ta: { disable: true },
       },
     },
   },
@@ -747,6 +774,7 @@ it.instance(
   {
     config: {
       agent: {
+        ta: { disable: true },
         build: { disable: true },
         plan: { disable: true },
       },
