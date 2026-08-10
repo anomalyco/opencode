@@ -1,8 +1,8 @@
 export * as Job from "./job"
 
 import { Cause, Clock, Context, Deferred, Effect, Exit, Layer, Scope, SynchronizedRef } from "effect"
+import { JobID } from "@opencode-ai/schema/job-id"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Identifier } from "./id/id"
 import { SessionSchema } from "./session/schema"
 
 export type Status = "running" | "completed" | "error" | "cancelled"
@@ -202,7 +202,7 @@ export const make = Effect.gen(function* () {
   const start: Interface["start"] = Effect.fn("Job.start")(function* (input) {
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        const id = input.id ?? Identifier.ascending("job")
+        const id = input.id ?? JobID.create()
         const started_at = yield* Clock.currentTimeMillis
         const done = yield* Deferred.make<Info>()
         const backgrounded = yield* Deferred.make<Info>()

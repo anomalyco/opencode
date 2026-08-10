@@ -3,6 +3,7 @@ import { DateTime, Schema } from "effect"
 import { Agent } from "../src/agent.js"
 import { FileSystem } from "../src/filesystem.js"
 import { Form } from "../src/form.js"
+import { JobID } from "../src/job-id.js"
 import { Mcp } from "../src/mcp.js"
 import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
@@ -131,6 +132,7 @@ describe("contract hygiene", () => {
   })
 
   test("current ID constructors expose create", () => {
+    expect(JobID.create()).toStartWith("job_")
     expect(Question.ID.create()).toStartWith("que_")
     expect(Pty.ID.create()).toStartWith("pty_")
   })

@@ -514,6 +514,7 @@
       },
       "devDependencies": {
         "@cloudflare/workers-types": "catalog:",
+        "@opencode-ai/schema": "workspace:*",
         "@tailwindcss/vite": "catalog:",
         "@types/bun": "catalog:",
         "@types/luxon": "catalog:",

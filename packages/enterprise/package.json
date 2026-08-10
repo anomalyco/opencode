@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
+    "@opencode-ai/schema": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@typescript/native-preview": "catalog:",
     "@types/bun": "catalog:",
