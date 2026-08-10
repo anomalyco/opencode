@@ -71,6 +71,7 @@ import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { JwtConfig } from "@opencode-ai/server/auth"
+import { DataRoot } from "@opencode-ai/server/data-root"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { Api } from "@opencode-ai/server/api"
 import { PublicApi } from "./public"
@@ -303,6 +304,7 @@ export function createRoutes(
       ]),
     ),
     Layer.provide(locationServiceMapV2),
+    Layer.provide(DataRoot.DataRootConfig.layer),
 
     Layer.provide(AppNodeBuilderV1.build(app)),
     // Must stay last: layers provided later in this pipe build beneath earlier ones,

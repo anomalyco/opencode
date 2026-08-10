@@ -22,6 +22,7 @@ import { schemaErrorLayer } from "./middleware/schema-error"
 import { PtyEnvironment } from "./pty-environment"
 import { layer as locationLayer } from "./location"
 import { sessionLocationLayer } from "./middleware/session-location"
+import { DataRoot } from "./data-root"
 
 const applicationServices = LayerNode.group([
   Database.node,
@@ -59,6 +60,7 @@ function makeRoutes<AuthError, AuthServices>(auth: Layer.Layer<ServerAuth.Config
     Layer.provide(schemaErrorLayer),
     Layer.provide(auth),
     Layer.provide(ServerAuth.JwtConfig.layer),
+    Layer.provide(DataRoot.DataRootConfig.layer),
     Layer.provide(serviceLayer),
   )
 }
