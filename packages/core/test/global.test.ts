@@ -10,7 +10,7 @@ describe("global paths", () => {
     expect(Global.make().tmp).toBe(Global.Path.tmp)
   })
 
-  test("tmp path is created on module load", async () => {
+  test("tmp path is created on first access", async () => {
     expect((await fs.stat(Global.Path.tmp)).isDirectory()).toBe(true)
   })
 })
