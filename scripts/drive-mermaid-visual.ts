@@ -4,6 +4,7 @@ import { defineScript, Effect, Llm } from "opencode-drive"
 const theme = Bun.env.DRIVE_THEME ?? "opencode"
 const output = Bun.env.DRIVE_SCREENSHOT ?? `artifacts/mermaid-${theme}.png`
 const animate = Bun.env.DRIVE_ANIMATE === "1"
+const cycleThemes = Bun.env.DRIVE_CYCLE_THEMES === "1"
 
 const response = `\`\`\`mermaid
 sequenceDiagram
@@ -47,6 +48,23 @@ export default defineScript({
         Llm.text(response, animate ? { delay: 80, chunkSize: 20 } : { delay: 0, chunkSize: response.length }),
       )
       yield* ui.waitFor("WS frames", { timeout: 10_000 })
+      if (cycleThemes) {
+        yield* Effect.sleep(800)
+        yield* Effect.forEach(
+          ["everforest", "synthwave84", "matrix", "opencode"],
+          (next) =>
+            Effect.gen(function* () {
+              yield* ui.press("x", { ctrl: true })
+              yield* ui.press("t")
+              yield* ui.waitFor("Themes")
+              yield* ui.type(next)
+              yield* Effect.sleep(700)
+              yield* ui.enter()
+              yield* Effect.sleep(1_200)
+            }),
+          { discard: true },
+        )
+      }
       const screenshot = yield* ui.screenshot(`mermaid-${theme}`)
       yield* Effect.promise(async () => {
         await mkdir("artifacts", { recursive: true })

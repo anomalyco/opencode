@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test"
+import { RGBA } from "@opentui/core"
 import { diagramTextWidth } from "../core/text.js"
 import { expectDiagram } from "../test/diagram.js"
 import { renderSequenceDiagram } from "./diagram.js"
 import { drawSequenceDiagramGrid } from "./drawing.js"
 import { parseMermaidSequenceDiagram } from "./parser.js"
+import { resolveSequenceStyleColors } from "./style.js"
 
 describe("SequenceDiagram", () => {
   test("parses Mermaid sequenceDiagram participants and messages", () => {
@@ -60,6 +62,10 @@ sequenceDiagram
          │ 401 WWW-Auth    │
          ◄─────────────────┤
          │                 │
+         │                 │
+         │                 │
+         │                 │
+         │                 │
     `)
   })
 
@@ -91,6 +97,10 @@ sequenceDiagram
           │                                   ◄─── revalidate(plan) ─────┤
           │                                   │                          │
           │                                   ├─ same target or reject ──►
+          │                                   │                          │
+          │                                   │                          │
+          │                                   │                          │
+          │                                   │                          │
           │                                   │                          │
     `)
   })
@@ -159,6 +169,27 @@ sequenceDiagram
       .filter((style) => style?.startsWith("lifelineRamp"))
 
     expect(new Set(rampStyles)).toEqual(new Set(["lifelineRamp1", "lifelineRamp2", "lifelineRamp3"]))
+  })
+
+  test("fades the bottom of participant lifelines", () => {
+    const grid = drawSequenceDiagramGrid(
+      parseMermaidSequenceDiagram(
+        "sequenceDiagram\n  participant Browser\n  participant Server\n  Browser->>Server: request",
+      ),
+    )
+    const fadeStyles = grid.rows
+      .flatMap((row) => row.map((cell) => cell.style))
+      .filter((style) => style?.startsWith("lifelineFade"))
+
+    expect(new Set(fadeStyles)).toEqual(
+      new Set(["lifelineFade1", "lifelineFade2", "lifelineFade3", "lifelineFade4", "lifelineFade5"]),
+    )
+
+    const lifeline = RGBA.fromInts(100, 120, 110)
+    const background = RGBA.fromInts(10, 20, 15)
+    const colors = resolveSequenceStyleColors({ lifeline, lifelineEnd: background })
+    expect(colors.lifelineFade1.equals(lifeline)).toBe(true)
+    expect(colors.lifelineFade5.equals(background)).toBe(true)
   })
 
   test("renders notes and long cross-participant messages in order", () => {
@@ -333,6 +364,10 @@ sequenceDiagram
        │                  │
        │ async dashed     │
        │(─────────────────┤
+       │                  │
+       │                  │
+       │                  │
+       │                  │
        │                  │"
     `)
   })
@@ -663,6 +698,10 @@ sequenceDiagram
          │               │  │ get user:42     │                 │  │
          │               │  ├─────────────────►                 │  │
          │               │  │                 │                 │  │
+         │               │  │                 │                 │  │
+         │               │  │                 │                 │  │
+         │               │  │                 │                 │  │
+         │               │  │                 │                 │  │
                          ╰─────────────────────────────────────────╯"
     `)
   })
@@ -709,6 +748,10 @@ sequenceDiagram
          ├────────────────────╮
          │ Check Permissions  │
          ◄────────────────────╯
+         │
+         │
+         │
+         │
          │"
     `)
   })
