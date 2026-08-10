@@ -395,6 +395,7 @@ it.effect("derives status and code when the AI SDK error message is empty", () =
     expect(projected.type).toBe("provider.invalid-request")
     expect(projected.status).toBe(404)
     expect(projected.message).not.toBe("")
+    expect(projected.http?.body).toBe('{"error":{"message":"","code":"not_found"}}')
   }),
 )
 
@@ -407,7 +408,7 @@ it.effect("persists redacted HTTP context from AI SDK call errors", () =>
       }),
     )
     expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
-    const http = "http" in error.reason ? error.reason.http : undefined
+    const http = toSessionError(error).http
     expect(http?.request.url).toBe("https://api.example.com/chat")
     expect(http?.response?.status).toBe(404)
     expect(http?.response?.headers["authorization"]).toBe("<redacted>")

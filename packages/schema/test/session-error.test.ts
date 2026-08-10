@@ -12,6 +12,18 @@ describe("SessionError", () => {
     const values: SessionError.Error[] = [
       { type: "provider.rate-limit", message: "Slow down" },
       { type: "provider.auth", message: "Authentication failed" },
+      {
+        type: "provider.internal",
+        message: "Unavailable",
+        status: 503,
+        http: {
+          request: { method: "POST", url: "https://api.example.com/chat", headers: {} },
+          response: { status: 503, headers: { "retry-after": "5" } },
+          body: '{"error":{"code":"unavailable"}}',
+          requestId: "request-1",
+          rateLimit: { retryAfterMs: 5_000 },
+        },
+      },
       { type: "provider.future-condition", message: "A future provider failure" },
       { type: "unknown", message: "Unexpected" },
     ]
