@@ -738,7 +738,7 @@ function llmError(method: string, error: unknown) {
 function apiCallErrorReason(error: APICallError) {
   const details = providerErrorDetails(error)
   const reason = RequestExecutor.classifyHttpFailure({
-    message: apiCallErrorMessage(error, details),
+    message: details.message,
     url: error.url,
     status: error.statusCode,
     code: details.code,
@@ -755,18 +755,17 @@ function apiCallErrorReason(error: APICallError) {
 }
 
 const ProviderErrorCode = Schema.Union([Schema.String, Schema.Finite])
-const ProviderErrorBody = Schema.Struct({
+const ProviderErrorDetail = Schema.Struct({
   message: Schema.optionalKey(Schema.String),
   code: Schema.optionalKey(ProviderErrorCode),
-  error: Schema.optionalKey(
-    Schema.Struct({
-      message: Schema.optionalKey(Schema.String),
-      code: Schema.optionalKey(ProviderErrorCode),
-    }),
-  ),
 })
-const decodeErrorData = Schema.decodeUnknownOption(ProviderErrorBody)
-const decodeErrorBody = Schema.decodeUnknownOption(Schema.fromJsonString(ProviderErrorBody))
+const ProviderErrorBody = Schema.Struct({
+  ...ProviderErrorDetail.fields,
+  error: Schema.optionalKey(ProviderErrorDetail),
+})
+const decodeProviderError = Schema.decodeUnknownOption(
+  Schema.Union([ProviderErrorBody, Schema.fromJsonString(ProviderErrorBody)]),
+)
 
 function unknownErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
@@ -774,23 +773,19 @@ function unknownErrorMessage(error: unknown) {
 }
 
 function providerErrorDetails(error: APICallError) {
-  const data = Option.getOrUndefined(decodeErrorData(error.data))
-  const body = Option.getOrUndefined(decodeErrorBody(error.responseBody))
-  const message = [data?.error?.message, data?.message, body?.error?.message, body?.message].find(
-    (value) => value !== undefined && value.trim() !== "",
-  )
-  const code = [data?.error?.code, data?.code, body?.error?.code, body?.code].find((value) => value !== undefined)
-  return { message, code: code === undefined ? undefined : String(code) }
-}
-
-// AI SDK errors can carry an empty message while still holding structured
-// provider details. Only recognized message and code fields are displayed.
-function apiCallErrorMessage(error: APICallError, details: ReturnType<typeof providerErrorDetails>) {
-  if (error.message.trim() !== "") return error.message
-  if (details.message !== undefined) return details.message
+  const data = Option.getOrUndefined(decodeProviderError(error.data))
+  const body = Option.getOrUndefined(decodeProviderError(error.responseBody))
+  const details = [data?.error, data, body?.error, body]
+  const message = details.map((detail) => detail?.message).find((value) => value?.trim())
+  const value = details.map((detail) => detail?.code).find((value) => value !== undefined)
+  const code = value === undefined ? undefined : String(value)
   const prefix =
     error.statusCode === undefined ? "Provider request failed" : `Provider request failed with HTTP ${error.statusCode}`
-  return details.code === undefined ? prefix : `${prefix}: ${details.code}`
+  return {
+    code,
+    message:
+      error.message.trim() !== "" ? error.message : (message ?? (code === undefined ? prefix : `${prefix}: ${code}`)),
+  }
 }
 
 export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })
