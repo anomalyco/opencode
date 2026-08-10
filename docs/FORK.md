@@ -2,6 +2,16 @@
 
 moks is a product fork of [OpenCode](https://github.com/anomalyco/opencode).
 
+## Three different “OpenCodes”
+
+| | |
+|--|--|
+| **moks** | This repo / product (TA harness). What we ship. |
+| **OpenCode upstream** | `anomalyco/opencode` — source we forked and may pull from. |
+| **OpenCode (installed)** | The coding agent on the machine used to *build* moks. Not the product. |
+
+`packages/opencode` is a folder name inside **moks**, not the installed agent.
+
 | Remote | Points at | Role |
 |--------|-----------|------|
 | `origin` | `artemysone/moks` | where we push |

@@ -1,8 +1,23 @@
 ## moks fork
 
-This repo is a product fork of OpenCode (`anomalyco/opencode` → `artemysone/moks`). See `docs/FORK.md`.
+This repo is **moks** — a product fork of the OpenCode *source* (`anomalyco/opencode` → `artemysone/moks`). See `docs/FORK.md`.
 
-- Remotes: `origin` = moks (push); `upstream` = OpenCode (pull only).
+### Do not confuse these three things
+
+| Name | What it is | Where |
+|------|------------|--------|
+| **moks** | This product / this repo (TA agent harness). The thing we are building. | `/Users/…/moks` (this workspace) |
+| **OpenCode upstream** | The open-source project we forked. Code lineage only. | `upstream` remote → `anomalyco/opencode` |
+| **OpenCode (installed agent)** | The coding agent CLI/TUI running *this* session to edit moks. Dev tool, not the product. | System install (`opencode` binary, `~/.config/opencode`, `~/.local/share/opencode`) |
+
+- When the user says “moks”, “the fork”, “our harness”, or “this repo” → **moks** (this workspace).
+- When they say “upstream” or “OpenCode upstream” → the GitHub project we pull from.
+- When they say “the agent”, “this session”, or “opencode on my machine” → the **installed** OpenCode used to build moks.
+- Paths like `packages/opencode` are **moks monorepo packages** (inherited names), not the installed agent.
+- Do not edit the user’s global OpenCode config/data (`~/.config/opencode`, `~/.local/share/opencode`) unless they explicitly ask. Product work stays in this repo.
+- `.opencode/` in this repo configures the *installed* agent while working here; it is not moks product code.
+
+- Remotes: `origin` = moks (push); `upstream` = OpenCode source (pull only).
 - Default branch is `dev`. Local `main` may not exist; use `dev` or `origin/dev` for diffs.
 - Runtime is Bun (`bun install`, `bun dev`). Do not introduce pnpm/npm as the primary workflow.
 - Prefer changes in `packages/opencode` (CLI/TUI/server) for the TA harness. Do not expand into `desktop`, `console`, `web`, or cloud/SST packages unless explicitly asked.
@@ -12,7 +27,7 @@ This repo is a product fork of OpenCode (`anomalyco/opencode` → `artemysone/mo
 - When tracking upstream: fetch/merge `upstream/dev` deliberately. After deep product divergence, prefer a hard fork over painful half-merges.
 - Product strategy / GTM: `docs/gtm.html`.
 
-## OpenCode monorepo
+## Monorepo (inherited from upstream)
 
 - To regenerate the legacy JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - After changing the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`. Do not edit `src/generated` or `src/generated-effect` directly.
