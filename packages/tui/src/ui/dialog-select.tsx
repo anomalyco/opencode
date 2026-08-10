@@ -212,7 +212,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const flatten = createMemo(() => props.flat && store.filter.length > 0)
 
   const grouped = createMemo<[string, DialogSelectOption<T>[]][]>(() => {
-    if (flatten()) return [["", filtered()]]
+    if (flatten()) return filtered().length ? [["", filtered()]] : []
     const result = pipe(
       filtered(),
       groupBy((x) => x.category ?? ""),

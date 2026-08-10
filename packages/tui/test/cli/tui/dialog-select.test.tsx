@@ -87,6 +87,7 @@ async function mountSelect(
   initial: DialogSelectOption<string>[],
   current?: string,
   focusCurrent?: boolean,
+  select?: { flat?: boolean },
 ) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
@@ -124,6 +125,7 @@ async function mountSelect(
             options={options()}
             current={current}
             focusCurrent={focusCurrent}
+            flat={select?.flat}
             onMove={(option) => moved.push(option.value)}
             onSelect={(option) => selected.push(option.value)}
           />
@@ -362,6 +364,34 @@ test("keeps the current option selected when options reorder", async () => {
     await select.app.waitFor(() => select.selected.length === 1)
 
     expect(select.selected).toEqual(["current"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("shows no-match and still closes after a flat filter goes empty", async () => {
+  await using tmp = await tmpdir()
+  const select = await mountSelect(
+    tmp.path,
+    [
+      { title: "models.dev", value: "models.dev", category: "Projects" },
+      { title: "opencode2", value: "opencode2", category: "Projects" },
+    ],
+    undefined,
+    undefined,
+    { flat: true },
+  )
+
+  try {
+    await select.app.waitForFrame((frame) => frame.includes("models.dev"))
+    await select.app.mockInput.typeText("models")
+    await select.app.waitForFrame((frame) => frame.includes("models.dev") && !frame.includes("opencode2"))
+    await select.app.mockInput.typeText(" missing")
+    await select.app.waitForFrame((frame) => frame.includes("No results found"))
+    expect(select.app.captureCharFrame()).not.toContain("models.dev")
+
+    select.app.mockInput.pressEscape()
+    await select.app.waitForFrame((frame) => !frame.includes("Mutable options") && !frame.includes("No results found"))
   } finally {
     select.app.renderer.destroy()
   }
