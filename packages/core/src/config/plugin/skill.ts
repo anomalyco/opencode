@@ -108,7 +108,17 @@ export const Plugin = define({
     }
 
     const load = Effect.fn("ConfigSkillPlugin.load")(function* (source: Source) {
-      const directories = source.type === "directory" ? [source.path] : yield* discovery.pull(source.url)
+      const directories =
+        source.type === "directory"
+          ? [source.path]
+          : yield* discovery.pull(source.url).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("failed to load skill source", {
+                  source: Skill.Source.key(source),
+                  cause,
+                }).pipe(Effect.as([] as AbsolutePath[])),
+              ),
+            )
       const roots = (yield* Effect.forEach(directories, watchDirectory)).flat()
       const skills: Skill.Info[] = []
       for (const directory of directories) {
@@ -120,8 +130,16 @@ export const Plugin = define({
           if (!roots.some((root) => FSUtil.contains(root, resolved))) yield* watch(path.dirname(resolved), "directory")
           const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
           if (!content) continue
-          const skill = SkillFile.parse(directory, filepath, content)
-          if (skill) skills.push(skill)
+          const parsed = SkillFile.parse(directory, filepath, content)
+          if (parsed._tag === "Skipped") {
+            yield* Effect.logDebug("skill file skipped", {
+              filepath,
+              reason: parsed.reason,
+              ...(parsed.reason === "frontmatter" ? { issue: parsed.issue } : {}),
+            })
+            continue
+          }
+          skills.push(parsed.skill)
         }
       }
       yield* Effect.logDebug("skill source loaded", {

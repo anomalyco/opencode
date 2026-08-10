@@ -1,7 +1,7 @@
 export * as SkillFile from "./skill-file"
 
 import path from "path"
-import { Schema } from "effect"
+import { Result, Schema, type SchemaIssue, SchemaParser } from "effect"
 import { ConfigMarkdown } from "../markdown"
 import { AbsolutePath } from "../../schema"
 import { Skill } from "../../skill"
@@ -12,7 +12,12 @@ const Frontmatter = Schema.Struct({
   slash: Schema.Boolean.pipe(Schema.optional),
   metadata: Schema.Unknown.pipe(Schema.optional),
 })
-const decodeFrontmatter = Schema.decodeUnknownOption(Frontmatter)
+const decodeFrontmatter = SchemaParser.decodeUnknownResult(Frontmatter)
+
+export type ParseResult =
+  | { readonly _tag: "Parsed"; readonly skill: Skill.Info }
+  | { readonly _tag: "Skipped"; readonly reason: "markdown" }
+  | { readonly _tag: "Skipped"; readonly reason: "frontmatter"; readonly issue: SchemaIssue.Issue }
 
 const metadataBoolean = (metadata: unknown, key: string) => {
   if (metadata === undefined || metadata === null || typeof metadata !== "object" || Array.isArray(metadata)) {
@@ -27,22 +32,26 @@ const metadataBoolean = (metadata: unknown, key: string) => {
   return undefined
 }
 
-export function parse(directory: string, filepath: string, content: string): Skill.Info | undefined {
+export function parse(directory: string, filepath: string, content: string): ParseResult {
   const markdown = ConfigMarkdown.parseOption(content)
-  if (!markdown) return undefined
-  const frontmatter = decodeFrontmatter(markdown.data).valueOrUndefined
-  if (!frontmatter) return undefined
+  if (!markdown) return { _tag: "Skipped", reason: "markdown" }
+  const decoded = decodeFrontmatter(markdown.data)
+  if (Result.isFailure(decoded)) return { _tag: "Skipped", reason: "frontmatter", issue: decoded.failure }
+  const frontmatter = decoded.success
   const id =
     path.dirname(filepath) === directory ? path.basename(filepath, ".md") : path.basename(path.dirname(filepath))
   const slash = metadataBoolean(frontmatter.metadata, "opencode/slash") ?? frontmatter.slash
   const autoinvoke = metadataBoolean(frontmatter.metadata, "opencode/autoinvoke")
   return {
-    id: Skill.ID.make(id),
-    name: Skill.Name.make(frontmatter.name ?? id),
-    ...(frontmatter.description === undefined ? {} : { description: frontmatter.description }),
-    ...(slash === undefined ? {} : { slash }),
-    ...(autoinvoke === undefined ? {} : { autoinvoke }),
-    location: AbsolutePath.make(filepath),
-    content: markdown.content,
+    _tag: "Parsed",
+    skill: {
+      id: Skill.ID.make(id),
+      name: Skill.Name.make(frontmatter.name ?? id),
+      ...(frontmatter.description === undefined ? {} : { description: frontmatter.description }),
+      ...(slash === undefined ? {} : { slash }),
+      ...(autoinvoke === undefined ? {} : { autoinvoke }),
+      location: AbsolutePath.make(filepath),
+      content: markdown.content,
+    },
   }
 }

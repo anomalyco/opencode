@@ -22,12 +22,14 @@ import { testEffect } from "../lib/effect"
 import { host } from "../plugin/host"
 
 const urls = new Map<string, AbsolutePath[]>()
+const failedUrls = new Set<string>()
 let pulls = 0
 const discoveryLayer = Layer.succeed(
   SkillDiscovery.Service,
   SkillDiscovery.Service.of({
     pull: (url) => {
       pulls++
+      if (failedUrls.has(url)) return Effect.die(`failed to pull ${url}`)
       return Effect.succeed(urls.get(url) ?? [])
     },
   }),
@@ -113,17 +115,29 @@ metadata:
 # manual`,
         ),
       ).toEqual({
-        id: Skill.ID.make("manual"),
-        name: Skill.Name.make("Manual"),
-        description: "Manual only",
-        slash: true,
-        autoinvoke: false,
-        location: AbsolutePath.make("/repo/skills/manual/SKILL.md"),
-        content: "# manual",
+        _tag: "Parsed",
+        skill: {
+          id: Skill.ID.make("manual"),
+          name: Skill.Name.make("Manual"),
+          description: "Manual only",
+          slash: true,
+          autoinvoke: false,
+          location: AbsolutePath.make("/repo/skills/manual/SKILL.md"),
+          content: "# manual",
+        },
       })
-      expect(SkillFile.parse(directory, "/repo/skills/foo.md", "---\nslash: true\n---\n# foo")?.id).toBe(
-        Skill.ID.make("foo"),
-      )
+      expect(SkillFile.parse(directory, "/repo/skills/foo.md", "---\nslash: true\n---\n# foo")).toMatchObject({
+        _tag: "Parsed",
+        skill: { id: Skill.ID.make("foo") },
+      })
+      expect(
+        SkillFile.parse(directory, "/repo/skills/broken.md", "---\ndescription: foo: bar\nmetadata: [\n---\n# broken"),
+      ).toEqual({ _tag: "Skipped", reason: "markdown" })
+      expect(SkillFile.parse(directory, "/repo/skills/broken.md", "---\nslash: nope\n---\n# broken")).toMatchObject({
+        _tag: "Skipped",
+        reason: "frontmatter",
+        issue: expect.anything(),
+      })
     }),
   )
 })
@@ -150,6 +164,28 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const skill = yield* start([first, "https://example.test/skills/"], tmp.path)
           expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Second")
           expect(pulls).toBe(1)
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps directory skills when a URL source fails", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "review"), { recursive: true })
+            await write(tmp.path, "review", "Available")
+          })
+          const url = "https://unreachable.example.test/skills/"
+          failedUrls.add(url)
+
+          const skill = yield* start([tmp.path, url], tmp.path)
+          expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Available")
+          failedUrls.delete(url)
         }),
       ),
     ),
