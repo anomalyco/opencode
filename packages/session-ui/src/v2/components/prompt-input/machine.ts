@@ -102,7 +102,7 @@ function inputChanged(
     ])
   }
 
-  const command = value.match(/^\/([^\s/]*)$/)
+  const command = value.match(/^\/(\S*)$/)
   if (command) {
     const query = command[1] ?? ""
     return changed({ ...state, popover: { type: "command-inline", query }, focus: "editor" }, [
@@ -240,7 +240,7 @@ function populated(persisted: PromptInputV2PersistedState) {
 }
 
 function replaceTrigger(value: string, trigger: "@" | "/", replacement: string) {
-  const index = value.lastIndexOf(trigger)
+  const index = trigger === "/" ? value.indexOf(trigger) : value.lastIndexOf(trigger)
   return index < 0 ? replacement : value.slice(0, index) + replacement
 }
 

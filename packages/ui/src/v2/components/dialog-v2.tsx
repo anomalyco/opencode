@@ -1,5 +1,6 @@
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
 import { type ComponentProps, type JSXElement, type ParentProps, Show, children, splitProps } from "solid-js"
+import { useI18n } from "../../context/i18n"
 import "./dialog-v2.css"
 
 export interface DialogProps extends ParentProps {
@@ -51,6 +52,7 @@ export function DialogTitleGroup(props: DialogTitleGroupProps) {
 }
 
 export function DialogHeader(props: DialogHeaderProps) {
+  const i18n = useI18n()
   const [local] = splitProps(props, ["closeLabel", "hideClose", "children"])
   const hideClose = () => local.hideClose === true
 
@@ -58,7 +60,7 @@ export function DialogHeader(props: DialogHeaderProps) {
     <div data-slot="dialog-header" data-hide-close={hideClose() ? "" : undefined}>
       {local.children}
       {!hideClose() && (
-        <Kobalte.CloseButton data-slot="dialog-close-button" aria-label={local.closeLabel ?? "Close"}>
+        <Kobalte.CloseButton data-slot="dialog-close-button" aria-label={local.closeLabel ?? i18n.t("ui.common.close")}>
           <svg
             width="16"
             height="16"
