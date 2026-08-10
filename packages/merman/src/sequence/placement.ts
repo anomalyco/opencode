@@ -142,7 +142,7 @@ function messageLabelText(message: SequenceMessage): string {
 
 function participantHeaderWidth(label: string, compact: boolean): number {
   const width = labelLinesWidth(mermaidLabelLines(label))
-  return compact ? width : Math.max(5, width + 4)
+  return compact ? width : Math.max(3, width)
 }
 
 function fragmentLabelText(fragment: SequenceFragment): string {
@@ -247,7 +247,7 @@ function getStepContentBounds(
     const leftX = Math.min(fromX, toX)
     const rightX = Math.max(fromX, toX)
     const labelWidth = messageWidth(step.message)
-    const labelLeftX = Math.floor((leftX + rightX - labelWidth) / 2)
+    const labelLeftX = leftX + 2
     return { leftX: Math.min(leftX, labelLeftX), rightX: Math.max(rightX, labelLeftX + labelWidth - 1) }
   }
   if (step.type !== "note") return undefined
@@ -525,8 +525,8 @@ export function createSequencePlacementPlan(
     ...diagram.participants.map((participant) => mermaidLabelLines(participant.label).length),
   )
   const participantHeaderTopY = hasGroups ? 1 : 0
-  const participantHeaderY = participantHeaderTopY + (compact ? 0 : 1)
-  const participantRuleY = participantHeaderTopY + (compact ? participantLabelHeight - 1 : participantLabelHeight + 1)
+  const participantHeaderY = participantHeaderTopY
+  const participantRuleY = participantHeaderTopY + (compact ? participantLabelHeight - 1 : participantLabelHeight)
   const lifelineStartY = participantRuleY + 1
   const stepStartY = lifelineStartY + 1
   const width = Math.max(contentBounds.rightX + 1, ...groups.map((group) => group.rightX + 1), fragments.rightX + 1)
@@ -650,7 +650,7 @@ export function createSequencePlacementPlan(
       const inlineLabel = inlineMessageLabel(step.message, labelLines, fromX, toX, compact)
       const arrowY = inlineLabel ? stepY : stepY + labelLines.length
       const renderedLabelWidth = inlineLabel ? visualLength(inlineLabel) : labelLinesWidth(labelLines)
-      const labelX = Math.floor((leftX + rightX - renderedLabelWidth) / 2)
+      const labelX = inlineLabel ? Math.floor((leftX + rightX - renderedLabelWidth) / 2) : leftX + 2
       steps.push({
         type: "message",
         message: step.message,

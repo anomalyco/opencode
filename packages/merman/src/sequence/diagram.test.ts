@@ -51,16 +51,15 @@ sequenceDiagram
 `)
 
     expectDiagram(output).toEqualDiagram(`
-        Browser           Server
-
-      ─────┬─────       ─────┬────
-           │                 │
-           │     GET /       │
-           ├─────────────────►
-           │                 │
-           │  401 WWW-Auth   │
-           ◄─────────────────┤
-           │                 │
+      Browser           Server
+      ───┬───           ───┬──
+         │                 │
+         │ GET /           │
+         ├─────────────────►
+         │                 │
+         │ 401 WWW-Auth    │
+         ◄─────────────────┤
+         │                 │
     `)
   })
 
@@ -143,10 +142,10 @@ sequenceDiagram
     const browserCenter = lines[0]!.indexOf("w")
     const serverCenter = lines[0]!.indexOf("v")
 
-    expect(lines[2]?.[browserCenter]).toBe("┬")
-    expect(lines[3]?.[browserCenter]).toBe("│")
-    expect(lines[2]?.[serverCenter]).toBe("┬")
-    expect(lines[3]?.[serverCenter]).toBe("│")
+    expect(lines[1]?.[browserCenter]).toBe("┬")
+    expect(lines[2]?.[browserCenter]).toBe("│")
+    expect(lines[1]?.[serverCenter]).toBe("┬")
+    expect(lines[2]?.[serverCenter]).toBe("│")
   })
 
   test("ramps participant frames into neutral lifelines", () => {
@@ -314,28 +313,27 @@ sequenceDiagram
 `)
 
     expect(output).toMatchInlineSnapshot(`
-      "  A                  B
-
-      ──┬──              ──┬──
-        │                  │
-        │   open solid     │
-        ├─────────────────>│
-        │                  │
-        │   open dashed    │
-        │<─────────────────┤
-        │                  │
-        │  failed solid    │
-        ├─────────────────✕│
-        │                  │
-        │  failed dashed   │
-        │✕─────────────────┤
-        │                  │
-        │   async solid    │
-        ├─────────────────)│
-        │                  │
-        │  async dashed    │
-        │(─────────────────┤
-        │                  │"
+      " A                  B
+      ─┬─                ─┬─
+       │                  │
+       │ open solid       │
+       ├─────────────────>│
+       │                  │
+       │ open dashed      │
+       │<─────────────────┤
+       │                  │
+       │ failed solid     │
+       ├─────────────────✕│
+       │                  │
+       │ failed dashed    │
+       │✕─────────────────┤
+       │                  │
+       │ async solid      │
+       ├─────────────────)│
+       │                  │
+       │ async dashed     │
+       │(─────────────────┤
+       │                  │"
     `)
   })
 
@@ -557,7 +555,7 @@ sequenceDiagram
     const fragmentMessageRow = fragment.split("\n").find((line) => line.includes("this non adjacent message"))!
     expect(groupMessageRow.trimEnd().endsWith("│")).toBe(true)
     expect(fragmentMessageRow).toContain("this non adjacent message is deliberately much wider than the frame")
-    expect(fragmentMessageRow.match(/│/g)?.length).toBe(2)
+    expect(fragmentMessageRow.match(/│/g)?.length).toBe(3)
   })
 
   test("keeps long notes inside groups and nested fragment frames intact", () => {
@@ -600,7 +598,7 @@ sequenceDiagram
     const groupBorderRight = output.split("\n")[0]!.lastIndexOf("╮")
     const lines = output.split("\n")
     const externalLabelRow = lines.findIndex((line) => line.includes("External"))
-    const externalHeaderLeft = lines[externalLabelRow + 2]!.lastIndexOf("─")
+    const externalHeaderLeft = lines[externalLabelRow + 1]!.lastIndexOf("─")
 
     expect(externalHeaderLeft).toBeGreaterThan(groupBorderRight)
   })
@@ -655,18 +653,17 @@ sequenceDiagram
 `)
 
     expect(output).toMatchInlineSnapshot(`
-      "                   ╭─ Backend ──────────────────────────────────╮
-        Browser          │   API              Cache              DB   │
-                         │                                            │
-      ─────┬─────        │ ───┬───          ────┬────          ───┬── │
-           │             │    │                 │                 │   │
-           │  GET /users/42   │                 │                 │   │
-           ├──────────────────►                 │                 │   │
-           │             │    │                 │                 │   │
-           │             │    │  get user:42    │                 │   │
-           │             │    ├─────────────────►                 │   │
-           │             │    │                 │                 │   │
-                         ╰────────────────────────────────────────────╯"
+      "                   ╭─ Backend ───────────────────────────────╮
+      Browser            │ API              Cache              DB  │
+      ───┬───            │ ─┬─              ──┬──              ─┬─ │
+         │               │  │                 │                 │  │
+         │ GET /users/42 │  │                 │                 │  │
+         ├──────────────────►                 │                 │  │
+         │               │  │                 │                 │  │
+         │               │  │ get user:42     │                 │  │
+         │               │  ├─────────────────►                 │  │
+         │               │  │                 │                 │  │
+                         ╰─────────────────────────────────────────╯"
     `)
   })
 
@@ -706,14 +703,13 @@ sequenceDiagram
 `)
 
     expect(output).toMatchInlineSnapshot(`
-      "  Service
-
-      ─────┬─────
-           │
-           ├────────────────────╮
-           │ Check Permissions  │
-           ◄────────────────────╯
-           │"
+      "Service
+      ───┬───
+         │
+         ├────────────────────╮
+         │ Check Permissions  │
+         ◄────────────────────╯
+         │"
     `)
   })
 
