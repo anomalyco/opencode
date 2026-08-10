@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
 import {
   DEFAULT_THEME,
+  generateSyntax,
   resolveTheme,
   resolveThemeDocument,
   selectTheme,
@@ -40,6 +41,14 @@ test("validates and resolves categorical hues in configured order", () => {
   expect(theme.contextual.elevated.categorical).toBe(theme.categorical)
   expect(() => resolveSource({ version: 2, light: { categorical: [] } }, "light")).toThrow("Invalid theme")
   expect(() => resolveSource({ version: 2, light: { categorical: ["magenta"] } }, "light")).toThrow("Invalid theme")
+})
+
+test("generates syntax with one categorical hue", () => {
+  const theme = resolveSource({ version: 2, light: { categorical: ["red"] } }, "light")
+  const syntax = generateSyntax(theme, "light")
+
+  expect(syntax.getStyleId("extmark.skill")).not.toBeNull()
+  syntax.destroy()
 })
 
 test("uses the default categorical order for direct definitions", () => {
