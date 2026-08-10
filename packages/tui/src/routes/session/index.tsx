@@ -850,7 +850,7 @@ export function Session() {
         }
 
         clipboard
-          .write?.(text)
+          .write(text)
           .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
         dialog.clear()
@@ -868,7 +868,7 @@ export function Session() {
           const sessionData = session()
           if (!sessionData) return
           const transcript = formatSessionTranscript(sessionData, messages(), showThinking())
-          await clipboard.write?.(transcript)
+          await clipboard.write(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
         } catch {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
@@ -902,7 +902,7 @@ export function Session() {
                 ) + EOL
 
           if (options.action === "copy") {
-            await clipboard.write?.(content)
+            await clipboard.write(content)
             dialog.clear()
             toast.show({ message: "Copied to clipboard", variant: "success" })
             return

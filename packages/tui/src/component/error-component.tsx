@@ -12,7 +12,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   const exit = useExit()
   const clipboard = useClipboard()
   const app = useTuiApp()
-  const [copied, setCopied] = createSignal(false)
+  const [copyState, setCopyState] = createSignal<"idle" | "copied" | "failed">("idle")
 
   // Safe fallback palette per mode (mirrors theme/assets/opencode.json) since the
   // theme context may be the thing that crashed.
@@ -46,11 +46,19 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   const issueURL = buildIssueURL(message, stack, app.version)
 
   const copyReport = () => {
-    void clipboard.write?.(issueURL.toString()).then(() => setCopied(true))
+    void clipboard
+      .write(issueURL.toString())
+      .then(() => setCopyState("copied"))
+      .catch(() => setCopyState("failed"))
   }
 
   const actions = [
-    { key: "c", label: () => (copied() ? "✓ Copied" : "Copy report"), copy: true, onUse: copyReport },
+    {
+      key: "c",
+      label: () => ({ idle: "Copy report", copied: "✓ Copied", failed: "Copy failed" })[copyState()],
+      copy: true,
+      onUse: copyReport,
+    },
     { key: "r", label: () => "Restart", onUse: props.reset },
     { key: "q", label: () => "Quit", onUse: () => exit() },
   ]
@@ -135,13 +143,20 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
           <For each={actions}>
             {(action, index) => {
               const isSelected = () => selected() === index()
-              const isCopied = () => action.copy && copied()
+              const copyColor = () =>
+                action.copy
+                  ? copyState() === "copied"
+                    ? colors.success
+                    : copyState() === "failed"
+                      ? colors.error
+                      : undefined
+                  : undefined
               return (
                 <box flexDirection="column" alignItems="center" flexShrink={0}>
                   <box
                     onMouseDown={() => setSelected(index())}
                     onMouseUp={() => action.onUse()}
-                    backgroundColor={isCopied() ? colors.success : isSelected() ? colors.primary : colors.element}
+                    backgroundColor={copyColor() ?? (isSelected() ? colors.primary : colors.element)}
                     minWidth={15}
                     alignItems="center"
                     paddingLeft={2}
@@ -149,7 +164,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
                   >
                     <text
                       attributes={TextAttributes.BOLD}
-                      fg={isCopied() || isSelected() ? colors.onPrimary : colors.text}
+                      fg={copyColor() || isSelected() ? colors.onPrimary : colors.text}
                     >
                       {action.label()}
                     </text>
@@ -189,9 +204,11 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
         <Show when={showFooter()}>
           <box flexDirection="column" alignItems="center" flexShrink={0}>
             <text fg={colors.muted}>
-              {copied()
+              {copyState() === "copied"
                 ? "Report copied — paste it into a new GitHub issue."
-                : "Copy the report and open a GitHub issue to help us fix this."}
+                : copyState() === "failed"
+                  ? "Clipboard write failed. Try again or report the crash manually."
+                  : "Copy the report and open a GitHub issue to help us fix this."}
             </text>
             <text fg={colors.muted}>OpenCode {app.version}</text>
           </box>

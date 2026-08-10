@@ -60,6 +60,9 @@ async function mountForm(root: string, width = 80) {
       >
         <ClipboardProvider
           value={{
+            async read() {
+              return undefined
+            },
             write(text) {
               copied.push(text)
               return Promise.resolve()
