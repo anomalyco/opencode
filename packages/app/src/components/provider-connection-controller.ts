@@ -138,7 +138,7 @@ export function createProviderConnectionController(options: {
     if (!result.ok) {
       dispatch({
         type: "auth.error",
-        error: formatProviderConnectionError(result.error, language.t("common.requestFailed")),
+        error: result.error instanceof Error ? result.error.message : String(result.error),
       })
       return
     }
@@ -186,10 +186,7 @@ export function createProviderConnectionController(options: {
       .catch((error) => ({ ok: false as const, error }))
     if (polling.disposed || generation !== polling.generation) return
     if (!result.ok) {
-      dispatch({
-        type: "auth.error",
-        error: formatProviderConnectionError(result.error, language.t("common.requestFailed")),
-      })
+      dispatch({ type: "auth.error", error: String(result.error) })
       return
     }
     dispatch({ type: "auth.complete", authorization: result.authorization })
@@ -220,8 +217,10 @@ export function createProviderConnectionController(options: {
       })
       .then(() => ({ ok: true as const }))
       .catch((error) => ({ ok: false as const, error }))
-    if (!result.ok)
-      return formatProviderConnectionError(result.error, language.t("provider.connect.oauth.code.invalid"))
+    if (!result.ok) {
+      const message = result.error instanceof Error ? result.error.message : String(result.error)
+      return message || language.t("provider.connect.oauth.code.invalid")
+    }
     await finish()
     return undefined
   }
@@ -255,22 +254,3 @@ export function createProviderConnectionController(options: {
 }
 
 export type ProviderConnectionController = ReturnType<typeof createProviderConnectionController>
-
-export function formatProviderConnectionError(value: unknown, fallback: string): string {
-  if (value && typeof value === "object" && "data" in value) {
-    const data = value.data
-    if (data && typeof data === "object" && "message" in data && typeof data.message === "string" && data.message)
-      return data.message
-  }
-  if (value && typeof value === "object" && "error" in value) {
-    const nested = formatProviderConnectionError(value.error, "")
-    if (nested) return nested
-  }
-  if (value && typeof value === "object" && "message" in value) {
-    const message = value.message
-    if (typeof message === "string" && message) return message
-  }
-  if (value instanceof Error && value.message) return value.message
-  if (typeof value === "string" && value) return value
-  return fallback
-}
