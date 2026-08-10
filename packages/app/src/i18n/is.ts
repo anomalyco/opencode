@@ -94,6 +94,7 @@ const desktop = [
 ]
 
 export const dict = {
+  ...STORAGE_FALLBACK,
   ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
   "command.category.suggested": "Tillögur",
   "command.category.view": "Skoða",
@@ -1155,3 +1156,4 @@ export const dict = {
   "workspace.reset.note": "Þetta mun endurstilla vinnusvæðið til að passa við sjálfgefna útibúið.",
   "dialog.usageExceeded.dontShowAgain": "Ekki sýna aftur",
 }
+import { STORAGE_FALLBACK } from "./storage"

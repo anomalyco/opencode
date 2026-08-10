@@ -1,4 +1,5 @@
 export const dict = {
+  ...STORAGE_FALLBACK,
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "Súbor",
   "desktop.menu.edit": "Upraviť",
@@ -1157,3 +1158,4 @@ export const dict = {
   "workspace.reset.note": "Týmto sa pracovný priestor obnoví podľa predvolenej vetvy.",
   "dialog.usageExceeded.dontShowAgain": "Znova nezobrazovať",
 }
+import { STORAGE_FALLBACK } from "./storage"
