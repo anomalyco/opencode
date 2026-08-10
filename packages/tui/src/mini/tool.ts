@@ -1172,12 +1172,6 @@ export function toolInlineInfo(part: SessionMessageAssistantTool, directory?: st
   return fallbackInline(ctx)
 }
 
-export function toolStartReady(part: SessionMessageAssistantTool) {
-  const tool = normalizeTool(part)
-  if (tool.name !== "websearch" || tool.state.status !== "running") return true
-  return typeof toolDisplayMetadata(tool.state).provider === "string"
-}
-
 export function toolScroll(phase: ToolPhase, ctx: ToolFrame): string {
   const draw = rule(ctx.name)?.scroll?.[phase]
   try {

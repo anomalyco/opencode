@@ -158,7 +158,35 @@ export const Plugin = {
                     .join("\n\n")
                 : NO_RESULTS
               return { output, content, metadata: { provider: output.provider } }
-            }).pipe(Effect.mapError((error) => webSearchFailure(input.query, error))),
+            }).pipe(
+              Effect.mapError((error) => {
+                const fallback = `Unable to search the web for ${input.query}`
+                if (!Schema.is(WebSearch.RequestError)(error)) return new ToolFailure({ message: fallback, error })
+                const status = HttpClientError.isHttpClientError(error.cause) ? error.cause.response?.status : undefined
+                switch (status) {
+                  case 429:
+                    return new ToolFailure({
+                      message: "Web search rate limited (HTTP 429)",
+                      error,
+                      metadata: { provider: error.providerID },
+                    })
+                  case 401:
+                    return new ToolFailure({
+                      message: "Web search authentication failed (HTTP 401)",
+                      error,
+                      metadata: { provider: error.providerID },
+                    })
+                  case undefined:
+                    return new ToolFailure({ message: fallback, error, metadata: { provider: error.providerID } })
+                  default:
+                    return new ToolFailure({
+                      message: `Web search request failed (HTTP ${status})`,
+                      error,
+                      metadata: { provider: error.providerID },
+                    })
+                }
+              }),
+            ),
         }),
       )
       .pipe(Effect.orDie)
@@ -169,19 +197,4 @@ export const Plugin = {
       }),
     )
   }),
-}
-
-function webSearchFailure(query: string, error: unknown) {
-  const fallback = `Unable to search the web for ${query}`
-  if (!Schema.is(WebSearch.RequestError)(error)) return new ToolFailure({ message: fallback, error })
-  const status = HttpClientError.isHttpClientError(error.cause) ? error.cause.response?.status : undefined
-  const message =
-    status === 429
-      ? "Web search rate limited (HTTP 429)"
-      : status === 401
-        ? "Web search authentication failed (HTTP 401)"
-        : status === undefined
-          ? fallback
-          : `Web search request failed (HTTP ${status})`
-  return new ToolFailure({ message, error, metadata: { provider: error.providerID } })
 }

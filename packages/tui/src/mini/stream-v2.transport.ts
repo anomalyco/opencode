@@ -15,7 +15,7 @@ import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
-import { normalizeTool, toolOutputText, toolStartReady } from "./tool"
+import { normalizeTool, toolOutputText } from "./tool"
 import { toolDisplayContent } from "../util/tool-display"
 import type {
   FooterApi,
@@ -620,7 +620,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const delta = current && prefix ? output.slice(current.output.length) : output
     if (part.state.status === "running") {
       const started = current?.started === true
-      const ready = toolStartReady(part)
+      const ready = part.name !== "websearch" || typeof part.state.metadata.provider === "string"
       if (render && !started && ready)
         write([toolCommit(part, messageID, "start", undefined, input.location?.directory, version)], {
           phase: "running",
