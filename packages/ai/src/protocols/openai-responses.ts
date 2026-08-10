@@ -1,27 +1,22 @@
-import { Effect, Encoding, Schema, Stream } from "effect"
+import { Effect, Encoding, Schema } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
-import {
-  HttpTransport,
-  WebSocketTransport,
-  type Transport,
-  type WebSocketChannelDriver,
-  type WebSocketChannelExchange,
-} from "../route/transport/index.js"
+import { HttpTransport } from "../route/transport/index.js"
 import { LLMEvent, LLMRequest, type JsonSchema, type ToolDefinition } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { optionalArray, ProviderShared } from "./shared.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { OpenAIImage } from "./utils/openai-image.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
-import { OpenAIResponsesChannel } from "./openai-responses-channel.js"
+import { OpenResponsesChannel } from "./open-responses-channel.js"
 
 const ADAPTER = "openai-responses"
 const NAME = "OpenAI Responses"
+const WEBSOCKET_PROTOCOL_HEADER = "responses_websockets=2026-02-06"
+const WEBSOCKET_ROTATE_AFTER_MS = 55 * 60 * 1000
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = OpenResponses.PATH
 
@@ -65,16 +60,6 @@ const OpenAIResponsesBody = Schema.Struct({
   stream: Schema.Literal(true),
 })
 export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
-
-const OpenAIResponsesWebSocketMessage = Schema.StructWithRest(
-  Schema.Struct({
-    type: Schema.tag("response.create"),
-    ...OpenAIResponsesCoreFields,
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-)
-type OpenAIResponsesWebSocketMessage = Schema.Schema.Type<typeof OpenAIResponsesWebSocketMessage>
-const encodeWebSocketMessage = Schema.encodeSync(Schema.fromJsonString(OpenAIResponsesWebSocketMessage))
 
 const extension = {
   id: ADAPTER,
@@ -258,60 +243,12 @@ const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BAS
 const auth = Auth.none
 
 export const httpTransport = HttpTransport.sseJson.with<OpenAIResponsesBody>()
-
-const decodeWebSocketMessage = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesWebSocketMessage))
-
-const webSocketMessage = (body: OpenAIResponsesBody | Record<string, unknown>) =>
-  Effect.gen(function* () {
-    if (!ProviderShared.isRecord(body))
-      return yield* ProviderShared.invalidRequest("OpenAI Responses WebSocket body must be a JSON object")
-    const { stream: _stream, ...message } = body
-    return yield* decodeWebSocketMessage({ ...message, type: "response.create" })
-  })
-
-export interface OpenAIResponsesPrepared {
-  readonly http: HttpTransport.HttpPrepared<string>
-  readonly channel?: {
-    readonly url: string
-    readonly headers: Headers.Headers
-    readonly driver: WebSocketChannelDriver
-  }
-}
-
-export const transport: Transport<OpenAIResponsesBody, OpenAIResponsesPrepared, string> = {
-  id: httpTransport.id,
-  prepare: (input) =>
-    Effect.gen(function* () {
-      const parts = yield* HttpTransport.jsonRequestParts(input)
-      return {
-        http: {
-          request: ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
-          framing: Framing.sse,
-          middleware: input.middleware,
-        },
-        channel: input.webSocket
-          ? {
-              url: yield* WebSocketTransport.toWebSocketUrl(parts.url),
-              headers: parts.headers,
-              driver: OpenAIResponsesChannel.make(encodeWebSocketMessage(yield* webSocketMessage(parts.jsonBody))),
-            }
-          : undefined,
-      }
-    }),
-  execute: (prepared, request, runtime, options) => {
-    if (!options?.webSocket || !prepared.channel) return httpTransport.execute(prepared.http, request, runtime)
-    const exchange: WebSocketChannelExchange = {
-      id: request.id ?? "request",
-      connect: { url: prepared.channel.url, headers: prepared.channel.headers },
-      fallback: () =>
-        Stream.unwrap(
-          httpTransport.execute(prepared.http, request, runtime).pipe(Effect.map((execution) => execution.frames)),
-        ),
-      driver: prepared.channel.driver,
-    }
-    return options.webSocket.execute(exchange)
-  },
-}
+export const transport = OpenResponsesChannel.transport<OpenAIResponsesBody>({
+  id: ADAPTER,
+  name: NAME,
+  rotateAfterMs: WEBSOCKET_ROTATE_AFTER_MS,
+  headers: (headers) => Headers.set(headers, "openai-beta", headers["openai-beta"] ?? WEBSOCKET_PROTOCOL_HEADER),
+})
 
 export const route = Route.make({
   id: ADAPTER,

@@ -80,7 +80,7 @@ Route defaults are request-shaping defaults such as `headers`, `limits`, `genera
 
 The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Route.make(...)` call instead of a 300-400 line route clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
-When a provider supports multiple physical transports, selection remains execution policy below its semantic route. OpenAI Responses uses a purpose-built hybrid transport that prepares one final request, executes HTTP by default, and passes a generic channel exchange to a per-call `WebSocketChannelExecutor` when supplied. `Route.streamPrepared` owns decoding and acknowledges channel completion only after successful full consumption.
+When a provider supports multiple physical transports, selection remains execution policy below its semantic route. `OpenResponsesChannel.transport(...)` owns the provider-neutral Responses WebSocket concept: it prepares one final request, executes HTTP by default, strips WebSocket-disallowed fields, and passes a generic channel exchange to a per-call `WebSocketChannelExecutor` when supplied. Provider-specific Responses routes opt in with handshake and connection-age policy. `Route.streamPrepared` owns decoding and acknowledges channel completion only after successful full consumption.
 
 ### URL Construction
 
@@ -161,7 +161,8 @@ packages/ai/src/
     shared.ts               ProviderShared toolkit used inside protocol impls
     openai-chat.ts          protocol + route (compose OpenAIChat.protocol)
     open-responses.ts         provider-neutral Responses protocol baseline
-    openai-responses.ts       OpenAI tools/events/transports composed over OpenResponses
+    open-responses-channel.ts provider-neutral Responses WebSocket transport factory
+    openai-responses.ts       OpenAI tools/events and channel policy composed over OpenResponses
     anthropic-messages.ts
     gemini.ts
     bedrock-converse.ts

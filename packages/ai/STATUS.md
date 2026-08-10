@@ -77,24 +77,24 @@ Other `aisdk:` packages, including Google Vertex, Azure, and Bedrock, currently 
 
 These are implementation/API slices, not separate npm packages.
 
-| API slice                     | Package-like entrypoint                                     | Purpose                                                                      |
-| ----------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| OpenAI Chat                   | `@opencode-ai/ai/providers/openai/chat`                     | OpenAI `/chat/completions` semantics.                                        |
-| OpenAI Responses              | `@opencode-ai/ai/providers/openai/responses`                | OpenAI `/responses` semantics with HTTP/WebSocket selected through settings. |
-| OpenAI-compatible Chat        | `@opencode-ai/ai/providers/openai-compatible`               | Generic OpenAI-compatible `/chat/completions`.                               |
-| Open Responses-compatible     | `@opencode-ai/ai/providers/openai-compatible/responses`     | Generic provider-neutral `/responses`.                                       |
-| Anthropic-compatible Messages | `@opencode-ai/ai/providers/anthropic-compatible`            | Generic Anthropic-compatible `/messages`.                                    |
-| Anthropic Messages            | `@opencode-ai/ai/providers/anthropic`                       | Anthropic Messages API.                                                      |
-| Gemini Developer API          | `@opencode-ai/ai/providers/google`                          | Google AI Studio Gemini API.                                                 |
-| Vertex Gemini                 | `@opencode-ai/ai/providers/google-vertex/gemini`            | Vertex Gemini API; `providers/google-vertex` is the default alias.           |
-| Vertex Chat                   | `@opencode-ai/ai/providers/google-vertex/chat`              | Vertex OpenAI-compatible Chat Completions for MaaS models.                   |
-| Vertex Responses              | `@opencode-ai/ai/providers/google-vertex/responses`         | Vertex Open Responses for Grok models.                                       |
-| Vertex Messages               | `@opencode-ai/ai/providers/google-vertex/messages`          | Vertex-hosted Anthropic Messages API.                                        |
-| Bedrock Converse              | `@opencode-ai/ai/providers/amazon-bedrock`                  | AWS Bedrock Converse API.                                                    |
-| Bedrock Mantle Chat           | `@opencode-ai/ai/providers/amazon-bedrock/mantle/chat`      | AWS Bedrock Mantle OpenAI-compatible Chat API.                               |
-| Bedrock Mantle Responses      | `@opencode-ai/ai/providers/amazon-bedrock/mantle/responses` | AWS Bedrock Mantle OpenAI-compatible Responses API.                          |
-| Azure OpenAI Chat             | `@opencode-ai/ai/providers/azure/chat`                      | Azure specialization of OpenAI Chat.                                         |
-| Azure OpenAI Responses        | `@opencode-ai/ai/providers/azure/responses`                 | Azure specialization of OpenAI Responses.                                    |
+| API slice                     | Package-like entrypoint                                     | Purpose                                                                                    |
+| ----------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| OpenAI Chat                   | `@opencode-ai/ai/providers/openai/chat`                     | OpenAI `/chat/completions` semantics.                                                      |
+| OpenAI Responses              | `@opencode-ai/ai/providers/openai/responses`                | OpenAI `/responses` semantics with HTTP default and optional per-call WebSocket execution. |
+| OpenAI-compatible Chat        | `@opencode-ai/ai/providers/openai-compatible`               | Generic OpenAI-compatible `/chat/completions`.                                             |
+| Open Responses-compatible     | `@opencode-ai/ai/providers/openai-compatible/responses`     | Generic provider-neutral `/responses`.                                                     |
+| Anthropic-compatible Messages | `@opencode-ai/ai/providers/anthropic-compatible`            | Generic Anthropic-compatible `/messages`.                                                  |
+| Anthropic Messages            | `@opencode-ai/ai/providers/anthropic`                       | Anthropic Messages API.                                                                    |
+| Gemini Developer API          | `@opencode-ai/ai/providers/google`                          | Google AI Studio Gemini API.                                                               |
+| Vertex Gemini                 | `@opencode-ai/ai/providers/google-vertex/gemini`            | Vertex Gemini API; `providers/google-vertex` is the default alias.                         |
+| Vertex Chat                   | `@opencode-ai/ai/providers/google-vertex/chat`              | Vertex OpenAI-compatible Chat Completions for MaaS models.                                 |
+| Vertex Responses              | `@opencode-ai/ai/providers/google-vertex/responses`         | Vertex Open Responses for Grok models.                                                     |
+| Vertex Messages               | `@opencode-ai/ai/providers/google-vertex/messages`          | Vertex-hosted Anthropic Messages API.                                                      |
+| Bedrock Converse              | `@opencode-ai/ai/providers/amazon-bedrock`                  | AWS Bedrock Converse API.                                                                  |
+| Bedrock Mantle Chat           | `@opencode-ai/ai/providers/amazon-bedrock/mantle/chat`      | AWS Bedrock Mantle OpenAI-compatible Chat API.                                             |
+| Bedrock Mantle Responses      | `@opencode-ai/ai/providers/amazon-bedrock/mantle/responses` | AWS Bedrock Mantle OpenAI-compatible Responses API.                                        |
+| Azure OpenAI Chat             | `@opencode-ai/ai/providers/azure/chat`                      | Azure specialization of OpenAI Chat.                                                       |
+| Azure OpenAI Responses        | `@opencode-ai/ai/providers/azure/responses`                 | Azure specialization of OpenAI Responses.                                                  |
 
 ## Suggested Next Work Slices
 

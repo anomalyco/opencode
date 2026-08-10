@@ -16,6 +16,7 @@ import {
   OpenAICompatibleResponses,
   OpenAIResponses,
   OpenResponses,
+  OpenResponsesChannel,
 } from "@opencode-ai/ai/protocols"
 import * as AnthropicMessages from "@opencode-ai/ai/protocols/anthropic-messages"
 import { TestLLM } from "@opencode-ai/ai/testing"
@@ -65,6 +66,7 @@ describe("public exports", () => {
     expect(OpenAIChat.route.id).toBe("openai-chat")
     expect(OpenAICompatibleChat.route.id).toBe("openai-compatible-chat")
     expect(OpenResponses.protocol.id).toBe("open-responses")
+    expect(OpenResponsesChannel.transport).toBeFunction()
     expect(OpenAICompatibleResponses.route.id).toBe("openai-compatible-responses")
     expect(OpenAICompatibleResponses.route.protocol).toBe("open-responses")
     expect(OpenAIResponses.route.id).toBe("openai-responses")

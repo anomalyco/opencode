@@ -238,7 +238,11 @@ describe("OpenAI Responses route", () => {
   it.effect("streams OpenAI Responses over WebSocket", () =>
     Effect.gen(function* () {
       const sent: string[] = []
-      const opened: Array<{ readonly url: string; readonly authorization: string | undefined }> = []
+      const opened: Array<{
+        readonly url: string
+        readonly authorization: string | undefined
+        readonly protocol: string | undefined
+      }> = []
       let closed = false
       const deps = Layer.succeed(
         RequestExecutor.Service,
@@ -251,7 +255,11 @@ describe("OpenAI Responses route", () => {
           Effect.succeed({
             sendText: (message) =>
               Effect.sync(() => {
-                opened.push({ url: input.url, authorization: input.headers.authorization })
+                opened.push({
+                  url: input.url,
+                  authorization: input.headers.authorization,
+                  protocol: input.headers["openai-beta"],
+                })
                 sent.push(message)
               }),
             messages: Stream.fromArray([
@@ -265,14 +273,24 @@ describe("OpenAI Responses route", () => {
       })
       const response = yield* LLMClient.generate(
         LLM.request({
-          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini"),
+          model: OpenAI.configure({
+            baseURL: "https://api.openai.test/v1/",
+            apiKey: "test",
+            headers: { "openai-beta": "custom-protocol" },
+          }).responses("gpt-4.1-mini"),
           prompt: "Say hello.",
         }),
         { webSocket },
       ).pipe(Effect.provide(LLMClient.layer.pipe(Layer.provide(deps))))
 
       expect(response.text).toBe("Hi")
-      expect(opened).toEqual([{ url: "wss://api.openai.test/v1/responses", authorization: "Bearer test" }])
+      expect(opened).toEqual([
+        {
+          url: "wss://api.openai.test/v1/responses",
+          authorization: "Bearer test",
+          protocol: "custom-protocol",
+        },
+      ])
       expect(closed).toBe(true)
       expect(sent).toHaveLength(1)
       expect(JSON.parse(sent[0])).toEqual({
@@ -294,7 +312,12 @@ describe("OpenAI Responses route", () => {
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini"),
           prompt: "Say hello.",
           http: {
-            body: { model: "overlaid-model", metadata: { source: "overlay" } },
+            body: {
+              model: "overlaid-model",
+              metadata: { source: "overlay" },
+              stream_options: { include_usage: true },
+              background: true,
+            },
             headers: { "x-request": "request" },
             query: { mode: "test" },
           },
@@ -303,6 +326,9 @@ describe("OpenAI Responses route", () => {
           webSocket: {
             execute: (exchange) =>
               Effect.gen(function* () {
+                expect(exchange.connect.rotateAfterMs).toBe(55 * 60 * 1000)
+                expect(exchange.connect.headers["openai-beta"]).toBe("responses_websockets=2026-02-06")
+                expect(exchange.connect.headers["content-length"]).toBeUndefined()
                 yield* exchange.driver
                   .create(undefined)
                   .pipe(Effect.flatMap((create) => Ref.set(message, create.message)))
@@ -328,7 +354,7 @@ describe("OpenAI Responses route", () => {
       )
 
       const httpBody = JSON.parse(yield* Ref.get(body))
-      const { stream: _stream, ...shared } = httpBody
+      const { stream: _stream, stream_options: _streamOptions, background: _background, ...shared } = httpBody
       expect(response.finishReason?.normalized).toBe("stop")
       expect(yield* Ref.get(attempts)).toBe(1)
       expect(JSON.parse(yield* Ref.get(message))).toEqual({ type: "response.create", ...shared })
@@ -336,6 +362,8 @@ describe("OpenAI Responses route", () => {
         model: "overlaid-model",
         metadata: { source: "overlay" },
         stream: true,
+        stream_options: { include_usage: true },
+        background: true,
       })
     }),
   )

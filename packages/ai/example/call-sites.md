@@ -376,11 +376,9 @@ import { model } from "@opencode-ai/ai/providers/google-vertex/messages"
 model("claude-sonnet-4-6", { project, location: "global" })
 ```
 
-The client should not require a different public layer just because a selected
-route uses WebSocket. Use one `LLMClient.layer` with HTTP and WebSocket runtime
-capabilities available; routes that do not need WebSocket simply never touch it.
-If a WebSocket route is selected in an environment without WebSocket support,
-fail with a typed transport configuration error.
+The client does not require a different public layer for WebSocket execution.
+Responses routes use HTTP by default, and callers may pass a channel executor per
+call. Routes without channel support simply ignore that execution capability.
 
 Azure is a route specialization with auth/path/default changes plus input
 mapping. The public API configures the Azure resource once, then selects
@@ -582,10 +580,8 @@ App boundary = explicit durable-config -> typed-provider call
 - [ ] Decide whether a tiny `Provider.define(...)` helper is warranted after two
       or three provider conversions; start with plain objects if duplication is not
       yet painful.
-- [x] Update `packages/opencode/src/session/llm/native-request.ts` to construct
-      executable models at the session boundary with explicit provider facade
-      calls, mapping catalog metadata such as `endpoint.websocket` to the correct
-      named route selector.
+- [x] Keep executable model construction transport-neutral at the Session boundary;
+      Session-scoped execution policy supplies channel capability separately.
 - [ ] Update tests so direct route/provider tests assert route values are carried
       by executable models, and opencode/native tests assert boundary-based route
       selection.
