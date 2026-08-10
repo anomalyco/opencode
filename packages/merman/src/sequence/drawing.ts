@@ -191,29 +191,9 @@ function renderSelfMessage(
 }
 
 function renderNote(grid: SequenceGrid, placement: Extract<SequenceStepPlacement, { type: "note" }>): void {
-  const width = Math.max(...placement.textLines.map(diagramTextWidth))
-  const left = placement.textX
-  const right = left + width - 1
-  const top = placement.textY - 1
-  const bottom = placement.textY + placement.textLines.length
-
-  for (let x = left + 1; x < right; x++) {
-    setCell(grid, x, top, SEQUENCE_BORDER.horizontal, "note")
-    setCell(grid, x, bottom, SEQUENCE_BORDER.horizontal, "note")
-  }
-  for (let y = top + 1; y < bottom; y++) {
-    setCell(grid, left, y, SEQUENCE_BORDER.vertical, "note")
-    setCell(grid, right, y, SEQUENCE_BORDER.vertical, "note")
-  }
-  setCell(grid, left, top, SEQUENCE_BORDER.topLeft, "note")
-  setCell(grid, right, top, SEQUENCE_BORDER.topRight, "note")
-  setCell(grid, left, bottom, SEQUENCE_BORDER.bottomLeft, "note")
-  setCell(grid, right, bottom, SEQUENCE_BORDER.bottomRight, "note")
-  placement.textLines.forEach((line, index) => setText(grid, left, placement.textY + index, line, "noteBadge"))
-  for (let y = placement.textY; y < bottom; y++) {
-    setCell(grid, left, y, SEQUENCE_BORDER.vertical, "note")
-    setCell(grid, right, y, SEQUENCE_BORDER.vertical, "note")
-  }
+  placement.textLines.forEach((line, index) =>
+    setText(grid, placement.textX, placement.textY + index, line, "noteBadge"),
+  )
 }
 
 export function drawSequenceDiagramGrid(
@@ -236,22 +216,12 @@ export function drawSequenceDiagramGrid(
         setText(grid, centeredStart(center, line), participantHeaderY + index, line, "participant"),
       )
     } else {
+      labelLines.forEach((line, index) =>
+        setText(grid, centeredStart(center, line), participantHeaderTopY + index, line, "participant"),
+      )
       for (let x = headerLeftX; x <= headerRightX; x++) {
-        setCell(grid, x, participantHeaderTopY, SEQUENCE_BORDER.horizontal, "participant")
         setCell(grid, x, participantRuleY, SEQUENCE_BORDER.horizontal, "participant")
       }
-
-      setCell(grid, headerLeftX, participantHeaderTopY, SEQUENCE_BORDER.topLeft, "participant")
-      setCell(grid, headerRightX, participantHeaderTopY, SEQUENCE_BORDER.topRight, "participant")
-      for (let y = participantHeaderY; y < participantRuleY; y++) {
-        setCell(grid, headerLeftX, y, SEQUENCE_BORDER.vertical, "participant")
-        setCell(grid, headerRightX, y, SEQUENCE_BORDER.vertical, "participant")
-      }
-      setCell(grid, headerLeftX, participantRuleY, SEQUENCE_BORDER.bottomLeft, "participant")
-      setCell(grid, headerRightX, participantRuleY, SEQUENCE_BORDER.bottomRight, "participant")
-      labelLines.forEach((line, index) =>
-        setText(grid, centeredStart(center, line), participantHeaderY + index, line, "participant"),
-      )
       setCell(grid, center, participantRuleY, SEQUENCE_BORDER.topT, "participant")
     }
 

@@ -51,9 +51,9 @@ sequenceDiagram
 `)
 
     expectDiagram(output).toEqualDiagram(`
-      ╭─────────╮       ╭────────╮
-      │ Browser │       │ Server │
-      ╰────┬────╯       ╰────┬───╯
+        Browser           Server
+
+      ─────┬─────       ─────┬────
            │                 │
            │     GET /       │
            ├─────────────────►
@@ -140,8 +140,8 @@ sequenceDiagram
 `)
 
     const lines = output.split("\n")
-    const browserCenter = lines[1]!.indexOf("w")
-    const serverCenter = lines[1]!.indexOf("v")
+    const browserCenter = lines[0]!.indexOf("w")
+    const serverCenter = lines[0]!.indexOf("v")
 
     expect(lines[2]?.[browserCenter]).toBe("┬")
     expect(lines[3]?.[browserCenter]).toBe("│")
@@ -277,8 +277,8 @@ sequenceDiagram
   A->>B: hello`)
 
     expect(output).not.toContain("<br")
-    expect(output).toContain("│ First line  │")
-    expect(output).toContain("│ Second line │")
+    expect(output).toContain("First line")
+    expect(output).toContain("Second line")
   })
 
   test("parses Mermaid arrow head variants", () => {
@@ -314,9 +314,9 @@ sequenceDiagram
 `)
 
     expect(output).toMatchInlineSnapshot(`
-      "╭───╮              ╭───╮
-      │ A │              │ B │
-      ╰─┬─╯              ╰─┬─╯
+      "  A                  B
+
+      ──┬──              ──┬──
         │                  │
         │   open solid     │
         ├─────────────────>│
@@ -387,7 +387,7 @@ sequenceDiagram
   end
 `)
     const lines = output.split("\n")
-    const participantCenter = lines.find((line) => line.includes("│ A │"))!.indexOf("A")
+    const participantCenter = lines.find((line) => line.includes("  A"))!.indexOf("A")
     const fragmentStart = lines.find((line) => line.includes("alt: ok"))!.indexOf("╭")
 
     expect(fragmentStart).toBeLessThan(participantCenter)
@@ -600,7 +600,7 @@ sequenceDiagram
     const groupBorderRight = output.split("\n")[0]!.lastIndexOf("╮")
     const lines = output.split("\n")
     const externalLabelRow = lines.findIndex((line) => line.includes("External"))
-    const externalHeaderLeft = lines[externalLabelRow - 1]!.lastIndexOf("╭")
+    const externalHeaderLeft = lines[externalLabelRow + 2]!.lastIndexOf("─")
 
     expect(externalHeaderLeft).toBeGreaterThan(groupBorderRight)
   })
@@ -656,9 +656,9 @@ sequenceDiagram
 
     expect(output).toMatchInlineSnapshot(`
       "                   ╭─ Backend ──────────────────────────────────╮
-      ╭─────────╮        │ ╭─────╮          ╭───────╮          ╭────╮ │
-      │ Browser │        │ │ API │          │ Cache │          │ DB │ │
-      ╰────┬────╯        │ ╰──┬──╯          ╰───┬───╯          ╰──┬─╯ │
+        Browser          │   API              Cache              DB   │
+                         │                                            │
+      ─────┬─────        │ ───┬───          ────┬────          ───┬── │
            │             │    │                 │                 │   │
            │  GET /users/42   │                 │                 │   │
            ├──────────────────►                 │                 │   │
@@ -706,9 +706,9 @@ sequenceDiagram
 `)
 
     expect(output).toMatchInlineSnapshot(`
-      "╭─────────╮
-      │ Service │
-      ╰────┬────╯
+      "  Service
+
+      ─────┬─────
            │
            ├────────────────────╮
            │ Check Permissions  │
@@ -717,7 +717,7 @@ sequenceDiagram
     `)
   })
 
-  test("frames notes in their reserved rows", () => {
+  test("renders note badges in their reserved rows", () => {
     const output = renderSequenceDiagram(`
 sequenceDiagram
   Browser->>Server: one
@@ -729,11 +729,9 @@ sequenceDiagram
     const nextMessageRow = lines.findIndex((line) => line.includes("two"))
 
     expect(noteRow).toBeGreaterThan(0)
-    expect(lines[noteRow - 1]).toContain("╭")
-    expect(lines[noteRow - 1]).toContain("╮")
-    expect(lines[noteRow]).toContain("│ phase │")
-    expect(lines[noteRow + 1]).toContain("╰")
-    expect(lines[noteRow + 1]).toContain("╯")
+    expect(lines[noteRow - 1]?.trim()).toBe("│                 │")
+    expect(lines[noteRow]).toContain(" phase ")
+    expect(lines[noteRow + 1]?.trim()).toBe("│                 │")
     expect(nextMessageRow).toBe(noteRow + 2)
   })
 

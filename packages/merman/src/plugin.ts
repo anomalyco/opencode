@@ -12,6 +12,8 @@ export default Plugin.define({
           text: context.theme.text.default,
           subdued: context.theme.text.subdued,
           info: context.theme.text.feedback.info.default,
+          success: context.theme.text.feedback.success.default,
+          warning: context.theme.text.feedback.warning.default,
           background: context.theme.background.default,
         }),
       })),

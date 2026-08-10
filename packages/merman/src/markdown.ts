@@ -44,6 +44,10 @@ export interface MermaidMarkdownRendererOptions {
     muted?: ColorInput
     warning?: ColorInput
     background?: ColorInput
+    request?: ColorInput
+    response?: ColorInput
+    note?: ColorInput
+    noteBackground?: ColorInput
   }
 }
 
@@ -131,12 +135,12 @@ function prepareDiagram(kind: DiagramKind, source: string, options: MermaidMarkd
             participant: color(colors.primary),
             lifeline: color(colors.muted),
             group: color(colors.secondary),
-            request: color(colors.primary),
-            response: color(colors.primary),
+            request: color(colors.request ?? colors.primary),
+            response: color(colors.response ?? colors.primary),
             fragment: color(colors.secondary),
             fragmentLabelBg: color(colors.background),
-            note: color(colors.warning),
-            noteBg: color(colors.background),
+            note: color(colors.note ?? colors.warning),
+            noteBg: color(colors.noteBackground ?? colors.background),
           }),
         ),
         height: size.height,

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
+import { blendColor } from "./core/color/style.js"
 import { createOpenCodeDiagramPalette } from "./palette.js"
 
 type Rgb = readonly [number, number, number]
@@ -31,11 +32,15 @@ describe("OpenCode diagram palette", () => {
   }>)("derives a controlled neutral ladder for a $name", ({ text, subdued, secondary, muted }) => {
     const primary = rgb(text)
     const info = RGBA.fromInts(40, 120, 220)
+    const success = RGBA.fromInts(80, 180, 120)
+    const warning = RGBA.fromInts(220, 160, 80)
     const background = RGBA.fromInts(10, 20, 30)
     const palette = createOpenCodeDiagramPalette({
       text: primary,
       subdued: rgb(subdued),
       info,
+      success,
+      warning,
       background,
     })
 
@@ -45,5 +50,9 @@ describe("OpenCode diagram palette", () => {
     expect(palette.muted.equals(rgb(muted))).toBe(true)
     expect(palette.warning).toBe(info)
     expect(palette.background).toBe(background)
+    expect(palette.request).toBe(success)
+    expect(palette.response).toBe(warning)
+    expect(palette.note).toBe(primary)
+    expect(palette.noteBackground.equals(blendColor(background, rgb(subdued), 0.25))).toBe(true)
   })
 })
