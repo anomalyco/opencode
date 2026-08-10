@@ -97,10 +97,10 @@ describe("ModelResolver", () => {
           providerID: Provider.ID.azure,
           modelID: "legacy-deployment",
           settings: {
-            baseURL: "https://${AZURE_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
+            resourceName: "legacy-resource",
+            baseURL: "https://legacy-resource.cognitiveservices.azure.com/openai",
           },
         }),
-        Credential.Key.make({ type: "key", key: "secret", configuration: { resourceName: "legacy-resource" } }),
       )
 
       expect(responses).toMatchObject({ id: "responses-deployment", provider: "azure" })
@@ -128,23 +128,15 @@ describe("ModelResolver", () => {
       const credential = Credential.Key.make({ type: "key", key: "secret" })
       const responses = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
-          providerID: Provider.ID.amazonBedrock,
           modelID: "openai.gpt-oss-120b",
-          settings: {
-            region: "us-east-2",
-            baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/v1",
-          },
+          settings: { region: "us-east-2" },
         }),
         credential,
       )
       const chat = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
-          providerID: Provider.ID.amazonBedrock,
           modelID: "openai.gpt-oss-safeguard-20b",
-          settings: {
-            region: "us-east-2",
-            baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/v1",
-          },
+          settings: { region: "us-east-2" },
         }),
         credential,
       )
@@ -259,48 +251,17 @@ describe("ModelResolver", () => {
     }),
   )
 
-  it.effect("resolves provider URLs from environment and credential configuration", () =>
-    withEnv(
-      {
-        ACME_HOST: "api.acme.test",
-        CLOUDFLARE_ACCOUNT_ID: undefined,
-      },
-      () =>
-        Effect.gen(function* () {
-          const environment = yield* ModelResolver.fromCatalogModel(
-            model(Provider.aisdk("@ai-sdk/openai-compatible"), {
-              settings: { baseURL: "https://${ACME_HOST}/v1" },
-            }),
-          )
-          const cloudflareCatalog = model(Provider.aisdk("@ai-sdk/openai-compatible"), {
-            providerID: Provider.ID.make("cloudflare-workers-ai"),
-            settings: {
-              baseURL: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
-            },
-          })
-          const cloudflare = yield* ModelResolver.fromCatalogModel(
-            cloudflareCatalog,
-            Credential.Key.make({ type: "key", key: "secret", configuration: { accountId: "account" } }),
-          )
-          const vertex = yield* ModelResolver.fromCatalogModel(
-            model(Provider.aisdk("@ai-sdk/openai-compatible"), {
-              providerID: Provider.ID.googleVertex,
-              settings: {
-                project: "project",
-                location: "global",
-                baseURL:
-                  "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}",
-              },
-            }),
-          )
+  it.effect("resolves provider URLs from environment without mutating the catalog model", () =>
+    withEnv({ ACME_HOST: "api.acme.test" }, () =>
+      Effect.gen(function* () {
+        const catalog = model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+          settings: { baseURL: "https://${ACME_HOST}/v1" },
+        })
+        const resolved = yield* ModelResolver.fromCatalogModel(catalog)
 
-          expect(environment.route.endpoint.baseURL).toBe("https://api.acme.test/v1")
-          expect(cloudflare.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/account/ai/v1")
-          expect(cloudflareCatalog.settings?.baseURL).toContain("${CLOUDFLARE_ACCOUNT_ID}")
-          expect(vertex.route.endpoint.baseURL).toBe(
-            "https://aiplatform.googleapis.com/v1/projects/project/locations/global",
-          )
-        }),
+        expect(resolved.route.endpoint.baseURL).toBe("https://api.acme.test/v1")
+        expect(catalog.settings?.baseURL).toBe("https://${ACME_HOST}/v1")
+      }),
     ),
   )
 

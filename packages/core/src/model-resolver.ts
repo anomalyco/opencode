@@ -171,6 +171,7 @@ export const fromCatalogModel = (
   const resolved = prepared.model
   const packageName = Provider.packageName(resolved.package)
   const key = apiKey(resolved, credential)
+  const configuration = credential?.type === "key" ? credential.configuration : undefined
 
   if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/openai") {
     return Effect.succeed(
@@ -197,7 +198,7 @@ export const fromCatalogModel = (
         .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
     )
   }
-  const configured = resolved.settings ?? {}
+  const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
   const mapping = Provider.isAISDK(resolved.package)
     ? AISDKNative.map({
         packageName,
@@ -211,6 +212,8 @@ export const fromCatalogModel = (
     const runtime = produce(resolved, (draft) => {
       draft.settings = Provider.mergeOverlay(draft.settings, {
         ...nativeCredentialSettings(resolved.package ?? "", credential),
+        ...credential?.metadata,
+        ...configuration,
       })
     })
     return dependencies.loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))
@@ -246,19 +249,13 @@ export const fromCatalogModel = (
 }
 
 function prepareRuntimeModel(model: Info, credential: Credential.Value | undefined) {
-  const configuration = credential?.type === "key" ? credential.configuration : undefined
-  const variables = providerVariables(model, configuration)
   const prepared = produce(model, (draft) => {
-    draft.settings = Provider.mergeOverlay(draft.settings, {
-      ...credential?.metadata,
-      ...configuration,
-    })
     if (draft.settings?.apiKey === "") delete draft.settings.apiKey
     if (credential?.type === "key" && credential.metadata !== undefined)
       draft.body = Provider.mergeOverlay(draft.body, credential.metadata)
     if (typeof draft.settings?.baseURL !== "string") return
     draft.settings.baseURL = draft.settings.baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => {
-      return variables[name] ?? nonEmpty(process.env[name]) ?? placeholder
+      return process.env[name] ?? placeholder
     })
   })
   const baseURL = prepared.settings?.baseURL
@@ -269,68 +266,6 @@ function prepareRuntimeModel(model: Info, credential: Credential.Value | undefin
         )
       : []
   return { model: prepared, unresolved }
-}
-
-function providerVariables(
-  model: Info,
-  configuration: Readonly<Record<string, unknown>> | undefined,
-): Record<string, string> {
-  const settings = model.settings ?? {}
-  if (model.providerID === Provider.ID.make("cloudflare-workers-ai")) {
-    const accountID =
-      nonEmpty(process.env.CLOUDFLARE_ACCOUNT_ID) ??
-      stringSetting(settings, "accountId") ??
-      stringSetting(configuration, "accountId")
-    return accountID ? { CLOUDFLARE_ACCOUNT_ID: accountID } : {}
-  }
-  if (model.providerID === Provider.ID.azure) {
-    const resourceName =
-      stringSetting(settings, "resourceName") ??
-      stringSetting(configuration, "resourceName") ??
-      nonEmpty(process.env.AZURE_RESOURCE_NAME) ??
-      nonEmpty(process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME)
-    return resourceName
-      ? {
-          AZURE_RESOURCE_NAME: resourceName,
-          AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: resourceName,
-        }
-      : {}
-  }
-  if (model.providerID === Provider.ID.googleVertex) {
-    const project =
-      stringSetting(settings, "project") ??
-      nonEmpty(process.env.GOOGLE_VERTEX_PROJECT) ??
-      nonEmpty(process.env.GOOGLE_CLOUD_PROJECT) ??
-      nonEmpty(process.env.GCP_PROJECT) ??
-      nonEmpty(process.env.GCLOUD_PROJECT)
-    const location =
-      stringSetting(settings, "location") ??
-      nonEmpty(process.env.GOOGLE_VERTEX_LOCATION) ??
-      nonEmpty(process.env.GOOGLE_CLOUD_LOCATION) ??
-      nonEmpty(process.env.VERTEX_LOCATION) ??
-      "us-central1"
-    return {
-      ...(project ? { GOOGLE_VERTEX_PROJECT: project } : {}),
-      GOOGLE_VERTEX_LOCATION: location,
-      GOOGLE_VERTEX_ENDPOINT:
-        location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`,
-    }
-  }
-  if (model.providerID === Provider.ID.amazonBedrock) {
-    return {
-      AWS_REGION: stringSetting(settings, "region") ?? nonEmpty(process.env.AWS_REGION) ?? "us-east-1",
-    }
-  }
-  return {}
-}
-
-function stringSetting(settings: Readonly<Record<string, unknown>> | undefined, key: string) {
-  const value = settings?.[key]
-  return typeof value === "string" ? nonEmpty(value) : undefined
-}
-
-function nonEmpty(value: string | undefined) {
-  return value === undefined || value === "" ? undefined : value
 }
 
 const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {
