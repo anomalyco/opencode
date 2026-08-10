@@ -133,6 +133,16 @@ const api: ElectronAPI = {
   setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
   setNativeTranslations: (bundle) => ipcRenderer.invoke("set-native-translations", bundle),
+  onMemoryPressure: (cb) => {
+    const handler = () => cb()
+    ipcRenderer.on("memory-pressure", handler)
+    return () => ipcRenderer.removeListener("memory-pressure", handler)
+  },
+  onToast: (cb) => {
+    const handler = (_: unknown, key: string) => cb(key)
+    ipcRenderer.on("show-toast", handler)
+    return () => ipcRenderer.removeListener("show-toast", handler)
+  },
 }
 
 contextBridge.exposeInMainWorld("api", api)
