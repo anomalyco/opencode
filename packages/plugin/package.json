@@ -31,9 +31,9 @@
   },
   "peerDependencies": {
     "@opencode-ai/theme": "workspace:*",
-    "@opentui/core": ">=0.4.5",
-    "@opentui/keymap": ">=0.4.5",
-    "@opentui/solid": ">=0.4.5",
+    "@opentui/core": "0.0.0-20260808-9ecf7c0a",
+    "@opentui/keymap": "0.0.0-20260808-9ecf7c0a",
+    "@opentui/solid": "0.0.0-20260808-9ecf7c0a",
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {

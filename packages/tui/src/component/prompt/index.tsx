@@ -7,9 +7,8 @@ import {
   decodePasteBytes,
   type KeyEvent,
 } from "@opentui/core"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
 import path from "path"
-import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
 import { useTheme, useThemes } from "../../context/theme"
 import { tint } from "../../theme/color"
@@ -48,13 +47,20 @@ import { DialogSkill } from "../dialog-skill"
 import { useArgs } from "../../context/args"
 import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
-import { readLocalAttachment } from "./local-attachment"
+import {
+  normalizePastedFilepath,
+  parsePastedFilepaths,
+  readLocalAttachment,
+  MAX_LOCAL_ATTACHMENT_BYTES,
+  type LocalAttachment,
+} from "./local-attachment"
 import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
 import { PluginSlot } from "../../plugin/render"
 import type { SessionPending } from "@opencode-ai/schema/session-pending"
+import { DialogImagePreview } from "../dialog-image-preview"
 
 export type PromptProps = {
   sessionID?: string
@@ -70,17 +76,6 @@ export type PromptProps = {
     normal?: string[]
     shell?: string[]
   }
-}
-
-function pastedFilepath(value: string, platform: string) {
-  const raw = value.replace(/^['"]+|['"]+$/g, "")
-  if (raw.startsWith("file://")) {
-    try {
-      return fileURLToPath(raw)
-    } catch {}
-  }
-  if (platform === "win32") return raw
-  return raw.replace(/\\(.)/g, "$1")
 }
 
 export type PromptRef = {
@@ -312,6 +307,41 @@ export function Prompt(props: PromptProps) {
     extmarkToPart: new Map(),
     interrupt: 0,
   })
+  let disposed = false
+  let pasteQueue = Promise.resolve()
+
+  function enqueuePaste(run: (changed: () => boolean) => Promise<void>) {
+    pasteQueue = pasteQueue
+      .then(async () => {
+        if (disposed || input.isDestroyed) return
+        const before = { sessionID: props.sessionID, mode: store.mode, text: input.plainText }
+        await run(
+          () =>
+            disposed ||
+            input.isDestroyed ||
+            props.sessionID !== before.sessionID ||
+            store.mode !== before.mode ||
+            input.plainText !== before.text,
+        )
+      })
+      .catch((error) => {
+        if (!disposed) toast.error(error)
+      })
+    return pasteQueue
+  }
+
+  const imageAttachments = createMemo(() =>
+    (store.prompt.files ?? []).filter((file) => typeof file.uri === "string" && file.uri.startsWith("data:image/")),
+  )
+  const imagePreviewHeight = createMemo(() => Math.max(4, Math.min(8, Math.floor(dimensions().height / 4))))
+  const imagePreviewWidth = createMemo(() => imagePreviewHeight() * 2)
+  const visibleImageAttachments = createMemo(() => imageAttachments().slice(0, 3))
+
+  function openImagePreview(initial: number) {
+    const images = imageAttachments()
+    if (images.length === 0) return
+    dialog.replace(() => <DialogImagePreview images={images} initial={initial} />)
+  }
 
   createEffect(
     on(
@@ -391,21 +421,31 @@ export function Prompt(props: PromptProps) {
         name: "prompt.paste",
         category: "Prompt",
         palette: undefined,
-        run: async (_input: string | undefined, event?: KeyEvent) => {
+        run: (_input: string | undefined, event?: KeyEvent) => {
           event?.preventDefault()
           event?.stopPropagation()
-          const content = await clipboard.read?.()
-          if (content?.mime.startsWith("image/")) {
-            await pasteAttachment({
-              filename: "clipboard",
-              uri: `data:${content.mime};base64,${content.data}`,
-            })
-            return
-          }
-          if (content?.mime === "text/plain") {
-            await pasteInputText(content.data)
-          }
+          return enqueuePaste(async (changed) => {
+            const content = await clipboard.read()
+            if (changed()) return
+            if (content?.mime.startsWith("image/")) {
+              pasteAttachment({
+                filename: "clipboard",
+                uri: `data:${content.mime};base64,${content.data}`,
+              })
+              return
+            }
+            if (content?.mime === "text/plain") {
+              await pasteInputText(content.data, changed)
+            }
+          })
         },
+      },
+      {
+        title: "View image attachments",
+        name: "prompt.images.view",
+        category: "Prompt",
+        enabled: imageAttachments().length > 0,
+        run: () => openImagePreview(0),
       },
       {
         title: "Interrupt session",
@@ -561,6 +601,7 @@ export function Prompt(props: PromptProps) {
       "prompt.submit",
       "prompt.editor",
       "prompt.editor_context.clear",
+      "prompt.images.view",
       "prompt.stash",
       "prompt.stash.pop",
       "prompt.stash.list",
@@ -614,6 +655,7 @@ export function Prompt(props: PromptProps) {
   })
 
   onCleanup(() => {
+    disposed = true
     if (store.prompt.text) {
       stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
     }
@@ -1262,26 +1304,38 @@ export function Prompt(props: PromptProps) {
     return true
   }
 
-  async function pasteInputText(text: string) {
+  async function pasteInputText(text: string, changed: () => boolean) {
     const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
     const pastedContent = normalizedText.trim()
-    const filepath = pastedFilepath(pastedContent, terminalEnvironment.platform)
+    const filepath = normalizePastedFilepath(pastedContent, terminalEnvironment.platform)
     const isUrl = /^(https?):\/\//.test(filepath)
     if (!isUrl) {
       const attachment = await readLocalAttachment(filepath)
-      const filename = path.basename(filepath)
-      if (attachment?.type === "text") {
-        pasteText(attachment.content, `[SVG: ${filename ?? "image"}]`)
+      if (attachment) {
+        if (changed()) return
+        pasteLocalAttachment(filepath, attachment)
         return
       }
-      if (attachment?.type === "binary") {
-        await pasteAttachment({
-          filename,
-          uri: `data:${attachment.mime};base64,${Buffer.from(attachment.content).toString("base64")}`,
-        })
-        return
+
+      const filepaths = parsePastedFilepaths(pastedContent, terminalEnvironment.platform)
+      if (filepaths.length > 1) {
+        let remaining = MAX_LOCAL_ATTACHMENT_BYTES
+        const attachments: Array<{ filepath: string; attachment: LocalAttachment }> = []
+        for (const candidate of filepaths) {
+          const next = await readLocalAttachment(candidate, remaining)
+          if (!next) break
+          remaining -= typeof next.content === "string" ? Buffer.byteLength(next.content) : next.content.byteLength
+          attachments.push({ filepath: candidate, attachment: next })
+        }
+        if (attachments.length === filepaths.length) {
+          if (changed()) return
+          for (const item of attachments) pasteLocalAttachment(item.filepath, item.attachment)
+          return
+        }
       }
     }
+
+    if (changed()) return
 
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
     if ((lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
@@ -1307,12 +1361,27 @@ export function Prompt(props: PromptProps) {
     }, 0)
   }
 
-  async function pasteAttachment(file: { filename?: string; uri: string }) {
+  function pasteLocalAttachment(filepath: string, attachment: LocalAttachment) {
+    const filename = path.basename(filepath)
+    if (attachment.type === "text") {
+      pasteText(attachment.content, `[SVG: ${filename || "image"}]`)
+      return
+    }
+    pasteAttachment({
+      filename,
+      uri: `data:${attachment.mime};base64,${Buffer.from(attachment.content).toString("base64")}`,
+    })
+  }
+
+  function pasteAttachment(file: { filename?: string; uri: string }) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
     const pdf = file.uri.startsWith("data:application/pdf;")
-    const prefix = pdf ? "data:application/pdf;" : "data:image/"
-    const count = store.prompt.files?.filter((attachment) => attachment.uri.startsWith(prefix)).length ?? 0
+    const count = pdf
+      ? (store.prompt.files?.filter(
+          (attachment) => typeof attachment.uri === "string" && attachment.uri.startsWith("data:application/pdf;"),
+        ).length ?? 0)
+      : imageAttachments().length
     const virtualText = pdf ? `[PDF ${count + 1}]` : `[Image ${count + 1}]`
     const extmarkEnd = extmarkStart + virtualText.length
     const textToInsert = virtualText + " "
@@ -1344,7 +1413,6 @@ export function Prompt(props: PromptProps) {
         draft.extmarkToPart.set(extmarkId, { type: "file", index })
       }),
     )
-    return
   }
 
   function clearPrompt() {
@@ -1468,6 +1536,74 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
             width="100%"
           >
+            <Show when={config.prompt?.image_preview && visibleImageAttachments().length > 0}>
+              <box
+                width="100%"
+                height={imagePreviewHeight() + 1}
+                flexDirection="row"
+                flexShrink={0}
+                justifyContent="flex-start"
+                gap={1}
+                paddingBottom={1}
+              >
+                <For each={visibleImageAttachments()}>
+                  {(file, index) => {
+                    const [failed, setFailed] = createSignal(false)
+                    return (
+                      <box
+                        width={imagePreviewWidth()}
+                        height={imagePreviewHeight()}
+                        flexBasis={imagePreviewWidth()}
+                        flexShrink={1}
+                        onMouseUp={(event: MouseEvent) => {
+                          if (event.button !== 0) return
+                          event.stopPropagation()
+                          openImagePreview(index())
+                        }}
+                      >
+                        <Show
+                          when={!failed()}
+                          fallback={
+                            <box width="100%" height="100%" alignItems="center" justifyContent="center">
+                              <text fg={theme.text.subdued}>No preview</text>
+                            </box>
+                          }
+                        >
+                          <image
+                            id={`prompt-image-preview-${index()}`}
+                            source={file.uri}
+                            fit="cover"
+                            protocol="auto"
+                            width="100%"
+                            height="100%"
+                            onError={() => setFailed(true)}
+                          />
+                        </Show>
+                      </box>
+                    )
+                  }}
+                </For>
+                <Show when={imageAttachments().length > visibleImageAttachments().length}>
+                  <box
+                    width={8}
+                    height={imagePreviewHeight()}
+                    flexBasis={8}
+                    flexShrink={1}
+                    alignItems="center"
+                    justifyContent="center"
+                    onMouseUp={(event: MouseEvent) => {
+                      if (event.button !== 0) return
+                      event.stopPropagation()
+                      openImagePreview(visibleImageAttachments().length)
+                    }}
+                  >
+                    <text fg={theme.text.subdued} wrapMode="none" truncate>
+                      +{imageAttachments().length - visibleImageAttachments().length} more
+                    </text>
+                  </box>
+                </Show>
+              </box>
+            </Show>
             <textarea
               width="100%"
               placeholder={placeholderText()}
@@ -1496,7 +1632,7 @@ export function Prompt(props: PromptProps) {
                 // hangul) is flushed to plainText before we read it for submission.
                 setTimeout(() => setTimeout(() => submit(), 0), 0)
               }}
-              onPaste={async (event: PasteEvent) => {
+              onPaste={(event: PasteEvent) => {
                 if (props.disabled) {
                   event.preventDefault()
                   return
@@ -1506,11 +1642,10 @@ export function Prompt(props: PromptProps) {
                 // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
                 // Replace CRLF first, then any remaining CR
                 const normalizedText = decodePasteBytes(event.bytes).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-                const pastedContent = normalizedText.trim()
 
                 // Windows Terminal <1.25 can surface image-only clipboard as an
                 // empty bracketed paste. Windows Terminal 1.25+ does not.
-                if (!pastedContent) {
+                if (event.bytes.byteLength === 0) {
                   keymap.dispatch("prompt.paste")
                   return
                 }
@@ -1519,7 +1654,7 @@ export function Prompt(props: PromptProps) {
                 // default paste unless we suppress it first and handle insertion ourselves.
                 event.preventDefault()
 
-                await pasteInputText(normalizedText)
+                void enqueuePaste((changed) => pasteInputText(normalizedText, changed))
               }}
               ref={(r: TextareaRenderable) => {
                 input = r

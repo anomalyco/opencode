@@ -85,6 +85,15 @@ export const settings: Setting[] = [
     keywords: ["transcript", "messages"],
   },
   {
+    title: "Transcript images",
+    category: "Session",
+    path: ["session", "image_preview"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["attachments", "images", "tool output"],
+  },
+  {
     title: "Enabled",
     category: "Tabs",
     path: ["tabs", "enabled"],
@@ -187,6 +196,15 @@ export const settings: Setting[] = [
     default: "compact",
     values: ["compact", "full"],
     keywords: ["paste summary", "clipboard", "pasted content"],
+  },
+  {
+    title: "Image previews",
+    category: "Input",
+    path: ["prompt", "image_preview"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["attachments", "clipboard", "images", "prompt"],
   },
   {
     title: "Leader timeout",
