@@ -242,18 +242,20 @@ describe("Truncate", () => {
   describe("cleanup", () => {
     const DAY_MS = 24 * 60 * 60 * 1000
 
-    it.live("deletes files older than 7 days and preserves recent files", () =>
+    it.live("uses file mtime when IDs wrap", () =>
       Effect.gen(function* () {
         const svc = yield* Truncate.Service
         const fs = yield* FileSystem.FileSystem
 
         yield* fs.makeDirectory(Truncate.DIR, { recursive: true })
 
-        const old = path.join(Truncate.DIR, Identifier.create("tool", "ascending", Date.now() - 10 * DAY_MS))
-        const recent = path.join(Truncate.DIR, Identifier.create("tool", "ascending", Date.now() - 3 * DAY_MS))
+        const old = path.join(Truncate.DIR, Identifier.create("tool", "ascending", 2 ** 36 - 1))
+        const recent = path.join(Truncate.DIR, Identifier.create("tool", "ascending", 2 ** 36 + 1))
 
         yield* writeFileStringScoped(old, "old content")
         yield* writeFileStringScoped(recent, "recent content")
+        yield* fs.utimes(old, new Date(), new Date(Date.now() - 10 * DAY_MS))
+        yield* fs.utimes(recent, new Date(), new Date(Date.now() - 3 * DAY_MS))
         yield* svc.cleanup()
 
         expect(yield* fs.exists(old)).toBe(false)

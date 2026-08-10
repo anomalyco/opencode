@@ -253,7 +253,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下の例外",
 
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
-  "go.banner.text": "GPT 5.6 Lunaの利用上限が期間限定で2倍に",
+  "go.banner.text": "DeepSeek V4 Flashの利用上限が期間限定で2倍に",
   "go.meta.description":
     "Goは最初の月$5、その後$10/月で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
