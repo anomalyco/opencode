@@ -25,6 +25,30 @@ export type VersionInfo = {
     rocm_version?: string;
 };
 
+export type RuntimeInfo = {
+    backend: Backend;
+    installed: boolean;
+    version?: string;
+    detail?: string;
+    error?: string;
+};
+
+export type RuntimeInstallRequest = {
+    /**
+     * Directory for the Python venv (required for mlx and vllm). For llamacpp, target directory for the binary.
+     */
+    venvDir?: string;
+};
+
+export type RuntimeHealth = {
+    backend: Backend;
+    healthy: boolean;
+};
+
+export type ErrorResponse = {
+    error: string;
+};
+
 export type ResourceSnapshot = {
     storage?: StorageInfo;
     memory?: MemoryInfo;
@@ -79,6 +103,22 @@ export type MemoryInfo = {
     total_mb?: number;
     used_mb?: number;
     free_mb?: number;
+    /**
+     * Memory available for new allocations without paging (reclaimable included).
+     */
+    available_mb?: number;
+    /**
+     * Process-visible memory limit: total_mb clamped by an applicable cgroup limit (Docker/LXC). Equals total_mb when no limit applies. Budget consumers use this, never total_mb.
+     */
+    effective_total_mb?: number;
+    /**
+     * available_mb additionally capped by the cgroup limit minus current cgroup usage.
+     */
+    effective_available_mb?: number;
+    /**
+     * Where the effective limit came from.
+     */
+    limit_source?: 'none' | 'cgroup-v2' | 'cgroup-v1';
     swap_total?: number;
     swap_used?: number;
     type?: string;
@@ -125,7 +165,10 @@ export type Model = {
     owned_by?: string;
     name?: string;
     description?: string;
-    state?: string;
+    /**
+     * Current process state. 'failed' means the last start or load attempt failed and is distinct from 'stopped', which means idle with nothing wrong; reporting a failed load as stopped makes a broken model indistinguishable from one that was never requested.
+     */
+    state?: 'stopped' | 'starting' | 'ready' | 'stopping' | 'shutdown' | 'failed';
     loaded?: boolean;
     context_length?: number;
     max_output_tokens?: number;
@@ -152,7 +195,7 @@ export type Model = {
     /**
      * Inference backend type.
      */
-    backend?: 'llamacpp' | 'mlx' | 'vllm';
+    backend?: Backend;
     /**
      * True when this model is the configured default, used for requests that omit the 'model' field. Listed first in the model list. llama-skein extension to the OpenAI schema.
      */
@@ -168,6 +211,31 @@ export type Model = {
      * True if the model emits reasoning/thinking output (reasoning_content) before its answer. Resolved from the model config; omitted when not declared. Clients use it to enable reasoning-stream rendering.
      */
     reasoning?: boolean;
+    /**
+     * What this model can do. Follows Ollama's capabilities pattern. Derived from the model config; empty when not declared.
+     */
+    capabilities?: Array<ModelCapability>;
+    last_error?: LastError;
+    /**
+     * Whether the model's primary weights file currently exists on disk. Distinct from being configured (present in this list at all) — a configured model's weight file can be missing (deleted, moved, or never finished installing). Omitted when it cannot be determined (e.g. no -m/--model path in the command).
+     */
+    installed?: boolean;
+    /**
+     * e.g. "unsloth/Qwen3.6-35B-A3B-GGUF". Recovered from the most recent succeeded install operation that registered this model_id (internal/operation.Store), not stored on the model config itself. Omitted when unknown — a model configured by hand, pulled via the older POST /api/models/pull route, or whose founding operation record has since been pruned has no recoverable source.
+     */
+    source_repository?: string;
+    /**
+     * Immutable revision (commit SHA) of source_repository, same provenance source and same omission conditions.
+     */
+    source_revision?: string;
+    /**
+     * Repository-relative paths of every artifact the founding install operation submitted (weights, shards, auxiliaries) — not live-rescanned from disk, so it reflects what was installed, not necessarily every file currently present at the destination. Same provenance source and omission conditions as source_repository.
+     */
+    artifact_paths?: Array<string>;
+    /**
+     * ID of a currently non-terminal model operation (see ModelOperation) whose registration.model_id is this model, if one is in progress — a reinstall, for instance. Omitted when no such operation exists.
+     */
+    active_operation_id?: string;
 };
 
 export type ConfigInfoResponse = {
@@ -193,11 +261,23 @@ export type ConfigModelRequest = {
     /**
      * Inference backend type. Controls backend-specific behaviours (e.g. slot cancellation is llamacpp-only). mlx targets Apple Silicon; vllm targets NVIDIA (CUDA); AMD ROCm requires building vllm from source. Default: llamacpp.
      */
-    backend?: 'llamacpp' | 'mlx' | 'vllm';
+    backend?: Backend;
     name?: string;
     description?: string;
     aliases?: Array<string>;
     ttl?: number;
+    /**
+     * What this model can do. Follows Ollama's capabilities pattern. Used for model selection and UI hints instead of model-name-specific detection.
+     */
+    capabilities?: Array<ModelCapability>;
+    /**
+     * Path to the multimodal vision/audio projector GGUF (llama.cpp --mmproj). When set, the engine appends --mmproj <path> to the launch command. Typed alternative to embedding it in cmd.
+     */
+    mmproj_path?: string;
+    /**
+     * Path to the draft model GGUF for speculative decoding (llama.cpp --model-draft). When set, the engine appends --model-draft <path> to the launch command. Typed alternative to embedding it in cmd.
+     */
+    draft_model_path?: string;
     /**
      * Number of leading layers whose MoE expert tensors are offloaded to CPU/RAM (llama.cpp --n-cpu-moe). llamacpp only.
      */
@@ -221,11 +301,23 @@ export type ConfigModelPatchRequest = {
     /**
      * Inference backend type. Controls backend-specific behaviours (e.g. slot cancellation is llamacpp-only). mlx targets Apple Silicon; vllm targets NVIDIA (CUDA); AMD ROCm requires building vllm from source. Default: llamacpp.
      */
-    backend?: 'llamacpp' | 'mlx' | 'vllm';
+    backend?: Backend;
     name?: string;
     description?: string;
     aliases?: Array<string>;
     ttl?: number;
+    /**
+     * What this model can do. Replaces the existing capabilities list.
+     */
+    capabilities?: Array<ModelCapability>;
+    /**
+     * Path to the multimodal vision/audio projector GGUF (llama.cpp --mmproj). Empty removes the flag.
+     */
+    mmproj_path?: string;
+    /**
+     * Path to the draft model GGUF for speculative decoding (llama.cpp --model-draft). Empty removes the flag.
+     */
+    draft_model_path?: string;
     concurrencyLimit?: number;
     concurrency_limit?: number;
     ctx_size?: number;
@@ -293,6 +385,18 @@ export type ConfigModelDetail = {
     aliases?: Array<string>;
     ttl?: number;
     concurrencyLimit?: number;
+    /**
+     * What this model can do. Follows Ollama's capabilities pattern.
+     */
+    capabilities?: Array<ModelCapability>;
+    /**
+     * Path to the multimodal vision/audio projector GGUF (llama.cpp --mmproj).
+     */
+    mmproj_path?: string;
+    /**
+     * Path to the draft model GGUF for speculative decoding (llama.cpp --model-draft).
+     */
+    draft_model_path?: string;
     ctx_size?: string;
     n_gpu_layers?: string;
     cache_type_k?: string;
@@ -322,6 +426,14 @@ export type ConfigModelDetail = {
 
 export type ReloadResponse = {
     status: string;
+    /**
+     * Present on a 422 response: why the config was rejected. Absent on success.
+     */
+    errors?: Array<string>;
+    /**
+     * Risky-but-loadable settings detected in the config that was (or would be) applied.
+     */
+    warnings?: Array<ConfigWarning>;
 };
 
 export type ConfigDefaultModelRequest = {
@@ -347,9 +459,9 @@ export type MtpMetadata = {
      */
     enabled?: boolean;
     /**
-     * The spec type for draft models. For MTP-enabled models, this is always 'draft-mtp'.
+     * The spec type for draft models. 'draft-mtp' for MTP models, 'draft-dflash' for DFlash drafter models.
      */
-    spec_type?: 'draft-mtp';
+    spec_type?: 'draft-mtp' | 'draft-dflash';
     /**
      * Maximum draft N value (number of prompt tokens per generated token). Recommended starting point is 2 for most models.
      */
@@ -380,7 +492,7 @@ export type OffloadRecommendation = {
     /**
      * Inference backend the recommendation targets.
      */
-    backend: 'llamacpp' | 'mlx' | 'vllm';
+    backend: Backend;
     /**
      * Recommended --n-cpu-moe value (number of leading layers whose MoE experts to offload to CPU). 0 means the model fits fully on GPU.
      */
@@ -406,6 +518,117 @@ export type OffloadRecommendation = {
      */
     ctx_size?: number;
 };
+
+export type HypotheticalQuantVariant = {
+    /**
+     * Variant label, e.g. "Q4_K_M" or "8bit". Echoed back in the verdict and used as the recommended-variant reference.
+     */
+    name: string;
+    /**
+     * Resident weight size of this variant: the GGUF file size, or the summed safetensors sizes for MLX.
+     */
+    file_bytes: number;
+};
+
+/**
+ * Explicit model dimensions, when the catalog knows them (e.g. from the model's config.json). Any zero/absent field falls back to estimation from params_b.
+ */
+export type HypotheticalDims = {
+    layer_count?: number;
+    embedding_length?: number;
+    head_count?: number;
+    head_count_kv?: number;
+    /**
+     * Explicit K/V head dimension; derived from embedding_length/head_count when absent.
+     */
+    head_dim?: number;
+    /**
+     * Trained context (n_ctx_train / max_position_embeddings).
+     */
+    trained_ctx?: number;
+};
+
+export type HypotheticalFitRequest = {
+    /**
+     * Free-form label for the candidate (e.g. the HF repo id). Echoed back; not resolved against configured models.
+     */
+    model?: string;
+    /**
+     * Backend the model would run under. Defaults to llamacpp. MLX scores against the unified-memory budget with f16 KV.
+     */
+    backend?: 'llamacpp' | 'mlx';
+    /**
+     * Parameter count in billions; the estimation source when dims are absent. MoE models should pass explicit dims — the dense estimation table does not model them.
+     */
+    params_b?: number;
+    /**
+     * Architecture family hint (e.g. "qwen3", "llama"). Recorded for the caller; not yet used in estimation.
+     */
+    arch_family?: string;
+    /**
+     * Score at this context size, like /api/fit/{model}?ctx=. 0/absent scores at the trained context capped by what VRAM allows.
+     */
+    requested_ctx?: number;
+    /**
+     * llama.cpp --cache-type-k the model would run with (f16 default).
+     */
+    cache_type_k?: string;
+    /**
+     * llama.cpp --cache-type-v the model would run with (f16 default).
+     */
+    cache_type_v?: string;
+    dims?: HypotheticalDims;
+    variants: Array<HypotheticalQuantVariant>;
+};
+
+export type HypotheticalVariantFit = {
+    name: string;
+    /**
+     * Same vocabulary as ModelFit.fit_level. A hypothetical model earns an honest "no" — the deployed-model rescue to "marginal" does not apply.
+     */
+    fit_level: FitLevel;
+    /**
+     * How this variant could run here: gpu = fits fully in VRAM; hybrid = larger than VRAM but loadable with host RAM under safe reserves (fit_level then describes the GPU-side fit, and ranking should treat the variant as loadable-with-caveats, not unloadable); cpu = host RAM only; refuse = exceeds every safe budget; unknown = budgets unknown. Descriptor-based (no tensor table), so MoE expert placement is approximated as a dense spill.
+     */
+    placement?: 'gpu' | 'hybrid' | 'cpu' | 'refuse' | 'unknown';
+    /**
+     * Estimated host-RAM weight share for a hybrid/cpu placement, MB.
+     */
+    est_host_mb?: number;
+    /**
+     * Prompt budget at the scored context; 0 when the variant does not fit.
+     */
+    max_safe_ctx: number;
+    /**
+     * Largest context that fits VRAM for this variant, capped at the trained context.
+     */
+    max_fit_ctx?: number;
+    model_mb?: number;
+    kv_mb_at_max_safe_ctx?: number;
+    vram_required_mb?: number;
+    reason?: string;
+};
+
+export type HypotheticalFitResponse = {
+    model?: string;
+    backend: 'llamacpp' | 'mlx';
+    /**
+     * True when any core dimension was estimated from params_b rather than supplied explicitly — verdicts are best-effort, not GGUF-derived.
+     */
+    estimated: boolean;
+    variants: Array<HypotheticalVariantFit>;
+    /**
+     * Name of the largest variant whose fit_level is perfect or good, else the largest tight one. Absent when nothing fits.
+     */
+    recommended?: string;
+    vram_total_mb?: number;
+    vram_free_mb?: number;
+};
+
+/**
+ * How well a model fits a host. "unknown" means host VRAM could not be read yet (not that the model does not fit); max_safe_ctx is 0 in that case. Shared by ModelFit (an installed model) and HypotheticalVariantFit (a gallery candidate not yet on disk) so both report identically.
+ */
+export type FitLevel = 'perfect' | 'good' | 'tight' | 'marginal' | 'no' | 'unknown';
 
 /**
  * Per-dimension fit scores in [0,1], weighted by use-case (ported from llmfit fit.rs ScoreComponents).
@@ -444,11 +667,11 @@ export type ModelFit = {
     /**
      * Inference backend.
      */
-    backend: 'llamacpp' | 'mlx' | 'vllm';
+    backend: Backend;
     /**
      * How well the model fits this host. "unknown" means host VRAM could not be read yet (not that the model does not fit); max_safe_ctx is 0 in that case.
      */
-    fit_level: 'perfect' | 'good' | 'tight' | 'marginal' | 'no' | 'unknown';
+    fit_level: FitLevel;
     /**
      * True when a configured model's --ctx-size is materially below the context VRAM could safely hold. Signals a starved config that the fit report would otherwise hide behind the small configured_ctx.
      */
@@ -474,6 +697,14 @@ export type ModelFit = {
      */
     model_mb?: number;
     /**
+     * Weight share resident in VRAM, MB. Equals model_mb unless the command offloads weights to the CPU.
+     */
+    gpu_resident_mb?: number;
+    /**
+     * Weight share resident in host/system RAM, MB (CPU-offloaded experts and layers).
+     */
+    host_resident_mb?: number;
+    /**
      * KV-cache size (MB) at max_safe_ctx, given the host's cache-type quantization.
      */
     kv_mb_at_max_safe_ctx?: number;
@@ -494,6 +725,7 @@ export type ModelFit = {
      * Human-readable explanation of the fit verdict.
      */
     reason?: string;
+    placement?: PlacementDecision;
 };
 
 /**
@@ -641,6 +873,437 @@ export type TuningPatchRequest = {
     backend_env?: boolean | null;
 };
 
+/**
+ * The most recent start or load failure, retained after the process is gone so callers can distinguish a broken model from an idle one. Kept as history across a later successful start; 'state' is what reports the current condition.
+ */
+export type LastError = {
+    /**
+     * Human-readable failure detail.
+     */
+    message: string;
+    /**
+     * 'start' = never reached a serving state; 'crash' = was ready then exited on its own.
+     */
+    category: 'start' | 'crash';
+    /**
+     * When the failure was recorded.
+     */
+    at: string;
+    /**
+     * Consecutive failures; reset on a successful start.
+     */
+    attempts?: number;
+    /**
+     * Why the backend failed, distinct from category (when). Only gpu-oom and host-oom are eligible for an adaptive placement retry; crash-other means the failure was not recognized and must never be treated as a memory problem.
+     */
+    class?: 'gpu-oom' | 'host-oom' | 'unsupported-arch' | 'missing-shard' | 'invalid-flag' | 'backend-error' | 'crash-other';
+};
+
+/**
+ * Per-model readiness. 'failed' is distinct from 'stopped': stopped means idle with nothing wrong, failed means the last load attempt failed.
+ */
+export type ModelHealth = {
+    state: 'stopped' | 'starting' | 'ready' | 'stopping' | 'shutdown' | 'failed';
+    last_error?: LastError;
+    /**
+     * Risky-but-loadable settings detected for this model (e.g. flash-attn on a GPU known to wedge with it). Informational only.
+     */
+    warnings?: Array<ConfigWarning>;
+};
+
+/**
+ * What the host can actually serve right now. Lets a caller preflight — distinguishing ready, loading, busy, failed and idle-with-no-model-resident — instead of discovering it by spending an inference request.
+ */
+export type HealthResponse = {
+    status: string;
+    /**
+     * True when at least one model is loaded and serving. False here with a reachable control plane is the 'up but not serving' case.
+     */
+    any_model_resident: boolean;
+    /**
+     * True when at least one inference request is in flight. A single-slot host that is busy will queue a new request.
+     */
+    busy: boolean;
+    in_flight?: number;
+    models: {
+        [key: string]: ModelHealth;
+    };
+    watchdog?: WatchdogStatus;
+    config_status: ConfigStatus;
+};
+
+/**
+ * GPU-stall watchdog observability. Active means the watchdog is monitoring for wedged backends.
+ */
+export type WatchdogStatus = {
+    /**
+     * True when the watchdog is actively monitoring GPU stall signatures.
+     */
+    active: boolean;
+    /**
+     * Human-readable reason when inactive (e.g., 'disabled by config', 'no perf monitor', 'GPU does not report memory-activity telemetry'). Omitted when active.
+     */
+    reason?: string;
+};
+
+export type RunningModel = {
+    model: string;
+    state: string;
+    cmd?: string;
+    proxy?: string;
+    ttl?: number;
+    name?: string;
+    description?: string;
+};
+
+export type RunningResponse = {
+    running: Array<RunningModel>;
+};
+
+export type ApiModel = {
+    id: string;
+    object: string;
+    state: 'stopped' | 'starting' | 'ready' | 'stopping' | 'shutdown' | 'failed';
+    loaded: boolean;
+    unlisted: boolean;
+    name?: string;
+    description?: string;
+    aliases?: Array<string>;
+    details?: {
+        [key: string]: unknown;
+    };
+};
+
+export type ApiModelsResponse = {
+    models: Array<ApiModel>;
+};
+
+export type UserProfile = {
+    /**
+     * Human-readable label for the profile.
+     */
+    name: string;
+    /**
+     * Whether GPU power limits are applied.
+     */
+    silent_mode: boolean;
+    power: PowerProfile;
+    /**
+     * Optional time window in HH:MM-HH:MM format for automatic silent mode toggling. Empty means always follow silent_mode setting.
+     */
+    schedule?: string;
+};
+
+export type PowerProfile = {
+    /**
+     * Percentage of default TDP to cap at (1-99).
+     */
+    power_limit_pct: number;
+    /**
+     * GPU temperature target while in silent mode (40-100).
+     */
+    temp_target_celsius: number;
+};
+
+export type UserProfileState = {
+    profile: UserProfile;
+    /**
+     * Whether GPU power control is available on this host.
+     */
+    available: boolean;
+    /**
+     * Whether silent mode is currently active.
+     */
+    active: boolean;
+};
+
+/**
+ * A risky-but-loadable piece of configuration, surfaced for awareness. Never causes a config or model to be rejected — see ConfigStatus for what IS rejected (parse/validation failures).
+ */
+export type ConfigWarning = {
+    /**
+     * Model ID this warning concerns, absent for a config-wide warning.
+     */
+    model?: string;
+    /**
+     * The specific flag/setting the warning is about, if applicable.
+     */
+    flag?: string;
+    message: string;
+    /**
+     * Stable identifier for what produced the warning, e.g. "flash-attn-gfx", so a client can key on it instead of parsing message text.
+     */
+    source: string;
+};
+
+/**
+ * Whether the on-disk config is currently valid. A previous invalid edit or reload never breaks serving — the last valid config keeps running — but must be visible here until fixed.
+ */
+export type ConfigStatus = {
+    valid: boolean;
+    /**
+     * Present when valid is false: the parse/validation error from the most recent failed reload attempt.
+     */
+    error?: string;
+    /**
+     * When the config first went invalid. Absent when valid.
+     */
+    stale_since?: string;
+};
+
+/**
+ * Optional dry-run body. Omit to validate the on-disk config file as-is.
+ */
+export type ConfigValidateRequest = {
+    /**
+     * Raw YAML to validate instead of reading the on-disk file. Never written anywhere — this is a pure dry run.
+     */
+    config?: string;
+};
+
+export type ConfigValidateResponse = {
+    valid: boolean;
+    errors?: Array<string>;
+    warnings?: Array<ConfigWarning>;
+};
+
+export type ConfigHistoryEntry = {
+    /**
+     * Snapshot identifier — pass as ref to POST /api/config/rollback.
+     */
+    id: string;
+    time: string;
+    /**
+     * What produced this snapshot: "reload" (file edit/SIGHUP/API write), "rollback", "legacy-bak" (migrated from an old config.yaml.bak* file), or an API-specific tag.
+     */
+    actor: string;
+    summary?: string;
+};
+
+export type ConfigHistoryResponse = {
+    /**
+     * Newest first.
+     */
+    entries: Array<ConfigHistoryEntry>;
+};
+
+export type ConfigRollbackRequest = {
+    /**
+     * A snapshot id from GET /api/config/history.
+     */
+    ref: string;
+};
+
+/**
+ * Inference backend type. Controls backend-specific behaviours (e.g. slot cancellation is llamacpp-only). mlx targets Apple Silicon; vllm targets NVIDIA (CUDA); AMD ROCm requires building vllm from source. Default: llamacpp. Extracted as a shared schema (like FitLevel — see the fit-hypothetical-models change) because RuntimeInfo, RuntimeHealth, Model, ConfigModelRequest, ConfigModelPatchRequest, OffloadRecommendation, ModelFit, and ModelRegistration all share this exact value set; leaving it duplicated inline let oapi-codegen's collision-avoidance dedup rename generated constants unpredictably whenever a new inline occurrence was added.
+ */
+export type Backend = 'llamacpp' | 'mlx' | 'vllm';
+
+/**
+ * What an install artifact is for. "projector" is a multimodal vision/audio projection file (llama.cpp mmproj); "draft" is a companion draft model for speculative decoding (e.g. DFlash drafter for Muse Glimmer, loaded via --model-draft); "other" covers auxiliary files (e.g. a chat template) that are not weights, a projector, a tokenizer, or config.
+ */
+export type ArtifactRole = 'weights' | 'projector' | 'draft' | 'tokenizer' | 'config' | 'other';
+
+/**
+ * What the model can do. Follows Ollama's capabilities pattern. 'completion' = text generation; 'vision' = accepts images (requires mmproj companion); 'reasoning' = emits reasoning/thinking output; 'tool-use' = supports function/tool calling.
+ */
+export type ModelCapability = 'completion' | 'vision' | 'reasoning' | 'tool-use';
+
+export type InstallArtifact = {
+    /**
+     * Repository-relative source path, e.g. "model-Q4_K_M-00001-of-00002.gguf". Never a full URL or a path outside the pinned repository/revision — resolved against source_repository/source_revision at plan-validation time.
+     */
+    path: string;
+    /**
+     * Expected size in bytes. Used for disk preflight and to detect a truncated or corrupt download; not itself a trust signal.
+     */
+    size_bytes: number;
+    /**
+     * Optional "sha256:<hex>" content digest. Verified after download when present; a missing digest is reported as weaker verification, not rejected outright (see design.md decision 4).
+     */
+    digest?: string;
+    role: ArtifactRole;
+};
+
+export type ModelRegistration = {
+    /**
+     * The config/model ID to register once every required artifact is installed. Must be a valid, not-already-configured ID; the plan is rejected before any download starts otherwise.
+     */
+    model_id: string;
+    display_name?: string;
+    /**
+     * Inference backend the registered model will run under. Matches ConfigModelRequest.backend's vocabulary — installation registers through the same config path load/unload already use, not a separate mechanism.
+     */
+    backend: Backend;
+    /**
+     * What this model can do. Derived from the install plan's artifacts and HF metadata.
+     */
+    capabilities?: Array<ModelCapability>;
+    /**
+     * When present, the engine maps the artifact with this role to --mmproj at registration time. Fixed value 'projector'; included for clarity, not as a free-form field.
+     */
+    mmproj_artifact_role?: 'projector';
+    /**
+     * When present, the engine maps the artifact with this role to --model-draft at registration time. Fixed value 'draft'; included for clarity, not as a free-form field.
+     */
+    draft_artifact_role?: 'draft';
+    /**
+     * Raw backend command-line flags to apply at registration, e.g. "--n-gpu-layers", "999". A minimal passthrough for the first slice; ConfigModelRequest's typed fields (n_cpu_moe, cpu_moe, cpu_offload_gb, override_tensor) remain the richer path for anything that needs validation beyond "is this a string".
+     */
+    flags?: Array<string>;
+    /**
+     * Idle-unload TTL in seconds, same semantics as ConfigModelRequest.ttl.
+     */
+    ttl?: number;
+};
+
+/**
+ * An immutable installation plan (design.md decision 2). The server validates and snapshots this into a ModelOperation with a host-generated ID; the plan itself is never mutated after submission.
+ */
+export type ModelInstallPlan = {
+    /**
+     * e.g. "unsloth/Qwen3.6-35B-A3B-GGUF". A display name or mutable branch reference is not artifact identity — see source_revision.
+     */
+    source_repository: string;
+    /**
+     * Immutable revision (commit SHA), not a mutable branch name. Required so a plan identifies exact, reproducible source content.
+     */
+    source_revision: string;
+    artifacts: Array<InstallArtifact>;
+    registration: ModelRegistration;
+    /**
+     * Hugging Face access token for a gated repository. A request secret, not artifact identity: never persisted in the operation record, logged, or echoed back in an error (design.md decision 7). Not yet used to authenticate a download — no download execution exists yet (sections 3-4) — accepted now so the redaction guarantee is in place before there is anything to redact from.
+     */
+    token?: string;
+};
+
+/**
+ * Host-local operation state machine (design.md decision 3). "succeeded", "cancelled", and "failed" are the only terminal phases; every other phase can still transition to "cancelled" or "failed".
+ */
+export type ModelOperationPhase = 'queued' | 'preflighting' | 'resolving' | 'downloading' | 'verifying' | 'installing' | 'registering' | 'reloading' | 'succeeded' | 'cancelled' | 'failed';
+
+export type ModelOperationArtifactProgress = {
+    path: string;
+    bytes_downloaded: number;
+    /**
+     * Omitted when the artifact's expected size could not be confirmed (weaker verification path); present whenever the plan's InstallArtifact.size_bytes was trusted.
+     */
+    bytes_total?: number;
+};
+
+/**
+ * Typed terminal error for a failed operation. "code" is a stable identifier automation can branch on; "message" is the human-readable detail (never includes an auth token — see design.md decision 7).
+ */
+export type ModelOperationError = {
+    /**
+     * "range_unsupported" means the origin could not honor a resume request and a full restart was required, not that the operation failed outright — it only becomes a terminal error if the restart itself then fails.
+     */
+    code: 'invalid_plan' | 'untrusted_source' | 'disk_insufficient' | 'range_unsupported' | 'digest_mismatch' | 'shard_incomplete' | 'reload_failed' | 'cancelled' | 'internal';
+    message: string;
+};
+
+/**
+ * Server-assigned record for one installation. GET returns a snapshot; an event stream (added in a later task) supplies incremental updates using this same vocabulary.
+ */
+export type ModelOperation = {
+    /**
+     * Host-generated operation ID, assigned when the plan is accepted. Stable across client disconnect/reconnect.
+     */
+    id: string;
+    phase: ModelOperationPhase;
+    /**
+     * Present once registration succeeds; absent before then.
+     */
+    model_id?: string;
+    artifacts: Array<ModelOperationArtifactProgress>;
+    /**
+     * Aggregate across all artifacts.
+     */
+    bytes_downloaded: number;
+    /**
+     * Aggregate across all artifacts; omitted if any artifact's total is unknown.
+     */
+    bytes_total?: number;
+    created_at: string;
+    updated_at: string;
+    error?: ModelOperationError;
+    /**
+     * Non-terminal warnings, e.g. a digest that could not be verified but size matched.
+     */
+    warnings?: Array<string>;
+};
+
+export type ModelOperationList = {
+    /**
+     * Most recent first.
+     */
+    operations: Array<ModelOperation>;
+};
+
+/**
+ * The automatic placement decision for a model: whether llama-skein rewrote its launch flags (in memory only) to run it hybrid GPU + system-RAM, refused it, or left it untouched.
+ */
+export type PlacementDecision = {
+    /**
+     * gpu: fits fully, untouched. hybrid: flags rewritten to place weights in host RAM. cpu: planned CPU-only. refuse: exceeds safe budgets, load is refused. custom: operator pinned placement flags, automation stays out. unknown: could not plan confidently, untouched.
+     */
+    mode?: 'gpu' | 'hybrid' | 'cpu' | 'refuse' | 'custom' | 'unknown';
+    /**
+     * Qualitative performance expectation; never a tokens-per-second prediction.
+     */
+    perf_class?: 'native-gpu' | 'fast-hybrid' | 'cpu-bound-hybrid' | 'cpu-only';
+    /**
+     * Human-readable explanation of the placement decision.
+     */
+    reason?: string;
+    /**
+     * Layers whose MoE experts were planned onto the CPU (hybrid MoE plans only).
+     */
+    n_cpu_moe?: number;
+    /**
+     * Planned GPU memory footprint (weights share + KV + overhead), MB.
+     */
+    est_gpu_mb?: number;
+    /**
+     * Planned host-RAM weight footprint, MB.
+     */
+    est_host_mb?: number;
+    /**
+     * True when the plan rewrote the model's in-memory command (the config file is never touched).
+     */
+    applied?: boolean;
+    /**
+     * llama-fit-params preflight output (the engine's own fitted arguments) when the tool is available; advisory.
+     */
+    effective_args?: string;
+    /**
+     * Adaptive retry ladder history, oldest first. Empty when the model has never failed for a memory reason.
+     */
+    retry_attempts?: Array<PlacementAttempt>;
+};
+
+/**
+ * One rung of the adaptive placement retry ladder and how it ended.
+ */
+export type PlacementAttempt = {
+    /**
+     * Which escalation step was applied.
+     */
+    rung?: 'widen-gpu-reserve' | 'shrink-batch' | 'shrink-context' | 'full-cpu-moe';
+    /**
+     * Placement mode of the retried plan.
+     */
+    mode?: string;
+    /**
+     * What the retried plan changed and why.
+     */
+    reason?: string;
+    /**
+     * The failure this rung was a response to.
+     */
+    failure?: string;
+};
+
 export type GetSystemVersionData = {
     body?: never;
     path?: never;
@@ -656,6 +1319,102 @@ export type GetSystemVersionResponses = {
 };
 
 export type GetSystemVersionResponse = GetSystemVersionResponses[keyof GetSystemVersionResponses];
+
+export type ListRuntimesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/runtime';
+};
+
+export type ListRuntimesResponses = {
+    /**
+     * Runtime status for all backends.
+     */
+    200: Array<RuntimeInfo>;
+};
+
+export type ListRuntimesResponse = ListRuntimesResponses[keyof ListRuntimesResponses];
+
+export type InstallRuntimeData = {
+    body?: RuntimeInstallRequest;
+    path: {
+        backend: 'llamacpp' | 'mlx' | 'vllm';
+    };
+    query?: never;
+    url: '/api/runtime/{backend}/install';
+};
+
+export type InstallRuntimeErrors = {
+    /**
+     * Invalid request.
+     */
+    400: ErrorResponse;
+    /**
+     * Install failed.
+     */
+    500: ErrorResponse;
+};
+
+export type InstallRuntimeError = InstallRuntimeErrors[keyof InstallRuntimeErrors];
+
+export type InstallRuntimeResponses = {
+    /**
+     * Install completed.
+     */
+    200: RuntimeInfo;
+};
+
+export type InstallRuntimeResponse = InstallRuntimeResponses[keyof InstallRuntimeResponses];
+
+export type UpgradeRuntimeData = {
+    body?: RuntimeInstallRequest;
+    path: {
+        backend: 'llamacpp' | 'mlx' | 'vllm';
+    };
+    query?: never;
+    url: '/api/runtime/{backend}/upgrade';
+};
+
+export type UpgradeRuntimeErrors = {
+    /**
+     * Invalid request.
+     */
+    400: ErrorResponse;
+    /**
+     * Upgrade failed.
+     */
+    500: ErrorResponse;
+};
+
+export type UpgradeRuntimeError = UpgradeRuntimeErrors[keyof UpgradeRuntimeErrors];
+
+export type UpgradeRuntimeResponses = {
+    /**
+     * Upgrade completed.
+     */
+    200: RuntimeInfo;
+};
+
+export type UpgradeRuntimeResponse = UpgradeRuntimeResponses[keyof UpgradeRuntimeResponses];
+
+export type CheckRuntimeHealthData = {
+    body?: never;
+    path: {
+        backend: 'llamacpp' | 'mlx' | 'vllm';
+    };
+    query?: never;
+    url: '/api/runtime/{backend}/health';
+};
+
+export type CheckRuntimeHealthResponses = {
+    /**
+     * Health status.
+     */
+    200: RuntimeHealth;
+};
+
+export type CheckRuntimeHealthResponse = CheckRuntimeHealthResponses[keyof CheckRuntimeHealthResponses];
 
 export type GetSystemCapabilitiesData = {
     body?: never;
@@ -749,14 +1508,14 @@ export type GetConfigInfoResponses = {
 
 export type GetConfigInfoResponse = GetConfigInfoResponses[keyof GetConfigInfoResponses];
 
-export type AddConfigModelData = {
+export type AddModelConfigData = {
     body: ConfigModelRequest;
     path?: never;
     query?: never;
-    url: '/api/config/models';
+    url: '/api/models/config';
 };
 
-export type AddConfigModelErrors = {
+export type AddModelConfigErrors = {
     /**
      * Bad request.
      */
@@ -771,16 +1530,16 @@ export type AddConfigModelErrors = {
     500: unknown;
 };
 
-export type AddConfigModelResponses = {
+export type AddModelConfigResponses = {
     /**
      * Model added; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type AddConfigModelResponse = AddConfigModelResponses[keyof AddConfigModelResponses];
+export type AddModelConfigResponse = AddModelConfigResponses[keyof AddModelConfigResponses];
 
-export type RemoveConfigModelData = {
+export type RemoveModelConfigData = {
     body?: never;
     path: {
         /**
@@ -789,10 +1548,10 @@ export type RemoveConfigModelData = {
         id: string;
     };
     query?: never;
-    url: '/api/config/models/{id}';
+    url: '/api/models/config/{id}';
 };
 
-export type RemoveConfigModelErrors = {
+export type RemoveModelConfigErrors = {
     /**
      * Model not found in config.
      */
@@ -807,16 +1566,16 @@ export type RemoveConfigModelErrors = {
     500: unknown;
 };
 
-export type RemoveConfigModelResponses = {
+export type RemoveModelConfigResponses = {
     /**
      * Model removed; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type RemoveConfigModelResponse = RemoveConfigModelResponses[keyof RemoveConfigModelResponses];
+export type RemoveModelConfigResponse = RemoveModelConfigResponses[keyof RemoveModelConfigResponses];
 
-export type GetConfigModelData = {
+export type GetModelConfigData = {
     body?: never;
     path: {
         /**
@@ -825,26 +1584,26 @@ export type GetConfigModelData = {
         id: string;
     };
     query?: never;
-    url: '/api/config/models/{id}';
+    url: '/api/models/config/{id}';
 };
 
-export type GetConfigModelErrors = {
+export type GetModelConfigErrors = {
     /**
      * Model not found in config.
      */
     404: unknown;
 };
 
-export type GetConfigModelResponses = {
+export type GetModelConfigResponses = {
     /**
      * Model configuration and parsed llama-server flags.
      */
     200: ConfigModelDetail;
 };
 
-export type GetConfigModelResponse = GetConfigModelResponses[keyof GetConfigModelResponses];
+export type GetModelConfigResponse = GetModelConfigResponses[keyof GetModelConfigResponses];
 
-export type PatchConfigModelData = {
+export type PatchModelConfigData = {
     body: ConfigModelPatchRequest;
     path: {
         /**
@@ -853,10 +1612,10 @@ export type PatchConfigModelData = {
         id: string;
     };
     query?: never;
-    url: '/api/config/models/{id}';
+    url: '/api/models/config/{id}';
 };
 
-export type PatchConfigModelErrors = {
+export type PatchModelConfigErrors = {
     /**
      * Bad request.
      */
@@ -875,16 +1634,16 @@ export type PatchConfigModelErrors = {
     500: unknown;
 };
 
-export type PatchConfigModelResponses = {
+export type PatchModelConfigResponses = {
     /**
      * Model updated; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type PatchConfigModelResponse = PatchConfigModelResponses[keyof PatchConfigModelResponses];
+export type PatchModelConfigResponse = PatchModelConfigResponses[keyof PatchModelConfigResponses];
 
-export type PatchConfigGroupData = {
+export type PatchGroupData = {
     body: ConfigGroupPatchRequest;
     path: {
         /**
@@ -893,10 +1652,10 @@ export type PatchConfigGroupData = {
         id: string;
     };
     query?: never;
-    url: '/api/config/groups/{id}';
+    url: '/api/groups/{id}';
 };
 
-export type PatchConfigGroupErrors = {
+export type PatchGroupErrors = {
     /**
      * Bad request.
      */
@@ -915,14 +1674,14 @@ export type PatchConfigGroupErrors = {
     500: unknown;
 };
 
-export type PatchConfigGroupResponses = {
+export type PatchGroupResponses = {
     /**
      * Group updated; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type PatchConfigGroupResponse = PatchConfigGroupResponses[keyof PatchConfigGroupResponses];
+export type PatchGroupResponse = PatchGroupResponses[keyof PatchGroupResponses];
 
 export type ReloadConfigData = {
     body?: never;
@@ -933,10 +1692,16 @@ export type ReloadConfigData = {
 
 export type ReloadConfigErrors = {
     /**
+     * Config is invalid — not reloaded; the previously-active config keeps serving.
+     */
+    422: ReloadResponse;
+    /**
      * Reload not available.
      */
     503: unknown;
 };
+
+export type ReloadConfigError = ReloadConfigErrors[keyof ReloadConfigErrors];
 
 export type ReloadConfigResponses = {
     /**
@@ -947,14 +1712,14 @@ export type ReloadConfigResponses = {
 
 export type ReloadConfigResponse = ReloadConfigResponses[keyof ReloadConfigResponses];
 
-export type ClearDefaultModelData = {
+export type ClearModelDefaultData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/config/default-model';
+    url: '/api/models/default';
 };
 
-export type ClearDefaultModelErrors = {
+export type ClearModelDefaultErrors = {
     /**
      * Config file path not set.
      */
@@ -965,39 +1730,39 @@ export type ClearDefaultModelErrors = {
     500: unknown;
 };
 
-export type ClearDefaultModelResponses = {
+export type ClearModelDefaultResponses = {
     /**
      * Default model cleared; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type ClearDefaultModelResponse = ClearDefaultModelResponses[keyof ClearDefaultModelResponses];
+export type ClearModelDefaultResponse = ClearModelDefaultResponses[keyof ClearModelDefaultResponses];
 
-export type GetDefaultModelData = {
+export type GetModelDefaultData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/config/default-model';
+    url: '/api/models/default';
 };
 
-export type GetDefaultModelResponses = {
+export type GetModelDefaultResponses = {
     /**
      * Default model info. 'model' is null when no default is configured.
      */
     200: ConfigDefaultModelResponse;
 };
 
-export type GetDefaultModelResponse = GetDefaultModelResponses[keyof GetDefaultModelResponses];
+export type GetModelDefaultResponse = GetModelDefaultResponses[keyof GetModelDefaultResponses];
 
-export type SetDefaultModelData = {
+export type SetModelDefaultData = {
     body: ConfigDefaultModelRequest;
     path?: never;
     query?: never;
-    url: '/api/config/default-model';
+    url: '/api/models/default';
 };
 
-export type SetDefaultModelErrors = {
+export type SetModelDefaultErrors = {
     /**
      * Bad request.
      */
@@ -1016,14 +1781,77 @@ export type SetDefaultModelErrors = {
     500: unknown;
 };
 
-export type SetDefaultModelResponses = {
+export type SetModelDefaultResponses = {
     /**
      * Default model updated; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type SetDefaultModelResponse = SetDefaultModelResponses[keyof SetDefaultModelResponses];
+export type SetModelDefaultResponse = SetModelDefaultResponses[keyof SetModelDefaultResponses];
+
+export type GetSkeinConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/skein/config';
+};
+
+export type GetSkeinConfigResponses = {
+    /**
+     * Current user profile with active state.
+     */
+    200: UserProfileState;
+};
+
+export type GetSkeinConfigResponse = GetSkeinConfigResponses[keyof GetSkeinConfigResponses];
+
+export type SetSkeinConfigData = {
+    body: UserProfile;
+    path?: never;
+    query?: never;
+    url: '/api/skein/config';
+};
+
+export type SetSkeinConfigErrors = {
+    /**
+     * Invalid profile.
+     */
+    400: unknown;
+    /**
+     * Failed to apply profile.
+     */
+    500: unknown;
+    /**
+     * GPU power control not available on this host.
+     */
+    503: unknown;
+};
+
+export type SetSkeinConfigResponses = {
+    /**
+     * Profile saved and applied successfully.
+     */
+    201: UserProfileState;
+};
+
+export type SetSkeinConfigResponse = SetSkeinConfigResponses[keyof SetSkeinConfigResponses];
+
+export type GetDefaultSkeinConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/skein/config/default';
+};
+
+export type GetDefaultSkeinConfigResponses = {
+    /**
+     * Default user profile template.
+     */
+    200: UserProfile;
+};
+
+export type GetDefaultSkeinConfigResponse = GetDefaultSkeinConfigResponses[keyof GetDefaultSkeinConfigResponses];
 
 export type GetFitReportData = {
     body?: never;
@@ -1074,6 +1902,29 @@ export type GetModelFitResponses = {
 
 export type GetModelFitResponse = GetModelFitResponses[keyof GetModelFitResponses];
 
+export type PostHypotheticalFitData = {
+    body: HypotheticalFitRequest;
+    path?: never;
+    query?: never;
+    url: '/api/fit/hypothetical';
+};
+
+export type PostHypotheticalFitErrors = {
+    /**
+     * Malformed descriptor: no variants, a variant without name or file_bytes, or an unsupported backend.
+     */
+    400: unknown;
+};
+
+export type PostHypotheticalFitResponses = {
+    /**
+     * Per-variant fit verdicts.
+     */
+    200: HypotheticalFitResponse;
+};
+
+export type PostHypotheticalFitResponse = PostHypotheticalFitResponses[keyof PostHypotheticalFitResponses];
+
 export type GetTuningData = {
     body?: never;
     path?: never;
@@ -1121,3 +1972,237 @@ export type ListTuningProfilesResponses = {
 };
 
 export type ListTuningProfilesResponse = ListTuningProfilesResponses[keyof ListTuningProfilesResponses];
+
+export type GetHealthData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/health';
+};
+
+export type GetHealthResponses = {
+    /**
+     * Current readiness.
+     */
+    200: HealthResponse;
+};
+
+export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
+
+export type GetRunningData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/running';
+};
+
+export type GetRunningResponses = {
+    /**
+     * Running models.
+     */
+    200: RunningResponse;
+};
+
+export type GetRunningResponse = GetRunningResponses[keyof GetRunningResponses];
+
+export type GetApiModelsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Pass 'running' to list only loaded models.
+         */
+        state?: 'running';
+    };
+    url: '/api/models';
+};
+
+export type GetApiModelsResponses = {
+    /**
+     * Configured models.
+     */
+    200: ApiModelsResponse;
+};
+
+export type GetApiModelsResponse = GetApiModelsResponses[keyof GetApiModelsResponses];
+
+export type ValidateConfigData = {
+    body?: ConfigValidateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/config/validate';
+};
+
+export type ValidateConfigResponses = {
+    /**
+     * Validation result (valid may be true or false — this endpoint always returns 200; check the body).
+     */
+    200: ConfigValidateResponse;
+};
+
+export type ValidateConfigResponse = ValidateConfigResponses[keyof ValidateConfigResponses];
+
+export type GetConfigHistoryData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/config/history';
+};
+
+export type GetConfigHistoryResponses = {
+    /**
+     * Retained snapshots.
+     */
+    200: ConfigHistoryResponse;
+};
+
+export type GetConfigHistoryResponse = GetConfigHistoryResponses[keyof GetConfigHistoryResponses];
+
+export type RollbackConfigData = {
+    body: ConfigRollbackRequest;
+    path?: never;
+    query?: never;
+    url: '/api/config/rollback';
+};
+
+export type RollbackConfigErrors = {
+    /**
+     * Unknown snapshot ref.
+     */
+    404: unknown;
+    /**
+     * Reload not available.
+     */
+    503: unknown;
+};
+
+export type RollbackConfigResponses = {
+    /**
+     * Rollback applied; reload triggered asynchronously.
+     */
+    202: ReloadResponse;
+};
+
+export type RollbackConfigResponse = RollbackConfigResponses[keyof RollbackConfigResponses];
+
+export type ListModelOperationsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/models/operations';
+};
+
+export type ListModelOperationsResponses = {
+    /**
+     * Operations, most recent first.
+     */
+    200: ModelOperationList;
+};
+
+export type ListModelOperationsResponse = ListModelOperationsResponses[keyof ListModelOperationsResponses];
+
+export type CreateModelOperationData = {
+    body: ModelInstallPlan;
+    path?: never;
+    query?: never;
+    url: '/api/models/operations';
+};
+
+export type CreateModelOperationErrors = {
+    /**
+     * Invalid plan: untrusted source, malformed artifact set, or an already-configured model_id.
+     */
+    400: ErrorResponse;
+};
+
+export type CreateModelOperationError = CreateModelOperationErrors[keyof CreateModelOperationErrors];
+
+export type CreateModelOperationResponses = {
+    /**
+     * Operation created.
+     */
+    201: ModelOperation;
+};
+
+export type CreateModelOperationResponse = CreateModelOperationResponses[keyof CreateModelOperationResponses];
+
+export type GetModelOperationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/models/operations/{id}';
+};
+
+export type GetModelOperationErrors = {
+    /**
+     * Unknown operation id.
+     */
+    404: ErrorResponse;
+};
+
+export type GetModelOperationError = GetModelOperationErrors[keyof GetModelOperationErrors];
+
+export type GetModelOperationResponses = {
+    /**
+     * Current snapshot.
+     */
+    200: ModelOperation;
+};
+
+export type GetModelOperationResponse = GetModelOperationResponses[keyof GetModelOperationResponses];
+
+export type CancelModelOperationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/models/operations/{id}/cancel';
+};
+
+export type CancelModelOperationErrors = {
+    /**
+     * Unknown operation id.
+     */
+    404: ErrorResponse;
+};
+
+export type CancelModelOperationError = CancelModelOperationErrors[keyof CancelModelOperationErrors];
+
+export type CancelModelOperationResponses = {
+    /**
+     * Cancellation requested; the operation transitions to "cancelled" asynchronously.
+     */
+    202: ModelOperation;
+};
+
+export type CancelModelOperationResponse = CancelModelOperationResponses[keyof CancelModelOperationResponses];
+
+export type StreamModelOperationEventsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/models/operations/{id}/events';
+};
+
+export type StreamModelOperationEventsErrors = {
+    /**
+     * Unknown operation id.
+     */
+    404: ErrorResponse;
+};
+
+export type StreamModelOperationEventsError = StreamModelOperationEventsErrors[keyof StreamModelOperationEventsErrors];
+
+export type StreamModelOperationEventsResponses = {
+    /**
+     * Event stream open. Each event's data is a ModelOperation.
+     */
+    200: ModelOperation;
+};
+
+export type StreamModelOperationEventsResponse = StreamModelOperationEventsResponses[keyof StreamModelOperationEventsResponses];

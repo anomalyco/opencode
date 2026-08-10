@@ -2050,7 +2050,7 @@ test("adjustLocalContextOnOverflow: context_too_large (failed model load) still 
           backend: "llamacpp",
         })
       }
-      if (url.pathname === "/api/config/models/qwen3" && req.method === "PATCH") {
+      if (url.pathname === "/api/models/config/qwen3" && req.method === "PATCH") {
         patched = await req.json()
         return Response.json({})
       }

@@ -211,6 +211,10 @@ export type Model = {
      * True if the model emits reasoning/thinking output (reasoning_content) before its answer. Resolved from the model config; omitted when not declared. Clients use it to enable reasoning-stream rendering.
      */
     reasoning?: boolean;
+    /**
+     * What this model can do. Follows Ollama's capabilities pattern. Derived from the model config; empty when not declared.
+     */
+    capabilities?: Array<ModelCapability>;
     last_error?: LastError;
     /**
      * Whether the model's primary weights file currently exists on disk. Distinct from being configured (present in this list at all) — a configured model's weight file can be missing (deleted, moved, or never finished installing). Omitted when it cannot be determined (e.g. no -m/--model path in the command).
@@ -263,6 +267,18 @@ export type ConfigModelRequest = {
     aliases?: Array<string>;
     ttl?: number;
     /**
+     * What this model can do. Follows Ollama's capabilities pattern. Used for model selection and UI hints instead of model-name-specific detection.
+     */
+    capabilities?: Array<ModelCapability>;
+    /**
+     * Path to the multimodal vision/audio projector GGUF (llama.cpp --mmproj). When set, the engine appends --mmproj <path> to the launch command. Typed alternative to embedding it in cmd.
+     */
+    mmproj_path?: string;
+    /**
+     * Path to the draft model GGUF for speculative decoding (llama.cpp --model-draft). When set, the engine appends --model-draft <path> to the launch command. Typed alternative to embedding it in cmd.
+     */
+    draft_model_path?: string;
+    /**
      * Number of leading layers whose MoE expert tensors are offloaded to CPU/RAM (llama.cpp --n-cpu-moe). llamacpp only.
      */
     n_cpu_moe?: number;
@@ -290,6 +306,18 @@ export type ConfigModelPatchRequest = {
     description?: string;
     aliases?: Array<string>;
     ttl?: number;
+    /**
+     * What this model can do. Replaces the existing capabilities list.
+     */
+    capabilities?: Array<ModelCapability>;
+    /**
+     * Path to the multimodal vision/audio projector GGUF (llama.cpp --mmproj). Empty removes the flag.
+     */
+    mmproj_path?: string;
+    /**
+     * Path to the draft model GGUF for speculative decoding (llama.cpp --model-draft). Empty removes the flag.
+     */
+    draft_model_path?: string;
     concurrencyLimit?: number;
     concurrency_limit?: number;
     ctx_size?: number;
@@ -357,6 +385,18 @@ export type ConfigModelDetail = {
     aliases?: Array<string>;
     ttl?: number;
     concurrencyLimit?: number;
+    /**
+     * What this model can do. Follows Ollama's capabilities pattern.
+     */
+    capabilities?: Array<ModelCapability>;
+    /**
+     * Path to the multimodal vision/audio projector GGUF (llama.cpp --mmproj).
+     */
+    mmproj_path?: string;
+    /**
+     * Path to the draft model GGUF for speculative decoding (llama.cpp --model-draft).
+     */
+    draft_model_path?: string;
     ctx_size?: string;
     n_gpu_layers?: string;
     cache_type_k?: string;
@@ -419,9 +459,9 @@ export type MtpMetadata = {
      */
     enabled?: boolean;
     /**
-     * The spec type for draft models. For MTP-enabled models, this is always 'draft-mtp'.
+     * The spec type for draft models. 'draft-mtp' for MTP models, 'draft-dflash' for DFlash drafter models.
      */
-    spec_type?: 'draft-mtp';
+    spec_type?: 'draft-mtp' | 'draft-dflash';
     /**
      * Maximum draft N value (number of prompt tokens per generated token). Recommended starting point is 2 for most models.
      */
@@ -1060,9 +1100,14 @@ export type ConfigRollbackRequest = {
 export type Backend = 'llamacpp' | 'mlx' | 'vllm';
 
 /**
- * What an install artifact is for. "projector" is a multimodal vision/audio projection file (llama.cpp mmproj); "other" covers auxiliary files (e.g. a chat template) that are not weights, a projector, a tokenizer, or config.
+ * What an install artifact is for. "projector" is a multimodal vision/audio projection file (llama.cpp mmproj); "draft" is a companion draft model for speculative decoding (e.g. DFlash drafter for Muse Glimmer, loaded via --model-draft); "other" covers auxiliary files (e.g. a chat template) that are not weights, a projector, a tokenizer, or config.
  */
-export type ArtifactRole = 'weights' | 'projector' | 'tokenizer' | 'config' | 'other';
+export type ArtifactRole = 'weights' | 'projector' | 'draft' | 'tokenizer' | 'config' | 'other';
+
+/**
+ * What the model can do. Follows Ollama's capabilities pattern. 'completion' = text generation; 'vision' = accepts images (requires mmproj companion); 'reasoning' = emits reasoning/thinking output; 'tool-use' = supports function/tool calling.
+ */
+export type ModelCapability = 'completion' | 'vision' | 'reasoning' | 'tool-use';
 
 export type InstallArtifact = {
     /**
@@ -1090,6 +1135,18 @@ export type ModelRegistration = {
      * Inference backend the registered model will run under. Matches ConfigModelRequest.backend's vocabulary — installation registers through the same config path load/unload already use, not a separate mechanism.
      */
     backend: Backend;
+    /**
+     * What this model can do. Derived from the install plan's artifacts and HF metadata.
+     */
+    capabilities?: Array<ModelCapability>;
+    /**
+     * When present, the engine maps the artifact with this role to --mmproj at registration time. Fixed value 'projector'; included for clarity, not as a free-form field.
+     */
+    mmproj_artifact_role?: 'projector';
+    /**
+     * When present, the engine maps the artifact with this role to --model-draft at registration time. Fixed value 'draft'; included for clarity, not as a free-form field.
+     */
+    draft_artifact_role?: 'draft';
     /**
      * Raw backend command-line flags to apply at registration, e.g. "--n-gpu-layers", "999". A minimal passthrough for the first slice; ConfigModelRequest's typed fields (n_cpu_moe, cpu_moe, cpu_offload_gb, override_tensor) remain the richer path for anything that needs validation beyond "is this a string".
      */
@@ -1451,14 +1508,14 @@ export type GetConfigInfoResponses = {
 
 export type GetConfigInfoResponse = GetConfigInfoResponses[keyof GetConfigInfoResponses];
 
-export type AddConfigModelData = {
+export type AddModelConfigData = {
     body: ConfigModelRequest;
     path?: never;
     query?: never;
-    url: '/api/config/models';
+    url: '/api/models/config';
 };
 
-export type AddConfigModelErrors = {
+export type AddModelConfigErrors = {
     /**
      * Bad request.
      */
@@ -1473,16 +1530,16 @@ export type AddConfigModelErrors = {
     500: unknown;
 };
 
-export type AddConfigModelResponses = {
+export type AddModelConfigResponses = {
     /**
      * Model added; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type AddConfigModelResponse = AddConfigModelResponses[keyof AddConfigModelResponses];
+export type AddModelConfigResponse = AddModelConfigResponses[keyof AddModelConfigResponses];
 
-export type RemoveConfigModelData = {
+export type RemoveModelConfigData = {
     body?: never;
     path: {
         /**
@@ -1491,10 +1548,10 @@ export type RemoveConfigModelData = {
         id: string;
     };
     query?: never;
-    url: '/api/config/models/{id}';
+    url: '/api/models/config/{id}';
 };
 
-export type RemoveConfigModelErrors = {
+export type RemoveModelConfigErrors = {
     /**
      * Model not found in config.
      */
@@ -1509,16 +1566,16 @@ export type RemoveConfigModelErrors = {
     500: unknown;
 };
 
-export type RemoveConfigModelResponses = {
+export type RemoveModelConfigResponses = {
     /**
      * Model removed; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type RemoveConfigModelResponse = RemoveConfigModelResponses[keyof RemoveConfigModelResponses];
+export type RemoveModelConfigResponse = RemoveModelConfigResponses[keyof RemoveModelConfigResponses];
 
-export type GetConfigModelData = {
+export type GetModelConfigData = {
     body?: never;
     path: {
         /**
@@ -1527,26 +1584,26 @@ export type GetConfigModelData = {
         id: string;
     };
     query?: never;
-    url: '/api/config/models/{id}';
+    url: '/api/models/config/{id}';
 };
 
-export type GetConfigModelErrors = {
+export type GetModelConfigErrors = {
     /**
      * Model not found in config.
      */
     404: unknown;
 };
 
-export type GetConfigModelResponses = {
+export type GetModelConfigResponses = {
     /**
      * Model configuration and parsed llama-server flags.
      */
     200: ConfigModelDetail;
 };
 
-export type GetConfigModelResponse = GetConfigModelResponses[keyof GetConfigModelResponses];
+export type GetModelConfigResponse = GetModelConfigResponses[keyof GetModelConfigResponses];
 
-export type PatchConfigModelData = {
+export type PatchModelConfigData = {
     body: ConfigModelPatchRequest;
     path: {
         /**
@@ -1555,10 +1612,10 @@ export type PatchConfigModelData = {
         id: string;
     };
     query?: never;
-    url: '/api/config/models/{id}';
+    url: '/api/models/config/{id}';
 };
 
-export type PatchConfigModelErrors = {
+export type PatchModelConfigErrors = {
     /**
      * Bad request.
      */
@@ -1577,16 +1634,16 @@ export type PatchConfigModelErrors = {
     500: unknown;
 };
 
-export type PatchConfigModelResponses = {
+export type PatchModelConfigResponses = {
     /**
      * Model updated; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type PatchConfigModelResponse = PatchConfigModelResponses[keyof PatchConfigModelResponses];
+export type PatchModelConfigResponse = PatchModelConfigResponses[keyof PatchModelConfigResponses];
 
-export type PatchConfigGroupData = {
+export type PatchGroupData = {
     body: ConfigGroupPatchRequest;
     path: {
         /**
@@ -1595,10 +1652,10 @@ export type PatchConfigGroupData = {
         id: string;
     };
     query?: never;
-    url: '/api/config/groups/{id}';
+    url: '/api/groups/{id}';
 };
 
-export type PatchConfigGroupErrors = {
+export type PatchGroupErrors = {
     /**
      * Bad request.
      */
@@ -1617,14 +1674,14 @@ export type PatchConfigGroupErrors = {
     500: unknown;
 };
 
-export type PatchConfigGroupResponses = {
+export type PatchGroupResponses = {
     /**
      * Group updated; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type PatchConfigGroupResponse = PatchConfigGroupResponses[keyof PatchConfigGroupResponses];
+export type PatchGroupResponse = PatchGroupResponses[keyof PatchGroupResponses];
 
 export type ReloadConfigData = {
     body?: never;
@@ -1655,14 +1712,14 @@ export type ReloadConfigResponses = {
 
 export type ReloadConfigResponse = ReloadConfigResponses[keyof ReloadConfigResponses];
 
-export type ClearDefaultModelData = {
+export type ClearModelDefaultData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/config/default-model';
+    url: '/api/models/default';
 };
 
-export type ClearDefaultModelErrors = {
+export type ClearModelDefaultErrors = {
     /**
      * Config file path not set.
      */
@@ -1673,39 +1730,39 @@ export type ClearDefaultModelErrors = {
     500: unknown;
 };
 
-export type ClearDefaultModelResponses = {
+export type ClearModelDefaultResponses = {
     /**
      * Default model cleared; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type ClearDefaultModelResponse = ClearDefaultModelResponses[keyof ClearDefaultModelResponses];
+export type ClearModelDefaultResponse = ClearModelDefaultResponses[keyof ClearModelDefaultResponses];
 
-export type GetDefaultModelData = {
+export type GetModelDefaultData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/config/default-model';
+    url: '/api/models/default';
 };
 
-export type GetDefaultModelResponses = {
+export type GetModelDefaultResponses = {
     /**
      * Default model info. 'model' is null when no default is configured.
      */
     200: ConfigDefaultModelResponse;
 };
 
-export type GetDefaultModelResponse = GetDefaultModelResponses[keyof GetDefaultModelResponses];
+export type GetModelDefaultResponse = GetModelDefaultResponses[keyof GetModelDefaultResponses];
 
-export type SetDefaultModelData = {
+export type SetModelDefaultData = {
     body: ConfigDefaultModelRequest;
     path?: never;
     query?: never;
-    url: '/api/config/default-model';
+    url: '/api/models/default';
 };
 
-export type SetDefaultModelErrors = {
+export type SetModelDefaultErrors = {
     /**
      * Bad request.
      */
@@ -1724,14 +1781,14 @@ export type SetDefaultModelErrors = {
     500: unknown;
 };
 
-export type SetDefaultModelResponses = {
+export type SetModelDefaultResponses = {
     /**
      * Default model updated; reload triggered asynchronously.
      */
     202: ConfigModelResponse;
 };
 
-export type SetDefaultModelResponse = SetDefaultModelResponses[keyof SetDefaultModelResponses];
+export type SetModelDefaultResponse = SetModelDefaultResponses[keyof SetModelDefaultResponses];
 
 export type GetSkeinConfigData = {
     body?: never;

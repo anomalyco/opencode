@@ -36,7 +36,7 @@ function fakeBackend(options: { maxFitCtx?: number; fitStatus?: number } = {}) {
           max_fit_ctx: options.maxFitCtx ?? MAX_FIT,
         })
       }
-      if (pathname.startsWith("/api/config/models/") && req.method === "PATCH") {
+      if (pathname.startsWith("/api/models/config/") && req.method === "PATCH") {
         return req.json().then((body: { ctx_size?: number }) => {
           patched.push(body.ctx_size ?? 0)
           return new Response(null, { status: 202 })

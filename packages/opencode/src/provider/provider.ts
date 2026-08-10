@@ -1447,7 +1447,7 @@ export async function adjustLocalContextOnOverflow(
       if (maxFit <= 0) return false // can't determine a safe ceiling — surface the overflow
       const target = Math.min(maxCtx, maxFit)
       if (target <= 0) return false
-      const patch = await client.patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size: target } })
+      const patch = await client.patchModelConfig({ id: modelID, configModelPatchRequest: { ctx_size: target } })
       return !patch.error
     }
 

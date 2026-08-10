@@ -2,7 +2,7 @@
 
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddConfigModelErrors, AddConfigModelResponses, CancelModelOperationErrors, CancelModelOperationResponses, CheckRuntimeHealthResponses, ClearDefaultModelErrors, ClearDefaultModelResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, ConfigRollbackRequest, ConfigValidateRequest, CreateModelOperationErrors, CreateModelOperationResponses, GetApiModelsResponses, GetConfigHistoryResponses, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetDefaultModelResponses, GetDefaultSkeinConfigResponses, GetFitReportResponses, GetHardwareResponses, GetHealthResponses, GetModelFitErrors, GetModelFitResponses, GetModelOperationErrors, GetModelOperationResponses, GetOffloadRecommendationErrors, GetOffloadRecommendationResponses, GetRunningResponses, GetSkeinConfigResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, GetTuningResponses, HypotheticalFitRequest, InstallRuntimeErrors, InstallRuntimeResponses, ListModelOperationsResponses, ListModelsResponses, ListRuntimesResponses, ListTuningProfilesResponses, ModelInstallPlan, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, PatchTuningResponses, PostHypotheticalFitErrors, PostHypotheticalFitResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses, RollbackConfigErrors, RollbackConfigResponses, RuntimeInstallRequest, SetDefaultModelErrors, SetDefaultModelResponses, SetSkeinConfigErrors, SetSkeinConfigResponses, StreamModelOperationEventsErrors, StreamModelOperationEventsResponses, TuningPatchRequest, UpgradeRuntimeErrors, UpgradeRuntimeResponses, UserProfile, ValidateConfigResponses } from './types.gen';
+import type { AddModelConfigErrors, AddModelConfigResponses, CancelModelOperationErrors, CancelModelOperationResponses, CheckRuntimeHealthResponses, ClearModelDefaultErrors, ClearModelDefaultResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, ConfigRollbackRequest, ConfigValidateRequest, CreateModelOperationErrors, CreateModelOperationResponses, GetApiModelsResponses, GetConfigHistoryResponses, GetConfigInfoResponses, GetDefaultSkeinConfigResponses, GetFitReportResponses, GetHardwareResponses, GetHealthResponses, GetModelConfigErrors, GetModelConfigResponses, GetModelDefaultResponses, GetModelFitErrors, GetModelFitResponses, GetModelOperationErrors, GetModelOperationResponses, GetOffloadRecommendationErrors, GetOffloadRecommendationResponses, GetRunningResponses, GetSkeinConfigResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, GetTuningResponses, HypotheticalFitRequest, InstallRuntimeErrors, InstallRuntimeResponses, ListModelOperationsResponses, ListModelsResponses, ListRuntimesResponses, ListTuningProfilesResponses, ModelInstallPlan, PatchGroupErrors, PatchGroupResponses, PatchModelConfigErrors, PatchModelConfigResponses, PatchTuningResponses, PostHypotheticalFitErrors, PostHypotheticalFitResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveModelConfigErrors, RemoveModelConfigResponses, RollbackConfigErrors, RollbackConfigResponses, RuntimeInstallRequest, SetModelDefaultErrors, SetModelDefaultResponses, SetSkeinConfigErrors, SetSkeinConfigResponses, StreamModelOperationEventsErrors, StreamModelOperationEventsResponses, TuningPatchRequest, UpgradeRuntimeErrors, UpgradeRuntimeResponses, UserProfile, ValidateConfigResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -158,12 +158,12 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Adds or replaces a model entry in the on-disk config YAML and triggers reload.
      */
-    public addConfigModel<ThrowOnError extends boolean = false>(parameters: {
+    public addModelConfig<ThrowOnError extends boolean = false>(parameters: {
         configModelRequest: ConfigModelRequest;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ key: 'configModelRequest', map: 'body' }] }]);
-        return (options?.client ?? this.client).post<AddConfigModelResponses, AddConfigModelErrors, ThrowOnError>({
-            url: '/api/config/models',
+        return (options?.client ?? this.client).post<AddModelConfigResponses, AddModelConfigErrors, ThrowOnError>({
+            url: '/api/models/config',
             ...options,
             ...params,
             headers: {
@@ -177,12 +177,12 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Removes the model entry from the config YAML without touching the file on disk.
      */
-    public removeConfigModel<ThrowOnError extends boolean = false>(parameters: {
+    public removeModelConfig<ThrowOnError extends boolean = false>(parameters: {
         id: string;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'id' }] }]);
-        return (options?.client ?? this.client).delete<RemoveConfigModelResponses, RemoveConfigModelErrors, ThrowOnError>({
-            url: '/api/config/models/{id}',
+        return (options?.client ?? this.client).delete<RemoveModelConfigResponses, RemoveModelConfigErrors, ThrowOnError>({
+            url: '/api/models/config/{id}',
             ...options,
             ...params
         });
@@ -191,12 +191,12 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Returns the configuration and current runtime state for a specific model.
      */
-    public getConfigModel<ThrowOnError extends boolean = false>(parameters: {
+    public getModelConfig<ThrowOnError extends boolean = false>(parameters: {
         id: string;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'id' }] }]);
-        return (options?.client ?? this.client).get<GetConfigModelResponses, GetConfigModelErrors, ThrowOnError>({
-            url: '/api/config/models/{id}',
+        return (options?.client ?? this.client).get<GetModelConfigResponses, GetModelConfigErrors, ThrowOnError>({
+            url: '/api/models/config/{id}',
             ...options,
             ...params
         });
@@ -205,13 +205,13 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Updates selected config fields and common llama-server flags without requiring callers to reconstruct the whole command string.
      */
-    public patchConfigModel<ThrowOnError extends boolean = false>(parameters: {
+    public patchModelConfig<ThrowOnError extends boolean = false>(parameters: {
         id: string;
         configModelPatchRequest: ConfigModelPatchRequest;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'id' }, { key: 'configModelPatchRequest', map: 'body' }] }]);
-        return (options?.client ?? this.client).patch<PatchConfigModelResponses, PatchConfigModelErrors, ThrowOnError>({
-            url: '/api/config/models/{id}',
+        return (options?.client ?? this.client).patch<PatchModelConfigResponses, PatchModelConfigErrors, ThrowOnError>({
+            url: '/api/models/config/{id}',
             ...options,
             ...params,
             headers: {
@@ -225,13 +225,13 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Updates selected group config fields (autoUnload, exclusive, swap) without requiring callers to reconstruct the whole group configuration.
      */
-    public patchConfigGroup<ThrowOnError extends boolean = false>(parameters: {
+    public patchGroup<ThrowOnError extends boolean = false>(parameters: {
         id: string;
         configGroupPatchRequest: ConfigGroupPatchRequest;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'id' }, { key: 'configGroupPatchRequest', map: 'body' }] }]);
-        return (options?.client ?? this.client).patch<PatchConfigGroupResponses, PatchConfigGroupErrors, ThrowOnError>({
-            url: '/api/config/groups/{id}',
+        return (options?.client ?? this.client).patch<PatchGroupResponses, PatchGroupErrors, ThrowOnError>({
+            url: '/api/groups/{id}',
             ...options,
             ...params,
             headers: {
@@ -252,26 +252,26 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Removes the default model from the on-disk config YAML and triggers reload. Idempotent.
      */
-    public clearDefaultModel<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-        return (options?.client ?? this.client).delete<ClearDefaultModelResponses, ClearDefaultModelErrors, ThrowOnError>({ url: '/api/config/default-model', ...options });
+    public clearModelDefault<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).delete<ClearModelDefaultResponses, ClearModelDefaultErrors, ThrowOnError>({ url: '/api/models/default', ...options });
     }
     
     /**
      * Returns the configured default model used when a request omits the 'model' field.
      */
-    public getDefaultModel<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-        return (options?.client ?? this.client).get<GetDefaultModelResponses, unknown, ThrowOnError>({ url: '/api/config/default-model', ...options });
+    public getModelDefault<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetModelDefaultResponses, unknown, ThrowOnError>({ url: '/api/models/default', ...options });
     }
     
     /**
      * Sets the default model in the on-disk config YAML and triggers reload. The model must be a configured model ID or alias.
      */
-    public setDefaultModel<ThrowOnError extends boolean = false>(parameters: {
+    public setModelDefault<ThrowOnError extends boolean = false>(parameters: {
         configDefaultModelRequest: ConfigDefaultModelRequest;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ key: 'configDefaultModelRequest', map: 'body' }] }]);
-        return (options?.client ?? this.client).put<SetDefaultModelResponses, SetDefaultModelErrors, ThrowOnError>({
-            url: '/api/config/default-model',
+        return (options?.client ?? this.client).put<SetModelDefaultResponses, SetModelDefaultErrors, ThrowOnError>({
+            url: '/api/models/default',
             ...options,
             ...params,
             headers: {

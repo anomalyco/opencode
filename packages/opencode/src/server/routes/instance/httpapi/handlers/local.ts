@@ -296,7 +296,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       const maxFit = fit?.data?.max_fit_ctx ?? 0
       if (maxFit > 0 && ctx_size > maxFit) return false
       const res = yield* Effect.tryPromise(() =>
-        client.patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size } }),
+        client.patchModelConfig({ id: modelID, configModelPatchRequest: { ctx_size } }),
       ).pipe(Effect.orElseSucceed(() => null))
       const ok = res !== null && !res.error
       // fork: llama-skein reloads the model on a ctx change; sync our cached
@@ -317,7 +317,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
         ?.baseURL
       if (!baseURL) return false
       const res = yield* Effect.tryPromise(() =>
-        llamaClient(baseURL).patchConfigModel({ id: modelID, configModelPatchRequest: ctx.payload }),
+        llamaClient(baseURL).patchModelConfig({ id: modelID, configModelPatchRequest: ctx.payload }),
       ).pipe(Effect.orElseSucceed(() => null))
       return res !== null && !res.error
     })

@@ -2,7 +2,7 @@
 
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddConfigModelErrors, AddConfigModelResponses, ClearDefaultModelErrors, ClearDefaultModelResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetDefaultModelResponses, GetFitReportResponses, GetHardwareResponses, GetModelFitErrors, GetModelFitResponses, GetOffloadRecommendationErrors, GetOffloadRecommendationResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, GetTuningResponses, ListModelsResponses, ListTuningProfilesResponses, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, PatchTuningResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses, SetDefaultModelErrors, SetDefaultModelResponses, TuningPatchRequest } from './types.gen';
+import type { AddModelConfigErrors, AddModelConfigResponses, CancelModelOperationErrors, CancelModelOperationResponses, CheckRuntimeHealthResponses, ClearModelDefaultErrors, ClearModelDefaultResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, ConfigRollbackRequest, ConfigValidateRequest, CreateModelOperationErrors, CreateModelOperationResponses, GetApiModelsResponses, GetConfigHistoryResponses, GetConfigInfoResponses, GetDefaultSkeinConfigResponses, GetFitReportResponses, GetHardwareResponses, GetHealthResponses, GetModelConfigErrors, GetModelConfigResponses, GetModelDefaultResponses, GetModelFitErrors, GetModelFitResponses, GetModelOperationErrors, GetModelOperationResponses, GetOffloadRecommendationErrors, GetOffloadRecommendationResponses, GetRunningResponses, GetSkeinConfigResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, GetTuningResponses, HypotheticalFitRequest, InstallRuntimeErrors, InstallRuntimeResponses, ListModelOperationsResponses, ListModelsResponses, ListRuntimesResponses, ListTuningProfilesResponses, ModelInstallPlan, PatchGroupErrors, PatchGroupResponses, PatchModelConfigErrors, PatchModelConfigResponses, PatchTuningResponses, PostHypotheticalFitErrors, PostHypotheticalFitResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveModelConfigErrors, RemoveModelConfigResponses, RollbackConfigErrors, RollbackConfigResponses, RuntimeInstallRequest, SetModelDefaultErrors, SetModelDefaultResponses, SetSkeinConfigErrors, SetSkeinConfigResponses, StreamModelOperationEventsErrors, StreamModelOperationEventsResponses, TuningPatchRequest, UpgradeRuntimeErrors, UpgradeRuntimeResponses, UserProfile, ValidateConfigResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -61,6 +61,67 @@ export class LlamaSkeinClient extends HeyApiClient {
         return (options?.client ?? this.client).get<GetSystemVersionResponses, unknown, ThrowOnError>({ url: '/api/system/version', ...options });
     }
     
+    /**
+     * List all runtime backends and their status.
+     */
+    public listRuntimes<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<ListRuntimesResponses, unknown, ThrowOnError>({ url: '/api/runtime', ...options });
+    }
+    
+    /**
+     * Install a runtime backend.
+     */
+    public installRuntime<ThrowOnError extends boolean = false>(parameters: {
+        backend: 'llamacpp' | 'mlx' | 'vllm';
+        runtimeInstallRequest?: RuntimeInstallRequest;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'backend' }, { key: 'runtimeInstallRequest', map: 'body' }] }]);
+        return (options?.client ?? this.client).post<InstallRuntimeResponses, InstallRuntimeErrors, ThrowOnError>({
+            url: '/api/runtime/{backend}/install',
+            ...options,
+            ...params,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+                ...params.headers
+            }
+        });
+    }
+    
+    /**
+     * Upgrade a runtime backend.
+     */
+    public upgradeRuntime<ThrowOnError extends boolean = false>(parameters: {
+        backend: 'llamacpp' | 'mlx' | 'vllm';
+        runtimeInstallRequest?: RuntimeInstallRequest;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'backend' }, { key: 'runtimeInstallRequest', map: 'body' }] }]);
+        return (options?.client ?? this.client).post<UpgradeRuntimeResponses, UpgradeRuntimeErrors, ThrowOnError>({
+            url: '/api/runtime/{backend}/upgrade',
+            ...options,
+            ...params,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+                ...params.headers
+            }
+        });
+    }
+    
+    /**
+     * Check if a runtime backend is healthy.
+     */
+    public checkRuntimeHealth<ThrowOnError extends boolean = false>(parameters: {
+        backend: 'llamacpp' | 'mlx' | 'vllm';
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'backend' }] }]);
+        return (options?.client ?? this.client).get<CheckRuntimeHealthResponses, unknown, ThrowOnError>({
+            url: '/api/runtime/{backend}/health',
+            ...options,
+            ...params
+        });
+    }
+    
     public getSystemCapabilities<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
         return (options?.client ?? this.client).get<GetSystemCapabilitiesResponses, unknown, ThrowOnError>({ url: '/api/system/capabilities', ...options });
     }
@@ -97,12 +158,12 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Adds or replaces a model entry in the on-disk config YAML and triggers reload.
      */
-    public addConfigModel<ThrowOnError extends boolean = false>(parameters: {
+    public addModelConfig<ThrowOnError extends boolean = false>(parameters: {
         configModelRequest: ConfigModelRequest;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ key: 'configModelRequest', map: 'body' }] }]);
-        return (options?.client ?? this.client).post<AddConfigModelResponses, AddConfigModelErrors, ThrowOnError>({
-            url: '/api/config/models',
+        return (options?.client ?? this.client).post<AddModelConfigResponses, AddModelConfigErrors, ThrowOnError>({
+            url: '/api/models/config',
             ...options,
             ...params,
             headers: {
@@ -116,12 +177,12 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Removes the model entry from the config YAML without touching the file on disk.
      */
-    public removeConfigModel<ThrowOnError extends boolean = false>(parameters: {
+    public removeModelConfig<ThrowOnError extends boolean = false>(parameters: {
         id: string;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'id' }] }]);
-        return (options?.client ?? this.client).delete<RemoveConfigModelResponses, RemoveConfigModelErrors, ThrowOnError>({
-            url: '/api/config/models/{id}',
+        return (options?.client ?? this.client).delete<RemoveModelConfigResponses, RemoveModelConfigErrors, ThrowOnError>({
+            url: '/api/models/config/{id}',
             ...options,
             ...params
         });
@@ -130,12 +191,12 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Returns the configuration and current runtime state for a specific model.
      */
-    public getConfigModel<ThrowOnError extends boolean = false>(parameters: {
+    public getModelConfig<ThrowOnError extends boolean = false>(parameters: {
         id: string;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'id' }] }]);
-        return (options?.client ?? this.client).get<GetConfigModelResponses, GetConfigModelErrors, ThrowOnError>({
-            url: '/api/config/models/{id}',
+        return (options?.client ?? this.client).get<GetModelConfigResponses, GetModelConfigErrors, ThrowOnError>({
+            url: '/api/models/config/{id}',
             ...options,
             ...params
         });
@@ -144,13 +205,13 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Updates selected config fields and common llama-server flags without requiring callers to reconstruct the whole command string.
      */
-    public patchConfigModel<ThrowOnError extends boolean = false>(parameters: {
+    public patchModelConfig<ThrowOnError extends boolean = false>(parameters: {
         id: string;
         configModelPatchRequest: ConfigModelPatchRequest;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'id' }, { key: 'configModelPatchRequest', map: 'body' }] }]);
-        return (options?.client ?? this.client).patch<PatchConfigModelResponses, PatchConfigModelErrors, ThrowOnError>({
-            url: '/api/config/models/{id}',
+        return (options?.client ?? this.client).patch<PatchModelConfigResponses, PatchModelConfigErrors, ThrowOnError>({
+            url: '/api/models/config/{id}',
             ...options,
             ...params,
             headers: {
@@ -164,13 +225,13 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Updates selected group config fields (autoUnload, exclusive, swap) without requiring callers to reconstruct the whole group configuration.
      */
-    public patchConfigGroup<ThrowOnError extends boolean = false>(parameters: {
+    public patchGroup<ThrowOnError extends boolean = false>(parameters: {
         id: string;
         configGroupPatchRequest: ConfigGroupPatchRequest;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'id' }, { key: 'configGroupPatchRequest', map: 'body' }] }]);
-        return (options?.client ?? this.client).patch<PatchConfigGroupResponses, PatchConfigGroupErrors, ThrowOnError>({
-            url: '/api/config/groups/{id}',
+        return (options?.client ?? this.client).patch<PatchGroupResponses, PatchGroupErrors, ThrowOnError>({
+            url: '/api/groups/{id}',
             ...options,
             ...params,
             headers: {
@@ -191,26 +252,26 @@ export class LlamaSkeinClient extends HeyApiClient {
     /**
      * Removes the default model from the on-disk config YAML and triggers reload. Idempotent.
      */
-    public clearDefaultModel<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-        return (options?.client ?? this.client).delete<ClearDefaultModelResponses, ClearDefaultModelErrors, ThrowOnError>({ url: '/api/config/default-model', ...options });
+    public clearModelDefault<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).delete<ClearModelDefaultResponses, ClearModelDefaultErrors, ThrowOnError>({ url: '/api/models/default', ...options });
     }
     
     /**
      * Returns the configured default model used when a request omits the 'model' field.
      */
-    public getDefaultModel<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-        return (options?.client ?? this.client).get<GetDefaultModelResponses, unknown, ThrowOnError>({ url: '/api/config/default-model', ...options });
+    public getModelDefault<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetModelDefaultResponses, unknown, ThrowOnError>({ url: '/api/models/default', ...options });
     }
     
     /**
      * Sets the default model in the on-disk config YAML and triggers reload. The model must be a configured model ID or alias.
      */
-    public setDefaultModel<ThrowOnError extends boolean = false>(parameters: {
+    public setModelDefault<ThrowOnError extends boolean = false>(parameters: {
         configDefaultModelRequest: ConfigDefaultModelRequest;
     }, options?: Options<never, ThrowOnError>) {
         const params = buildClientParams([parameters], [{ args: [{ key: 'configDefaultModelRequest', map: 'body' }] }]);
-        return (options?.client ?? this.client).put<SetDefaultModelResponses, SetDefaultModelErrors, ThrowOnError>({
-            url: '/api/config/default-model',
+        return (options?.client ?? this.client).put<SetModelDefaultResponses, SetModelDefaultErrors, ThrowOnError>({
+            url: '/api/models/default',
             ...options,
             ...params,
             headers: {
@@ -219,6 +280,39 @@ export class LlamaSkeinClient extends HeyApiClient {
                 ...params.headers
             }
         });
+    }
+    
+    /**
+     * Returns the current persistent user profile for GPU power and silent-mode preferences.
+     */
+    public getSkeinConfig<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetSkeinConfigResponses, unknown, ThrowOnError>({ url: '/api/skein/config', ...options });
+    }
+    
+    /**
+     * Saves a persistent user profile and applies it to the thermal manager. Accepts a profile payload with power settings and optional schedule.
+     */
+    public setSkeinConfig<ThrowOnError extends boolean = false>(parameters: {
+        userProfile: UserProfile;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ key: 'userProfile', map: 'body' }] }]);
+        return (options?.client ?? this.client).post<SetSkeinConfigResponses, SetSkeinConfigErrors, ThrowOnError>({
+            url: '/api/skein/config',
+            ...options,
+            ...params,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+                ...params.headers
+            }
+        });
+    }
+    
+    /**
+     * Returns a default profile template for the host.
+     */
+    public getDefaultSkeinConfig<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetDefaultSkeinConfigResponses, unknown, ThrowOnError>({ url: '/api/skein/config/default', ...options });
     }
     
     /**
@@ -240,6 +334,25 @@ export class LlamaSkeinClient extends HeyApiClient {
             url: '/api/fit/{model}',
             ...options,
             ...params
+        });
+    }
+    
+    /**
+     * Fit of a model that is NOT on disk: a gallery/catalog candidate scored before download. Takes a descriptor (explicit dims when the catalog knows them, else a parameter count to estimate from) plus one or more quant variants with file sizes; returns per-variant verdicts in the same vocabulary as /api/fit plus the recommended variant. Skein's fleet gallery calls this on every host to build its model-x-host-x-quant matrix.
+     */
+    public postHypotheticalFit<ThrowOnError extends boolean = false>(parameters: {
+        hypotheticalFitRequest: HypotheticalFitRequest;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ key: 'hypotheticalFitRequest', map: 'body' }] }]);
+        return (options?.client ?? this.client).post<PostHypotheticalFitResponses, PostHypotheticalFitErrors, ThrowOnError>({
+            url: '/api/fit/hypothetical',
+            ...options,
+            ...params,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+                ...params.headers
+            }
         });
     }
     
@@ -274,5 +387,162 @@ export class LlamaSkeinClient extends HeyApiClient {
      */
     public listTuningProfiles<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
         return (options?.client ?? this.client).get<ListTuningProfilesResponses, unknown, ThrowOnError>({ url: '/api/tuning/profiles', ...options });
+    }
+    
+    /**
+     * Host and per-model readiness
+     *
+     * Reports per-model state and last_error plus provider-level residency and busyness. Previously a bare 200 "OK", which could not distinguish a healthy host from one whose model had failed to load.
+     */
+    public getHealth<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetHealthResponses, unknown, ThrowOnError>({ url: '/health', ...options });
+    }
+    
+    /**
+     * Locally running models
+     *
+     * Every local process that is not stopped or shut down, joined against its config.
+     */
+    public getRunning<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetRunningResponses, unknown, ThrowOnError>({ url: '/running', ...options });
+    }
+    
+    /**
+     * Configured models with state
+     */
+    public getApiModels<ThrowOnError extends boolean = false>(parameters?: {
+        state?: 'running';
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ in: 'query', key: 'state' }] }]);
+        return (options?.client ?? this.client).get<GetApiModelsResponses, unknown, ThrowOnError>({
+            url: '/api/models',
+            ...options,
+            ...params
+        });
+    }
+    
+    /**
+     * Dry-run validate a config without applying it.
+     *
+     * Validates the on-disk config file, or the YAML in the request body when provided. Never writes anything and never triggers a reload — use POST /api/config/reload to actually apply a change.
+     */
+    public validateConfig<ThrowOnError extends boolean = false>(parameters?: {
+        configValidateRequest?: ConfigValidateRequest;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ key: 'configValidateRequest', map: 'body' }] }]);
+        return (options?.client ?? this.client).post<ValidateConfigResponses, unknown, ThrowOnError>({
+            url: '/api/config/validate',
+            ...options,
+            ...params,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+                ...params.headers
+            }
+        });
+    }
+    
+    /**
+     * List retained config snapshots, newest first.
+     */
+    public getConfigHistory<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetConfigHistoryResponses, unknown, ThrowOnError>({ url: '/api/config/history', ...options });
+    }
+    
+    /**
+     * Restore the config to a previous snapshot and reload.
+     *
+     * The config active immediately before the rollback is itself snapshotted first — a rollback is a change like any other and can itself be undone.
+     */
+    public rollbackConfig<ThrowOnError extends boolean = false>(parameters: {
+        configRollbackRequest: ConfigRollbackRequest;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ key: 'configRollbackRequest', map: 'body' }] }]);
+        return (options?.client ?? this.client).post<RollbackConfigResponses, RollbackConfigErrors, ThrowOnError>({
+            url: '/api/config/rollback',
+            ...options,
+            ...params,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+                ...params.headers
+            }
+        });
+    }
+    
+    /**
+     * List operations (bounded history).
+     *
+     * Supports reconnect and diagnostics after a client or process restart — every operation the host still has a record of, not only ones the current connection created.
+     */
+    public listModelOperations<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<ListModelOperationsResponses, unknown, ThrowOnError>({ url: '/api/models/operations', ...options });
+    }
+    
+    /**
+     * Submit an install plan; creates a ModelOperation.
+     *
+     * Validates and snapshots the plan (design.md decision 2) before creating the operation. Returns immediately with the operation at phase "queued" — the caller polls GET /api/models/operations/{id} or watches the event stream for progress, and can disconnect/reconnect at any point without losing the operation.
+     */
+    public createModelOperation<ThrowOnError extends boolean = false>(parameters: {
+        modelInstallPlan: ModelInstallPlan;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ key: 'modelInstallPlan', map: 'body' }] }]);
+        return (options?.client ?? this.client).post<CreateModelOperationResponses, CreateModelOperationErrors, ThrowOnError>({
+            url: '/api/models/operations',
+            ...options,
+            ...params,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+                ...params.headers
+            }
+        });
+    }
+    
+    /**
+     * Get one operation's current snapshot.
+     */
+    public getModelOperation<ThrowOnError extends boolean = false>(parameters: {
+        id: string;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'id' }] }]);
+        return (options?.client ?? this.client).get<GetModelOperationResponses, GetModelOperationErrors, ThrowOnError>({
+            url: '/api/models/operations/{id}',
+            ...options,
+            ...params
+        });
+    }
+    
+    /**
+     * Cancel an operation.
+     *
+     * Idempotent: cancelling an already-cancelled or already-terminal operation returns its current snapshot rather than an error. Partial artifacts are retained for later resume unless the operation record's retention policy says otherwise — cancellation itself never deletes them.
+     */
+    public cancelModelOperation<ThrowOnError extends boolean = false>(parameters: {
+        id: string;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'id' }] }]);
+        return (options?.client ?? this.client).post<CancelModelOperationResponses, CancelModelOperationErrors, ThrowOnError>({
+            url: '/api/models/operations/{id}/cancel',
+            ...options,
+            ...params
+        });
+    }
+    
+    /**
+     * Stream operation updates as they happen.
+     *
+     * Server-sent events; each event's data is one ModelOperation snapshot, same vocabulary as GET /api/models/operations/{id}. Supplementary to the snapshot endpoint, not a replacement for it — a client that reconnects after missing events GETs the snapshot to resynchronize rather than trying to replay the stream.
+     */
+    public streamModelOperationEvents<ThrowOnError extends boolean = false>(parameters: {
+        id: string;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'id' }] }]);
+        return (options?.client ?? this.client).sse.get<StreamModelOperationEventsResponses, StreamModelOperationEventsErrors, ThrowOnError>({
+            url: '/api/models/operations/{id}/events',
+            ...options,
+            ...params
+        });
     }
 }
