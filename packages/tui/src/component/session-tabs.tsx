@@ -49,6 +49,13 @@ const NEW_SESSION_TAB: SessionTab = { sessionID: "new", title: NEW_SESSION_TAB_T
 const glowTextColor = (base: RGBA, glow: RGBA, index: number, width: number) =>
   tint(base, glow, 0.12 * unreadGlowIntensity(index, width))
 
+function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: number, leading: boolean) {
+  const start = leading && index < FADE_WIDTH ? FADE_WIDTH - index : 0
+  const end = index - (length - FADE_WIDTH) + 1
+  const position = Math.max(start, end)
+  return position <= 0 ? color : tint(color, background, 0.2 + 0.72 * ((position - 1) / Math.max(1, FADE_WIDTH - 1)))
+}
+
 function createMarqueeOffset(hovered: () => string | undefined) {
   const [offset, setOffset] = createSignal(0)
 
@@ -178,9 +185,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   : Locale.takeWidth(title(), titleWidth()),
               )
               const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
-              const titleFades = createMemo(
-                () => !scrolling() && stringWidth(title()) >= titleWidth() && titleWidth() > FADE_WIDTH,
-              )
+              const titleFades = createMemo(() => stringWidth(title()) >= titleWidth() && titleWidth() > FADE_WIDTH)
               const detail = createMemo(() => {
                 if (tab === NEW_SESSION_TAB) return Locale.takeWidth("Start a new session", titleWidth())
                 const value = session()
@@ -240,9 +245,9 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                 const color = glows()
                   ? glowTextColor(foreground(), glowColor(), 1 + numberWidth() + index, width())
                   : foreground()
-                if (!titleFades() || index < visibleTitleParts().length - FADE_WIDTH) return color
-                const position = index - (visibleTitleParts().length - FADE_WIDTH)
-                return tint(color, pulseBackground(), 0.2 + 0.72 * (position / Math.max(1, FADE_WIDTH - 1)))
+                return titleFades()
+                  ? fadeTitleColor(color, pulseBackground(), index, visibleTitleParts().length, scrolling())
+                  : color
               }
               const release = () => {
                 setDragging(undefined)
@@ -607,7 +612,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           )
           const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
           const titleFades = createMemo(
-            () => !scrolling() && stringWidth(title()) >= availableTitleWidth() && availableTitleWidth() > FADE_WIDTH,
+            () => stringWidth(title()) >= availableTitleWidth() && availableTitleWidth() > FADE_WIDTH,
           )
           const foreground = () => {
             if (hovered() === tab.sessionID) return theme.text.default
@@ -618,9 +623,9 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const characterColor = (index: number) => {
             const base = foreground()
             const color = glows() ? glowTextColor(base, glowColor(), 1 + numberWidth() + index, width()) : base
-            if (!titleFades() || index < visibleTitleParts().length - FADE_WIDTH) return color
-            const position = index - (visibleTitleParts().length - FADE_WIDTH)
-            return tint(color, background(), 0.2 + 0.72 * (position / Math.max(1, FADE_WIDTH - 1)))
+            return titleFades()
+              ? fadeTitleColor(color, background(), index, visibleTitleParts().length, scrolling())
+              : color
           }
           // The running sweep's level under the number cell, reported by the pulse renderable.
           const [sweepLevel, setSweepLevel] = createSignal(0)
