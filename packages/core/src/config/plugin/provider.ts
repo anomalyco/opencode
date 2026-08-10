@@ -13,12 +13,14 @@ export const Plugin = define({
     const config = yield* Config.Service
     const loaded = { entries: yield* config.entries() }
     yield* ctx.integration.transform((integrations) => {
-      const configuredIntegrations = new Set(
-        configuredProviders(loaded.entries).flatMap(([id, provider]) => (provider.env === undefined ? [] : [id])),
-      )
       for (const [id, provider] of configuredProviders(loaded.entries)) {
         const integrationID = id
-        if (!configuredIntegrations.has(id) && !integrations.get(integrationID)) continue
+        if (!integrations.get(integrationID)) {
+          integrations.method.update({
+            integrationID,
+            method: { type: "key", label: "Manually enter API Key" },
+          })
+        }
         integrations.update(integrationID, (integration) => {
           integration.name = provider.name ?? integration.name
         })

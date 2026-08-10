@@ -1,11 +1,11 @@
 {
   "name": "@opencode-ai/enterprise",
-  "version": "1.18.8",
+  "version": "1.18.15",
   "private": true,
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsgo -b",
     "dev": "vite dev",
     "build": "vite build",
     "build:cloudflare": "OPENCODE_DEPLOYMENT_TARGET=cloudflare vite build",

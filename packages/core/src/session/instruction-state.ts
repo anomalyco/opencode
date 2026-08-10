@@ -20,7 +20,7 @@ export interface Observation extends Instructions.Admission {
 
 export const observe = Effect.fn("InstructionState.observe")(function* (
   db: DatabaseService,
-  instructions: Instructions.Instructions,
+  instructions: Instructions.List,
   sessionID: SessionSchema.ID,
 ): Effect.fn.Return<Observation, Instructions.InitializationBlocked> {
   const [observed, stored] = yield* Effect.all([Instructions.read(instructions), find(db, sessionID)], {
@@ -38,7 +38,7 @@ export const observe = Effect.fn("InstructionState.observe")(function* (
 export const commit = Effect.fn("InstructionState.commit")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
-  instructions: Instructions.Instructions,
+  instructions: Instructions.List,
   observation: Observation,
 ) {
   if (!observation.initial && Object.keys(observation.delta).length === 0) return
@@ -62,11 +62,14 @@ export const commit = Effect.fn("InstructionState.commit")(function* (
 
 const renderUpdateText = Effect.fnUntraced(function* (
   db: DatabaseService,
-  instructions: Instructions.Instructions,
+  instructions: Instructions.List,
   observation: Observation,
 ) {
   const replaced = Object.entries(observation.previous).filter(([key]) => Object.hasOwn(observation.delta, key))
-  const blobs = yield* loadBlobs(db, replaced.map(([, hash]) => hash))
+  const blobs = yield* loadBlobs(
+    db,
+    replaced.map(([, hash]) => hash),
+  )
   const previous = Object.fromEntries(replaced.map(([key, hash]) => [key, requireBlob(blobs, hash)]))
   const admitted = new Map(
     Object.entries(observation.blobs).map(([hash, value]) => [Instructions.Hash.make(hash), value]),
@@ -77,7 +80,7 @@ const renderUpdateText = Effect.fnUntraced(function* (
 export const prepare = Effect.fn("InstructionState.prepare")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
-  instructions: Instructions.Instructions,
+  instructions: Instructions.List,
   sessionID: SessionSchema.ID,
 ) {
   yield* commit(db, bus, instructions, yield* observe(db, instructions, sessionID))
@@ -162,7 +165,7 @@ export const reset = Effect.fn("InstructionState.reset")(function* (db: Database
 export const initial = Effect.fn("InstructionState.initial")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  instructions: Instructions.Instructions,
+  instructions: Instructions.List,
 ) {
   const state = yield* find(db, sessionID)
   if (!state) return yield* Effect.die(new Error(`Instruction state not found during assembly: ${sessionID}`))
@@ -181,7 +184,7 @@ export const current = Effect.fn("InstructionState.current")(function* (
 export const preview = Effect.fn("InstructionState.preview")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  instructions: Instructions.Instructions,
+  instructions: Instructions.List,
   observed: Instructions.ReadResult,
 ) {
   const state = yield* find(db, sessionID)
@@ -193,10 +196,7 @@ export const preview = Effect.fn("InstructionState.preview")(function* (
     const values = dereference(result.current, observedBlobs)
     return { initial: Instructions.renderInitial(instructions, values), update: "" }
   }
-  const stored = yield* loadBlobs(db, [
-    ...Object.values(state.initial_values),
-    ...Object.values(state.current_values),
-  ])
+  const stored = yield* loadBlobs(db, [...Object.values(state.initial_values), ...Object.values(state.current_values)])
   return {
     initial: Instructions.renderInitial(instructions, dereference(state.initial_values, stored)),
     update: Instructions.renderUpdate(

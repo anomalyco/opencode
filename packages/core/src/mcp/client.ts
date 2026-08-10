@@ -209,16 +209,13 @@ export const connect = Effect.fnUntraced(function* (
       authProvider,
     })
   })
-  const client = new Client(
-    clientInfo,
-    {
-      capabilities: {
-        ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
-        // https://github.com/anomalyco/opencode/issues/2308
-        roots: {},
-      },
+  const client = new Client(clientInfo, {
+    capabilities: {
+      ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
+      // https://github.com/anomalyco/opencode/issues/2308
+      roots: {},
     },
-  )
+  })
   client.setRequestHandler(ListRootsRequestSchema, () =>
     Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
   )

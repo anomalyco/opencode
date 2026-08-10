@@ -510,8 +510,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
 
   const progress = Effect.fnUntraced(function* (id: string, update: Tool.Metadata) {
     const tool = tools.get(id)
-    if (!tool?.called || tool.settled)
-      return yield* Effect.die(new Error(`Tool progress outside running call: ${id}`))
+    if (!tool?.called || tool.settled) return yield* Effect.die(new Error(`Tool progress outside running call: ${id}`))
     tool.progress = update
     yield* bus.publish(SessionEvent.Tool.Progress, {
       sessionID: input.sessionID,
@@ -522,11 +521,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   })
 
   /** Publishes one canonical terminal event for a locally executed tool call. */
-  const toolExecution = Effect.fnUntraced(function* (
-    id: string,
-    name: string,
-    result: Tool.Result,
-  ) {
+  const toolExecution = Effect.fnUntraced(function* (id: string, name: string, result: Tool.Result) {
     const tool = tools.get(id)
     if (!tool?.called) return yield* Effect.die(new Error(`Tool execution before call: ${id}`))
     if (tool.name !== name)

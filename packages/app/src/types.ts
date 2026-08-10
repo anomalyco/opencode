@@ -1,8 +1,4 @@
-import type {
-  EventSubscribeOutput,
-  FileDiffInfo,
-  ProjectListOutput,
-} from "@opencode-ai/client/promise"
+import type { EventSubscribeOutput, FileDiffInfo, ProjectListOutput } from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 
 export type Project = Omit<ProjectListOutput[number], "canonical"> & { worktree: string }

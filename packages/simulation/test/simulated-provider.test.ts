@@ -272,9 +272,9 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
           expect(
             (yield* registry.snapshot([{ action: "simulate_lookup", resource: "*", effect: "deny" }])).definitions,
           ).not.toContainEqual(expect.objectContaining({ name: "lookup" }))
-          const secondaryToolSet = yield* Tool.Service.use((secondaryRegistry) =>
-            secondaryRegistry.snapshot(),
-          ).pipe(Effect.provide(secondary))
+          const secondaryToolSet = yield* Tool.Service.use((secondaryRegistry) => secondaryRegistry.snapshot()).pipe(
+            Effect.provide(secondary),
+          )
           expect(secondaryToolSet.definitions).toContainEqual(
             expect.objectContaining({ name: "lookup", description: "Look up a value" }),
           )
@@ -601,9 +601,9 @@ test("controls arbitrary tools through scoped SDK overlays", async () => {
           const replacedNames = replaced.definitions.map((definition) => definition.name)
           expect(replacedNames).toEqual(expect.arrayContaining(["github_search", "web_search"]))
           expect(replacedNames).not.toContain("lookup")
-          const secondaryReplaced = yield* Tool.Service.use((secondaryRegistry) =>
-            secondaryRegistry.snapshot(),
-          ).pipe(Effect.provide(secondary))
+          const secondaryReplaced = yield* Tool.Service.use((secondaryRegistry) => secondaryRegistry.snapshot()).pipe(
+            Effect.provide(secondary),
+          )
           const secondaryNames = secondaryReplaced.definitions.map((definition) => definition.name)
           expect(secondaryNames).toEqual(expect.arrayContaining(["github_search", "web_search"]))
           expect(secondaryNames).not.toContain("lookup")
@@ -701,12 +701,7 @@ const toolLifecycleLayer = (endpoint: string) => {
   })
   return AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, provider]),
-    [
-      [
-        Config.node,
-        Config.testLayer(),
-      ],
-    ],
+    [[Config.node, Config.testLayer()]],
   )
 }
 

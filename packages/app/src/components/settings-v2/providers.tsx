@@ -123,9 +123,7 @@ export const SettingsProvidersV2: Component<{
         const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
         if (credentials.length === 0) throw new Error(`No removable credentials found for ${name}`)
         await Promise.all(
-          credentials.map((credential) =>
-            serverSdk().api.credential.remove({ credentialID: credential.id, location }),
-          ),
+          credentials.map((credential) => serverSdk().api.credential.remove({ credentialID: credential.id, location })),
         )
         showToast({
           variant: "success",

@@ -144,7 +144,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         location: location(config),
         data: currentProviders(providerConfig(config)),
       })
-    if (path === "/api/model") return json(route, { location: location(config), data: currentModels(providerConfig(config)) })
+    if (path === "/api/model")
+      return json(route, { location: location(config), data: currentModels(providerConfig(config)) })
     if (path === "/api/model/default")
       return json(route, { location: location(config), data: currentDefaultModel(providerConfig(config)) })
     if (path === "/api/integration") return json(route, { location: location(config), data: [] })
@@ -206,7 +207,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     const fileRead = path.match(/^\/api\/fs\/read\/(.+)$/)?.[1]
     if (fileRead && config.fileContent) {
       const value = await config.fileContent(decodeURIComponent(fileRead))
-      const content = value && typeof value === "object" && "content" in value ? String(value.content) : String(value ?? "")
+      const content =
+        value && typeof value === "object" && "content" in value ? String(value.content) : String(value ?? "")
       return route.fulfill({ status: 200, body: content, headers: { "content-type": "application/octet-stream" } })
     }
     if (path === "/api/fs/find" && config.findFiles) {
@@ -281,7 +283,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
-    if (/^\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST") return json(route, true)
+    if (/^\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST")
+      return json(route, true)
     if (/^\/session\/[^/]+\/permissions\/[^/]+$/.test(path) && route.request().method() === "POST")
       return json(route, true)
     if (
@@ -386,11 +389,13 @@ function providerConfig(config: MockServerConfig) {
 
 function currentProviders(value: unknown) {
   if (!record(value) || !Array.isArray(value.all)) return Array.isArray(value) ? value : []
-  return value.all.filter(record).flatMap((provider) =>
-    typeof provider.id === "string" && typeof provider.name === "string"
-      ? [{ id: provider.id, name: provider.name, package: provider.id }]
-      : [],
-  )
+  return value.all
+    .filter(record)
+    .flatMap((provider) =>
+      typeof provider.id === "string" && typeof provider.name === "string"
+        ? [{ id: provider.id, name: provider.name, package: provider.id }]
+        : [],
+    )
 }
 
 function currentModels(value: unknown) {
@@ -440,9 +445,7 @@ function currentDefaultModel(value: unknown) {
   if (!record(value) || !record(value.default)) return null
   const selected = value.default
   const models = currentModels(value)
-  return models.find(
-    (model) => model.providerID === selected.providerID && model.id === selected.modelID,
-  ) ?? null
+  return models.find((model) => model.providerID === selected.providerID && model.id === selected.modelID) ?? null
 }
 
 function currentPermission(value: unknown) {
@@ -562,22 +565,16 @@ function legacyAgent(part: Record<string, unknown>): PromptAgentAttachment[] {
 }
 
 function mentionFrom(value: Record<string, unknown> | undefined) {
-  if (
-    !value ||
-    typeof value.value !== "string" ||
-    typeof value.start !== "number" ||
-    typeof value.end !== "number"
-  )
+  if (!value || typeof value.value !== "string" || typeof value.start !== "number" || typeof value.end !== "number")
     return
   return { text: value.value, start: value.start, end: value.end }
 }
 
-function legacyAssistantContent(
-  part: Record<string, unknown>,
-  created: number,
-): SessionMessageAssistant["content"] {
+function legacyAssistantContent(part: Record<string, unknown>, created: number): SessionMessageAssistant["content"] {
   if (part.type === "text" && typeof part.text === "string")
-    return [{ type: "text", text: part.text, ...(jsonRecord(part.metadata) ? { state: jsonRecord(part.metadata) } : {}) }]
+    return [
+      { type: "text", text: part.text, ...(jsonRecord(part.metadata) ? { state: jsonRecord(part.metadata) } : {}) },
+    ]
   if (part.type === "reasoning" && typeof part.text === "string") {
     const time = record(part.time) ? part.time : undefined
     return [
@@ -618,7 +615,12 @@ function legacyAssistantContent(
     ...(jsonRecord(part.providerResultState) ? { providerResultState: jsonRecord(part.providerResultState) } : {}),
   }
   if (state.status === "pending")
-    return [{ ...base, state: { status: "streaming", input: typeof state.raw === "string" ? state.raw : JSON.stringify(input) } }]
+    return [
+      {
+        ...base,
+        state: { status: "streaming", input: typeof state.raw === "string" ? state.raw : JSON.stringify(input) },
+      },
+    ]
   if (state.status === "completed")
     return [
       {

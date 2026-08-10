@@ -55,7 +55,6 @@ export interface OpenRouterOptions {
   readonly debug?: Readonly<{ echo_upstream_body?: boolean }>
   readonly models?: ReadonlyArray<string>
   readonly plugins?: ReadonlyArray<OpenRouterPlugin>
-  readonly promptCacheKey?: string
   readonly provider?: OpenRouterProviderRouting
   readonly reasoning?: Readonly<{
     enabled?: boolean
@@ -122,6 +121,7 @@ export const protocol = Protocol.make({
             ...body,
             messages,
             ...bodyOptions(request.providerOptions?.openrouter),
+            ...(request.promptCacheKey ? { prompt_cache_key: request.promptCacheKey } : {}),
           } as OpenRouterBody
         }),
       ),
@@ -161,7 +161,6 @@ const bodyOptions = (input: unknown) => {
     ...(isRecord(debug) ? { debug } : {}),
     ...(typeof user === "string" ? { user } : {}),
     ...(isRecord(reasoning) ? { reasoning } : {}),
-    ...(typeof promptCacheKey === "string" ? { prompt_cache_key: promptCacheKey } : {}),
   }
 }
 

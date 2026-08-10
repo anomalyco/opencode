@@ -8,7 +8,7 @@ import { SessionSchema } from "../session/schema"
 import { Instructions } from "./index"
 
 export interface Interface {
-  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.Instructions>
+  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionBuiltIns") {}
@@ -39,9 +39,7 @@ const layer = Layer.effect(
               ),
               render: {
                 initial: (environment) =>
-                  ["Here is some useful information about the environment you are running in:", environment].join(
-                    "\n",
-                  ),
+                  ["Here is some useful information about the environment you are running in:", environment].join("\n"),
                 changed: (_previous, environment) =>
                   ["The environment you are running in is now:", environment].join("\n"),
               },

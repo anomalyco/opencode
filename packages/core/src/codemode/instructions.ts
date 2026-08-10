@@ -126,7 +126,7 @@ ${render(current)}`
 const key = Instructions.Key.make("core/codemode")
 const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
 
-export const make = (entries?: ReadonlyArray<CodeModeCatalog.Entry>): Instructions.Instructions => {
+export const make = (entries?: ReadonlyArray<CodeModeCatalog.Entry>): Instructions.List => {
   const catalog = entries === undefined ? Instructions.removed : CodeModeCatalog.summarize(entries)
   return Instructions.make({
     key,

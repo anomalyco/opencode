@@ -2,6 +2,15 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "@tsconfig/bun/tsconfig.json",
   "compilerOptions": {
-    "noUncheckedIndexedAccess": false
-  }
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "incremental": true,
+    "noEmit": false,
+    "noUncheckedIndexedAccess": false,
+    "outDir": "node_modules/.ts-dist/source",
+    "rootDir": "src",
+    "tsBuildInfoFile": "node_modules/.ts-dist/source.tsbuildinfo"
+  },
+  "include": ["src"]
 }

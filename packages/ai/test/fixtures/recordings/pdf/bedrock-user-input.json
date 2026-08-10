@@ -1,13 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:pdf",
-      "pdf",
-      "provider:amazon-bedrock",
-      "protocol:bedrock-converse",
-      "user-input"
-    ],
+    "tags": ["prefix:pdf", "pdf", "provider:amazon-bedrock", "protocol:bedrock-converse", "user-input"],
     "name": "pdf/bedrock-user-input",
     "recordedAt": "2026-07-22T18:15:48.408Z"
   },

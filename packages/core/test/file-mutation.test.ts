@@ -5,15 +5,16 @@ import { Deferred, Effect, Fiber, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Environment } from "@opencode-ai/core/environment"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { type EnvironmentFilesTransform, transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
-function provide(directory: string, filesystemLayer = LayerNode.compile(FSUtil.node)) {
+function provide(directory: string, transformFiles: EnvironmentFilesTransform = () => ({})) {
   const activeLocation = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
@@ -21,7 +22,7 @@ function provide(directory: string, filesystemLayer = LayerNode.compile(FSUtil.n
   return Effect.provide(
     AppNodeBuilder.build(LayerNode.group([LocationMutation.node, FileMutation.node]), [
       [Location.node, activeLocation],
-      [FSUtil.node, filesystemLayer],
+      [Environment.node, transformEnvironmentFiles(activeLocation, transformFiles)],
     ]),
   )
 }
@@ -152,6 +153,57 @@ describe("FileMutation", () => {
     ),
   )
 
+  it.live("shares transaction locks across Location service instances", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const firstStarted = yield* Deferred.make<void>()
+        const releaseFirst = yield* Deferred.make<void>()
+        const secondStarted = yield* Deferred.make<void>()
+        const target = path.join(directory, "shared.txt")
+        const first = yield* Effect.gen(function* () {
+          const files = yield* FileMutation.Service
+          yield* files.withLock([target])(
+            Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
+          )
+        }).pipe(provide(directory), Effect.forkChild)
+        yield* Deferred.await(firstStarted)
+        const second = yield* Effect.gen(function* () {
+          const files = yield* FileMutation.Service
+          yield* files.withLock([target])(Deferred.succeed(secondStarted, undefined))
+        }).pipe(provide(directory), Effect.forkChild)
+        yield* Effect.yieldNow
+        expect(yield* Deferred.isDone(secondStarted)).toBe(false)
+
+        yield* Deferred.succeed(releaseFirst, undefined)
+        yield* Deferred.await(secondStarted)
+        yield* Fiber.join(first)
+        yield* Fiber.join(second)
+      }),
+    ),
+  )
+
+  it.live("allows transaction locks for distinct resolved paths to proceed independently", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const firstStarted = yield* Deferred.make<void>()
+        const releaseFirst = yield* Deferred.make<void>()
+        const secondFinished = yield* Deferred.make<void>()
+        const files = yield* FileMutation.Service
+        const first = yield* files
+          .withLock([path.join(directory, "first.txt")])(
+            Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
+          )
+          .pipe(Effect.forkChild)
+        yield* Deferred.await(firstStarted)
+        yield* files.withLock([path.join(directory, "second.txt")])(Deferred.succeed(secondFinished, undefined))
+        expect(yield* Deferred.isDone(secondFinished)).toBe(true)
+
+        yield* Deferred.succeed(releaseFirst, undefined)
+        yield* Fiber.join(first)
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("allows distinct absolute targets to proceed independently", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -189,18 +241,8 @@ describe("FileMutation", () => {
   )
 })
 
-function instrumentWrites(run: <E>(write: Effect.Effect<void, E>, target: string) => Effect.Effect<void, E>) {
-  return Layer.effect(
-    FSUtil.Service,
-    Effect.gen(function* () {
-      const filesystem = yield* FSUtil.Service
-      return FSUtil.Service.of({
-        ...filesystem,
-        writeWithDirs: (target, content, mode) => run(filesystem.writeWithDirs(target, content, mode), target),
-        writeFile: (target, content, options) => run(filesystem.writeFile(target, content, options), target),
-        writeFileString: (target, content, options) =>
-          run(filesystem.writeFileString(target, content, options), target),
-      })
-    }),
-  ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
+function instrumentWrites(
+  run: <E>(write: Effect.Effect<void, E>, target: string) => Effect.Effect<void, E>,
+): EnvironmentFilesTransform {
+  return (files) => ({ write: (target, content) => run(files.write(target, content), target) })
 }

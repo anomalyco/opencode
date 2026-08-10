@@ -1,6 +1,7 @@
 import { PluginContextProvider } from "@opencode-ai/plugin/tui"
 import type { JSX } from "solid-js"
 import type { Context, Dialog, Page, Slot, SlotMap, Toast } from "@opencode-ai/plugin/tui/context"
+import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { useClient } from "../context/client"
 import { useData } from "../context/data"
@@ -26,10 +27,11 @@ export type Dispose = () => Promise<void>
 // route/slot registration lands there, but ordering and lifecycle stay owned
 // by the provider.
 export type Registry = {
-  has(kind: "routes" | "slots", name: string): boolean
+  has(kind: "routes" | "slots" | "markdown", name: string): boolean
   set(kind: "routes", name: string, page: Page): void
   set(kind: "slots", name: string, slot: Slot): void
-  remove(kind: "routes" | "slots", name: string): void
+  set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
+  remove(kind: "routes" | "slots" | "markdown", name: string): void
   active(): boolean
 }
 
@@ -81,7 +83,7 @@ export function createPluginContext(input: {
   }
   // Unregistering after deactivation is a no-op: deactivate already resets
   // the registration's routes and slots wholesale.
-  const registration = (kind: "routes" | "slots", name: string) => {
+  const registration = (kind: "routes" | "slots" | "markdown", name: string) => {
     let registered = true
     const unregister = () => {
       if (!registered) return
@@ -104,6 +106,17 @@ export function createPluginContext(input: {
     attention: host.attention,
     get theme() {
       return host.themes.currentTokens()
+    },
+    markdown: {
+      registerCodeBlockRenderer(language, render) {
+        const name = infoStringToFiletype(language)
+        if (!name) throw new Error("Markdown code-block language is required")
+        if (input.registry.has("markdown", name)) {
+          throw new Error(`Markdown code-block renderer already registered: ${name}`)
+        }
+        input.registry.set("markdown", name, render)
+        return registration("markdown", name)
+      },
     },
     keymap: {
       layer: Keymap.createLayer,

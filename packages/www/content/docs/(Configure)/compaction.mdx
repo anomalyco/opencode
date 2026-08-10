@@ -82,18 +82,18 @@ Add `compaction` to any [OpenCode configuration file](/config):
   "compaction": {
     "auto": true,
     "keep": {
-      "tokens": 15000
+      "tokens": 15000,
     },
-    "buffer": 20000
-  }
+    "buffer": 20000,
+  },
 }
 ```
 
-| Field | Default | V2 behavior |
-| --- | ---: | --- |
-| `auto` | `true` | Runs the preflight context-size check. It does not disable manual compaction or one-shot provider-overflow recovery. |
-| `keep.tokens` | `15000` | Approximate number of tokens from the newest serialized conversation context to retain beside the summary. |
-| `buffer` | `20000` | Safety reserve below an explicit input limit. Without one, it is the minimum context reserve and the model output allowance wins when larger. |
+| Field         | Default | V2 behavior                                                                                                                                   |
+| ------------- | ------: | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auto`        |  `true` | Runs the preflight context-size check. It does not disable manual compaction or one-shot provider-overflow recovery.                          |
+| `keep.tokens` | `15000` | Approximate number of tokens from the newest serialized conversation context to retain beside the summary.                                    |
+| `buffer`      | `20000` | Safety reserve below an explicit input limit. Without one, it is the minimum context reserve and the model output allowance wins when larger. |
 
 `keep.tokens` and `buffer` accept non-negative integers. Larger `keep.tokens`
 preserves more recent detail but leaves less room for future work. Larger

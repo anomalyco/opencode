@@ -92,9 +92,7 @@ export const layer = (options?: Options) =>
       const watchers = yield* RcMap.make({
         lookup: (key: Key) =>
           Effect.gen(function* () {
-            const pubsub = yield* Effect.acquireRelease(PubSub.unbounded<Update>(), (pubsub) =>
-              PubSub.shutdown(pubsub),
-            )
+            const pubsub = yield* Effect.acquireRelease(PubSub.unbounded<Update>(), (pubsub) => PubSub.shutdown(pubsub))
             const subscription = yield* Effect.acquireRelease(
               native.subscribe({
                 type: key.type,

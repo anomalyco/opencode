@@ -1,11 +1,7 @@
 import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import {
-  isMissingPath,
-  localProjectDirectory,
-  projectConfigDirectories,
-} from "../util/config-directories"
+import { isMissingPath, localProjectDirectory, projectConfigDirectories } from "../util/config-directories"
 
 const extensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"])
 
@@ -22,9 +18,7 @@ export async function tuiPluginDirectories(cwd: string, configDirectory: string)
       )
     }),
   )
-  return directories
-    .filter((_, index) => exists[index])
-    .map((directory) => path.join(directory, "plugins", "tui"))
+  return directories.filter((_, index) => exists[index]).map((directory) => path.join(directory, "plugins", "tui"))
 }
 
 export async function discoverTuiPlugins(directories: string[]) {

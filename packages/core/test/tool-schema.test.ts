@@ -121,13 +121,13 @@ test("portable schemas validate and describe typed tools", async () => {
       },
     },
   }
-  const tool: Info = ({
+  const tool: Info = {
     name: "portable",
     description: "Portable tool",
     input,
     output,
     execute: ({ count }) => Effect.succeed({ output: count + 1 }),
-  })
+  }
 
   expect(definition(tool)).toEqual({
     name: "portable",
@@ -170,13 +170,13 @@ test("portable schema failures become tool failures", async () => {
 test("canonical results carry metadata with typed output", async () => {
   const input = Schema.Struct({ value: Schema.String })
   const output = Schema.Struct({ value: Schema.String, internal: Schema.Boolean })
-  const tool: Info = ({
+  const tool: Info = {
     name: "annotated",
     description: "Annotated tool",
     input,
     output,
     execute: ({ value }) => Effect.succeed({ output: { value, internal: true }, metadata: { value }, content: value }),
-  })
+  }
 
   expect(await Effect.runPromise(tool.execute({ value: "out" }, {} as Tool.Context))).toEqual({
     output: { value: "out", internal: true },
@@ -187,12 +187,12 @@ test("canonical results carry metadata with typed output", async () => {
 
 test("raw JSON schemas are render-only and omitted output means model-only", async () => {
   const input = { type: "object", properties: { value: { type: "string" } } }
-  const tool: Info = ({
+  const tool: Info = {
     name: "raw",
     description: "Raw tool",
     input,
     execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
-  })
+  }
 
   expect(definition(tool)).toEqual({
     name: "raw",

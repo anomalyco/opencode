@@ -2,11 +2,7 @@ import { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { batch, createSignal, For, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import {
-  EMPTY_SESSION_TAB_STATUS,
-  SessionTabs,
-  type SessionTabsController,
-} from "../../../component/session-tabs"
+import { EMPTY_SESSION_TAB_STATUS, SessionTabs, type SessionTabsController } from "../../../component/session-tabs"
 import { moveSessionTab } from "../../../context/session-tabs-model"
 import type { Story } from "./index"
 

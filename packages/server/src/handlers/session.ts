@@ -26,6 +26,22 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
   Effect.gen(function* () {
     const session = yield* Session.Service
     const transfer = yield* SessionTransfer.Service
+    const pendingMutation = (effect: ReturnType<typeof session.cancelPending>, conflict: string) =>
+      effect.pipe(
+        Effect.catchTag(
+          "Session.NotFoundError",
+          (error) =>
+            new SessionNotFoundError({
+              sessionID: error.sessionID,
+              message: `Session not found: ${error.sessionID}`,
+            }),
+        ),
+        Effect.catchTag(
+          "Session.PendingInputConflictError",
+          (error) => new ConflictError({ resource: error.inputID, message: `${conflict}: ${error.inputID}` }),
+        ),
+        Effect.as(HttpApiSchema.NoContent.make()),
+      )
 
     return handlers
       .handle(
@@ -297,6 +313,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 text: ctx.payload.text,
                 files: ctx.payload.files,
                 agents: ctx.payload.agents,
+                skills: ctx.payload.skills,
                 metadata: ctx.payload.metadata,
                 delivery: ctx.payload.delivery,
                 resume: ctx.payload.resume,
@@ -321,6 +338,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 Effect.catchTag("Session.AttachmentError", (error) =>
                   Effect.fail(new InvalidRequestError({ message: error.message, field: "files" })),
                 ),
+                Effect.catchTag("Session.SkillNotFoundError", (error) =>
+                  Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
+                ),
               ),
           }
         }),
@@ -339,6 +359,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 model: ctx.payload.model,
                 files: ctx.payload.files,
                 agents: ctx.payload.agents,
+                skills: ctx.payload.skills,
                 delivery: ctx.payload.delivery,
                 resume: ctx.payload.resume,
               })
@@ -377,6 +398,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 ),
                 Effect.catchTag("Session.AttachmentError", (error) =>
                   Effect.fail(new InvalidRequestError({ message: error.message, field: "files" })),
+                ),
+                Effect.catchTag("Session.SkillNotFoundError", (error) =>
+                  Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
                 ),
               ),
           }
@@ -659,6 +683,33 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               ),
             ),
           }
+        }),
+      )
+      .handle(
+        "session.pending.cancel",
+        Effect.fn(function* (ctx) {
+          return yield* pendingMutation(
+            session.cancelPending({ sessionID: ctx.params.sessionID, inputID: ctx.params.inputID }),
+            "Pending input can no longer be cancelled",
+          )
+        }),
+      )
+      .handle(
+        "session.pending.steer",
+        Effect.fn(function* (ctx) {
+          return yield* pendingMutation(
+            session.steerPending({ sessionID: ctx.params.sessionID, inputID: ctx.params.inputID }),
+            "Pending input is no longer queued",
+          )
+        }),
+      )
+      .handle(
+        "session.pending.queue",
+        Effect.fn(function* (ctx) {
+          return yield* pendingMutation(
+            session.queuePending({ sessionID: ctx.params.sessionID, inputID: ctx.params.inputID }),
+            "Pending input is no longer a steer",
+          )
         }),
       )
       .handle(

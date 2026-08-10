@@ -11,6 +11,7 @@ import { llmClient } from "../effect/app-node-platform"
 import { SessionEvent } from "./event"
 import type { SessionMessage } from "./message"
 import { SessionModelHeaders } from "./model-headers"
+import { SessionPromptCacheKey } from "./prompt-cache-key"
 import { App } from "../app"
 import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
@@ -123,7 +124,8 @@ const serialize = (message: SessionMessage.Info) => {
         (file) =>
           `[Attached ${file.mime}: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")}]`,
       ) ?? []
-    return [`[User]: ${message.text}`, ...files].join("\n")
+    const skills = message.skills?.map((skill) => `[Attached skill: ${skill.name}]\n${skill.text}`) ?? []
+    return [`[User]: ${message.text}`, ...skills, ...files].join("\n")
   }
   if (message.type === "assistant") {
     return message.content
@@ -258,6 +260,7 @@ const make = (dependencies: Dependencies) => {
       .stream(
         LLM.request({
           model: plan.model,
+          promptCacheKey: SessionPromptCacheKey.make(plan.session.id),
           http: { headers: SessionModelHeaders.make(plan.session, dependencies.app) },
           messages: [Message.user(plan.prompt)],
           tools: [],

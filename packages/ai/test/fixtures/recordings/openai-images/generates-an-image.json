@@ -1,11 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:openai-images",
-      "provider:openai",
-      "protocol:openai-images"
-    ],
+    "tags": ["prefix:openai-images", "provider:openai", "protocol:openai-images"],
     "name": "openai-images/generates-an-image",
     "recordedAt": "2026-07-19T14:41:43.188Z"
   },

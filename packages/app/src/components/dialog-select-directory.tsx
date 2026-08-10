@@ -18,6 +18,8 @@ interface DialogSelectDirectoryProps {
   server: ServerConnection.Any
 }
 
+const RECENT_PROJECT_LIMIT = 5
+
 type Row = {
   absolute: string
   search: string
@@ -107,7 +109,6 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return projects
       .map((project, index) => ({ project, at: byProject.get(project.worktree) ?? 0, index }))
       .sort((a, b) => b.at - a.at || a.index - b.index)
-      .slice(0, 5)
       .map(({ project }) => {
         const row = toRow(project.worktree, home(), "recent")
         const name = project.name || getFilename(project.worktree)
@@ -121,7 +122,10 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const items = async (value: string) => {
     const results = await directories(value)
     const directoryRows = results.map((absolute) => toRow(absolute, home(), "folders"))
-    return uniqueRows([...recentProjects(), ...directoryRows])
+    // Cap the idle list only. Once a query narrows the results, every project stays searchable.
+    const recent = recentProjects()
+    const visible = value ? recent : recent.slice(0, RECENT_PROJECT_LIMIT)
+    return uniqueRows([...visible, ...directoryRows])
   }
 
   function resolve(absolute: string) {

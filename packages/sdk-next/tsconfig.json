@@ -4,5 +4,6 @@
   "compilerOptions": {
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "noUncheckedIndexedAccess": false
-  }
+  },
+  "references": [{ "path": "../core" }]
 }

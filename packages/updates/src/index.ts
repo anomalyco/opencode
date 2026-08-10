@@ -100,8 +100,7 @@ async function admin(request: Request, env: Env) {
   const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM artifact").first<{ total: number }>()
   const pages = Math.max(1, Math.ceil((count?.total ?? 0) / pageSize))
   const currentPage = Math.min(page, pages)
-  const result = await env.DB
-    .prepare(`${select} ORDER BY time_created DESC LIMIT ? OFFSET ?`)
+  const result = await env.DB.prepare(`${select} ORDER BY time_created DESC LIMIT ? OFFSET ?`)
     .bind(pageSize, (currentPage - 1) * pageSize)
     .all<ArtifactRow>()
   const rows = result.results
@@ -230,11 +229,9 @@ async function activateArtifact(request: Request, env: Env) {
   if (!exists) return json({ error: "Artifact not found" }, 404)
   await env.DB.batch([
     deactivateStatement(env.DB, key),
-    env.DB
-      .prepare(
-        "UPDATE artifact SET active = 1, time_updated = ? WHERE channel = ? AND name = ? AND distribution = ? AND version = ?",
-      )
-      .bind(Date.now(), key.channel, key.name, key.distribution, key.version),
+    env.DB.prepare(
+      "UPDATE artifact SET active = 1, time_updated = ? WHERE channel = ? AND name = ? AND distribution = ? AND version = ?",
+    ).bind(Date.now(), key.channel, key.name, key.distribution, key.version),
   ])
   return Response.redirect(new URL("/admin", request.url), 303)
 }

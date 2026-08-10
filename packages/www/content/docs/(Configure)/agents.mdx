@@ -10,12 +10,12 @@ Markdown files.
 
 ## Built-in agents
 
-| Agent | Mode | Purpose |
-| --- | --- | --- |
-| **Build** (`build`) | `primary` | Default coding agent. Tools are allowed by default, sensitive environment-file reads ask for approval, and access outside the workspace asks for approval. |
-| **Plan** (`plan`) | `primary` | Planning agent. File edits are denied except for OpenCode plan files. Shell commands are not generally denied. |
-| **General** (`general`) | `subagent` | General-purpose research and multi-step work. It has broad tool access but cannot launch more subagents. |
-| **Explore** (`explore`) | `subagent` | Read-only code and web exploration using `read`, `glob`, `grep`, `webfetch`, and `websearch`. |
+| Agent                   | Mode       | Purpose                                                                                                                                                    |
+| ----------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Build** (`build`)     | `primary`  | Default coding agent. Tools are allowed by default, sensitive environment-file reads ask for approval, and access outside the workspace asks for approval. |
+| **Plan** (`plan`)       | `primary`  | Planning agent. File edits are denied except for OpenCode plan files. Shell commands are not generally denied.                                             |
+| **General** (`general`) | `subagent` | General-purpose research and multi-step work. It has broad tool access but cannot launch more subagents.                                                   |
+| **Explore** (`explore`) | `subagent` | Read-only code and web exploration using `read`, `glob`, `grep`, `webfetch`, and `websearch`.                                                              |
 
 OpenCode also has hidden `compaction`, `title`, and `summary` system agents.
 They run internal maintenance tasks and are not selectable. There is no built-in
@@ -31,7 +31,7 @@ Set the primary agent used when a session has not selected one:
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "default_agent": "reviewer"
+  "default_agent": "reviewer",
 }
 ```
 
@@ -44,11 +44,11 @@ rewrite the agent already stored on an existing session.
 
 An agent's `mode` controls where it can run:
 
-| Mode | Behavior |
-| --- | --- |
-| `primary` | Can be selected as the main agent for a session. It cannot be launched as a subagent. This is the default for a custom agent when `mode` is omitted. |
-| `subagent` | Can run in a child session through the `subagent` tool, but cannot be selected as the main agent. |
-| `all` | Can be used either way. |
+| Mode       | Behavior                                                                                                                                             |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `primary`  | Can be selected as the main agent for a session. It cannot be launched as a subagent. This is the default for a custom agent when `mode` is omitted. |
+| `subagent` | Can run in a child session through the `subagent` tool, but cannot be selected as the main agent.                                                    |
+| `all`      | Can be used either way.                                                                                                                              |
 
 In the TUI, press <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> to cycle
 through visible primary and `all` agents, or use `/agents` to choose one.
@@ -122,15 +122,13 @@ Use the `agents` field in any [OpenCode configuration file](/config):
       "steps": 8,
       "permissions": [
         { "action": "edit", "resource": "*", "effect": "deny" },
-        { "action": "shell", "resource": "*", "effect": "deny" }
-      ]
+        { "action": "shell", "resource": "*", "effect": "deny" },
+      ],
     },
     "build": {
-      "permissions": [
-        { "action": "shell", "resource": "git push *", "effect": "ask" }
-      ]
-    }
-  }
+      "permissions": [{ "action": "shell", "resource": "git push *", "effect": "ask" }],
+    },
+  },
 }
 ```
 
@@ -159,9 +157,9 @@ Selects a model using `provider/model` with an optional `#variant`:
 {
   "agents": {
     "reviewer": {
-      "model": "anthropic/claude-sonnet-4-5#high"
-    }
-  }
+      "model": "anthropic/claude-sonnet-4-5#high",
+    },
+  },
 }
 ```
 
@@ -174,10 +172,10 @@ The equivalent expanded form is:
       "model": {
         "providerID": "anthropic",
         "model": "claude-sonnet-4-5",
-        "variant": "high"
-      }
-    }
-  }
+        "variant": "high",
+      },
+    },
+  },
 }
 ```
 
@@ -207,20 +205,20 @@ Permissions are an ordered array of rules:
       "permissions": [
         { "action": "subagent", "resource": "*", "effect": "deny" },
         { "action": "subagent", "resource": "explore", "effect": "allow" },
-        { "action": "shell", "resource": "git *", "effect": "ask" }
-      ]
-    }
-  }
+        { "action": "shell", "resource": "git *", "effect": "ask" },
+      ],
+    },
+  },
 }
 ```
 
 Each rule has:
 
-| Field | Meaning |
-| --- | --- |
-| `action` | Tool or permission action, with `*` wildcards supported. |
+| Field      | Meaning                                                                                        |
+| ---------- | ---------------------------------------------------------------------------------------------- |
+| `action`   | Tool or permission action, with `*` wildcards supported.                                       |
 | `resource` | The path, command, agent ID, or other resource matched by the action. Wildcards are supported. |
-| `effect` | `allow`, `ask`, or `deny`. |
+| `effect`   | `allow`, `ask`, or `deny`.                                                                     |
 
 The last matching rule wins. Important V2 action names include `shell` for
 shell commands, `edit` for all edit/write/patch tools, and `subagent` for child
@@ -228,8 +226,7 @@ agents. Other tools generally use their tool name, such as `read`, `glob`,
 `grep`, `webfetch`, `websearch`, and `skill`.
 
 <Callout type="tip">
-  Put broad wildcard rules first and exceptions afterward. For example, deny
-  all subagents first, then allow `explore`.
+  Put broad wildcard rules first and exceptions afterward. For example, deny all subagents first, then allow `explore`.
 </Callout>
 
 `~` and `$HOME` are expanded in filesystem resources for `read`, `edit`, and
@@ -267,17 +264,16 @@ The V2 schema accepts per-agent request `headers` and JSON `body` overlays:
     "reviewer": {
       "request": {
         "headers": { "x-agent": "reviewer" },
-        "body": { "temperature": 0.1 }
-      }
-    }
-  }
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
 }
 ```
 
 <Callout type="warning">
-  The current V2 session runner preserves these overlays on the agent
-  definition but does not yet apply them to model requests. Configure effective
-  request settings on the provider, model, or model variant instead. Do not use
-  legacy top-level agent fields such as `temperature`, `top_p`, `prompt`,
-  `permission`, `tools`, `disable`, or `maxSteps` in new V2 configuration.
+  The current V2 session runner preserves these overlays on the agent definition but does not yet apply them to model
+  requests. Configure effective request settings on the provider, model, or model variant instead. Do not use legacy
+  top-level agent fields such as `temperature`, `top_p`, `prompt`, `permission`, `tools`, `disable`, or `maxSteps` in
+  new V2 configuration.
 </Callout>

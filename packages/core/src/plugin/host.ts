@@ -47,17 +47,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
       workspaceID: location.workspaceID,
       project: location.project,
     })
-  const locationRef = (input?: {
-    readonly location?: { readonly directory?: string; readonly workspace?: string }
-  }) =>
+  const locationRef = (input?: { readonly location?: { readonly directory?: string; readonly workspace?: string } }) =>
     input?.location === undefined
       ? undefined
       : Location.Ref.make({
           directory: AbsolutePath.make(input.location.directory ?? location.directory),
           workspaceID:
-            input.location.workspace === undefined
-              ? location.workspaceID
-              : Workspace.ID.make(input.location.workspace),
+            input.location.workspace === undefined ? location.workspaceID : Workspace.ID.make(input.location.workspace),
         })
   const isCurrentLocation = (ref: Location.Ref) =>
     ref.directory === location.directory && ref.workspaceID === location.workspaceID
@@ -72,9 +68,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
         const ref = locationRef(input)
         const output =
           ref && !isCurrentLocation(ref)
-            ? runtime.location.agent
-                .list(ref)
-                .pipe(Effect.map((result) => ({ ...result, data: result.data.find((agent) => agent.id === input.agentID) })))
+            ? runtime.location.agent.list(ref).pipe(
+                Effect.map((result) => ({
+                  ...result,
+                  data: result.data.find((agent) => agent.id === input.agentID),
+                })),
+              )
             : response(agents.get(input.agentID))
         return output.pipe(
           Effect.flatMap((result) =>
@@ -162,8 +161,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
                 mutable(draft.model.get(Provider.ID.make(providerID), Model.ID.make(modelID))),
               update: (providerID, modelID, update) =>
                 draft.model.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
-              remove: (providerID, modelID) =>
-                draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+              remove: (providerID, modelID) => draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
               default: {
                 get: draft.model.default.get,
                 set: (providerID, modelID) =>
@@ -192,6 +190,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
           integration.connection.key({
             integrationID: Integration.ID.make(input.integrationID),
             key: input.key,
+            answer: input.answer,
             label: input.label,
           }),
       },
@@ -201,7 +200,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
             integration.oauth.connect({
               integrationID: Integration.ID.make(input.integrationID),
               methodID: Integration.MethodID.make(input.methodID),
-              inputs: input.inputs,
+              answer: input.answer,
               label: input.label,
             }),
           ),
@@ -262,7 +261,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
             update: (id, update) => draft.update(Integration.ID.make(id), update),
             remove: (id) => draft.remove(Integration.ID.make(id)),
             method: {
-              list: (id) => mutable(draft.method.list(Integration.ID.make(id))),
+              list: (id) => draft.method.list(Integration.ID.make(id)),
               update: (input) => draft.method.update(methodImplementation(input)),
               remove: (id, method) =>
                 draft.method.remove(Integration.ID.make(id), Schema.decodeUnknownSync(Integration.Method)(method)),
@@ -365,8 +364,8 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
     return {
       integrationID: Integration.ID.make(input.integrationID),
       method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
-      authorize: (inputs) =>
-        input.authorize(inputs).pipe(
+      authorize: (answer) =>
+        input.authorize(answer).pipe(
           Effect.map((authorization) => {
             if (authorization.mode === "auto") {
               return {
@@ -387,18 +386,18 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
   if (input.method.type === "env") {
     return {
       integrationID: Integration.ID.make(input.integrationID),
-      method: { type: "env", names: input.method.names },
+      method: input.method,
     }
   }
   if (input.method.type === "command") {
     return {
       integrationID: Integration.ID.make(input.integrationID),
-      method: Schema.decodeUnknownSync(Integration.CommandMethod)(input.method),
+      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
     }
   }
   return {
     integrationID: Integration.ID.make(input.integrationID),
-    method: { type: "key", label: input.method.label },
+    method: input.method,
   }
 }
 

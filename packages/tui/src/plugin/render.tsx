@@ -1,4 +1,14 @@
-import { createComponent, createMemo, ErrorBoundary, For, mergeProps, onMount, Show, type JSX, type ParentProps } from "solid-js"
+import {
+  createComponent,
+  createMemo,
+  ErrorBoundary,
+  For,
+  mergeProps,
+  onMount,
+  Show,
+  type JSX,
+  type ParentProps,
+} from "solid-js"
 import type { SlotMap, SlotName } from "@opencode-ai/plugin/tui/context"
 import { useRoute } from "../context/route"
 import { useToast } from "../ui/toast"

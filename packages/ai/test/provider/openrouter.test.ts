@@ -162,7 +162,6 @@ describe("OpenRouter", () => {
               openrouter: {
                 usage: true,
                 reasoning: { effort: "high" },
-                promptCacheKey: "session_123",
                 models: ["anthropic/claude-sonnet-4.6", "google/gemini-3.1-pro"],
                 provider: { order: ["anthropic", "google"], require_parameters: true },
                 plugins: [{ id: "response-healing" }],
@@ -174,6 +173,7 @@ describe("OpenRouter", () => {
             },
           }).model("anthropic/claude-3.7-sonnet:thinking"),
           prompt: "Think briefly.",
+          promptCacheKey: "session_123",
         }),
       )
 

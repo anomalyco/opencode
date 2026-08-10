@@ -10,7 +10,7 @@ export const state = (values: Readonly<Record<string, Schema.Json>>): State => (
 const hashes = (values: Readonly<Record<string, Schema.Json>>): Instructions.Values =>
   Object.fromEntries(Object.entries(values).map(([key, value]) => [key, Instructions.hash(value)]))
 
-export const readInitial = (instructions: Instructions.Instructions) =>
+export const readInitial = (instructions: Instructions.List) =>
   Effect.gen(function* () {
     const admission = yield* Instructions.read(instructions).pipe(Effect.flatMap(Instructions.diff))
     const current = state(
@@ -23,7 +23,7 @@ export const readInitial = (instructions: Instructions.Instructions) =>
     return { ...current, text: Instructions.renderInitial(instructions, current.values) }
   })
 
-export const readUpdate = (instructions: Instructions.Instructions, previous: State) =>
+export const readUpdate = (instructions: Instructions.List, previous: State) =>
   Effect.gen(function* () {
     const admission = yield* Instructions.read(instructions).pipe(
       Effect.flatMap((observed) => Instructions.diff(observed, hashes(previous.values))),

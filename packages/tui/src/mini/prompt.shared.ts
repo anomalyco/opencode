@@ -7,7 +7,7 @@
 // the current browse position. When the user arrows up at cursor offset 0,
 // the current draft is saved and history begins. Arrowing past the end
 // restores the draft.
-export { displayCharAt, displaySlice, mentionTriggerIndex } from "../prompt/display"
+export { displayCharAt, displaySlice, mentionTriggerIndex, slashTriggerIndex } from "../prompt/display"
 import { stringWidth } from "../util/string-width"
 import type { RunPrompt } from "./types"
 
@@ -54,8 +54,7 @@ export function isNewCommand(input: string): boolean {
 }
 
 export function isCompactCommand(input: string): boolean {
-  const text = input.trim().toLowerCase()
-  return text === "/compact" || text === "/summarize"
+  return input.trim().toLowerCase() === "/compact"
 }
 
 export function createPromptHistory(items?: RunPrompt[]): PromptHistoryState {

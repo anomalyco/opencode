@@ -47,6 +47,8 @@ const chatRoute = Route.make({
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions", { baseURL: OpenAICompatibleProfiles.profiles.xai.baseURL }),
   transport: OpenAICompatibleChat.route.transport,
+  headers: ({ request }): Record<string, string> =>
+    request.promptCacheKey ? { "x-grok-conv-id": request.promptCacheKey } : {},
 })
 
 export const routes = [responsesRoute, chatRoute]

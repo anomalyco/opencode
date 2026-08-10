@@ -358,7 +358,7 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   return { type: "input_image" as const, image_url: media.dataUrl }
 })
 
-const lowerUserContent = Effect.fn("OpenResponses.lowerUserContent")(function* (
+const lowerUserContent = Effect.fnUntraced(function* (
   part: LLMRequest["messages"][number]["content"][number],
   request: LLMRequest,
   extension: Extension,
@@ -370,7 +370,7 @@ const lowerUserContent = Effect.fn("OpenResponses.lowerUserContent")(function* (
 
 // Tool results may carry structured text, images, and files. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
-const lowerToolResultContentItem = Effect.fn("OpenResponses.lowerToolResultContentItem")(function* (
+const lowerToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
   extension: Extension,
@@ -383,7 +383,7 @@ const lowerToolResultContentItem = Effect.fn("OpenResponses.lowerToolResultConte
   )
 })
 
-const lowerToolResultOutput = Effect.fn("OpenResponses.lowerToolResultOutput")(function* (
+const lowerToolResultOutput = Effect.fnUntraced(function* (
   part: ToolResultPart,
   request: LLMRequest,
   extension: Extension,
@@ -539,7 +539,7 @@ const lowerOptions = (request: LLMRequest) => {
   return {
     ...(options.instructions ? { instructions: options.instructions } : {}),
     ...(options.store !== undefined ? { store: options.store } : {}),
-    ...(options.promptCacheKey ? { prompt_cache_key: options.promptCacheKey } : {}),
+    ...(request.promptCacheKey ? { prompt_cache_key: request.promptCacheKey } : {}),
     ...(options.include ? { include: options.include } : {}),
     ...(options.reasoningEffort || options.reasoningSummary
       ? { reasoning: { effort: options.reasoningEffort, summary: options.reasoningSummary } }

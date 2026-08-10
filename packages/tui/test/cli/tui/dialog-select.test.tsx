@@ -219,11 +219,19 @@ test("dialog actions run without options while row actions still require a selec
 
 test("renders one gap before an empty state", async () => {
   await using tmp = await tmpdir()
-  const app = await renderSelect(tmp.path, [], () => {}, () => {})
+  const app = await renderSelect(
+    tmp.path,
+    [],
+    () => {},
+    () => {},
+  )
 
   try {
     await app.waitForFrame((frame) => frame.includes("No items available"))
-    const lines = app.captureCharFrame().split("\n").map((line) => line.trim())
+    const lines = app
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.trim())
     expect(lines.indexOf("No items available") - lines.indexOf("Search")).toBe(2)
   } finally {
     app.renderer.destroy()

@@ -16,6 +16,7 @@ import { ConfigReferencePlugin } from "../config/plugin/reference"
 import { ConfigSkillPlugin } from "../config/plugin/skill"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch"
 import { Bus } from "../bus"
+import { Environment } from "../environment"
 import { FileMutation } from "../file-mutation"
 import { Formatter } from "../formatter"
 import { Form } from "../form"
@@ -70,6 +71,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const config = yield* Config.Service
   const credential = yield* Credential.Service
   const bus = yield* Bus.Service
+  const environment = yield* Environment.Service
   const mutation = yield* FileMutation.Service
   const formatter = yield* Formatter.Service
   const filesystem = yield* FileSystem.Service
@@ -102,6 +104,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Config.Service, config),
     Context.make(Credential.Service, credential),
     Context.make(Bus.Service, bus),
+    Context.make(Environment.Service, environment),
     Context.make(FileMutation.Service, mutation),
     Context.make(Formatter.Service, formatter),
     Context.make(FileSystem.Service, filesystem),

@@ -51,6 +51,17 @@ export function DialogOpen() {
         .catch(() => [] as SessionInfo[]),
     { initialValue: [] },
   )
+  const [matched] = createResource(
+    () => {
+      const value = filter().trim()
+      return /^ses_[0-9A-Za-z]{26}$/.test(value) ? value : undefined
+    },
+    (sessionID) =>
+      client.api.session
+        .get({ sessionID })
+        .then((session) => (session.id === sessionID ? session : undefined))
+        .catch(() => undefined),
+  )
 
   const openTabs = createMemo(
     () => new Set(sessionTabs.enabled() ? sessionTabs.tabs().map((tab) => tab.sessionID) : []),
@@ -60,7 +71,8 @@ export function DialogOpen() {
   )
   const sessions = createMemo(() => {
     const seen = new Set<string>()
-    return [...data.session.list(), ...fetched()]
+    const match = matched()
+    return [...data.session.list(), ...fetched(), ...(match ? [match] : [])]
       .filter((session) => {
         if (session.parentID || seen.has(session.id)) return false
         seen.add(session.id)
@@ -87,6 +99,7 @@ export function DialogOpen() {
         data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
         title: withTimestampedFallback(session),
+        searchText: session.id,
         value: { type: "session", sessionID: session.id } as OpenTarget,
         category: "Sessions",
         footer: `${name ? `${Locale.truncate(name, 20)} · ` : ""}${timeAgo(session.time.updated)}`,

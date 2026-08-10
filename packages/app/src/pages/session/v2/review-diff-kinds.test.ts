@@ -54,9 +54,9 @@ describe("reviewDiffNeedsLoad", () => {
         patch: "@@ -0,0 +1 @@\n+value",
       }),
     ).toBe(false)
-    expect(
-      reviewDiffNeedsLoad({ file: "empty.txt", patch: "", additions: 0, deletions: 0, status: "modified" }),
-    ).toBe(false)
+    expect(reviewDiffNeedsLoad({ file: "empty.txt", patch: "", additions: 0, deletions: 0, status: "modified" })).toBe(
+      false,
+    )
   })
 })
 

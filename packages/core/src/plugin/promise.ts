@@ -11,6 +11,7 @@ import { Provider } from "@opencode-ai/schema/provider"
 import { AbsolutePath } from "@opencode-ai/schema/schema"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { Skill } from "@opencode-ai/schema/skill"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { WebSearch } from "@opencode-ai/schema/websearch"
 import { DateTime, Effect, Scope, Stream } from "effect"
@@ -179,8 +180,8 @@ export function fromPromise(plugin: Plugin) {
                         const refresh = input.refresh
                         draft.method.update({
                           ...input,
-                          authorize: (inputs) =>
-                            Effect.promise(() => input.authorize(inputs)).pipe(
+                          authorize: (answer) =>
+                            Effect.promise(() => input.authorize(answer)).pipe(
                               Effect.map((authorization) =>
                                 authorization.mode === "auto"
                                   ? {
@@ -296,6 +297,7 @@ export function fromPromise(plugin: Plugin) {
                   ...input,
                   sessionID: Session.ID.make(input.sessionID),
                   id: input.id == null ? undefined : SessionMessage.ID.make(input.id),
+                  skills: input.skills?.map((skill) => ({ ...skill, id: Skill.ID.make(skill.id) })),
                   delivery: input.delivery ?? undefined,
                   resume: input.resume ?? undefined,
                 }),
@@ -310,6 +312,7 @@ export function fromPromise(plugin: Plugin) {
                   id: input.id == null ? undefined : SessionMessage.ID.make(input.id),
                   agent: input.agent == null ? undefined : Agent.ID.make(input.agent),
                   model: input.model == null ? undefined : model(input.model),
+                  skills: input.skills?.map((skill) => ({ ...skill, id: Skill.ID.make(skill.id) })),
                   arguments: input.arguments ?? undefined,
                   delivery: input.delivery ?? undefined,
                   resume: input.resume ?? undefined,
@@ -359,11 +362,17 @@ type Wire<Value> = unknown extends Value
     ? Value
     : Value extends DateTime.DateTime
       ? number
-      : Value extends ReadonlyArray<infer Item>
-        ? Array<Wire<Item>>
-        : Value extends object
-          ? { -readonly [Key in keyof Value]: Wire<Value[Key]> }
-          : Value
+      : Value extends readonly [infer Head, ...infer Tail]
+        ? [Wire<Head>, ...WireTuple<Tail>]
+        : Value extends ReadonlyArray<infer Item>
+          ? Array<Wire<Item>>
+          : Value extends object
+            ? { -readonly [Key in keyof Value]: Wire<Value[Key]> }
+            : Value
+
+type WireTuple<Value extends ReadonlyArray<unknown>> = {
+  -readonly [Key in keyof Value]: Wire<Value[Key]>
+}
 
 function wire<Value>(value: Value): Wire<Value>
 function wire(value: unknown): unknown {

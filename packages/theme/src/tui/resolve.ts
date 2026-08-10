@@ -142,7 +142,9 @@ function resolveView(
   return { ...(createResolver(source)(source, "theme") as ResolvedThemeTokens), hue, categorical, ...hueSteps }
 }
 
-function compileHueSteps(hue: ResolvedThemeTokens["hue"]): Pick<ResolvedThemeTokens, "source" | "increase" | "decrease"> {
+function compileHueSteps(
+  hue: ResolvedThemeTokens["hue"],
+): Pick<ResolvedThemeTokens, "source" | "increase" | "decrease"> {
   const index = new WeakMap<RGBA, { hue: keyof typeof hue; step: HueStep; position: number }>()
   for (const [name, scale] of Object.entries(hue) as [keyof typeof hue, HueScale][]) {
     HueStep.literals.forEach((step, position) => index.set(scale[step], { hue: name, step, position }))

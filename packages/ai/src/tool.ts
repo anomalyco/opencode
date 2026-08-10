@@ -1,10 +1,6 @@
 import { Effect, JsonSchema, Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
-import type {
-  ToolCallPart,
-  ToolDefinition as ToolDefinitionClass,
-  ToolOutput as ToolOutputType,
-} from "./schema"
+import type { ToolCallPart, ToolDefinition as ToolDefinitionClass, ToolOutput as ToolOutputType } from "./schema"
 import { ToolDefinition, ToolFailure, ToolOutput } from "./schema"
 
 /**
@@ -244,8 +240,7 @@ const project = (
 ): ToolOutputType =>
   ToolOutput.make(
     toStructuredOutput?.(output) ?? output,
-    toModelOutput?.({ id, parameters, output }) ??
-      (typeof output === "string" ? [{ type: "text", text: output }] : []),
+    toModelOutput?.({ id, parameters, output }) ?? (typeof output === "string" ? [{ type: "text", text: output }] : []),
   )
 
 export { ToolFailure }

@@ -3,13 +3,7 @@ import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { defineConfig, type Plugin, type UserConfig } from "vite"
 import solid from "vite-plugin-solid"
-import {
-  nodeExecArgv,
-  nodeTarget,
-  type NodeTarget,
-  photonWasmAsset,
-  shellParserWasmAssets,
-} from "./src/node/target"
+import { nodeExecArgv, nodeTarget, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "./src/node/target"
 
 const dir = import.meta.dirname
 

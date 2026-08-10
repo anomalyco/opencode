@@ -15,6 +15,7 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { SessionPending } from "@opencode-ai/core/session/pending"
 import { Skill } from "@opencode-ai/core/skill"
 import { testEffect } from "./lib/effect"
 
@@ -55,6 +56,41 @@ const it = testEffect(
 )
 
 describe("Session.skill", () => {
+  it.effect("attaches a resolved skill snapshot to a normal prompt", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const session = yield* sessions.create({ location })
+      const id = SessionMessage.ID.make("msg_skill_attachment")
+
+      yield* sessions.prompt({
+        id,
+        sessionID: session.id,
+        text: "Apply this guidance",
+        skills: [{ id: Skill.ID.make("effect"), mention: { start: 20, end: 27, text: "/effect" } }],
+        resume: false,
+      })
+      yield* SessionPending.promote(database.db, bus, session.id, "steer")
+
+      expect(yield* sessions.messages({ sessionID: session.id })).toContainEqual(
+        expect.objectContaining({
+          id,
+          type: "user",
+          text: "Apply this guidance",
+          skills: [
+            {
+              id: "effect",
+              name: "Effect",
+              text: expect.stringContaining("Use Effect"),
+              mention: { start: 20, end: 27, text: "/effect" },
+            },
+          ],
+        }),
+      )
+    }),
+  )
+
   it.effect("projects the caller-supplied message ID", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service

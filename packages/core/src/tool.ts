@@ -118,13 +118,12 @@ const layer = Layer.effect(
         yield* hooks.trigger("tool", "execute.after", afterEvent)
         return yield* afterEvent.error
       }
-      const content = yield* normalizeImages(execution.value.content)
       const afterEvent: PluginHooks.Domains["tool"]["execute.after"] = {
         ...base,
         status: "completed",
         result: {
           ...(execution.value.output === undefined ? {} : { output: execution.value.output }),
-          content: content.length > 0 ? content : execution.value.content,
+          content: execution.value.content,
           ...(execution.value.metadata === undefined ? {} : { metadata: execution.value.metadata }),
         },
       }

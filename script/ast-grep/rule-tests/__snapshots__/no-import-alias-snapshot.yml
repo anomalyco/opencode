@@ -2,41 +2,41 @@ id: no-import-alias
 snapshots:
   import { baz, foo as bar } from "./foo":
     labels:
-    - source: foo as bar
-      style: primary
-      start: 14
-      end: 24
-    - source: bar
-      style: secondary
-      start: 21
-      end: 24
+      - source: foo as bar
+        style: primary
+        start: 14
+        end: 24
+      - source: bar
+        style: secondary
+        start: 21
+        end: 24
   import { foo as bar } from "./foo":
     labels:
-    - source: foo as bar
-      style: primary
-      start: 9
-      end: 19
-    - source: bar
-      style: secondary
-      start: 16
-      end: 19
+      - source: foo as bar
+        style: primary
+        start: 9
+        end: 19
+      - source: bar
+        style: secondary
+        start: 16
+        end: 19
   import { foo as bar, baz } from "./foo":
     labels:
-    - source: foo as bar
-      style: primary
-      start: 9
-      end: 19
-    - source: bar
-      style: secondary
-      start: 16
-      end: 19
+      - source: foo as bar
+        style: primary
+        start: 9
+        end: 19
+      - source: bar
+        style: secondary
+        start: 16
+        end: 19
   import { type Foo as Bar, baz } from "./foo":
     labels:
-    - source: type Foo as Bar
-      style: primary
-      start: 9
-      end: 24
-    - source: Bar
-      style: secondary
-      start: 21
-      end: 24
+      - source: type Foo as Bar
+        style: primary
+        start: 9
+        end: 24
+      - source: Bar
+        style: secondary
+        start: 21
+        end: 24

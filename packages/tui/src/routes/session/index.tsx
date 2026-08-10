@@ -23,7 +23,7 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
-import { ThemeContextProvider, useTheme, useThemes } from "../../context/theme"
+import { createSyntaxStyleMemo, ThemeContextProvider, useTheme, useThemes } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
@@ -52,6 +52,7 @@ import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
 import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
+import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
@@ -82,6 +83,7 @@ import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { PluginSlot } from "../../plugin/render"
+import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
   createSessionRows,
@@ -97,6 +99,9 @@ import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { useSessionTabs } from "../../context/session-tabs"
+import { createSingleFlight } from "../../util/single-flight"
+import type { SessionPending } from "@opencode-ai/schema/session-pending"
+import { generateThinkingSyntax } from "./thinking-syntax"
 
 addDefaultParsers(parsers.parsers)
 
@@ -109,6 +114,7 @@ const NAVIGATION_SLACK_ID = "session-navigation-slack"
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
 const TRANSCRIPT_BACKFILL_DELAY = 120
+type PendingAction = "steer" | "queue" | "cancel"
 
 const context = createContext<{
   width: number
@@ -120,6 +126,8 @@ const context = createContext<{
   diffWrapMode: () => "word" | "none"
   models: () => ModelInfo[]
   config: ReturnType<typeof useConfig>["data"]
+  mutatePending: (action: PendingAction, inputID: string) => Promise<boolean>
+  pendingDelivery: (inputID: string) => SessionPending.Delivery | undefined
 }>()
 
 function use() {
@@ -147,6 +155,18 @@ export function Session() {
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
+  const messagesBeforeRevert = () => {
+    const messageID = session()?.revert?.messageID
+    if (!messageID) return messages()
+    const index = messages().findIndex((message) => message.id === messageID)
+    return index === -1 ? messages() : messages().slice(0, index)
+  }
+  const messagesFromRevert = () => {
+    const messageID = session()?.revert?.messageID
+    if (!messageID) return []
+    const index = messages().findIndex((message) => message.id === messageID)
+    return index === -1 ? [] : messages().slice(index)
+  }
   const currentLocation = useLocation()
   const location = createMemo(() => session()?.location ?? currentLocation.ref)
 
@@ -175,17 +195,18 @@ export function Session() {
       .flatMap((sessionID) => data.session.form.list(sessionID) ?? [])
       .concat(global)
   })
+  const pendingUsers = createMemo(() =>
+    data.session.pending.list(route.sessionID).flatMap((item) => (item.type === "user" ? [item] : [])),
+  )
+  const pendingDeliveries = createMemo(() => new Map(pendingUsers().map((item) => [item.id, item.delivery])))
+  const queuedPrompts = createMemo(() =>
+    pendingUsers().flatMap((item) => (item.delivery === "queue" ? [{ id: item.id, text: item.data.text }] : [])),
+  )
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
   })
   const disabled = createMemo(() => promptedPermissions().length > 0 || forms().length > 0)
-
-  const pending = createMemo(() => {
-    const completed = messages().findLast((x) => x.type === "assistant" && x.time.completed)?.id
-    return messages().findLast((x) => x.type === "assistant" && !x.time.completed && (!completed || x.id > completed))
-      ?.id
-  })
 
   const lastAssistant = createMemo(() => {
     return messages().findLast((x) => x.type === "assistant")
@@ -369,6 +390,55 @@ export function Session() {
   })
   const dialog = useDialog()
   const renderer = useRenderer()
+  const runPendingAction = createSingleFlight<string>()
+  const mutatePending = async (action: PendingAction, inputID: string) => {
+    const result = await runPendingAction(inputID, async () => {
+      const request =
+        action === "steer"
+          ? client.api.session.pending.steer({ sessionID: route.sessionID, inputID })
+          : action === "queue"
+            ? client.api.session.pending.queue({ sessionID: route.sessionID, inputID })
+            : client.api.session.pending.cancel({ sessionID: route.sessionID, inputID })
+      const error = await request.then(
+        () => undefined,
+        (error) => error,
+      )
+      if (!error) return true
+      const label = action === "cancel" ? "delete" : action
+      toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
+      return false
+    })
+    return result ?? false
+  }
+  const openQueuedPrompts = () =>
+    dialog.replace(() => (
+      <DialogSelect
+        title="Queued prompts"
+        options={queuedPrompts().map((prompt, index) => ({
+          title: prompt.text,
+          value: prompt.id,
+          footer: `${index + 1} of ${queuedPrompts().length}`,
+        }))}
+        onSelect={(option) => {
+          void mutatePending("steer", option.value).then((steered) => {
+            if (steered) dialog.clear()
+          })
+        }}
+        actions={[
+          {
+            command: "queued_prompt.delete",
+            title: "delete",
+            onTrigger: (option) => {
+              const last = queuedPrompts().length === 1
+              void mutatePending("cancel", option.value).then((cancelled) => {
+                if (cancelled && last) dialog.clear()
+              })
+            },
+          },
+        ]}
+        footerHints={[{ title: "steer", label: "enter" }]}
+      />
+    ))
   const unavailable = (feature: string) => {
     toast.show({ message: `${feature} is not implemented for V2 sessions yet`, variant: "error", duration: 5000 })
     dialog.clear()
@@ -572,7 +642,6 @@ export function Session() {
       group: "Session",
       slash: {
         name: "compact",
-        aliases: ["summarize"],
       },
       run: () => {
         void client.api.session.compact({ sessionID: route.sessionID })
@@ -593,10 +662,8 @@ export function Session() {
       group: "Session",
       slash: { name: "undo" },
       run: () => {
-        const boundary = session()?.revert?.messageID
-        const message = messages().findLast(
-          (message): message is SessionMessageUser =>
-            message.type === "user" && !!message.text.trim() && (!boundary || message.id < boundary),
+        const message = messagesBeforeRevert().findLast(
+          (message): message is SessionMessageUser => message.type === "user" && !!message.text.trim(),
         )
         if (!message) {
           toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
@@ -750,9 +817,8 @@ export function Session() {
       id: "messages.copy",
       group: "Session",
       run: () => {
-        const revertID = session()?.revert?.messageID
-        const lastAssistantMessage = messages().findLast(
-          (msg): msg is SessionMessageAssistant => msg.type === "assistant" && (!revertID || msg.id < revertID),
+        const lastAssistantMessage = messagesBeforeRevert().findLast(
+          (msg): msg is SessionMessageAssistant => msg.type === "assistant",
         )
         if (!lastAssistantMessage) {
           toast.show({ message: "No assistant messages found", variant: "error" })
@@ -824,13 +890,13 @@ export function Session() {
           if (options === null) return
 
           const content =
-              options.format === "markdown"
-                ? formatSessionTranscript(sessionData, messages(), options.thinking)
-                : JSON.stringify(
-                    await client.api.session.export({ sessionID: sessionData.id, sanitize: options.sanitize }),
-                    null,
-                    2,
-                  ) + EOL
+            options.format === "markdown"
+              ? formatSessionTranscript(sessionData, messages(), options.thinking)
+              : JSON.stringify(
+                  await client.api.session.export({ sessionID: sessionData.id, sanitize: options.sanitize }),
+                  null,
+                  2,
+                ) + EOL
 
           if (options.action === "copy") {
             await clipboard.write?.(content)
@@ -870,6 +936,13 @@ export function Session() {
         else setComposer("open", true)
         dialog.clear()
       },
+    },
+    {
+      title: "View queued prompts",
+      id: "session.queued_prompts",
+      group: "Session",
+      enabled: queuedPrompts().length > 0,
+      run: openQueuedPrompts,
     },
     {
       title: "Go to parent session",
@@ -942,6 +1015,8 @@ export function Session() {
         diffWrapMode,
         models,
         config,
+        mutatePending,
+        pendingDelivery: (inputID) => pendingDeliveries().get(inputID),
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -984,11 +1059,7 @@ export function Session() {
               <BackgroundToolHint messages={messages()} />
               <Show when={session()?.revert?.messageID}>
                 <RevertMessage
-                  count={
-                    messages().filter(
-                      (message) => message.id >= session()!.revert!.messageID && message.type === "user",
-                    ).length
-                  }
+                  count={messagesFromRevert().filter((message) => message.type === "user").length}
                   files={session()!.revert!.files ?? []}
                 />
               </Show>
@@ -997,6 +1068,9 @@ export function Session() {
               </Show>
             </scrollbox>
             <box flexShrink={0}>
+              <Show when={!composer.open && !disabled() && queuedPrompts().length > 0}>
+                <QueuedPromptDock prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
+              </Show>
               <PluginSlot name="session.composer.top" input={{ sessionID: route.sessionID }} mode="all" />
               <Composer
                 sessionID={route.sessionID}
@@ -1031,6 +1105,11 @@ export function Session() {
                     disabled={false}
                     onSubmit={() => {
                       toBottom()
+                    }}
+                    onEmptySubmit={async () => {
+                      const next = queuedPrompts()[0]
+                      if (!next) return false
+                      return mutatePending("steer", next.id)
                     }}
                     sessionID={route.sessionID}
                   />
@@ -1111,11 +1190,7 @@ function SessionRowView(props: SessionRowViewProps) {
         </Match>
         <Match when={props.row.type === "turn-usage" ? props.row : undefined}>
           {(row) => (
-            <TurnTokenUsage
-              messageIDs={row().messageIDs}
-              previousCache={row().previousCache}
-              message={props.message}
-            />
+            <TurnTokenUsage messageIDs={row().messageIDs} previousCache={row().previousCache} message={props.message} />
           )}
         </Match>
       </Switch>
@@ -1222,21 +1297,10 @@ function TurnTokenToolCalls(props: { tools: SessionMessageAssistantTool[] }) {
         <For each={props.tools}>
           {(tool) => (
             <box flexDirection="row">
-              <text
-                width={nameWidth()}
-                flexShrink={0}
-                fg={theme.text.subdued}
-                attributes={TextAttributes.BOLD}
-              >
+              <text width={nameWidth()} flexShrink={0} fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
                 {tool.name}
               </text>
-              <text
-                fg={theme.text.subdued}
-                attributes={TextAttributes.DIM}
-                wrapMode="word"
-                flexGrow={1}
-                minWidth={0}
-              >
+              <text fg={theme.text.subdued} attributes={TextAttributes.DIM} wrapMode="word" flexGrow={1} minWidth={0}>
                 {turnTokenToolSummary(tool)}
               </text>
             </box>
@@ -1253,9 +1317,7 @@ function turnTokenToolSummary(tool: SessionMessageAssistantTool) {
   const primaryKey = ["command", "id", "pattern", "url", "query", "path", "description", "code"].find(
     (key) => key in data,
   )
-  const input = Object.entries(data).filter(([, value]) =>
-    ["string", "number", "boolean"].includes(typeof value),
-  )
+  const input = Object.entries(data).filter(([, value]) => ["string", "number", "boolean"].includes(typeof value))
   const primary = input.find(([key]) => key === primaryKey)?.[1]
   const details = input.filter(([key]) => key !== primaryKey).map(([key, value]) => `${key}: ${String(value)}`)
   return [primary === undefined ? "" : String(primary), ...details].filter(Boolean).join("  ")
@@ -1353,6 +1415,7 @@ function SessionReasoningGroupView(props: {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
+  const thinkingSyntax = createSyntaxStyleMemo(() => generateThinkingSyntax(syntax(), theme.text.subdued))
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
   const [hover, setHover] = createSignal(false)
@@ -1448,7 +1511,7 @@ function SessionReasoningGroupView(props: {
                             filetype="markdown"
                             drawUnstyledText={false}
                             streaming={part()?.time?.completed === undefined && message()?.time.completed === undefined}
-                            syntaxStyle={syntax()}
+                            syntaxStyle={thinkingSyntax()}
                             content={content()}
                             conceal={ctx.markdownMode() === "rendered"}
                             fg={theme.text.subdued}
@@ -1550,21 +1613,13 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   return (
     <>
-      <Show when={props.message.error && !interrupted()}>
-        <box
-          border={["left"]}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          backgroundColor={theme.background.default}
-          customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme.text.feedback.error.default}
-        >
-          <text fg={theme.text.subdued}>{errorMessage(props.message.error)}</text>
+      <Show when={props.message.error && !interrupted() && !props.message.retry}>
+        <box paddingLeft={3}>
+          <text fg={theme.text.feedback.error.default}>Error: {errorMessage(props.message.error)}</text>
         </box>
       </Show>
       <AssistantRetry retry={props.message.retry} />
-      <box paddingLeft={3} marginTop={props.message.error && !interrupted() ? 1 : 0}>
+      <box paddingLeft={3} marginTop={props.message.retry || (props.message.error && !interrupted()) ? 1 : 0}>
         <text>
           <span style={{ fg: props.message.error ? theme.text.subdued : local.agent.color(props.message.agent) }}>
             {Locale.titlecase(props.message.agent)}
@@ -1658,13 +1713,13 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
+  const plugins = usePlugin()
   const status = () => props.message.status
   const cancelled = () => props.message.status === "failed" && props.message.error.type === "aborted"
   const text = () =>
     props.message.status === "failed" ? (cancelled() ? "" : props.message.error.message) : props.message.summary
   const content = createMemo(() => text().trim())
-  const color = () =>
-    status() === "failed" && !cancelled() ? theme.text.feedback.error.default : theme.text.subdued
+  const color = () => (status() === "failed" && !cancelled() ? theme.text.feedback.error.default : theme.text.subdued)
   return (
     <box>
       <box flexDirection="row" alignItems="center">
@@ -1698,6 +1753,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             conceal={ctx.markdownMode() === "rendered"}
             fg={theme.markdown.text}
             bg={theme.background.default}
+            renderNode={plugins.markdown()}
           />
         </box>
       </Show>
@@ -1813,6 +1869,7 @@ function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "she
 
   return (
     <box
+      width="100%"
       border={["left"]}
       paddingTop={1}
       paddingBottom={1}
@@ -1835,23 +1892,26 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const data = useData()
   const local = useLocal()
   const files = createMemo(() => props.message.files ?? [])
+  const skills = createMemo(() => props.message.skills ?? [])
   const themes = useThemes()
   const theme = useTheme("elevated")
   const mode = themes.mode
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
-  const queued = createMemo(
-    () => data.session.status(ctx.sessionID) === "running" && data.session.input.has(ctx.sessionID, props.message.id),
-  )
+  const delivery = createMemo(() => ctx.pendingDelivery(props.message.id))
   const dialog = useDialog()
   const renderer = useRenderer()
   const promptRef = usePromptRef()
 
+  const updatePendingSteer = async (action: "queue" | "cancel") => {
+    if (await ctx.mutatePending(action, props.message.id)) dialog.clear()
+  }
+
   return (
-    <Show when={props.message.text.trim() || files().length}>
+    <Show when={props.message.text.trim() || files().length || skills().length}>
       <box
         border={["left"]}
-        borderColor={queued() ? theme.border.default : color()}
+        borderColor={delivery() ? theme.border.default : color()}
         customBorderChars={SplitBorder.customBorderChars}
       >
         <box
@@ -1863,6 +1923,21 @@ function UserMessage(props: { message: SessionMessageUser }) {
           }}
           onMouseUp={() => {
             if (renderer.getSelection()?.getSelectedText()) return
+            if (delivery() === "steer") {
+              dialog.replace(() => (
+                <DialogSelect
+                  title="Pending steer"
+                  options={[
+                    { title: "Move to queue", value: "queue" as const },
+                    { title: "Delete", value: "cancel" as const },
+                  ]}
+                  onSelect={(option) => {
+                    void updatePendingSteer(option.value)
+                  }}
+                />
+              ))
+              return
+            }
             dialog.replace(() => (
               <DialogMessage
                 messageID={props.message.id}
@@ -1878,6 +1953,28 @@ function UserMessage(props: { message: SessionMessageUser }) {
           flexShrink={0}
         >
           <text fg={theme.text.default}>{props.message.text}</text>
+          <Show when={skills().length}>
+            <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
+              <For each={skills()}>
+                {(skill) => (
+                  <text fg={theme.text.default}>
+                    <span
+                      style={{
+                        bg: theme.hue.accent[mode() === "light" ? 700 : 200],
+                        fg: theme.background.default,
+                        bold: true,
+                      }}
+                    >
+                      {" skill "}
+                    </span>
+                    <span style={{ bg: theme.raise(theme.background.default), fg: theme.text.subdued }}>
+                      {` ${skill.name} `}
+                    </span>
+                  </text>
+                )}
+              </For>
+            </box>
+          </Show>
           <Show when={files().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={files()}>
@@ -1910,14 +2007,43 @@ function UserMessage(props: { message: SessionMessageUser }) {
   )
 }
 
+function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOpen: () => void }) {
+  const theme = useTheme("elevated")
+  const next = createMemo(() => props.prompts[0]?.text)
+
+  return (
+    <box
+      border={["left"]}
+      borderColor={theme.border.default}
+      customBorderChars={SplitBorder.customBorderChars}
+      onMouseUp={props.onOpen}
+    >
+      <box
+        width="100%"
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        paddingRight={1}
+        backgroundColor={theme.background.default}
+        flexDirection="row"
+      >
+        <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
+          <span style={{ fg: theme.text.default }}>{props.prompts.length} queued</span>
+          <Show when={next()}>{(text) => <> · {text()}</>}</Show>
+        </text>
+      </box>
+    </box>
+  )
+}
+
 function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
   const theme = useTheme()
   return (
     <Show when={props.retry}>
       {(retry) => (
-        <box paddingLeft={3} marginTop={1}>
-          <text fg={theme.text.subdued}>
-            Retry attempt {retry().attempt} scheduled: {retry().error.message} [{retry().error.type}]
+        <box paddingLeft={3}>
+          <text fg={theme.text.feedback.warning.default}>
+            ⚠ Retry attempt {retry().attempt} scheduled: {retry().error.message}
           </text>
         </box>
       )}
@@ -1934,6 +2060,7 @@ function ReasoningPart(props: {
 }) {
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
+  const thinkingSyntax = createSyntaxStyleMemo(() => generateThinkingSyntax(syntax(), theme.text.subdued))
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
@@ -1986,7 +2113,7 @@ function ReasoningPart(props: {
                 filetype="markdown"
                 drawUnstyledText={false}
                 streaming={true}
-                syntaxStyle={syntax()}
+                syntaxStyle={thinkingSyntax()}
                 content={content()}
                 conceal={ctx.markdownMode() === "rendered"}
                 fg={theme.text.subdued}
@@ -2057,6 +2184,7 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
+  const plugins = usePlugin()
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
@@ -2069,6 +2197,7 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
           bg={theme.background.default}
+          renderNode={plugins.markdown()}
         />
       </box>
     </Show>
@@ -2194,10 +2323,7 @@ function GenericTool(props: ToolProps) {
             {(value) => (
               <box gap={1}>
                 <text>
-                  <span style={{ bg: theme.raise(theme.background.default), fg: theme.text.subdued }}>
-                    {" "}
-                    Output{" "}
-                  </span>
+                  <span style={{ bg: theme.raise(theme.background.default), fg: theme.text.subdued }}> Output </span>
                 </text>
                 <box paddingLeft={1}>
                   <text fg={theme.text.default} wrapMode="word">
@@ -2449,9 +2575,7 @@ function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
               <Show
                 when={props.spinner}
                 fallback={
-                  <text fg={permission() ? theme.text.feedback.warning.default : theme.text.subdued}>
-                    {title()}
-                  </text>
+                  <text fg={permission() ? theme.text.feedback.warning.default : theme.text.subdued}>{title()}</text>
                 }
               >
                 <Spinner color={permission() ? theme.text.feedback.warning.default : theme.text.subdued}>

@@ -16,6 +16,13 @@ const model = Gemini.route
   })
   .model({ id: "gemini-2.5-flash" })
 
+const gemini3 = Gemini.route
+  .with({
+    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+    auth: Auth.header("x-goog-api-key", "test"),
+  })
+  .model({ id: "gemini-3-flash-preview" })
+
 const request = LLM.request({
   id: "req_1",
   model,
@@ -83,6 +90,39 @@ describe("Gemini route", () => {
         thinkingLevel: "high",
       })
       expect(emptySafetySettings.body.safetySettings).toEqual([])
+    }),
+  )
+
+  it.effect("forwards standard Gemini generation options", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Say hello.",
+          generation: {
+            maxTokens: 40,
+            temperature: 0.2,
+            topP: 0.8,
+            topK: 12,
+            frequencyPenalty: 0.3,
+            presencePenalty: 0.4,
+            seed: 42,
+            stop: ["done"],
+          },
+        }),
+      )
+
+      expect(prepared.body.generationConfig).toEqual({
+        maxOutputTokens: 40,
+        temperature: 0.2,
+        topP: 0.8,
+        topK: 12,
+        frequencyPenalty: 0.3,
+        presencePenalty: 0.4,
+        seed: 42,
+        stopSequences: ["done"],
+        thinkingConfig: undefined,
+      })
     }),
   )
 
@@ -350,6 +390,100 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("preserves nested empty object tool schemas", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Use the tool.",
+          tools: [
+            {
+              name: "configure",
+              description: "Configure the operation",
+              inputSchema: {
+                type: "object",
+                required: ["options"],
+                properties: {
+                  options: { type: "object", description: "Optional provider settings", properties: {} },
+                },
+              },
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          functionDeclarations: [
+            {
+              name: "configure",
+              description: "Configure the operation",
+              parameters: {
+                type: "object",
+                required: ["options"],
+                properties: {
+                  options: { type: "object", description: "Optional provider settings", properties: {} },
+                },
+              },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("projects Gemini type arrays without narrowing their allowed values", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Use the tool.",
+          tools: [
+            {
+              name: "filter",
+              description: "Filter values",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  status: { type: ["number", "string"], description: "Status filter" },
+                  maybe: { type: ["string", "null"] },
+                  nothing: { type: ["null"] },
+                  explicit: { anyOf: [{ type: "string" }, { type: "null" }] },
+                  choice: { anyOf: [{ type: "string" }, { type: "number" }, { type: "null" }] },
+                },
+              },
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools?.[0]?.functionDeclarations[0]?.parameters).toEqual({
+        type: "object",
+        properties: {
+          status: {
+            description: "Status filter",
+            anyOf: [{ type: "number" }, { type: "string" }],
+          },
+          maybe: {
+            nullable: true,
+            anyOf: [{ type: "string" }],
+          },
+          nothing: {
+            type: "null",
+          },
+          explicit: {
+            type: "string",
+            nullable: true,
+          },
+          choice: {
+            anyOf: [{ type: "string" }, { type: "number" }],
+            nullable: true,
+          },
+        },
+      })
+    }),
+  )
+
   it.effect("parses text, reasoning, and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -526,6 +660,44 @@ describe("Gemini route", () => {
             {
               functionResponse: {
                 id: "provider_call",
+                name: "lookup",
+                response: { name: "lookup", content: "done" },
+              },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("replays unsigned Gemini 3 tool calls with the validator bypass sentinel", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: gemini3,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "tool_0", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "tool_0", name: "lookup", result: "done", resultType: "text" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: { id: undefined, name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+          ],
+        },
+        {
+          role: "user",
+          parts: [
+            {
+              functionResponse: {
+                id: undefined,
                 name: "lookup",
                 response: { name: "lookup", content: "done" },
               },

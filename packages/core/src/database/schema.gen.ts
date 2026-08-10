@@ -1,22 +1,9 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "./migration"
 
-export default {
+const schema: Omit<DatabaseMigration.Migration, "id"> = {
   up(tx) {
     return Effect.gen(function* () {
-      yield* tx.run(`
-        CREATE TABLE \`workspace\` (
-          \`id\` text PRIMARY KEY,
-          \`type\` text NOT NULL,
-          \`name\` text DEFAULT '' NOT NULL,
-          \`branch\` text,
-          \`directory\` text,
-          \`extra\` text,
-          \`project_id\` text NOT NULL,
-          \`time_used\` integer NOT NULL,
-          CONSTRAINT \`fk_workspace_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
-        );
-      `)
       yield* tx.run(`
         CREATE TABLE \`account_state\` (
           \`id\` integer PRIMARY KEY,
@@ -216,6 +203,15 @@ export default {
           CONSTRAINT \`fk_session_v2_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
         );
       `)
+      yield* tx.run(`
+        CREATE TABLE \`workspace\` (
+          \`id\` text PRIMARY KEY,
+          \`provider\` text NOT NULL,
+          \`binding\` text NOT NULL,
+          \`created_at\` integer NOT NULL,
+          \`last_used_at\` integer NOT NULL
+        );
+      `)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(
@@ -248,4 +244,6 @@ export default {
       )
     })
   },
-} satisfies Omit<DatabaseMigration.Migration, "id">
+}
+
+export default schema

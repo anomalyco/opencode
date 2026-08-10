@@ -14,6 +14,7 @@ import { useSDK } from "@/context/sdk"
 import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
+import { terminalConnectToken } from "@/utils/terminal-connect-token"
 import { terminalWriter } from "@/utils/terminal-writer"
 import { terminalWebSocketURL } from "@/utils/terminal-websocket-url"
 
@@ -364,7 +365,11 @@ export const Terminal = (props: TerminalProps) => {
 
     event.preventDefault()
     event.stopImmediatePropagation()
-    platform.openLink(text)
+    if (URL.canParse(text) && new URL(text).protocol === "file:" && platform.openLocalFile) {
+      platform.openLocalFile(text)
+      return
+    }
+    platform.openExternal(text)
   }
 
   onMount(() => {
@@ -526,8 +531,11 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const connectToken = async () => {
-        // TODO: Add PTY tickets when the V2 client exposes a connect-token API.
-        return undefined
+        const result = await terminalConnectToken({ url, id, directory })
+        if (result.ticket) return result.ticket
+        if (result.status === 404 || result.status === 405) return
+        if (result.status === 403) throw new Error(language.t("terminal.connectTicket.csrfError"))
+        throw new Error(language.t("terminal.connectTicket.statusError", { status: result.status }))
       }
 
       const retry = (err: unknown) => {
@@ -679,6 +687,7 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
+      dir="ltr"
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}

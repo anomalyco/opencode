@@ -1,9 +1,4 @@
-import type {
-  Config,
-  Path,
-  Project,
-  ProviderAuthResponse,
-} from "@/types"
+import type { Config, Path, Project, ProviderAuthResponse } from "@/types"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { type Accessor, batch, createMemo, getOwner, onCleanup, onMount, untrack } from "solid-js"
@@ -164,15 +159,11 @@ export function seedActiveSessionStatuses(
   }
 }
 
-function makeQueryOptionsApi(
-  scope: ServerScope,
-  serverAPI: ServerApi,
-) {
+function makeQueryOptionsApi(scope: ServerScope, serverAPI: ServerApi) {
   return {
     globalConfig: () => loadGlobalConfigQuery(scope),
     projects: () => loadProjectsQuery(scope, serverAPI.project),
-    providers: (directory: PathKey | null) =>
-      loadProvidersQuery(scope, directory, serverAPI),
+    providers: (directory: PathKey | null) => loadProvidersQuery(scope, directory, serverAPI),
     path: (directory: PathKey | null) => loadPathQuery(scope, directory, serverAPI.location),
     agents: (directory: PathKey) => loadAgentsQuery(scope, directory, serverAPI.agent),
     references: (directory: PathKey) => loadReferencesQuery(scope, directory, serverAPI.reference),
@@ -671,16 +662,15 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
               integrationID: server.integrationID,
               location: { directory: key },
             })
-            const method = integration.data?.methods.find((item) => item.type === "oauth" && !item.prompts?.length)
+            const method = integration.data?.methods.find((item) => item.type === "oauth" && !item.form?.length)
             if (!method || method.type !== "oauth")
               throw new Error(`MCP server ${name} requires an interactive authentication form`)
             const attempt = await serverSDK.api.integration.oauth.connect({
               integrationID: server.integrationID,
               methodID: method.id,
-              inputs: {},
               location: { directory: key },
             })
-            platform.openLink(attempt.data.url)
+            platform.openExternal(attempt.data.url)
           },
           refresh: async () => {
             await queryClient.refetchQueries(queryOptionsApi.mcp(key))

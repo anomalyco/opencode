@@ -1,11 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:google-images",
-      "provider:google",
-      "protocol:google-images"
-    ],
+    "tags": ["prefix:google-images", "provider:google", "protocol:google-images"],
     "name": "google-images/generates-an-image",
     "recordedAt": "2026-07-19T16:05:51.868Z"
   },

@@ -20,9 +20,7 @@ if (!Number.isInteger(iterations) || iterations < 1) {
 }
 
 const ref = Location.Ref.make({ directory: AbsolutePath.make(path.resolve(directory)) })
-const layer = AppNodeBuilder.build(
-  LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]),
-)
+const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]))
 
 const measure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {

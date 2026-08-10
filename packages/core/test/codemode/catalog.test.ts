@@ -48,10 +48,7 @@ describe("CodeModeCatalog.summarize", () => {
   })
 
   test("always retains pinned tools beyond the inline budget", () => {
-    const pinned = [
-      entry("alpha.first", "First", undefined, true),
-      entry("beta.second", "Second", undefined, true),
-    ]
+    const pinned = [entry("alpha.first", "First", undefined, true), entry("beta.second", "Second", undefined, true)]
     const catalog = CodeModeCatalog.summarize([...pinned, entry("alpha.unpinned", "Unpinned")], 0)
 
     expect(catalog.shown).toBe(2)

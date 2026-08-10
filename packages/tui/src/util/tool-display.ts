@@ -22,6 +22,7 @@ export function primitiveInputSummary(input: Record<string, unknown>, omit: read
 export function webSearchProviderLabel(provider: unknown) {
   if (provider === "parallel") return "Parallel Web Search"
   if (provider === "exa") return "Exa Web Search"
+  if (provider === "firecrawl") return "Firecrawl Web Search"
   return "Web Search"
 }
 

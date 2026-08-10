@@ -45,35 +45,34 @@ const isToolResultValue = (value: unknown): value is ToolResultValue =>
   (value.type === "text" || value.type === "json" || value.type === "error" || value.type === "content") &&
   "value" in value
 
-export const ToolResultValue = Object.assign(
-  Schema.Union([
-    Schema.Struct({
-      type: Schema.Literal("json"),
-      value: Schema.Unknown,
-    }),
-    Schema.Struct({
-      type: Schema.Literal("text"),
-      value: Schema.Unknown,
-    }),
-    Schema.Struct({
-      type: Schema.Literal("error"),
-      value: Schema.Unknown,
-    }),
-    Schema.Struct({
-      type: Schema.Literal("content"),
-      value: Schema.Array(Tool.Content),
-    }),
-  ]).annotate({ identifier: "LLM.ToolResult" }),
-  {
-    is: isToolResultValue,
-    make: (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
-      if (isToolResultValue(value)) return value
-      if (type === "content") return { type, value: Array.isArray(value) ? value : [] }
-      return { type, value }
-    },
+const toolResultValueSchema = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("json"),
+    value: Schema.Unknown,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("text"),
+    value: Schema.Unknown,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("error"),
+    value: Schema.Unknown,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("content"),
+    value: Schema.Array(Tool.Content),
+  }),
+]).annotate({ identifier: "LLM.ToolResult" })
+export type ToolResultValue = Schema.Schema.Type<typeof toolResultValueSchema>
+
+export const ToolResultValue = Object.assign(toolResultValueSchema, {
+  is: isToolResultValue,
+  make: (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
+    if (isToolResultValue(value)) return value
+    if (type === "content") return { type, value: Array.isArray(value) ? value : [] }
+    return { type, value }
   },
-)
-export type ToolResultValue = Schema.Schema.Type<typeof ToolResultValue>
+})
 
 export interface ToolOutput {
   readonly structured: unknown
@@ -272,6 +271,8 @@ export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
   cache: Schema.optional(CachePolicy),
+  // Stable cache affinity for protocols that support provider-managed prompt caching.
+  promptCacheKey: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
@@ -289,6 +290,7 @@ export namespace LLMRequest {
     providerOptions: request.providerOptions,
     http: request.http,
     cache: request.cache,
+    promptCacheKey: request.promptCacheKey,
     metadata: request.metadata,
   })
 

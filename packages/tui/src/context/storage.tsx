@@ -27,6 +27,7 @@ export interface Storage {
    * JSON-serializable.
    */
   memory<Value extends object>(key: string, options: { readonly initial: Value }): MemoryEntry<Value>
+  flush(): Promise<void>
 }
 
 function clone<Value extends object>(value: Value) {
@@ -46,6 +47,7 @@ function segment(value: string) {
 function createStorage(root: string, channel: string) {
   const entries = new Map<string, { readonly value: Entry<object>; readonly reload: () => void }>()
   const memories = new Map<string, MemoryEntry<object>>()
+  const pending = new Set<Promise<void>>()
   const directory = path.join(root, segment(channel), "tui")
   const locks = path.join(root, segment(channel), "locks")
   mkdirSync(directory, { recursive: true })
@@ -66,8 +68,8 @@ function createStorage(root: string, channel: string) {
       const [store, setStore] = createStore(load())
       const merge = (next: Value) => reconcile(next, { key: options.key })
       const reload = () => batch(() => setStore(merge(load())))
-      const update = (mutation: (draft: Value) => void) =>
-        Flock.withLock(
+      const update = (mutation: (draft: Value) => void) => {
+        const operation = Flock.withLock(
           file,
           async () => {
             const draft = load()
@@ -78,6 +80,13 @@ function createStorage(root: string, channel: string) {
           },
           { dir: locks },
         )
+        pending.add(operation)
+        operation.then(
+          () => pending.delete(operation),
+          () => pending.delete(operation),
+        )
+        return operation
+      }
       const entry = [store, update] as const
       entries.set(file, { value: entry as Entry<object>, reload })
       return entry
@@ -89,6 +98,15 @@ function createStorage(root: string, channel: string) {
       const entry = [store, (mutation: (draft: Value) => void) => setStore(produce(mutation))] as const
       memories.set(key, entry as MemoryEntry<object>)
       return entry
+    },
+    async flush() {
+      const failures: unknown[] = []
+      while (pending.size > 0) {
+        const results = await Promise.allSettled(pending)
+        failures.push(...results.filter((result) => result.status === "rejected").map((result) => result.reason))
+      }
+      if (failures.length === 1) throw failures[0]
+      if (failures.length > 1) throw new AggregateError(failures, "Storage writes failed")
     },
   }
 

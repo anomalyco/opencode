@@ -81,9 +81,9 @@ describe("Home V2 session index", () => {
     ])
 
     expect(result).toEqual([
-       expect.objectContaining({
-         id: "root",
-         location: { directory: "/project" },
+      expect.objectContaining({
+        id: "root",
+        location: { directory: "/project" },
         projectID: "project",
         title: "root",
         time: { created: 1, updated: 30 },

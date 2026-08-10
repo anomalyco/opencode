@@ -23,6 +23,7 @@ import { formatServerError } from "@/utils/server-errors"
 import { ScopedKey } from "@/utils/server-scope"
 import { createPromptSubmissionState } from "./submission-state"
 import { Event } from "@opencode-ai/schema/event"
+import { blobDataUrl } from "@/utils/draft-store"
 
 type PendingPrompt = {
   abort: AbortController
@@ -97,10 +98,12 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
           providerID: input.draft.model.providerID,
           variant: input.draft.variant,
         },
-        files: images.map((attachment) => ({
-          uri: attachment.dataUrl,
-          name: attachment.filename,
-        })),
+        files: await Promise.all(
+          images.map(async (attachment) => ({
+            uri: await blobDataUrl(attachment.blob, attachment.mime),
+            name: attachment.filename,
+          })),
+        ),
       })
       return true
     } catch (err) {
@@ -110,10 +113,16 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   }
 
   const messageID = input.messageID ?? Identifier.ascending("message")
+  const encodedImages = await Promise.all(
+    images.map(async (attachment) => ({
+      ...attachment,
+      dataUrl: await blobDataUrl(attachment.blob, attachment.mime),
+    })),
+  )
   const { requestParts, optimisticParts } = buildRequestParts({
     prompt: input.draft.prompt,
     context: input.draft.context,
-    images,
+    images: encodedImages,
     text,
     sessionID: input.draft.sessionID,
     messageID,
@@ -523,10 +532,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             arguments: args.join(" "),
             agent,
             model: { id: model.modelID, providerID: model.providerID, variant },
-            files: images.map((attachment) => ({
-              uri: attachment.dataUrl,
-              name: attachment.filename,
-            })),
+            files: await Promise.all(
+              images.map(async (attachment) => ({
+                uri: await blobDataUrl(attachment.blob, attachment.mime),
+                name: attachment.filename,
+              })),
+            ),
           })
           .catch((err) => {
             serverSync().session.set("session_status", session.id, { type: "idle" })

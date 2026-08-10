@@ -79,6 +79,4 @@ export const makeQuestionGroup = <
           }),
         ),
     )
-    .annotateMerge(
-      OpenApi.annotations({ title: "question", description: "Experimental session question routes." }),
-    )
+    .annotateMerge(OpenApi.annotations({ title: "question", description: "Experimental session question routes." }))

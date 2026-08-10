@@ -21,11 +21,15 @@ describe("GitHub publish authorization", () => {
 
   test("rejects another repository or workflow", () => {
     expect(validGitHubClaims({ ...claims, repository_id: "1" })).toBe(false)
-    expect(validGitHubClaims({ ...claims, workflow_ref: "anomalyco/opencode/.github/workflows/other.yml@refs/heads/dev" })).toBe(false)
+    expect(
+      validGitHubClaims({ ...claims, workflow_ref: "anomalyco/opencode/.github/workflows/other.yml@refs/heads/dev" }),
+    ).toBe(false)
   })
 
   test("rejects unconfigured refs", () => {
     const ref = "refs/heads/untrusted"
-    expect(validGitHubClaims({ ...claims, ref, workflow_ref: `anomalyco/opencode/.github/workflows/publish.yml@${ref}` })).toBe(false)
+    expect(
+      validGitHubClaims({ ...claims, ref, workflow_ref: `anomalyco/opencode/.github/workflows/publish.yml@${ref}` }),
+    ).toBe(false)
   })
 })

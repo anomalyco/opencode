@@ -118,6 +118,7 @@ const sessionTabBindingCommands = [
   "session.tab.select.7",
   "session.tab.select.8",
   "session.tab.select.9",
+  "session.tab.select.10",
 ] as const
 
 const pinnedSessionBindingCommands = [
@@ -714,7 +715,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.reopen(),
       },
-      ...Array.from({ length: 9 }, (_, i) => ({
+      ...Array.from({ length: 10 }, (_, i) => ({
         name: `session.tab.select.${i + 1}`,
         title: `Switch to tab ${i + 1}`,
         category: "Session",
@@ -832,7 +833,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "provider.connect",
-        title: "Connect integration",
+        title: "Connect an integration",
         suggested: !connected(),
         slash: { name: "connect" },
         run: () => {
@@ -1152,15 +1153,6 @@ function App(props: { pair?: DialogPairCredentials }) {
         message: title ? `Session "${title}" was deleted` : "The current session was deleted",
       })
     }
-  })
-
-  event.on("session.execution.failed", (evt, { workspace }) => {
-    if (workspace !== (location.current?.workspaceID ?? data.location.default().workspaceID)) return
-    toast.show({
-      variant: "error",
-      message: evt.data.error.message,
-      duration: 5000,
-    })
   })
 
   // Suppress the full-screen overlay for transient startup and event-stream retry states.

@@ -2,8 +2,13 @@ export * as SessionRestart from "./restart"
 
 import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { Bus } from "../../bus"
+import { SessionEvent } from "../event"
 import { SessionExecution } from "../execution"
 import { SessionStore } from "../store"
+
+const CONTINUE_AFTER_SERVER_RESTART =
+  "The server restarted while you were working. Continue from where you left off without repeating completed work."
 
 export interface Interface {
   /**
@@ -26,6 +31,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
     const execution = yield* SessionExecution.Service
+    const bus = yield* Bus.Service
     return Service.of({
       suspendActiveSessions: Effect.gen(function* () {
         yield* store.suspend(yield* execution.active)
@@ -37,6 +43,11 @@ export const layer = Layer.effect(
           (sessionID) =>
             Effect.gen(function* () {
               if (!(yield* store.consumeSuspended(sessionID))) return
+              yield* bus.publish(SessionEvent.Synthetic, {
+                sessionID,
+                text: CONTINUE_AFTER_SERVER_RESTART,
+                description: "Continuing after restart",
+              })
               // Drain failures are already logged and durably recorded by the execution layer.
               yield* Effect.ignore(execution.resume(sessionID))
             }),
@@ -47,4 +58,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [SessionStore.node, SessionExecution.node] })
+export const node = makeGlobalNode({
+  service: Service,
+  layer,
+  deps: [SessionStore.node, SessionExecution.node, Bus.node],
+})

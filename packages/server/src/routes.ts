@@ -7,7 +7,6 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventLogger } from "@opencode-ai/core/event-logger"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
-import { Observability } from "@opencode-ai/util/observability"
 import { Credential } from "@opencode-ai/core/credential"
 import { Config } from "@opencode-ai/core/config"
 import { Command } from "@opencode-ai/core/command"
@@ -28,6 +27,7 @@ import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { WellKnown } from "@opencode-ai/core/wellknown"
+import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -43,6 +43,7 @@ import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
+import { modalWorkspaceDriver, provider as modalProvider } from "./workspace/modal-workspace"
 
 const applicationServices = LayerNode.group([
   Database.node,
@@ -115,6 +116,10 @@ function makeRoutes<AuthError, AuthServices>(
     ],
     [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
     [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(pluginRuntimeCell)],
+    [
+      WorkspaceDriver.node,
+      WorkspaceDriver.registryNode({ [modalProvider]: modalWorkspaceDriver({ app: "opencode-workspaces" }) }),
+    ],
   ]
   const serviceLayer = options.simulation
     ? Layer.unwrap(
@@ -125,13 +130,6 @@ function makeRoutes<AuthError, AuthServices>(
         }),
       )
     : AppNodeBuilder.build(applicationServices, replacements)
-  const observability = Observability.layer({
-    ...options.observability,
-    client: options.app?.name,
-    version: options.app?.version,
-    channel: options.app?.channel,
-  })
-
   return serviceLayer.pipe(
     Layer.flatMap((context) => {
       const services = Layer.succeedContext(context)
@@ -155,6 +153,5 @@ function makeRoutes<AuthError, AuthServices>(
       )
       return Layer.merge(api, V1Migration.layer.pipe(Layer.provide(services)))
     }),
-    Layer.provide(observability),
   )
 }

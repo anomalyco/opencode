@@ -300,7 +300,9 @@ describe("OpenAI-compatible Chat route", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, {
-          tools: [ToolDefinition.make({ name: "weather", description: "Get weather", inputSchema: { type: "object" } })],
+          tools: [
+            ToolDefinition.make({ name: "weather", description: "Get weather", inputSchema: { type: "object" } }),
+          ],
         }),
       ).pipe(
         Effect.provide(

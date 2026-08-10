@@ -3254,10 +3254,7 @@ describe("SessionRunnerLLM", () => {
       yield* stream.started
 
       expect(requests).toHaveLength(2)
-      expect(requests.map((request) => request.providerOptions?.openai?.promptCacheKey)).toEqual([
-        sessionID,
-        otherSessionID,
-      ])
+      expect(requests.map((request) => request.promptCacheKey)).toEqual([sessionID, otherSessionID])
       yield* stream.release
       yield* Fiber.join(first)
       yield* Fiber.join(second)
@@ -3285,7 +3282,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(longSessionID)
       yield* session.resume(otherLongSessionID)
 
-      const keys = requests.map((request) => request.providerOptions?.openai?.promptCacheKey)
+      const keys = requests.map((request) => request.promptCacheKey)
       expect(keys).toEqual([longSessionID.slice(4), otherLongSessionID.slice(4)])
       expect(keys.every((key) => typeof key === "string" && key.length === 64)).toBe(true)
       expect(keys[0]).not.toBe(keys[1])

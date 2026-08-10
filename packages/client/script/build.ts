@@ -1,11 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { compile, emitEffectImported, emitEffectShape, emitPromise, write } from "@opencode-ai/httpapi-codegen"
-import {
-  ClientApi,
-  effectOmitEndpoints,
-  groupNames,
-  promiseOmitEndpoints,
-} from "@opencode-ai/protocol/client"
+import { ClientApi, effectOmitEndpoints, groupNames, promiseOmitEndpoints } from "@opencode-ai/protocol/client"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Command } from "@opencode-ai/schema/command"
 import { Config } from "@opencode-ai/schema/config"

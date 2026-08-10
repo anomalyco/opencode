@@ -127,7 +127,7 @@ export async function convertToOpenAIResponsesInput({
               input.push({
                 role: "assistant",
                 content: [{ type: "output_text", text: part.text }],
-                id: (part.providerOptions?.copilot?.itemId as string) ?? undefined,
+                id: store ? ((part.providerOptions?.copilot?.itemId as string) ?? undefined) : undefined,
               })
               break
             }
@@ -143,7 +143,7 @@ export async function convertToOpenAIResponsesInput({
                 input.push({
                   type: "local_shell_call",
                   call_id: part.toolCallId,
-                  id: (part.providerOptions?.copilot?.itemId as string) ?? undefined,
+                  id: store ? ((part.providerOptions?.copilot?.itemId as string) ?? undefined) : undefined,
                   action: {
                     type: "exec",
                     command: parsedInput.action.command,
@@ -162,7 +162,7 @@ export async function convertToOpenAIResponsesInput({
                 call_id: part.toolCallId,
                 name: part.toolName,
                 arguments: JSON.stringify(part.input),
-                id: (part.providerOptions?.copilot?.itemId as string) ?? undefined,
+                id: store ? ((part.providerOptions?.copilot?.itemId as string) ?? undefined) : undefined,
               })
               break
             }
@@ -206,35 +206,14 @@ export async function convertToOpenAIResponsesInput({
                       summary: [],
                     }
                   }
-                } else {
-                  const summaryParts: Array<{
-                    type: "summary_text"
-                    text: string
-                  }> = []
-
-                  if (part.text.length > 0) {
-                    summaryParts.push({
-                      type: "summary_text",
-                      text: part.text,
-                    })
-                  } else if (reasoningMessage !== undefined) {
-                    warnings.push({
-                      type: "other",
-                      message: `Cannot append empty reasoning part to existing reasoning sequence. Skipping reasoning part: ${JSON.stringify(part)}.`,
-                    })
+                } else if (providerOptions?.reasoningEncryptedContent != null && reasoningMessage === undefined) {
+                  reasoningMessages[reasoningId] = {
+                    type: "reasoning",
+                    id: reasoningId,
+                    encrypted_content: providerOptions.reasoningEncryptedContent,
+                    summary: [],
                   }
-
-                  if (reasoningMessage === undefined) {
-                    reasoningMessages[reasoningId] = {
-                      type: "reasoning",
-                      id: reasoningId,
-                      encrypted_content: providerOptions?.reasoningEncryptedContent,
-                      summary: summaryParts,
-                    }
-                    input.push(reasoningMessages[reasoningId])
-                  } else {
-                    reasoningMessage.summary.push(...summaryParts)
-                  }
+                  input.push(reasoningMessages[reasoningId])
                 }
               } else {
                 warnings.push({

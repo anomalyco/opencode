@@ -255,13 +255,7 @@ const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent,
         if (LLMEvent.is.finish(event) || LLMEvent.is.providerError(event)) terminal = true
         return Effect.succeed(event)
       }),
-      Stream.onEnd(
-        Effect.suspend(() =>
-          terminal
-            ? Effect.void
-            : Effect.fail(incompleteStreamError(route)),
-        ),
-      ),
+      Stream.onEnd(Effect.suspend(() => (terminal ? Effect.void : Effect.fail(incompleteStreamError(route))))),
     )
   })
 

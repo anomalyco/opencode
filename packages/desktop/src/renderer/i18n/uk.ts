@@ -3,7 +3,7 @@ export const dict = {
   "desktop.menu.reloadWebview": "Перезавантажити Webview",
   "desktop.menu.restart": "Перезапустити",
 
-  "desktop.dialog.chooseFolder": "Виберіть теку",
+  "desktop.dialog.chooseFolder": "Виберіть папку",
   "desktop.dialog.chooseFile": "Виберіть файл",
   "desktop.dialog.saveFile": "Зберегти файл",
 
@@ -18,4 +18,7 @@ export const dict = {
     "Версію {{version}} OpenCode завантажено. Бажаєте встановити її та перезапустити?",
   "desktop.updater.installFailed.title": "Помилка оновлення",
   "desktop.updater.installFailed.message": "Не вдалося встановити оновлення",
+
+  "desktop.error.dev.rootNotFound":
+    "Кореневий елемент не знайдено. Ви забули додати його до index.html? Або, можливо, атрибут id було написано з помилкою?",
 }

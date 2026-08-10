@@ -35,10 +35,7 @@ export class CancelledError extends Schema.TaggedErrorClass<CancelledError>()("Q
   }
 }
 
-export const toModelOutput = (
-  questions: ReadonlyArray<Question.Prompt>,
-  answers: ReadonlyArray<Question.Answer>,
-) => {
+export const toModelOutput = (questions: ReadonlyArray<Question.Prompt>, answers: ReadonlyArray<Question.Answer>) => {
   const formatted = questions
     .map(
       (question, index) =>
@@ -56,62 +53,60 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((draft) =>
-        draft.add(
-          ({
-            name,
-            options: { codemode: false },
-            description,
-            input: Input,
-            output: Output,
-            execute: (input, context) =>
-              permission
-                .assert({
-                  action: "question",
-                  resources: ["*"],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source: { type: "tool", messageID: context.messageID, id: context.id },
-                })
-                .pipe(
-                  Effect.mapError((error) => new ToolFailure({ message: "Permission denied: question", error })),
-                  Effect.andThen(
-                    forms
-                      .ask({
-                        sessionID: context.sessionID,
-                        title: "Questions",
-                        metadata: {
-                          kind: "question",
-                          tool: { messageID: context.messageID, id: context.id },
-                        },
-                        fields: [
-                          toField(input.questions[0], 0),
-                          ...input.questions.slice(1).map((question, index) => toField(question, index + 1)),
-                        ],
-                      })
-                      .pipe(Effect.orDie),
-                  ),
-                  Effect.flatMap((state) => {
-                    // Deliberate defect tunnel (see Permission.assert): a dismissal must dodge
-                    // leaf `mapError` blankets so it never becomes model-facing tool output; it
-                    // resurfaces as a typed failure at SessionModelRequest.executeTool.
-                    if (state.status === "cancelled") return Effect.die(new CancelledError())
-                    const output = {
-                      answers: input.questions.map((_, index): Question.Answer => {
-                        const value = state.answer[`q${index}`]
-                        if (value === undefined) return []
-                        if (typeof value === "object") return Array.from(value)
-                        return [String(value)]
-                      }),
-                    }
-                    return Effect.succeed({
-                      output,
-                      content: toModelOutput(input.questions, output.answers),
-                      metadata: { answers: output.answers },
+        draft.add({
+          name,
+          options: { codemode: false },
+          description,
+          input: Input,
+          output: Output,
+          execute: (input, context) =>
+            permission
+              .assert({
+                action: "question",
+                resources: ["*"],
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
+              })
+              .pipe(
+                Effect.mapError((error) => new ToolFailure({ message: "Permission denied: question", error })),
+                Effect.andThen(
+                  forms
+                    .ask({
+                      sessionID: context.sessionID,
+                      title: "Questions",
+                      metadata: {
+                        kind: "question",
+                        tool: { messageID: context.messageID, id: context.id },
+                      },
+                      fields: [
+                        toField(input.questions[0], 0),
+                        ...input.questions.slice(1).map((question, index) => toField(question, index + 1)),
+                      ],
                     })
-                  }),
+                    .pipe(Effect.orDie),
                 ),
-          }),
-        ),
+                Effect.flatMap((state) => {
+                  // Deliberate defect tunnel (see Permission.assert): a dismissal must dodge
+                  // leaf `mapError` blankets so it never becomes model-facing tool output; it
+                  // resurfaces as a typed failure at SessionModelRequest.executeTool.
+                  if (state.status === "cancelled") return Effect.die(new CancelledError())
+                  const output = {
+                    answers: input.questions.map((_, index): Question.Answer => {
+                      const value = state.answer[`q${index}`]
+                      if (value === undefined) return []
+                      if (typeof value === "object") return Array.from(value)
+                      return [String(value)]
+                    }),
+                  }
+                  return Effect.succeed({
+                    output,
+                    content: toModelOutput(input.questions, output.answers),
+                    metadata: { answers: output.answers },
+                  })
+                }),
+              ),
+        }),
       )
       .pipe(Effect.orDie)
   }),

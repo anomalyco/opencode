@@ -38,7 +38,11 @@ import { ToolOutput } from "../../tool-output"
 type CallOutcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean; readonly step: number }
   Retry: { readonly step: number }
-  Continue: { readonly cause: AIError; readonly error: SessionRunnerRetry.RetryableFailure["error"]; readonly step: number }
+  Continue: {
+    readonly cause: AIError
+    readonly error: SessionRunnerRetry.RetryableFailure["error"]
+    readonly step: number
+  }
   Restart: { readonly step: number; readonly recoveredOverflow: boolean }
 }>
 const CallOutcome = Data.taggedEnum<CallOutcome>()

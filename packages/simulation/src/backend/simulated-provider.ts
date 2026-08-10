@@ -562,25 +562,23 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
                   ctx.tool
                     .transform((draft) => {
                       for (const registration of nextRegistrations)
-                        draft.add(
-                          {
-                            name: registration.name,
-                            options:
-                              registration.permission === undefined
-                                ? registration.options
-                                : { ...registration.options, permission: registration.permission },
-                            description: registration.description,
-                            input: registration.inputSchema,
-                            output: registration.outputSchema ?? {},
-                            execute: (input, context) =>
-                              invoke(
-                                generation,
-                                SimulationProtocol.Backend.exposedToolName(registration),
-                                input,
-                                context,
-                              ),
-                          },
-                        )
+                        draft.add({
+                          name: registration.name,
+                          options:
+                            registration.permission === undefined
+                              ? registration.options
+                              : { ...registration.options, permission: registration.permission },
+                          description: registration.description,
+                          input: registration.inputSchema,
+                          output: registration.outputSchema ?? {},
+                          execute: (input, context) =>
+                            invoke(
+                              generation,
+                              SimulationProtocol.Backend.exposedToolName(registration),
+                              input,
+                              context,
+                            ),
+                        })
                     })
                     .pipe(Scope.provide(nextScope)),
                 )

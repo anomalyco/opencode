@@ -66,8 +66,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     if (registration.timedOut && registration.info !== undefined) {
       timeouts = {
         info: registration.info,
-        count:
-          timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
+        count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
       }
       if (timeouts.count >= 3) {
         announce("missing")
@@ -188,8 +187,7 @@ async function probeResult(info: Info, allowLegacy = false) {
   const body = result.value.body
   if (body !== undefined && "version" in body && "pid" in body) {
     if (body.pid !== info.pid) return { service: undefined, timedOut: false }
-    if (info.version !== undefined && body.version !== info.version)
-      return { service: undefined, timedOut: false }
+    if (info.version !== undefined && body.version !== info.version) return { service: undefined, timedOut: false }
     return {
       service: {
         info,

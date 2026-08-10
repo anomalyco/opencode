@@ -19,7 +19,7 @@ test("effect entrypoint exposes canonical Schema contracts", () => {
 test("generated Effect API names canonical and composed outputs", async () => {
   const source = await Bun.file(new URL("../src/effect/api/api.ts", import.meta.url)).text()
 
-  expect(source).toContain("export type Endpoint5_3Output = Session.Info")
+  expect(source).toContain("export type Endpoint5_5Output = Session.Info")
   expect(source).toContain("export type Endpoint19_0Output = OpenCodeEvent")
   expect(source).not.toContain("HttpApiClient.ForApi")
 })

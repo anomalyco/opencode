@@ -92,10 +92,6 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             file: process.env.OPENCODE_MODELS_PATH,
             fetch: !truthy(process.env.OPENCODE_DISABLE_MODELS_FETCH),
           },
-          observability: {
-            endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
-            headers: process.env.OTEL_EXPORTER_OTLP_HEADERS,
-          },
           config: {
             directory: process.env.OPENCODE_CONFIG_DIR,
             project: !truthy(

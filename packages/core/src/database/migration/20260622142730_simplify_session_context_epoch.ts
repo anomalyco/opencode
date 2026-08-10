@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260622142730_simplify_session_context_epoch",
   up(tx) {
     return Effect.gen(function* () {
@@ -10,4 +10,6 @@ export default {
       yield* tx.run(`ALTER TABLE \`session_context_epoch\` DROP COLUMN \`revision\`;`)
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration

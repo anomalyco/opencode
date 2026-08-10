@@ -468,10 +468,7 @@ export async function runNonInteractivePrompt(input: Input) {
         continue
       }
       if (event.type === "session.step.failed") {
-        if (
-          input.compatibility === "v1" &&
-          event.data.error.message === "The provider response ended unexpectedly."
-        ) {
+        if (input.compatibility === "v1" && event.data.error.message === "The provider response ended unexpectedly.") {
           pendingStep = undefined
           v1InvalidOutput = true
           continue

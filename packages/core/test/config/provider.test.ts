@@ -50,6 +50,33 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () =
 const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
+  it.effect("adds key auth for custom providers without env credentials", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              litellm: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: { chat: {} },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries)
+
+      expect(yield* integrations.get(Integration.ID.make("litellm"))).toMatchObject({
+        id: "litellm",
+        name: "litellm",
+        methods: [{ type: "key", label: "Manually enter API Key" }],
+      })
+    }),
+  )
+
   it.effect("defaults custom models to agent capabilities", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

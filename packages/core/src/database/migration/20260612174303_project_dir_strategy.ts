@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260612174303_project_dir_strategy",
   up(tx) {
     return Effect.gen(function* () {
@@ -26,4 +26,6 @@ export default {
       yield* tx.run(`PRAGMA foreign_keys=ON;`)
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration

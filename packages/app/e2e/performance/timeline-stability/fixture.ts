@@ -8,7 +8,7 @@ import { expect, type Page } from "@playwright/test"
 import { Schema } from "effect"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { installSseTransport } from "../../utils/sse-transport"
-import { expectSessionTitle } from "../../utils/waits"
+import { expectSessionReady } from "../../utils/waits"
 
 export const directory = "C:/OpenCode/TimelineStability"
 export const projectID = "proj_timeline_stability"
@@ -111,8 +111,9 @@ export async function setupTimeline(
     active?.info.role === "assistant" && active.info.time.completed === undefined ? { type: "busy" } : { type: "idle" },
     decodeOptions,
   )
+  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   const transport = await installSseTransport<EventPayload>(page, {
-    server: `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`,
+    server,
     retry: input.eventRetry ?? 20,
   })
   await mockOpenCodeServer(page, {
@@ -161,8 +162,8 @@ export async function setupTimeline(
     })
   }
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await expectSessionReady(page, { server, sessionID, title })
   await transport.waitForConnection()
-  await expectSessionTitle(page, title)
   if (input.cpuRate && input.cpuRate > 1) {
     const devtools = await page.context().newCDPSession(page)
     await devtools.send("Emulation.setCPUThrottlingRate", { rate: input.cpuRate })
@@ -198,7 +199,9 @@ export async function setupTimeline(
       )
     },
     async waitForPart(partID: string) {
-      await expect(page.locator(`[data-timeline-part-id="${partID}"]`).first()).toBeVisible()
+      const part = page.locator(`[data-timeline-part-id="${partID}"]`)
+      await expect(part).toHaveCount(1)
+      await expect(part).toBeVisible()
     },
   }
 }

@@ -268,10 +268,13 @@ function createWorkspaceTerminalSession(
     const index = store.all.findIndex((x) => x.id === id)
     const pty = store.all[index]
     if (!pty) return
-    const data = await sdk.api.pty.create({ location, title: pty.title }).then((result) => result.data).catch((error: unknown) => {
-      console.error("Failed to clone terminal", error)
-      return undefined
-    })
+    const data = await sdk.api.pty
+      .create({ location, title: pty.title })
+      .then((result) => result.data)
+      .catch((error: unknown) => {
+        console.error("Failed to clone terminal", error)
+        return undefined
+      })
     if (!data?.id) return
 
     const active = store.active === pty.id

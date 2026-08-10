@@ -10,6 +10,7 @@ import {
   moveSessionTab,
   NEW_SESSION_TAB_TITLE,
   sessionTabComplete,
+  sessionTabShortcutLabel,
   seedSessionTabMotion,
   sessionTabOverflowWidth,
   type SessionTab,
@@ -140,7 +141,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                 const value = session()
                 return value ? data.project.get(value.projectID) : undefined
               })
-              const numberWidth = () => String(index() + 1).length + 1
+              const numberWidth = () => 2
               const titleWidth = () => Math.max(1, width() - numberWidth() - 2 - (hovered() === tab.sessionID ? 1 : 0))
               const title = () => tab.title ?? "Untitled session"
               const visibleTitle = createMemo(() => Locale.takeWidth(title(), titleWidth()))
@@ -311,7 +312,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                         selectable={false}
                         attributes={selected() ? TextAttributes.BOLD : undefined}
                       >
-                        {index() + 1}
+                        {sessionTabShortcutLabel(index())}
                       </text>
                       <text
                         width={titleWidth()}
@@ -555,8 +556,8 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const glows = () => !selected() && (status().attention || (!status().busy && status().unread !== undefined))
           const title = () => tab.title ?? "Untitled session"
           const tabNumber = createMemo(() => items().findIndex((item) => item.sessionID === tab.sessionID) + 1)
-          // The number cell keeps one trailing space, even for double-digit tabs.
-          const numberWidth = () => String(tabNumber()).length + 1
+          // Shortcut labels stay one cell wide: 1-9, 0 for ten, then a neutral dot.
+          const numberWidth = () => 2
           // Hovering reveals the close mark, so the title's right bound shifts left of it.
           const availableTitleWidth = () =>
             Math.max(1, width() - 1 - numberWidth() - (hovered() === tab.sessionID ? 2 : 0))
@@ -639,7 +640,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   {" "}
                 </text>
                 <text width={numberWidth()} fg={numberColor()} selectable={false} attributes={bold()}>
-                  {tabNumber()}
+                  {sessionTabShortcutLabel(tabNumber() - 1)}
                 </text>
                 <text
                   width={availableTitleWidth()}

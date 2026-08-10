@@ -8,8 +8,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@/utils/toast"
 import { batch, For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { Link } from "@/components/link"
-import { useServerSDK } from "@/context/server-sdk"
+import { ExternalLink } from "@/components/external-link"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { type FormState, headerRow, modelRow, validateCustomProvider } from "./dialog-custom-provider-form"
@@ -43,7 +42,6 @@ export function DialogCustomProvider(props: Props) {
 export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
   const dialog = useDialog()
   const serverSync = useServerSync()
-  const serverSDK = useServerSDK()
   const language = useLanguage()
 
   const [form, setForm] = createStore<FormState>({
@@ -132,7 +130,7 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
   const saveMutation = useMutation(() => ({
     mutationFn: async (result: NonNullable<ReturnType<typeof validate>>): Promise<typeof result> => {
       // TODO: Restore custom providers when V2 exposes config and arbitrary credential APIs.
-      throw new Error(`Custom provider ${result.providerID} is unavailable`)
+      throw new Error(language.t("provider.custom.unavailable"))
     },
     onSuccess: (result) => {
       dialog.close()
@@ -168,9 +166,9 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
       <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
         <p class="text-14-regular text-text-base">
           {language.t("provider.custom.description.prefix")}
-          <Link href="https://opencode.ai/docs/providers/#custom-provider" tabIndex={-1}>
+          <ExternalLink href="https://opencode.ai/docs/providers/#custom-provider" tabIndex={-1}>
             {language.t("provider.custom.description.link")}
-          </Link>
+          </ExternalLink>
           {language.t("provider.custom.description.suffix")}
         </p>
 

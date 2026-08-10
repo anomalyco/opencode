@@ -1,7 +1,6 @@
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useMarked } from "@opencode-ai/ui/context/marked"
 import { useQuery } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, createRoot, type JSX, startTransition } from "solid-js"
@@ -16,7 +15,7 @@ import type { LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
-import { displayName, errorMessage, projectForSession } from "@/pages/layout/helpers"
+import { compareSessionTime, displayName, errorMessage, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { pathKey } from "@/utils/path-key"
 import { showToast } from "@/utils/toast"
@@ -44,7 +43,6 @@ export function createHomeSessionsController(home: HomeController) {
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
-  const marked = useMarked()
   const projectDirectories = createMemo(() => {
     const project = home.project.selected()
     if (!project) return home.project.list().flatMap(directories)
@@ -119,7 +117,7 @@ export function createHomeSessionsController(home: HomeController) {
                   (ctx.sync.session.data.message[record.session.id] ?? []).flatMap((message) =>
                     (ctx.sync.session.data.part[message.id] ?? []).flatMap((part) => {
                       if (part.type !== "text" || !part.text) return []
-                      return preloadMarkdown(part.text, part.id, marked)
+                      return preloadMarkdown(part.text, part.id)
                     }),
                   ),
                 ),
@@ -251,7 +249,7 @@ function buildHomeSessionRecords(input: {
   const directories = new Set(input.projectDirectories().map(pathKey))
   const sessions = input.sessions().filter((session) => directories.has(pathKey(session.location.directory)))
   return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
-    .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+    .sort(compareSessionTime)
     .flatMap((session) => {
       const directory = pathKey(session.location.directory)
       const project =

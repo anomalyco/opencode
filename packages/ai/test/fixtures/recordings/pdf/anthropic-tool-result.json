@@ -1,14 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:pdf",
-      "pdf",
-      "provider:anthropic",
-      "protocol:anthropic-messages",
-      "tool",
-      "tool-result"
-    ],
+    "tags": ["prefix:pdf", "pdf", "provider:anthropic", "protocol:anthropic-messages", "tool", "tool-result"],
     "name": "pdf/anthropic-tool-result",
     "recordedAt": "2026-07-22T18:15:39.002Z"
   },

@@ -20,11 +20,11 @@ OpenCode supports both **JSON** and **JSONC** (JSON with Comments) configuration
       "models": {
         "gpt-5.2-custom": {
           "modelID": "gpt-5.2",
-          "name": "GPT-5.2 Custom"
-        }
-      }
-    }
-  }
+          "name": "GPT-5.2 Custom",
+        },
+      },
+    },
+  },
 }
 ```
 
@@ -98,7 +98,7 @@ Set the shell used by the terminal and shell tools.
 
 ```jsonc
 {
-  "shell": "/bin/zsh"
+  "shell": "/bin/zsh",
 }
 ```
 
@@ -109,7 +109,7 @@ does not retain a `#variant`; select variants in the TUI or on an agent or comma
 
 ```jsonc
 {
-  "model": "anthropic/claude-sonnet-4-5"
+  "model": "anthropic/claude-sonnet-4-5",
 }
 ```
 
@@ -122,7 +122,7 @@ Choose the primary agent used when a session does not select one explicitly.
 
 ```jsonc
 {
-  "default_agent": "build"
+  "default_agent": "build",
 }
 ```
 
@@ -138,7 +138,7 @@ ignored.
 
 ```jsonc
 {
-  "autoupdate": false
+  "autoupdate": false,
 }
 ```
 
@@ -149,7 +149,7 @@ sharing is not implemented yet.
 
 ```jsonc
 {
-  "share": "manual"
+  "share": "manual",
 }
 ```
 
@@ -162,7 +162,7 @@ currently display it in conversations.
 
 ```jsonc
 {
-  "username": "alice"
+  "username": "alice",
 }
 ```
 
@@ -177,9 +177,9 @@ matching resource.
     {
       "action": "shell",
       "resource": "git push *",
-      "effect": "ask"
-    }
-  ]
+      "effect": "ask",
+    },
+  ],
 }
 ```
 
@@ -197,11 +197,9 @@ instructions, mode, and permissions.
       "description": "Review changes without editing files",
       "mode": "subagent",
       "system": "Focus on correctness, security, and missing tests.",
-      "permissions": [
-        { "action": "edit", "resource": "*", "effect": "deny" }
-      ]
-    }
-  }
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
+    },
+  },
 }
 ```
 
@@ -213,7 +211,7 @@ Enable or disable filesystem snapshots used by undo and revert behavior.
 
 ```jsonc
 {
-  "snapshots": false
+  "snapshots": false,
 }
 ```
 
@@ -226,8 +224,8 @@ Ignore files and directories that should not trigger filesystem updates.
 ```jsonc
 {
   "watcher": {
-    "ignore": ["dist/**", "coverage/**"]
-  }
+    "ignore": ["dist/**", "coverage/**"],
+  },
 }
 ```
 
@@ -241,9 +239,9 @@ field, but it does not run formatters yet.
   "formatter": {
     "prettier": {
       "command": ["bunx", "prettier", "--write", "$FILE"],
-      "extensions": [".js", ".ts", ".tsx"]
-    }
-  }
+      "extensions": [".js", ".ts", ".tsx"],
+    },
+  },
 }
 ```
 
@@ -259,9 +257,9 @@ this field, but it does not start language servers yet.
   "lsp": {
     "typescript": {
       "command": ["typescript-language-server", "--stdio"],
-      "extensions": [".ts", ".tsx"]
-    }
-  }
+      "extensions": [".ts", ".tsx"],
+    },
+  },
 }
 ```
 
@@ -279,9 +277,9 @@ before they are sent to a model.
       "auto_resize": true,
       "max_width": 2000,
       "max_height": 2000,
-      "max_base64_bytes": 5242880
-    }
-  }
+      "max_base64_bytes": 5242880,
+    },
+  },
 }
 ```
 
@@ -295,8 +293,8 @@ Set the maximum number of lines and bytes retained from a tool result.
 {
   "tool_output": {
     "max_lines": 2000,
-    "max_bytes": 51200
-  }
+    "max_bytes": 51200,
+  },
 }
 ```
 
@@ -311,10 +309,10 @@ be overridden by an individual server.
     "servers": {
       "playwright": {
         "type": "local",
-        "command": ["bunx", "@playwright/mcp"]
-      }
-    }
-  }
+        "command": ["bunx", "@playwright/mcp"],
+      },
+    },
+  },
 }
 ```
 
@@ -329,10 +327,10 @@ Control automatic context compaction and how much recent context it preserves.
   "compaction": {
     "auto": true,
     "keep": {
-      "tokens": 15000
+      "tokens": 15000,
     },
-    "buffer": 20000
-  }
+    "buffer": 20000,
+  },
 }
 ```
 
@@ -349,8 +347,8 @@ interval and 30-minute active window.
   "warming": {
     "prompt": "Do not perform any work. Reply with exactly: OK",
     "interval": "4 minutes",
-    "duration": "30 minutes"
-  }
+    "duration": "30 minutes",
+  },
 }
 ```
 
@@ -363,7 +361,7 @@ Add directories or URLs that OpenCode should search for agent skills.
 
 ```jsonc
 {
-  "skills": ["./team-skills", "https://example.com/.well-known/skills/"]
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
 }
 ```
 
@@ -378,9 +376,9 @@ Define reusable slash commands as named prompt templates.
   "commands": {
     "review": {
       "description": "Review the current changes",
-      "template": "Review the current diff for correctness and missing tests."
-    }
-  }
+      "template": "Review the current diff for correctness and missing tests.",
+    },
+  },
 }
 ```
 
@@ -393,7 +391,7 @@ but does not load these entries yet; use `AGENTS.md` for active instructions.
 
 ```jsonc
 {
-  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"]
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
 }
 ```
 
@@ -409,13 +407,13 @@ context.
   "references": {
     "docs": {
       "path": "../product-docs",
-      "description": "Product behavior and terminology"
+      "description": "Product behavior and terminology",
     },
     "effect": {
       "repository": "Effect-TS/effect",
-      "branch": "main"
-    }
-  }
+      "branch": "main",
+    },
+  },
 }
 ```
 
@@ -433,10 +431,10 @@ accepts options.
     {
       "package": "./plugins/local.ts",
       "options": {
-        "enabled": true
-      }
-    }
-  ]
+        "enabled": true,
+      },
+    },
+  ],
 }
 ```
 
@@ -457,12 +455,12 @@ headers, and model variants.
           "name": "GPT-5.2 Custom",
           "limit": {
             "context": 200000,
-            "output": 32000
-          }
-        }
-      }
-    }
-  }
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
 }
 ```
 

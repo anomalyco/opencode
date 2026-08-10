@@ -48,12 +48,16 @@ export function migrateV1(legacy: TuiConfigV1.Info | undefined, kv: Record<strin
   const attentionSoundPack = kv.attention_sound_pack
   const diffView = kv.diff_viewer_view ?? (legacy?.diff_style === "stacked" ? "unified" : undefined)
   const thinking =
-    kv.thinking_mode ??
-    (kv.thinking_visibility === undefined ? undefined : kv.thinking_visibility ? "show" : "hide")
+    kv.thinking_mode ?? (kv.thinking_visibility === undefined ? undefined : kv.thinking_visibility ? "show" : "hide")
 
   return {
     ...(themeName !== undefined || themeMode !== undefined
-      ? { theme: { ...(themeName === undefined ? {} : { name: themeName }), ...(themeMode === undefined ? {} : { mode: themeMode }) } }
+      ? {
+          theme: {
+            ...(themeName === undefined ? {} : { name: themeName }),
+            ...(themeMode === undefined ? {} : { mode: themeMode }),
+          },
+        }
       : {}),
     ...(legacy?.keybinds === undefined ? {} : { keybinds: legacy.keybinds }),
     ...(plugins.length ? { plugins } : {}),
@@ -118,6 +122,7 @@ export function migrateV1(legacy: TuiConfigV1.Info | undefined, kv: Record<strin
         }),
     ...(kv.animations_enabled === undefined ? {} : { animations: kv.animations_enabled }),
     ...(legacy?.mouse === undefined ? {} : { mouse: legacy.mouse }),
+    ...(legacy?.cursor === undefined ? {} : { cursor: legacy.cursor }),
   }
 }
 

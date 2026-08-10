@@ -141,7 +141,12 @@ export function DialogSessionList() {
     const option = (session: SessionInfo, category: string) => {
       const directory = session.location.directory
       const project = data.project.get(session.projectID)
-      const footer = allProjects() ? Locale.truncate(projectName(project, directory) ?? "", 20) : undefined
+      const relative = path.relative(project?.canonical ?? directory, directory)
+      const footer = allProjects()
+        ? Locale.truncate(projectName(project, directory) ?? "", 20)
+        : relative.startsWith("..") || path.isAbsolute(relative)
+          ? Locale.truncate(path.basename(directory), 20)
+          : undefined
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
       return {

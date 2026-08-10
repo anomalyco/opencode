@@ -1,13 +1,4 @@
-import type {
-  Agent,
-  Config,
-  LspStatus,
-  Message,
-  Part,
-  Path,
-  Todo,
-  VcsInfo,
-} from "@/types"
+import type { Agent, Config, LspStatus, Message, Part, Path, Todo, VcsInfo } from "@/types"
 import type {
   FileDiffInfo,
   PermissionRequest,

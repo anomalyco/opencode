@@ -15,7 +15,12 @@ import {
 } from "../../src/util/form"
 import type { FormAnswerField } from "../../src/util/form"
 
-const option = { key: "choice", type: "string", options: [{ value: "one", label: "One" }], custom: true } satisfies FormField
+const option = {
+  key: "choice",
+  type: "string",
+  options: [{ value: "one", label: "One" }],
+  custom: true,
+} satisfies FormField
 const selection = {
   key: "tags",
   type: "multiselect",
@@ -87,9 +92,11 @@ test("shares field classification, rows, selection, and display", () => {
     { value: "one", label: "One", description: "First" },
   ])
   expect(formRows({ key: "value", type: "number" })).toEqual([])
-  expect([formSelected(selection, "two"), formSelected(selection, "custom"), formSelected(selection, undefined)]).toEqual([
-    1, 2, 0,
-  ])
+  expect([
+    formSelected(selection, "two"),
+    formSelected(selection, "custom"),
+    formSelected(selection, undefined),
+  ]).toEqual([1, 2, 0])
   expect(formDisplayValue(selection, ["one", "custom"], "(none)")).toBe("One, custom")
   expect([formDisplayValue(selection, [], ""), formDisplayValue(selection, [], "(none)")]).toEqual(["", "(none)"])
 })

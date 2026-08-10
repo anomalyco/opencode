@@ -12,9 +12,27 @@ import {
   seedSessionTabMotion,
   sessionTabComplete,
   sessionTabOverflowWidth,
+  sessionTabShortcutLabel,
 } from "../../src/context/session-tabs-model"
 
 describe("session tabs", () => {
+  test("labels direct shortcut tabs and marks unbound tabs with a dot", () => {
+    expect(Array.from({ length: 12 }, (_, index) => sessionTabShortcutLabel(index))).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "0",
+      "·",
+      "·",
+    ])
+  })
+
   test("moves a tab to a clamped index and returns the same tabs for no-ops", () => {
     const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
     expect(moveSessionTab(tabs, "a", 2).map((tab) => tab.sessionID)).toEqual(["b", "c", "a"])

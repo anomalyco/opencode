@@ -72,19 +72,13 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.background.surface.overlay).toBe(lightTheme.hue.neutral[400])
   expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
   expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[200])
-  expect(lightTheme.contextual.elevated.background.action.primary.default).toBe(
-    lightTheme.hue.interactive[500],
-  )
+  expect(lightTheme.contextual.elevated.background.action.primary.default).toBe(lightTheme.hue.interactive[500])
   expect(lightTheme.contextual.elevated.background.default).toBe(lightTheme.background.surface.offset)
   expect(lightTheme.contextual.elevated.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
-  expect(lightTheme.contextual.overlay.background.action.primary.default).toBe(
-    lightTheme.hue.interactive[500],
-  )
+  expect(lightTheme.contextual.overlay.background.action.primary.default).toBe(lightTheme.hue.interactive[500])
   expect(lightTheme.contextual.overlay.background.default).toBe(lightTheme.background.surface.overlay)
   expect(lightTheme.contextual.overlay.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
-  expect(darkTheme.contextual.elevated.background.action.primary.default).toBe(
-    darkTheme.hue.interactive[400],
-  )
+  expect(darkTheme.contextual.elevated.background.action.primary.default).toBe(darkTheme.hue.interactive[400])
   expect(darkTheme.contextual.elevated.text.action.primary.default).toBe(darkTheme.hue.neutral[200])
   expect(darkTheme.contextual.overlay.background.action.primary.default).toBe(darkTheme.hue.interactive[400])
   expect(darkTheme.contextual.overlay.text.action.primary.default).toBe(darkTheme.hue.neutral[200])

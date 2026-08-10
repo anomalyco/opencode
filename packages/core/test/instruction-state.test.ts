@@ -14,7 +14,12 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstructionState } from "@opencode-ai/core/session/instruction-state"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
-import { InstructionBlobTable, InstructionStateTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import {
+  InstructionBlobTable,
+  InstructionStateTable,
+  SessionMessageTable,
+  SessionTable,
+} from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -68,7 +73,7 @@ const instructionEvents = (db: Database.Interface["db"], sessionID: SessionSchem
     .all()
     .pipe(Effect.orDie)
 
-const preview = (db: Database.Interface["db"], sessionID: SessionSchema.ID, instructions: Instructions.Instructions) =>
+const preview = (db: Database.Interface["db"], sessionID: SessionSchema.ID, instructions: Instructions.List) =>
   Instructions.read(instructions).pipe(
     Effect.flatMap((observed) => InstructionState.preview(db, sessionID, instructions, observed)),
   )

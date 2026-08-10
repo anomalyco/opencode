@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test"
+import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -7,8 +7,6 @@ import { createEventStream, createFetch, directory, json } from "./fixture/tui-c
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const core = await import("@opentui/core")
-  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const titles: string[] = []
   let started!: () => void
   const ready = new Promise<void>((resolve) => {
@@ -32,6 +30,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: {},
         log: () => {},
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
@@ -46,14 +45,11 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
-    mock.restore()
   }
 })
 
 test("session lifecycle updates the terminal title and prints the epilogue after cleanup", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const core = await import("@opentui/core")
-  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   let initialTitle!: () => void
   const initialTitleSet = new Promise<void>((resolve) => {
     initialTitle = resolve
@@ -110,6 +106,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
@@ -134,14 +131,11 @@ test("session lifecycle updates the terminal title and prints the epilogue after
     process.stdout.write = originalWrite
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
-    mock.restore()
   }
 })
 
 test("session title generated while an untitled session is loading remains visible", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const core = await import("@opentui/core")
-  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const titles: string[] = []
   const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
   const generatedTitle = Promise.withResolvers<void>()
@@ -186,6 +180,7 @@ test("session title generated while an untitled session is loading remains visib
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
@@ -222,14 +217,11 @@ test("session title generated while an untitled session is loading remains visib
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
-    mock.restore()
   }
 })
 
 test("session startup prompt is submitted exactly once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const core = await import("@opentui/core")
-  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const events = createEventStream()
   const cwd = process.cwd()
   const location = { directory: cwd, project: { id: "project", directory: cwd } }
@@ -279,6 +271,7 @@ test("session startup prompt is submitted exactly once", async () => {
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy", prompt: "RESUME_READY" },
         log: () => {},
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
@@ -299,6 +292,5 @@ test("session startup prompt is submitted exactly once", async () => {
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
-    mock.restore()
   }
 })

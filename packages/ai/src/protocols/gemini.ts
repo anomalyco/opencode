@@ -25,7 +25,19 @@ import { ToolSchemaProjection } from "./utils/tool-schema"
 
 const ADAPTER = "gemini"
 const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
+// Google documents this sentinel for replaying Gemini 3 function calls after their original signature was lost.
+const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+// Gemini 3 rejects replayed function calls without a thought signature. Google's SDKs avoid that in normal chats by
+// retaining complete model responses, but OpenCode reconstructs durable history and may encounter an unsigned call
+// from an older or external session. Model IDs are open-ended, so unknown Gemini aliases inherit current behavior.
+const requiresThoughtSignatureFallback = (modelID: string) => {
+  if (!/(^|\/)gemini-/i.test(modelID)) return false
+  if (/(^|\/)gemini-(?:1|2)(?:[.-]|$)/i.test(modelID)) return false
+  if (/(^|\/)gemini-pro(?:-vision)?$/i.test(modelID)) return false
+  return !/(^|\/)gemini-robotics-er-1\.5(?:[.-]|$)/i.test(modelID)
+}
 
 export interface OptionsInput {
   readonly [key: string]: unknown
@@ -145,6 +157,9 @@ const GeminiGenerationConfig = Schema.Struct({
   temperature: Schema.optional(Schema.Number),
   topP: Schema.optional(Schema.Number),
   topK: Schema.optional(Schema.Number),
+  frequencyPenalty: Schema.optional(Schema.Number),
+  presencePenalty: Schema.optional(Schema.Number),
+  seed: Schema.optional(Schema.Number),
   stopSequences: optionalArray(Schema.String),
   thinkingConfig: Schema.optional(GeminiThinkingConfig),
 })
@@ -202,11 +217,13 @@ interface ParserState {
 //    keys on non-object scalars. Mirrors OpenCode's historical Gemini rules.
 //
 // 2. Project — lossy mapping from JSON Schema to Gemini's schema dialect:
-//    drop empty objects, derive `nullable: true` from `type: [..., "null"]`,
-//    coerce `const` to `[const]` enum, recurse properties/items, propagate
+//    drop empty root parameter schemas while preserving nested empty objects,
+//    expand type arrays into `anyOf`, derive `nullable: true` from null members,
+//    coerce `const` to `[const]` enum, recurse properties/items, and propagate
 //    only an allowlisted set of keys (description, required, format, type,
-//    properties, items, allOf, anyOf, oneOf, minLength). Anything outside the
-//    allowlist (e.g. `additionalProperties`, `$ref`) is silently dropped.
+//    nullable, enum, properties, items, allOf, anyOf, oneOf, minLength).
+//    Anything outside the allowlist (e.g. `additionalProperties`, `$ref`) is
+//    silently dropped.
 //
 // Sanitize runs first, then project. The implementation lives in
 // `utils/gemini-tool-schema` so this protocol keeps the same shape as the other
@@ -282,6 +299,8 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
 
     if (message.role === "assistant") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
+      // Parallel Gemini 3 calls may carry one signature on the first call; unsigned sibling calls are valid.
+      let hasSignedToolCall = false
       for (const part of message.content) {
         if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
@@ -294,7 +313,17 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
           continue
         }
         if (part.type === "tool-call") {
-          parts.push(lowerToolCall(part))
+          const lowered = lowerToolCall(part)
+          const signature = lowered.thoughtSignature
+          parts.push({
+            ...lowered,
+            thoughtSignature:
+              signature ??
+              (requiresThoughtSignatureFallback(request.model.id) && !hasSignedToolCall
+                ? SKIP_THOUGHT_SIGNATURE_VALIDATOR
+                : undefined),
+          })
+          if (signature !== undefined) hasSignedToolCall = true
           continue
         }
       }
@@ -388,6 +417,9 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     temperature: generation?.temperature,
     topP: generation?.topP,
     topK: generation?.topK,
+    frequencyPenalty: generation?.frequencyPenalty,
+    presencePenalty: generation?.presencePenalty,
+    seed: generation?.seed,
     stopSequences: generation?.stop,
     thinkingConfig: options.thinkingConfig,
   }

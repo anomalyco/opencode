@@ -159,10 +159,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       if (b.location === b.root.directory) return 1
       return a.location.localeCompare(b.location)
     })
-    const titleWidth = Math.max(
-      1,
-      dialogSelectContentWidth(Math.min(dialogWidth("xlarge"), dimensions().width - 2)),
-    )
+    const titleWidth = Math.max(1, dialogSelectContentWidth(Math.min(dialogWidth("xlarge"), dimensions().width - 2)))
 
     return list.map((item) => {
       const title = abbreviateHome(item.location, paths.home)

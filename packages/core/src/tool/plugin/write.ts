@@ -10,7 +10,7 @@ import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
 import { Bom } from "@opencode-ai/util/bom"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Environment } from "../../environment"
 import { FileMutation } from "../../file-mutation"
 import { Formatter } from "../../formatter"
 import { LocationMutation } from "../../location-mutation"
@@ -47,9 +47,9 @@ export const Plugin = {
   id: "opencode.tool.write",
   effect: Effect.fn("WriteTool.Plugin")(function* (ctx: PluginContext) {
     const mutation = yield* LocationMutation.Service
-    const files = yield* FileMutation.Service
+    const fileMutation = yield* FileMutation.Service
+    const environment = yield* Environment.Service
     const formatter = yield* Formatter.Service
-    const fs = yield* FSUtil.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
@@ -77,8 +77,8 @@ export const Plugin = {
                   agent: context.agent,
                   source,
                 })
-              const current = yield* Bom.readFile(fs, target.absolute).pipe(
-                Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+              const current = yield* FileMutation.readText(environment.files, target.absolute).pipe(
+                Effect.catchTag("Environment.NotFound", () => Effect.succeed(undefined)),
               )
               const next = Bom.split(input.content)
               const preview = fileDiff(target.resource, current?.text ?? "", next.text, current ? "modified" : "added")
@@ -91,9 +91,11 @@ export const Plugin = {
                 agent: context.agent,
                 source,
               })
-              const result = yield* files.writeTextPreservingBom({ target, content: input.content })
-              const bom = (yield* Bom.readFile(fs, target.absolute)).bom
-              if (yield* formatter.file(target.absolute)) yield* Bom.syncFile(fs, target.absolute, bom)
+              const result = yield* fileMutation.writeTextPreservingBom({ target, content: input.content })
+              const bom = (yield* FileMutation.readText(environment.files, target.absolute)).bom
+              if (yield* formatter.file(target.absolute)) {
+                yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
+              }
               return result
             }).pipe(
               Effect.map((output) => ({ output, content: toModelOutput(output) })),

@@ -11,6 +11,7 @@ import { Permission } from "../../permission"
 import { SessionInstructions } from "../../session/instructions"
 import { AbsolutePath } from "../../schema"
 import { ReadToolFileSystem } from "../read-filesystem"
+import { Environment } from "../../environment"
 
 export const name = "read"
 const FILENAME = "AGENTS.md"
@@ -72,16 +73,12 @@ export const Plugin = {
                 agent: context.agent,
                 source,
               })
-              const type = yield* reader
-                .inspect(absolute)
-                .pipe(Effect.catchReason("PlatformError", "NotFound", () => missing(input.path, target.absolute)))
-              const content =
-                type === "directory"
-                  ? yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
-                  : yield* reader.read(absolute, resource, {
-                      offset: input.offset,
-                      limit: input.limit,
-                    })
+              const content = yield* reader.read(absolute, resource, { offset: input.offset, limit: input.limit }).pipe(
+                Effect.catchIf(
+                  (error) => error instanceof Environment.NotFound,
+                  () => missing(input.path, target.absolute),
+                ),
+              )
               // After a successful read, discover nearby AGENTS.md walking up to the Location
               // root exclusive and inject them as durable synthetic instructions. For a
               // directory listing the walk starts at the directory itself (so its own AGENTS.md
@@ -95,7 +92,7 @@ export const Plugin = {
                 // supplied by core initial instructions) is dropped by the dirname filter.
                 const discovered = yield* fs.up({
                   targets: [FILENAME],
-                  start: type === "directory" ? resolved : dirname(resolved),
+                  start: content.type === "list-page" ? resolved : dirname(resolved),
                   stop: root,
                 })
                 const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(

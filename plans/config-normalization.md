@@ -27,37 +27,37 @@ The encoded boundary matters because schemas such as warming durations transform
 
 ## Behavior
 
-| Situation | Result |
-| --- | --- |
-| Supported V1-only field | Migrate it to its canonical V2 destination. |
-| Native V2 field | Preserve it after schema decode and encode. |
-| Disjoint V1 and V2 map entries | Preserve both. |
-| Same canonical scalar, map entry, or nested leaf | Valid native V2 wins regardless of JSON key order. |
+| Situation                                         | Result                                              |
+| ------------------------------------------------- | --------------------------------------------------- |
+| Supported V1-only field                           | Migrate it to its canonical V2 destination.         |
+| Native V2 field                                   | Preserve it after schema decode and encode.         |
+| Disjoint V1 and V2 map entries                    | Preserve both.                                      |
+| Same canonical scalar, map entry, or nested leaf  | Valid native V2 wins regardless of JSON key order.  |
 | Malformed native value with valid legacy fallback | Skip native value, log it, and retain legacy value. |
-| Malformed collection entry | Skip only the explicitly supported recovery unit. |
-| Unsupported accepted V1 setting | Omit it and log a redacted warning. |
-| Unknown field | Continue ignoring it for forward compatibility. |
+| Malformed collection entry                        | Skip only the explicitly supported recovery unit.   |
+| Unsupported accepted V1 setting                   | Omit it and log a redacted warning.                 |
+| Unknown field                                     | Continue ignoring it for forward compatibility.     |
 
 Valid supported V1 syntax does not warn merely because it is legacy.
 
 ## Field Precedence
 
-| Destination | Lowest to highest precedence |
-| --- | --- |
-| `snapshots` | `snapshot` < `snapshots` |
-| `share` | `autoshare` < `share` |
-| `references[name]` | `reference[name]` < `references[name]` |
-| `agents[name]` | `agent[name]` < `mode[name]` < `agents[name]` |
-| `commands[name]` | `command[name]` < `commands[name]` |
-| `providers[name]` | `provider[name]` < `providers[name]` |
-| `permissions` | `tools` rules < `permission` rules < native `permissions` |
-| `plugins` | migrated `plugin` items < native `plugins` items |
-| `media` | `attachment` < `media` |
-| `experimental.policies` | enabled-provider policies < disabled-provider policies < native policies |
-| `mcp.servers[name]` | direct legacy server < native `servers[name]` |
-| `mcp.timeout.*` | `experimental.mcp_timeout` < native timeout leaf |
-| `compaction.keep.tokens` | `preserve_recent_tokens` < `keep.tokens` |
-| `compaction.buffer` | `reserved` < `buffer` |
+| Destination              | Lowest to highest precedence                                             |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `snapshots`              | `snapshot` < `snapshots`                                                 |
+| `share`                  | `autoshare` < `share`                                                    |
+| `references[name]`       | `reference[name]` < `references[name]`                                   |
+| `agents[name]`           | `agent[name]` < `mode[name]` < `agents[name]`                            |
+| `commands[name]`         | `command[name]` < `commands[name]`                                       |
+| `providers[name]`        | `provider[name]` < `providers[name]`                                     |
+| `permissions`            | `tools` rules < `permission` rules < native `permissions`                |
+| `plugins`                | migrated `plugin` items < native `plugins` items                         |
+| `media`                  | `attachment` < `media`                                                   |
+| `experimental.policies`  | enabled-provider policies < disabled-provider policies < native policies |
+| `mcp.servers[name]`      | direct legacy server < native `servers[name]`                            |
+| `mcp.timeout.*`          | `experimental.mcp_timeout` < native timeout leaf                         |
+| `compaction.keep.tokens` | `preserve_recent_tokens` < `keep.tokens`                                 |
+| `compaction.buffer`      | `reserved` < `buffer`                                                    |
 
 Ordered rules and plugin directives retain both forms, with migrated V1 entries first and native V2 entries last.
 

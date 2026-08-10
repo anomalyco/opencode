@@ -181,12 +181,17 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
       return json(route, true)
     }
     if (requestDirectory && requestDirectory !== directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/api/event")
-      return sse(route)
+    if (url.pathname === "/api/event") return sse(route)
     if (url.pathname === "/api/provider")
       return json(route, {
         location: { directory },
-        data: [{ id: remote ? "server-b" : "server-a", name: remote ? "Server B Provider" : "Server A Provider", package: "test" }],
+        data: [
+          {
+            id: remote ? "server-b" : "server-a",
+            name: remote ? "Server B Provider" : "Server A Provider",
+            package: "test",
+          },
+        ],
       })
     if (url.pathname === "/api/model") return json(route, { location: { directory }, data: [model(remote)] })
     if (url.pathname === "/api/model/default") return json(route, { location: { directory }, data: model(remote) })

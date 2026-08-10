@@ -16,7 +16,6 @@ import { SessionPendingTable, SessionMessageTable, SessionTable } from "./sql"
 import { Slug } from "../util/slug"
 import { Money } from "@opencode-ai/schema/money"
 import type { SessionSchema } from "./schema"
-import { WorkspaceTable } from "../control-plane/workspace.sql"
 
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
@@ -376,13 +375,6 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (!stored) return yield* Effect.die(new SessionAlreadyProjected())
-        if (!event.data.location.workspaceID) return
-        yield* db
-          .update(WorkspaceTable)
-          .set({ time_used: Date.now() })
-          .where(eq(WorkspaceTable.id, event.data.location.workspaceID))
-          .run()
-          .pipe(Effect.orDie)
       }),
     )
     yield* bus.project(SessionEvent.Moved, (event) =>
@@ -453,6 +445,7 @@ const layer = Layer.effectDiscard(
                 text: input.data.text,
                 files: input.data.files,
                 agents: input.data.agents,
+                skills: input.data.skills,
                 time: { created: event.created },
               }
             : {
@@ -483,6 +476,24 @@ const layer = Layer.effectDiscard(
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
+      }),
+    )
+    yield* bus.project(SessionEvent.InputCancelled, (event) =>
+      SessionPending.projectCancelled(db, {
+        id: event.data.inputID,
+        sessionID: event.data.sessionID,
+      }),
+    )
+    yield* bus.project(SessionEvent.InputSteered, (event) =>
+      SessionPending.projectSteered(db, {
+        id: event.data.inputID,
+        sessionID: event.data.sessionID,
+      }),
+    )
+    yield* bus.project(SessionEvent.InputQueued, (event) =>
+      SessionPending.projectQueued(db, {
+        id: event.data.inputID,
+        sessionID: event.data.sessionID,
       }),
     )
     yield* bus.project(SessionEvent.Compaction.Admitted, (event) =>

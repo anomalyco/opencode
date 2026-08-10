@@ -71,15 +71,13 @@ it.live(
             Effect.gen(function* () {
               yield* ctx.tool
                 .transform((draft) =>
-                  draft.add(
-                    ({
-                      name: "bootstrap_sdk_tool",
-                      description: "Marks the initial Location plugin generation",
-                      input: Schema.Struct({}),
-                      output: Schema.Void,
-                      execute: () => Effect.succeed({ output: undefined }),
-                    }),
-                  ),
+                  draft.add({
+                    name: "bootstrap_sdk_tool",
+                    description: "Marks the initial Location plugin generation",
+                    input: Schema.Struct({}),
+                    output: Schema.Void,
+                    execute: () => Effect.succeed({ output: undefined }),
+                  }),
                 )
                 .pipe(Effect.orDie)
               if (yield* Ref.updateAndGet(bootCount, (count) => count + 1).pipe(Effect.map((count) => count === 2))) {
@@ -98,15 +96,13 @@ it.live(
             Effect.gen(function* () {
               yield* ctx.tool
                 .transform((draft) =>
-                  draft.add(
-                    ({
-                      name: "late_sdk_tool",
-                      description: "Tool registered after Location boot",
-                      input: Schema.Struct({}),
-                      output: Schema.Void,
-                      execute: () => Effect.succeed({ output: undefined }),
-                    }),
-                  ),
+                  draft.add({
+                    name: "late_sdk_tool",
+                    description: "Tool registered after Location boot",
+                    input: Schema.Struct({}),
+                    output: Schema.Void,
+                    execute: () => Effect.succeed({ output: undefined }),
+                  }),
                 )
                 .pipe(Effect.orDie)
               if (
@@ -219,15 +215,13 @@ it.live(
           effect: (ctx) =>
             ctx.tool
               .transform((draft) =>
-                draft.add(
-                  ({
-                    name: "embedded_tool",
-                    description: "Embedded test tool",
-                    input: Schema.Struct({}),
-                    output: Schema.Struct({ ok: Schema.Boolean }),
-                    execute: () => Effect.succeed({ output: { ok: true } }),
-                  }),
-                ),
+                draft.add({
+                  name: "embedded_tool",
+                  description: "Embedded test tool",
+                  input: Schema.Struct({}),
+                  output: Schema.Struct({ ok: Schema.Boolean }),
+                  execute: () => Effect.succeed({ output: { ok: true } }),
+                }),
               )
               .pipe(Effect.orDie),
         })

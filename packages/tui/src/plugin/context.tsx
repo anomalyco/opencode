@@ -1,5 +1,16 @@
 import type { Plugin } from "@opencode-ai/plugin/tui"
-import { batch, createContext, createEffect, on, onCleanup, onMount, useContext, type ParentProps } from "solid-js"
+import { createMarkdownCodeBlockRenderer, type MarkdownCodeBlockRenderer, type MarkdownOptions } from "@opentui/core"
+import {
+  batch,
+  createContext,
+  createEffect,
+  createMemo,
+  on,
+  onCleanup,
+  onMount,
+  useContext,
+  type ParentProps,
+} from "solid-js"
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
@@ -35,7 +46,10 @@ type Value = {
   readonly list: () => ReadonlyArray<State>
   readonly registered: () => ReadonlyArray<RegisteredPlugin>
   readonly route: (id: string, name: string) => Page["render"] | undefined
-  readonly slot: <Name extends SlotName>(name: Name) => ReadonlyArray<{ readonly id: string; readonly render: Slot<Name> }>
+  readonly slot: <Name extends SlotName>(
+    name: Name,
+  ) => ReadonlyArray<{ readonly id: string; readonly render: Slot<Name> }>
+  readonly markdown: () => MarkdownOptions["renderNode"]
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
 }
@@ -49,6 +63,7 @@ type Registration = {
   active: boolean
   routes: Record<string, Page>
   slots: Record<string, Slot>
+  markdown: Record<string, MarkdownCodeBlockRenderer>
   cleanups: Dispose[]
 }
 
@@ -56,6 +71,17 @@ type Registration = {
 type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "options"> & { enabled: boolean }
 
 const PluginContext = createContext<Value>()
+
+export function combineMarkdownRenderers(
+  sources: ReadonlyArray<Readonly<Record<string, MarkdownCodeBlockRenderer>>>,
+): MarkdownOptions["renderNode"] {
+  const renderers = new Map<string, MarkdownCodeBlockRenderer>()
+  for (const source of sources) {
+    for (const [language, render] of Object.entries(source)) renderers.set(language, render)
+  }
+  if (renderers.size === 0) return undefined
+  return createMarkdownCodeBlockRenderer(renderers)
+}
 
 export function PluginProvider(props: ParentProps<{ packages: PackageResolver; directories: string[] }>) {
   const host = usePluginHost()
@@ -67,6 +93,13 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     states: [] as ReadonlyArray<State>,
     registrations: {} as Record<string, Registration>,
   })
+  const markdown = createMemo(() =>
+    combineMarkdownRenderers(
+      Object.values(store.registrations).flatMap((registration) =>
+        registration.active ? [registration.markdown] : [],
+      ),
+    ),
+  )
 
   const activate = async (id: string) => {
     const item = store.registrations[id]
@@ -75,6 +108,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     batch(() => {
       setStore("registrations", id, "routes", reconcileStore({}))
       setStore("registrations", id, "slots", reconcileStore({}))
+      setStore("registrations", id, "markdown", reconcileStore({}))
       setStore("registrations", id, "cleanups", [])
     })
     const owned: Dispose[] = []
@@ -85,7 +119,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       owned,
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
-        set: (kind: "routes" | "slots", name: string, value: Page | Slot) =>
+        set: (kind: "routes" | "slots" | "markdown", name: string, value: Page | Slot | MarkdownCodeBlockRenderer) =>
           setStore("registrations", id, kind, name, () => value),
         remove: (kind, name) =>
           setStore(
@@ -101,6 +135,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     const cleanup = await setup(item.plugin, context, owned).catch((error) => {
       setStore("registrations", id, "routes", reconcileStore({}))
       setStore("registrations", id, "slots", reconcileStore({}))
+      setStore("registrations", id, "markdown", reconcileStore({}))
       throw error
     })
     if (cleanup) owned.push(async () => cleanup())
@@ -129,6 +164,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         if (store.registrations[id]) {
           setStore("registrations", id, "routes", reconcileStore({}))
           setStore("registrations", id, "slots", reconcileStore({}))
+          setStore("registrations", id, "markdown", reconcileStore({}))
         }
         setStore("states", (items) =>
           items.map((state) =>
@@ -193,7 +229,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
     const desired = new Map<string, Desired>()
-    for (const plugin of builtins) desired.set(plugin.id, { plugin, source: "builtin", version: "builtin", enabled: true })
+    for (const plugin of builtins)
+      desired.set(plugin.id, { plugin, source: "builtin", version: "builtin", enabled: true })
     const failures: State[] = []
     for (const entry of entries) {
       const target = typeof entry === "string" ? entry : entry.package
@@ -256,7 +293,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     // generation is a no-op, so spurious watch events cost nothing.
     const currentIds = Object.keys(store.registrations)
     const desiredIds = [...desired.keys()]
-    const structural = currentIds.length !== desiredIds.length || currentIds.some((id, index) => desiredIds[index] !== id)
+    const structural =
+      currentIds.length !== desiredIds.length || currentIds.some((id, index) => desiredIds[index] !== id)
     if (structural) {
       await Promise.all(
         Object.entries(store.registrations)
@@ -342,7 +380,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     for (const state of states)
       if (
         state.status === "failed" &&
-        !store.states.some((prev) => prev.status === "failed" && prev.target === state.target && prev.error === state.error)
+        !store.states.some(
+          (prev) => prev.status === "failed" && prev.target === state.target && prev.error === state.error,
+        )
       )
         host.toast.show({ variant: "error", title: "Plugin", message: `${state.target}: ${state.error}` })
     setStore("states", reconcileStore(states))
@@ -390,7 +430,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         ready: () => store.ready,
         list: () => store.states,
         registered: () =>
-          Object.entries(store.registrations).map(([id, plugin]) => ({ id, source: plugin.source, active: plugin.active })),
+          Object.entries(store.registrations).map(([id, plugin]) => ({
+            id,
+            source: plugin.source,
+            active: plugin.active,
+          })),
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
         slot: (name) =>
           Object.entries(store.registrations).flatMap(([id, registration]) => {
@@ -405,6 +449,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
             slotItems.set(render, item)
             return [item]
           }),
+        markdown,
         // Manual dialog toggles join the same chain as reconciles so a
         // toggle mid-reload cannot mix registrations across generations.
         activate: (id) => enqueue(() => activate(id)),
@@ -468,6 +513,7 @@ function toRegistration(item: Desired): Registration {
     active: false,
     routes: {},
     slots: {},
+    markdown: {},
     cleanups: [],
   }
 }

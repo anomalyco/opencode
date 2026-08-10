@@ -62,10 +62,7 @@ function managedService(options: EnsureOptions) {
   }
 }
 
-const resolveManaged = Effect.fnUntraced(function* (
-  options: EnsureOptions,
-  mismatch: NonNullable<Args["mismatch"]>,
-) {
+const resolveManaged = Effect.fnUntraced(function* (options: EnsureOptions, mismatch: NonNullable<Args["mismatch"]>) {
   if (mismatch === "replace") return yield* Service.ensure(options)
   if (mismatch === "ignore") return yield* Service.ensure({ ...options, version: undefined })
 

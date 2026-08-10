@@ -29,6 +29,27 @@ const it = testEffect(layer)
 const models = (file: string) =>
   AppNodeBuilder.build(ModelsDev.node, [[ModelsDev.node, ModelsDev.configured({ file, fetch: false })]])
 
+function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Object.fromEntries(Object.keys(variables).map((key) => [key, process.env[key]]))
+      Object.entries(variables).forEach(([key, value]) => {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      })
+      return previous
+    }),
+    effect,
+    (previous) =>
+      Effect.sync(() => {
+        Object.entries(previous).forEach(([key, value]) => {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        })
+      }),
+  )
+}
+
 describe("ModelsDevPlugin", () => {
   it.effect("projects normalized models.dev snapshots into the catalog", () =>
     Effect.gen(function* () {
@@ -219,6 +240,71 @@ describe("ModelsDevPlugin", () => {
         }),
       ])
     }).pipe(Effect.provide(models(path.join(import.meta.dir, "fixtures", "models-dev.json")))),
+  )
+
+  it.effect("resolves declared environment variables in provider and model URLs", () =>
+    withEnv(
+      {
+        ACME_HOST: "api.acme.test",
+        ACME_MODEL_PATH: undefined,
+        UNDECLARED_HOST: "private.example",
+      },
+      () =>
+        Effect.gen(function* () {
+          const integrations = yield* Integration.Service
+          const catalog = yield* Catalog.Service
+          const providerID = Provider.ID.make("acme")
+          const modelID = Model.ID.make("gpt-5.4")
+          yield* ModelsDevPlugin.effect(
+            host({
+              catalog: catalogHost(catalog),
+              integration: integrationHost(integrations),
+            }),
+          ).pipe(
+            Effect.provideService(
+              ModelsDev.Service,
+              ModelsDev.Service.of({
+                get: () =>
+                  Effect.succeed([
+                    {
+                      info: {
+                        id: providerID,
+                        name: "Acme",
+                        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+                        settings: { baseURL: "https://${ACME_HOST}/${UNDECLARED_HOST}/v1" },
+                      },
+                      environment: ["ACME_HOST", "ACME_MODEL_PATH", "ACME_API_KEY"],
+                      models: [
+                        {
+                          id: modelID,
+                          modelID,
+                          providerID,
+                          name: "GPT-5.4",
+                          settings: { baseURL: "https://${ACME_HOST}/${ACME_MODEL_PATH}/v1" },
+                          capabilities: { tools: true, input: [], output: [] },
+                          variants: [],
+                          time: { released: Date.parse("2026-01-01") },
+                          cost: [],
+                          status: "active",
+                          enabled: true,
+                          limit: { context: 1_050_000, output: 128_000 },
+                        },
+                      ],
+                    },
+                  ] satisfies readonly ModelsDev.Snapshot[]),
+                refresh: () => Effect.void,
+              }),
+            ),
+          )
+
+          expect((yield* catalog.provider.get(providerID))?.settings?.baseURL).toBe(
+            "https://api.acme.test/${UNDECLARED_HOST}/v1",
+          )
+          expect((yield* catalog.model.get(providerID, modelID))?.settings?.baseURL).toBe(
+            "https://api.acme.test/${ACME_MODEL_PATH}/v1",
+          )
+        }),
+    ),
   )
 
   it.effect("omits legacy provider aliases", () =>

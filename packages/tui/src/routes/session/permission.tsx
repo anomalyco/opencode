@@ -289,6 +289,7 @@ function RejectPrompt(props: {
 }) {
   let input: TextareaRenderable
   const theme = useTheme("elevated")
+  const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   Keymap.createLayer(() => ({
@@ -363,6 +364,7 @@ function RejectPrompt(props: {
           textColor={theme.text.default}
           focusedTextColor={theme.text.default}
           cursorColor={theme.text.default}
+          cursorStyle={config.cursor}
         />
         <box
           id="session.permission.reject.actions"

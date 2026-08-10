@@ -300,9 +300,8 @@ export const fixture = {
       .filter((message) => message.info.role === "user")
       .map((message) => message.info.id),
     targetPartIDs: targetMessages.flatMap(currentPartIDs),
-    expandedShellPartID: targetMessages
-      .flatMap((message) => message.parts)
-      .find((part) => part.tool === "bash")!.callID,
+    expandedShellPartID: targetMessages.flatMap((message) => message.parts).find((part) => part.tool === "bash")!
+      .callID,
   },
 }
 

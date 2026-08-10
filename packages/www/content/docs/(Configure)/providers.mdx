@@ -33,9 +33,9 @@ For a custom provider, `env` declares the variables that can supply its key:
   "$schema": "https://opencode.ai/config.json",
   "providers": {
     "acme": {
-      "env": ["ACME_API_KEY"]
-    }
-  }
+      "env": ["ACME_API_KEY"],
+    },
+  },
 }
 ```
 
@@ -48,10 +48,10 @@ When several credential sources exist, OpenCode uses the stored credential first
   "providers": {
     "acme": {
       "settings": {
-        "apiKey": "{env:ACME_API_KEY}"
-      }
-    }
-  }
+        "apiKey": "{env:ACME_API_KEY}",
+      },
+    },
+  },
 }
 ```
 
@@ -61,15 +61,15 @@ When several credential sources exist, OpenCode uses the stored credential first
 
 The `providers` object is keyed by provider ID. Each provider accepts these fields:
 
-| Field | Purpose |
-| --- | --- |
-| `name` | Display name. |
-| `env` | Ordered environment variable names that provide a connection. |
-| `package` | Runtime provider package. |
+| Field      | Purpose                                                         |
+| ---------- | --------------------------------------------------------------- |
+| `name`     | Display name.                                                   |
+| `env`      | Ordered environment variable names that provide a connection.   |
+| `package`  | Runtime provider package.                                       |
 | `settings` | JSON settings passed to the runtime package, such as `baseURL`. |
-| `headers` | String-valued HTTP headers added to requests. |
-| `body` | JSON fields merged into request bodies. |
-| `models` | Models to add or override, keyed by catalog model ID. |
+| `headers`  | String-valued HTTP headers added to requests.                   |
+| `body`     | JSON fields merged into request bodies.                         |
+| `models`   | Models to add or override, keyed by catalog model ID.           |
 
 Configuration files are applied from lowest to highest precedence. `settings` and `body` are deep-merged. Headers are
 merged case-insensitively. At request time, provider values are inherited by the model, model values override them, and
@@ -86,10 +86,10 @@ models, and connection continue to apply:
   "providers": {
     "anthropic": {
       "settings": {
-        "baseURL": "https://llm-proxy.example.com/anthropic"
-      }
-    }
-  }
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+    },
+  },
 }
 ```
 
@@ -105,22 +105,22 @@ Headers and body fields can be set at provider, model, or variant scope:
   "providers": {
     "openai": {
       "headers": {
-        "X-Gateway-Tenant": "engineering"
+        "X-Gateway-Tenant": "engineering",
       },
       "body": {
         "metadata": {
-          "application": "opencode"
-        }
+          "application": "opencode",
+        },
       },
       "models": {
         "gpt-5.2": {
           "headers": {
-            "X-Model-Policy": "coding"
-          }
-        }
-      }
-    }
-  }
+            "X-Model-Policy": "coding",
+          },
+        },
+      },
+    },
+  },
 }
 ```
 
@@ -142,7 +142,7 @@ provider has no Models.dev catalog entries:
       "env": ["ACME_API_KEY"],
       "package": "@opencode-ai/ai/providers/openai-compatible",
       "settings": {
-        "baseURL": "https://llm.acme.example/v1"
+        "baseURL": "https://llm.acme.example/v1",
       },
       "models": {
         "qwen3-coder": {
@@ -150,16 +150,16 @@ provider has no Models.dev catalog entries:
           "capabilities": {
             "tools": true,
             "input": ["text"],
-            "output": ["text"]
+            "output": ["text"],
           },
           "limit": {
             "context": 131072,
-            "output": 32768
-          }
-        }
-      }
-    }
-  }
+            "output": 32768,
+          },
+        },
+      },
+    },
+  },
 }
 ```
 
@@ -168,10 +168,10 @@ Omit `env` for an endpoint that does not require authentication. The native comp
 
 The `package` field supports two runtime contracts:
 
-| Form | Contract |
-| --- | --- |
+| Form                                            | Contract                                                                                                                        |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `"@opencode-ai/ai/providers/openai-compatible"` | A V2 native package exporting `model(modelID, settings)`. An npm specifier or absolute `file://` URL may use the same contract. |
-| `"aisdk:@ai-sdk/openai-compatible"` | An AI SDK provider package. The `aisdk:` prefix is required. |
+| `"aisdk:@ai-sdk/openai-compatible"`             | An AI SDK provider package. The `aisdk:` prefix is required.                                                                    |
 
 Native packages receive the merged `settings` plus the resolved `apiKey`, `headers`, `body`, and `limits`. AI SDK
 packages receive their merged provider options. Use a package's own documentation for accepted settings; OpenCode does
@@ -193,11 +193,11 @@ the provider:
       "models": {
         "coding": {
           "modelID": "gpt-5.2",
-          "name": "GPT-5.2 Coding"
-        }
-      }
-    }
-  }
+          "name": "GPT-5.2 Coding",
+        },
+      },
+    },
+  },
 }
 ```
 

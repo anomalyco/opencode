@@ -16,9 +16,10 @@ test("discovers project TUI plugin files in stable order", async () => {
     writeFile(path.join(directory, "nested", "ignored.ts"), "export default {}"),
   ])
 
-  expect(
-    await discoverTuiPlugins(await tuiPluginDirectories(tmp.path, path.join(tmp.path, "config"))),
-  ).toEqual([path.join(directory, "first.js"), path.join(directory, "second.tsx")])
+  expect(await discoverTuiPlugins(await tuiPluginDirectories(tmp.path, path.join(tmp.path, "config")))).toEqual([
+    path.join(directory, "first.js"),
+    path.join(directory, "second.tsx"),
+  ])
 })
 
 test("returns no project TUI plugins when the directory is absent", async () => {

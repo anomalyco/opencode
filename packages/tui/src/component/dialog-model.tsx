@@ -140,7 +140,7 @@ export function DialogModel(props: { providerID?: string }) {
       actions={[
         {
           command: "model.dialog.provider",
-          title: connected() ? "Connect integration" : "View all integrations",
+          title: connected() ? "Connect an integration" : "View all integrations",
           selection: "none",
           onTrigger() {
             dialog.replace(() => (

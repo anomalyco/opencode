@@ -86,6 +86,7 @@ test.each([
   let themes: ReturnType<typeof useThemes> | undefined
   let failure: ThemeError | undefined
   let unsubscribe: (() => void) | undefined
+  const discovery = Promise.withResolvers<Record<string, unknown>>()
 
   function Probe() {
     const value = useThemes()
@@ -97,7 +98,7 @@ test.each([
   const app = await testRender(
     () => (
       <ConfigProvider config={createTuiResolvedConfig({ theme: { name: "invalid" } })}>
-        <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({ invalid: source }) }}>
+        <ThemeProvider mode="dark" source={{ discover: () => discovery.promise }}>
           <Probe />
         </ThemeProvider>
       </ConfigProvider>
@@ -105,6 +106,7 @@ test.each([
     { width: 20, height: 2 },
   )
   app.renderer.start()
+  discovery.resolve({ invalid: source })
 
   try {
     await wait(() => themes?.ready === true)

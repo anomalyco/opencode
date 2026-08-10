@@ -519,14 +519,8 @@ describe("Bedrock Converse route", () => {
           fixedBytes(
             eventStreamBody(
               ["messageStart", { role: "assistant" }],
-              [
-                "contentBlockDelta",
-                { contentBlockIndex: 0, delta: { reasoningContent: { text: "Let me think." } } },
-              ],
-              [
-                "contentBlockDelta",
-                { contentBlockIndex: 0, delta: { reasoningContent: { signature: "sig_1" } } },
-              ],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { text: "Let me think." } } }],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { signature: "sig_1" } } }],
               ["messageStop", { stopReason: "end_turn" }],
             ),
           ),
@@ -561,10 +555,7 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       const body = eventStreamBody(
         ["messageStart", { role: "assistant" }],
-        [
-          "contentBlockDelta",
-          { contentBlockIndex: 0, delta: { reasoningContent: { signature: "sig_1" } } },
-        ],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { signature: "sig_1" } } }],
         ["contentBlockStop", { contentBlockIndex: 0 }],
         ["messageStop", { stopReason: "end_turn" }],
       )

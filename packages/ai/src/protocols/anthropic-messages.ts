@@ -422,14 +422,12 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: Me
 
 // Tool results may carry structured text, images, and documents. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
-const lowerToolResultContentItem = Effect.fn("AnthropicMessages.lowerToolResultContentItem")(function* (
-  item: Tool.Content,
-) {
+const lowerToolResultContentItem = Effect.fnUntraced(function* (item: Tool.Content) {
   if (item.type === "text") return { type: "text" as const, text: item.text } satisfies AnthropicTextBlock
   return yield* lowerMedia({ type: "media", mediaType: item.mime, data: item.uri, filename: item.name })
 })
 
-const lowerToolResultContent = Effect.fn("AnthropicMessages.lowerToolResultContent")(function* (part: ToolResultPart) {
+const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart) {
   // Text / json / error results stay as a string for backward compatibility
   // with existing cassettes and provider expectations.
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)

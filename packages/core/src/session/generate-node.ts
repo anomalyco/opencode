@@ -11,6 +11,7 @@ import { SessionContext } from "./context"
 import { SessionGenerate } from "./generate"
 import { SessionHistory } from "./history"
 import { SessionModelHeaders } from "./model-headers"
+import { SessionPromptCacheKey } from "./prompt-cache-key"
 import { SessionRunnerModel } from "./runner/model"
 import PROMPT_DEFAULT from "./runner/prompt/base.txt"
 import { toLLMMessages } from "./runner/to-llm-message"
@@ -31,9 +32,6 @@ export const layer = Layer.effect(
         const model = yield* models.resolve(selection.session)
         const history = yield* SessionHistory.preview(database.db, selection.session.id, selection.instructions)
         const providerMetadataKey = model.model.route.providerMetadataKey ?? model.model.provider
-        const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(selection.session.id)
-          ? selection.session.id.slice(4)
-          : selection.session.id
         const tools = selection.tools
         const toolDefinitions = tools.definitions
         const toolsByName = new Map(toolDefinitions.map((tool) => [tool.name, tool]))
@@ -71,7 +69,7 @@ export const layer = Layer.effect(
           LLM.request({
             model: model.model,
             http: { headers: SessionModelHeaders.make(selection.session, app) },
-            providerOptions: { [providerMetadataKey]: { promptCacheKey } },
+            promptCacheKey: SessionPromptCacheKey.make(selection.session.id),
             system: contextEvent.system,
             messages: contextEvent.messages,
             tools: hookedTools,

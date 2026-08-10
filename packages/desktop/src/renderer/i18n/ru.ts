@@ -1,6 +1,6 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Проверить обновления...",
-  "desktop.menu.reloadWebview": "Перезагрузить Webview",
+  "desktop.menu.reloadWebview": "Перезагрузить WebView",
   "desktop.menu.restart": "Перезапустить",
 
   "desktop.dialog.chooseFolder": "Выберите папку",
@@ -17,4 +17,7 @@ export const dict = {
   "desktop.updater.downloaded.prompt": "Версия OpenCode {{version}} загружена. Хотите установить и перезапустить?",
   "desktop.updater.installFailed.title": "Обновление не удалось",
   "desktop.updater.installFailed.message": "Не удалось установить обновление",
+
+  "desktop.error.dev.rootNotFound":
+    "Корневой элемент не найден. Вы забыли добавить его в index.html? Или, может быть, атрибут id был написан неправильно?",
 }

@@ -688,6 +688,8 @@ export default function Page() {
     return {
       queryKey: [...vcsKey(), mode] as const,
       enabled,
+      refetchOnMount: "always" as const,
+      refetchOnWindowFocus: true,
       queryFn: mode
         ? () =>
             sdk()
@@ -701,6 +703,16 @@ export default function Page() {
     }
   })
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
+  createEffect(
+    on(
+      () => desktopReviewOpen() || mobileChanges(),
+      (open, previous) => {
+        if (!open || previous || !desktopFileTreeOpen() || vcsQuery.isFetching) return
+        refreshVcs()
+      },
+      { defer: true },
+    ),
+  )
   const reviewDiffs = () => {
     if (reviewMode() === "git" || reviewMode() === "branch")
       // avoids suspense
@@ -946,19 +958,6 @@ export default function Page() {
       { defer: true },
     ),
   )
-
-  const stopVcs = sdk().event.listen((evt) => {
-    const details = evt.details as { type: string; properties?: unknown }
-    if (details.type !== "file.watcher.updated" && details.type !== "filesystem.changed") return
-    const props =
-      typeof details.properties === "object" && details.properties
-        ? (details.properties as Record<string, unknown>)
-        : undefined
-    const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
-    refreshVcs()
-  })
-  onCleanup(stopVcs)
 
   createEffect(
     on(
@@ -1847,7 +1846,9 @@ export default function Page() {
 
       const session = sdk().api.session
       const target = sync()
-      const next = userMessages().find((item) => item.id > id)
+      const index = userMessages().findIndex((item) => item.id === id)
+      if (index < 0) return
+      const next = userMessages()[index + 1]
       const last = target.session.get(sessionID)?.revert
 
       await runPromptRollbackMutation({
@@ -1887,8 +1888,10 @@ export default function Page() {
   const rolled = createMemo(() => {
     const id = revertMessageID()
     if (!id) return []
+    const index = userMessages().findIndex((item) => item.id === id)
+    if (index < 0) return []
     return userMessages()
-      .filter((item) => item.id >= id)
+      .slice(index)
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
@@ -2278,7 +2281,7 @@ export default function Page() {
             <div onPointerDown={() => size.start()}>
               <ResizeHandle
                 classList={{
-                  "-right-1": settings.general.newLayoutDesigns(),
+                  "-end-1": settings.general.newLayoutDesigns(),
                 }}
                 direction="horizontal"
                 size={sessionPanelResizedWidth()}

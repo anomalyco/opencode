@@ -75,8 +75,7 @@ describe("OpenRouterPlugin", () => {
       })
       yield* addPlugin()
       expect(
-        (yield* catalog.model.get(Provider.ID.make("custom-openrouter"), Model.ID.make("gpt-5-chat-latest")))
-          ?.enabled,
+        (yield* catalog.model.get(Provider.ID.make("custom-openrouter"), Model.ID.make("gpt-5-chat-latest")))?.enabled,
       ).toBe(true)
     }),
   )

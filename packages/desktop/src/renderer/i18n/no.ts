@@ -18,4 +18,7 @@ export const dict = {
     "Versjon {{version}} av OpenCode er lastet ned. Vil du installere den og starte på nytt?",
   "desktop.updater.installFailed.title": "Oppdatering mislyktes",
   "desktop.updater.installFailed.message": "Kunne ikke installere oppdateringen",
+
+  "desktop.error.dev.rootNotFound":
+    "Rotelement ikke funnet. Glemte du å legge det til i index.html? Eller kanskje id-attributtet er feilstavet?",
 }

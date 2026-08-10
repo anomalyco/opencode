@@ -58,6 +58,12 @@ import type {
   SessionContextOutput,
   SessionPendingListInput,
   SessionPendingListOutput,
+  SessionPendingCancelInput,
+  SessionPendingCancelOutput,
+  SessionPendingSteerInput,
+  SessionPendingSteerOutput,
+  SessionPendingQueueInput,
+  SessionPendingQueueOutput,
   SessionInstructionsEntryListInput,
   SessionInstructionsEntryListOutput,
   SessionInstructionsEntryPutInput,
@@ -609,6 +615,7 @@ export function make(options: ClientOptions) {
               text: input["text"],
               files: input["files"],
               agents: input["agents"],
+              skills: input["skills"],
               metadata: input["metadata"],
               delivery: input["delivery"],
               resume: input["resume"],
@@ -632,6 +639,7 @@ export function make(options: ClientOptions) {
               model: input["model"],
               files: input["files"],
               agents: input["agents"],
+              skills: input["skills"],
               delivery: input["delivery"],
               resume: input["resume"],
             },
@@ -766,6 +774,39 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+        cancel: (input: SessionPendingCancelInput, requestOptions?: RequestOptions) =>
+          request<SessionPendingCancelOutput>(
+            {
+              method: "DELETE",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/pending/${encodeURIComponent(input.inputID)}`,
+              successStatus: 204,
+              declaredStatuses: [409, 404, 401, 400],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        steer: (input: SessionPendingSteerInput, requestOptions?: RequestOptions) =>
+          request<SessionPendingSteerOutput>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/pending/${encodeURIComponent(input.inputID)}/steer`,
+              successStatus: 204,
+              declaredStatuses: [409, 404, 401, 400],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        queue: (input: SessionPendingQueueInput, requestOptions?: RequestOptions) =>
+          request<SessionPendingQueueOutput>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/pending/${encodeURIComponent(input.inputID)}/queue`,
+              successStatus: 204,
+              declaredStatuses: [409, 404, 401, 400],
+              empty: true,
+            },
+            requestOptions,
+          ),
       },
       instructions: {
         entry: {
@@ -991,7 +1032,7 @@ export function make(options: ClientOptions) {
               method: "POST",
               path: `/api/integration/${encodeURIComponent(input.integrationID)}/connect/key`,
               query: { location: input["location"] },
-              body: { key: input["key"], label: input["label"] },
+              body: { key: input["key"], answer: input["answer"], label: input["label"] },
               successStatus: 204,
               declaredStatuses: [400, 401],
               empty: true,
@@ -1006,7 +1047,7 @@ export function make(options: ClientOptions) {
               method: "POST",
               path: `/api/integration/${encodeURIComponent(input.integrationID)}/connect/oauth`,
               query: { location: input["location"] },
-              body: { methodID: input["methodID"], inputs: input["inputs"], label: input["label"] },
+              body: { methodID: input["methodID"], answer: input["answer"], label: input["label"] },
               successStatus: 200,
               declaredStatuses: [400, 401],
               empty: false,

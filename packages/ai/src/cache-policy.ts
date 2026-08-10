@@ -133,7 +133,8 @@ const countHints = (request: LLMRequest) =>
 
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
-  if (request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto")) return request
+  if (request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto"))
+    return request
   const policy = resolve(request.cache)
   if (!policy.tools && !policy.system && !policy.messages) return request
 

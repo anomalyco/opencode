@@ -305,11 +305,13 @@ describe("LocationServiceMap", () => {
           )
           yield* Deferred.await(started)
 
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
+          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
             Effect.provide(context),
-            Effect.timeout("1 second"),
+            Effect.forkChild({ startImmediately: true }),
           )
+          expect(flushFiber.pollUnsafe()).toBeUndefined()
           yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(flushFiber)
           yield* Deferred.await(completed)
         }),
       ),

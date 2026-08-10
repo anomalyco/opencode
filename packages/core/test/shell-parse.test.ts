@@ -20,7 +20,11 @@ describe("ShellParse", () => {
 
   test("splits PowerShell commands case-insensitively", async () => {
     const result = await Effect.runPromise(
-      ShellParse.scan("Get-ChildItem; Write-Output 'done'", "C:\\Program Files\\PowerShell\\7\\pwsh.exe", "C:\\workspace"),
+      ShellParse.scan(
+        "Get-ChildItem; Write-Output 'done'",
+        "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+        "C:\\workspace",
+      ),
     )
     expect(result.commands).toEqual([
       { resource: "Get-ChildItem", save: "Get-ChildItem *" },

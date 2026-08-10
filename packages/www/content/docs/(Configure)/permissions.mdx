@@ -7,9 +7,8 @@ Permissions control whether an agent may perform an action on a resource. V2
 configuration uses the `permissions` field and an ordered array of rules.
 
 <Callout type="warning">
-  The V1 object syntax uses different field and action names. Do not use
-  `permission`, `bash`, or `task` in V2 configuration; use `permissions`,
-  `shell`, and `subagent`.
+  The V1 object syntax uses different field and action names. Do not use `permission`, `bash`, or `task` in V2
+  configuration; use `permissions`, `shell`, and `subagent`.
 </Callout>
 
 ## Rule schema
@@ -25,8 +24,8 @@ Each rule has three required string fields:
     { "action": "read", "resource": "*.env", "effect": "deny" },
     { "action": "shell", "resource": "git status *", "effect": "allow" },
     { "action": "shell", "resource": "git push *", "effect": "deny" },
-    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" }
-  ]
+    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
+  ],
 }
 ```
 
@@ -65,21 +64,21 @@ multiple files. OpenCode denies the operation if any resource resolves to
 V2 action names are strings, so plugins may introduce additional actions. The
 current built-in actions use these resources:
 
-| Action | Resource matched |
-| --- | --- |
-| `read` | Location-relative path for an internal file or directory; canonical absolute path for an external target |
-| `edit` | Target path for `edit`, `write`, and `patch`; all three tools share this action |
-| `glob` | The requested glob pattern |
-| `grep` | The requested regular expression, not the search path |
-| `shell` | The complete raw shell command string |
-| `subagent` | The target agent ID |
-| `skill` | The skill ID |
-| `question` | `*` |
-| `webfetch` | The requested URL |
-| `websearch` | The search query |
-| `external_directory` | A canonical external directory boundary, normally ending in `/*` |
-| `<server>_<tool>` | `*` for an MCP tool; unsupported characters in both names become `_` |
-| `execute` | `*`; controls availability of the Code Mode dispatcher, while each nested tool still enforces its own permission |
+| Action               | Resource matched                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `read`               | Location-relative path for an internal file or directory; canonical absolute path for an external target         |
+| `edit`               | Target path for `edit`, `write`, and `patch`; all three tools share this action                                  |
+| `glob`               | The requested glob pattern                                                                                       |
+| `grep`               | The requested regular expression, not the search path                                                            |
+| `shell`              | The complete raw shell command string                                                                            |
+| `subagent`           | The target agent ID                                                                                              |
+| `skill`              | The skill ID                                                                                                     |
+| `question`           | `*`                                                                                                              |
+| `webfetch`           | The requested URL                                                                                                |
+| `websearch`          | The search query                                                                                                 |
+| `external_directory` | A canonical external directory boundary, normally ending in `/*`                                                 |
+| `<server>_<tool>`    | `*` for an MCP tool; unsupported characters in both names become `_`                                             |
+| `execute`            | `*`; controls availability of the Code Mode dispatcher, while each nested tool still enforces its own permission |
 
 `doom_loop` and `lsp` are not current V2 Core permission actions.
 
@@ -97,19 +96,19 @@ directory.
     {
       "action": "external_directory",
       "resource": "~/projects/reference/*",
-      "effect": "allow"
+      "effect": "allow",
     },
     {
       "action": "read",
       "resource": "~/projects/reference/*",
-      "effect": "allow"
+      "effect": "allow",
     },
     {
       "action": "edit",
       "resource": "~/projects/reference/*",
-      "effect": "deny"
-    }
-  ]
+      "effect": "deny",
+    },
+  ],
 }
 ```
 
@@ -118,11 +117,10 @@ For `external_directory`, `read`, and `edit` resources, a leading `~`, `~/`,
 raw command text and are **not** home-expanded.
 
 <Callout type="warning">
-  `shell` runs with the host user's filesystem, process, and network authority.
-  Its resource is raw text, not a parsed command. External command arguments
-  produce only best-effort warnings; `external_directory` is enforced for the
-  working directory, not every path embedded in a command. Prefer a narrow
-  shell allowlist over patterns intended to identify every dangerous command.
+  `shell` runs with the host user's filesystem, process, and network authority. Its resource is raw text, not a parsed
+  command. External command arguments produce only best-effort warnings; `external_directory` is enforced for the
+  working directory, not every path embedded in a command. Prefer a narrow shell allowlist over patterns intended to
+  identify every dangerous command.
 </Callout>
 
 Relative mutation paths cannot escape the active Location, and symlink escapes
@@ -135,13 +133,13 @@ Every agent, including custom agents, starts with ordered defaults that allow
 tools, ask for external directories, ask for `.env` reads, and allow
 `.env.example` reads. Shipped agents then add their own policies:
 
-| Agent | Effective default policy |
-| --- | --- |
-| `build` | Allows most actions; asks for external directories and `.env` reads; allows questions and entering plan mode; denies exiting plan mode |
-| `plan` | Uses the same base, allows questions and exiting plan mode, and denies edits except OpenCode plan files |
-| `general` | Uses the base policy but cannot launch another subagent; questions and plan transitions remain denied |
-| `explore` | Denies everything except `read`, `glob`, `grep`, `webfetch`, and `websearch`; cannot launch subagents and asks for external directories |
-| Hidden maintenance agents | Deny all actions |
+| Agent                     | Effective default policy                                                                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `build`                   | Allows most actions; asks for external directories and `.env` reads; allows questions and entering plan mode; denies exiting plan mode  |
+| `plan`                    | Uses the same base, allows questions and exiting plan mode, and denies edits except OpenCode plan files                                 |
+| `general`                 | Uses the base policy but cannot launch another subagent; questions and plan transitions remain denied                                   |
+| `explore`                 | Denies everything except `read`, `glob`, `grep`, `webfetch`, and `websearch`; cannot launch subagents and asks for external directories |
+| Hidden maintenance agents | Deny all actions                                                                                                                        |
 
 The base read rules are ordered as follows:
 
@@ -150,7 +148,7 @@ The base read rules are ordered as follows:
   { "action": "read", "resource": "*", "effect": "allow" },
   { "action": "read", "resource": "*.env", "effect": "ask" },
   { "action": "read", "resource": "*.env.*", "effect": "ask" },
-  { "action": "read", "resource": "*.env.example", "effect": "allow" }
+  { "action": "read", "resource": "*.env.example", "effect": "allow" },
 ]
 ```
 
@@ -172,7 +170,7 @@ agent under `agents.<id>.permissions`:
   "permissions": [
     { "action": "shell", "resource": "*", "effect": "ask" },
     { "action": "shell", "resource": "git diff *", "effect": "allow" },
-    { "action": "shell", "resource": "git status *", "effect": "allow" }
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
   ],
   "agents": {
     "reviewer": {
@@ -181,10 +179,10 @@ agent under `agents.<id>.permissions`:
       "permissions": [
         { "action": "edit", "resource": "*", "effect": "deny" },
         { "action": "shell", "resource": "git diff *", "effect": "allow" },
-        { "action": "shell", "resource": "git status *", "effect": "allow" }
-      ]
-    }
-  }
+        { "action": "shell", "resource": "git status *", "effect": "allow" },
+      ],
+    },
+  },
 }
 ```
 

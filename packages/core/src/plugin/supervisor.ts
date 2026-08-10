@@ -14,6 +14,7 @@ import { Credential } from "../credential"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { Bus } from "../bus"
+import { Environment } from "../environment"
 import { FileMutation } from "../file-mutation"
 import { Formatter } from "../formatter"
 import { FileSystem } from "../filesystem"
@@ -232,7 +233,7 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const watcher = yield* Watcher.Service
     const fs = yield* FSUtil.Service
-    const ready = yield* Deferred.make<void>()
+    const ready = { current: yield* Deferred.make<void>() }
     let observed = 0
 
     // Configured local plugin files can live outside config roots, where the
@@ -282,13 +283,21 @@ const layer = Layer.effect(
     })
     const updates = Stream.merge(
       config.changes().pipe(
-        Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path))),
+        Stream.filterEffect((update) =>
+          Effect.map(config.entries(), (entries) => isPluginSource(entries, update.path)),
+        ),
         Stream.merge(Stream.fromPubSub(configuredChanges)),
       ),
       bus.subscribe([Event.Updated, SdkPlugins.Updated]),
     ).pipe(
       // Make accepted work visible to flush before coalescing the burst.
-      Stream.mapEffect(() => Effect.sync(() => ++observed)),
+      Stream.mapEffect(() =>
+        Effect.gen(function* () {
+          observed++
+          if (yield* Deferred.isDone(ready.current)) ready.current = yield* Deferred.make<void>()
+          return observed
+        }),
+      ),
     )
     yield* Stream.concat(Stream.succeed(0), updates).pipe(
       // Keep observing updates while activation runs, retaining only the latest generation request.
@@ -297,12 +306,12 @@ const layer = Layer.effect(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
           yield* activate()
-          if (observed === target) yield* Deferred.succeed(ready, undefined)
+          if (observed === target) yield* Deferred.succeed(ready.current, undefined)
         }).pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause }))),
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: Deferred.await(ready) })
+    return Service.of({ flush: Effect.suspend(() => Deferred.await(ready.current)) })
   }),
 )
 
@@ -320,6 +329,7 @@ export const node = makeLocationNode({
     Config.node,
     Credential.node,
     Bus.node,
+    Environment.node,
     FileMutation.node,
     Formatter.node,
     FileSystem.node,

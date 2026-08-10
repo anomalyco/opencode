@@ -85,7 +85,12 @@ test("discovers an ancestor TUI plugin directory created after startup", async (
   await writeFile(path.join(initial, "ready.ts"), lifecycleSource(ready, "test.ready", "ready"))
 
   await using app = await bootApp(cwd)
-  expect(await until(() => readFile(ready, "utf8"), (value) => value === "ready:setup\n")).toBe("ready:setup\n")
+  expect(
+    await until(
+      () => readFile(ready, "utf8"),
+      (value) => value === "ready:setup\n",
+    ),
+  ).toBe("ready:setup\n")
   const directory = path.join(tmp.path, "repo", ".opencode", "plugins", "tui")
   await mkdir(directory, { recursive: true })
   await writeFile(path.join(directory, "hot.ts"), lifecycleSource(marker, "test.hot", "v1"))
@@ -149,7 +154,12 @@ export default {
   expect(await until(readA, (value) => value === "a1:setup\n")).toBe("a1:setup\n")
   // The crashing plugin genuinely loaded and registered its slot; without
   // this the rest of the test would pass even if it never imported.
-  expect(await until(() => readFile(markerCrash, "utf8"), (value) => value === "setup\n")).toBe("setup\n")
+  expect(
+    await until(
+      () => readFile(markerCrash, "utf8"),
+      (value) => value === "setup\n",
+    ),
+  ).toBe("setup\n")
 
   // The app survives the crashing slot: hot reload still works for others.
   // The render-time boundary itself (fallback + toast) is not exercisable

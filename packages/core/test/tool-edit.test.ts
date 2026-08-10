@@ -4,9 +4,9 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Environment } from "@opencode-ai/core/environment"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Formatter } from "@opencode-ai/core/formatter"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { Permission } from "@opencode-ai/core/permission"
@@ -14,6 +14,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Tool } from "@opencode-ai/core/tool"
 import { EditTool } from "@opencode-ai/core/tool/plugin/edit"
+import { transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -23,7 +24,15 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const editToolNode = makeLocationNode({
   name: "test/edit-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(EditTool.Plugin)),
-  deps: [Tool.node, LocationMutation.node, FileMutation.node, Formatter.node, FSUtil.node, Permission.node],
+  deps: [
+    Tool.node,
+    LocationMutation.node,
+    FileMutation.node,
+    Environment.node,
+    Formatter.node,
+    Location.node,
+    Permission.node,
+  ],
 })
 
 const sessionID = Session.ID.make("ses_edit_tool_test")
@@ -72,30 +81,6 @@ const reset = () => {
   formatFile = () => Effect.succeed(false)
 }
 
-const filesystem = Layer.effect(
-  FSUtil.Service,
-  Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    return FSUtil.Service.of({
-      ...fs,
-      readFile: (target) =>
-        fs
-          .readFile(target)
-          .pipe(
-            Effect.tap((content) =>
-              Effect.sync(() => reads++).pipe(Effect.andThen(Effect.suspend(() => afterRead(target, content)))),
-            ),
-          ),
-      writeWithDirs: (target, content, mode) =>
-        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeWithDirs(target, content, mode))),
-      writeFile: (target, content, options) =>
-        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeFile(target, content, options))),
-      writeFileString: (target, content, options) =>
-        Effect.sync(() => writes.push(target)).pipe(Effect.andThen(fs.writeFileString(target, content, options))),
-    })
-  }),
-).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
-
 const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) => Effect.Effect<A, E, R>) => {
   const activeLocation = Layer.succeed(
     Location.Service,
@@ -106,15 +91,25 @@ const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) =
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(
-        LayerNode.group([
-          Tool.node,
-          Tool.node,
-          LocationMutation.node,
-          FileMutation.node,
-          editToolNode,
-        ]),
+        LayerNode.group([Tool.node, Tool.node, LocationMutation.node, FileMutation.node, editToolNode]),
         [
-          [FSUtil.node, filesystem],
+          [
+            Environment.node,
+            transformEnvironmentFiles(activeLocation, (files) => ({
+              read: (target, range) =>
+                files
+                  .read(target, range)
+                  .pipe(
+                    Effect.tap((result) =>
+                      Effect.sync(() => reads++).pipe(
+                        Effect.andThen(Effect.suspend(() => afterRead(target, result.bytes))),
+                      ),
+                    ),
+                  ),
+              write: (target, content) =>
+                Effect.sync(() => writes.push(target)).pipe(Effect.andThen(files.write(target, content))),
+            })),
+          ],
           [Location.node, activeLocation],
           [Formatter.node, formatter],
           [Permission.node, permission],
@@ -471,10 +466,7 @@ describe("EditTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* executeTool(
-                    registry,
-                    call({ path: "missing.ts", oldString: "before", newString: "after" }),
-                  ),
+                  yield* executeTool(registry, call({ path: "missing.ts", oldString: "before", newString: "after" })),
                 ).toEqual({
                   status: "error",
                   error: { type: "tool.execution", message: "File not found: missing.ts" },
@@ -639,6 +631,43 @@ describe("EditTool", () => {
           ),
           Effect.andThen(() => Effect.promise(() => fs.readFile(target, "utf8"))),
           Effect.tap((content) => Effect.sync(() => expect(content).toBe("\uFEFFafter\r\nrest\r\n"))),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("serializes concurrent edit transactions", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "concurrent.txt")
+        afterRead = () => (reads === 1 ? Effect.sleep("50 millis") : Effect.void)
+        return Effect.promise(() => fs.writeFile(target, "one\ntwo\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.all(
+                [
+                  executeTool(
+                    registry,
+                    call({ path: "concurrent.txt", oldString: "one", newString: "ONE" }, "call-edit-one"),
+                  ),
+                  executeTool(
+                    registry,
+                    call({ path: "concurrent.txt", oldString: "two", newString: "TWO" }, "call-edit-two"),
+                  ),
+                ],
+                { concurrency: "unbounded" },
+              ),
+            ),
+          ),
+          Effect.andThen((results) =>
+            Effect.gen(function* () {
+              expect(results.map((result) => result.status)).toEqual(["completed", "completed"])
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("ONE\nTWO\n")
+            }),
+          ),
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),

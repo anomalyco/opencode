@@ -1,9 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import { mkdtempSync, rmSync } from "fs"
-import { tmpdir } from "os"
-import path from "path"
 import { onMount } from "solid-js"
 import { DialogOpen } from "../../../src/component/dialog-open"
 import { ConfigProvider } from "../../../src/config"
@@ -14,12 +11,13 @@ import { LocationProvider, useLocation } from "../../../src/context/location"
 import { RouteProvider, useRoute } from "../../../src/context/route"
 import { TuiAppProvider } from "../../../src/context/runtime"
 import { SessionTabsProvider } from "../../../src/context/session-tabs"
-import { StorageProvider } from "../../../src/context/storage"
+import { StorageProvider, useStorage } from "../../../src/context/storage"
 import { ThemeProvider } from "../../../src/context/theme"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { createApi, createEventStream, createFetch, json, type FetchHandler } from "../../fixture/tui-client"
 import { TestTuiContexts } from "../../fixture/tui-environment"
+import { tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 test("selecting an unhydrated session preserves its location", async () => {
@@ -50,6 +48,40 @@ test("selecting an unhydrated session preserves its location", async () => {
     await fixture.app.waitFor(() => fixture.route.data.type === "session")
 
     expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_remote" })
+    expect(fixture.location.ref).toEqual(remote)
+  } finally {
+    await fixture.dispose()
+  }
+})
+
+test("finds and opens an exact session ID outside the recent list", async () => {
+  const sessionID = "ses_04a7a3d82ffeIphUJgd3SnEqiv"
+  const remote = { directory: "/tmp/opencode/archive", workspaceID: "ws_archive" }
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
+    if (url.pathname !== `/api/session/${sessionID}`) return undefined
+    return json({
+      data: {
+        id: sessionID,
+        projectID: "proj_archive",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1, updated: 2 },
+        title: "TUI plugin slot API v2",
+        location: remote,
+      },
+    })
+  })
+
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Search sessions and projects"))
+    await fixture.app.mockInput.typeText(sessionID)
+    await fixture.app.waitForFrame((frame) => frame.includes("TUI plugin slot API v2"))
+
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "session")
+
+    expect(fixture.route.data).toEqual({ type: "session", sessionID })
     expect(fixture.location.ref).toEqual(remote)
   } finally {
     fixture.dispose()
@@ -94,7 +126,7 @@ test("shows the current project and opens its root", async () => {
     expect(fixture.route.data).toEqual({ type: "home", location: { directory: root } })
     expect(fixture.location.ref).toEqual({ directory: root })
   } finally {
-    fixture.dispose()
+    await fixture.dispose()
   }
 })
 
@@ -149,7 +181,7 @@ test("preserves a moved project when sessions arrive", async () => {
 
     expect(fixture.route.data).toEqual({ type: "home", location: { directory: "/tmp/opencode/second" } })
   } finally {
-    fixture.dispose()
+    await fixture.dispose()
   }
 })
 
@@ -160,18 +192,21 @@ async function renderOpen(
     location: ReturnType<typeof useLocation>
   }) => void | Promise<void>,
 ) {
-  const state = mkdtempSync(path.join(tmpdir(), "opencode-dialog-open-"))
+  const temporary = await tmpdir()
+  const state = temporary.path
   const events = createEventStream()
   const calls = createFetch(handler, events)
   let route!: ReturnType<typeof useRoute>
   let location!: ReturnType<typeof useLocation>
   let data!: ReturnType<typeof useData>
+  let storage!: ReturnType<typeof useStorage>
 
   function Probe() {
     const dialog = useDialog()
     route = useRoute()
     location = useLocation()
     data = useData()
+    storage = useStorage()
     onMount(
       () => void Promise.resolve(beforeOpen?.({ data, location })).then(() => dialog.replace(() => <DialogOpen />)),
     )
@@ -223,9 +258,10 @@ async function renderOpen(
     get data() {
       return data
     },
-    dispose() {
+    async dispose() {
       app.renderer.destroy()
-      rmSync(state, { recursive: true, force: true })
+      await storage.flush()
+      await temporary[Symbol.asyncDispose]()
     },
   }
 }

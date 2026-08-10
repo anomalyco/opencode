@@ -74,7 +74,7 @@ export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseServ
 export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  instructions: Instructions.Instructions,
+  instructions: Instructions.List,
 ) {
   return yield* db
     .transaction(() =>
@@ -92,7 +92,7 @@ export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(fun
 export const preview = Effect.fn("SessionHistory.preview")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  instructions: Instructions.Instructions,
+  instructions: Instructions.List,
 ) {
   const observed = yield* Instructions.read(instructions)
   return yield* db

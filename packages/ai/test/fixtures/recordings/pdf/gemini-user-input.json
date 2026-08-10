@@ -1,13 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:pdf",
-      "pdf",
-      "provider:google",
-      "protocol:gemini",
-      "user-input"
-    ],
+    "tags": ["prefix:pdf", "pdf", "provider:google", "protocol:gemini", "user-input"],
     "name": "pdf/gemini-user-input",
     "recordedAt": "2026-07-22T18:20:55.140Z"
   },

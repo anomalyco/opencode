@@ -128,7 +128,7 @@ describe("OpencodePlugin", () => {
           const attempt = yield* integrations.oauth.connect({
             integrationID,
             methodID: Integration.MethodID.make("device"),
-            inputs: { server: `${server.url.origin}/console///?ignored=true#ignored` },
+            answer: { server: `${server.url.origin}/console///?ignored=true#ignored` },
           })
           expect(attempt.url).toBe(`${server.url.origin}/verify`)
           yield* eventually(
@@ -155,11 +155,26 @@ describe("OpencodePlugin", () => {
         .connect({
           integrationID: Integration.ID.make("opencode"),
           methodID: Integration.MethodID.make("device"),
-          inputs: { server: "ftp://console.example.com" },
+          answer: { server: "ftp://console.example.com" },
         })
         .pipe(Effect.flip)
       expect(error).toBeInstanceOf(Integration.AuthorizationError)
       expect(String(error.cause)).toContain("Invalid OpenCode server URL: expected HTTP(S)")
+    }),
+  )
+
+  it.effect("rejects non-string OpenCode servers", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const error = yield* (yield* Integration.Service).oauth
+        .connect({
+          integrationID: Integration.ID.make("opencode"),
+          methodID: Integration.MethodID.make("device"),
+          answer: { server: true },
+        })
+        .pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Integration.AuthorizationError)
+      expect(String(error.cause)).toContain("Invalid OpenCode server URL: expected string")
     }),
   )
 

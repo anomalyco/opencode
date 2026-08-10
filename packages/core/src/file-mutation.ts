@@ -5,6 +5,8 @@ import { Context, Effect, Layer } from "effect"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bom } from "@opencode-ai/util/bom"
+import { Environment } from "./environment"
+import type { Files } from "./environment"
 
 export interface Target {
   readonly absolute: string
@@ -29,12 +31,35 @@ export interface WriteResult {
 }
 
 export interface Interface {
-  readonly write: (input: WriteInput) => Effect.Effect<WriteResult, FSUtil.Error>
+  /** Serialize a complete read/prepare/write mutation transaction by resolved path. */
+  readonly withLock: (
+    targets: ReadonlyArray<string>,
+  ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  readonly write: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
   /** Write text while retaining an existing UTF-8 BOM and emitting at most one BOM. */
-  readonly writeTextPreservingBom: (input: TextWriteInput) => Effect.Effect<WriteResult, FSUtil.Error>
+  readonly writeTextPreservingBom: (
+    input: TextWriteInput,
+  ) => Effect.Effect<WriteResult, Environment.WrongKind | Environment.Failed>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileMutation") {}
+
+export const readText = Effect.fn("FileMutation.readText")(function* (files: Files, target: string) {
+  return Bom.decodeBytes((yield* files.read(target)).bytes)
+})
+
+export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
+  files: Files,
+  target: string,
+  bom: boolean,
+) {
+  const synced = Bom.syncBytes((yield* files.read(target)).bytes, bom)
+  if (synced.bytes) yield* files.write(target, synced.bytes)
+  return synced.text
+})
+
+/** Share transaction locks across Location graphs that address the same file. */
+const transactionLocks = KeyedMutex.makeUnsafe<string>()
 
 /**
  * Serialize file changes by absolute target. Conditional writes compare and
@@ -44,8 +69,12 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fi
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
+    const environment = yield* Environment.Service
     const locks = KeyedMutex.makeUnsafe<string>()
+    const withLock: Interface["withLock"] = (targets) => (effect) =>
+      [...new Set(targets.map(FSUtil.resolve))]
+        .sort()
+        .reduceRight((result, target) => transactionLocks.withLock(target)(result), effect)
     const withTargetLock =
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -61,8 +90,14 @@ const layer = Layer.effect(
     const write = Effect.fn("FileMutation.write")((input: WriteInput) =>
       withTargetLock(input.target)(
         Effect.gen(function* () {
-          const existed = yield* fs.exists(input.target.absolute)
-          yield* fs.writeWithDirs(input.target.absolute, input.content)
+          const existed = yield* environment.files.stat(input.target.absolute).pipe(
+            Effect.as(true),
+            Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
+          )
+          yield* environment.files.write(
+            input.target.absolute,
+            typeof input.content === "string" ? new TextEncoder().encode(input.content) : input.content,
+          )
           return writeResult(input.target, existed)
         }),
       ),
@@ -72,23 +107,24 @@ const layer = Layer.effect(
       withTargetLock(input.target)(
         Effect.gen(function* () {
           const next = Bom.split(input.content)
-          const current = yield* fs
-            .readFile(input.target.absolute)
-            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
-          yield* fs.writeWithDirs(
+          const current = yield* environment.files.read(input.target.absolute, { offset: 0, length: 3 }).pipe(
+            Effect.map((result) => result.bytes),
+            Effect.catchTag("Environment.NotFound", () => Effect.succeed(undefined)),
+          )
+          yield* environment.files.write(
             input.target.absolute,
-            Bom.join(next.text, Boolean(current && Bom.has(current)) || next.bom),
+            new TextEncoder().encode(Bom.join(next.text, Boolean(current && Bom.has(current)) || next.bom)),
           )
           return writeResult(input.target, current !== undefined)
         }),
       ),
     )
 
-    return Service.of({ write, writeTextPreservingBom })
+    return Service.of({ withLock, write, writeTextPreservingBom })
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node] })
 
 /**
  * Deferred until the corresponding integrations exist.

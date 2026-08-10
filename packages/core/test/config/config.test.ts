@@ -373,9 +373,7 @@ describe("Config", () => {
             const initial = yield* config.entries()
             expect(Config.latest(initial, "shell")).toBe("project")
             expect(
-              initial.flatMap((entry) =>
-                entry.type === "document" && entry.info.shell ? [entry.info.shell] : [],
-              ),
+              initial.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
             ).toEqual(["secret", "global", "project"])
             const updated = yield* bus
               .subscribe(Event.Updated)
@@ -387,9 +385,7 @@ describe("Config", () => {
             const refreshed = yield* config.entries()
             expect(Config.latest(refreshed, "shell")).toBe("project")
             expect(
-              refreshed.flatMap((entry) =>
-                entry.type === "document" && entry.info.shell ? [entry.info.shell] : [],
-              ),
+              refreshed.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
             ).toEqual(["next", "global", "project"])
           }).pipe(
             Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),

@@ -124,9 +124,7 @@ export const createDirSyncContext = (
         const [store, setStore] = current()
         setStore("limit", (value) => value + count)
         const response = await serverSDK.api.session.list({ directory, limit: store.limit, order: "desc" })
-        const sessions = response.data
-          .sort((a, b) => cmp(a.id, b.id))
-          .slice(0, store.limit)
+        const sessions = response.data.sort((a, b) => cmp(a.id, b.id)).slice(0, store.limit)
         sessions.forEach(serverSync.session.remember)
         setStore("session", reconcile(sessions, { key: "id" }))
       },
