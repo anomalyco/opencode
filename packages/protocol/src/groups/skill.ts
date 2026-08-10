@@ -10,7 +10,7 @@ const SkillCreateBody = Schema.Struct({
   description: Schema.String.pipe(Schema.optional),
   content: Schema.String,
   scope: Schema.Struct({
-    type: Schema.Literal("global", "department", "user"),
+    type: Schema.Literals(["global", "department", "user"]),
     departmentCode: Schema.String.pipe(Schema.optional),
     userID: Schema.String.pipe(Schema.optional),
   }),
@@ -25,17 +25,17 @@ const SkillParams = Schema.Struct({
   name: Schema.String,
 }).annotate({ identifier: "SkillParams" })
 
-export const SkillNotFoundError = Schema.TaggedErrorClass<SkillNotFoundError>()(
+export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()(
   "SkillNotFoundError",
   { name: Schema.String, message: Schema.String },
   { httpApiStatus: 404 },
-)()
+) {}
 
-export const SkillNameConflictError = Schema.TaggedErrorClass<SkillNameConflictError>()(
+export class SkillNameConflictError extends Schema.TaggedErrorClass<SkillNameConflictError>()(
   "SkillNameConflictError",
   { name: Schema.String, message: Schema.String },
   { httpApiStatus: 409 },
-)()
+) {}
 
 export const SkillGroup = HttpApiGroup.make("server.skill")
   .add(
@@ -80,7 +80,7 @@ export const SkillGroup = HttpApiGroup.make("server.skill")
     ),
   )
   .add(
-    HttpApiEndpoint.del("skill.remove", "/api/skill/:name", {
+    HttpApiEndpoint.delete("skill.remove", "/api/skill/:name", {
       params: SkillParams,
       success: HttpApiSchema.NoContent,
       error: [ForbiddenError, SkillNotFoundError],

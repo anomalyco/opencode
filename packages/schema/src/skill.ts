@@ -6,7 +6,7 @@ import { AbsolutePath } from "./schema"
 
 export interface SkillScope extends Schema.Schema.Type<typeof SkillScope> {}
 export const SkillScope = Schema.Struct({
-  type: Schema.Literal("global", "department", "user"),
+  type: Schema.Literals(["global", "department", "user"]),
   departmentCode: Schema.String.pipe(optional),
   userID: Schema.String.pipe(optional),
 }).annotate({ identifier: "SkillV2.SkillScope" })
