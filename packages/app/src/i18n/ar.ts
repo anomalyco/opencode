@@ -1,4 +1,5 @@
 export const dict = {
+  ...STORAGE_FALLBACK,
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "ملف",
   "desktop.menu.edit": "تحرير",
@@ -1169,3 +1170,4 @@ export const dict = {
   "error.childStore.storeCreateFailed": "فشل إنشاء المخزن",
   "terminal.connectionLost.abnormalClose": "تم إغلاق WebSocket بشكل غير طبيعي: {{code}}",
 }
+import { STORAGE_FALLBACK } from "./storage"

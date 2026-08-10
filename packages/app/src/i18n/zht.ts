@@ -3,6 +3,7 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
+  ...STORAGE_FALLBACK,
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "檔案",
   "desktop.menu.edit": "編輯",
@@ -1221,3 +1222,4 @@ export const dict = {
   "error.childStore.storeCreateFailed": "建立儲存區失敗",
   "terminal.connectionLost.abnormalClose": "WebSocket 異常關閉：{{code}}",
 } satisfies Partial<Record<Keys, string>>
+import { STORAGE_FALLBACK } from "./storage"

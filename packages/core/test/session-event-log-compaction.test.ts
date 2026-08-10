@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
+import { DatabaseMaintenance } from "@opencode-ai/core/database/maintenance"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -23,7 +24,8 @@ const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Event
 describe("SessionEventLogCompaction", () => {
   it.effect("keeps replay and the message projection identical while reclaiming superseded snapshots", () =>
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
+      const database = yield* Database.Service
+      const { db } = database
       const events = yield* EventV2.Service
       const sessionID = SessionID.descending("ses_event_log_compaction")
       const messageID = SessionV1.MessageID.ascending("msg_event_log_compaction")
@@ -55,6 +57,14 @@ describe("SessionEventLogCompaction", () => {
       yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: message("after") })
       const projection = yield* db.select().from(MessageTable).where(eq(MessageTable.id, messageID)).get()
       expect(yield* SessionEventLogCompaction.status(db)).toMatchObject({ events: 2, compactableEvents: 2 })
+      expect(yield* DatabaseMaintenance.analyze(database)).toMatchObject({
+        snapshots: 2,
+        candidates: 1,
+        payloadBytesReclaimable: expect.any(Number),
+      })
+      expect(
+        yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'event_compaction_state'`),
+      ).toBeUndefined()
       const dryRun = yield* SessionEventLogCompaction.compact(db, { aggregateID: sessionID })
       const allDryRun = yield* SessionEventLogCompaction.compact(db, { all: true, limit: 1 })
 

@@ -94,6 +94,7 @@ const desktop = [
 ]
 
 export const dict = {
+  ...STORAGE_FALLBACK,
   ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
   "command.category.suggested": "Predloženo",
   "command.category.view": "Prikaz",
@@ -1166,3 +1167,4 @@ export const dict = {
   "workspace.reset.note": "Ovo će resetirati radni prostor kako bi odgovarao zadanoj grani.",
   "dialog.usageExceeded.dontShowAgain": "Ne prikazuj ponovno",
 }
+import { STORAGE_FALLBACK } from "./storage"

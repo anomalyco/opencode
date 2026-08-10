@@ -1,4 +1,5 @@
 export const dict: Record<string, string> = {
+  ...STORAGE_FALLBACK,
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "फाइल",
   "desktop.menu.edit": "सम्पादन गर्नुहोस्",
@@ -1155,3 +1156,4 @@ export const dict: Record<string, string> = {
   "workspace.reset.note": "यसले पूर्वनिर्धारित शाखासँग मिलाउन कार्यस्थान रिसेट गर्नेछ।",
   "dialog.usageExceeded.dontShowAgain": "फेरि नदेखाउनुहोस्",
 }
+import { STORAGE_FALLBACK } from "./storage"
