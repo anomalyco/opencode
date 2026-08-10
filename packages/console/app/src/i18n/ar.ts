@@ -102,10 +102,14 @@ export const dict = {
   "temp.logoDarkAlt": "شعار opencode الداكن",
 
   "home.banner.badge": "جديد",
-  "home.banner.text": "تطبيق سطح المكتب متاح بنسخة تجريبية",
-  "home.banner.platforms": "على macOS، Windows، وLinux",
+  "home.banner.text": "نقدّم علامات التبويب لتطبيق سطح المكتب.",
+  "home.banner.platforms": "متاحة على macOS وWindows وLinux",
   "home.banner.downloadNow": "حمّل الآن",
   "home.banner.downloadBetaNow": "حمّل النسخة التجريبية لتطبيق سطح المكتب الآن",
+  "home.promo.title": "نقدّم علامات التبويب لتطبيق سطح المكتب",
+  "home.promo.body": "نظّم عملك وجلساتك النشطة باستخدام علامات التبويب.",
+  "home.promo.cta": "نزّل أحدث إصدار للبدء.",
+  "home.promo.close": "إغلاق إعلان تطبيق سطح المكتب",
 
   "home.hero.title": "وكيل برمجة بالذكاء الاصطناعي مفتوح المصدر",
   "home.hero.subtitle.a": "نماذج مجانية مضمّنة أو اربط أي نموذج من أي مزوّد،",
@@ -248,8 +252,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "الاستثناءات التالية",
 
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
+  "go.banner.text": "يحصل DeepSeek V4 Flash على حدود استخدام مضاعفة لفترة محدودة",
   "go.meta.description":
-    "يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود طلب سخية لمدة 5 ساعات لـ GLM-5.2 وGLM-5.1 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash.",
+    "يبدأ Go بسعر $5 للشهر الأول، ثم $10/شهر، مع حدود استخدام سخية ووصول موثوق إلى نماذج البرمجة الرائدة.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
   "go.hero.body":
     "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
@@ -266,7 +271,6 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "الطلبات كل 5 ساعات",
   "go.graph.usageLimits": "حدود الاستخدام",
-  "go.graph.tick": "{{n}}x",
   "go.graph.aria": "الطلبات كل 5 ساعات: {{free}} مقابل {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
@@ -297,8 +301,7 @@ export const dict = {
   "go.problem.item1": "أسعار اشتراك منخفضة التكلفة",
   "go.problem.item2": "حدود سخية ووصول موثوق",
   "go.problem.item3": "مصمم لأكبر عدد ممكن من المبرمجين",
-  "go.problem.item4":
-    "يتضمن GLM-5.2 وGLM-5.1 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash",
+  "go.problem.item4": "مجموعة منسقة من النماذج المختبرة للبرمجة الوكيلة",
   "go.how.title": "كيف يعمل Go",
   "go.how.body": "يبدأ Go من $5 للشهر الأول، ثم $10/شهر. يمكنك استخدامه مع OpenCode أو أي وكيل.",
   "go.how.step1.title": "أنشئ حسابًا",
@@ -322,7 +325,7 @@ export const dict = {
   "go.faq.a2": "يتضمن Go النماذج المدرجة أدناه، مع حدود سخية وإتاحة موثوقة.",
   "go.faq.q3": "هل Go هو نفسه Zen؟",
   "go.faq.a3":
-    "لا. Zen هو الدفع حسب الاستخدام، بينما يبدأ Go من $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى نماذج المصدر المفتوح GLM-5.2 وGLM-5.1 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash.",
+    "لا. يعتمد Zen على الدفع حسب الاستخدام، بينما يبدأ Go بسعر $5 للشهر الأول، ثم $10/شهر، مع حدود سخية ووصول موثوق إلى مجموعة منسقة من النماذج.",
   "go.faq.q4": "كم تكلفة Go؟",
   "go.faq.a4.p1.beforePricing": "تكلفة Go",
   "go.faq.a4.p1.pricingLink": "$5 للشهر الأول",
@@ -331,8 +334,20 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "حسابك",
   "go.faq.a4.p3": "ألغِ في أي وقت.",
   "go.faq.q5": "ماذا عن البيانات والخصوصية؟",
-  "go.faq.a5.body":
-    "تم تصميم الخطة بشكل أساسي للمستخدمين الدوليين، مع استضافة النماذج في الولايات المتحدة والاتحاد الأوروبي وسنغافورة للحصول على وصول عالمي مستقر. يتبع مزودونا سياسة عدم الاحتفاظ بالبيانات ولا يستخدمون بياناتك لتدريب النماذج.",
+  "go.faq.a5.model": "النموذج",
+  "go.faq.a5.training": "تدريب النموذج",
+  "go.faq.a5.retention": "الاحتفاظ بالبيانات",
+  "go.faq.a5.retention30": "30 يومًا",
+  "go.faq.a5.retention0": "0 أيام",
+  "go.faq.a5.used": "مستخدَمة",
+  "go.faq.a5.notUsed": "غير مستخدَمة",
+  "go.faq.a5.noAgreement": "لا توجد اتفاقية",
+  "go.faq.a5.grokRetention":
+    "تعطّل ZDR ميزات API مهمة تعتمد على البيانات المخزنة، بما في ذلك Responses API ذات الحالة، وFiles and Collections، وBatch API.",
+  "go.faq.a5.gptRetention":
+    "تُنشأ سجلات مراقبة إساءة الاستخدام لكل استخدام لميزات API، ويُحتفظ بها لمدة تصل إلى 30 يومًا.",
+  "go.faq.a5.learnMore": "اعرف المزيد",
+  "go.faq.a5.deepseekRetention": "تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 31 أغسطس 2026.",
   "go.faq.a5.beforeExceptions":
     "تتم استضافة نماذج Go في الولايات المتحدة. يتبع المزودون سياسة عدم الاحتفاظ بالبيانات ولا يستخدمون بياناتك لتدريب النماذج، مع",
   "go.faq.a5.exceptionsLink": "الاستثناءات التالية",
@@ -345,7 +360,7 @@ export const dict = {
 
   "go.faq.q9": "ما الفرق بين النماذج المجانية وGo؟",
   "go.faq.a9":
-    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة 200 طلب/يوم. يتضمن Go نماذج GLM-5.2 وGLM-5.1 وKimi K2.7 Code وKimi K2.6 وMiMo-V2.5-Pro وMiMo-V2.5 وQwen3.7 Max وQwen3.7 Plus وQwen3.6 Plus وMiniMax M2.7 وMiniMax M3 وDeepSeek V4 Pro وDeepSeek V4 Flash مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، أسبوعيًا، وشهريًا)، تعادل تقريبًا 12 دولارًا كل 5 ساعات، و30 دولارًا في الأسبوع، و60 دولارًا في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
+    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة قدرها 200 طلب/يوم. يقدّم Go مجموعة منسقة من النماذج مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، وأسبوعية، وشهرية)، تعادل تقريبًا $12 لكل 5 ساعات، و$30 في الأسبوع، و$60 في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
 
   "zen.api.error.rateLimitExceeded": "تم تجاوز حد الطلبات. يرجى المحاولة مرة أخرى لاحقًا.",
   "zen.api.error.modelNotSupported": "النموذج {{model}} غير مدعوم",
@@ -354,6 +369,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "المزود {{provider}} غير مدعوم",
   "zen.api.error.missingApiKey": "مفتاح API مفقود.",
   "zen.api.error.invalidApiKey": "مفتاح API غير صالح.",
+  "zen.api.error.requestBlockedByUpstreamProvider": "حظر المزود الخارجي الطلب.",
   "zen.api.error.subscriptionQuotaExceeded": "تم تجاوز حصة الاشتراك. أعد المحاولة خلال {{retryIn}}.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "تم الوصول إلى حد الاستخدام لمدة 5 ساعات. تتم إعادة التعيين خلال {{retryIn}}. لمواصلة استخدام هذا النموذج الآن، فعّل الاستخدام من رصيدك المتاح: {{consoleGoUrl}}",
@@ -369,7 +385,7 @@ export const dict = {
     "لقد وصلت إلى حد الإنفاق الشهري البالغ ${{amount}}. إدارة حدودك هنا: {{membersUrl}}",
   "zen.api.error.modelDisabled": "النموذج معطل",
   "zen.api.error.regionNotAllowed":
-    "هذا النموذج مستضاف في الصين. إذا كنت ترغب في استخدام هذا النموذج، فعّله في إعداداتك: {{consoleGoUrl}}",
+    "لا يتوفر أحدث إصدار من هذا النموذج إلا مستضافًا في الصين، ويتطلب تفعيلًا صريحًا: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "انتهى العرض المجاني لـ {{model}}. يمكنك مواصلة استخدام النموذج بالاشتراك في OpenCode Go - {{link}}",
 
@@ -659,7 +675,7 @@ export const dict = {
   "workspace.lite.promo.price": "$5 للشهر الأول",
   "workspace.lite.promo.modelsTitle": "ما يتضمنه",
   "workspace.lite.promo.footer":
-    "تم تصميم الخطة بشكل أساسي للمستخدمين الدوليين، مع استضافة النماذج في الولايات المتحدة والاتحاد الأوروبي وسنغافورة للحصول على وصول عالمي مستقر. قد تتغير الأسعار وحدود الاستخدام بناءً على تعلمنا من الاستخدام المبكر والملاحظات.",
+    "صُممت الخطة بشكل أساسي للمستخدمين الدوليين، وتوفر وصولًا عالميًا مستقرًا. قد تتغير الأسعار وحدود الاستخدام بينما نتعلم من الاستخدام المبكر والملاحظات.",
   "workspace.lite.promo.subscribe": "الاشتراك في Go",
   "workspace.lite.promo.subscribing": "جارٍ إعادة التوجيه...",
   "workspace.lite.promo.otherMethods": "طرق دفع أخرى",
@@ -700,11 +716,11 @@ export const dict = {
 
   "download.title": "OpenCode | تنزيل",
   "download.meta.description": "نزّل OpenCode لـ macOS، Windows، وLinux",
-  "download.hero.title": "تنزيل OpenCode",
+  "download.hero.title": "تنزيل OpenCode لسطح المكتب",
   "download.hero.subtitle": "متاح في نسخة تجريبية لـ macOS، Windows، وLinux",
   "download.hero.button": "تنزيل لـ {{os}}",
   "download.section.terminal": "OpenCode للطرفية",
-  "download.section.desktop": "OpenCode لسطح المكتب (Beta)",
+  "download.section.desktop": "OpenCode لسطح المكتب",
   "download.section.extensions": "امتدادات OpenCode",
   "download.section.integrations": "تكاملات OpenCode",
   "download.action.download": "تنزيل",

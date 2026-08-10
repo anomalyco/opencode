@@ -173,6 +173,53 @@ it.live("orgsByAccount groups orgs per account", () =>
   }),
 )
 
+it.live("remove switches to another org when the active account is removed", () =>
+  Effect.gen(function* () {
+    const first = AccountID.make("user-1")
+    const second = AccountID.make("user-2")
+
+    yield* AccountRepo.Service.use((r) =>
+      r.persistAccount({
+        id: first,
+        email: "one@example.com",
+        url: "https://one.example.com",
+        accessToken: AccessToken.make("at_1"),
+        refreshToken: RefreshToken.make("rt_1"),
+        expiry: Date.now() + outsideEagerRefreshWindow,
+        orgID: Option.some(OrgID.make("org-1")),
+      }),
+    )
+
+    yield* AccountRepo.Service.use((r) =>
+      r.persistAccount({
+        id: second,
+        email: "two@example.com",
+        url: "https://two.example.com",
+        accessToken: AccessToken.make("at_2"),
+        refreshToken: RefreshToken.make("rt_2"),
+        expiry: Date.now() + outsideEagerRefreshWindow,
+        orgID: Option.some(OrgID.make("org-2")),
+      }),
+    )
+
+    const client = HttpClient.make((req) =>
+      Effect.succeed(
+        req.url === "https://one.example.com/api/orgs" ? json(req, [org("org-1", "One")]) : json(req, [], 404),
+      ),
+    )
+
+    yield* Account.use.remove(second).pipe(Effect.provide(live(client)))
+
+    const active = yield* AccountRepo.use.active()
+    expect(Option.getOrThrow(active)).toEqual(
+      expect.objectContaining({
+        id: first,
+        active_org_id: OrgID.make("org-1"),
+      }),
+    )
+  }),
+)
+
 it.live("token refresh persists the new token", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")

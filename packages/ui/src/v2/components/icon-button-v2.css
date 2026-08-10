@@ -112,13 +112,17 @@
   color: var(--v2-text-text-base);
 }
 
-[data-component="icon-button-v2"][data-variant="ghost"]:is(:hover, [data-state="hover"], [data-expanded]):not(
-    :disabled
+[data-component="icon-button-v2"][data-variant="ghost"]:is(:hover, [data-state="hover"]):not(:disabled):not(
+    [data-expanded]
   ) {
   background-color: var(--v2-overlay-simple-overlay-hover);
 }
 
 [data-component="icon-button-v2"][data-variant="ghost"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="icon-button-v2"][data-variant="ghost"]:where([data-expanded]):not(:disabled) {
   background-color: var(--v2-overlay-simple-overlay-pressed);
 }
 
@@ -133,8 +137,8 @@
   color: var(--v2-icon-icon-muted);
 }
 
-[data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:hover, [data-state="hover"], [data-expanded]):not(
-    :disabled
+[data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:hover, [data-state="hover"]):not(:disabled):not(
+    [data-expanded]
   ) {
   background-color: var(--v2-overlay-simple-overlay-hover);
 }

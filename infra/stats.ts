@@ -185,7 +185,9 @@ export const statSync = new sst.aws.Service("StatsSyncService", {
   cluster: lakeCluster,
   architecture: "arm64",
   cpu: "0.25 vCPU",
-  memory: "0.5 GB",
+  // 0.5 GB caused an OOM crash loop: every restart immediately re-ran the 4 Athena
+  // stats queries (~$5/pass) every ~5 minutes instead of hourly.
+  memory: "2 GB",
   image: {
     context: ".",
     dockerfile: "packages/stats/server/Dockerfile",

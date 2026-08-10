@@ -4,27 +4,31 @@ import { V2_AVATAR_DARK, V2_AVATAR_LIGHT } from "./avatar"
 const ref = (name: string): V2ColorValue => `var(--${name})`
 
 const lightAgentTokens: Record<string, V2ColorValue> = {
-  "v2-agent-plan-solid": ref("v2-pink-900"),
-  "v2-agent-plan-border": "rgba(200, 61, 139, 0.5)",
-  "v2-agent-plan-background": "rgba(253, 236, 243, 0.33)",
-  "v2-agent-build-solid": ref("v2-blue-900"),
-  "v2-agent-build-border": "rgba(59, 92, 246, 0.5)",
-  "v2-agent-build-background": "rgba(236, 241, 254, 0.33)",
+  "v2-agent-plan-solid": ref("v2-pink-800"),
+  "v2-agent-plan-border": "rgba(200, 61, 139, 0.20)",
+  "v2-agent-plan-background": "rgba(253, 236, 243, 0.10)",
+  "v2-agent-build-solid": ref("v2-blue-800"),
+  "v2-agent-build-border": "rgba(44, 71, 200, 0.20)",
+  "v2-agent-build-background": "rgba(236, 241, 254, 0.10)",
   "v2-agent-explore-solid": ref("v2-yellow-900"),
-  "v2-agent-explore-border": "rgba(142, 114, 49, 0.5)",
-  "v2-agent-explore-background": "rgba(254, 250, 236, 0.33)",
+  "v2-agent-explore-border": "rgba(203, 159, 52, 0.20)",
+  "v2-agent-explore-background": "rgba(254, 250, 236, 0.1)",
+  "v2-agent-review-solid": ref("v2-green-800"),
+  "v2-agent-writer-solid": ref("v2-purple-700"),
 }
 
 const darkAgentTokens: Record<string, V2ColorValue> = {
   "v2-agent-plan-solid": ref("v2-pink-400"),
-  "v2-agent-plan-border": "rgba(250, 188, 216, 0.5)",
-  "v2-agent-plan-background": "rgba(247, 213, 228, 0.1)",
-  "v2-agent-build-solid": ref("v2-blue-400"),
-  "v2-agent-build-border": "rgba(215, 226, 252, 0.5)",
-  "v2-agent-build-background": "rgba(215, 226, 252, 0.1)",
-  "v2-agent-explore-solid": ref("v2-yellow-400"),
-  "v2-agent-explore-border": "rgba(247, 229, 181, 0.5)",
-  "v2-agent-explore-background": "rgba(252, 239, 208, 0.1)",
+  "v2-agent-plan-border": "rgba(247, 153, 198, 0.20)",
+  "v2-agent-plan-background": "rgba(170, 53, 118, 0.05)",
+  "v2-agent-build-solid": ref("v2-blue-300"),
+  "v2-agent-build-border": "rgba(162, 188, 255, 0.20)",
+  "v2-agent-build-background": "rgba(38, 63, 169, 0.05)",
+  "v2-agent-explore-solid": ref("v2-yellow-300"),
+  "v2-agent-explore-border": "rgba(243, 218, 155, 0.20)",
+  "v2-agent-explore-background": "rgba(172, 136, 51, 0.05)",
+  "v2-agent-review-solid": ref("v2-green-300"),
+  "v2-agent-writer-solid": ref("v2-purple-400"),
 }
 
 const light: Record<string, V2ColorValue> = {

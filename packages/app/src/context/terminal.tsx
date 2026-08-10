@@ -149,6 +149,7 @@ function createWorkspaceTerminalSession(
   scope: ServerScopeValue,
   legacySessionID?: string,
 ) {
+  const location = { directory: sdk.directory }
   const legacy = scope === ServerScope.local ? getLegacyTerminalStorageKeys(dir, legacySessionID) : []
 
   const [store, setStore, _, ready] = persisted(
@@ -163,6 +164,43 @@ function createWorkspaceTerminalSession(
       all: [],
     }),
   )
+  const [ui, setUi] = createStore({
+    focus: undefined as { request: number; id?: string; pending: boolean } | undefined,
+  })
+  const focus = { request: 0 }
+
+  const requestFocus = (id?: string, pending = false) => {
+    focus.request += 1
+    setUi("focus", { request: focus.request, id, pending })
+    return focus.request
+  }
+
+  const focusRequested = (id?: string) => {
+    if (!id) return false
+    if (!ui.focus || ui.focus.pending) return false
+    return !ui.focus.id || ui.focus.id === id
+  }
+
+  const consumeFocus = (id: string) => {
+    if (!focusRequested(id)) return
+    setUi("focus", undefined)
+  }
+
+  const cancelFocus = (request?: number) => {
+    if (request !== undefined && ui.focus?.request !== request) return
+    setUi("focus", undefined)
+  }
+
+  if (typeof document !== "undefined") {
+    const cancelOnOutsideFocus = (event: FocusEvent) => {
+      if (!ui.focus) return
+      if (!(event.target instanceof Element)) return
+      if (event.target.closest("#terminal-panel")) return
+      cancelFocus()
+    }
+    document.addEventListener("focusin", cancelOnOutsideFocus)
+    onCleanup(() => document.removeEventListener("focusin", cancelOnOutsideFocus))
+  }
 
   const pickNextTerminalNumber = () => {
     const existingTitleNumbers = new Set(
@@ -203,47 +241,63 @@ function createWorkspaceTerminalSession(
   })
   onCleanup(unsub)
 
-  const update = (client: DirectorySDK["client"], pty: Partial<LocalPTY> & { id: string }) => {
+  const update = (pty: Partial<LocalPTY> & { id: string }) => {
     const index = store.all.findIndex((x) => x.id === pty.id)
     const previous = index >= 0 ? store.all[index] : undefined
     if (index >= 0) {
       setStore("all", index, (item) => ({ ...item, ...pty }))
     }
-    client.pty
-      .update({
-        ptyID: pty.id,
-        title: pty.title,
-        size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined,
-      })
-      .catch((error: unknown) => {
-        if (previous) {
-          const currentIndex = store.all.findIndex((item) => item.id === pty.id)
-          if (currentIndex >= 0) setStore("all", currentIndex, previous)
-        }
-        console.error("Failed to update terminal", error)
-      })
+    const doUpdate = async () => {
+      if ((await sdk.protocol) === "v1") {
+        await sdk.client.pty.update({
+          ptyID: pty.id,
+          title: pty.title,
+          size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined,
+        })
+      } else {
+        await sdk.api.pty.update({
+          ptyID: pty.id,
+          location,
+          title: pty.title,
+          size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined,
+        })
+      }
+    }
+    doUpdate().catch((error: unknown) => {
+      if (previous) {
+        const currentIndex = store.all.findIndex((item) => item.id === pty.id)
+        if (currentIndex >= 0) setStore("all", currentIndex, previous)
+      }
+      console.error("Failed to update terminal", error)
+    })
   }
 
-  const clone = async (client: DirectorySDK["client"], id: string) => {
+  const clone = async (id: string) => {
     const index = store.all.findIndex((x) => x.id === id)
     const pty = store.all[index]
     if (!pty) return
-    const next = await client.pty
-      .create({
-        title: pty.title,
-      })
-      .catch((error: unknown) => {
-        console.error("Failed to clone terminal", error)
-        return undefined
-      })
-    if (!next?.data) return
+    const data = await (async () => {
+      if ((await sdk.protocol) === "v1") {
+        return (await sdk.client.pty.create({ title: pty.title })).data
+      }
+      return (
+        await sdk.api.pty.create({
+          location,
+          title: pty.title,
+        })
+      ).data
+    })().catch((error: unknown) => {
+      console.error("Failed to clone terminal", error)
+      return undefined
+    })
+    if (!data?.id) return
 
     const active = store.active === pty.id
 
     batch(() => {
       setStore("all", index, {
-        id: next.data.id,
-        title: next.data.title ?? pty.title,
+        id: data.id,
+        title: data.title ?? pty.title,
         titleNumber: pty.titleNumber,
         buffer: undefined,
         cursor: undefined,
@@ -252,7 +306,7 @@ function createWorkspaceTerminalSession(
         cols: undefined,
       })
       if (active) {
-        setStore("active", next.data.id)
+        setStore("active", data.id)
       }
     })
   }
@@ -267,28 +321,43 @@ function createWorkspaceTerminalSession(
         setStore("all", [])
       })
     },
-    new() {
+    new(options?: { focus?: boolean }) {
       const nextNumber = pickNextTerminalNumber()
+      const focusRequest = options?.focus ? requestFocus(undefined, true) : undefined
 
-      sdk.client.pty
-        .create({ title: defaultTitle(nextNumber) })
-        .then((pty: { data?: { id?: string; title?: string } }) => {
-          const id = pty.data?.id
-          if (!id) return
+      const doCreate = async () => {
+        if ((await sdk.protocol) === "v1") {
+          return (await sdk.client.pty.create({ title: defaultTitle(nextNumber) })).data
+        }
+        return (await sdk.api.pty.create({ location, title: defaultTitle(nextNumber) })).data
+      }
+      doCreate()
+        .then((data) => {
+          const id = data?.id
+          if (!id) {
+            if (focusRequest !== undefined) cancelFocus(focusRequest)
+            return
+          }
           const newTerminal = {
             id,
-            title: pty.data?.title ?? defaultTitle(nextNumber),
+            title: data?.title ?? defaultTitle(nextNumber),
             titleNumber: nextNumber,
           }
-          setStore("all", store.all.length, newTerminal)
-          setStore("active", id)
+          batch(() => {
+            setStore("all", store.all.length, newTerminal)
+            setStore("active", id)
+            if (focusRequest !== undefined && ui.focus?.request === focusRequest) {
+              setUi("focus", { request: focusRequest, id, pending: false })
+            }
+          })
         })
         .catch((error: unknown) => {
+          if (focusRequest !== undefined) cancelFocus(focusRequest)
           console.error("Failed to create terminal", error)
         })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
-      update(sdk.client, pty)
+      update(pty)
     },
     trim(id: string) {
       const index = store.all.findIndex((x) => x.id === id)
@@ -303,10 +372,9 @@ function createWorkspaceTerminalSession(
       })
     },
     async clone(id: string) {
-      await clone(sdk.client, id)
+      await clone(id)
     },
     bind() {
-      const client = sdk.client
       return {
         trim(id: string) {
           const index = store.all.findIndex((x) => x.id === id)
@@ -314,15 +382,27 @@ function createWorkspaceTerminalSession(
           setStore("all", index, (pty) => trimTerminal(pty))
         },
         update(pty: Partial<LocalPTY> & { id: string }) {
-          update(client, pty)
+          update(pty)
         },
         async clone(id: string) {
-          await clone(client, id)
+          await clone(id)
         },
       }
     },
     open(id: string) {
       setStore("active", id)
+    },
+    requestFocus(id?: string) {
+      requestFocus(id)
+    },
+    focusRequested(id?: string) {
+      return focusRequested(id)
+    },
+    consumeFocus(id: string) {
+      consumeFocus(id)
+    },
+    cancelFocus() {
+      cancelFocus()
     },
     next() {
       const index = store.all.findIndex((x) => x.id === store.active)
@@ -353,7 +433,11 @@ function createWorkspaceTerminalSession(
         })
       }
 
-      await sdk.client.pty.remove({ ptyID: id }).catch((error: unknown) => {
+      const removePromise =
+        (await sdk.protocol) === "v1"
+          ? sdk.client.pty.remove({ ptyID: id })
+          : sdk.api.pty.remove({ ptyID: id, location })
+      await removePromise.catch((error: unknown) => {
         console.error("Failed to close terminal", error)
       })
     },
@@ -442,13 +526,17 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
-      new: () => workspace().new(),
+      new: (options?: { focus?: boolean }) => workspace().new(options),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),
       clone: (id: string) => workspace().clone(id),
       bind: () => workspace(),
       open: (id: string) => workspace().open(id),
+      requestFocus: (id?: string) => workspace().requestFocus(id),
+      focusRequested: (id?: string) => workspace().focusRequested(id),
+      consumeFocus: (id: string) => workspace().consumeFocus(id),
+      cancelFocus: () => workspace().cancelFocus(),
       close: (id: string) => workspace().close(id),
       move: (id: string, to: number) => workspace().move(id, to),
       next: () => workspace().next(),

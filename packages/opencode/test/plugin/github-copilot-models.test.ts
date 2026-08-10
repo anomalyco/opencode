@@ -187,6 +187,60 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
   expect(models["ignored-non-chat-record"]).toBeUndefined()
 })
 
+test("uses zero cost when Copilot reports a zero billing batch size", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "mercury-alpha",
+              name: "Mercury Alpha",
+              version: "mercury-alpha-2026-07-09",
+              billing: {
+                token_prices: {
+                  batch_size: 0,
+                  default: {
+                    input_price: 0,
+                    output_price: 0,
+                    cache_price: 0,
+                  },
+                },
+              },
+              capabilities: {
+                family: "mercury",
+                limits: {
+                  max_context_window_tokens: 128000,
+                  max_output_tokens: 16384,
+                  max_prompt_tokens: 128000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const model = (await CopilotModels.get("https://api.githubcopilot.com")).models["mercury-alpha"]
+
+  expect(model.cost).toEqual({
+    input: 0,
+    output: 0,
+    cache: {
+      read: 0,
+      write: 0,
+    },
+  })
+  expect(JSON.stringify(model)).not.toContain("null")
+})
+
 test("records Copilot advertised responses endpoint for non-GPT model IDs", async () => {
   globalThis.fetch = mock(() =>
     Promise.resolve(

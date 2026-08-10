@@ -28,7 +28,6 @@ import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
-  const delays = [120, 240]
   const layout = useLayout()
   const terminal = useTerminal()
   const sdk = useSDK()
@@ -45,6 +44,8 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
   const close = () => view().terminal.close()
   let root: HTMLDivElement | undefined
   let tabList: HTMLDivElement | undefined
+
+  onCleanup(() => terminal.cancelFocus())
 
   const [store, setStore] = createStore({
     autoCreated: false,
@@ -94,36 +95,12 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
     ),
   )
 
-  const focus = (id: string) => {
-    focusTerminalById(id)
-
-    const frame = requestAnimationFrame(() => {
-      if (!opened()) return
-      if (terminal.active() !== id) return
-      focusTerminalById(id)
-    })
-
-    const timers = delays.map((ms) =>
-      window.setTimeout(() => {
-        if (!opened()) return
-        if (terminal.active() !== id) return
-        focusTerminalById(id)
-      }, ms),
-    )
-
-    return () => {
-      cancelAnimationFrame(frame)
-      for (const timer of timers) clearTimeout(timer)
-    }
-  }
-
   createEffect(
     on(
-      () => [opened(), terminal.active()] as const,
-      ([next, id]) => {
-        if (!next || !id) return
-        const stop = focus(id)
-        onCleanup(stop)
+      () => [opened(), terminal.active(), terminal.focusRequested(terminal.active())] as const,
+      ([next, id, requested]) => {
+        if (!next || !id || !requested) return
+        focusTerminalById(id)
       },
     ),
   )
@@ -195,7 +172,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
       aria-label={language.t("terminal.title")}
       aria-hidden={!opened()}
       inert={!opened()}
-      class="relative shrink-0 overflow-hidden bg-background-stronger"
+      class="relative shrink-0 overflow-hidden bg-v2-background-bg-base"
       classList={{
         "w-full": !isDesktop() || stacked(),
         "min-w-0 h-full flex-1": isDesktop() && opened() && !stacked(),
@@ -237,7 +214,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
           when={terminal.ready()}
           fallback={
             <div class="flex flex-col h-full pointer-events-none">
-              <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-background-stronger overflow-hidden">
+              <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-v2-background-bg-base overflow-hidden">
                 <For each={handoff()}>
                   {(title) => (
                     <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
@@ -285,7 +262,15 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                 onChange={(id) => terminal.open(id)}
                 class={newLayout() ? "!h-[52px] !flex-none" : "!h-auto !flex-none"}
               >
-                <Tabs.List ref={tabList} class={newLayout() ? undefined : "h-10 border-b border-border-weaker-base"}>
+                <Tabs.List
+                  ref={tabList}
+                  class={newLayout() ? undefined : "h-10 border-b border-border-weaker-base"}
+                  onPointerDown={(event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+                    const active = document.activeElement
+                    if (event.target === active) return
+                    if (active instanceof HTMLInputElement && event.currentTarget.contains(active)) active.blur()
+                  }}
+                >
                   <For each={all()}>
                     {(pty, index) => (
                       <SortableTerminalTabV2 terminal={pty} index={index} newLayout={newLayout()} onClose={close} />
@@ -304,7 +289,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                             icon="plus-small"
                             variant="ghost"
                             iconSize="large"
-                            onClick={terminal.new}
+                            onClick={() => terminal.new({ focus: true })}
                             aria-label={language.t("command.terminal.new")}
                           />
                         </TooltipKeybind>
@@ -326,7 +311,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                           icon="plus-small"
                           variant="ghost"
                           iconSize="large"
-                          onClick={terminal.new}
+                          onClick={() => terminal.new({ focus: true })}
                           aria-label={language.t("command.terminal.new")}
                         />
                       </TooltipV2>
@@ -344,7 +329,8 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                           <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
                             <Terminal
                               pty={pty()}
-                              autoFocus={opened()}
+                              autoFocus={terminal.focusRequested(id)}
+                              onAutoFocus={() => terminal.consumeFocus(id)}
                               class="!px-[14px]"
                               onConnect={() => markTerminalConnected(terminalRecoveryKey(pty()), id, ops.trim)}
                               onCleanup={ops.update}

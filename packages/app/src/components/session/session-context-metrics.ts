@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message, Session } from "@opencode-ai/sdk/v2/client"
+import type { AssistantMessage, Message } from "@opencode-ai/sdk/v2/client"
 
 type Provider = {
   id: string
@@ -21,6 +21,7 @@ type Context = {
   modelLabel: string
   limit: number | undefined
   input: number
+  total: number
   usage: number | null
 }
 
@@ -54,15 +55,11 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Context | 
     modelLabel: model?.name ?? message.modelID,
     limit,
     input: message.tokens.input,
+    total,
     usage: limit ? Math.round((total / limit) * 100) : null,
   }
 }
 
 export function getSessionContext(messages: Message[] = [], providers: Provider[] = []) {
   return build(messages, providers)
-}
-
-export function getSessionTokenTotal(tokens: Session["tokens"] | undefined) {
-  if (!tokens) return undefined
-  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
 }

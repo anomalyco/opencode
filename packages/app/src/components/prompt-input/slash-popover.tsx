@@ -41,6 +41,10 @@ type PromptPopoverProps = {
   slashActive?: string
   setSlashActive: (id: string) => void
   onSlashSelect: (item: SlashCommand) => void
+  slashMenu: boolean
+  slashMenuQuery: string
+  onSlashMenuInput: (value: string) => void
+  onSlashMenuKeyDown: (event: KeyboardEvent) => void
   commandKeybind: (id: string) => string | undefined
   commandKeybindParts: (id: string) => string[]
   newLayoutDesigns: boolean
@@ -254,6 +258,20 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
             </Show>
           </Match>
           <Match when={props.popover === "slash"}>
+            <Show when={props.slashMenu}>
+              <div class="px-2 py-1">
+                <input
+                  ref={(el) => requestAnimationFrame(() => el.focus())}
+                  value={props.slashMenuQuery}
+                  onInput={(event) => props.onSlashMenuInput(event.currentTarget.value)}
+                  onKeyDown={props.onSlashMenuKeyDown}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  aria-label={props.t("prompt.menu.commands")}
+                  placeholder="/"
+                  class="w-full bg-transparent outline-none text-[13px] leading-5 text-v2-text-text-base placeholder:text-v2-text-text-faint"
+                />
+              </div>
+            </Show>
             <Show
               when={props.slashFlat.length > 0}
               fallback={

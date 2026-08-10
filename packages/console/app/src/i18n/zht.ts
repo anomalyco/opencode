@@ -103,10 +103,14 @@ export const dict = {
   "temp.logoDarkAlt": "opencode 深色標誌",
 
   "home.banner.badge": "新",
-  "home.banner.text": "桌面應用已推出 Beta",
-  "home.banner.platforms": "支援 macOS、Windows 與 Linux",
+  "home.banner.text": "桌面版分頁功能全新推出。",
+  "home.banner.platforms": "適用於 macOS、Windows 與 Linux",
   "home.banner.downloadNow": "立即下載",
   "home.banner.downloadBetaNow": "立即下載桌面 Beta 版",
+  "home.promo.title": "桌面版分頁功能全新推出",
+  "home.promo.body": "使用分頁整理工作和作用中的工作階段。",
+  "home.promo.cta": "下載最新版本即可開始使用。",
+  "home.promo.close": "關閉桌面應用程式公告",
 
   "home.hero.title": "開源 AI 編碼代理",
   "home.hero.subtitle.a": "內建免費模型，或連接任意供應商的任意模型，",
@@ -240,8 +244,8 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情況",
 
   "go.title": "OpenCode Go | 低成本全民編碼模型",
-  "go.meta.description":
-    "Go 首月 $5，之後 $10/月，提供對 GLM-5.2、GLM-5.1、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 和 DeepSeek V4 Flash 的 5 小時充裕請求額度。",
+  "go.banner.text": "DeepSeek V4 Flash 限時享有 2 倍使用額度",
+  "go.meta.description": "Go 首月 $5，之後 $10/月，提供充裕的使用限額，並可穩定存取領先的編碼模型。",
   "go.hero.title": "低成本全民編碼模型",
   "go.hero.body":
     "Go 將代理編碼帶給全世界的程式設計師。提供寬裕的限額以及對最強大開源模型的穩定存取，讓你可以使用強大的代理進行構建，而無需擔心成本或可用性。",
@@ -257,7 +261,6 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "每 5 小時請求數",
   "go.graph.usageLimits": "使用限制",
-  "go.graph.tick": "{{n}}x",
   "go.graph.aria": "每 5 小時請求數：{{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
@@ -288,8 +291,7 @@ export const dict = {
   "go.problem.item1": "低成本訂閱定價",
   "go.problem.item2": "寬裕的限額與穩定存取",
   "go.problem.item3": "專為盡可能多的程式設計師打造",
-  "go.problem.item4":
-    "包含 GLM-5.2、GLM-5.1、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 與 DeepSeek V4 Flash",
+  "go.problem.item4": "針對代理編碼測試的精選模型陣容",
   "go.how.title": "Go 如何運作",
   "go.how.body": "Go 起價為首月 $5，之後 $10/月。您可以將其與 OpenCode 或任何代理搭配使用。",
   "go.how.step1.title": "建立帳號",
@@ -310,8 +312,7 @@ export const dict = {
   "go.faq.q2": "Go 包含哪些模型？",
   "go.faq.a2": "Go 包含下方列出的模型，提供充足的額度與穩定的存取。",
   "go.faq.q3": "Go 與 Zen 一樣嗎？",
-  "go.faq.a3":
-    "不。Zen 是按量付費，而 Go 首月 $5，之後 $10/月，提供充裕的額度，並可可靠地存取 GLM-5.2、GLM-5.1、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 和 DeepSeek V4 Flash 等開源模型。",
+  "go.faq.a3": "不。Zen 是按量付費，而 Go 首月 $5，之後 $10/月，提供充裕的限額，並可穩定存取精選模型陣容。",
   "go.faq.q4": "Go 費用是多少？",
   "go.faq.a4.p1.beforePricing": "Go 費用為",
   "go.faq.a4.p1.pricingLink": "首月 $5",
@@ -320,8 +321,19 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "帳戶",
   "go.faq.a4.p3": "中管理訂閱。隨時取消。",
   "go.faq.q5": "資料與隱私怎麼辦？",
-  "go.faq.a5.body":
-    "該方案主要面向國際用戶設計，模型託管在美國、歐盟和新加坡，以確保全球穩定存取。我們的供應商遵循零留存政策，不會將你的資料用於模型訓練。",
+  "go.faq.a5.model": "模型",
+  "go.faq.a5.training": "模型訓練",
+  "go.faq.a5.retention": "資料保留",
+  "go.faq.a5.retention30": "30 天",
+  "go.faq.a5.retention0": "0 天",
+  "go.faq.a5.used": "使用",
+  "go.faq.a5.notUsed": "不使用",
+  "go.faq.a5.noAgreement": "無協議",
+  "go.faq.a5.grokRetention":
+    "ZDR 會停用依賴儲存資料的重要 API 功能，包括具狀態的 Responses API、Files and Collections 與 Batch API。",
+  "go.faq.a5.gptRetention": "所有 API 功能的使用都會產生濫用監控日誌，並保留最多 30 天。",
+  "go.faq.a5.learnMore": "了解更多",
+  "go.faq.a5.deepseekRetention": "ZDR 協議每月續簽。目前的協議有效至 2026 年 8 月 31 日。",
   "go.faq.a5.beforeExceptions": "Go 模型託管在美國。供應商遵循零留存政策，不會將你的資料用於模型訓練，但有",
   "go.faq.a5.exceptionsLink": "以下例外",
   "go.faq.q6": "我可以儲值額度嗎？",
@@ -333,7 +345,7 @@ export const dict = {
 
   "go.faq.q9": "免費模型與 Go 有什麼區別？",
   "go.faq.a9":
-    "免費模型包括 Big Pickle 以及當時可用的促銷模型，配額為 200 次請求/天。Go 包括 GLM-5.2、GLM-5.1、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 與 DeepSeek V4 Flash，並在滾動視窗（5 小時、每週和每月）內執行更高的請求配額，大約相當於每 5 小時 $12、每週 $30 和每月 $60（實際請求數因模型和使用情況而異）。",
+    "免費模型包括 Big Pickle 以及當時可用的促銷模型，配額為 200 次請求/天。Go 提供精選模型陣容，並在滾動視窗（5 小時、每週和每月）內提供更高的請求配額，大約相當於每 5 小時 $12、每週 $30 和每月 $60（實際請求數因模型和使用情況而異）。",
 
   "zen.api.error.rateLimitExceeded": "超出頻率限制。請稍後再試。",
   "zen.api.error.modelNotSupported": "不支援模型 {{model}}",
@@ -342,6 +354,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "不支援供應商 {{provider}}",
   "zen.api.error.missingApiKey": "缺少 API 金鑰。",
   "zen.api.error.invalidApiKey": "無效的 API 金鑰。",
+  "zen.api.error.requestBlockedByUpstreamProvider": "請求遭上游供應商封鎖。",
   "zen.api.error.subscriptionQuotaExceeded": "超出訂閱配額。請在 {{retryIn}} 後重試。",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "已達 5 小時使用上限，將在 {{retryIn}} 後重置。若要立即繼續使用此模型，請從可用餘額啟用使用量：{{consoleGoUrl}}",
@@ -355,7 +368,7 @@ export const dict = {
     "你的工作區已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached": "你已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{membersUrl}}",
   "zen.api.error.modelDisabled": "模型已停用",
-  "zen.api.error.regionNotAllowed": "此模型部署於中國。如果你想使用此模型，請在設定中啟用它：{{consoleGoUrl}}",
+  "zen.api.error.regionNotAllowed": "此模型的最新版本僅於中國託管，且需明確選擇啟用：{{consoleGoUrl}}",
   "zen.api.error.trialEnded": "{{model}} 的限免活动已結束。您可以訂閱 OpenCode Go 繼續使用該模型 - {{link}}",
 
   "black.meta.title": "OpenCode Black | 存取全球最佳編碼模型",
@@ -641,7 +654,7 @@ export const dict = {
   "workspace.lite.promo.price": "首月 $5",
   "workspace.lite.promo.modelsTitle": "包含模型",
   "workspace.lite.promo.footer":
-    "該計畫主要面向國際用戶設計，模型部署在美國、歐盟和新加坡，以確保全球範圍內的穩定存取體驗。定價和使用額度可能會根據早期用戶的使用情況和回饋持續調整與優化。",
+    "此方案主要為國際使用者設計，提供穩定的全球存取服務。隨著我們從初期使用情況和回饋中持續了解需求，價格和使用額度可能會有所調整。",
   "workspace.lite.promo.subscribe": "訂閱 Go",
   "workspace.lite.promo.subscribing": "重新導向中...",
   "workspace.lite.promo.otherMethods": "其他付款方式",
@@ -682,11 +695,11 @@ export const dict = {
 
   "download.title": "OpenCode | 下載",
   "download.meta.description": "下載適用於 macOS、Windows 與 Linux 的 OpenCode",
-  "download.hero.title": "下載 OpenCode",
+  "download.hero.title": "下載 OpenCode 桌面版",
   "download.hero.subtitle": "適用於 macOS、Windows 與 Linux 的 Beta 版現已提供",
   "download.hero.button": "下載 {{os}} 版",
   "download.section.terminal": "OpenCode 終端",
-  "download.section.desktop": "OpenCode 桌面版（Beta）",
+  "download.section.desktop": "OpenCode 桌面版",
   "download.section.extensions": "OpenCode 擴充功能",
   "download.section.integrations": "OpenCode 整合",
   "download.action.download": "下載",

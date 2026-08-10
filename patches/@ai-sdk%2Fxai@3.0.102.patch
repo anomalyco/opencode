@@ -1,0 +1,174 @@
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index 266c5ffdd9ee74ff95908ce90858ee4369d4e4ae..990ef4195bc67b6d25f249e1c81cf51710390f9a 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -78,6 +78,7 @@ declare const xaiLanguageModelResponsesOptions: z.ZodObject<{
+     topLogprobs: z.ZodOptional<z.ZodNumber>;
+     store: z.ZodOptional<z.ZodBoolean>;
+     previousResponseId: z.ZodOptional<z.ZodString>;
++    promptCacheKey: z.ZodOptional<z.ZodString>;
+     include: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodEnum<{
+         "file_search_call.results": "file_search_call.results";
+     }>>>>;
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 266c5ffdd9ee74ff95908ce90858ee4369d4e4ae..990ef4195bc67b6d25f249e1c81cf51710390f9a 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -78,6 +78,7 @@ declare const xaiLanguageModelResponsesOptions: z.ZodObject<{
+     topLogprobs: z.ZodOptional<z.ZodNumber>;
+     store: z.ZodOptional<z.ZodBoolean>;
+     previousResponseId: z.ZodOptional<z.ZodString>;
++    promptCacheKey: z.ZodOptional<z.ZodString>;
+     include: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodEnum<{
+         "file_search_call.results": "file_search_call.results";
+     }>>>>;
+diff --git a/dist/index.js b/dist/index.js
+index 717b74538f5c8f0d6ab1475ebb2a84a47ccd3950..dd7dbeb3bc307e0d355f4bb4939d06cc8eae7528 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1119,6 +1119,14 @@ async function convertToXaiResponsesInput({
+                   type: "input_file",
+                   file_url: block.data.toString()
+                 });
++              } else if (block.mediaType === "application/pdf") {
++                contentParts.push({
++                  type: "input_file",
++                  ...typeof block.data === "string" && block.data.startsWith("file-") ? { file_id: block.data } : {
++                    filename: block.filename ?? "file",
++                    file_data: `data:application/pdf;base64,${(0, import_provider_utils5.convertToBase64)(block.data)}`
++                  }
++                });
+               } else {
+                 throw new import_provider4.UnsupportedFunctionalityError({
+                   functionality: `file part media type ${block.mediaType} as inline data (xAI Responses requires a URL or a Files API reference for non-image files)`
+@@ -1760,6 +1768,10 @@ var xaiLanguageModelResponsesOptions = import_v47.z.object({
+    * The ID of the previous response from the model.
+    */
+   previousResponseId: import_v47.z.string().optional(),
++  /**
++   * A stable key used by xAI to improve prompt cache routing.
++   */
++  promptCacheKey: import_v47.z.string().optional(),
+   /**
+    * Specify additional output data to include in the model response.
+    * Example values: 'file_search_call.results'.
+@@ -2165,6 +2177,9 @@ var XaiResponsesLanguageModel = class {
+       },
+       ...options.previousResponseId != null && {
+         previous_response_id: options.previousResponseId
++      },
++      ...options.promptCacheKey != null && {
++        prompt_cache_key: options.promptCacheKey
+       }
+     };
+     if (xaiTools2 && xaiTools2.length > 0) {
+diff --git a/dist/index.mjs b/dist/index.mjs
+index a26af109585fc2bd3053b320142aa869c06d36f4..774adaf971b648544317a4fc65d0c56e488d4fc7 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1122,6 +1122,14 @@ async function convertToXaiResponsesInput({
+                   type: "input_file",
+                   file_url: block.data.toString()
+                 });
++              } else if (block.mediaType === "application/pdf") {
++                contentParts.push({
++                  type: "input_file",
++                  ...typeof block.data === "string" && block.data.startsWith("file-") ? { file_id: block.data } : {
++                    filename: block.filename ?? "file",
++                    file_data: `data:application/pdf;base64,${convertToBase642(block.data)}`
++                  }
++                });
+               } else {
+                 throw new UnsupportedFunctionalityError3({
+                   functionality: `file part media type ${block.mediaType} as inline data (xAI Responses requires a URL or a Files API reference for non-image files)`
+@@ -1763,6 +1771,10 @@ var xaiLanguageModelResponsesOptions = z7.object({
+    * The ID of the previous response from the model.
+    */
+   previousResponseId: z7.string().optional(),
++  /**
++   * A stable key used by xAI to improve prompt cache routing.
++   */
++  promptCacheKey: z7.string().optional(),
+   /**
+    * Specify additional output data to include in the model response.
+    * Example values: 'file_search_call.results'.
+@@ -2186,6 +2198,9 @@ var XaiResponsesLanguageModel = class {
+       },
+       ...options.previousResponseId != null && {
+         previous_response_id: options.previousResponseId
++      },
++      ...options.promptCacheKey != null && {
++        prompt_cache_key: options.promptCacheKey
+       }
+     };
+     if (xaiTools2 && xaiTools2.length > 0) {
+diff --git a/src/responses/convert-to-xai-responses-input.ts b/src/responses/convert-to-xai-responses-input.ts
+index 9a3712990cf646a6f7ba757d3f2893a3c37c6ef9..b018a9b95eb21e6c12794e6bddb3d953f40441e5 100644
+--- a/src/responses/convert-to-xai-responses-input.ts
++++ b/src/responses/convert-to-xai-responses-input.ts
+@@ -64,6 +64,17 @@ export async function convertToXaiResponsesInput({
+                   type: 'input_file',
+                   file_url: block.data.toString(),
+                 });
++              } else if (block.mediaType === 'application/pdf') {
++                contentParts.push({
++                  type: 'input_file',
++                  ...(typeof block.data === 'string' &&
++                  block.data.startsWith('file-')
++                    ? { file_id: block.data }
++                    : {
++                        filename: block.filename ?? 'file',
++                        file_data: `data:application/pdf;base64,${convertToBase64(block.data)}`,
++                      }),
++                });
+               } else {
+                 throw new UnsupportedFunctionalityError({
+                   functionality: `file part media type ${block.mediaType} as inline data (xAI Responses requires a URL or a Files API reference for non-image files)`,
+diff --git a/src/responses/xai-responses-api.ts b/src/responses/xai-responses-api.ts
+index 70483ea4f7c340b84c23766ac1d1df21e052842b..4b4d052860caa019556151e9e46dbfda8dfb18a9 100644
+--- a/src/responses/xai-responses-api.ts
++++ b/src/responses/xai-responses-api.ts
+@@ -27,7 +27,13 @@ export type XaiResponsesSystemMessage = {
+ export type XaiResponsesUserMessageContentPart =
+   | { type: 'input_text'; text: string }
+   | { type: 'input_image'; image_url: string }
+-  | { type: 'input_file'; file_url: string };
++  | {
++      type: 'input_file';
++      file_url?: string;
++      file_id?: string;
++      file_data?: string;
++      filename?: string;
++    };
+ 
+ export type XaiResponsesUserMessage = {
+   role: 'user';
+diff --git a/src/responses/xai-responses-language-model.ts b/src/responses/xai-responses-language-model.ts
+index f90df62eb9a30154388b1390e9f3acc3ccc022bf..00e61cba6cf048ae0045be692f33cb7e1e6a1188 100644
+--- a/src/responses/xai-responses-language-model.ts
++++ b/src/responses/xai-responses-language-model.ts
+@@ -182,6 +182,9 @@ export class XaiResponsesLanguageModel implements LanguageModelV3 {
+       ...(options.previousResponseId != null && {
+         previous_response_id: options.previousResponseId,
+       }),
++      ...(options.promptCacheKey != null && {
++        prompt_cache_key: options.promptCacheKey,
++      }),
+     };
+ 
+     if (xaiTools && xaiTools.length > 0) {
+diff --git a/src/responses/xai-responses-options.ts b/src/responses/xai-responses-options.ts
+index f8e96c061bf8793a402ababb8cad65bb2ad6aead..15c168892c1e8755453c61d3061e958cfd51ac71 100644
+--- a/src/responses/xai-responses-options.ts
++++ b/src/responses/xai-responses-options.ts
+@@ -32,6 +32,10 @@ export const xaiLanguageModelResponsesOptions = z.object({
+    * The ID of the previous response from the model.
+    */
+   previousResponseId: z.string().optional(),
++  /**
++   * A stable key used by xAI to improve prompt cache routing.
++   */
++  promptCacheKey: z.string().optional(),
+   /**
+    * Specify additional output data to include in the model response.
+    * Example values: 'file_search_call.results'.

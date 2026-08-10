@@ -1,11 +1,13 @@
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
 import { type ComponentProps, type JSXElement, type ParentProps, Show, children, splitProps } from "solid-js"
+import { useI18n } from "../../context/i18n"
 import "./dialog-v2.css"
 
 export interface DialogProps extends ParentProps {
   size?: "normal" | "large" | "x-large"
   variant?: "default" | "settings"
   class?: ComponentProps<"div">["class"]
+  containerClass?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   fit?: boolean
 }
@@ -50,6 +52,7 @@ export function DialogTitleGroup(props: DialogTitleGroupProps) {
 }
 
 export function DialogHeader(props: DialogHeaderProps) {
+  const i18n = useI18n()
   const [local] = splitProps(props, ["closeLabel", "hideClose", "children"])
   const hideClose = () => local.hideClose === true
 
@@ -57,7 +60,7 @@ export function DialogHeader(props: DialogHeaderProps) {
     <div data-slot="dialog-header" data-hide-close={hideClose() ? "" : undefined}>
       {local.children}
       {!hideClose() && (
-        <Kobalte.CloseButton data-slot="dialog-close-button" aria-label={local.closeLabel ?? "Close"}>
+        <Kobalte.CloseButton data-slot="dialog-close-button" aria-label={local.closeLabel ?? i18n.t("ui.common.close")}>
           <svg
             width="16"
             height="16"
@@ -79,7 +82,7 @@ export function DialogHeader(props: DialogHeaderProps) {
 }
 
 export function Dialog(props: DialogProps) {
-  const [local] = splitProps(props, ["size", "variant", "class", "classList", "fit", "children"])
+  const [local] = splitProps(props, ["size", "variant", "class", "containerClass", "classList", "fit", "children"])
 
   return (
     <div
@@ -88,7 +91,7 @@ export function Dialog(props: DialogProps) {
       data-fit={local.fit ? true : undefined}
       data-size={local.size || "normal"}
     >
-      <div data-slot="dialog-container">
+      <div data-slot="dialog-container" class={local.containerClass}>
         <Kobalte.Content
           data-slot="dialog-content"
           classList={{
@@ -100,7 +103,7 @@ export function Dialog(props: DialogProps) {
             const autofocusEl = target?.querySelector("[autofocus]") as HTMLElement | null
             if (autofocusEl) {
               e.preventDefault()
-              autofocusEl.focus()
+              autofocusEl.focus({ preventScroll: true })
             }
           }}
         >

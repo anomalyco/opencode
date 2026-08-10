@@ -1,8 +1,8 @@
 import { query } from "@solidjs/router"
 
-export const modelCatalogSourceUrl = "https://models.dev/catalog.json"
-export const modelCatalogPricingUrl = "https://models.dev/api.json"
-export const modelCatalogLabSourceUrl = "https://models.dev/labs"
+export const modelCatalogSourceUrl = "https://models.opencode.ai/catalog.json"
+export const modelCatalogPricingUrl = "https://models.opencode.ai/api.json"
+export const modelCatalogLabSourceUrl = "https://models.opencode.ai/labs"
 
 export type ModelCatalogCost = {
   input: number
@@ -56,14 +56,18 @@ export type ModelCatalog = {
   labs: ModelCatalogLab[]
 }
 
-export const getModelCatalog = query(async () => {
-  "use server"
+export async function loadModelCatalog() {
   const [models, pricing, labs] = await Promise.all([
     fetchCatalogPayload(modelCatalogSourceUrl),
     fetchCatalogPayload(modelCatalogPricingUrl),
     fetchLabCatalogPayload(modelCatalogLabSourceUrl),
   ])
   return buildModelCatalog(models, pricing, labs)
+}
+
+export const getModelCatalog = query(async () => {
+  "use server"
+  return loadModelCatalog()
 }, "getModelCatalog")
 
 export function findModelCatalogEntry(catalog: ModelCatalog, model: string, lab?: string) {

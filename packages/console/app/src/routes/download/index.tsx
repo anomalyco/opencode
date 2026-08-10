@@ -11,7 +11,7 @@ import { LocaleLinks } from "~/component/locale-links"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import desktopAppIcon from "../../asset/lander/opencode-desktop-icon.png"
+import desktopTabsVideo from "../../asset/lander/desktop-tabs-landscape.mp4"
 import type { DownloadPlatform } from "./types"
 
 type OS = "macOS" | "Windows" | "Linux" | null
@@ -93,12 +93,14 @@ export default function Download() {
 
         <div data-component="content">
           <section data-component="download-hero">
-            <div data-component="hero-icon">
-              <img src={desktopAppIcon} alt="" />
+            <div data-component="hero-video">
+              <video src={desktopTabsVideo} autoplay playsinline loop muted preload="metadata" aria-hidden="true" />
             </div>
             <div data-component="hero-text">
               <h1>{i18n.t("download.hero.title")}</h1>
-              <p>{i18n.t("download.hero.subtitle")}</p>
+              <p>
+                {i18n.t("home.promo.body")} {i18n.t("home.promo.cta")}
+              </p>
               <Show when={detectedOS()}>
                 <a
                   href={language.route(getDownloadHref(getDownloadPlatform(detectedOS())))}
