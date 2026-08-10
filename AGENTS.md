@@ -1,8 +1,22 @@
+## moks fork
+
+This repo is a product fork of OpenCode (`anomalyco/opencode` → `artemysone/moks`). See `docs/FORK.md`.
+
+- Remotes: `origin` = moks (push); `upstream` = OpenCode (pull only).
+- Default branch is `dev`. Local `main` may not exist; use `dev` or `origin/dev` for diffs.
+- Runtime is Bun (`bun install`, `bun dev`). Do not introduce pnpm/npm as the primary workflow.
+- Prefer changes in `packages/opencode` (CLI/TUI/server) for the TA harness. Do not expand into `desktop`, `console`, `web`, or cloud/SST packages unless explicitly asked.
+- Do not ship under OpenCode package/install names. Do not imply official OpenCode affiliation.
+- Keep MIT license and upstream copyright notices; add moks copyright only for new work.
+- Their CI, releases, and cloud infra are not ours — don’t assume secrets, npm publishes, or SST stages work here.
+- When tracking upstream: fetch/merge `upstream/dev` deliberately. After deep product divergence, prefer a hard fork over painful half-merges.
+- Product strategy / GTM: `docs/gtm.html`.
+
+## OpenCode monorepo
+
 - To regenerate the legacy JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - After changing the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`. Do not edit `src/generated` or `src/generated-effect` directly.
 - Keep runtime dependencies directed from Schema to Core and Protocol, then from Core and Protocol to Server. Client runtime code may depend on Schema and Protocol but never Core or Server; `sdk-next` composes Client, Core, and Server.
-- The default branch in this repo is `dev`.
-- Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 
 ## Branch Names
 
