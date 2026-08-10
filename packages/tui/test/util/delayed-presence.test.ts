@@ -1,39 +1,55 @@
-import { expect, test } from "bun:test"
+import { expect, jest, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { createDelayedPresence } from "../../src/util/delayed-presence"
 
 test("shows only after the same value remains present for the delay", async () => {
-  await createRoot(async (dispose) => {
+  jest.useFakeTimers()
+  const scope = createRoot((dispose) => {
     const [value, setValue] = createSignal<string>()
-    const visible = createDelayedPresence(value, 40)
-
-    setValue("first")
-    await Bun.sleep(20)
-    expect(visible()).toBe(false)
-
-    setValue("second")
-    await Bun.sleep(25)
-    expect(visible()).toBe(false)
-    await Bun.sleep(25)
-    expect(visible()).toBe(true)
-
-    dispose()
+    return { dispose, setValue, visible: createDelayedPresence(value, 1_000) }
   })
+
+  try {
+    scope.setValue("first")
+    await Promise.resolve()
+    jest.advanceTimersByTime(500)
+    expect(scope.visible()).toBe(false)
+
+    scope.setValue("second")
+    await Promise.resolve()
+    jest.advanceTimersByTime(999)
+    expect(scope.visible()).toBe(false)
+    jest.advanceTimersByTime(1)
+    expect(scope.visible()).toBe(true)
+  } finally {
+    scope.dispose()
+    jest.useRealTimers()
+  }
 })
 
 test("cancels the delay when the value disappears or the owner is disposed", async () => {
-  await createRoot(async (dispose) => {
+  jest.useFakeTimers()
+  const scope = createRoot((dispose) => {
     const [value, setValue] = createSignal<string>()
-    const visible = createDelayedPresence(value, 30)
-
-    setValue("running")
-    setValue(undefined)
-    await Bun.sleep(40)
-    expect(visible()).toBe(false)
-
-    setValue("running")
-    dispose()
-    await Bun.sleep(40)
-    expect(visible()).toBe(false)
+    return { dispose, setValue, visible: createDelayedPresence(value, 1_000) }
   })
+
+  try {
+    scope.setValue("running")
+    await Promise.resolve()
+    jest.advanceTimersByTime(500)
+    scope.setValue(undefined)
+    await Promise.resolve()
+    jest.advanceTimersByTime(1_000)
+    expect(scope.visible()).toBe(false)
+
+    scope.setValue("running")
+    await Promise.resolve()
+    scope.dispose()
+    jest.advanceTimersByTime(1_000)
+    expect(scope.visible()).toBe(false)
+  } finally {
+    scope.dispose()
+    jest.useRealTimers()
+  }
 })
