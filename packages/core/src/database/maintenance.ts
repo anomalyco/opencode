@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm"
 import { DateTime, Effect, Semaphore } from "effect"
 import { basename, dirname, extname, join } from "node:path"
 import { Database } from "./database"
+import { DatabaseMaintenanceGate } from "./maintenance-gate"
 import { SessionEventLogCompaction } from "../session/event-log-compaction"
 
 const BATCH_SIZE = 10_000
@@ -292,14 +293,26 @@ export const backup = Effect.fn("DatabaseMaintenance.backup")((database: Databas
   guarded(backupUnlocked(database)),
 )
 
-export const compact = Effect.fn("DatabaseMaintenance.compact")((database: Database.Interface) =>
-  guarded(compactUnlocked(database).pipe(Effect.ensuring(SessionEventLogCompaction.dropIndex(database.db)))),
+type ExclusiveOptions = {
+  readonly onGateStatus?: (status: DatabaseMaintenanceGate.Status) => void
+}
+
+export const compact = Effect.fn("DatabaseMaintenance.compact")(
+  (database: Database.Interface, options: ExclusiveOptions = {}) =>
+    DatabaseMaintenanceGate.exclusive(
+      "compact",
+      guarded(compactUnlocked(database).pipe(Effect.ensuring(SessionEventLogCompaction.dropIndex(database.db)))),
+      { onStatus: options.onGateStatus },
+    ),
 )
 
 export const checkpoint = Effect.fn("DatabaseMaintenance.checkpoint")((database: Database.Interface) =>
   guarded(checkpointUnlocked(database)),
 )
 
-export const vacuum = Effect.fn("DatabaseMaintenance.vacuum")((database: Database.Interface) =>
-  guarded(vacuumUnlocked(database)),
+export const vacuum = Effect.fn("DatabaseMaintenance.vacuum")(
+  (database: Database.Interface, options: ExclusiveOptions = {}) =>
+    DatabaseMaintenanceGate.exclusive("vacuum", guarded(vacuumUnlocked(database)), {
+      onStatus: options.onGateStatus,
+    }),
 )

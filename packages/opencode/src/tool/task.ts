@@ -14,6 +14,7 @@ import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { DatabaseMaintenanceGate } from "@opencode-ai/core/database/maintenance-gate"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -250,7 +251,11 @@ export const TaskTool = Tool.define(
               },
             ],
           })
-          .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
+          .pipe(
+            DatabaseMaintenanceGate.waitForDetachedMutation,
+            Effect.ignore,
+            Effect.forkIn(scope, { startImmediately: true }),
+          )
       })
 
       const notify = Effect.fn("TaskTool.notifyBackgroundResult")(function* (jobID: string) {

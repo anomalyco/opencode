@@ -41,6 +41,7 @@ const StoragePhase = Schema.Literals([
   "index",
   "analyze",
   "backup",
+  "drain",
   "compact",
   "checkpoint",
   "vacuum",
