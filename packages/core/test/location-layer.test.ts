@@ -3,13 +3,15 @@ import path from "path"
 import { describe, expect } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
-import { DateTime, Deferred, Effect, Equal, Fiber, Hash, RcMap, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Equal, Exit, Fiber, Hash, Layer, RcMap, Schema, Stream } from "effect"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
+import { Vcs } from "@opencode-ai/core/vcs"
 import { Location } from "@opencode-ai/core/location"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
@@ -29,6 +31,31 @@ import { Reference } from "../src/reference"
 import { Tool } from "../src/tool"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node])))
+
+const bootAttempts = { count: 0 }
+const vcsFailOnceNode = makeLocationNode({
+  service: Vcs.Service,
+  layer: Layer.suspend(() => {
+    bootAttempts.count++
+    return bootAttempts.count === 1
+      ? Layer.effect(Vcs.Service, Effect.die(new Error("transient boot failure")))
+      : Layer.succeed(
+          Vcs.Service,
+          Vcs.Service.of({ status: () => Effect.succeed([]), diff: () => Effect.succeed([]) }),
+        )
+  }),
+  deps: [],
+})
+const retryMapNode = makeGlobalNode({
+  service: LocationServiceMap.Service,
+  layer: buildLocationServiceMap([[Vcs.node, vcsFailOnceNode]], { bootFailureRetry: "250 millis" }),
+  deps: [],
+})
+const itRetry = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+    [LocationServiceMap.node, retryMapNode],
+  ]),
+)
 const itWithSdk = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node])),
 )
@@ -794,6 +821,31 @@ describe("LocationServiceMap", () => {
           Effect.scoped,
           Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
         ),
+      ),
+    ),
+  )
+
+  itRetry.live("retries a failed location boot after the retry delay", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const locations = yield* LocationServiceMap.Service
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const boot = locations.contextEffect(ref).pipe(Effect.asVoid, Effect.scoped, Effect.exit)
+
+          expect(Exit.isFailure(yield* boot)).toBe(true)
+          expect(bootAttempts.count).toBe(1)
+          // Within the retry window the cached failure replays without a rebuild.
+          expect(Exit.isFailure(yield* boot)).toBe(true)
+          expect(bootAttempts.count).toBe(1)
+
+          yield* Effect.sleep("1 second")
+          expect(Exit.isSuccess(yield* boot)).toBe(true)
+          expect(bootAttempts.count).toBe(2)
+        }),
       ),
     ),
   )

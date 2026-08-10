@@ -1,4 +1,4 @@
-import { Effect, Layer, LayerMap } from "effect"
+import { Cause, Duration, Effect, Layer, LayerMap } from "effect"
 import { Agent } from "./agent"
 import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
@@ -110,16 +110,30 @@ export type LocationError = LayerNode.Error<typeof locationServices>
 
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
+  options?: { bootFailureRetry?: Duration.Input },
 ): Layer.Layer<LocationServiceMap.Service> {
   // Structural Equal is own-key-set sensitive, so `{ directory }` (schema-decoded
   // payloads omit optional keys) and `{ directory, workspaceID: undefined }` are
   // different RcMap keys. The RcMap caches by the raw key before the build
   // callback runs, so canonicalize at the map boundary to the key-present shape.
   const canonical = (ref: Location.Ref) => Location.Ref.make({ directory: ref.directory, workspaceID: ref.workspaceID })
+  const bootFailureRetry = Duration.fromInputUnsafe(options?.bootFailureRetry ?? "5 seconds")
   return Layer.effect(
     LocationServiceMap.Service,
-    Effect.map(
-      LayerMap.make(
+    Effect.gen(function* () {
+      const scope = yield* Effect.scope
+      // The RcMap caches a failed boot exactly like a successful one, for the
+      // full idleTimeToLive, and nothing in production invalidates it: one
+      // transient boot error would poison the location for an hour. Evict the
+      // failed entry after a short delay instead. The delay matters: a failed
+      // boot still publishes agent/command/catalog.updated, clients refetch on
+      // those, and an immediate eviction would let a persistently failing
+      // location rebuild in a hot loop. The lookup runs once per cached entry,
+      // so exactly one eviction is scheduled per failed boot. Eviction is best
+      // effort: invalidate no-ops while the entry is referenced, and the entry
+      // then falls back to the idleTimeToLive.
+      const evict: { current?: (ref: Location.Ref) => Effect.Effect<void> } = {}
+      const inner = yield* LayerMap.make(
         (ref: Location.Ref) => {
           const startedAt = performance.now()
           const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
@@ -139,16 +153,24 @@ export function buildLocationServiceMap(
               }),
             ),
             Layer.provide(LayerNode.compile(location.hoisted)),
+            Layer.tapCause((cause) => {
+              if (Cause.hasInterruptsOnly(cause)) return Effect.void
+              return Effect.suspend(() => evict.current!(ref)).pipe(
+                Effect.delay(bootFailureRetry),
+                Effect.forkIn(scope),
+              )
+            }),
           )
         },
         { idleTimeToLive: "60 minutes" },
-      ),
-      (inner) => ({
+      )
+      evict.current = (ref) => inner.invalidate(ref)
+      return {
         ...inner,
         get: (ref: Location.Ref) => inner.get(canonical(ref)),
         contextEffect: (ref: Location.Ref) => inner.contextEffect(canonical(ref)),
         invalidate: (ref: Location.Ref) => inner.invalidate(canonical(ref)),
-      }),
-    ),
+      }
+    }),
   )
 }
