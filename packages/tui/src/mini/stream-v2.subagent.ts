@@ -32,7 +32,7 @@ import type {
   MiniPermissionRequest,
   StreamCommit,
 } from "./types"
-import { canonicalToolName, normalizeTool, toolOutputText, toolView } from "./tool"
+import { canonicalToolName, normalizeTool, toolOutputText, toolStartReady, toolView } from "./tool"
 import { toolDisplayContent } from "../util/tool-display"
 
 const CHILD_MESSAGE_LIMIT = 80
@@ -312,7 +312,10 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     const current = child.tools.get(key)
     const output = toolOutputText(part.name, toolDisplayContent(part.state))
     if (part.state.status === "running") {
-      if (!current || current.part.state.status === "streaming")
+      if (
+        (!current || current.part.state.status === "streaming" || !toolStartReady(current.part)) &&
+        toolStartReady(part)
+      )
         setFrame(child, frame, toolCommit(part, messageID, "start", undefined, input.directory))
       if (output) setFrame(child, frame, toolCommit(part, messageID, "progress", output, input.directory))
       child.tools.set(key, { part })

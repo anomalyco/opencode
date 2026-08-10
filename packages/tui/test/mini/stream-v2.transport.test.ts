@@ -11,6 +11,7 @@ import {
   type PermissionRequest,
 } from "@opencode-ai/client/promise"
 import { createSessionTransport } from "../../src/mini/stream-v2.transport"
+import { entryBody } from "../../src/mini/entry.body"
 import type { StreamCommit } from "../../src/mini/types"
 import { createFooterApiFixture } from "./fixture/footer-api"
 import { canonicalToolPart } from "./fixture/tool-part"
@@ -2197,6 +2198,85 @@ describe("V2 mini transport", () => {
       status: "error",
       metadata: { checkpoint: 1 },
       content: [{ type: "text", text: "partial" }],
+    })
+    await transport.close()
+  })
+
+  test("waits for the attempted web search provider before rendering its title", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      footer: ui.api,
+    })
+    events.push({
+      id: "evt_websearch_input",
+      created: 1,
+      type: "session.tool.input.started",
+      durable: durable("ses_1"),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_websearch",
+        id: "call_websearch",
+        name: "websearch",
+      },
+    })
+    events.push({
+      id: "evt_websearch_called",
+      created: 2,
+      type: "session.tool.called",
+      durable: durable("ses_1", 1),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_websearch",
+        id: "call_websearch",
+        input: { query: "effect" },
+        executed: true,
+      },
+    })
+    await Bun.sleep(0)
+    expect(ui.commits.filter((item) => item.part?.id === "call_websearch")).toEqual([])
+
+    events.push({
+      id: "evt_websearch_progress",
+      created: 3,
+      type: "session.tool.progress",
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_websearch",
+        id: "call_websearch",
+        metadata: { provider: "exa" },
+      },
+    })
+    events.push({
+      id: "evt_websearch_failed",
+      created: 4,
+      type: "session.tool.failed",
+      durable: durable("ses_1", 2, 2),
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_websearch",
+        id: "call_websearch",
+        error: { type: "tool.execution", message: "Web search request failed (HTTP 403)" },
+        metadata: { provider: "exa" },
+        executed: true,
+      },
+    })
+    await Bun.sleep(0)
+
+    const commits = ui.commits.filter((item) => item.part?.id === "call_websearch")
+    expect(commits.map((item) => item.phase)).toEqual(["start", "final"])
+    const start = commits[0]
+    const final = commits[1]
+    if (!start || !final) throw new Error("Expected web search start and final commits")
+    expect(entryBody(start)).toEqual({ type: "text", content: '◈ Exa Web Search "effect"' })
+    expect(entryBody(final)).toEqual({
+      type: "text",
+      content: "✖ websearch failed: Web search request failed (HTTP 403)",
     })
     await transport.close()
   })

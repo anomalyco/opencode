@@ -3,6 +3,7 @@ export * as WebSearchTool from "./websearch"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema, Semaphore } from "effect"
+import { HttpClientError } from "effect/unstable/http"
 import { Form } from "../../form"
 import { KV } from "../../kv"
 import { Permission } from "../../permission"
@@ -52,7 +53,13 @@ export const Plugin = {
                 source: { type: "tool", messageID: context.messageID, id: context.id },
               })
               const search = (): Effect.Effect<Effect.Success<ReturnType<typeof ctx.websearch.query>>, unknown> =>
-                ctx.websearch.query(input).pipe(
+                websearch.default().pipe(
+                  Effect.flatMap((provider) => {
+                    if (!provider) return ctx.websearch.query(input)
+                    return context
+                      .progress({ provider: provider.id })
+                      .pipe(Effect.andThen(ctx.websearch.query({ ...input, providerID: provider.id })))
+                  }),
                   Effect.catch((error) => {
                     if (!Schema.is(WebSearch.ProviderRequiredError)(error)) return Effect.fail(error)
                     return providerSelectionLock
@@ -151,11 +158,7 @@ export const Plugin = {
                     .join("\n\n")
                 : NO_RESULTS
               return { output, content, metadata: { provider: output.provider } }
-            }).pipe(
-              Effect.mapError(
-                (error) => new ToolFailure({ message: `Unable to search the web for ${input.query}`, error }),
-              ),
-            ),
+            }).pipe(Effect.mapError((error) => webSearchFailure(input.query, error))),
         }),
       )
       .pipe(Effect.orDie)
@@ -166,4 +169,19 @@ export const Plugin = {
       }),
     )
   }),
+}
+
+function webSearchFailure(query: string, error: unknown) {
+  const fallback = `Unable to search the web for ${query}`
+  if (!Schema.is(WebSearch.RequestError)(error)) return new ToolFailure({ message: fallback, error })
+  const status = HttpClientError.isHttpClientError(error.cause) ? error.cause.response?.status : undefined
+  const message =
+    status === 429
+      ? "Web search rate limited (HTTP 429)"
+      : status === 401
+        ? "Web search authentication failed (HTTP 401)"
+        : status === undefined
+          ? fallback
+          : `Web search request failed (HTTP ${status})`
+  return new ToolFailure({ message, error, metadata: { provider: error.providerID } })
 }

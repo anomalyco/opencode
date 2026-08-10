@@ -15,7 +15,7 @@ import { blockerStatus, pickBlockerView } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
-import { normalizeTool, toolOutputText } from "./tool"
+import { normalizeTool, toolOutputText, toolStartReady } from "./tool"
 import { toolDisplayContent } from "../util/tool-display"
 import type {
   FooterApi,
@@ -120,6 +120,7 @@ type ToolState = {
   part: SessionMessageAssistantTool
   output: string
   version: number
+  started: boolean
 }
 
 type State = {
@@ -609,7 +610,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     state.toolSources.set(key, part)
     if (part.state.status === "streaming") {
-      state.tools.set(key, { part, output: "", version: 0 })
+      state.tools.set(key, { part, output: "", version: 0, started: false })
       return
     }
     const current = state.tools.get(key)
@@ -618,16 +619,18 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const version = current && !prefix ? current.version + 1 : (current?.version ?? 0)
     const delta = current && prefix ? output.slice(current.output.length) : output
     if (part.state.status === "running") {
-      if (render && (!current || current.part.state.status === "streaming"))
+      const started = current?.started === true
+      const ready = toolStartReady(part)
+      if (render && !started && ready)
         write([toolCommit(part, messageID, "start", undefined, input.location?.directory, version)], {
           phase: "running",
           status: `running ${part.name}`,
         })
       if (render && delta) write([toolCommit(part, messageID, "progress", delta, input.location?.directory, version)])
-      state.tools.set(key, { part, output, version })
+      state.tools.set(key, { part, output, version, started: started || (render && ready) })
       return
     }
-    if (render && (!current || current.part.state.status === "streaming"))
+    if (render && !current?.started)
       write([toolCommit(part, messageID, "start", undefined, input.location?.directory, version)])
     state.finishedTools.add(key)
     state.tools.delete(key)
