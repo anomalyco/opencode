@@ -14,17 +14,14 @@ import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { showToast } from "@/utils/toast"
 import { type Accessor, type Component, createMemo, createUniqueId, For, Match, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useQueryClient } from "@tanstack/solid-query"
 import { useParams } from "@solidjs/router"
 import { Link } from "@/components/link"
-import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { CustomProviderForm } from "./dialog-custom-provider"
 import { decode64 } from "@/utils/base64"
-import { pathKey } from "@/utils/path-key"
 import { createProviderConnectionController } from "./provider-connection-controller"
 
 const CUSTOM_ID = "_custom"
@@ -370,8 +367,6 @@ function ProviderConnection(props: {
 }) {
   const dialog = useDialog()
   const serverSync = useServerSync()
-  const serverSDK = useServerSDK()
-  const queryClient = useQueryClient()
   const params = useParams()
   const language = useLanguage()
   const settings = useSettings()
@@ -383,80 +378,18 @@ function ProviderConnection(props: {
     () => providers.all().get(props.provider) ?? serverSync().data.provider.all.get(props.provider)!,
   )
   const controller = createProviderConnectionController({
-    provider: props.provider,
+    provider: () => props.provider,
     directory,
-    fallbackKeyLabel: () => language.t("provider.connect.method.apiKey"),
-    requestFailed: () => language.t("common.requestFailed"),
-    invalidCode: () => language.t("provider.connect.oauth.code.invalid"),
-    services: {
-      integration: {
-        load: (integrationID, value) =>
-          serverSDK()
-            .api.integration.get({
-              integrationID,
-              location: value ? { directory: value } : undefined,
-            })
-            .then((result) => result.data),
-      },
-      connection: {
-        key: (integrationID, value, key) =>
-          serverSDK().api.integration.connect.key({
-            integrationID,
-            location: value ? { directory: value } : undefined,
-            key,
-          }),
-        oauth: (integrationID, value, methodID, inputs) =>
-          serverSDK()
-            .api.integration.oauth.connect({
-              integrationID,
-              methodID,
-              inputs,
-              location: value ? { directory: value } : undefined,
-            })
-            .then((result) => result.data),
-        status: (integrationID, value, attemptID) =>
-          serverSDK()
-            .api.integration.oauth.status({
-              integrationID,
-              attemptID,
-              location: value ? { directory: value } : undefined,
-            })
-            .then((result) => result.data),
-        complete: (integrationID, value, attemptID, code) =>
-          serverSDK().api.integration.oauth.complete({
-            integrationID,
-            attemptID,
-            location: value ? { directory: value } : undefined,
-            code,
-          }),
-      },
-      provider: {
-        refresh: () =>
-          queryClient.refetchQueries(serverSync().queryOptions.providers(directory() ? pathKey(directory()!) : null)),
-      },
-      completion: {
-        finish: () => {
-          dialog.close()
-          showToast({
-            variant: "success",
-            icon: "circle-check",
-            title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
-            description: language.t("provider.connect.toast.connected.description", { provider: provider().name }),
-          })
-        },
-      },
+    onComplete: () => {
+      dialog.close()
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
+        description: language.t("provider.connect.toast.connected.description", { provider: provider().name }),
+      })
     },
   })
-  const loading = controller.data.loading
-  const methods = controller.data.methods
-  const method = controller.data.method
-  const methodIndex = controller.data.methodIndex
-  const authorization = controller.data.authorization
-  const state = controller.auth.state
-  const error = controller.auth.error
-  const connectKey = controller.auth.connectKey
-  const completeCode = controller.auth.completeCode
-
   const methodLabel = (value?: { type?: string; label?: string }) => {
     if (!value) return ""
     if (value.type === "key") return language.t("provider.connect.method.apiKey")
@@ -473,8 +406,6 @@ function ProviderConnection(props: {
     }
   }
 
-  const selectMethod = controller.auth.select
-
   function AuthPromptsView() {
     const [formStore, setFormStore] = createStore({
       value: {} as Record<string, string>,
@@ -482,7 +413,7 @@ function ProviderConnection(props: {
     })
 
     const prompts = createMemo(() => {
-      const value = method()
+      const value = controller.currentMethod()
       return value?.type === "oauth" ? (value.prompts ?? []) : []
     })
     const matches = (prompt: NonNullable<ReturnType<typeof prompts>[number]>, value: Record<string, string>) => {
@@ -508,14 +439,14 @@ function ProviderConnection(props: {
     })
 
     async function next(index: number, value: Record<string, string>) {
-      const selected = methodIndex()
+      const selected = controller.methodIndex()
       if (selected === undefined) return
       const next = prompts().findIndex((prompt, i) => i > index && matches(prompt, value))
       if (next !== -1) {
         setFormStore("index", next)
         return
       }
-      await selectMethod(selected, value)
+      await controller.auth.select(selected, value)
     }
 
     async function handleSubmit(e: SubmitEvent) {
@@ -606,7 +537,7 @@ function ProviderConnection(props: {
   }
 
   function goBack() {
-    if (methods().length > 1 && methodIndex() !== undefined) {
+    if (controller.methods().length > 1 && controller.methodIndex() !== undefined) {
       controller.auth.reset()
       return
     }
@@ -623,14 +554,14 @@ function ProviderConnection(props: {
             {language.t("provider.connect.selectMethod", { provider: provider().name })}
           </div>
           <div class="flex flex-col">
-            <For each={methods()}>
+            <For each={controller.methods()}>
               {(item, index) => {
                 const details = () => methodDetails(item)
                 return (
                   <button
                     type="button"
                     class="group flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-                    onClick={() => void selectMethod(index())}
+                    onClick={() => void controller.auth.select(index())}
                   >
                     <span class="flex h-2 w-4 shrink-0 items-center justify-center rounded-[1px] bg-v2-background-bg-base shadow-[var(--v2-elevation-button-neutral)]">
                       <span class="hidden h-0.5 w-2.5 bg-v2-icon-icon-base group-hover:block group-focus-visible:block" />
@@ -658,11 +589,11 @@ function ProviderConnection(props: {
             ref={(ref) => {
               listRef = ref
             }}
-            items={methods}
+            items={controller.methods}
             key={(m) => m?.label ?? m?.type}
             onSelect={async (selected, index) => {
               if (!selected) return
-              void selectMethod(index)
+              void controller.auth.select(index)
             }}
           >
             {(i) => (
@@ -705,7 +636,7 @@ function ProviderConnection(props: {
       }
 
       setFormStore("error", undefined)
-      await connectKey(apiKey)
+      await controller.auth.connectKey(apiKey)
     }
 
     if (newLayout())
@@ -830,7 +761,7 @@ function ProviderConnection(props: {
       }
 
       setFormStore("error", undefined)
-      setFormStore("error", await completeCode(code))
+      setFormStore("error", await controller.auth.completeCode(code))
     }
 
     if (newLayout())
@@ -838,14 +769,14 @@ function ProviderConnection(props: {
         <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
           <div>
             {language.t("provider.connect.oauth.code.visit.prefix")}
-            <Link href={authorization()!.url} class="text-v2-text-text-base">
+            <Link href={controller.authorization()!.url} class="text-v2-text-text-base">
               {language.t("provider.connect.oauth.code.visit.link")}
             </Link>
             {language.t("provider.connect.oauth.code.visit.suffix", { provider: provider().name })}
           </div>
           <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
             <label class="flex w-full flex-col gap-1 font-[530] leading-4 text-v2-text-text-base">
-              {language.t("provider.connect.oauth.code.label", { method: method()?.label ?? "" })}
+              {language.t("provider.connect.oauth.code.label", { method: controller.currentMethod()?.label ?? "" })}
               <TextInputV2
                 ref={codeInput}
                 class="!w-full"
@@ -877,7 +808,7 @@ function ProviderConnection(props: {
       <div class="flex flex-col gap-6">
         <div class="text-14-regular text-text-base">
           {language.t("provider.connect.oauth.code.visit.prefix")}
-          <Link href={authorization()!.url}>{language.t("provider.connect.oauth.code.visit.link")}</Link>
+          <Link href={controller.authorization()!.url}>{language.t("provider.connect.oauth.code.visit.link")}</Link>
           {language.t("provider.connect.oauth.code.visit.suffix", { provider: provider().name })}
         </div>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
@@ -885,7 +816,9 @@ function ProviderConnection(props: {
             autofocus={!newLayout()}
             ref={codeInput}
             type="text"
-            label={language.t("provider.connect.oauth.code.label", { method: method()?.label ?? "" })}
+            label={language.t("provider.connect.oauth.code.label", {
+              method: controller.currentMethod()?.label ?? "",
+            })}
             placeholder={language.t("provider.connect.oauth.code.placeholder")}
             name="code"
             value={formStore.value}
@@ -903,7 +836,7 @@ function ProviderConnection(props: {
 
   function OAuthAutoView() {
     const code = createMemo(() => {
-      const instructions = authorization()?.instructions
+      const instructions = controller.authorization()?.instructions
       if (instructions?.includes(":")) {
         return instructions.split(":").pop()?.trim()
       }
@@ -914,7 +847,7 @@ function ProviderConnection(props: {
       <div class="flex flex-col gap-6">
         <div class="text-14-regular text-text-base">
           {language.t("provider.connect.oauth.auto.visit.prefix")}
-          <Link href={authorization()!.url}>{language.t("provider.connect.oauth.auto.visit.link")}</Link>
+          <Link href={controller.authorization()!.url}>{language.t("provider.connect.oauth.auto.visit.link")}</Link>
           {language.t("provider.connect.oauth.auto.visit.suffix", { provider: provider().name })}
         </div>
         <TextField
@@ -947,7 +880,9 @@ function ProviderConnection(props: {
           }
         >
           <Switch>
-            <Match when={props.provider === "anthropic" && method()?.label?.toLowerCase().includes("max")}>
+            <Match
+              when={props.provider === "anthropic" && controller.currentMethod()?.label?.toLowerCase().includes("max")}
+            >
               {language.t("provider.connect.title.anthropicProMax")}
             </Match>
             <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
@@ -958,10 +893,10 @@ function ProviderConnection(props: {
         <div
           onKeyDown={handleKey}
           tabIndex={newLayout() ? undefined : 0}
-          autofocus={!newLayout() && methodIndex() === undefined ? true : undefined}
+          autofocus={!newLayout() && controller.methodIndex() === undefined ? true : undefined}
         >
           <Switch>
-            <Match when={loading()}>
+            <Match when={controller.loading()}>
               <div class="text-14-regular text-text-base">
                 <div class="flex items-center gap-x-2">
                   <Spinner />
@@ -969,10 +904,10 @@ function ProviderConnection(props: {
                 </div>
               </div>
             </Match>
-            <Match when={methodIndex() === undefined}>
+            <Match when={controller.methodIndex() === undefined}>
               <MethodSelection />
             </Match>
-            <Match when={state() === "pending"}>
+            <Match when={controller.auth.state() === "pending"}>
               <div class="text-14-regular text-text-base">
                 <div class="flex items-center gap-x-2">
                   <Spinner />
@@ -980,26 +915,26 @@ function ProviderConnection(props: {
                 </div>
               </div>
             </Match>
-            <Match when={state() === "prompt"}>
+            <Match when={controller.auth.state() === "prompt"}>
               <AuthPromptsView />
             </Match>
-            <Match when={state() === "error"}>
+            <Match when={controller.auth.state() === "error"}>
               <div class="text-14-regular text-text-base">
                 <div class="flex items-center gap-x-2">
                   <Icon name="circle-ban-sign" class="text-icon-critical-base" />
-                  <span>{language.t("provider.connect.status.failed", { error: error() ?? "" })}</span>
+                  <span>{language.t("provider.connect.status.failed", { error: controller.auth.error() ?? "" })}</span>
                 </div>
               </div>
             </Match>
-            <Match when={method()?.type === "key"}>
+            <Match when={controller.currentMethod()?.type === "key"}>
               <ApiAuthView />
             </Match>
-            <Match when={method()?.type === "oauth"}>
+            <Match when={controller.currentMethod()?.type === "oauth"}>
               <Switch>
-                <Match when={authorization()?.mode === "code"}>
+                <Match when={controller.authorization()?.mode === "code"}>
                   <OAuthCodeView />
                 </Match>
-                <Match when={authorization()?.mode === "auto"}>
+                <Match when={controller.authorization()?.mode === "auto"}>
                   <OAuthAutoView />
                 </Match>
               </Switch>

@@ -1,67 +1,43 @@
 import type { IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode-ai/client/promise"
+import { useQueryClient } from "@tanstack/solid-query"
+import { useLanguage } from "@/context/language"
+import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
+import { pathKey } from "@/utils/path-key"
 import { createEffect, createMemo, createResource, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 
 export type ProviderConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
 type Authorization = IntegrationOauthConnectOutput["data"]
-type OAuthStatus = { status: "pending" | "complete" | "expired" } | { status: "failed"; message: string }
-
-type ProviderConnectionServices = {
-  integration: {
-    load: (provider: string, directory?: string) => Promise<{ methods: readonly IntegrationMethod[] } | null>
-  }
-  connection: {
-    key: (provider: string, directory: string | undefined, key: string) => Promise<unknown>
-    oauth: (
-      provider: string,
-      directory: string | undefined,
-      method: string,
-      inputs: Record<string, string>,
-    ) => Promise<Authorization>
-    status: (provider: string, directory: string | undefined, attempt: string) => Promise<OAuthStatus>
-    complete: (provider: string, directory: string | undefined, attempt: string, code: string) => Promise<unknown>
-  }
-  provider: { refresh: () => Promise<unknown> }
-  completion: { finish: () => void }
-}
 
 export function createProviderConnectionController(options: {
-  provider: string
+  provider: () => string
   directory: () => string | undefined
-  fallbackKeyLabel: () => string
-  requestFailed: () => string
-  invalidCode: () => string
-  services: ProviderConnectionServices
+  onComplete: () => void
   pollInterval?: number
 }) {
+  const language = useLanguage()
+  const serverSDK = useServerSDK()
+  const serverSync = useServerSync()
+  const queryClient = useQueryClient()
+  const location = () => {
+    const directory = options.directory()
+    return directory ? { directory } : undefined
+  }
   const [integration] = createResource(
-    () => ({ provider: options.provider, directory: options.directory() }),
-    (input) => options.services.integration.load(input.provider, input.directory),
+    () => ({ provider: options.provider(), directory: options.directory() }),
+    (input) =>
+      serverSDK()
+        .api.integration.get({ integrationID: input.provider, location: location() })
+        .then((result) => result.data),
   )
   const methods = createMemo<ProviderConnectMethod[]>(() => {
     const values = integration.latest?.methods.filter(
       (method): method is ProviderConnectMethod => method.type === "key" || method.type === "oauth",
     )
     if (values?.length) return [...values]
-    return [{ type: "key", label: options.fallbackKeyLabel() }]
+    return [{ type: "key", label: language.t("provider.connect.method.apiKey") }]
   })
-  return createProviderConnectionWorkflowController({
-    ...options,
-    loading: () => integration.loading,
-    methods,
-  })
-}
-
-export function createProviderConnectionWorkflowController(options: {
-  provider: string
-  directory: () => string | undefined
-  requestFailed: () => string
-  invalidCode: () => string
-  loading: () => boolean
-  methods: () => ProviderConnectMethod[]
-  services: Pick<ProviderConnectionServices, "connection" | "provider" | "completion">
-  pollInterval?: number
-}) {
   const [store, setStore] = createStore({
     methodIndex: undefined as number | undefined,
     authorization: undefined as Authorization | undefined,
@@ -73,8 +49,9 @@ export function createProviderConnectionWorkflowController(options: {
     timer: undefined as ReturnType<typeof setTimeout> | undefined,
     disposed: false,
   }
-  const methods = options.methods
-  const method = createMemo(() => (store.methodIndex === undefined ? undefined : methods().at(store.methodIndex)))
+  const currentMethod = createMemo(() =>
+    store.methodIndex === undefined ? undefined : methods().at(store.methodIndex),
+  )
 
   type Action =
     | { type: "method.select"; index: number }
@@ -131,18 +108,28 @@ export function createProviderConnectionWorkflowController(options: {
   }
   const finish = async () => {
     cancelPolling()
-    await options.services.provider.refresh().catch(() => undefined)
+    const directory = options.directory()
+    await queryClient
+      .refetchQueries(serverSync().queryOptions.providers(directory ? pathKey(directory) : null))
+      .catch(() => undefined)
     if (polling.disposed) return
-    options.services.completion.finish()
+    options.onComplete()
   }
   const poll = async (authorization: Authorization, generation: number) => {
-    const result = await options.services.connection
-      .status(options.provider, options.directory(), authorization.attemptID)
-      .then((status) => ({ ok: true as const, status }))
+    const result = await serverSDK()
+      .api.integration.oauth.status({
+        integrationID: options.provider(),
+        attemptID: authorization.attemptID,
+        location: location(),
+      })
+      .then((response) => ({ ok: true as const, status: response.data }))
       .catch((error) => ({ ok: false as const, error }))
     if (polling.disposed || generation !== polling.generation) return
     if (!result.ok) {
-      dispatch({ type: "auth.error", error: formatProviderConnectionError(result.error, options.requestFailed()) })
+      dispatch({
+        type: "auth.error",
+        error: formatProviderConnectionError(result.error, language.t("common.requestFailed")),
+      })
       return
     }
     if (result.status.status === "complete") {
@@ -154,7 +141,7 @@ export function createProviderConnectionWorkflowController(options: {
       return
     }
     if (result.status.status === "expired") {
-      dispatch({ type: "auth.error", error: options.requestFailed() })
+      dispatch({ type: "auth.error", error: language.t("common.requestFailed") })
       return
     }
     polling.timer = setTimeout(() => void poll(authorization, generation), options.pollInterval ?? 1_000)
@@ -170,13 +157,21 @@ export function createProviderConnectionWorkflowController(options: {
       return
     }
     dispatch({ type: "auth.pending" })
-    const result = await options.services.connection
-      .oauth(options.provider, options.directory(), selected.id, inputs ?? {})
-      .then((authorization) => ({ ok: true as const, authorization }))
+    const result = await serverSDK()
+      .api.integration.oauth.connect({
+        integrationID: options.provider(),
+        methodID: selected.id,
+        inputs: inputs ?? {},
+        location: location(),
+      })
+      .then((response) => ({ ok: true as const, authorization: response.data }))
       .catch((error) => ({ ok: false as const, error }))
     if (polling.disposed || generation !== polling.generation) return
     if (!result.ok) {
-      dispatch({ type: "auth.error", error: formatProviderConnectionError(result.error, options.requestFailed()) })
+      dispatch({
+        type: "auth.error",
+        error: formatProviderConnectionError(result.error, language.t("common.requestFailed")),
+      })
       return
     }
     dispatch({ type: "auth.complete", authorization: result.authorization })
@@ -187,24 +182,30 @@ export function createProviderConnectionWorkflowController(options: {
     dispatch({ type: "method.reset" })
   }
   const connectKey = async (key: string) => {
-    await options.services.connection.key(options.provider, options.directory(), key)
+    await serverSDK().api.integration.connect.key({ integrationID: options.provider(), location: location(), key })
     await finish()
   }
   const completeCode = async (code: string) => {
     const authorization = store.authorization
-    if (!authorization) return options.invalidCode()
-    const result = await options.services.connection
-      .complete(options.provider, options.directory(), authorization.attemptID, code)
+    if (!authorization) return language.t("provider.connect.oauth.code.invalid")
+    const result = await serverSDK()
+      .api.integration.oauth.complete({
+        integrationID: options.provider(),
+        attemptID: authorization.attemptID,
+        location: location(),
+        code,
+      })
       .then(() => ({ ok: true as const }))
       .catch((error) => ({ ok: false as const, error }))
-    if (!result.ok) return formatProviderConnectionError(result.error, options.invalidCode())
+    if (!result.ok)
+      return formatProviderConnectionError(result.error, language.t("provider.connect.oauth.code.invalid"))
     await finish()
     return undefined
   }
 
   let auto = false
   createEffect(() => {
-    if (auto || options.loading() || methods().length !== 1) return
+    if (auto || integration.loading || methods().length !== 1) return
     auto = true
     void select(0)
   })
@@ -214,13 +215,11 @@ export function createProviderConnectionWorkflowController(options: {
   })
 
   return {
-    data: {
-      loading: options.loading,
-      methods,
-      method,
-      methodIndex: () => store.methodIndex,
-      authorization: () => store.authorization,
-    },
+    loading: () => integration.loading,
+    methods,
+    currentMethod,
+    methodIndex: () => store.methodIndex,
+    authorization: () => store.authorization,
     auth: {
       state: () => store.state,
       error: () => store.error,
