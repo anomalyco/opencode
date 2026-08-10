@@ -23,6 +23,7 @@ import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { useEvent } from "./event"
 import { createSignal, onCleanup, onMount } from "solid-js"
+import { createDeltaBuffer } from "./delta-buffer"
 
 type LocationData = {
   agent?: AgentV2Info[]
@@ -121,7 +122,64 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
     }
 
+    // Reasoning and text parts can stream thousands of deltas; applying each one
+    // immediately rewrites the accumulating text on every token, stalling the UI
+    // while a thinking block is expanded. Coalesce per frame instead.
+    const deltaBuffer = createDeltaBuffer(
+      (flush) => {
+        if (typeof requestAnimationFrame === "function") requestAnimationFrame(flush)
+        else setTimeout(flush, 16)
+      },
+      (item) => {
+        message.update(item.sessionID, (draft) => {
+          const assistant = message.assistant(draft, item.messageID)
+          if (item.kind === "tool") {
+            const match = message.latestTool(assistant, item.partID)
+            if (match?.state.status === "pending") match.state.input += item.delta
+            return
+          }
+          const match =
+            item.kind === "text" ? message.latestText(assistant, item.partID) : message.latestReasoning(assistant, item.partID)
+          if (match) match.text += item.delta
+        })
+      },
+    )
+
     function handleEvent(event: V2Event) {
+      // Terminating events replace the whole part text, so once any pending
+      // deltas are coalesced they must be applied before the replacement.
+      switch (event.type) {
+        case "session.next.text.delta":
+          deltaBuffer.push({
+            kind: "text",
+            sessionID: event.data.sessionID,
+            messageID: event.data.assistantMessageID,
+            partID: event.data.textID,
+            delta: event.data.delta,
+          })
+          break
+        case "session.next.reasoning.delta":
+          deltaBuffer.push({
+            kind: "reasoning",
+            sessionID: event.data.sessionID,
+            messageID: event.data.assistantMessageID,
+            partID: event.data.reasoningID,
+            delta: event.data.delta,
+          })
+          break
+        case "session.next.tool.input.delta":
+          deltaBuffer.push({
+            kind: "tool",
+            sessionID: event.data.sessionID,
+            messageID: event.data.assistantMessageID,
+            partID: event.data.callID,
+            delta: event.data.delta,
+          })
+          break
+
+        default:
+          deltaBuffer.drain()
+      }
       switch (event.type) {
         case "catalog.updated":
           void Promise.all([
@@ -251,12 +309,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             })
           })
           break
-        case "session.next.text.delta":
-          message.update(event.data.sessionID, (draft) => {
-            const match = message.latestText(message.assistant(draft, event.data.assistantMessageID), event.data.textID)
-            if (match) match.text += event.data.delta
-          })
-          break
         case "session.next.text.ended":
           message.update(event.data.sessionID, (draft) => {
             const match = message.latestText(message.assistant(draft, event.data.assistantMessageID), event.data.textID)
@@ -272,12 +324,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               time: { created: event.data.timestamp },
               state: { status: "pending", input: "" },
             })
-          })
-          break
-        case "session.next.tool.input.delta":
-          message.update(event.data.sessionID, (draft) => {
-            const match = message.latestTool(message.assistant(draft, event.data.assistantMessageID), event.data.callID)
-            if (match?.state.status === "pending") match.state.input += event.data.delta
           })
           break
         case "session.next.tool.input.ended":
@@ -352,15 +398,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             })
           })
           break
-        case "session.next.reasoning.delta":
-          message.update(event.data.sessionID, (draft) => {
-            const match = message.latestReasoning(
-              message.assistant(draft, event.data.assistantMessageID),
-              event.data.reasoningID,
-            )
-            if (match) match.text += event.data.delta
-          })
-          break
         case "session.next.reasoning.ended":
           message.update(event.data.sessionID, (draft) => {
             const match = message.latestReasoning(
@@ -410,7 +447,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           location: { directory: metadata.directory, workspaceID: metadata.workspace },
         } as V2Event)
       })
-      onCleanup(unsub)
+      onCleanup(() => {
+        unsub()
+        deltaBuffer.drain()
+      })
     })
 
     const result = {
