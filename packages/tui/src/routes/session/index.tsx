@@ -2455,6 +2455,7 @@ function InlineTool(props: {
   children: JSX.Element
   part: SessionMessageAssistantTool
   onClick?: () => void
+  onErrorClick?: () => void
 }) {
   const theme = useTheme()
   const renderer = useRenderer()
@@ -2503,6 +2504,7 @@ function InlineTool(props: {
         if (renderer.getSelection()?.getSelectedText()) return
         if (failed()) {
           setErrorExpanded((value) => !value)
+          props.onErrorClick?.()
           return
         }
         props.onClick?.()
@@ -3019,6 +3021,17 @@ function executeCalls(value: unknown): ExecuteCall[] {
   })
 }
 
+export function executeDisplay(value: unknown, expanded: boolean) {
+  if (!expanded) return "execute"
+  return [
+    "execute",
+    ...executeCalls(value).map((call) => {
+      const args = primitiveInputSummary(call.input ?? {})
+      return `↳ ${call.tool}${args ? ` ${args}` : ""}${call.status === "error" ? " (failed)" : ""}`
+    }),
+  ].join("\n")
+}
+
 // The `execute` tool streams child tool calls through metadata, not a child session like Task.
 function Execute(props: ToolProps) {
   const ctx = use()
@@ -3029,14 +3042,9 @@ function Execute(props: ToolProps) {
   const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
   const showOutput = createMemo(() => output() && hasRuntimeError())
-  const content = createMemo(() => {
-    const lines = ["execute"]
-    for (const call of calls()) {
-      const args = primitiveInputSummary(call.input ?? {})
-      lines.push(`↳ ${call.tool}${args ? ` ${args}` : ""}${call.status === "error" ? " (failed)" : ""}`)
-    }
-    return lines.join("\n")
-  })
+  const [expanded, setExpanded] = createSignal(false)
+  const expandable = createMemo(() => calls().length > 0 || Boolean(showOutput()))
+  const toggle = () => setExpanded((value) => !value)
 
   return (
     <>
@@ -3047,10 +3055,12 @@ function Execute(props: ToolProps) {
         pending="execute"
         complete={true}
         part={props.part}
+        onClick={expandable() ? toggle : undefined}
+        onErrorClick={expandable() ? toggle : undefined}
       >
-        {content()}
+        {executeDisplay(props.metadata.toolCalls, expanded())}
       </InlineTool>
-      <Show when={showOutput()}>
+      <Show when={expanded() && showOutput()}>
         <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (

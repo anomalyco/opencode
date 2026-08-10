@@ -3,6 +3,7 @@ import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
 import {
   InlineToolRow,
+  executeDisplay,
   isBackgroundSubagent,
   parseApplyPatchFiles,
   parseDiagnostics,
@@ -180,6 +181,18 @@ describe("TUI inline tool wrapping", () => {
     expect(parseQuestions([{}, { question: 1 }, { question: "Continue?" }])).toEqual([{ question: "Continue?" }])
     expect(parseQuestionAnswers([null, ["yes", 1], "no"])).toEqual([[], ["yes"], []])
     expect(parseQuestionAnswers({})).toBeUndefined()
+  })
+
+  test("collapses execute calls until expanded", () => {
+    const calls = [
+      { tool: "session.prompt", status: "completed", input: { sessionID: "ses_example", notify: true } },
+      { tool: "session.get", status: "error", input: { nested: { hidden: true } } },
+    ]
+
+    expect(executeDisplay(calls, false)).toBe("execute")
+    expect(executeDisplay(calls, true)).toBe(
+      "execute\n↳ session.prompt [sessionID=ses_example, notify=true]\n↳ session.get (failed)",
+    )
   })
 
   test("ignores diagnostics with malformed nested ranges", () => {
