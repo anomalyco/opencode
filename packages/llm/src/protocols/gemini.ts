@@ -229,10 +229,22 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
     if (message.role === "assistant") {
       const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
-          return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
+        if (!ProviderShared.supportsContent(part, ["text", "media", "reasoning", "tool-call"]))
+          return yield* ProviderShared.unsupportedContent("Gemini", "assistant", [
+            "text",
+            "media",
+            "reasoning",
+            "tool-call",
+          ])
         if (part.type === "text") {
           parts.push({ text: part.text })
+          continue
+        }
+        if (part.type === "media") {
+          // Replay previously generated images back to the model so follow-up
+          // turns ("make it brighter") can edit them.
+          const media = yield* ProviderShared.validateMedia("Gemini", part, MEDIA_MIMES)
+          parts.push({ inlineData: { mimeType: media.mime, data: media.base64 } })
           continue
         }
         if (part.type === "reasoning") {
@@ -435,6 +447,26 @@ const step = (state: ParserState, event: GeminiEvent) => {
         reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
       )
       lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
+      continue
+    }
+
+    if ("inlineData" in part) {
+      // Image models (gemini-*-image, "Nano Banana") return generated media as
+      // inline base64. Close any open reasoning block first so the media does
+      // not land inside it, then emit the block whole — media has no deltas.
+      lifecycle = Lifecycle.reasoningEnd(
+        lifecycle,
+        events,
+        "reasoning-0",
+        reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
+      )
+      lifecycle = Lifecycle.stepStart(lifecycle, events)
+      events.push(
+        LLMEvent.file({
+          mediaType: part.inlineData.mimeType,
+          data: part.inlineData.data,
+        }),
+      )
       continue
     }
 

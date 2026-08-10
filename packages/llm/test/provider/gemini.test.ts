@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
+import { LLM, LLMError, LLMEvent, Message, ToolCallPart, Usage } from "../../src"
 import { Auth, LLMClient } from "../../src/route"
 import * as Gemini from "../../src/protocols/gemini"
 import { ProviderShared } from "../../src/protocols/shared"
@@ -566,19 +566,48 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("rejects unsupported assistant media content", () =>
+  it.effect("replays assistant media as inline data", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_media",
           model,
           messages: [Message.assistant({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
         }),
-      ).pipe(Effect.flip)
-
-      expect(error.message).toContain(
-        "Gemini assistant messages only support text, reasoning, and tool-call content for now",
       )
+
+      // Generated images must survive replay so follow-up turns can edit them.
+      expect(prepared.body).toMatchObject({
+        contents: [{ role: "model", parts: [{ inlineData: { mimeType: "image/png", data: "AAECAw==" } }] }],
+      })
+    }),
+  )
+
+  it.effect("emits a file event for generated inline image data", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [
+                {
+                  content: {
+                    role: "model",
+                    parts: [{ text: "Here you go" }, { inlineData: { mimeType: "image/png", data: "AAECAw==" } }],
+                  },
+                  finishReason: "STOP",
+                },
+              ],
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events.filter(LLMEvent.is.file)).toEqual([
+        { type: "file", mediaType: "image/png", data: "AAECAw==", providerMetadata: undefined },
+      ])
+      // The text block must still be delivered alongside the image.
+      expect(response.text).toBe("Here you go")
     }),
   )
 })
