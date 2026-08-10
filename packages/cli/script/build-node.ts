@@ -12,6 +12,7 @@ import { modelsData } from "./generate"
 import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "./node-assets"
 import { mainConfig } from "../vite.node.config"
 import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
+import { buildAppAssets } from "./app-assets"
 
 const NODE_VERSION = "26.4.0"
 const dir = path.resolve(import.meta.dirname, "..")
@@ -26,6 +27,7 @@ if (outdir === path.join(dir, "dist-node")) {
 const bundleOnly = process.argv.includes("--bundle-only")
 const single = process.argv.includes("--single")
 const skipInstall = process.argv.includes("--skip-install")
+const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
 const requested = process.argv.find((arg) => arg.startsWith("--target="))?.slice("--target=".length)
 const allTargets = [
   nodeTarget("linux", "arm64"),
@@ -55,13 +57,24 @@ const builder =
   !bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch)
     ? await resolveHostNode()
     : undefined
+const appAssets = skipEmbedWebUi ? [] : await buildAppAssets(Script.channel)
 
 for (const target of targets) {
   console.log(`building cli-node-${targetName(target)}`)
-  const assets = await collectNodeAssets(target)
+  const assets = [
+    ...(await collectNodeAssets(target)),
+    ...appAssets.map((asset) => ({ key: `app/${asset.key}`, source: asset.source })),
+  ]
   await rm("dist-node", { recursive: true, force: true })
   const assetHash = await hashNodeAssets(assets)
-  const input = { version: Script.version, channel: Script.channel, models: modelsData, assetHash, target }
+  const input = {
+    version: Script.version,
+    channel: Script.channel,
+    models: modelsData,
+    assetHash,
+    target,
+    appAssets: appAssets.map((asset) => asset.key),
+  }
   await copyNodeAssets(assets)
   await build(mainConfig(input))
 

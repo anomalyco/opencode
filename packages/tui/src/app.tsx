@@ -179,6 +179,7 @@ export type TuiInput = {
   args: Args
   config: Config.Interface
   packages: PackageResolver
+  web?: () => Promise<string>
   terminalHandoff?: () => Promise<
     | {
         readonly renderer: CliRenderer
@@ -375,6 +376,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                           directories={pluginDirectories}
                                                                         >
                                                                           <App
+                                                                            web={input.web}
                                                                             pair={
                                                                               input.server.endpoint.auth
                                                                                 ? input.server.endpoint.auth
@@ -434,7 +436,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: { pair?: DialogPairCredentials }) {
+function App(props: { pair?: DialogPairCredentials; web?: () => Promise<string> }) {
   const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
@@ -952,6 +954,33 @@ function App(props: { pair?: DialogPairCredentials }) {
         },
         category: "System",
       },
+      ...(props.web
+        ? [
+            {
+              name: "web.open",
+              title: "Open web interface",
+              slash: { name: "web" },
+              run: async () => {
+                const web = props.web
+                if (!web) return
+                const url = await web().catch((error) => {
+                  toast.error(error)
+                  return undefined
+                })
+                if (!url) return
+                await open(url).catch(() =>
+                  toast.show({
+                    title: "Could not open browser",
+                    message: `Open ${url} manually.`,
+                    variant: "warning",
+                  }),
+                )
+                dialog.clear()
+              },
+              category: "System",
+            },
+          ]
+        : []),
       {
         name: "app.exit",
         title: "Exit the app",

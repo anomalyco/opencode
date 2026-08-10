@@ -17,6 +17,23 @@ function rawTextPlugin(): Plugin {
   }
 }
 
+function appAssetsPlugin(assets: readonly string[]): Plugin {
+  return {
+    name: "opencode:app-assets",
+    resolveId(id) {
+      if (id === "virtual:opencode-app-assets") return "\0virtual:opencode-app-assets"
+    },
+    load(id) {
+      if (id !== "\0virtual:opencode-app-assets") return
+      return `import path from "node:path"
+const root = process.env.OPENCODE_NODE_ASSETS_DIR
+export default root ? {${assets
+        .map((key) => `${JSON.stringify(key)}: path.join(root, "app", ${JSON.stringify(key)})`)
+        .join(",")}} : {}`
+    },
+  }
+}
+
 function runtimeRequirePlugin(): Plugin {
   return {
     name: "opencode:runtime-require",
@@ -212,12 +229,14 @@ export type NodeBuildInput = {
   readonly models: string
   readonly assetHash: string
   readonly target: NodeTarget
+  readonly appAssets: readonly string[]
 }
 
 export function mainConfig(input: NodeBuildInput): UserConfig {
   return defineConfig({
     root: dir,
     plugins: [
+      appAssetsPlugin(input.appAssets),
       rawTextPlugin(),
       runtimeRequirePlugin(),
       fffNodePlugin(),
@@ -259,4 +278,5 @@ export default mainConfig({
   models: "undefined",
   assetHash: "local",
   target: nodeTarget(process.platform, process.arch),
+  appAssets: [],
 })

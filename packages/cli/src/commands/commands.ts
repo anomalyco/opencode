@@ -266,8 +266,15 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       ],
     }),
     Spec.make("pair", { description: "Show server pairing information" }),
+    Spec.make("web", {
+      description: "Start the server and open the web interface",
+      params: {
+        hostname: Flag.string("hostname").pipe(Flag.optional),
+        port: Flag.integer("port").pipe(Flag.optional),
+      },
+    }),
     Spec.make("serve", {
-      description: "Start the v2 API server",
+      description: "Start the v2 API and web server",
       params: {
         hostname: Flag.string("hostname").pipe(Flag.optional),
         port: Flag.integer("port").pipe(Flag.optional),

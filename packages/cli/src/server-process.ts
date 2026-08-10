@@ -1,20 +1,22 @@
 export * as ServerProcess from "./server-process"
 
 import { NodeServices } from "@effect/platform-node"
-import { Service, type DiscoverOptions, type Info } from "@opencode-ai/client/effect/service"
+import { Service, type DiscoverOptions, type Endpoint, type Info } from "@opencode-ai/client/effect/service"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode-ai/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import path from "node:path"
-import { Effect, FileSystem, Option, Redacted, Schedule, Schema } from "effect"
+import { Effect, FileSystem, Option, Redacted, Ref, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { Updater } from "./services/updater"
+import { WebUi } from "./services/web-ui"
+import open from "open"
 
-export type Mode = "default" | "service" | "stdio"
+export type Mode = "default" | "service" | "stdio" | "web"
 
 export type Options = {
   readonly mode: Mode
@@ -42,6 +44,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
   if (options.mode === "service") yield* Effect.sync(() => process.chdir(Global.Path.home))
   return yield* Effect.scoped(
     Effect.gen(function* () {
+      const foreground = options.mode === "default" || options.mode === "web"
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
@@ -74,8 +77,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             version: OPENCODE_VERSION,
             channel: OPENCODE_CHANNEL,
           },
-          hostname,
-          port,
+          hostname: foreground ? "127.0.0.1" : hostname,
+          port: foreground ? 0 : port,
           password,
           simulation: truthy(process.env.OPENCODE_SIMULATE),
           database: {
@@ -140,9 +143,24 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         }),
       )
       if (server === undefined) return
-      const url = HttpServer.formatAddress(server.address)
+      const url =
+        foreground
+          ? yield* WebUi.serve(
+              yield* Ref.make<Endpoint>({
+                url: HttpServer.formatAddress(server.address),
+                auth: { type: "basic", username: "opencode", password },
+              }),
+              { hostname, port, password },
+            )
+          : HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
-      if (options.mode === "default" && !environmentPassword) console.log(`server password ${password}`)
+      if (foreground && !environmentPassword) console.log(`server password ${password}`)
+      if (options.mode === "web") {
+        const target = new URL(url)
+        if (target.hostname === "0.0.0.0" || target.hostname === "::") target.hostname = "localhost"
+        target.searchParams.set("auth_token", Buffer.from(`opencode:${password}`).toString("base64"))
+        yield* Effect.promise(() => open(target.toString()).catch(() => undefined))
+      }
       const updater = yield* Updater.Service
       yield* updater.check().pipe(Effect.schedule(Schedule.spaced("10 minutes")), Effect.forkScoped)
       return yield* options.mode === "service"
