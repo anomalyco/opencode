@@ -14,12 +14,16 @@ const workspaceDir = (root: string) => path.join(root, "workspaces")
 
 export class DataRootConfig extends Context.Service<DataRootConfig, string>()("@opencode/DataRootConfig") {
   static get layer() {
+    // Note: uses Effect.sync instead of EffectConfig so that process.env
+    // is read fresh each time the layer is built. EffectConfig caches the
+    // env snapshot on first read, which makes testing different values in
+    // the same process impossible.
     return Layer.effect(
       this,
-      EffectConfig.string("OPENCODE_DATA_ROOT").pipe(
-        EffectConfig.withDefault(Global.Path.data),
-        Effect.map((root) => DataRootConfig.of(root)),
-      ),
+      Effect.sync(() => {
+        const root = process.env.OPENCODE_DATA_ROOT ?? Global.Path.data
+        return DataRootConfig.of(root)
+      }),
     )
   }
 }
@@ -30,7 +34,12 @@ export class DataRootConfig extends Context.Service<DataRootConfig, string>()("@
 // Used by session.create to determine the default location.directory.
 
 export function workspacePath(userID: string, dataRoot: string): string {
-  return path.join(workspaceDir(dataRoot), encodeURIComponent(userID))
+  // encodeURIComponent does NOT encode "." or "..", so path-traversal
+  // sequences like "../etc" would survive encoding. Strip them explicitly.
+  const safe = encodeURIComponent(userID).replace(/\.\.?/g, (m) =>
+    m === ".." ? "%2E%2E" : "%2E",
+  )
+  return path.join(workspaceDir(dataRoot), safe)
 }
 
 export function dataRootFromConfig(): Effect.Effect<string, never, DataRootConfig> {
