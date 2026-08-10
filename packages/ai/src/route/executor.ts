@@ -270,6 +270,7 @@ export const classifyHttpFailure = (input: {
   readonly message: string
   readonly url: string
   readonly status?: number | undefined
+  readonly code?: string | undefined
   readonly responseHeaders?: Record<string, string> | undefined
   readonly responseBody?: string | undefined
 }) => {
@@ -280,6 +281,7 @@ export const classifyHttpFailure = (input: {
   return classifyProviderFailure({
     message: input.message,
     status: input.status,
+    code: input.code,
     retryAfterMs: retryAfter,
     rateLimit,
     http: new HttpContext({

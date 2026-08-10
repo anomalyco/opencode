@@ -5,7 +5,7 @@ import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
-import { LLM, AIError, LLMEvent, Message } from "@opencode-ai/ai"
+import { LLM, AIError, LLMEvent, Message, isContextOverflowFailure } from "@opencode-ai/ai"
 import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { expect } from "bun:test"
@@ -428,6 +428,45 @@ it.effect("classifies retryable AI SDK failures with retry-after details", () =>
   }),
 )
 
+it.effect("classifies data-only AI SDK provider codes", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 400,
+        data: { error: { code: "api_error" } },
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status: 400 })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+  }),
+)
+
+it.effect("classifies data-only AI SDK authentication errors", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 400,
+        data: { error: { code: "authentication_error" } },
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "Authentication", kind: "invalid" })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeFalse()
+  }),
+)
+
+it.effect("detects context overflow from data-only AI SDK errors", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 400,
+        data: { error: { code: "context_length_exceeded" } },
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+    expect(isContextOverflowFailure(error)).toBeTrue()
+  }),
+)
+
 it.effect("retries status-less AI SDK transport failures", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(
@@ -447,7 +486,8 @@ it.effect("prefers a structured provider message over the code fallback", () =>
     const error = yield* streamFailure(
       apiCallError({
         statusCode: 404,
-        data: { error: { message: "The requested model does not exist", code: "not_found" } },
+        data: { error: { code: "not_found" } },
+        responseBody: '{"message":"The requested model does not exist"}',
       }),
     )
     expect(error.reason.message).toBe("The requested model does not exist")

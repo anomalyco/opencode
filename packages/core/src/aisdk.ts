@@ -736,10 +736,12 @@ function llmError(method: string, error: unknown) {
 }
 
 function apiCallErrorReason(error: APICallError) {
+  const details = providerErrorDetails(error)
   const reason = RequestExecutor.classifyHttpFailure({
-    message: unknownErrorMessage(error),
+    message: apiCallErrorMessage(error, details),
     url: error.url,
     status: error.statusCode,
+    code: details.code,
     responseHeaders: error.responseHeaders,
     responseBody: error.responseBody,
   })
@@ -752,33 +754,43 @@ function apiCallErrorReason(error: APICallError) {
   })
 }
 
+const ProviderErrorCode = Schema.Union([Schema.String, Schema.Finite])
 const ProviderErrorBody = Schema.Struct({
   message: Schema.optionalKey(Schema.String),
-  code: Schema.optionalKey(Schema.String),
+  code: Schema.optionalKey(ProviderErrorCode),
   error: Schema.optionalKey(
     Schema.Struct({
       message: Schema.optionalKey(Schema.String),
-      code: Schema.optionalKey(Schema.String),
+      code: Schema.optionalKey(ProviderErrorCode),
     }),
   ),
 })
 const decodeErrorData = Schema.decodeUnknownOption(ProviderErrorBody)
 const decodeErrorBody = Schema.decodeUnknownOption(Schema.fromJsonString(ProviderErrorBody))
 
-// AI SDK errors such as AI_APICallError can carry an empty message while still
-// holding structured provider details. Derive a safe non-empty fallback from
-// recognized error fields only; never surface the raw response payload.
 function unknownErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
-  if (message.trim() !== "") return message
-  if (!APICallError.isInstance(error)) return "Provider request failed"
-  const body =
-    Option.getOrUndefined(decodeErrorData(error.data)) ?? Option.getOrUndefined(decodeErrorBody(error.responseBody))
-  const detail = body?.error ?? body
-  if (detail?.message) return detail.message
+  return message.trim() === "" ? "Provider request failed" : message
+}
+
+function providerErrorDetails(error: APICallError) {
+  const data = Option.getOrUndefined(decodeErrorData(error.data))
+  const body = Option.getOrUndefined(decodeErrorBody(error.responseBody))
+  const message = [data?.error?.message, data?.message, body?.error?.message, body?.message].find(
+    (value) => value !== undefined && value.trim() !== "",
+  )
+  const code = [data?.error?.code, data?.code, body?.error?.code, body?.code].find((value) => value !== undefined)
+  return { message, code: code === undefined ? undefined : String(code) }
+}
+
+// AI SDK errors can carry an empty message while still holding structured
+// provider details. Only recognized message and code fields are displayed.
+function apiCallErrorMessage(error: APICallError, details: ReturnType<typeof providerErrorDetails>) {
+  if (error.message.trim() !== "") return error.message
+  if (details.message !== undefined) return details.message
   const prefix =
     error.statusCode === undefined ? "Provider request failed" : `Provider request failed with HTTP ${error.statusCode}`
-  return detail?.code ? `${prefix}: ${detail.code}` : prefix
+  return details.code === undefined ? prefix : `${prefix}: ${details.code}`
 }
 
 export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })
