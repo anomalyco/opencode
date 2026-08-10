@@ -24,6 +24,8 @@ export const Replied = QuestionV1.Replied
 export const Rejected = QuestionV1.Rejected
 export const Event = QuestionV1.Event
 
+const EMPTY_QUESTIONS_ERROR = "Question.ask requires at least one question"
+
 export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("QuestionRejectedError", {}) {
   override get message() {
     return "The user dismissed this question"
@@ -89,6 +91,9 @@ const layer = Layer.effect(
       questions: ReadonlyArray<Info>
       tool?: Tool
     }) {
+      // An empty questions array has nothing to render or answer; registering a
+      // pending request for it would wait forever. Reject it up front instead.
+      if (input.questions.length === 0) return yield* Effect.die(new Error(EMPTY_QUESTIONS_ERROR))
       const pending = (yield* InstanceState.get(state)).pending
       const id = QuestionID.ascending()
       yield* Effect.logInfo("asking", { id, questions: input.questions.length })

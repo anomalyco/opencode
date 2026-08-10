@@ -119,6 +119,22 @@ it.instance(
   { git: true },
 )
 
+it.instance(
+  "ask - fails fast when questions is empty",
+  () =>
+    Effect.gen(function* () {
+      const exit = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
+        questions: [],
+      }).pipe(Effect.timeout("1 second"), Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("at least one question")
+      // An empty ask must not register a never-resolving pending request.
+      expect(yield* listEffect).toHaveLength(0)
+    }),
+  { git: true },
+)
+
 // reply tests
 
 it.instance(
