@@ -126,22 +126,7 @@ function latestContext(messages: SessionV1.WithParts[]) {
   const start = messages.findIndex((message) => message.info.id === part.tail_start_id)
   const end = messages.findIndex((message) => message.info.id === marker.info.id)
   if (start === -1 || end === -1 || start >= end) return { summary: text }
-  const recent = messages
-    .slice(start, end)
-    .flatMap((message) => {
-      const text = message.parts
-        .flatMap((part) => {
-          if (part.type === "text") return part.synthetic ? [] : [part.text.trim()]
-          if (part.type !== "tool") return []
-          if (part.state.status === "completed") return [`[${part.tool} output]\n${part.state.output.trim()}`]
-          if (part.state.status === "error") return [`[${part.tool} error]\n${part.state.error.trim()}`]
-          return []
-        })
-        .filter(Boolean)
-        .join("\n\n")
-      return text ? [`### ${message.info.role}\n${text}`] : []
-    })
-    .join("\n\n")
+  const recent = messages.slice(start, end).map(SessionCompaction.serialize).filter(Boolean).join("\n\n")
   return recent ? { summary: text, recent } : { summary: text }
 }
 

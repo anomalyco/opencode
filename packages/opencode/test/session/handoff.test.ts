@@ -246,9 +246,24 @@ describe("session handoff with retained context", () => {
       const created = yield* sessions.create({ title: "retained" })
       yield* addUser(created.id, "finished work")
       const current = yield* addUser(created.id, "continue the active investigation")
+      const assistant = yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        role: "assistant",
+        sessionID: created.id,
+        mode: "build",
+        agent: "build",
+        path: { cwd: "/tmp", root: "/tmp" },
+        cost: 0,
+        tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        parentID: current,
+        finish: "end_turn",
+        time: { created: Date.now() },
+      })
       yield* sessions.updatePart({
         id: PartID.ascending(),
-        messageID: current,
+        messageID: assistant.id,
         sessionID: created.id,
         type: "tool",
         callID: "call_recent",
