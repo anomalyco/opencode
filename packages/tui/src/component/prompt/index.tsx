@@ -130,7 +130,7 @@ function formatEditorContext(selection: EditorSelection) {
   return `<system-reminder>${ranges.join("\n")} This may or may not be relevant to the current task.</system-reminder>\n`
 }
 
-let stashed: { prompt: PromptInfo; cursor: number } | undefined
+const drafts = new Map<string | undefined, { prompt: PromptInfo; cursor: number }>()
 
 function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
   const head = parseSlashHead(input, /\s/)
@@ -601,22 +601,40 @@ export function Prompt(props: PromptProps) {
     },
   }
 
-  onMount(() => {
-    const saved = stashed
-    stashed = undefined
-    if (store.prompt.text) return
-    if (saved && saved.prompt.text) {
-      input.setText(saved.prompt.text)
-      setStore("prompt", saved.prompt)
-      restoreExtmarksFromPrompt(saved.prompt)
-      input.cursorOffset = saved.cursor
+  function saveDraft(sessionID: string | undefined) {
+    if (!store.prompt.text) {
+      drafts.delete(sessionID)
+      return
     }
-  })
+    drafts.set(sessionID, { prompt: unwrap(store.prompt), cursor: input.cursorOffset })
+  }
+
+  function restoreDraft(sessionID: string | undefined) {
+    const saved = drafts.get(sessionID)
+    drafts.delete(sessionID)
+    ref.reset()
+    if (!saved?.prompt.text) return
+    ref.set(saved.prompt)
+    input.cursorOffset = saved.cursor
+  }
+
+  let draftSessionID = props.sessionID
+  onMount(() => restoreDraft(draftSessionID))
+
+  createEffect(
+    on(
+      () => props.sessionID,
+      (sessionID) => {
+        saveDraft(draftSessionID)
+        draftSessionID = sessionID
+        restoreDraft(sessionID)
+      },
+      { defer: true },
+    ),
+  )
 
   onCleanup(() => {
-    if (store.prompt.text) {
-      stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
-    }
+    saveDraft(draftSessionID)
     setInputTarget(undefined)
     props.ref?.(undefined)
   })

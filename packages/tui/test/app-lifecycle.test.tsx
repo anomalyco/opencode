@@ -294,3 +294,72 @@ test("session startup prompt is submitted exactly once", async () => {
     await server.stop()
   }
 })
+
+test("new session does not inherit the current session prompt draft", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const events = createEventStream()
+  const cwd = process.cwd()
+  const location = { directory: cwd, project: { id: "project", directory: cwd } }
+  const session = {
+    id: "dummy",
+    title: "Demo session",
+    projectID: "project",
+    location: { directory: cwd },
+    agent: "build",
+    model: { providerID: "provider", id: "model" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/location") return json(location)
+    if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+    if (url.pathname === "/api/session/dummy") return json({ data: session })
+    if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/session/dummy/pending") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
+    if (url.pathname === "/api/agent")
+      return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+    if (url.pathname === "/api/model")
+      return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({}), update: async () => ({}) },
+        packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        args: { sessionID: "dummy" },
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await Promise.race([
+      (async () => {
+        while (!setup.renderer.currentFocusedEditor) await Bun.sleep(10)
+      })(),
+      Bun.sleep(2_000).then(() => {
+        throw new Error("session prompt did not focus")
+      }),
+    ])
+    await setup.mockInput.typeText("keep this draft")
+    expect(setup.renderer.currentFocusedEditor?.plainText).toBe("keep this draft")
+
+    setup.mockInput.pressKey("x", { ctrl: true })
+    await Bun.sleep(10)
+    setup.mockInput.pressKey("n")
+    await Bun.sleep(20)
+
+    expect(setup.renderer.currentFocusedEditor?.plainText).toBe("")
+    setup.renderer.destroy()
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
