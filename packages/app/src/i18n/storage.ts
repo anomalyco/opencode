@@ -6,6 +6,17 @@ export const STORAGE_FALLBACK = {
   "settings.storage.description":
     "Inspect and maintain the SQLite database used by this server. Maintenance runs against the selected server, not only this desktop app.",
   "settings.storage.status.loading": "Loading database information…",
+  "settings.storage.progress.idle": "Preparing storage maintenance…",
+  "settings.storage.progress.snapshot": "Creating a consistent analysis snapshot…",
+  "settings.storage.progress.verify": "Checking snapshot integrity…",
+  "settings.storage.progress.index": "Indexing event snapshots…",
+  "settings.storage.progress.analyze": "Analyzing safe cleanup candidates…",
+  "settings.storage.progress.backup": "Creating and verifying a backup…",
+  "settings.storage.progress.compact": "Compacting event history…",
+  "settings.storage.progress.checkpoint": "Checkpointing the write-ahead log…",
+  "settings.storage.progress.vacuum": "Rebuilding the database…",
+  "settings.storage.progress.workers": "{{count}} workers",
+  "settings.storage.progress.detail": "{{completed}} of {{total}} · {{count}} workers",
   "settings.storage.section.overview": "Database overview",
   "settings.storage.section.history": "Event history",
   "settings.storage.section.database": "Database files",
@@ -17,7 +28,7 @@ export const STORAGE_FALLBACK = {
   "settings.storage.metric.path": "Database path",
   "settings.storage.action.analyze": "Analyze",
   "settings.storage.action.analyze.description":
-    "Find superseded message snapshots that can be replaced without changing replayed sessions. The scan does not alter session history.",
+    "Find superseded message snapshots that can be replaced without changing replayed sessions. The scan does not alter session history and temporarily needs about the current database size for a verified snapshot.",
   "settings.storage.action.backup": "Create backup",
   "settings.storage.action.backup.description":
     "Create a consistent, integrity-checked copy next to the active database.",
@@ -60,7 +71,9 @@ export const STORAGE_FALLBACK = {
   "settings.storage.result.checkpoint": "Reduced the write-ahead log from {{before}} to {{after}}.",
   "settings.storage.result.checkpointBusy":
     "An active reader prevented complete truncation; the write-ahead log changed from {{before}} to {{after}}.",
-  "settings.storage.result.vacuum": "Returned {{size}} of allocated database pages.",
+  "settings.storage.result.vacuum": "Reduced database files on disk by {{size}}.",
+  "settings.storage.result.vacuumCheckpointBusy":
+    "Returned {{size}}, but active readers prevented the final WAL checkpoint.",
   "settings.storage.result.completed": "Maintenance completed",
   "settings.storage.result.failed": "Maintenance failed",
   "settings.storage.result.backupPath": "Verified backup: ",

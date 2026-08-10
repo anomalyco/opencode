@@ -388,8 +388,11 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 database tools
 
 Commands:
-  opencode db [query]     open an interactive sqlite3 shell or run a query                 [default]
-  opencode db path        print the database path
+  opencode db [query]           open an interactive sqlite3 shell or run a query           [default]
+  opencode db path              print the database path
+  opencode db compact-events    replace superseded message and part snapshots with replay-safe
+                                checkpoints
+  opencode db event-log-status  report event-log growth and compaction recommendation
 
 Positionals:
   query  SQL query to execute                                                               [string]

@@ -33,6 +33,29 @@ export const StorageAnalysis = Schema.Struct({
   byType: Schema.Record(Schema.String, StorageTypeSummary),
 })
 
+const StorageOperation = Schema.Literals(["analyze", "backup", "compact", "checkpoint", "vacuum"])
+const StoragePhase = Schema.Literals([
+  "idle",
+  "snapshot",
+  "verify",
+  "index",
+  "analyze",
+  "backup",
+  "compact",
+  "checkpoint",
+  "vacuum",
+])
+
+export const StorageProgress = Schema.Struct({
+  operation: Schema.NullOr(StorageOperation),
+  phase: StoragePhase,
+  completed: NonNegativeInt,
+  total: NonNegativeInt,
+  workers: NonNegativeInt,
+  startedAt: NonNegativeInt,
+  updatedAt: NonNegativeInt,
+})
+
 export const StorageBackup = Schema.Struct({
   path: Schema.String,
   bytes: NonNegativeInt,
@@ -62,6 +85,7 @@ export const StorageCheckpoint = Schema.Struct({
 export const StorageVacuum = Schema.Struct({
   backup: StorageBackup,
   bytesReclaimed: NonNegativeInt,
+  checkpointBusy: NonNegativeInt,
   before: StorageOverview,
   after: StorageOverview,
 })
@@ -76,6 +100,7 @@ export class StorageMaintenanceError extends Schema.ErrorClass<StorageMaintenanc
 
 export const StoragePaths = {
   status: "/global/storage",
+  progress: "/global/storage/progress",
   analyze: "/global/storage/analyze",
   backup: "/global/storage/backup",
   compact: "/global/storage/compact",
@@ -94,6 +119,16 @@ export const StorageApi = HttpApi.make("storage").add(
           identifier: "storage.status",
           summary: "Get database storage status",
           description: "Get the database, WAL, shared-memory, allocation, and reusable-page sizes.",
+        }),
+      ),
+      HttpApiEndpoint.get("progress", StoragePaths.progress, {
+        success: described(StorageProgress, "Storage maintenance progress"),
+        error: StorageMaintenanceError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "storage.progress",
+          summary: "Get storage maintenance progress",
+          description: "Get the current maintenance phase, completed work, total work, and worker count.",
         }),
       ),
       HttpApiEndpoint.post("analyze", StoragePaths.analyze, {

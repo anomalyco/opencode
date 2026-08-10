@@ -7433,6 +7433,43 @@ export type StorageStatusResponses = {
 
 export type StorageStatusResponse = StorageStatusResponses[keyof StorageStatusResponses]
 
+export type StorageProgressData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/storage/progress"
+}
+
+export type StorageProgressErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * StorageMaintenanceError
+   */
+  500: StorageMaintenanceError
+}
+
+export type StorageProgressError = StorageProgressErrors[keyof StorageProgressErrors]
+
+export type StorageProgressResponses = {
+  /**
+   * Storage maintenance progress
+   */
+  200: {
+    operation: "analyze" | "backup" | "compact" | "checkpoint" | "vacuum"
+    phase: "idle" | "snapshot" | "verify" | "index" | "analyze" | "backup" | "compact" | "checkpoint" | "vacuum"
+    completed: number
+    total: number
+    workers: number
+    startedAt: number
+    updatedAt: number
+  }
+}
+
+export type StorageProgressResponse = StorageProgressResponses[keyof StorageProgressResponses]
+
 export type StorageAnalyzeData = {
   body?: never
   path?: never
@@ -7678,6 +7715,7 @@ export type StorageVacuumResponses = {
       integrity: "ok"
     }
     bytesReclaimed: number
+    checkpointBusy: number
     before: {
       path: string
       databaseBytes: number
