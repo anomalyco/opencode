@@ -74,7 +74,7 @@ describe("toSessionError", () => {
     })
   })
 
-  test("preserves provider HTTP context", () => {
+  test("preserves provider HTTP status", () => {
     const http = new HttpContext({
       request: new HttpRequestDetails({ method: "POST", url: "https://example.com", headers: {} }),
       response: new HttpResponseDetails({ status: 413, headers: {} }),
@@ -83,7 +83,6 @@ describe("toSessionError", () => {
       type: "provider.invalid-request",
       message: "too large",
       status: 413,
-      http,
     })
     expect(toSessionError(llm(new ProviderInternalReason({ message: "bad gateway", status: 502 })))).toEqual({
       type: "provider.internal",

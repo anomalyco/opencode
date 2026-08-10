@@ -474,34 +474,7 @@ export type Endpoint5_31Output =
           readonly location?: Location.Ref | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly error: {
-              readonly type: string
-              readonly message: string
-              readonly status?: number | undefined
-              readonly http?:
-                | {
-                    readonly request: {
-                      readonly method: string
-                      readonly url: string
-                      readonly headers: { readonly [x: string]: string }
-                    }
-                    readonly response?:
-                      | { readonly status: number; readonly headers: { readonly [x: string]: string } }
-                      | undefined
-                    readonly body?: string | undefined
-                    readonly bodyTruncated?: boolean | undefined
-                    readonly requestId?: string | undefined
-                    readonly rateLimit?:
-                      | {
-                          readonly retryAfterMs?: number | undefined
-                          readonly limit?: { readonly [x: string]: string } | undefined
-                          readonly remaining?: { readonly [x: string]: string } | undefined
-                          readonly reset?: { readonly [x: string]: string } | undefined
-                        }
-                      | undefined
-                  }
-                | undefined
-            }
+            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
           }
         }
       | {
@@ -628,34 +601,7 @@ export type Endpoint5_31Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
-            readonly error: {
-              readonly type: string
-              readonly message: string
-              readonly status?: number | undefined
-              readonly http?:
-                | {
-                    readonly request: {
-                      readonly method: string
-                      readonly url: string
-                      readonly headers: { readonly [x: string]: string }
-                    }
-                    readonly response?:
-                      | { readonly status: number; readonly headers: { readonly [x: string]: string } }
-                      | undefined
-                    readonly body?: string | undefined
-                    readonly bodyTruncated?: boolean | undefined
-                    readonly requestId?: string | undefined
-                    readonly rateLimit?:
-                      | {
-                          readonly retryAfterMs?: number | undefined
-                          readonly limit?: { readonly [x: string]: string } | undefined
-                          readonly remaining?: { readonly [x: string]: string } | undefined
-                          readonly reset?: { readonly [x: string]: string } | undefined
-                        }
-                      | undefined
-                  }
-                | undefined
-            }
+            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
             readonly cost?: (number & Brand.Brand<"Money.USD">) | undefined
             readonly tokens?:
               | {
@@ -817,34 +763,7 @@ export type Endpoint5_31Output =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly id: string
-            readonly error: {
-              readonly type: string
-              readonly message: string
-              readonly status?: number | undefined
-              readonly http?:
-                | {
-                    readonly request: {
-                      readonly method: string
-                      readonly url: string
-                      readonly headers: { readonly [x: string]: string }
-                    }
-                    readonly response?:
-                      | { readonly status: number; readonly headers: { readonly [x: string]: string } }
-                      | undefined
-                    readonly body?: string | undefined
-                    readonly bodyTruncated?: boolean | undefined
-                    readonly requestId?: string | undefined
-                    readonly rateLimit?:
-                      | {
-                          readonly retryAfterMs?: number | undefined
-                          readonly limit?: { readonly [x: string]: string } | undefined
-                          readonly remaining?: { readonly [x: string]: string } | undefined
-                          readonly reset?: { readonly [x: string]: string } | undefined
-                        }
-                      | undefined
-                  }
-                | undefined
-            }
+            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
             readonly content?:
               | readonly [
                   (
@@ -884,34 +803,7 @@ export type Endpoint5_31Output =
             readonly assistantMessageID: SessionMessage.ID
             readonly attempt: number
             readonly at: number
-            readonly error: {
-              readonly type: string
-              readonly message: string
-              readonly status?: number | undefined
-              readonly http?:
-                | {
-                    readonly request: {
-                      readonly method: string
-                      readonly url: string
-                      readonly headers: { readonly [x: string]: string }
-                    }
-                    readonly response?:
-                      | { readonly status: number; readonly headers: { readonly [x: string]: string } }
-                      | undefined
-                    readonly body?: string | undefined
-                    readonly bodyTruncated?: boolean | undefined
-                    readonly requestId?: string | undefined
-                    readonly rateLimit?:
-                      | {
-                          readonly retryAfterMs?: number | undefined
-                          readonly limit?: { readonly [x: string]: string } | undefined
-                          readonly remaining?: { readonly [x: string]: string } | undefined
-                          readonly reset?: { readonly [x: string]: string } | undefined
-                        }
-                      | undefined
-                  }
-                | undefined
-            }
+            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
           }
         }
       | {
@@ -961,34 +853,7 @@ export type Endpoint5_31Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly reason: "auto" | "manual"
-            readonly error: {
-              readonly type: string
-              readonly message: string
-              readonly status?: number | undefined
-              readonly http?:
-                | {
-                    readonly request: {
-                      readonly method: string
-                      readonly url: string
-                      readonly headers: { readonly [x: string]: string }
-                    }
-                    readonly response?:
-                      | { readonly status: number; readonly headers: { readonly [x: string]: string } }
-                      | undefined
-                    readonly body?: string | undefined
-                    readonly bodyTruncated?: boolean | undefined
-                    readonly requestId?: string | undefined
-                    readonly rateLimit?:
-                      | {
-                          readonly retryAfterMs?: number | undefined
-                          readonly limit?: { readonly [x: string]: string } | undefined
-                          readonly remaining?: { readonly [x: string]: string } | undefined
-                          readonly reset?: { readonly [x: string]: string } | undefined
-                        }
-                      | undefined
-                  }
-                | undefined
-            }
+            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
             readonly inputID?: SessionMessage.ID | undefined
           }
         }
