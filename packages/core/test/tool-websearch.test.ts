@@ -392,6 +392,7 @@ describe("WebSearchTool registration", () => {
         [
           { status: 403, message: "Web search request failed (HTTP 403)" },
           { status: 429, message: "Web search rate limited (HTTP 429)" },
+          { status: 401, message: "Web search authentication failed (HTTP 401)" },
         ],
         ({ status, message }, index) =>
           Effect.gen(function* () {
@@ -421,9 +422,9 @@ describe("WebSearchTool registration", () => {
               })
               .pipe(Effect.flip)
 
-            expect(error.message).toBe(message)
-            expect(error.message).not.toContain("secret")
-            expect(toSessionError(error)).toEqual({ type: "tool.execution", message })
+            const sessionError = toSessionError(error)
+            expect(sessionError).toEqual({ type: "tool.execution", message })
+            expect(sessionError.message).not.toContain("secret")
             expect(error.metadata).toEqual({ provider: "exa" })
             expect(progress).toEqual([{ provider: "exa" }])
           }),

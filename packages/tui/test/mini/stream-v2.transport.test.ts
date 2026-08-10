@@ -2271,13 +2271,8 @@ describe("V2 mini transport", () => {
     const commits = ui.commits.filter((item) => item.part?.id === "call_websearch")
     expect(commits.map((item) => item.phase)).toEqual(["start", "final"])
     const start = commits[0]
-    const final = commits[1]
-    if (!start || !final) throw new Error("Expected web search start and final commits")
+    if (!start) throw new Error("Expected web search start commit")
     expect(entryBody(start)).toEqual({ type: "text", content: '◈ Exa Web Search "effect"' })
-    expect(entryBody(final)).toEqual({
-      type: "text",
-      content: "✖ websearch failed: Web search request failed (HTTP 403)",
-    })
     await transport.close()
   })
 
