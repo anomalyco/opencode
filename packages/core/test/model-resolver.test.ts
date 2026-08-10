@@ -42,6 +42,27 @@ const model = (packageName: string | undefined, options: ModelOptions = {}) =>
     limit: options.limit ?? { context: 100, output: 20 },
   })
 
+function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Object.fromEntries(Object.keys(variables).map((key) => [key, process.env[key]]))
+      Object.entries(variables).forEach(([key, value]) => {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      })
+      return previous
+    }),
+    effect,
+    (previous) =>
+      Effect.sync(() => {
+        Object.entries(previous).forEach(([key, value]) => {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        })
+      }),
+  )
+}
+
 describe("ModelResolver", () => {
   it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
     Effect.gen(function* () {
@@ -76,10 +97,10 @@ describe("ModelResolver", () => {
           providerID: Provider.ID.azure,
           modelID: "legacy-deployment",
           settings: {
-            resourceName: "legacy-resource",
-            baseURL: "https://legacy-resource.cognitiveservices.azure.com/openai",
+            baseURL: "https://${AZURE_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
           },
         }),
+        Credential.Key.make({ type: "key", key: "secret", configuration: { resourceName: "legacy-resource" } }),
       )
 
       expect(responses).toMatchObject({ id: "responses-deployment", provider: "azure" })
@@ -107,15 +128,23 @@ describe("ModelResolver", () => {
       const credential = Credential.Key.make({ type: "key", key: "secret" })
       const responses = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          providerID: Provider.ID.amazonBedrock,
           modelID: "openai.gpt-oss-120b",
-          settings: { region: "us-east-2" },
+          settings: {
+            region: "us-east-2",
+            baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/v1",
+          },
         }),
         credential,
       )
       const chat = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          providerID: Provider.ID.amazonBedrock,
           modelID: "openai.gpt-oss-safeguard-20b",
-          settings: { region: "us-east-2" },
+          settings: {
+            region: "us-east-2",
+            baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/v1",
+          },
         }),
         credential,
       )
@@ -228,6 +257,73 @@ describe("ModelResolver", () => {
       expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
       expect(resolved.route.defaults.http?.body).toEqual({})
     }),
+  )
+
+  it.effect("resolves provider URLs from environment and credential configuration", () =>
+    withEnv(
+      {
+        ACME_HOST: "api.acme.test",
+        CLOUDFLARE_ACCOUNT_ID: undefined,
+      },
+      () =>
+        Effect.gen(function* () {
+          const environment = yield* ModelResolver.fromCatalogModel(
+            model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+              settings: { baseURL: "https://${ACME_HOST}/v1" },
+            }),
+          )
+          const cloudflareCatalog = model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+            providerID: Provider.ID.make("cloudflare-workers-ai"),
+            settings: {
+              baseURL: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+            },
+          })
+          const cloudflare = yield* ModelResolver.fromCatalogModel(
+            cloudflareCatalog,
+            Credential.Key.make({ type: "key", key: "secret", configuration: { accountId: "account" } }),
+          )
+          const vertex = yield* ModelResolver.fromCatalogModel(
+            model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+              providerID: Provider.ID.googleVertex,
+              settings: {
+                project: "project",
+                location: "global",
+                baseURL:
+                  "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}",
+              },
+            }),
+          )
+
+          expect(environment.route.endpoint.baseURL).toBe("https://api.acme.test/v1")
+          expect(cloudflare.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/account/ai/v1")
+          expect(cloudflareCatalog.settings?.baseURL).toContain("${CLOUDFLARE_ACCOUNT_ID}")
+          expect(vertex.route.endpoint.baseURL).toBe(
+            "https://aiplatform.googleapis.com/v1/projects/project/locations/global",
+          )
+        }),
+    ),
+  )
+
+  it.effect("rejects unresolved provider URL variables before route construction", () =>
+    withEnv({ REQUIRED_HOST: undefined }, () =>
+      Effect.gen(function* () {
+        const failure = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+            settings: { baseURL: "https://${REQUIRED_HOST}/${REQUIRED_PATH}/v1" },
+          }),
+        ).pipe(Effect.flip)
+
+        expect(failure).toMatchObject({
+          _tag: "SessionRunnerModel.UnresolvedProviderVariablesError",
+          providerID: "test-provider",
+          modelID: "test-model",
+          variables: ["REQUIRED_HOST", "REQUIRED_PATH"],
+        })
+        expect(failure.message).toBe(
+          "Cannot initialize test-provider/test-model: REQUIRED_HOST, REQUIRED_PATH are required to resolve the provider endpoint",
+        )
+      }),
+    ),
   )
 
   it.effect("overlays selected OpenAI variant settings and bodies", () =>

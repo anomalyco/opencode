@@ -52,7 +52,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
     cause instanceof SessionRunnerModel.ModelNotSelectedError ||
     cause instanceof SessionRunnerModel.ModelUnavailableError ||
     cause instanceof SessionRunnerModel.VariantUnavailableError ||
-    cause instanceof SessionRunnerModel.UnsupportedPackageError
+    cause instanceof SessionRunnerModel.UnsupportedPackageError ||
+    cause instanceof SessionRunnerModel.UnresolvedProviderVariablesError
   )
     return { type: "provider.no-route", message: cause.message }
   if (cause instanceof Integration.AuthorizationError) return { type: "provider.auth", message: cause.message }

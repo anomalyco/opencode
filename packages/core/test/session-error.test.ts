@@ -19,6 +19,9 @@ import {
   HttpResponseDetails,
 } from "@opencode-ai/ai"
 import { Permission } from "@opencode-ai/core/permission"
+import { ID } from "@opencode-ai/core/model"
+import { ModelResolver } from "@opencode-ai/core/model-resolver"
+import { Provider } from "@opencode-ai/core/provider"
 import { Tool } from "@opencode-ai/schema/tool"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
@@ -88,6 +91,19 @@ describe("toSessionError", () => {
       type: "provider.internal",
       message: "bad gateway",
       status: 502,
+    })
+  })
+
+  test("preserves unresolved provider endpoint errors", () => {
+    const error = new ModelResolver.UnresolvedProviderVariablesError({
+      providerID: Provider.ID.make("cloudflare-workers-ai"),
+      modelID: ID.make("model"),
+      variables: ["CLOUDFLARE_ACCOUNT_ID"],
+    })
+    expect(toSessionError(error)).toEqual({
+      type: "provider.no-route",
+      message:
+        "Cannot initialize cloudflare-workers-ai/model: CLOUDFLARE_ACCOUNT_ID is required to resolve the provider endpoint",
     })
   })
 

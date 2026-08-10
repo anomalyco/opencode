@@ -34,6 +34,8 @@ export const VariantUnavailableError = ModelResolver.VariantUnavailableError
 export type VariantUnavailableError = ModelResolver.VariantUnavailableError
 export const UnsupportedPackageError = ModelResolver.UnsupportedPackageError
 export type UnsupportedPackageError = ModelResolver.UnsupportedPackageError
+export const UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
+export type UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
 
 export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved
