@@ -231,6 +231,8 @@ import type {
   StorageCheckpointResponses,
   StorageCompactErrors,
   StorageCompactResponses,
+  StorageProgressErrors,
+  StorageProgressResponses,
   StorageStatusErrors,
   StorageStatusResponses,
   StorageVacuumErrors,
@@ -1403,6 +1405,18 @@ export class Storage extends HeyApiClient {
   public status<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<StorageStatusResponses, StorageStatusErrors, ThrowOnError>({
       url: "/global/storage",
+      ...options,
+    })
+  }
+
+  /**
+   * Get storage maintenance progress
+   *
+   * Get the current maintenance phase, completed work, total work, and worker count.
+   */
+  public progress<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<StorageProgressResponses, StorageProgressErrors, ThrowOnError>({
+      url: "/global/storage/progress",
       ...options,
     })
   }

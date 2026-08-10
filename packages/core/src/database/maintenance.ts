@@ -63,6 +63,7 @@ export type Checkpoint = {
 export type Vacuum = {
   readonly backup: Backup
   readonly bytesReclaimed: number
+  readonly checkpointBusy: number
   readonly before: Overview
   readonly after: Overview
 }
@@ -262,10 +263,12 @@ const vacuumUnlocked = Effect.fn("DatabaseMaintenance.vacuumUnlocked")(function*
   yield* SessionEventLogCompaction.verify(database.db)
   yield* database.db.run(sql`VACUUM`).pipe(Effect.orDie)
   yield* SessionEventLogCompaction.verify(database.db)
+  const checkpoint = yield* database.db.get<{ busy: number }>(sql`PRAGMA wal_checkpoint(TRUNCATE)`).pipe(Effect.orDie)
   const after = yield* overviewUnlocked(database)
   return {
     backup,
-    bytesReclaimed: Math.max(0, before.allocatedBytes - after.allocatedBytes),
+    bytesReclaimed: Math.max(0, before.totalBytes - after.totalBytes),
+    checkpointBusy: checkpoint?.busy ?? 0,
     before,
     after,
   } satisfies Vacuum
@@ -274,6 +277,8 @@ const vacuumUnlocked = Effect.fn("DatabaseMaintenance.vacuumUnlocked")(function*
 function guarded<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return lock.withPermit(effect)
 }
+
+export const exclusive = guarded
 
 export const overview = Effect.fn("DatabaseMaintenance.overview")((database: Database.Interface) =>
   guarded(overviewUnlocked(database)),

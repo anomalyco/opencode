@@ -3,14 +3,16 @@ import type {
   StorageBackupResponse,
   StorageCheckpointResponse,
   StorageCompactResponse,
+  StorageProgressResponse,
   StorageStatusResponse,
   StorageVacuumResponse,
 } from "@opencode-ai/sdk/v2/client"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/v2/dialog-v2"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
+import { Progress } from "@opencode-ai/ui/progress"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { For, Show, createMemo, createResource, type Component } from "solid-js"
+import { For, Show, createEffect, createMemo, createResource, onCleanup, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
@@ -86,11 +88,22 @@ export const SettingsStorageV2: Component = () => {
     () => serverSdk().url,
     async () => unwrap<StorageStatusResponse>(await serverSdk().client.storage.status()),
   )
+  const [progress, { refetch: refetchProgress }] = createResource(
+    () => serverSdk().url,
+    async () => unwrap<StorageProgressResponse>(await serverSdk().client.storage.progress()),
+  )
 
   const busy = () => state.operation !== undefined
   const operationVariant = (operation: Operation, fallback: "neutral" | "warning" | "danger" = "neutral") =>
     state.operation === operation ? "loading" : fallback
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+  createEffect(() => {
+    if (!busy()) return
+    void refetchProgress()
+    const timer = window.setInterval(() => void refetchProgress(), 500)
+    onCleanup(() => window.clearInterval(timer))
+  })
 
   const execute = async <T,>(
     operation: Operation,
@@ -119,6 +132,7 @@ export const SettingsStorageV2: Component = () => {
       showToast({ title: language.t("common.requestFailed"), description: message })
     } finally {
       setState("operation", undefined)
+      void refetchProgress()
       if (succeeded) void refetch()
     }
   }
@@ -185,9 +199,12 @@ export const SettingsStorageV2: Component = () => {
       "vacuum",
       () => serverSdk().client.storage.vacuum({ confirmed: true }),
       (result: StorageVacuumResponse) => ({
-        message: language.t("settings.storage.result.vacuum", {
-          size: formatBytes(result.bytesReclaimed, locale()),
-        }),
+        message: language.t(
+          result.checkpointBusy ? "settings.storage.result.vacuumCheckpointBusy" : "settings.storage.result.vacuum",
+          {
+            size: formatBytes(result.bytesReclaimed, locale()),
+          },
+        ),
         backupPath: result.backup.path,
       }),
       true,
@@ -260,6 +277,41 @@ export const SettingsStorageV2: Component = () => {
     return analysis.projectionMismatches + analysis.compatibilityRejected + analysis.malformed
   }
 
+  const progressLabel = () => {
+    const phase = progress()?.phase
+    const key = {
+      idle: "settings.storage.progress.idle",
+      snapshot: "settings.storage.progress.snapshot",
+      verify: "settings.storage.progress.verify",
+      index: "settings.storage.progress.index",
+      analyze: "settings.storage.progress.analyze",
+      backup: "settings.storage.progress.backup",
+      compact: "settings.storage.progress.compact",
+      checkpoint: "settings.storage.progress.checkpoint",
+      vacuum: "settings.storage.progress.vacuum",
+    }[phase ?? "idle"]
+    return language.t(key)
+  }
+
+  const progressValue = () => {
+    const current = progress()
+    if (!current?.total) return 0
+    return Math.min(100, (current.completed / current.total) * 100)
+  }
+
+  const progressDetail = () => {
+    const current = progress()
+    if (!current) return ""
+    if (!current.total) {
+      return language.t("settings.storage.progress.workers", { count: formatCount(current.workers, locale()) })
+    }
+    return language.t("settings.storage.progress.detail", {
+      completed: formatCount(current.completed, locale()),
+      total: formatCount(current.total, locale()),
+      count: formatCount(current.workers, locale()),
+    })
+  }
+
   return (
     <>
       <div class="settings-v2-tab-header">
@@ -268,6 +320,21 @@ export const SettingsStorageV2: Component = () => {
 
       <div class="settings-v2-tab-body settings-v2-storage">
         <p class="settings-v2-storage-intro">{language.t("settings.storage.description")}</p>
+
+        <Show when={busy()}>
+          <div class="settings-v2-storage-progress">
+            <Progress
+              value={progressValue()}
+              minValue={0}
+              maxValue={100}
+              indeterminate={!progress()?.total}
+              showValueLabel={Boolean(progress()?.total)}
+            >
+              {progressLabel()}
+            </Progress>
+            <span>{progressDetail()}</span>
+          </div>
+        </Show>
 
         <Show
           when={status()}
