@@ -3272,6 +3272,37 @@ describe("ProviderTransform sampling defaults - Gemini", () => {
   })
 })
 
+describe("ProviderTransform sampling defaults - DeepSeek", () => {
+  const model = (providerID: string, id: string) =>
+    ({
+      id: `${providerID}/${id}`,
+      providerID,
+      api: { id },
+    }) as any
+
+  test.each([
+    ["deepseek", "deepseek-v4-flash"],
+    ["opencode", "deepseek-v4-flash"],
+    ["opencode-go", "deepseek-v4-flash"],
+    ["openrouter", "deepseek/deepseek-v4-flash-0731"],
+    ["ollama-cloud", "deepseek-v4-flash:0731"],
+  ])("defaults top_p for %s/%s", (providerID, id) => {
+    expect(ProviderTransform.temperature(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topP(model(providerID, id))).toBe(0.95)
+    expect(ProviderTransform.topK(model(providerID, id))).toBeUndefined()
+  })
+
+  test.each([
+    ["openrouter", "deepseek/deepseek-v4-flash"],
+    ["vercel", "deepseek/deepseek-v4-flash"],
+    ["custom", "deepseek-ai/DeepSeek-V4-Flash"],
+  ])("preserves legacy defaults for %s/%s", (providerID, id) => {
+    expect(ProviderTransform.temperature(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topP(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topK(model(providerID, id))).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.reasoningVariants", () => {
   const model = (reasoning_options: ModelsDev.Model["reasoning_options"]) => ({ reasoning_options }) as ModelsDev.Model
   const target = (npm: string, id = "test-model") =>
