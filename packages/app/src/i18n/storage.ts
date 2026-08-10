@@ -12,6 +12,8 @@ export const STORAGE_FALLBACK = {
   "settings.storage.progress.index": "Indexing event snapshots…",
   "settings.storage.progress.analyze": "Analyzing safe cleanup candidates…",
   "settings.storage.progress.backup": "Creating and verifying a backup…",
+  "settings.storage.progress.drain": "Waiting for active session work to finish…",
+  "settings.storage.progress.drainDetail": "{{completed}} of {{total}} active tasks finished",
   "settings.storage.progress.compact": "Compacting event history…",
   "settings.storage.progress.checkpoint": "Checkpointing the write-ahead log…",
   "settings.storage.progress.vacuum": "Rebuilding the database…",

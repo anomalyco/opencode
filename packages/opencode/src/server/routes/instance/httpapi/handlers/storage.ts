@@ -1,5 +1,6 @@
 import { Database } from "@opencode-ai/core/database/database"
 import { DatabaseMaintenance } from "@opencode-ai/core/database/maintenance"
+import { DatabaseMaintenanceGate } from "@opencode-ai/core/database/maintenance-gate"
 import { ParallelStorageAnalysis } from "@/storage-maintenance/parallel-analysis"
 import { StorageMaintenanceProgress } from "@/storage-maintenance/progress"
 import { Cause, Effect, Semaphore } from "effect"
@@ -37,6 +38,23 @@ function tracked<A, E, R>(
   )
 }
 
+function gateProgress(id: string, operation: "compact" | "vacuum") {
+  let total = 0
+  return (status: DatabaseMaintenanceGate.Status) => {
+    if (status.phase === "active") {
+      StorageMaintenanceProgress.update(id, { phase: operation, completed: 0, total: 0 })
+      return
+    }
+    if (status.phase !== "draining") return
+    total = Math.max(total, status.activeMutations)
+    StorageMaintenanceProgress.update(id, {
+      phase: "drain",
+      completed: total - status.activeMutations,
+      total,
+    })
+  }
+}
+
 export const storageHandlers = HttpApiBuilder.group(RootHttpApi, "storage", (handlers) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
@@ -60,8 +78,18 @@ export const storageHandlers = HttpApiBuilder.group(RootHttpApi, "storage", (han
         ),
       )
       .handle("backup", () => maintenance(tracked("backup", () => DatabaseMaintenance.backup(database))))
-      .handle("compact", () => maintenance(tracked("compact", () => DatabaseMaintenance.compact(database))))
+      .handle("compact", () =>
+        maintenance(
+          tracked("compact", (id) =>
+            DatabaseMaintenance.compact(database, { onGateStatus: gateProgress(id, "compact") }),
+          ),
+        ),
+      )
       .handle("checkpoint", () => maintenance(tracked("checkpoint", () => DatabaseMaintenance.checkpoint(database))))
-      .handle("vacuum", () => maintenance(tracked("vacuum", () => DatabaseMaintenance.vacuum(database))))
+      .handle("vacuum", () =>
+        maintenance(
+          tracked("vacuum", (id) => DatabaseMaintenance.vacuum(database, { onGateStatus: gateProgress(id, "vacuum") })),
+        ),
+      )
   }),
 )

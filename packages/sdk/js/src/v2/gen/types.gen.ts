@@ -7459,7 +7459,17 @@ export type StorageProgressResponses = {
    */
   200: {
     operation: "analyze" | "backup" | "compact" | "checkpoint" | "vacuum"
-    phase: "idle" | "snapshot" | "verify" | "index" | "analyze" | "backup" | "compact" | "checkpoint" | "vacuum"
+    phase:
+      | "idle"
+      | "snapshot"
+      | "verify"
+      | "index"
+      | "analyze"
+      | "backup"
+      | "drain"
+      | "compact"
+      | "checkpoint"
+      | "vacuum"
     completed: number
     total: number
     workers: number
