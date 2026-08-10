@@ -1,4 +1,4 @@
-import { Formatter, Logger, type LogLevel } from "effect"
+import { Effect, FileSystem, Formatter, Logger, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global.js"
 import { runID } from "./shared.js"
@@ -53,7 +53,11 @@ export function file(local = true, channel = "local") {
 
 export function fileLogger(target = file(), id: string = runID) {
   // Do not set batchWindow to 0; it causes high idle CPU usage.
-  return Logger.toFile(formatter(id), target, { flag: "a" })
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    yield* fs.makeDirectory(path.dirname(target), { recursive: true })
+    return yield* Logger.toFile(formatter(id), target, { flag: "a" })
+  })
 }
 
 const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))

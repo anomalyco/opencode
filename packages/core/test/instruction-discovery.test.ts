@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import fs from "fs/promises"
+import os from "os"
 import path from "path"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -15,6 +16,7 @@ import { testEffect } from "./lib/effect"
 import { readInitial, readUpdate, state } from "./lib/instructions"
 
 const it = testEffect(Layer.empty)
+const testConfig = path.join(os.tmpdir(), "opencode-instruction-discovery-test")
 
 const instructionLayer = (input: {
   config: string
@@ -147,7 +149,7 @@ describe("InstructionDiscovery", () => {
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
-            config: "/global",
+            config: testConfig,
             filesystemLayer: failingFS,
             locationServiceLayer: Layer.succeed(
               Location.Service,
@@ -183,7 +185,7 @@ describe("InstructionDiscovery", () => {
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
-            config: "/global",
+            config: testConfig,
             filesystemLayer: racingFS,
             locationServiceLayer: Layer.succeed(
               Location.Service,
@@ -222,7 +224,7 @@ describe("InstructionDiscovery", () => {
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
-            config: "/global",
+            config: testConfig,
             filesystemLayer: observingFS,
             locationServiceLayer: Layer.succeed(
               Location.Service,
@@ -250,7 +252,7 @@ describe("InstructionDiscovery", () => {
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
-            config: "/global",
+            config: testConfig,
             project: false,
             filesystemLayer: Layer.effect(
               FSUtil.Service,
@@ -277,7 +279,7 @@ describe("InstructionDiscovery", () => {
         Effect.flatMap((service) => service.load()),
         Effect.provide(
           instructionLayer({
-            config: "/global",
+            config: testConfig,
             filesystemLayer: Layer.effect(
               FSUtil.Service,
               FSUtil.Service.pipe(
