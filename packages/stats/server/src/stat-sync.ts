@@ -19,9 +19,19 @@ const daemon = Effect.gen(function* () {
   let lastFullDay = ""
   const pass = Effect.gen(function* () {
     const today = new Date().toISOString().slice(0, 10)
-    const full = lastFullDay !== today
-    yield* syncStats({ full })
-    if (full) lastFullDay = today
+    if (lastFullDay !== today) {
+      const completed = yield* syncStats({ full: true }).pipe(
+        Effect.as(true),
+        Effect.catchCause((cause) =>
+          Effect.logWarning(`full stats sync failed; falling back to incremental sync ${Cause.pretty(cause)}`).pipe(
+            Effect.as(false),
+          ),
+        ),
+      )
+      lastFullDay = today
+      if (completed) return
+    }
+    yield* syncStats({ full: false })
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning(`stats sync failed ${JSON.stringify({ cause: Cause.pretty(cause) })}`),

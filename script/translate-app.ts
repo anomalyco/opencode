@@ -3,27 +3,14 @@
 import path from "path"
 import { parseArgs } from "util"
 import { pathToFileURL } from "url"
+import {
+  DESKTOP_NATIVE_LOCALES,
+  desktopNativePluralCategories,
+  type DesktopNativeLocale,
+} from "../packages/app/src/i18n/desktop-native"
 
-const locales = [
-  "ar",
-  "br",
-  "bs",
-  "da",
-  "de",
-  "es",
-  "fr",
-  "ja",
-  "ko",
-  "no",
-  "pl",
-  "ru",
-  "uk",
-  "th",
-  "tr",
-  "zh",
-  "zht",
-] as const
-type Locale = (typeof locales)[number]
+type Locale = Exclude<DesktopNativeLocale, "en">
+const locales = DESKTOP_NATIVE_LOCALES.filter((locale): locale is Locale => locale !== "en")
 
 const languages = {
   ar: "Arabic",
@@ -41,6 +28,50 @@ const languages = {
   uk: "Ukrainian",
   th: "Thai",
   tr: "Turkish",
+  hi: "Hindi",
+  nl: "Dutch",
+  id: "Indonesian",
+  vi: "Vietnamese",
+  it: "Italian",
+  ur: "Urdu",
+  pa: "Punjabi (Shahmukhi)",
+  az: "Azerbaijani (Latin)",
+  fi: "Finnish",
+  sv: "Swedish",
+  am: "Amharic",
+  bg: "Bulgarian",
+  bn: "Bengali",
+  ca: "Catalan",
+  cs: "Czech",
+  dv: "Dhivehi",
+  dz: "Dzongkha",
+  el: "Greek",
+  et: "Estonian",
+  fa: "Persian",
+  fo: "Faroese",
+  hr: "Croatian",
+  hu: "Hungarian",
+  hy: "Armenian",
+  is: "Icelandic",
+  ka: "Georgian",
+  km: "Khmer",
+  lo: "Lao",
+  lt: "Lithuanian",
+  lv: "Latvian",
+  mk: "Macedonian",
+  mn: "Mongolian (Cyrillic)",
+  ms: "Malay",
+  my: "Burmese",
+  ne: "Nepali",
+  ro: "Romanian",
+  si: "Sinhala",
+  sk: "Slovak",
+  sl: "Slovenian",
+  sq: "Albanian",
+  sr: "Serbian (Cyrillic)",
+  tg: "Tajik",
+  tk: "Turkmen",
+  uz: "Uzbek (Latin)",
   zh: "Simplified Chinese",
   zht: "Traditional Chinese",
 } as const satisfies Record<Locale, string>
@@ -49,7 +80,7 @@ type Dictionary = Record<string, string>
 type Drift = ReturnType<typeof findDrift>
 type Domain = { name: string; source: string; target: string; drift: Drift }
 
-const desktopLocales = new Set<Locale>(locales.filter((locale) => locale !== "th" && locale !== "tr"))
+const desktopLocales = new Set<Locale>(locales)
 const root = path.resolve(import.meta.dir, "..")
 
 export function parseTranslationArgs(args: string[]) {
@@ -97,13 +128,33 @@ export function glossaryFile(locale: Locale) {
   return `.opencode/glossary/${locale}.md`
 }
 
-export function findDrift(source: Dictionary, target: Dictionary) {
+export function findDrift(source: Dictionary, target: Dictionary, locale?: Locale) {
+  const pluralVariants = new Map(
+    (locale
+      ? pluralFamilies(source).flatMap((key) =>
+          desktopNativePluralCategories(locale)
+            .filter((category) => category !== "one" && category !== "other")
+            .map((category) => [`${key}.${category}`, `${key}.other`] as const),
+        )
+      : []) as ReadonlyArray<readonly [string, string]>,
+  )
   return {
-    missing: Object.keys(source).filter((key) => !Object.hasOwn(target, key)),
-    extra: Object.keys(target).filter((key) => !Object.hasOwn(source, key)),
-    placeholders: Object.keys(source).filter(
-      (key) => Object.hasOwn(target, key) && tokens(source[key]).join() !== tokens(target[key]).join(),
-    ),
+    missing: [
+      ...Object.keys(source).filter((key) => !Object.hasOwn(target, key)),
+      ...Array.from(pluralVariants.keys()).filter((key) => !Object.hasOwn(target, key)),
+    ],
+    extra: Object.keys(target).filter((key) => !Object.hasOwn(source, key) && !pluralVariants.has(key)),
+    placeholders: [
+      ...Object.keys(source).filter(
+        (key) => Object.hasOwn(target, key) && tokens(source[key]).join() !== tokens(target[key]).join(),
+      ),
+      ...Array.from(pluralVariants.entries())
+        .filter(
+          ([key, sourceKey]) =>
+            Object.hasOwn(target, key) && tokens(source[sourceKey]).join() !== tokens(target[key]).join(),
+        )
+        .map(([key]) => key),
+    ],
   }
 }
 
@@ -161,6 +212,8 @@ export function translationConfig(agent: string, model: string, targets: string[
           read: "allow" as const,
           glob: "allow" as const,
           grep: "allow" as const,
+          webfetch: "allow" as const,
+          websearch: "allow" as const,
           edit: Object.fromEntries([["*", "deny"], ...targets.map((target) => [target, "allow"])]),
         },
       },
@@ -315,7 +368,7 @@ async function inspect(locale: Locale) {
         name: target.includes("packages/app/") ? "app" : target.includes("packages/ui/") ? "ui" : "desktop",
         source,
         target,
-        drift: findDrift(dictionaries[0], dictionaries[1]),
+        drift: findDrift(dictionaries[0], dictionaries[1], locale),
       }
     }),
   )
@@ -456,6 +509,17 @@ function isLocale(value: string): value is Locale {
 function isDictionary(value: unknown): value is Dictionary {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false
   return Object.values(value).every((item) => typeof item === "string")
+}
+
+function pluralFamilies(dictionary: Dictionary) {
+  return Object.keys(dictionary)
+    .filter(
+      (key) =>
+        key.endsWith(".one") &&
+        dictionary[key].includes("{{count}}") &&
+        dictionary[`${key.slice(0, -4)}.other`]?.includes("{{count}}"),
+    )
+    .map((key) => key.slice(0, -4))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
