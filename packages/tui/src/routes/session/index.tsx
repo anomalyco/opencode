@@ -647,8 +647,18 @@ export function Session() {
       slash: {
         name: "compact",
       },
-      run: () => {
-        void client.api.session.compact({ sessionID: route.sessionID })
+      run: async () => {
+        const selection = local.model.current()
+        if (selection)
+          await client.api.session.switchModel({
+            sessionID: route.sessionID,
+            model: {
+              providerID: selection.providerID,
+              id: selection.modelID,
+              variant: local.model.variant.current(),
+            },
+          })
+        await client.api.session.compact({ sessionID: route.sessionID })
         dialog.clear()
       },
     },
