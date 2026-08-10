@@ -57,15 +57,11 @@ const getBase = (appId: string): Configuration => ({
   },
   files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
   extraResources: [
-    ...(channel === "dev"
-      ? [
-          {
-            from: "resources/",
-            to: "",
-            filter: ["opencode-cli*"],
-          },
-        ]
-      : []),
+    {
+      from: "resources/",
+      to: "",
+      filter: ["opencode-cli*"],
+    },
     {
       from: "native/",
       to: "native/",
