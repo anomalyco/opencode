@@ -71,7 +71,7 @@
 [data-component="tabs-v2"] [data-slot="tabs-v2-close-button"] {
   width: 20px;
   height: 20px;
-  margin-left: -5px;
+  margin-inline-start: -5px;
   flex: none;
   display: flex;
   align-items: center;
@@ -109,7 +109,7 @@
   background-color: var(--v2-border-border-base);
   position: absolute;
   bottom: 0px;
-  left: -8px;
+  inset-inline-start: -8px;
 }
 
 [data-component="tabs-v2"][data-variant="pill"][data-orientation="horizontal"] [data-slot="tabs-v2-list"] {
@@ -183,12 +183,12 @@
   padding: 12px;
   gap: 4px;
   overflow-y: auto;
-  border-right: 1px solid var(--v2-border-border-base);
+  border-inline-end: 1px solid var(--v2-border-border-base);
 }
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-section-title"] {
   width: 100%;
-  padding-left: 4px;
+  padding-inline-start: 4px;
   color: var(--v2-text-text-muted);
   font-size: 12px;
   font-weight: 500;
