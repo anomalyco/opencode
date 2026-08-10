@@ -1,0 +1,17 @@
+name: Build opencode linux-arm64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: MODELS_DEV_API_JSON=$PWD/packages/opencode/test/tool/fixtures/models-api.json bun run --cwd packages/opencode build --single --skip-embed-web-ui
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-linux-arm64
+          path: packages/opencode/dist/opencode-linux-arm64/bin/opencode
