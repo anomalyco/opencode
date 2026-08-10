@@ -1,6 +1,8 @@
 export * as PluginInternal from "./internal"
 
 import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { Context, Effect, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { Agent } from "../agent"
@@ -136,6 +138,41 @@ const services = Effect.fn("PluginInternal.services")(function* () {
 type ContextServices<A> = A extends Context.Context<infer R> ? R : never
 
 export type Requirements = ContextServices<Effect.Success<ReturnType<typeof services>>>
+
+export const requirements = LayerNode.group([
+  Agent.node,
+  Catalog.node,
+  Command.node,
+  Config.node,
+  Credential.node,
+  Bus.node,
+  Environment.node,
+  FileMutation.node,
+  Formatter.node,
+  FileSystem.node,
+  FSUtil.node,
+  Global.node,
+  httpClient,
+  Image.node,
+  Integration.node,
+  KV.node,
+  Location.node,
+  LocationMutation.node,
+  ModelsDev.node,
+  Npm.node,
+  Permission.node,
+  PluginRuntime.node,
+  Form.node,
+  ReadToolFileSystem.node,
+  Reference.node,
+  WebSearch.node,
+  Ripgrep.node,
+  SessionInstructions.node,
+  Shell.node,
+  Skill.node,
+  Tool.node,
+  WellKnown.node,
+])
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 

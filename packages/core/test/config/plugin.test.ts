@@ -5,6 +5,7 @@ import { describe, expect } from "bun:test"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { ConfigPluginSource } from "@opencode-ai/core/config/plugin/source"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
@@ -26,7 +27,7 @@ const it = testEffect(
 )
 const staticIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    [PluginSupervisor.node, PluginSupervisor.configured({ dynamic: false })],
+    [ConfigPluginSource.node, ConfigPluginSource.empty],
   ]),
 )
 
@@ -162,7 +163,7 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
-  staticIt.live("uses only internal and SDK plugins when dynamic imports are disabled", () =>
+  staticIt.live("uses only internal and SDK plugins when the static source is wired", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
       yield* sdk.register(EffectPlugin.define({ id: "static-sdk", effect: () => Effect.void }))
