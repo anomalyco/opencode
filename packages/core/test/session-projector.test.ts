@@ -358,6 +358,7 @@ describe("SessionProjector", () => {
           directory: "/project",
           title: "test",
           version: "test",
+          agent: "plan",
           model: previousModel,
         })
         .run()
@@ -458,6 +459,10 @@ describe("SessionProjector", () => {
       expect(messages.find((message) => message.type === "synthetic")).toMatchObject({
         text: "synthetic context",
         metadata: { source: "projector-test" },
+      })
+      expect(messages.find((message) => message.type === "agent-switched")).toMatchObject({
+        agent: build,
+        previous: "plan",
       })
       expect(messages.find((message) => message.type === "model-switched")).toMatchObject({ previous: previousModel })
       expect(messages.find((message) => message.type === "shell")).toMatchObject({

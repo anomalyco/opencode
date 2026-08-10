@@ -648,7 +648,7 @@ describe("Session.create", () => {
   it.effect("switches the selected agent through the durable Session event", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
-      const created = yield* session.create({ location })
+      const created = yield* session.create({ location, agent: Agent.ID.make("build") })
 
       yield* session.switchAgent({ sessionID: created.id, agent: Agent.ID.make("plan") })
 
@@ -656,6 +656,9 @@ describe("Session.create", () => {
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.drop(1), Stream.take(1), Stream.runCollect)),
       ).toMatchObject([{ type: "session.agent.selected", data: { agent: "plan" } }])
+      expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toMatchObject([
+        { type: "agent-switched", agent: "plan", previous: "build" },
+      ])
     }),
   )
 

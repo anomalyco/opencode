@@ -5,6 +5,7 @@ import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import { Database } from "../database/database"
 import { Bus } from "../bus"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { Agent } from "../agent"
 import { Model } from "../model"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
@@ -230,6 +231,17 @@ function run(db: DatabaseService, event: MessageEvent) {
     }
     const appendMessage = (message: SessionMessage.Info) => insertMessage(db, event, message)
     const adapter: SessionMessageUpdater.Adapter = {
+      getAgent() {
+        return db
+          .select({ agent: SessionTable.agent })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) => (row?.agent ? Agent.ID.make(row.agent) : undefined)),
+          )
+      },
       getModel() {
         return db
           .select({ model: SessionTable.model })
@@ -398,12 +410,15 @@ const layer = Layer.effectDiscard(
       db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie),
     )
     yield* bus.project(SessionEvent.AgentSelected, (event) =>
-      db
-        .update(SessionTable)
-        .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.created) })
-        .where(eq(SessionTable.id, event.data.sessionID))
-        .run()
-        .pipe(Effect.orDie, Effect.andThen(run(db, event))),
+      Effect.gen(function* () {
+        yield* run(db, event)
+        yield* db
+          .update(SessionTable)
+          .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.created) })
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
+      }),
     )
     yield* bus.project(SessionEvent.ModelSelected, (event) =>
       Effect.gen(function* () {

@@ -12733,6 +12733,9 @@
           },
           "agent": {
             "type": "string"
+          },
+          "previous": {
+            "type": "string"
           }
         },
         "required": ["id", "time", "type", "agent"],

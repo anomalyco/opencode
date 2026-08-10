@@ -42,6 +42,7 @@ export const AgentSelected = Schema.Struct({
   ...Base,
   type: Schema.tag("agent-switched"),
   agent: Agent.ID,
+  previous: Agent.ID.pipe(optional),
 }).annotate({ identifier: "Session.Message.AgentSelected" })
 
 export interface ModelSelected extends Schema.Schema.Type<typeof ModelSelected> {}

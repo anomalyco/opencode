@@ -41,6 +41,7 @@ export type SessionMessageAgentSelected = {
   time: { created: number }
   type: "agent-switched"
   agent: string
+  previous?: string
 }
 
 export type PromptBase64 = string
@@ -2535,6 +2536,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "agent-switched"
           readonly agent: string
+          readonly previous?: string
         }
       | {
           readonly id: string
@@ -2786,6 +2788,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "agent-switched"
           readonly agent: string
+          readonly previous?: string
         }
       | {
           readonly id: string
@@ -3037,6 +3040,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "agent-switched"
           readonly agent: string
+          readonly previous?: string
         }
       | {
           readonly id: string
