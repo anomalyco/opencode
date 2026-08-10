@@ -3,7 +3,6 @@ export * as SessionModelRequest from "./model-request.js"
 import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import type { Content } from "@opencode-ai/schema/tool"
-import { SessionError } from "@opencode-ai/schema/session-error"
 import { Cause, Config, Context, Effect, Layer, Result } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app.js"
@@ -46,6 +45,8 @@ const declineDefect = (cause: Cause.Cause<Tool.Error>) => {
 interface Prepared {
   readonly request: LLMRequest
   readonly options: StreamOptions
+  /** False when Session HTTP hooks require the request to remain on HTTP. */
+  readonly webSocketEligible: boolean
   /**
    * One request-scoped execution operation. Unknown, hook-removed, and
    * step-limit-violating calls fail individually through the same seam.
@@ -226,13 +227,17 @@ export const layer = Layer.effect(
         tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
         toolChoice: stepLimitReached ? "none" : undefined,
       })
-      const options: StreamOptions = {
-        http: SessionModelHttp.middleware(hooks, {
-          sessionID: session.id,
-          agent: agent.id,
-          model: resolved.ref,
-        }),
-      }
+      const webSocketEligible =
+        !(yield* hooks.has("session", "http.request")) && !(yield* hooks.has("session", "http.response"))
+      const options: StreamOptions = webSocketEligible
+        ? {}
+        : {
+            http: SessionModelHttp.middleware(hooks, {
+              sessionID: session.id,
+              agent: agent.id,
+              model: resolved.ref,
+            }),
+          }
       if (promptCacheSnapshots) {
         const current = PromptCacheDiagnostics.snapshot(request)
         const comparison = PromptCacheDiagnostics.compare(promptCacheSnapshots.get(session.id), current)
@@ -263,6 +268,7 @@ export const layer = Layer.effect(
       return {
         request,
         options,
+        webSocketEligible,
         executeTool,
         stepLimitReached,
       }
