@@ -23,6 +23,7 @@ import {
   LanguageModel,
   ProviderID,
   ProviderMetadata,
+  TransportReason,
   ToolResultValue,
   UnknownProviderReason,
   type ContentPart,
@@ -725,18 +726,29 @@ function llmError(method: string, error: unknown) {
     error instanceof AIError
       ? new InvalidProviderOutputReason({ message: error.message })
       : APICallError.isInstance(error)
-        ? RequestExecutor.classifyHttpFailure({
-            message: unknownErrorMessage(error),
-            url: error.url,
-            status: error.statusCode,
-            responseHeaders: error.responseHeaders,
-            responseBody: error.responseBody,
-          })
+        ? apiCallErrorReason(error)
         : new UnknownProviderReason({ message: unknownErrorMessage(error) })
   return new AIError({
     module: "AISDK",
     method,
     reason,
+  })
+}
+
+function apiCallErrorReason(error: APICallError) {
+  const reason = RequestExecutor.classifyHttpFailure({
+    message: unknownErrorMessage(error),
+    url: error.url,
+    status: error.statusCode,
+    responseHeaders: error.responseHeaders,
+    responseBody: error.responseBody,
+  })
+  if (error.statusCode !== undefined || !error.isRetryable) return reason
+  return new TransportReason({
+    message: reason.message,
+    kind: error.name,
+    url: error.url,
+    http: reason.http,
   })
 }
 

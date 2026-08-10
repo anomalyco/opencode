@@ -1,6 +1,7 @@
 import { APICallError } from "@ai-sdk/provider"
 import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
@@ -428,6 +429,20 @@ it.effect("classifies retryable AI SDK failures with retry-after details", () =>
   }),
 )
 
+it.effect("retries status-less AI SDK transport failures", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        message: "Cannot connect to API: connection refused",
+        isRetryable: true,
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "Transport", kind: "AI_APICallError" })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+    expect(toSessionError(error).http?.request.url).toBe("https://api.example.com/chat")
+  }),
+)
+
 it.effect("prefers a structured provider message over the code fallback", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(
@@ -445,6 +460,7 @@ it.effect("falls back to the status alone for malformed response bodies", () =>
     const error = yield* streamFailure(
       apiCallError({
         statusCode: 502,
+        isRetryable: false,
         responseBody: "<html>Bad Gateway</html>",
       }),
     )
