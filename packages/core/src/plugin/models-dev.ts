@@ -60,6 +60,7 @@ function environmentNames(provider: ModelsDev.Snapshot) {
 
 function snapshots(data: readonly ModelsDev.Snapshot[]) {
   return structuredClone(data)
+    // These deprecated aliases are replaced by the canonical Azure and Google Vertex providers.
     .filter(
       (provider) => provider.info.id !== "azure-cognitive-services" && provider.info.id !== "google-vertex-anthropic",
     )
