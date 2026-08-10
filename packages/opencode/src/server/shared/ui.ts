@@ -9,8 +9,11 @@ let embeddedUIPromise: Promise<Record<string, string> | null> | undefined
 export const UI_UPSTREAM = new URL("https://app.opencode.ai")
 
 export const csp = (...hashes: string[]) => {
-  const hashParts = hashes.filter(Boolean).map((h) => ` 'sha256-${h}'`).join("")
-  return `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hashParts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src * data:`
+  const hashParts = hashes
+    .filter(Boolean)
+    .map((h) => ` 'sha256-${h}'`)
+    .join("")
+  return `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hashParts}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; media-src 'self' data:; connect-src * data: blob:`
 }
 export const DEFAULT_CSP = csp()
 

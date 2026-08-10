@@ -95,6 +95,8 @@ export const dict = {
   "command.session.share.description": "Share this session and copy the URL to clipboard",
   "command.session.unshare": "Unshare session",
   "command.session.unshare.description": "Stop sharing this session",
+  "command.session.export": "Export session",
+  "command.session.export.description": "Export the full session transcript as JSON",
 
   "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.search.placeholder.home": "Search commands and sessions",
@@ -478,6 +480,7 @@ export const dict = {
   "dialog.releaseNotes.action.next": "Next",
   "dialog.releaseNotes.action.hideFuture": "Don't show these in the future",
   "dialog.releaseNotes.media.alt": "Release preview",
+  "dialog.usageExceeded.dontShowAgain": "Don't show again",
 
   "context.breakdown.title": "Context Breakdown",
   "context.breakdown.note": 'Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.',
@@ -489,6 +492,7 @@ export const dict = {
 
   "context.systemPrompt.title": "System Prompt",
   "context.rawMessages.title": "Raw messages",
+  "context.export.session": "Export session",
 
   "context.stats.session": "Session",
   "context.stats.messages": "Messages",
@@ -567,6 +571,11 @@ export const dict = {
   "toast.session.unshare.success.description": "Session unshared successfully!",
   "toast.session.unshare.failed.title": "Failed to unshare session",
   "toast.session.unshare.failed.description": "An error occurred while unsharing the session",
+
+  "toast.session.export.success.title": "Session exported",
+  "toast.session.export.success.description": "Saved session to {{filename}}",
+  "toast.session.export.failed.title": "Failed to export session",
+  "toast.session.export.failed.description": "An error occurred while exporting the session",
 
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
@@ -802,6 +811,7 @@ export const dict = {
   "common.moreOptions": "More options",
   "common.learnMore": "Learn more",
   "common.rename": "Rename",
+  "common.export": "Export",
   "common.reset": "Reset",
   "common.archive": "Archive",
   "common.delete": "Delete",
