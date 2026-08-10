@@ -193,6 +193,9 @@ export const dict = {
   "command.session.unshare": "Ukini dijeljenje sesije",
   "command.session.unshare.description": "Zaustavi dijeljenje ove sesije",
 
+  "command.session.export": "Izvezi sesiju",
+  "command.session.export.description": "Izvezi cijeli zapis sesije u JSON formatu",
+
   "palette.search.placeholder": "Pretraži datoteke, komande i sesije",
   "palette.search.placeholder.home": "Pretraži komande i sesije",
   "palette.empty": "Nema rezultata",
@@ -565,6 +568,8 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "Pokreće se nakon kreiranja novog radnog prostora (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "npr. bun install",
 
+  "dialog.usageExceeded.dontShowAgain": "Nemoj više prikazivati",
+
   "context.breakdown.title": "Razlaganje konteksta",
   "context.breakdown.note":
     'Približna raspodjela ulaznih tokena. "Ostalo" uključuje definicije alata i dodatno opterećenje.',
@@ -576,6 +581,8 @@ export const dict = {
 
   "context.systemPrompt.title": "Sistemski prompt",
   "context.rawMessages.title": "Sirove poruke",
+
+  "context.export.session": "Izvezi sesiju",
 
   "context.stats.session": "Sesija",
   "context.stats.messages": "Poruke",
@@ -654,6 +661,11 @@ export const dict = {
   "toast.session.unshare.success.description": "Dijeljenje sesije je uspješno ukinuto!",
   "toast.session.unshare.failed.title": "Neuspjelo ukidanje dijeljenja",
   "toast.session.unshare.failed.description": "Došlo je do greške prilikom ukidanja dijeljenja",
+
+  "toast.session.export.success.title": "Sesija izvezena",
+  "toast.session.export.success.description": "Sesija je sačuvana kao {{filename}}",
+  "toast.session.export.failed.title": "Izvoz sesije nije uspio",
+  "toast.session.export.failed.description": "Došlo je do greške prilikom izvoza sesije",
 
   "toast.session.listFailed.title": "Neuspjelo učitavanje sesija za {{project}}",
 
@@ -856,6 +868,7 @@ export const dict = {
   "common.moreOptions": "Više opcija",
   "common.learnMore": "Saznaj više",
   "common.rename": "Preimenuj",
+  "common.export": "Izvezi",
   "common.reset": "Vrati na početno stanje",
   "common.archive": "Arhiviraj",
   "common.delete": "Izbriši",

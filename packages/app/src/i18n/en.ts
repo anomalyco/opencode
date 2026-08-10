@@ -480,6 +480,7 @@ export const dict = {
   "dialog.releaseNotes.action.next": "Next",
   "dialog.releaseNotes.action.hideFuture": "Don't show these in the future",
   "dialog.releaseNotes.media.alt": "Release preview",
+  "dialog.usageExceeded.dontShowAgain": "Don't show again",
 
   "context.breakdown.title": "Context Breakdown",
   "context.breakdown.note": 'Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.',

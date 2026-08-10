@@ -184,6 +184,9 @@ export const dict = {
   "command.session.share.description": "مشاركة هذه الجلسة ونسخ الرابط إلى الحافظة",
   "command.session.unshare": "إلغاء مشاركة الجلسة",
   "command.session.unshare.description": "إيقاف مشاركة هذه الجلسة",
+  "command.session.export": "تصدير الجلسة",
+  "command.session.export.description": "تصدير النص الكامل للجلسة بصيغة JSON",
+
   "palette.search.placeholder": "البحث في الملفات والأوامر والجلسات",
   "palette.search.placeholder.home": "البحث في الأوامر والجلسات",
   "palette.empty": "لا توجد نتائج",
@@ -531,6 +534,8 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "برنامج نصي لبدء تشغيل مساحة العمل",
   "dialog.project.edit.worktree.startup.description": "يتم تشغيله بعد إنشاء مساحة عمل جديدة (شجرة عمل).",
   "dialog.project.edit.worktree.startup.placeholder": "مثال: bun install",
+  "dialog.usageExceeded.dontShowAgain": "عدم الإظهار مرة أخرى",
+
   "context.breakdown.title": "تفصيل السياق",
   "context.breakdown.note": 'تفصيل تقريبي لرموز الإدخال المميزة. يشمل "أخرى" تعريفات الأدوات والأعباء الإضافية.',
   "context.breakdown.system": "النظام",
@@ -540,6 +545,8 @@ export const dict = {
   "context.breakdown.other": "أخرى",
   "context.systemPrompt.title": "موجّه النظام",
   "context.rawMessages.title": "الرسائل الخام",
+  "context.export.session": "تصدير الجلسة",
+
   "context.stats.session": "جلسة",
   "context.stats.messages": "رسائل",
   "context.stats.provider": "موفر",
@@ -606,6 +613,11 @@ export const dict = {
   "toast.session.unshare.success.description": "تم إلغاء مشاركة الجلسة بنجاح!",
   "toast.session.unshare.failed.title": "فشل إلغاء مشاركة الجلسة",
   "toast.session.unshare.failed.description": "حدث خطأ أثناء إلغاء مشاركة الجلسة",
+  "toast.session.export.success.title": "تم تصدير الجلسة",
+  "toast.session.export.success.description": "تم حفظ الجلسة في \u2068{{filename}}\u2069",
+  "toast.session.export.failed.title": "فشل تصدير الجلسة",
+  "toast.session.export.failed.description": "حدث خطأ أثناء تصدير الجلسة",
+
   "toast.session.listFailed.title": "فشل تحميل الجلسات لـ {{project}}",
   "toast.update.title": "تحديث متاح",
   "toast.update.description": "يتوفر الآن إصدار جديد من OpenCode ({{version}}) للتثبيت.",
@@ -793,6 +805,7 @@ export const dict = {
   "common.moreOptions": "مزيد من الخيارات",
   "common.learnMore": "اطّلع على المزيد",
   "common.rename": "إعادة تسمية",
+  "common.export": "تصدير",
   "common.reset": "إعادة تعيين",
   "common.archive": "أرشفة",
   "common.delete": "حذف",

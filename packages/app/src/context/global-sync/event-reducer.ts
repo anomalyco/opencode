@@ -15,6 +15,7 @@ import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
+import { messageKey } from "@/utils/session-message"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const SESSION_CONTENT_EVENTS = new Set([
@@ -275,7 +276,7 @@ export function applyDirectoryEvent(input: {
         input.setStore("message", info.sessionID, [info])
         break
       }
-      const result = Binary.search(messages, info.id, (m) => m.id)
+      const result = Binary.search(messages, messageKey(info), messageKey)
       if (result.found) {
         input.setStore("message", info.sessionID, result.index, reconcile(info))
         break
@@ -295,8 +296,8 @@ export function applyDirectoryEvent(input: {
         produce((draft) => {
           const messages = draft.message[props.sessionID]
           if (messages) {
-            const result = Binary.search(messages, props.messageID, (m) => m.id)
-            if (result.found) messages.splice(result.index, 1)
+            const index = messages.findIndex((message) => message.id === props.messageID)
+            if (index >= 0) messages.splice(index, 1)
           }
           const parts = draft.part[props.messageID]
           if (parts) {
@@ -322,7 +323,7 @@ export function applyDirectoryEvent(input: {
         input.setStore("part", part.messageID, [part])
         break
       }
-      const result = Binary.search(parts, part.id, (p) => p.id)
+      const result = Binary.search(parts, part.id, (item) => item.id)
       if (result.found) {
         input.setStore("part", part.messageID, result.index, reconcile(part))
         break
@@ -345,13 +346,13 @@ export function applyDirectoryEvent(input: {
       )
       const parts = input.store.part[props.messageID]
       if (!parts) break
-      const result = Binary.search(parts, props.partID, (p) => p.id)
+      const result = Binary.search(parts, props.partID, (part) => part.id)
       if (result.found) {
         input.setStore(
           produce((draft) => {
             const list = draft.part[props.messageID]
             if (!list) return
-            const next = Binary.search(list, props.partID, (p) => p.id)
+            const next = Binary.search(list, props.partID, (part) => part.id)
             if (!next.found) return
             list.splice(next.index, 1)
             if (list.length === 0) delete draft.part[props.messageID]
@@ -364,7 +365,7 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as { messageID: string; partID: string; field: string; delta: string }
       const parts = input.store.part[props.messageID]
       if (!parts) break
-      const result = Binary.search(parts, props.partID, (p) => p.id)
+      const result = Binary.search(parts, props.partID, (part) => part.id)
       if (!result.found) break
       const field = props.field as keyof (typeof parts)[number]
       const current = parts[result.index]?.[field]
