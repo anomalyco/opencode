@@ -740,6 +740,23 @@
   color: var(--v2-text-text-muted);
 }
 
+.settings-v2-storage-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 0.5px solid var(--v2-border-border-muted);
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+}
+
+.settings-v2-storage-progress > span {
+  font-size: 11px;
+  font-weight: 440;
+  line-height: 14px;
+  color: var(--v2-text-text-muted);
+}
+
 .settings-v2-storage-section-heading {
   display: flex;
   align-items: center;
