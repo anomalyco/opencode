@@ -93,9 +93,10 @@ export const SettingsStorageV2: Component = () => {
     async () => unwrap<StorageProgressResponse>(await serverSdk().client.storage.progress()),
   )
 
-  const busy = () => state.operation !== undefined
+  const activeOperation = () => state.operation ?? progress()?.operation ?? undefined
+  const busy = () => activeOperation() !== undefined
   const operationVariant = (operation: Operation, fallback: "neutral" | "warning" | "danger" = "neutral") =>
-    state.operation === operation ? "loading" : fallback
+    activeOperation() === operation ? "loading" : fallback
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
   createEffect(() => {
@@ -286,6 +287,7 @@ export const SettingsStorageV2: Component = () => {
       index: "settings.storage.progress.index",
       analyze: "settings.storage.progress.analyze",
       backup: "settings.storage.progress.backup",
+      drain: "settings.storage.progress.drain",
       compact: "settings.storage.progress.compact",
       checkpoint: "settings.storage.progress.checkpoint",
       vacuum: "settings.storage.progress.vacuum",
@@ -304,6 +306,12 @@ export const SettingsStorageV2: Component = () => {
     if (!current) return ""
     if (!current.total) {
       return language.t("settings.storage.progress.workers", { count: formatCount(current.workers, locale()) })
+    }
+    if (current.phase === "drain") {
+      return language.t("settings.storage.progress.drainDetail", {
+        completed: formatCount(current.completed, locale()),
+        total: formatCount(current.total, locale()),
+      })
     }
     return language.t("settings.storage.progress.detail", {
       completed: formatCount(current.completed, locale()),

@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { DatabaseMaintenanceGate } from "@opencode-ai/core/database/maintenance-gate"
 import { BackgroundJob as CoreBackgroundJob } from "@opencode-ai/core/background-job"
 import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer } from "effect"
@@ -22,8 +23,14 @@ const layer = Layer.effect(
     return CoreBackgroundJob.Service.of({
       list: () => InstanceState.useEffect(state, (jobs) => jobs.list()),
       get: (id) => InstanceState.useEffect(state, (jobs) => jobs.get(id)),
-      start: (input) => InstanceState.useEffect(state, (jobs) => jobs.start(input)),
-      extend: (input) => InstanceState.useEffect(state, (jobs) => jobs.extend(input)),
+      start: (input) =>
+        InstanceState.useEffect(state, (jobs) =>
+          jobs.start({ ...input, run: DatabaseMaintenanceGate.waitForDetachedMutation(input.run) }),
+        ),
+      extend: (input) =>
+        InstanceState.useEffect(state, (jobs) =>
+          jobs.extend({ ...input, run: DatabaseMaintenanceGate.waitForDetachedMutation(input.run) }),
+        ),
       wait: (input) => InstanceState.useEffect(state, (jobs) => jobs.wait(input)),
       waitForPromotion: (id) => InstanceState.useEffect(state, (jobs) => jobs.waitForPromotion(id)),
       promote: (id) => InstanceState.useEffect(state, (jobs) => jobs.promote(id)),

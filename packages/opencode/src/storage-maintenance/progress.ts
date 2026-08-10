@@ -8,6 +8,7 @@ export type Phase =
   | "index"
   | "analyze"
   | "backup"
+  | "drain"
   | "compact"
   | "checkpoint"
   | "vacuum"
