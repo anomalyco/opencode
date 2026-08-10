@@ -9,7 +9,7 @@ import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { useGlobal } from "@/context/global"
 import { cleanPickerInput, createDirectorySearch, displayPickerPath } from "./directory-picker-domain"
-import type { Path } from "@opencode-ai/sdk/v2/client"
+import type { Path } from "@/types"
 
 interface DialogSelectDirectoryProps {
   title?: string
@@ -17,6 +17,8 @@ interface DialogSelectDirectoryProps {
   onSelect: (result: string | string[] | null) => void
   server: ServerConnection.Any
 }
+
+const RECENT_PROJECT_LIMIT = 5
 
 type Row = {
   absolute: string
@@ -57,16 +59,21 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const [filter, setFilter] = createSignal("")
   let list: ListRef | undefined
 
-  const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
-    () => (missingBase() ? true : undefined),
-    async (): Promise<Path | undefined> => {
-      if ((await sdk.protocol) !== "v1") return
-      return sdk.client.path
+    () => (!(sync.data.path.home || sync.data.path.directory) ? true : undefined),
+    () =>
+      sdk.api.location
         .get()
-        .then((result) => result.data)
-        .catch(() => undefined)
-    },
+        .then(
+          (location): Path => ({
+            state: "",
+            config: "",
+            worktree: location.project.directory,
+            directory: location.directory,
+            home: "",
+          }),
+        )
+        .catch(() => undefined),
     { initialValue: undefined },
   )
 
@@ -102,7 +109,6 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return projects
       .map((project, index) => ({ project, at: byProject.get(project.worktree) ?? 0, index }))
       .sort((a, b) => b.at - a.at || a.index - b.index)
-      .slice(0, 5)
       .map(({ project }) => {
         const row = toRow(project.worktree, home(), "recent")
         const name = project.name || getFilename(project.worktree)
@@ -116,7 +122,10 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const items = async (value: string) => {
     const results = await directories(value)
     const directoryRows = results.map((absolute) => toRow(absolute, home(), "folders"))
-    return uniqueRows([...recentProjects(), ...directoryRows])
+    // Cap the idle list only. Once a query narrows the results, every project stays searchable.
+    const recent = recentProjects()
+    const visible = value ? recent : recent.slice(0, RECENT_PROJECT_LIMIT)
+    return uniqueRows([...visible, ...directoryRows])
   }
 
   function resolve(absolute: string) {

@@ -77,7 +77,8 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
 export const configure = (input: Config = {}) => {
   return {
     id,
-    model: (modelID: string | ModelID) => configuredRoute(input, modelID).model({ id: modelID }),
+    model: (modelID: string | ModelID) =>
+      configuredRoute(input, modelID).model<Gemini.ProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }
@@ -86,7 +87,10 @@ export const provider = {
   id,
   configure,
 }
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<Settings, Gemini.ProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) => {
   if (settings.apiKey !== undefined && settings.accessToken !== undefined)
     throw new Error("Google Vertex apiKey cannot be combined with accessToken or auth")
   return configure({

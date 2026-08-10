@@ -43,14 +43,14 @@ describe("acp permission behavior", () => {
           permissionAsked("ses_allow", "perm_once", {
             action: "shell",
             metadata: { command: "printf hello" },
-            source: { type: "tool", messageID: "msg_allow", callID: "call_once" },
+            source: { type: "tool", messageID: "msg_allow", id: "call_once" },
           }),
         )
         send(
           permissionAsked("ses_allow", "perm_always", {
             action: "read",
             metadata: { path: "/workspace/file.ts" },
-            source: { type: "tool", messageID: "msg_allow", callID: "call_always" },
+            source: { type: "tool", messageID: "msg_allow", id: "call_always" },
           }),
         )
         send(durableEvent("session.execution.succeeded", { sessionID: "ses_allow" }))
@@ -153,6 +153,64 @@ describe("acp permission behavior", () => {
     }
   })
 
+  test("routes foreground child permissions through the parent ACP session", async () => {
+    const permissionRequests: RequestPermissionRequest[] = []
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(durableEvent("session.input.promoted", { sessionID: "ses_parent", inputID: id }))
+        send(
+          durableEvent("session.created", {
+            sessionID: "ses_child",
+            slug: "ses_child",
+            projectID: "project",
+            location: { directory: "/workspace" },
+            parentID: "ses_parent",
+            title: "Review code",
+            version: "test",
+          }),
+        )
+        send(durableEvent("session.execution.started", { sessionID: "ses_child" }))
+        send(
+          permissionAsked("ses_child", "perm_child", {
+            action: "read",
+            metadata: { path: "/workspace/child.ts" },
+            source: { type: "tool", messageID: "msg_child", id: "call_child" },
+          }),
+        )
+        send(durableEvent("session.execution.succeeded", { sessionID: "ses_child" }))
+        send(durableEvent("session.execution.succeeded", { sessionID: "ses_parent" }))
+      },
+    })
+    const connection = {
+      sessionUpdate: async () => {},
+      requestPermission: async (request) => {
+        permissionRequests.push(request)
+        return { outcome: { outcome: "selected", optionId: "once" } } as const
+      },
+    } satisfies Connection
+
+    try {
+      await startTurn(fixture, connection, "ses_parent", "input_parent")
+
+      expect(permissionRequests).toHaveLength(1)
+      expect(permissionRequests[0]).toMatchObject({
+        sessionId: "ses_parent",
+        toolCall: {
+          toolCallId: "ses_child:call_child",
+          title: "Review code: /workspace/child.ts",
+        },
+      })
+      expect(fixture.requests).toContainEqual(
+        expect.objectContaining({
+          method: "POST",
+          path: "/api/session/ses_child/permission/perm_child/reply",
+        }),
+      )
+    } finally {
+      await fixture.stop()
+    }
+  })
+
   test("previews edits during approval and syncs the completed file", async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-acp-permission-"))
     const file = path.join(cwd, "file.ts")
@@ -166,7 +224,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.input.started", {
             sessionID: "ses_edit",
             assistantMessageID: "msg_edit",
-            callID: "call_edit",
+            id: "call_edit",
             name: "edit",
           }),
         )
@@ -174,7 +232,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.called", {
             sessionID: "ses_edit",
             assistantMessageID: "msg_edit",
-            callID: "call_edit",
+            id: "call_edit",
             input: { path: "file.ts", oldString: "before", newString: "after" },
             executed: false,
           }),
@@ -182,7 +240,7 @@ describe("acp permission behavior", () => {
         send(
           permissionAsked("ses_edit", "perm_edit", {
             action: "edit",
-            source: { type: "tool", messageID: "msg_edit", callID: "call_edit" },
+            source: { type: "tool", messageID: "msg_edit", id: "call_edit" },
           }),
         )
       },
@@ -192,7 +250,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.success", {
             sessionID: "ses_edit",
             assistantMessageID: "msg_edit",
-            callID: "call_edit",
+            id: "call_edit",
             metadata: { files: [{ file: "file.ts" }], replacements: 1 },
             content: [{ type: "text", text: "edited" }],
             executed: true,
@@ -256,7 +314,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.input.started", {
             sessionID: "ses_patch",
             assistantMessageID: "msg_patch",
-            callID: "call_patch",
+            id: "call_patch",
             name: "patch",
           }),
         )
@@ -264,7 +322,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.called", {
             sessionID: "ses_patch",
             assistantMessageID: "msg_patch",
-            callID: "call_patch",
+            id: "call_patch",
             input: { patchText },
             executed: false,
           }),
@@ -272,7 +330,7 @@ describe("acp permission behavior", () => {
         send(
           permissionAsked("ses_patch", "perm_patch", {
             action: "edit",
-            source: { type: "tool", messageID: "msg_patch", callID: "call_patch" },
+            source: { type: "tool", messageID: "msg_patch", id: "call_patch" },
           }),
         )
       },
@@ -285,7 +343,7 @@ describe("acp permission behavior", () => {
           durableEvent("session.tool.success", {
             sessionID: "ses_patch",
             assistantMessageID: "msg_patch",
-            callID: "call_patch",
+            id: "call_patch",
             metadata: { files: [{ file: "first.ts" }, { file: "second.ts" }] },
             content: [{ type: "text", text: "patched" }],
             executed: true,
@@ -499,7 +557,7 @@ function permissionAsked(
   input: {
     readonly action?: string
     readonly metadata?: Record<string, unknown>
-    readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
+    readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
   } = {},
 ) {
   return ephemeralEvent("permission.asked", {

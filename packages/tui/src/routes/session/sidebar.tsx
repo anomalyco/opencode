@@ -1,14 +1,16 @@
 import { useData } from "../../context/data"
 import { createMemo, Show } from "solid-js"
-import { useThemes } from "../../context/theme"
+import { useTheme } from "../../context/theme"
 import { useConfig } from "../../config"
-import { PluginSlot } from "../../plugin/context"
+import { PluginSlot } from "../../plugin/render"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 
 import { getScrollAcceleration } from "../../util/scroll"
+import { SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const data = useData()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const config = useConfig().data
   const session = createMemo(() => data.session.get(props.sessionID))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -17,7 +19,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     <Show when={session()}>
       <box
         backgroundColor={theme.background.default}
-        width={42}
+        width={SESSION_SIDEBAR_WIDTH}
         height="100%"
         paddingTop={1}
         paddingBottom={1}
@@ -26,9 +28,15 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         position={props.overlay ? "absolute" : "relative"}
       >
         <scrollbox
+          ref={(scroll) =>
+            queueMicrotask(() => {
+              if (!scroll.isDestroyed) scroll.verticalScrollBar.resetVisibilityControl()
+            })
+          }
           flexGrow={1}
           scrollAcceleration={scrollAcceleration()}
           verticalScrollbarOptions={{
+            visible: false,
             trackOptions: {
               backgroundColor: theme.background.default,
               foregroundColor: theme.scrollbar.default,
@@ -38,7 +46,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           <box flexShrink={0} gap={1} paddingRight={1}>
             <box paddingRight={1}>
               <text fg={theme.text.default}>
-                <b>{session()!.title}</b>
+                <b>{withTimestampedFallback(session()!)}</b>
               </text>
               <Show when={session()!.location.workspaceID}>
                 <text fg={theme.text.subdued}>{session()!.location.workspaceID}</text>

@@ -1,11 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:xai-images",
-      "provider:xai",
-      "protocol:xai-images"
-    ],
+    "tags": ["prefix:xai-images", "provider:xai", "protocol:xai-images"],
     "name": "xai-images/generates-an-image",
     "recordedAt": "2026-07-19T15:56:20.098Z"
   },

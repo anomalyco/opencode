@@ -1,49 +1,36 @@
-import { PluginContextProvider, type Plugin } from "@opencode-ai/plugin/tui"
+import type { Plugin } from "@opencode-ai/plugin/tui"
+import { createMarkdownCodeBlockRenderer, type MarkdownCodeBlockRenderer, type MarkdownOptions } from "@opentui/core"
 import {
   batch,
   createContext,
+  createEffect,
   createMemo,
-  For,
+  on,
   onCleanup,
   onMount,
   useContext,
-  type JSX,
   type ParentProps,
 } from "solid-js"
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import type { Context, Dialog, Page, Slot, SlotMap, SlotName, Toast } from "@opencode-ai/plugin/tui/context"
+import type { Page, Slot, SlotName } from "@opencode-ai/plugin/tui/context"
 import { createStore, produce, reconcile as reconcileStore } from "solid-js/store"
-import { useRenderer } from "@opentui/solid"
-import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support/configure"
+import { isDeepEqual } from "remeda"
+import "#runtime-plugin-support"
 import { useConfig } from "../config"
-import { useClient } from "../context/client"
-import { useData } from "../context/data"
-import { Keymap } from "../context/keymap"
-import { useRoute } from "../context/route"
-import { useTuiApp, useTuiLifecycle, useTuiPaths } from "../context/runtime"
-import { useLocation } from "../context/location"
-import { useTheme, useThemes } from "../context/theme"
-import { DialogAlert } from "../ui/dialog-alert"
-import { DialogConfirm } from "../ui/dialog-confirm"
-import { DialogPrompt } from "../ui/dialog-prompt"
-import { DialogSelect } from "../ui/dialog-select"
-import { useDialog } from "../ui/dialog"
-import { useToast } from "../ui/toast"
-import { useAttention } from "../context/attention"
-import { abbreviateHome } from "../util/path-format"
+import { useTuiLifecycle } from "../context/runtime"
+import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
-import { discoverTuiPlugins } from "./discovery"
-
-ensureRuntimePluginSupport()
+import { createPluginContext, usePluginHost, type Dispose } from "./api"
+import { createSourceWatcher } from "./watch"
+import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
 
 export interface PackageResolver {
   readonly resolve: (spec: string) => Promise<string | undefined>
 }
 
 type State =
-  | { readonly target: string; readonly status: "loading" }
   | { readonly target: string; readonly id: string; readonly status: "active" | "inactive" }
   | { readonly target: string; readonly status: "unsupported" }
   | { readonly target: string; readonly status: "failed"; readonly error: string }
@@ -59,49 +46,60 @@ type Value = {
   readonly list: () => ReadonlyArray<State>
   readonly registered: () => ReadonlyArray<RegisteredPlugin>
   readonly route: (id: string, name: string) => Page["render"] | undefined
-  readonly slot: <Name extends SlotName>(name: Name) => ReadonlyArray<Slot<Name>>
+  readonly slot: <Name extends SlotName>(
+    name: Name,
+  ) => ReadonlyArray<{ readonly id: string; readonly render: Slot<Name> }>
+  readonly markdown: () => MarkdownOptions["renderNode"]
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
 }
 
-type Dispose = () => Promise<void>
 type Registration = {
   plugin: Plugin.Definition
   source: RegisteredPlugin["source"]
+  target?: string
+  version: string
   options?: Readonly<Record<string, any>>
   active: boolean
   routes: Record<string, Page>
   slots: Record<string, Slot>
+  markdown: Record<string, MarkdownCodeBlockRenderer>
   cleanups: Dispose[]
 }
 
+// One entry of the desired plugin generation produced by the resolve phase.
+type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "options"> & { enabled: boolean }
+
 const PluginContext = createContext<Value>()
 
-export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>) {
-  const renderer = useRenderer()
-  const client = useClient()
-  const data = useData()
-  const route = useRoute()
+export function combineMarkdownRenderers(
+  sources: ReadonlyArray<Readonly<Record<string, MarkdownCodeBlockRenderer>>>,
+): MarkdownOptions["renderNode"] {
+  const renderers = new Map<string, MarkdownCodeBlockRenderer>()
+  for (const source of sources) {
+    for (const [language, render] of Object.entries(source)) renderers.set(language, render)
+  }
+  if (renderers.size === 0) return undefined
+  return createMarkdownCodeBlockRenderer(renderers)
+}
+
+export function PluginProvider(props: ParentProps<{ packages: PackageResolver; directories: string[] }>) {
+  const host = usePluginHost()
   const config = useConfig()
-  const keymap = Keymap.use()
-  const shortcuts = Keymap.useShortcuts()
-  const keymapState = Keymap.useState()
   const lifecycle = useTuiLifecycle()
-  const app = useTuiApp()
-  const paths = useTuiPaths()
-  const location = useLocation()
-  const theme = useTheme()
-  const themes = useThemes()
-  const pluginTheme = createPluginTheme(theme, themes)
-  const dialog = useDialog()
-  const toast = useToast()
-  const attention = useAttention()
   const directory = config.path ? path.dirname(config.path) : process.cwd()
   const [store, setStore] = createStore({
     ready: false,
     states: [] as ReadonlyArray<State>,
     registrations: {} as Record<string, Registration>,
   })
+  const markdown = createMemo(() =>
+    combineMarkdownRenderers(
+      Object.values(store.registrations).flatMap((registration) =>
+        registration.active ? [registration.markdown] : [],
+      ),
+    ),
+  )
 
   const activate = async (id: string) => {
     const item = store.registrations[id]
@@ -110,197 +108,34 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     batch(() => {
       setStore("registrations", id, "routes", reconcileStore({}))
       setStore("registrations", id, "slots", reconcileStore({}))
+      setStore("registrations", id, "markdown", reconcileStore({}))
       setStore("registrations", id, "cleanups", [])
     })
     const owned: Dispose[] = []
-    let context: Context
-    const dialogApi: Dialog = {
-      show(render, onClose) {
-        dialog.replace(() => <PluginContextProvider value={context}>{render()}</PluginContextProvider>, onClose)
+    const context = createPluginContext({
+      host,
+      id,
+      options: item.options,
+      owned,
+      registry: {
+        has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
+        set: (kind: "routes" | "slots" | "markdown", name: string, value: Page | Slot | MarkdownCodeBlockRenderer) =>
+          setStore("registrations", id, kind, name, () => value),
+        remove: (kind, name) =>
+          setStore(
+            "registrations",
+            produce((registrations) => {
+              if (!registrations[id]) return
+              delete registrations[id][kind][name]
+            }),
+          ),
+        active: () => Boolean(store.registrations[id]?.active),
       },
-      set(options) {
-        dialog.setSize(options.size ?? "medium")
-        dialog.setCentered(options.centered ?? false)
-      },
-      clear() {
-        dialog.clear()
-      },
-      alert(options) {
-        return new Promise<void>((resolve) => {
-          let settled = false
-          const done = () => {
-            if (settled) return
-            settled = true
-            resolve()
-          }
-          dialogApi.show(() => <DialogAlert title={options.title} message={options.message} onConfirm={done} />, done)
-        })
-      },
-      confirm(options) {
-        return new Promise<boolean | undefined>((resolve) => {
-          let settled = false
-          const done = (result: boolean | undefined) => {
-            if (settled) return
-            settled = true
-            resolve(result)
-          }
-          dialogApi.show(
-            () => (
-              <DialogConfirm
-                title={options.title}
-                message={options.message}
-                label={options.label}
-                onConfirm={() => done(true)}
-                onCancel={() => done(false)}
-              />
-            ),
-            () => done(undefined),
-          )
-        })
-      },
-      prompt(options) {
-        return new Promise<string | undefined>((resolve) => {
-          let settled = false
-          const done = (result: string | undefined) => {
-            if (settled) return
-            settled = true
-            resolve(result)
-          }
-          dialogApi.show(
-            () => (
-              <DialogPrompt
-                title={options.title}
-                description={options.description ? () => <text>{options.description}</text> : undefined}
-                placeholder={options.placeholder}
-                value={options.value}
-                onConfirm={(value) => {
-                  done(value)
-                  dialogApi.clear()
-                }}
-              />
-            ),
-            () => done(undefined),
-          )
-        })
-      },
-      select(options) {
-        return new Promise((resolve) => {
-          let settled = false
-          const done = (result: (typeof options.options)[number]["value"] | undefined) => {
-            if (settled) return
-            settled = true
-            resolve(result)
-          }
-          dialogApi.show(
-            () => (
-              <DialogSelect
-                title={options.title}
-                placeholder={options.placeholder}
-                options={options.options.map((option) => ({ ...option }))}
-                current={options.current}
-                onSelect={(option) => {
-                  done(option.value)
-                  dialogApi.clear()
-                }}
-              />
-            ),
-            () => done(undefined),
-          )
-        })
-      },
-    }
-    const toastApi: Toast = {
-      show(options) {
-        toast.show({ ...options, variant: options.variant ?? "info" })
-      },
-    }
-    context = {
-      options: item.options ?? {},
-      get location() {
-        return location.current
-      },
-      app: { version: app.version, channel: app.channel },
-      renderer,
-      client: client.api,
-      data,
-      attention,
-      theme: pluginTheme,
-      keymap: {
-        layer: Keymap.createLayer,
-        dispatch: keymap.dispatch,
-        shortcuts: shortcuts.list,
-        commands: keymapState.commands,
-        pending: keymapState.pending,
-        active: keymapState.active,
-        mode: keymap.mode,
-      },
-      ui: {
-        dialog: dialogApi,
-        toast: toastApi,
-        format: {
-          path: (value) => abbreviateHome(value, paths.home),
-        },
-        router: {
-          register(page) {
-            if (store.registrations[item.plugin.id]?.routes[page.name])
-              throw new Error(`Route already registered: ${page.name}`)
-            setStore("registrations", item.plugin.id, "routes", page.name, {
-              ...page,
-              render: (input) => <PluginContextProvider value={context}>{page.render(input)}</PluginContextProvider>,
-            })
-            let registered = true
-            const unregister = () => {
-              if (!registered) return
-              registered = false
-              if (!store.registrations[item.plugin.id]?.active) return
-              setStore(
-                "registrations",
-                produce((registrations) => {
-                  if (!registrations[item.plugin.id]) return
-                  delete registrations[item.plugin.id].routes[page.name]
-                }),
-              )
-            }
-            owned.push(async () => unregister())
-            return unregister
-          },
-          navigate(destination) {
-            if (destination.type === "plugin") {
-              route.navigate({ ...destination, id: "id" in destination ? destination.id : item.plugin.id })
-              return
-            }
-            route.navigate(destination)
-          },
-          current() {
-            return route.data
-          },
-        },
-        slot(name, render) {
-          if (store.registrations[item.plugin.id]?.slots[name]) throw new Error(`Slot already registered: ${name}`)
-          setStore("registrations", item.plugin.id, "slots", name, () => (input: SlotMap[typeof name]) => (
-            <PluginContextProvider value={context}>{render(input)}</PluginContextProvider>
-          ))
-          let registered = true
-          const unregister = () => {
-            if (!registered) return
-            registered = false
-            if (!store.registrations[item.plugin.id]?.active) return
-            setStore(
-              "registrations",
-              produce((registrations) => {
-                if (!registrations[item.plugin.id]) return
-                delete registrations[item.plugin.id].slots[name]
-              }),
-            )
-          }
-          owned.push(async () => unregister())
-          return unregister
-        },
-      },
-    }
+    })
     const cleanup = await setup(item.plugin, context, owned).catch((error) => {
       setStore("registrations", id, "routes", reconcileStore({}))
       setStore("registrations", id, "slots", reconcileStore({}))
+      setStore("registrations", id, "markdown", reconcileStore({}))
       throw error
     })
     if (cleanup) owned.push(async () => cleanup())
@@ -329,6 +164,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         if (store.registrations[id]) {
           setStore("registrations", id, "routes", reconcileStore({}))
           setStore("registrations", id, "slots", reconcileStore({}))
+          setStore("registrations", id, "markdown", reconcileStore({}))
         }
         setStore("states", (items) =>
           items.map((state) =>
@@ -340,98 +176,242 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
     return true
   }
 
-  const reconcile = async () => {
-    await Promise.all(
-      Object.entries(store.registrations)
-        .filter(([, registration]) => registration.active)
-        .map(([id]) => deactivate(id)),
+  // Cleanup failures must not stop a swap or teardown, but they should not
+  // vanish either: the old generation may still own listeners or intervals.
+  const deactivateNoisily = (id: string) =>
+    deactivate(id).catch((error) =>
+      host.toast.show({ variant: "error", title: "Plugin", message: `${id}: cleanup failed: ${errorMessage(error)}` }),
     )
-    const entries = [...(await discoverTuiPlugins(paths.cwd)), ...(config.data.plugins ?? [])]
-    batch(() => {
-      setStore("registrations", reconcileStore({}))
-      setStore("states", [])
-    })
 
-    for (const plugin of builtins) {
-      setStore("registrations", plugin.id, {
-        plugin,
-        source: "builtin",
-        active: false,
-        routes: {},
-        slots: {},
-        cleanups: [],
-      })
-      await activate(plugin.id)
-    }
+  // Every lifecycle mutation — reconciles, manual dialog toggles, shutdown —
+  // is serialized through one chain so generations can never interleave.
+  let loading = Promise.resolve()
+  const enqueue = <T,>(task: () => Promise<T>) => {
+    const result = loading.catch(() => undefined).then(task)
+    loading = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
 
+  // Hot-reload local plugin sources: watch the discovery directory and any
+  // local entrypoints (see watch.ts for the mechanics), debounced into a
+  // serialized reconcile so bursts of events rebuild the generation once.
+  let pending: ReturnType<typeof setTimeout> | undefined
+  const watcher = createSourceWatcher(() => {
+    clearTimeout(pending)
+    pending = setTimeout(() => {
+      // Observe failures immediately: a plugin cleanup that throws would
+      // otherwise surface as an unhandled rejection until the next trigger.
+      void enqueue(reconcile).catch(() => undefined)
+    }, 100)
+  })
+  const stopWatching = () => {
+    clearTimeout(pending)
+    watcher.dispose()
+  }
+  onCleanup(stopWatching)
+
+  // Rebuild the plugin generation as resolve → compare → swap, mirroring the
+  // core plugin registry: fold the ordered entries into a desired end state
+  // (importing only new or changed sources, before anything running is
+  // touched), no-op when the generation is unchanged, and restart only the
+  // plugins that differ. Membership or order changes rebuild the whole
+  // generation to preserve slot-order semantics.
+  // Package resolution failures would otherwise retry a full npm install on
+  // every watch event; remember them until the configuration changes.
+  const npmFailures = new Map<string, string>()
+  const reconcile = async () => {
+    await Promise.all(props.directories.map(watcher.wait))
+    const entries = [...(await discoverTuiPlugins(props.directories)), ...(config.data.plugins ?? [])]
+
+    // Resolve: fold entries into one desired generation. A source that fails
+    // to import keeps its running previous version and only reports failure.
+    const desired = new Map<string, Desired>()
+    for (const plugin of builtins)
+      desired.set(plugin.id, { plugin, source: "builtin", version: "builtin", enabled: true })
+    const failures: State[] = []
     for (const entry of entries) {
       const target = typeof entry === "string" ? entry : entry.package
       if (target.startsWith("-")) {
-        for (const id of Object.keys(store.registrations).filter((id) => matches(target.slice(1), id)))
-          await deactivate(id)
+        for (const item of desired.values()) if (matches(target.slice(1), item.plugin.id)) item.enabled = false
         continue
       }
 
-      const selected = Object.keys(store.registrations).filter((id) => matches(target, id))
+      const selected = [...desired.values()].filter((item) => matches(target, item.plugin.id))
       if (selected.length || target === "*" || target.endsWith(".*") || target.startsWith("opencode.")) {
-        for (const id of selected) await activate(id)
+        for (const item of selected) item.enabled = true
         continue
       }
 
       const options = typeof entry === "string" ? undefined : entry.options
-      setStore("states", (items) => [...items, { target, status: "loading" }])
-      const plugin = await loadPlugin(target, directory, props.packages).catch((error) => {
-        setStore("states", (items) =>
-          items.map((state) =>
-            state.target === target
-              ? { target, status: "failed", error: error instanceof Error ? error.message : String(error) }
-              : state,
-          ),
-        )
-        return undefined
-      })
-      if (!plugin) {
-        setStore("states", (items) =>
-          items.map((state) =>
-            state.target === target && state.status !== "failed" ? { target, status: "unsupported" } : state,
-          ),
-        )
+      // Watch even when the resolve below fails so fixing a broken plugin reloads it.
+      const local = localSource(target, directory)
+      if (local) await watcher.add(fileURLToPath(local))
+      const previous = Object.values(store.registrations).find((registration) => registration.target === target)
+      const memo = local ? undefined : npmFailures.get(target)
+      const resolved = memo
+        ? { status: "failed" as const, error: memo }
+        : await resolvePlugin(target, local, options, previous, props.packages).catch((error) => ({
+            status: "failed" as const,
+            error: errorMessage(error),
+          }))
+      if (resolved.status === "unsupported") {
+        failures.push({ target, status: "unsupported" })
         continue
       }
-
-      setStore("registrations", plugin.id, {
-        plugin,
+      if (resolved.status === "failed") {
+        if (!local && !previous) npmFailures.set(target, resolved.error)
+        failures.push({
+          target,
+          status: "failed",
+          error: previous?.active ? `${resolved.error} (previous version still active)` : resolved.error,
+        })
+        if (previous)
+          desired.set(previous.plugin.id, {
+            plugin: previous.plugin,
+            source: previous.source,
+            target,
+            version: previous.version,
+            options: previous.options,
+            enabled: previous.active,
+          })
+        continue
+      }
+      desired.set(resolved.plugin.id, {
+        plugin: resolved.plugin,
         source: "external",
+        target,
+        version: resolved.version,
         options,
-        active: false,
-        routes: {},
-        slots: {},
-        cleanups: [],
+        enabled: true,
       })
-      const error = await activate(plugin.id).then(
-        () => undefined,
-        (error) => (error instanceof Error ? error.message : String(error)),
-      )
-      setStore("states", (items) => [
-        ...items.filter((state) => state.target !== target && (!("id" in state) || state.id !== plugin.id)),
-        error
-          ? { target, status: "failed", error }
-          : { target, id: plugin.id, status: "active" },
-      ])
     }
+
+    // Compare: unchanged plugins are never touched, and a fully unchanged
+    // generation is a no-op, so spurious watch events cost nothing.
+    const currentIds = Object.keys(store.registrations)
+    const desiredIds = [...desired.keys()]
+    const structural =
+      currentIds.length !== desiredIds.length || currentIds.some((id, index) => desiredIds[index] !== id)
+    if (structural) {
+      await Promise.all(
+        Object.entries(store.registrations)
+          .filter(([, registration]) => registration.active)
+          .map(([id]) => deactivateNoisily(id)),
+      )
+      setStore("registrations", reconcileStore({}))
+    }
+    const changed = structural
+      ? desiredIds
+      : desiredIds.filter((id) => {
+          const registration = store.registrations[id]!
+          const item = desired.get(id)!
+          // enabled derives from config directives alone, so config wins over
+          // manual dialog toggles on every reconcile — the same semantics
+          // config saves had before hot reload existed, just more frequent.
+          return (
+            registration.version !== item.version ||
+            !sameOptions(registration.options, item.options) ||
+            registration.active !== item.enabled
+          )
+        })
+
+    // Swap: cleanup failures surface as a toast, never propagate, so one
+    // broken plugin cannot take the rest of the generation down.
+    const errors = new Map<string, string>()
+    for (const id of changed) {
+      const item = desired.get(id)!
+      const registration = store.registrations[id]
+      const replaced =
+        !registration || registration.version !== item.version || !sameOptions(registration.options, item.options)
+      // Snapshot the running version before it is overwritten: an import
+      // failure keeps last-good in the resolve phase, and a setup failure
+      // must not cost the previous version either.
+      const fallback: Desired | undefined =
+        replaced && registration
+          ? {
+              plugin: registration.plugin,
+              source: registration.source,
+              target: registration.target,
+              version: registration.version,
+              options: registration.options,
+              enabled: registration.active,
+            }
+          : undefined
+      if (replaced) {
+        if (registration) await deactivateNoisily(id)
+        // In-place replacement keeps the registration's key position, which
+        // slot ordering (mode "replace" takes the last one) depends on.
+        setStore("registrations", id, toRegistration(item))
+      }
+      if (!item.enabled) {
+        await deactivateNoisily(id)
+        continue
+      }
+      const error = await activate(id).then(() => undefined, errorMessage)
+      if (!error) continue
+      errors.set(id, error)
+      if (!fallback) continue
+      setStore("registrations", id, toRegistration(fallback))
+      if (!fallback.enabled) continue
+      const restored = await activate(id).then(
+        () => true,
+        () => false,
+      )
+      if (restored) errors.set(id, `${error} (previous version still active)`)
+    }
+
+    const failedTargets = new Set(failures.map((failure) => failure.target))
+    const states: State[] = [
+      ...[...desired.values()].flatMap((item): State[] => {
+        if (item.target === undefined) return []
+        // A failed reload keeps this item running; the failure entry covers it.
+        if (failedTargets.has(item.target)) return []
+        const error = errors.get(item.plugin.id)
+        if (error) return [{ target: item.target, status: "failed", error }]
+        const status = store.registrations[item.plugin.id]?.active ? "active" : "inactive"
+        return [{ target: item.target, id: item.plugin.id, status }]
+      }),
+      ...failures,
+    ]
+    // Surface newly failing plugins; repeated reconciles stay silent.
+    for (const state of states)
+      if (
+        state.status === "failed" &&
+        !store.states.some(
+          (prev) => prev.status === "failed" && prev.target === state.target && prev.error === state.error,
+        )
+      )
+        host.toast.show({ variant: "error", title: "Plugin", message: `${state.target}: ${state.error}` })
+    setStore("states", reconcileStore(states))
   }
+  const slotItems = new WeakMap<Slot, { readonly id: string; readonly render: Slot }>()
+  createEffect(
+    on(
+      () => JSON.stringify(config.data.plugins ?? []),
+      () => {
+        npmFailures.clear()
+        void enqueue(reconcile).then(
+          () => setStore("ready", true),
+          () => setStore("ready", true),
+        )
+      },
+    ),
+  )
   onMount(() => {
-    const loading = reconcile()
     let disposing: Promise<void> | undefined
     const dispose = () => {
       if (disposing) return disposing
+      stopWatching()
       disposing = loading
         .catch(() => undefined)
         .then(() =>
           Promise.all(
             Object.entries(store.registrations)
               .filter(([, registration]) => registration.active)
-              .map(([id]) => deactivate(id)),
+              .map(([id]) => deactivate(id).catch(() => undefined)),
           ),
         )
         .then(() => setStore("registrations", reconcileStore({})))
@@ -442,7 +422,6 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
       unregister()
       void dispose()
     })
-    void loading.finally(() => setStore("ready", true))
   })
 
   return (
@@ -451,14 +430,30 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver }>
         ready: () => store.ready,
         list: () => store.states,
         registered: () =>
-          Object.entries(store.registrations).map(([id, plugin]) => ({ id, source: plugin.source, active: plugin.active })),
+          Object.entries(store.registrations).map(([id, plugin]) => ({
+            id,
+            source: plugin.source,
+            active: plugin.active,
+          })),
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
         slot: (name) =>
-          Object.values(store.registrations).flatMap((registration) =>
-            registration.active && registration.slots[name] ? [registration.slots[name]] : [],
-          ),
-        activate,
-        deactivate,
+          Object.entries(store.registrations).flatMap(([id, registration]) => {
+            const render = registration.active ? registration.slots[name] : undefined
+            if (!render) return []
+            // <For> diffs rows by reference; a stable wrapper per render
+            // function keeps untouched plugins' slot rows (and their state)
+            // alive across other plugins' reloads.
+            const cached = slotItems.get(render)
+            if (cached) return [cached]
+            const item = { id, render }
+            slotItems.set(render, item)
+            return [item]
+          }),
+        markdown,
+        // Manual dialog toggles join the same chain as reconciles so a
+        // toggle mid-reload cannot mix registrations across generations.
+        activate: (id) => enqueue(() => activate(id)),
+        deactivate: (id) => enqueue(() => deactivate(id)),
       }}
     >
       {props.children}
@@ -485,17 +480,46 @@ function matches(selector: string, id: string) {
   return selector === "*" || selector === id || (selector.endsWith(".*") && id.startsWith(selector.slice(0, -1)))
 }
 
-async function loadPlugin(spec: string, directory: string, packages: PackageResolver) {
-  const local = spec.startsWith("file://")
-    ? new URL(spec)
-    : spec.startsWith("./") || spec.startsWith("../") || path.isAbsolute(spec)
-      ? pathToFileURL(path.resolve(directory, spec))
-      : undefined
+async function resolvePlugin(
+  spec: string,
+  local: URL | undefined,
+  options: Readonly<Record<string, any>> | undefined,
+  previous: Registration | undefined,
+  packages: PackageResolver,
+) {
+  // Package entrypoints never change within a session, so a loaded previous
+  // version needs no re-resolution (which could otherwise hit npm).
+  if (!local && previous && sameOptions(previous.options, options))
+    return { status: "unchanged" as const, plugin: previous.plugin, version: previous.version }
   const entrypoint = local ? await resolveLocal(local) : await packages.resolve(spec)
-  if (!entrypoint) return
-  const mod: { readonly default?: unknown } = await import(entrypoint)
+  if (!entrypoint) return { status: "unsupported" as const }
+  // The cache-busted specifier doubles as the version: unique per entrypoint
+  // and mtime, so equal versions mean an identical module.
+  const version = local ? freshSpecifier(entrypoint, (await stat(new URL(entrypoint))).mtimeMs) : entrypoint
+  if (previous && previous.version === version && sameOptions(previous.options, options))
+    return { status: "unchanged" as const, plugin: previous.plugin, version }
+  const mod: { readonly default?: unknown } = await import(version)
   if (!isPlugin(mod.default)) throw new Error(`Invalid V2 TUI plugin module: ${spec}`)
-  return mod.default
+  return { status: "loaded" as const, plugin: mod.default, version }
+}
+
+function toRegistration(item: Desired): Registration {
+  return {
+    plugin: item.plugin,
+    source: item.source,
+    target: item.target,
+    version: item.version,
+    options: item.options,
+    active: false,
+    routes: {},
+    slots: {},
+    markdown: {},
+    cleanups: [],
+  }
+}
+
+function sameOptions(a: Registration["options"], b: Registration["options"]) {
+  return isDeepEqual(a ?? null, b ?? null)
 }
 
 async function resolveLocal(url: URL) {
@@ -525,52 +549,8 @@ function isPlugin(value: unknown): value is Plugin.Definition {
   )
 }
 
-type PluginTheme = ReturnType<typeof useTheme> & {
-  contextual(context: "elevated" | "overlay"): PluginTheme
-  syntaxStyle(): ReturnType<ReturnType<typeof useThemes>["currentSyntax"]>
-}
-
-export function createPluginTheme(theme: ReturnType<typeof useTheme>, themes: ReturnType<typeof useThemes>): PluginTheme {
-  return new Proxy(theme as PluginTheme, {
-    get(target, property, receiver) {
-      if (property === "contextual") {
-        return (context: "elevated" | "overlay") => createPluginTheme(themes.contextual(context), themes)
-      }
-      if (property === "syntaxStyle") return themes.currentSyntax
-      if (Reflect.has(target, property)) return Reflect.get(target, property, receiver)
-      return Reflect.get(themes, property, themes)
-    },
-  })
-}
-
 export function usePlugin() {
   const value = useContext(PluginContext)
   if (!value) throw new Error("PluginProvider is missing")
   return value
-}
-
-export function PluginRoute(props: { readonly fallback: (id: string, name: string) => JSX.Element }) {
-  const plugins = usePlugin()
-  const route = useRoute()
-  const content = createMemo(() => {
-    if (route.data.type !== "plugin") return
-    const render = plugins.route(route.data.id, route.data.name)
-    if (!render) return props.fallback(route.data.id, route.data.name)
-    return render({ data: route.data.data })
-  })
-  return <>{content()}</>
-}
-
-export function PluginSlot<Name extends SlotName>(props: {
-  readonly name: Name
-  readonly input: SlotMap[Name]
-  readonly mode: "all" | "replace"
-}) {
-  const plugins = usePlugin()
-  const renderers = createMemo(() => {
-    const items = plugins.slot(props.name)
-    if (props.mode === "replace") return items.slice(-1)
-    return items
-  })
-  return <For each={renderers()}>{(render) => render(props.input)}</For>
 }

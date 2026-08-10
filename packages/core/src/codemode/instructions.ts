@@ -6,7 +6,9 @@ import { Instructions } from "../instructions/index"
 import { CodeModeCatalog } from "./catalog"
 
 // prettier-ignore
-const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.${hasMoreTools ? `
+const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.
+
+${hasMoreTools ? "The Code Mode catalog and `search` results are" : "This catalog is"} the complete set of tools available within Code Mode. Tools presented elsewhere are not available in this runtime.${hasMoreTools ? `
 
 ## Search
 
@@ -124,7 +126,7 @@ ${render(current)}`
 const key = Instructions.Key.make("core/codemode")
 const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
 
-export const make = (entries?: ReadonlyArray<CodeModeCatalog.Entry>): Instructions.Instructions => {
+export const make = (entries?: ReadonlyArray<CodeModeCatalog.Entry>): Instructions.List => {
   const catalog = entries === undefined ? Instructions.removed : CodeModeCatalog.summarize(entries)
   return Instructions.make({
     key,

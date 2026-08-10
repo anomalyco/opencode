@@ -1,18 +1,9 @@
 export * as AgentPlugin from "./agent"
 
-import path from "path"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
 import { Agent } from "../agent"
-import { Global } from "@opencode-ai/util/global"
-import { Location } from "../location"
 import { Permission } from "../permission"
-
-// Combined output files written by the Shell service, e.g. `<data>/shell/<projectID>/<shellID>.out`.
-// Whitelisted so agents can read a command's full captured output without an external-directory prompt.
-const SHELL_OUTPUT_GLOB = path.join(Global.Path.data, "shell", "*", "*")
-const BUILD_SYSTEM =
-  "You are an AI coding agent. Help the user accomplish software engineering tasks by inspecting the workspace, making targeted changes, and using tools according to the configured permissions."
 
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
@@ -102,38 +93,12 @@ Rules:
 export const Plugin = define({
   id: "opencode.agent",
   effect: Effect.fn(function* (ctx) {
-    const location = yield* Location.Service
-    const worktree = location.directory
-    const whitelistedDirs = [SHELL_OUTPUT_GLOB, path.join(Global.Path.tmp, "*")]
-    const readonlyExternalDirectory: Permission.Ruleset = [
-      { action: "external_directory", resource: "*", effect: "ask" },
-      ...whitelistedDirs.map(
-        (resource): Permission.Rule => ({ action: "external_directory", resource, effect: "allow" }),
-      ),
-    ]
-    const defaults: Permission.Ruleset = [
-      { action: "*", resource: "*", effect: "allow" },
-      ...readonlyExternalDirectory,
-      { action: "question", resource: "*", effect: "deny" },
-      { action: "plan_enter", resource: "*", effect: "deny" },
-      { action: "plan_exit", resource: "*", effect: "deny" },
-      { action: "read", resource: "*", effect: "allow" },
-      { action: "read", resource: "*.env", effect: "ask" },
-      { action: "read", resource: "*.env.*", effect: "ask" },
-      { action: "read", resource: "*.env.example", effect: "allow" },
-    ]
-
     yield* ctx.agent.transform((draft) => {
       draft.update(Agent.defaultID, (item) => {
         item.name = Agent.Name.make("Build")
         item.description = "The default agent. Executes tools based on configured permissions."
         item.mode = "primary"
-        item.permissions.push(
-          ...Permission.merge(defaults, [
-            { action: "question", resource: "*", effect: "allow" },
-            { action: "plan_enter", resource: "*", effect: "allow" },
-          ]),
-        )
+        item.permissions.push({ action: "question", resource: "*", effect: "allow" })
       })
 
       draft.update(Agent.ID.make("plan"), (item) => {
@@ -141,18 +106,8 @@ export const Plugin = define({
         item.description = "Plan mode. Disallows all edit tools."
         item.mode = "primary"
         item.permissions.push(
-          ...Permission.merge(defaults, [
-            { action: "question", resource: "*", effect: "allow" },
-            { action: "plan_exit", resource: "*", effect: "allow" },
-            { action: "external_directory", resource: path.join(Global.Path.data, "plans", "*"), effect: "allow" },
-            { action: "edit", resource: "*", effect: "deny" },
-            { action: "edit", resource: path.join(".opencode", "plans", "*.md"), effect: "allow" },
-            {
-              action: "edit",
-              resource: path.relative(worktree, path.join(Global.Path.data, "plans", "*.md")),
-              effect: "allow",
-            },
-          ]),
+          { action: "question", resource: "*", effect: "allow" },
+          { action: "edit", resource: "*", effect: "deny" },
         )
       })
 
@@ -161,10 +116,16 @@ export const Plugin = define({
         item.description =
           "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel."
         item.mode = "subagent"
-        item.permissions.push(...Permission.merge(defaults, [{ action: "subagent", resource: "*", effect: "deny" }]))
+        item.permissions.push(
+          { action: "question", resource: "*", effect: "deny" },
+          { action: "subagent", resource: "*", effect: "deny" },
+        )
       })
 
       draft.update(Agent.ID.make("explore"), (item) => {
+        const externalDirectories = item.permissions.filter(
+          (rule) => rule.action === "external_directory" && rule.effect === "allow",
+        )
         item.name = Agent.Name.make("Explore")
         item.description =
           'Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'
@@ -172,7 +133,6 @@ export const Plugin = define({
         item.mode = "subagent"
         item.permissions.push(
           ...Permission.merge(
-            defaults,
             [
               { action: "*", resource: "*", effect: "deny" },
               { action: "grep", resource: "*", effect: "allow" },
@@ -180,9 +140,12 @@ export const Plugin = define({
               { action: "webfetch", resource: "*", effect: "allow" },
               { action: "websearch", resource: "*", effect: "allow" },
               { action: "read", resource: "*", effect: "allow" },
+              { action: "read", resource: "*.env", effect: "ask" },
+              { action: "read", resource: "*.env.*", effect: "ask" },
+              { action: "read", resource: "*.env.example", effect: "allow" },
               { action: "subagent", resource: "*", effect: "deny" },
             ],
-            readonlyExternalDirectory,
+            [{ action: "external_directory", resource: "*", effect: "ask" }, ...externalDirectories],
           ),
         )
       })
@@ -192,7 +155,7 @@ export const Plugin = define({
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_COMPACTION
-        item.permissions.push(...Permission.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
+        item.permissions.push({ action: "*", resource: "*", effect: "deny" })
       })
 
       draft.update(Agent.ID.make("title"), (item) => {
@@ -200,7 +163,7 @@ export const Plugin = define({
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_TITLE
-        item.permissions.push(...Permission.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
+        item.permissions.push({ action: "*", resource: "*", effect: "deny" })
       })
 
       draft.update(Agent.ID.make("summary"), (item) => {
@@ -208,7 +171,7 @@ export const Plugin = define({
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_SUMMARY
-        item.permissions.push(...Permission.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
+        item.permissions.push({ action: "*", resource: "*", effect: "deny" })
       })
     })
   }),

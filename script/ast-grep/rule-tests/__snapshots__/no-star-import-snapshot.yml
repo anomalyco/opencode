@@ -2,21 +2,21 @@ id: no-star-import
 snapshots:
   import * as Foo from "./foo":
     labels:
-    - source: '* as Foo'
-      style: primary
-      start: 7
-      end: 15
-    - source: import * as Foo from "./foo"
-      style: secondary
-      start: 0
-      end: 28
+      - source: "* as Foo"
+        style: primary
+        start: 7
+        end: 15
+      - source: import * as Foo from "./foo"
+        style: secondary
+        start: 0
+        end: 28
   import type * as Foo from "./foo":
     labels:
-    - source: '* as Foo'
-      style: primary
-      start: 12
-      end: 20
-    - source: import type * as Foo from "./foo"
-      style: secondary
-      start: 0
-      end: 33
+      - source: "* as Foo"
+        style: primary
+        start: 12
+        end: 20
+      - source: import type * as Foo from "./foo"
+        style: secondary
+        start: 0
+        end: 33

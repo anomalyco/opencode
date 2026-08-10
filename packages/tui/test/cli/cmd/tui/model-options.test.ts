@@ -1,5 +1,26 @@
 import { describe, expect, test } from "bun:test"
-import { sortModelOptions } from "../../../../src/component/dialog-model"
+import { prioritizeFavorites, sortModelOptions } from "../../../../src/component/dialog-model"
+
+describe("prioritizeFavorites", () => {
+  test("uses the favorite order captured when the dialog opened", () => {
+    const prioritized = prioritizeFavorites(
+      [
+        { title: "Best match", value: { providerID: "test", modelID: "best" } },
+        { title: "Favorite match", value: { providerID: "test", modelID: "favorite" } },
+        { title: "Second best match", value: { providerID: "test", modelID: "second-best" } },
+        { title: "Second favorite match", value: { providerID: "test", modelID: "second-favorite" } },
+      ],
+      new Set(["test/favorite", "test/second-favorite"]),
+    )
+
+    expect(prioritized.map((model) => model.title)).toEqual([
+      "Favorite match",
+      "Second favorite match",
+      "Best match",
+      "Second best match",
+    ])
+  })
+})
 
 describe("sortModelOptions", () => {
   test("orders opencode models before other providers", () => {

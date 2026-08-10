@@ -52,7 +52,10 @@ export const configure = (input: Config = {}) => {
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<Settings, AnthropicMessages.ProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) => {
   if (settings.apiKey !== undefined && settings.authToken !== undefined)
     throw new Error("Anthropic apiKey cannot be combined with authToken")
   return configure({

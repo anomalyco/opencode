@@ -1,31 +1,33 @@
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, createEffect, onCleanup, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { Keymap } from "../context/keymap"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
 import { useClipboard } from "../context/clipboard"
 import { useConfig } from "../config"
 
+export type DialogSize = "medium" | "large" | "xlarge"
+
+export function dialogWidth(size: DialogSize) {
+  if (size === "xlarge") return 116
+  if (size === "large") return 88
+  return 60
+}
+
 export function Dialog(
   props: ParentProps<{
-    size?: "medium" | "large" | "xlarge"
+    size?: DialogSize
     centered?: boolean
     onClose: () => void
   }>,
 ) {
   const dimensions = useTerminalDimensions()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const renderer = useRenderer()
 
   let dismiss = false
-  const width = () => {
-    if (props.size === "xlarge") return 116
-    if (props.size === "large") return 88
-    return 60
-  }
-
   return (
     <box
       onMouseDown={() => {
@@ -57,7 +59,7 @@ export function Dialog(
           dismiss = false
           e.stopPropagation()
         }}
-        width={width()}
+        width={dialogWidth(props.size ?? "medium")}
         maxWidth={dimensions().width - 2}
         backgroundColor={theme.background.default}
         paddingTop={1}
@@ -74,7 +76,7 @@ function init() {
       element: JSX.Element
       onClose?: () => void
     }[],
-    size: "medium" as "medium" | "large" | "xlarge",
+    size: "medium" as DialogSize,
     centered: false,
   })
 

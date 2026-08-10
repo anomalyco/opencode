@@ -28,6 +28,13 @@ export namespace FSUtil {
     readonly type: "file" | "directory" | "symlink" | "other"
   }
 
+  export interface UpOptions {
+    readonly targets: string[]
+    readonly start: string
+    readonly stop?: string
+    readonly mode?: "all" | "first"
+  }
+
   export interface Interface extends FileSystem.FileSystem {
     readonly isDir: (path: string) => Effect.Effect<boolean>
     readonly isFile: (path: string) => Effect.Effect<boolean>
@@ -40,7 +47,7 @@ export namespace FSUtil {
     readonly readDirectoryEntries: (path: string) => Effect.Effect<DirEntry[], Error>
     readonly resolve: (path: string) => Effect.Effect<string>
     readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
-    readonly up: (options: { targets: string[]; start: string; stop?: string }) => Effect.Effect<string[], Error>
+    readonly up: (options: UpOptions) => Effect.Effect<string[], Error>
     readonly globUp: (pattern: string, start: string, stop?: string) => Effect.Effect<string[], Error>
     readonly scan: (pattern: string, options?: Glob.Options) => Effect.Effect<string[], Error>
     readonly globMatch: (pattern: string, filepath: string) => boolean
@@ -153,27 +160,16 @@ export namespace FSUtil {
         })
       })
 
-      const findUp = Effect.fn("FileSystem.findUp")(function* (target: string, start: string, stop?: string) {
-        const result: string[] = []
-        let current = start
-        while (true) {
-          const search = join(current, target)
-          if (yield* fs.exists(search)) result.push(search)
-          if (stop === current) break
-          const parent = dirname(current)
-          if (parent === current) break
-          current = parent
-        }
-        return result
-      })
-
-      const up = Effect.fn("FileSystem.up")(function* (options: { targets: string[]; start: string; stop?: string }) {
+      const up = Effect.fn("FileSystem.up")(function* (options: UpOptions) {
         const result: string[] = []
         let current = options.start
         while (true) {
           for (const target of options.targets) {
             const search = join(current, target)
-            if (yield* fs.exists(search)) result.push(search)
+            if (yield* fs.exists(search)) {
+              result.push(search)
+              if (options.mode === "first") return result
+            }
           }
           if (options.stop === current) break
           const parent = dirname(current)
@@ -182,6 +178,10 @@ export namespace FSUtil {
         }
         return result
       })
+
+      const findUp = Effect.fn("FileSystem.findUp")((target: string, start: string, stop?: string) =>
+        up({ targets: [target], start, stop }),
+      )
 
       const globUp = Effect.fn("FileSystem.globUp")(function* (pattern: string, start: string, stop?: string) {
         const result: string[] = []

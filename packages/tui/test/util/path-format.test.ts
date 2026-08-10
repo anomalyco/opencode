@@ -11,7 +11,5 @@ test("formats relative, home, and foreign paths", () => {
   expect(formatPath("..\\shared\\a.ts", { base: "C:\\work\\project", forwardSlashes: true })).toBe(
     "C:/work/shared/a.ts",
   )
-  expect(
-    formatPath("C:\\Users\\test\\project", { base: "C:\\work", home: "C:\\Users\\test" }),
-  ).toBe("~/project")
+  expect(formatPath("C:\\Users\\test\\project", { base: "C:\\work", home: "C:\\Users\\test" })).toBe("~/project")
 })

@@ -36,7 +36,7 @@ export const configure = (input: Config) => {
   })
   return {
     id: ProviderID.make(provider),
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }
@@ -46,7 +46,10 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) =>
   configure({
     apiKey: settings.apiKey,
     baseURL: settings.baseURL,

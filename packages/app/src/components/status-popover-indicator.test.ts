@@ -35,7 +35,6 @@ describe("hasNonBlockingServiceIssue", () => {
   test("detects MCP failures that do not block chatting", () => {
     expect(hasNonBlockingServiceIssue({ mcp: ["failed"], lsp: [] })).toBe(true)
     expect(hasNonBlockingServiceIssue({ mcp: ["needs_auth"], lsp: [] })).toBe(true)
-    expect(hasNonBlockingServiceIssue({ mcp: ["needs_client_registration"], lsp: [] })).toBe(true)
     expect(hasNonBlockingServiceIssue({ mcp: ["connected", "pending", "disabled"], lsp: [] })).toBe(false)
   })
 
@@ -48,7 +47,6 @@ describe("hasNonBlockingServiceIssue", () => {
 describe("hasServiceNeedingAttention", () => {
   test("detects MCP states that need user attention", () => {
     expect(hasServiceNeedingAttention({ mcp: ["needs_auth"] })).toBe(true)
-    expect(hasServiceNeedingAttention({ mcp: ["needs_client_registration"] })).toBe(true)
   })
 
   test("ignores states that do not need user attention", () => {

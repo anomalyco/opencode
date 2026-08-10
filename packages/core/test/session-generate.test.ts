@@ -1,5 +1,13 @@
 import { expect } from "bun:test"
-import { LLMClient, LLMEvent, LLMResponse, Model, SystemPart, ToolDefinition, type LLMRequest } from "@opencode-ai/ai"
+import {
+  LLMClient,
+  LLMEvent,
+  LLMResponse,
+  LanguageModel,
+  SystemPart,
+  ToolDefinition,
+  type LLMRequest,
+} from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
@@ -15,7 +23,6 @@ import { Location } from "@opencode-ai/core/location"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
 import { ID } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Provider } from "@opencode-ai/core/provider"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -47,9 +54,8 @@ const requests: LLMRequest[] = []
 let instruction: string | Instructions.Unavailable = "Initial context"
 const sessionID = SessionSchema.ID.make("ses_generate_test")
 
-const model = Model.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
+const model = LanguageModel.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
 const client = Layer.mock(LLMClient.Service)({
-  prepare: () => Effect.die(new Error("unused")),
   stream: () => Stream.die(new Error("unused")),
   generate: (request) =>
     Effect.sync(() => {
@@ -127,6 +133,7 @@ const it = testEffect(
       SessionGenerateNode.node,
     ]),
     [
+      [Bus.node, Bus.configured({ persist: true })],
       [llmClient, client],
       [SessionRunnerModel.node, models],
       [InstructionBuiltIns.node, builtins],
@@ -193,11 +200,6 @@ const setup = Effect.gen(function* () {
     }),
   )
   yield* db
-    .insert(ProjectTable)
-    .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-    .run()
-    .pipe(Effect.orDie)
-  yield* db
     .insert(SessionTable)
     .values({
       id: sessionID,
@@ -254,19 +256,19 @@ it.effect("generates from fresh settled Session context without durable mutation
     yield* bus.publish(SessionEvent.Tool.Input.Started, {
       sessionID,
       assistantMessageID: activeAssistant,
-      callID: "active-call",
+      id: "active-call",
       name: "echo",
     })
     yield* bus.publish(SessionEvent.Tool.Input.Ended, {
       sessionID,
       assistantMessageID: activeAssistant,
-      callID: "active-call",
+      id: "active-call",
       text: "{}",
     })
     yield* bus.publish(SessionEvent.Tool.Called, {
       sessionID,
       assistantMessageID: activeAssistant,
-      callID: "active-call",
+      id: "active-call",
       input: {},
       executed: false,
     })
@@ -294,7 +296,7 @@ it.effect("generates from fresh settled Session context without durable mutation
     expect(requests[0]?.system[0]?.text).toBe("Hooked system")
     expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
     expect(requests[0]?.http?.headers).toMatchObject({ "X-Session-Id": sessionID })
-    expect(requests[0]?.providerOptions).toMatchObject({ openai: { promptCacheKey: sessionID } })
+    expect(requests[0]?.promptCacheKey).toBe(sessionID)
     const instructionUpdates = requests[0]?.messages.flatMap((message) =>
       message.role === "system"
         ? message.content.flatMap((content) => (content.type === "text" ? [content.text] : []))

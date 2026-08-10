@@ -36,6 +36,7 @@ export const groupNames = {
   "server.health": "health",
   "server.server": "server",
   "server.debug": "debug",
+  "server.migration": "migration",
   "server.location": "location",
   "server.agent": "agent",
   "server.plugin": "plugin",
@@ -61,6 +62,7 @@ export const groupNames = {
   "server.project": "project",
   "server.projectCopy": "projectCopy",
   "server.vcs": "vcs",
+  "server.config": "config",
 } as const
 
 export const promiseOmitEndpoints = new Set(["pty.connect", "pty.connectToken"])

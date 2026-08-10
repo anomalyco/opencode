@@ -1,7 +1,7 @@
 import type { HttpRecorder } from "@opencode-ai/http-recorder"
 import { describe } from "bun:test"
 import { Effect } from "effect"
-import type { Model } from "../src"
+import type { LanguageModel } from "../src"
 import { goldenScenarioTags, goldenScenarioTitle, runGoldenScenario, type GoldenScenarioID } from "./recorded-scenarios"
 import { recordedTests } from "./recorded-test"
 import { kebab } from "./recorded-utils"
@@ -22,7 +22,7 @@ type ScenarioInput =
 
 type TargetInput = {
   readonly name: string
-  readonly model: Model
+  readonly model: LanguageModel
   readonly protocol?: string
   readonly requires?: ReadonlyArray<string>
   readonly transport?: Transport

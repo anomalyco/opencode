@@ -25,7 +25,7 @@ import { SessionStore } from "./store"
 export interface Selection {
   readonly session: SessionSchema.Info
   readonly agent: Agent.Selection & { readonly info: Agent.Info }
-  readonly instructions: Instructions.Instructions
+  readonly instructions: Instructions.List
   readonly tools: Tool.Snapshot
 }
 

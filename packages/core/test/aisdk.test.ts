@@ -1,9 +1,10 @@
-import type { LanguageModelV3, LanguageModelV3CallOptions, LanguageModelV3StreamPart } from "@ai-sdk/provider"
+import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
-import { LLM, LLMError, LLMEvent, Message } from "@opencode-ai/ai"
+import { LLM, AIError, LLMEvent, Message } from "@opencode-ai/ai"
 import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
+import { compileRequest } from "@opencode-ai/ai/route/client"
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { testEffect } from "./lib/effect"
@@ -87,15 +88,30 @@ it.effect("projects request settings, headers, and body overlays", () =>
       headers: { "x-test": "header" },
       body: { safety_setting: "strict" },
     })
-    const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
-      LLM.request({ model: resolved, prompt: "Hello" }),
-    )
+    const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
 
     expect(prepared.body.providerOptions).toEqual({
       google: { thinkingConfig: { thinkingBudget: 1024 } },
     })
     expect(prepared.body.headers).toEqual({ "x-test": "header" })
     expect(body).toEqual({ safety_setting: "strict" })
+  }),
+)
+
+it.effect("leaves max output tokens unset when the request omits them", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model({
+      ...model("@openrouter/ai-sdk-provider"),
+      limit: { context: 500_000, output: 500_000 },
+    })
+    const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+
+    expect(prepared.body.maxOutputTokens).toBeUndefined()
   }),
 )
 
@@ -112,9 +128,7 @@ it.effect("maps pro reasoning bodies to AI SDK provider options", () =>
       ...model("@ai-sdk/openai"),
       body: { reasoning: { mode: "pro" } },
     })
-    const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
-      LLM.request({ model: resolved, prompt: "Hello" }),
-    )
+    const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
 
     expect(body).toBeUndefined()
     expect(prepared.body.providerOptions).toEqual({
@@ -139,9 +153,7 @@ it.effect("maps package-specific AI SDK provider option keys", () =>
     ] as const
     for (const [packageName, key, settings] of cases) {
       const resolved = yield* aisdk.model(model(packageName, { reasoningEffort: "high" }))
-      const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
-        LLM.request({ model: resolved, prompt: "Hello" }),
-      )
+      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
       expect(prepared.body.providerOptions).toEqual({ [key]: settings })
     }
   }),
@@ -155,17 +167,13 @@ it.effect("forces reasoning and projects both Azure AI SDK namespaces", () =>
     })
 
     const openai = yield* aisdk.model(model("@ai-sdk/openai", { reasoningEffort: "high" }))
-    const openaiPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
-      LLM.request({ model: openai, prompt: "Hello" }),
-    )
+    const openaiPrepared = yield* compileRequest(LLM.request({ model: openai, prompt: "Hello" }))
     expect(openaiPrepared.body.providerOptions).toEqual({
       openai: { reasoningEffort: "high", forceReasoning: true },
     })
 
     const azure = yield* aisdk.model(model("@ai-sdk/azure", { reasoningEffort: "high" }))
-    const azurePrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
-      LLM.request({ model: azure, prompt: "Hello" }),
-    )
+    const azurePrepared = yield* compileRequest(LLM.request({ model: azure, prompt: "Hello" }))
     expect(azurePrepared.body.providerOptions).toEqual({
       openai: { reasoningEffort: "high", forceReasoning: true },
       azure: { reasoningEffort: "high", forceReasoning: true },
@@ -187,9 +195,7 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
       }),
       modelID: Model.ID.make("anthropic/claude-sonnet-5"),
     })
-    const anthropicPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
-      LLM.request({ model: anthropic, prompt: "Hello" }),
-    )
+    const anthropicPrepared = yield* compileRequest(LLM.request({ model: anthropic, prompt: "Hello" }))
     expect(anthropicPrepared.body.providerOptions).toEqual({
       gateway: { order: ["anthropic"] },
       anthropic: { thinking: { type: "adaptive" } },
@@ -199,9 +205,7 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
       ...model("@ai-sdk/gateway", { reasoningConfig: { type: "enabled" } }),
       modelID: Model.ID.make("amazon/nova-2-lite"),
     })
-    const bedrockPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
-      LLM.request({ model: bedrock, prompt: "Hello" }),
-    )
+    const bedrockPrepared = yield* compileRequest(LLM.request({ model: bedrock, prompt: "Hello" }))
     expect(bedrockPrepared.body.providerOptions).toEqual({
       bedrock: { reasoningConfig: { type: "enabled" } },
     })
@@ -210,9 +214,7 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
       ...model("@ai-sdk/gateway", { reasoningEffort: "high" }),
       modelID: Model.ID.make("deepseek/deepseek-v4"),
     })
-    const fallbackPrepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
-      LLM.request({ model: fallback, prompt: "Hello" }),
-    )
+    const fallbackPrepared = yield* compileRequest(LLM.request({ model: fallback, prompt: "Hello" }))
     expect(fallbackPrepared.body.providerOptions).toEqual({
       deepseek: { reasoningEffort: "high" },
     })
@@ -228,7 +230,7 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
 
     const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
     expect(resolved.route.providerMetadataKey).toBe("anthropic")
-    const prepared = yield* LLMClient.prepare<LanguageModelV3CallOptions>(
+    const prepared = yield* compileRequest(
       LLM.request({
         model: resolved,
         messages: [
@@ -331,7 +333,7 @@ it.effect("keeps malformed provider-executed AI SDK input terminal", () =>
       Effect.flip,
     )
 
-    expect(error).toBeInstanceOf(LLMError)
+    expect(error).toBeInstanceOf(AIError)
     expect(error.message).toContain("Invalid JSON input for aisdk tool call web_search")
   }),
 )

@@ -164,13 +164,13 @@ function text(value: unknown): string | undefined {
   return next || undefined
 }
 
-function sourceKey(messageID: string, callID: string) {
-  return `${messageID}\u0000${callID}`
+function sourceKey(messageID: string, id: string) {
+  return `${messageID}\u0000${id}`
 }
 
 function permissionTool(request: PermissionRequest, tools: Map<string, SessionMessageAssistantTool>) {
   if (request.source?.type !== "tool") return request
-  const tool = tools.get(sourceKey(request.source.messageID, request.source.callID))
+  const tool = tools.get(sourceKey(request.source.messageID, request.source.id))
   return tool ? { ...request, tool } : request
 }
 
@@ -444,7 +444,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       ...new Set(
         permissions.flatMap((request) => {
           if (request.source?.type !== "tool") return []
-          const key = sourceKey(request.source.messageID, request.source.callID)
+          const key = sourceKey(request.source.messageID, request.source.id)
           return child.toolSources.has(key) ? [] : [request.source.messageID]
         }),
       ),
@@ -475,7 +475,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       permissions.some(
         (request) =>
           request.source?.type === "tool" &&
-          !child.toolSources.has(sourceKey(request.source.messageID, request.source.callID)),
+          !child.toolSources.has(sourceKey(request.source.messageID, request.source.id)),
       )
     )
       throw new Error("Permission source tool is unavailable")
@@ -653,6 +653,10 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       }
       return
     }
+    if (event.type === "session.input.cancelled") {
+      child.prompts.delete(event.data.inputID)
+      return
+    }
     if (event.type === "session.step.started") {
       touch(child, event.created)
       if (child.label === FALLBACK_LABEL && event.data.agent) child.label = Locale.titlecase(event.data.agent)
@@ -737,12 +741,12 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.tool.input.started") {
-      if (child.finishedTools.has(sourceKey(event.data.assistantMessageID, event.data.callID))) return
+      if (child.finishedTools.has(sourceKey(event.data.assistantMessageID, event.data.id))) return
       childTool(
         child,
         {
           type: "tool",
-          id: event.data.callID,
+          id: event.data.id,
           name: event.data.name,
           state: { status: "streaming", input: "" },
           time: { created: event.created },
@@ -752,7 +756,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.tool.input.delta" || event.type === "session.tool.input.ended") {
-      const current = child.tools.get(sourceKey(event.data.assistantMessageID, event.data.callID))
+      const current = child.tools.get(sourceKey(event.data.assistantMessageID, event.data.id))
       if (!current || current.part.state.status !== "streaming") return
       childTool(
         child,
@@ -769,14 +773,14 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.tool.called") {
-      const key = sourceKey(event.data.assistantMessageID, event.data.callID)
+      const key = sourceKey(event.data.assistantMessageID, event.data.id)
       if (child.finishedTools.has(key)) return
       const current = child.tools.get(key)
       childTool(
         child,
         {
           type: "tool",
-          id: event.data.callID,
+          id: event.data.id,
           name: current?.part.name ?? "tool",
           executed: event.data.executed,
           providerState: event.data.state,
@@ -790,7 +794,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.tool.progress") {
-      const key = sourceKey(event.data.assistantMessageID, event.data.callID)
+      const key = sourceKey(event.data.assistantMessageID, event.data.id)
       if (child.finishedTools.has(key)) return
       const current = child.tools.get(key)
       const part = current?.part
@@ -798,7 +802,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         child,
         {
           type: "tool",
-          id: event.data.callID,
+          id: event.data.id,
           name: part?.name ?? "tool",
           executed: part?.executed,
           providerState: part?.providerState,
@@ -819,7 +823,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       return
     }
     if (event.type === "session.tool.success" || event.type === "session.tool.failed") {
-      const key = sourceKey(event.data.assistantMessageID, event.data.callID)
+      const key = sourceKey(event.data.assistantMessageID, event.data.id)
       if (child.finishedTools.has(key)) return
       const current = child.tools.get(key)
       const part = current?.part
@@ -828,7 +832,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         child,
         {
           type: "tool",
-          id: event.data.callID,
+          id: event.data.id,
           name: part?.name ?? "tool",
           executed: event.data.executed,
           providerState: part?.providerState,
@@ -947,11 +951,11 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       if (!active(signal)) return
       if (event.type === "session.tool.input.started") {
         if (canonicalToolName(event.data.name) === "subagent")
-          pendingCalls.set(sourceKey(event.data.assistantMessageID, event.data.callID), {})
+          pendingCalls.set(sourceKey(event.data.assistantMessageID, event.data.id), {})
         return
       }
       if (event.type === "session.tool.called") {
-        const key = sourceKey(event.data.assistantMessageID, event.data.callID)
+        const key = sourceKey(event.data.assistantMessageID, event.data.id)
         if (pendingCalls.has(key)) pendingCalls.set(key, event.data.input)
         return
       }
@@ -961,7 +965,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         event.type !== "session.tool.failed"
       )
         return
-      const key = sourceKey(event.data.assistantMessageID, event.data.callID)
+      const key = sourceKey(event.data.assistantMessageID, event.data.id)
       const pending = pendingCalls.get(key)
       if (event.type !== "session.tool.progress") pendingCalls.delete(key)
       const found = childSessionID(record(event.data.metadata))

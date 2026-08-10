@@ -1,4 +1,4 @@
-import type { IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode-ai/client/promise"
+import type { FormAnswer, IntegrationMethod, IntegrationOauthConnectOutput } from "@opencode-ai/client/promise"
 import { useQueryClient } from "@tanstack/solid-query"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
@@ -41,7 +41,8 @@ export function createProviderConnectionController(options: {
   const [store, setStore] = createStore({
     methodIndex: undefined as number | undefined,
     authorization: undefined as Authorization | undefined,
-    state: "pending" as "pending" | "complete" | "error" | "prompt" | undefined,
+    formAnswer: undefined as FormAnswer | undefined,
+    state: "pending" as "pending" | "complete" | "error" | "form" | undefined,
     error: undefined as string | undefined,
   })
   const polling = {
@@ -56,7 +57,8 @@ export function createProviderConnectionController(options: {
   type Action =
     | { type: "method.select"; index: number }
     | { type: "method.reset" }
-    | { type: "auth.prompt" }
+    | { type: "auth.form" }
+    | { type: "auth.answer"; answer: FormAnswer | undefined }
     | { type: "auth.pending" }
     | { type: "auth.complete"; authorization: Authorization }
     | { type: "auth.error"; error: string }
@@ -67,6 +69,7 @@ export function createProviderConnectionController(options: {
         if (action.type === "method.select") {
           draft.methodIndex = action.index
           draft.authorization = undefined
+          draft.formAnswer = undefined
           draft.state = undefined
           draft.error = undefined
           return
@@ -74,12 +77,19 @@ export function createProviderConnectionController(options: {
         if (action.type === "method.reset") {
           draft.methodIndex = undefined
           draft.authorization = undefined
+          draft.formAnswer = undefined
           draft.state = undefined
           draft.error = undefined
           return
         }
-        if (action.type === "auth.prompt") {
-          draft.state = "prompt"
+        if (action.type === "auth.form") {
+          draft.state = "form"
+          draft.error = undefined
+          return
+        }
+        if (action.type === "auth.answer") {
+          draft.formAnswer = action.answer
+          draft.state = undefined
           draft.error = undefined
           return
         }
@@ -146,14 +156,22 @@ export function createProviderConnectionController(options: {
     }
     polling.timer = setTimeout(() => void poll(authorization, generation), options.pollInterval ?? 1_000)
   }
-  const select = async (index: number, inputs?: Record<string, string>) => {
+  const select = async (index: number, answer?: FormAnswer) => {
     cancelPolling()
     const generation = polling.generation
     const selected = methods()[index]
     dispatch({ type: "method.select", index })
+    if (selected.form?.length && !answer) {
+      dispatch({ type: "auth.form" })
+      return
+    }
+    if (selected.type === "key") {
+      dispatch({ type: "auth.answer", answer })
+      return
+    }
     if (selected.type !== "oauth") return
-    if (selected.prompts?.length && !inputs) {
-      dispatch({ type: "auth.prompt" })
+    if (selected.form?.some((field) => field.type !== "string")) {
+      dispatch({ type: "auth.error", error: "This authentication form contains unsupported fields" })
       return
     }
     dispatch({ type: "auth.pending" })
@@ -161,7 +179,7 @@ export function createProviderConnectionController(options: {
       .api.integration.oauth.connect({
         integrationID: options.provider(),
         methodID: selected.id,
-        inputs: inputs ?? {},
+        ...(answer ? { answer } : {}),
         location: location(),
       })
       .then((response) => ({ ok: true as const, authorization: response.data }))
@@ -182,7 +200,12 @@ export function createProviderConnectionController(options: {
     dispatch({ type: "method.reset" })
   }
   const connectKey = async (key: string) => {
-    await serverSDK().api.integration.connect.key({ integrationID: options.provider(), location: location(), key })
+    await serverSDK().api.integration.connect.key({
+      integrationID: options.provider(),
+      location: location(),
+      key,
+      ...(store.formAnswer ? { answer: store.formAnswer } : {}),
+    })
     await finish()
   }
   const completeCode = async (code: string) => {

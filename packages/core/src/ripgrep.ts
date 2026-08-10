@@ -3,8 +3,9 @@ export * as Ripgrep from "./ripgrep"
 import { Context, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Entry, Match } from "@opencode-ai/schema/filesystem"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { AppProcess, collectStream, waitForAbort } from "@opencode-ai/util/process"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { collectStream, waitForAbort } from "@opencode-ai/util/process"
+import { Environment } from "./environment"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
 import { RipgrepBinary } from "./ripgrep/binary"
 
@@ -52,6 +53,7 @@ export interface FindInput {
   readonly cwd: string
   readonly pattern: string
   readonly limit: number
+  readonly exclude?: readonly string[]
   readonly hidden?: boolean
   readonly follow?: boolean
   readonly signal?: AbortSignal
@@ -92,7 +94,7 @@ const isInvalidPattern = (stderr: string) =>
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const process = yield* AppProcess.Service
+    const environment = yield* Environment.Service
     const binary = yield* RipgrepBinary.Service
 
     const run = <A>(input: {
@@ -106,7 +108,8 @@ const layer = Layer.effect(
     }) => {
       const program = Effect.scoped(
         Effect.gen(function* () {
-          const handle = yield* process.spawn(
+          // Hosted environments will resolve rg through their driver image; the spawner is the execution seam.
+          const handle = yield* environment.spawner.spawn(
             ChildProcess.make(yield* binary.filepath, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
           )
           const stderrFiber = yield* collectStream(handle.stderr, ERROR_BYTES).pipe(
@@ -195,6 +198,7 @@ const layer = Layer.effect(
             ...(input.hidden ? ["--hidden"] : []),
             ...(input.follow ? ["--follow"] : []),
             ...(input.pattern === "*" ? [] : [`--glob=${input.pattern}`]),
+            ...(input.exclude ?? []).map((pattern) => `--glob=!${pattern}`),
             "--glob=!**/.git/**",
             ".",
           ],
@@ -273,4 +277,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer: layer, deps: [RipgrepBinary.node, AppProcess.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node, RipgrepBinary.node] })

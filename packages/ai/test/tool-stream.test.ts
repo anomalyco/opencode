@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLMError } from "../src/schema"
+import { AIError } from "../src/schema"
 import { ToolStream } from "../src/protocols/utils/tool-stream"
 import { it } from "./lib/effect"
 
@@ -67,7 +67,7 @@ describe("ToolStream", () => {
     Effect.gen(function* () {
       const error = ToolStream.appendExisting(ADAPTER, ToolStream.empty<number>(), 0, "{}", "missing tool")
 
-      expect(error).toBeInstanceOf(LLMError)
+      expect(error).toBeInstanceOf(AIError)
       if (ToolStream.isError(error)) expect(error.reason.message).toBe("missing tool")
     }),
   )

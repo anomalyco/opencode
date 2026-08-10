@@ -18,8 +18,8 @@ import {
   FinishReason,
   InvalidProviderOutputReason,
   LLMEvent,
-  LLMError,
-  Model,
+  AIError,
+  LanguageModel,
   ProviderID,
   ProviderMetadata,
   ToolResultValue,
@@ -182,7 +182,7 @@ export interface Interface {
   readonly runSDK: (event: SDKEvent) => Effect.Effect<SDKEvent>
   readonly runLanguage: (event: LanguageEvent) => Effect.Effect<LanguageEvent>
   readonly language: (model: Info) => Effect.Effect<LanguageModelV3, InitError>
-  readonly model: (model: Info) => Effect.Effect<Model, InitError>
+  readonly model: (model: Info) => Effect.Effect<LanguageModel, InitError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/AISDK") {}
@@ -299,8 +299,6 @@ export const locationLayer = Layer.effect(
   }),
 )
 
-export const defaultLayer = locationLayer
-
 function modelFromLanguage(info: Info, language: LanguageModelV3) {
   const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)
@@ -332,7 +330,7 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
               body: projected.body === undefined ? undefined : { ...projected.body },
               headers: info.headers,
             },
-      limits: { context: info.limit.context, output: info.limit.output },
+      limits: { context: info.limit.context, input: info.limit.input, output: info.limit.output },
       providerOptions,
     },
     body: {
@@ -340,11 +338,12 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
       from: (request) => Effect.succeed(callOptions(request)),
     },
     with: () => route,
-    model: (input) => Model.make({ ...input, provider: "provider" in input ? input.provider : info.providerID, route }),
+    model: (input) =>
+      LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : info.providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
     streamPrepared: (prepared) => streamLanguage(language, prepared as LanguageModelV3CallOptions),
   }
-  return Model.make({
+  return LanguageModel.make({
     id: info.modelID ?? info.id,
     provider: info.providerID,
     route,
@@ -414,7 +413,7 @@ function mapBodyToProviderOptions(model: Info, packageName: string) {
 function callOptions(request: LLMRequest): LanguageModelV3CallOptions {
   return {
     prompt: prompt(request),
-    maxOutputTokens: request.generation?.maxTokens ?? request.model.route.defaults.limits?.output,
+    maxOutputTokens: request.generation?.maxTokens,
     temperature: request.generation?.temperature,
     stopSequences: request.generation?.stop === undefined ? undefined : [...request.generation.stop],
     topP: request.generation?.topP,
@@ -557,7 +556,7 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
 function streamPartEvents(
   state: { step: number; toolNames: Record<string, string> },
   event: LanguageModelV3StreamPart,
-): Effect.Effect<ReadonlyArray<LLMEvent>, LLMError> {
+): Effect.Effect<ReadonlyArray<LLMEvent>, AIError> {
   switch (event.type) {
     case "stream-start":
     case "response-metadata":
@@ -722,10 +721,10 @@ function messageValue(input: unknown) {
 
 function llmError(method: string, error: unknown) {
   const reason =
-    error instanceof LLMError
+    error instanceof AIError
       ? new InvalidProviderOutputReason({ message: error.message })
       : new UnknownProviderReason({ message: error instanceof Error ? error.message : String(error) })
-  return new LLMError({
+  return new AIError({
     module: "AISDK",
     method,
     reason,

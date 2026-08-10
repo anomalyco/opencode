@@ -268,7 +268,6 @@ const session = {
 
 const admission = {
   data: {
-    admittedSeq: 0,
     id: "msg_test",
     sessionID: "ses_test",
     type: "user",
@@ -281,7 +280,6 @@ const admission = {
 const compactionAdmission = {
   data: {
     type: "compaction",
-    admittedSeq: 1,
     id: "msg_compaction",
     sessionID: "ses_test",
     timeCreated: 1_717_171_717_000,

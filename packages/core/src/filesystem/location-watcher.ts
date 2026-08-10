@@ -3,7 +3,7 @@ export * as LocationWatcher from "./location-watcher"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Stream } from "effect"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
-import os from "os"
+import { Document } from "@opencode-ai/schema/config"
 import path from "path"
 import { Config } from "../config"
 import { Bus } from "../bus"
@@ -11,15 +11,6 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "../git"
 import { Location } from "../location"
 import { Watcher } from "./watcher"
-import { Ignore } from "./ignore"
-import { Protected } from "./protected"
-
-function protecteds(dir: string) {
-  return Protected.paths().filter((item) => {
-    const relative = path.relative(dir, item)
-    return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
-  })
-}
 
 export interface Interface {}
 
@@ -42,22 +33,8 @@ const layer = Layer.effect(
 
     yield* Effect.gen(function* () {
       const config = (yield* configService.entries())
-        .filter((entry): entry is Config.Document => entry.type === "document")
+        .filter((entry): entry is Document => entry.type === "document")
         .flatMap((item) => item.info.watcher?.ignore ?? [])
-      const home = path.resolve(location.directory) === path.resolve(os.homedir())
-
-      if (!home && location.vcs) {
-        yield* watcher
-          .subscribe({
-            path: location.directory,
-            type: "directory",
-            ignore: [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)],
-          })
-          .pipe(Stream.runForEach(publish), Effect.forkScoped)
-      }
-      if (home) {
-        yield* Effect.logInfo("location watcher skipped home directory", { directory: location.directory })
-      }
 
       if (location.vcs?.type === "git") {
         const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
@@ -65,12 +42,16 @@ const layer = Layer.effect(
           ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved)))
           : undefined
         if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
-          const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
-            (entry) => (entry.name === "HEAD" ? [] : [entry.name]),
-          )
-          yield* watcher
-            .subscribe({ path: vcs, type: "directory", ignore })
-            .pipe(Stream.runForEach(publish), Effect.forkScoped)
+          const updates = yield* watcher.subscribe({ path: path.join(vcs, "HEAD"), type: "file" })
+          yield* updates.pipe(Stream.runForEach(publish), Effect.forkScoped)
+        }
+      }
+      if (location.vcs?.type === "hg") {
+        const store = location.vcs.store
+        const vcs = yield* fs.realPath(store).pipe(Effect.catch(() => Effect.succeed(store)))
+        if (!config.includes(".hg") && !config.includes(vcs)) {
+          const updates = yield* watcher.subscribe({ path: path.join(vcs, "branch"), type: "file" })
+          yield* updates.pipe(Stream.runForEach(publish), Effect.forkScoped)
         }
       }
     }).pipe(

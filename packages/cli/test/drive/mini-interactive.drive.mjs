@@ -17,7 +17,9 @@ export default defineScript({
       const session = `mini-stage2-${process.pid}`
       const snapshots = path.join(artifacts, "mini-stage2")
       const explicitDirectory = path.join(artifacts, "explicit-model")
-      yield* Effect.promise(() => Promise.all([snapshots, explicitDirectory].map((dir) => mkdir(dir, { recursive: true }))))
+      yield* Effect.promise(() =>
+        Promise.all([snapshots, explicitDirectory].map((dir) => mkdir(dir, { recursive: true }))),
+      )
       /** @param {string} directory @param {string | undefined} model */
       const mini = (directory, model) => [
         "env",
@@ -169,14 +171,7 @@ export default defineScript({
 
         yield* Effect.promise(() => tmux(["clear-history", "-t", session]))
         yield* Effect.promise(() =>
-          tmux([
-            "respawn-pane",
-            "-k",
-            "-t",
-            session,
-            "--",
-            ...mini(explicitDirectory, "simulation/gpt-sim-model"),
-          ]),
+          tmux(["respawn-pane", "-k", "-t", session, "--", ...mini(explicitDirectory, "simulation/gpt-sim-model")]),
         )
         const explicitModel = yield* Effect.promise(() => waitForPane(session, "Simulated Model", 15_000))
         yield* Effect.promise(() => Bun.write(path.join(snapshots, "07-explicit-model.txt"), explicitModel))

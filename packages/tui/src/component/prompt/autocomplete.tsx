@@ -12,17 +12,19 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
 import { useConfig } from "../../config"
 import { useLocation } from "../../context/location"
-import { useThemes } from "../../context/theme"
+import { useTheme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
 import type { PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { Keymap } from "../../context/keymap"
-import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
+import { displayCharAt, mentionTriggerIndex, slashTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/client"
+import { Skill } from "@opencode-ai/schema/skill"
 import { stringWidth } from "../../util/string-width"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
+import { moveSelection, revealSelectionOffset } from "../../ui/select-controller"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
@@ -38,6 +40,7 @@ export type AutocompleteOption = {
   isDirectory?: boolean
   onSelect?: () => void
   path?: string
+  kind?: "skill"
 }
 
 export function Autocomplete(props: {
@@ -50,6 +53,8 @@ export function Autocomplete(props: {
   ref: (ref: AutocompleteRef) => void
   fileStyleId: number
   agentStyleId: number
+  skillStyleId: number
+  hasSkill: (id: string) => boolean
   promptPartTypeId: () => number
 }) {
   const editor = useEditorContext()
@@ -57,7 +62,7 @@ export function Autocomplete(props: {
   const data = useData()
   const keymap = Keymap.use()
   const keymapCommands = Keymap.useCommands()
-  const theme = useThemes().contextual("overlay")
+  const theme = useTheme("overlay")
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const config = useConfig().data
@@ -139,14 +144,17 @@ export function Autocomplete(props: {
     text: string,
     part:
       | { type: "file"; value: NonNullable<PromptInfo["files"]>[number]; path?: string }
-      | { type: "agent"; value: NonNullable<PromptInfo["agents"]>[number] },
+      | { type: "agent"; value: NonNullable<PromptInfo["agents"]>[number] }
+      | { type: "skill"; value: NonNullable<PromptInfo["skills"]>[number] },
   ) {
+    if (part.type === "skill" && props.hasSkill(part.value.id)) return
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
 
     const charAfterCursor = displayCharAt(props.value, currentCursorOffset)
     const needsSpace = charAfterCursor !== " "
-    const append = "@" + text + (needsSpace ? " " : "")
+    const prefix = part.type === "skill" ? "/" : "@"
+    const append = prefix + text + (needsSpace ? " " : "")
 
     input.cursorOffset = store.index
     const startCursor = input.logicalCursor
@@ -156,11 +164,12 @@ export function Autocomplete(props: {
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
     input.insertText(append)
 
-    const virtualText = "@" + text
+    const virtualText = prefix + text
     const extmarkStart = store.index
     const extmarkEnd = extmarkStart + stringWidth(virtualText)
 
-    const styleId = part.type === "file" ? props.fileStyleId : props.agentStyleId
+    const styleId =
+      part.type === "file" ? props.fileStyleId : part.type === "skill" ? props.skillStyleId : props.agentStyleId
 
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
@@ -191,6 +200,20 @@ export function Autocomplete(props: {
         const index = files.length
         files.push(part.value)
         props.setExtmark({ type: "file", index }, extmarkId)
+        return
+      }
+
+      if (part.type === "skill") {
+        const skills = (draft.skills ??= [])
+        if (skills.some((skill) => skill.id === part.value.id)) return
+        if (part.value.mention) {
+          part.value.mention.start = extmarkStart
+          part.value.mention.end = extmarkEnd
+          part.value.mention.text = virtualText
+        }
+        const index = skills.length
+        skills.push(part.value)
+        props.setExtmark({ type: "skill", index }, extmarkId)
         return
       }
 
@@ -432,7 +455,12 @@ export function Autocomplete(props: {
       results.push({
         display: "/" + skill.id,
         description: skill.description,
-        onSelect: () => insertSlash(skill.id),
+        kind: "skill",
+        onSelect: () =>
+          insertPart(skill.id, {
+            type: "skill",
+            value: { id: Skill.ID.make(skill.id), mention: { start: 0, end: 0, text: "" } },
+          }),
       })
     }
 
@@ -462,7 +490,11 @@ export function Autocomplete(props: {
     // it shouldn't be additionally sorted by fuzzysort as it will loose the results
     const fileOptions: AutocompleteOption[] = store.visible === "@" ? fileSearch.options : []
     const nonFileOptions: AutocompleteOption[] =
-      store.visible === "@" ? [...referenceAliasesValue, ...agentsValue, ...mcpResources()] : [...commandsValue]
+      store.visible === "@"
+        ? [...referenceAliasesValue, ...agentsValue, ...mcpResources()]
+        : store.index === 0
+          ? [...commandsValue]
+          : commandsValue.filter((item) => item.kind === "skill")
 
     if (!searchValue) {
       return [...nonFileOptions, ...fileOptions]
@@ -501,28 +533,25 @@ export function Autocomplete(props: {
   function move(direction: -1 | 1) {
     if (!store.visible) return
     if (!options().length) return
-    let next = store.selected + direction
-    if (next < 0) next = options().length - 1
-    if (next >= options().length) next = 0
-    moveTo(next)
+    moveTo(moveSelection(store.selected, { count: options().length, delta: direction, policy: "wrap" }))
   }
 
   function moveTo(next: number) {
     setStore("selected", next)
     if (!scroll) return
-    const viewportHeight = Math.min(height(), options().length)
-    const scrollBottom = scroll.scrollTop + viewportHeight
-    if (next < scroll.scrollTop) {
-      scroll.scrollBy(next - scroll.scrollTop)
-    } else if (next + 1 > scrollBottom) {
-      scroll.scrollBy(next + 1 - scrollBottom)
-    }
+    const offset = revealSelectionOffset(scroll.scrollTop, {
+      count: options().length,
+      limit: Math.min(height(), options().length),
+      selected: next,
+    })
+    if (offset === scroll.scrollTop) return
+    scroll.scrollBy(offset - scroll.scrollTop)
   }
 
   function select() {
     const selected = options()[store.selected]
     if (!selected) return
-    hide()
+    hide(true)
     selected.onSelect?.()
   }
 
@@ -610,14 +639,18 @@ export function Autocomplete(props: {
     })
   }
 
-  function hide() {
-    const text = props.input().plainText
-    if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
-      const cursor = props.input().logicalCursor
-      props.input().deleteRange(0, 0, cursor.row, cursor.col)
+  function hide(removeToken = false) {
+    if (removeToken && store.visible === "/") {
+      const input = props.input()
+      const cursorOffset = input.cursorOffset
+      input.cursorOffset = store.index
+      const start = input.logicalCursor
+      input.cursorOffset = cursorOffset
+      const end = input.logicalCursor
+      input.deleteRange(start.row, start.col, end.row, end.col)
       // Sync the prompt store immediately since onContentChange is async
       props.setPrompt((draft) => {
-        draft.text = props.input().plainText
+        draft.text = input.plainText
       })
     }
     setStore("visible", false)
@@ -642,9 +675,7 @@ export function Autocomplete(props: {
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
             // There is a space between the trigger and the cursor
-            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
-            // "/<command>" is not the sole content
-            (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
+            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/)
           ) {
             hide()
           }
@@ -655,10 +686,10 @@ export function Autocomplete(props: {
         const offset = props.input().cursorOffset
         if (offset === 0) return
 
-        // Check for "/" at position 0 - reopen slash commands
-        if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
+        const slash = slashTriggerIndex(value, offset)
+        if (slash !== undefined) {
           show("/")
-          setStore("index", 0)
+          setStore("index", slash)
           return
         }
 

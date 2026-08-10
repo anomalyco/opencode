@@ -16,10 +16,10 @@ Define each server by a unique name under `mcp.servers` in your [OpenCode config
     "servers": {
       "my-server": {
         "type": "local",
-        "command": ["npx", "-y", "example-mcp-server"]
-      }
-    }
-  }
+        "command": ["npx", "-y", "example-mcp-server"],
+      },
+    },
+  },
 }
 ```
 
@@ -32,10 +32,10 @@ Servers connect automatically unless `disabled` is `true`. There is no V2 `enabl
       "my-server": {
         "type": "local",
         "command": ["npx", "-y", "example-mcp-server"],
-        "disabled": true
-      }
-    }
-  }
+        "disabled": true,
+      },
+    },
+  },
 }
 ```
 
@@ -52,31 +52,27 @@ A local server is a command that OpenCode starts using the MCP stdio transport.
     "servers": {
       "everything": {
         "type": "local",
-        "command": [
-          "npx",
-          "-y",
-          "@modelcontextprotocol/server-everything"
-        ],
+        "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
         "cwd": ".",
         "environment": {
           "LOG_LEVEL": "info",
-          "MCP_API_KEY": "{env:MCP_API_KEY}"
-        }
-      }
-    }
-  }
+          "MCP_API_KEY": "{env:MCP_API_KEY}",
+        },
+      },
+    },
+  },
 }
 ```
 
-| Field | Required | Description |
-| --- | --- | --- |
-| `type` | Yes | Must be `"local"`. |
-| `command` | Yes | Executable followed by its arguments. |
-| `cwd` | No | Process working directory. Relative paths resolve from the workspace directory; the workspace is the default. |
-| `environment` | No | String environment variables added to the inherited OpenCode process environment. |
-| `disabled` | No | Set to `true` to prevent the server from connecting. Defaults to `false`. |
-| `codemode` | No | Set to `false` to expose the server's tools directly to the model instead of through Code Mode. Defaults to `true`. |
-| `timeout` | No | Per-server timeout overrides. |
+| Field         | Required | Description                                                                                                         |
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `type`        | Yes      | Must be `"local"`.                                                                                                  |
+| `command`     | Yes      | Executable followed by its arguments.                                                                               |
+| `cwd`         | No       | Process working directory. Relative paths resolve from the workspace directory; the workspace is the default.       |
+| `environment` | No       | String environment variables added to the inherited OpenCode process environment.                                   |
+| `disabled`    | No       | Set to `true` to prevent the server from connecting. Defaults to `false`.                                           |
+| `codemode`    | No       | Set to `false` to expose the server's tools directly to the model instead of through Code Mode. Defaults to `true`. |
+| `timeout`     | No       | Per-server timeout overrides.                                                                                       |
 
 Use `{env:NAME}` to substitute an environment variable while loading config. Shell expressions such as `$NAME` are not expanded in JSON strings.
 
@@ -94,23 +90,23 @@ A remote server uses the MCP Streamable HTTP transport. Its `url` must be a vali
         "url": "https://mcp.context7.com/mcp",
         "oauth": false,
         "headers": {
-          "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
-        }
-      }
-    }
-  }
+          "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}",
+        },
+      },
+    },
+  },
 }
 ```
 
-| Field | Required | Description |
-| --- | --- | --- |
-| `type` | Yes | Must be `"remote"`. |
-| `url` | Yes | Streamable HTTP endpoint. |
-| `headers` | No | String HTTP headers sent to the MCP endpoint. |
-| `oauth` | No | OAuth client settings, or `false` to disable OAuth support. |
-| `disabled` | No | Set to `true` to prevent the server from connecting. Defaults to `false`. |
-| `codemode` | No | Set to `false` to expose the server's tools directly to the model instead of through Code Mode. Defaults to `true`. |
-| `timeout` | No | Per-server timeout overrides. |
+| Field      | Required | Description                                                                                                         |
+| ---------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `type`     | Yes      | Must be `"remote"`.                                                                                                 |
+| `url`      | Yes      | Streamable HTTP endpoint.                                                                                           |
+| `headers`  | No       | String HTTP headers sent to the MCP endpoint.                                                                       |
+| `oauth`    | No       | OAuth client settings, or `false` to disable OAuth support.                                                         |
+| `disabled` | No       | Set to `true` to prevent the server from connecting. Defaults to `false`.                                           |
+| `codemode` | No       | Set to `false` to expose the server's tools directly to the model instead of through Code Mode. Defaults to `true`. |
+| `timeout`  | No       | Per-server timeout overrides.                                                                                       |
 
 Use `oauth: false` for a server that exclusively uses an API key or another header-based credential.
 
@@ -127,10 +123,10 @@ For a server that supports dynamic client registration, only the remote server i
     "servers": {
       "sentry": {
         "type": "remote",
-        "url": "https://mcp.sentry.dev/mcp"
-      }
-    }
-  }
+        "url": "https://mcp.sentry.dev/mcp",
+      },
+    },
+  },
 }
 ```
 
@@ -165,21 +161,21 @@ If the provider issued client credentials, configure them using V2's snake_case 
           "client_secret": "{env:MCP_CLIENT_SECRET}",
           "scope": "tools:read tools:execute",
           "callback_port": 19876,
-          "redirect_uri": "http://127.0.0.1:19876/callback"
-        }
-      }
-    }
-  }
+          "redirect_uri": "http://127.0.0.1:19876/callback",
+        },
+      },
+    },
+  },
 }
 ```
 
-| OAuth field | Description |
-| --- | --- |
-| `client_id` | Pre-registered OAuth client ID. If omitted, OpenCode attempts dynamic client registration. |
-| `client_secret` | Client secret for a pre-registered client. |
-| `scope` | Space-delimited scopes to request. |
-| `callback_port` | Local callback port, from `1` through `65535`. An available ephemeral port is used by default. |
-| `redirect_uri` | Pre-registered loopback redirect URI. Its path and port must reach the local callback listener. |
+| OAuth field     | Description                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| `client_id`     | Pre-registered OAuth client ID. If omitted, OpenCode attempts dynamic client registration.      |
+| `client_secret` | Client secret for a pre-registered client.                                                      |
+| `scope`         | Space-delimited scopes to request.                                                              |
+| `callback_port` | Local callback port, from `1` through `65535`. An available ephemeral port is used by default.  |
+| `redirect_uri`  | Pre-registered loopback redirect URI. Its path and port must reach the local callback listener. |
 
 Remove stored credentials with:
 
@@ -198,26 +194,26 @@ Timeouts are positive integer milliseconds. Configure defaults under `mcp.timeou
     "timeout": {
       "startup": 45000,
       "catalog": 30000,
-      "execution": 600000
+      "execution": 600000,
     },
     "servers": {
       "slow-tools": {
         "type": "remote",
         "url": "https://mcp.example.com/mcp",
         "timeout": {
-          "catalog": 60000
-        }
-      }
-    }
-  }
+          "catalog": 60000,
+        },
+      },
+    },
+  },
 }
 ```
 
-| Timeout | Default | Applies to |
-| --- | --- | --- |
-| `startup` | 30 seconds | Establishing the transport and initializing the server. |
-| `catalog` | 30 seconds | Listing tools, prompts, resources, and resource templates. |
-| `execution` | 12 hours | Calling tools, getting prompts, and reading resources. |
+| Timeout     | Default    | Applies to                                                 |
+| ----------- | ---------- | ---------------------------------------------------------- |
+| `startup`   | 30 seconds | Establishing the transport and initializing the server.    |
+| `catalog`   | 30 seconds | Listing tools, prompts, resources, and resource templates. |
+| `execution` | 12 hours   | Calling tools, getting prompts, and reading resources.     |
 
 ## Names and permissions
 
@@ -234,10 +230,10 @@ Set `codemode` to `false` on a server when its tools should remain on the provid
       "context7": {
         "type": "remote",
         "url": "https://mcp.context7.com/mcp",
-        "codemode": false
-      }
-    }
-  }
+        "codemode": false,
+      },
+    },
+  },
 }
 ```
 
@@ -249,9 +245,9 @@ Use permission actions to hide or deny a server's tools without stopping its con
     {
       "action": "context7_*",
       "resource": "*",
-      "effect": "deny"
-    }
-  ]
+      "effect": "deny",
+    },
+  ],
 }
 ```
 

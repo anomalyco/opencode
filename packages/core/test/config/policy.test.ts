@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Config as ConfigSchema } from "@opencode-ai/schema/config"
+import { Document, Event, Info, type Entry } from "@opencode-ai/schema/config"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigPolicyPlugin } from "@opencode-ai/core/config/plugin/policy"
@@ -12,10 +12,10 @@ import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
-const decode = Schema.decodeUnknownSync(Config.Info)
+const decode = Schema.decodeUnknownSync(Info)
 
 const policies = (...items: { effect: "allow" | "deny"; resource: string }[]) =>
-  new Config.Document({
+  new Document({
     type: "document",
     info: decode({
       experimental: {
@@ -24,7 +24,7 @@ const policies = (...items: { effect: "allow" | "deny"; resource: string }[]) =>
     }),
   })
 
-const addPlugin = Effect.fn(function* (entries: Config.Entry[]) {
+const addPlugin = Effect.fn(function* (entries: Entry[]) {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
   yield* ConfigPolicyPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
@@ -78,7 +78,7 @@ describe("ConfigPolicyPlugin.Plugin", () => {
       expect(yield* catalog.provider.get(Provider.ID.openai)).toBeUndefined()
 
       yield* test.setEntries([policies({ effect: "allow", resource: "openai" })])
-      yield* bus.publish(ConfigSchema.Event.Updated, {})
+      yield* bus.publish(Event.Updated, {})
       yield* waitUntil(catalog.provider.get(Provider.ID.openai).pipe(Effect.map((provider) => provider !== undefined)))
     }).pipe(Effect.provide(Config.testLayer([policies({ effect: "deny", resource: "openai" })]))),
   )

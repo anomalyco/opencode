@@ -14,10 +14,19 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstructionState } from "@opencode-ai/core/session/instruction-state"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
-import { InstructionBlobTable, InstructionStateTable, SessionTable } from "@opencode-ai/core/session/sql"
+import {
+  InstructionBlobTable,
+  InstructionStateTable,
+  SessionMessageTable,
+  SessionTable,
+} from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node])))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]), [
+    [Bus.node, Bus.configured({ persist: true })],
+  ]),
+)
 
 const source = (name: string, read: Effect.Effect<string | Instructions.Unavailable | Instructions.Removed>) =>
   Instructions.make({
@@ -64,7 +73,7 @@ const instructionEvents = (db: Database.Interface["db"], sessionID: SessionSchem
     .all()
     .pipe(Effect.orDie)
 
-const preview = (db: Database.Interface["db"], sessionID: SessionSchema.ID, instructions: Instructions.Instructions) =>
+const preview = (db: Database.Interface["db"], sessionID: SessionSchema.ID, instructions: Instructions.List) =>
   Instructions.read(instructions).pipe(
     Effect.flatMap((observed) => InstructionState.preview(db, sessionID, instructions, observed)),
   )
@@ -105,6 +114,7 @@ describe("InstructionState", () => {
       expect(observation).toEqual({
         sessionID,
         initial: true,
+        previous: {},
         current: {
           "test/first": Instructions.hash("first"),
           "test/second": Instructions.hash("second"),
@@ -156,7 +166,7 @@ describe("InstructionState", () => {
 
       const initial = yield* InstructionState.observe(db, instructions, sessionID)
       expect(reads).toBe(2)
-      yield* InstructionState.commit(db, events, initial)
+      yield* InstructionState.commit(db, events, instructions, initial)
       expect(reads).toBe(2)
 
       current = "changed"
@@ -166,6 +176,10 @@ describe("InstructionState", () => {
       expect(changed).toMatchObject({
         sessionID,
         initial: false,
+        previous: {
+          "test/current": Instructions.hash("initial"),
+          "test/retired": Instructions.hash("retired"),
+        },
         current: { "test/current": Instructions.hash("changed") },
         delta: {
           "test/current": Instructions.hash("changed"),
@@ -173,7 +187,7 @@ describe("InstructionState", () => {
         },
         blobs: { [Instructions.hash("changed")]: "changed" },
       })
-      yield* InstructionState.commit(db, events, changed)
+      yield* InstructionState.commit(db, events, instructions, changed)
       expect(reads).toBe(4)
       yield* unsubscribe
 
@@ -189,6 +203,11 @@ describe("InstructionState", () => {
           "test/current": Instructions.hash("changed"),
           "test/retired": "removed",
         },
+      ])
+      // The chronological update text is frozen into the event; the baseline has none.
+      expect((yield* instructionEvents(db, sessionID)).map((event) => event.data.text)).toEqual([
+        undefined,
+        "changed\n\nRemoved retired",
       ])
       expect(yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)).toMatchObject({
         initial_values: {
@@ -222,18 +241,19 @@ describe("InstructionState", () => {
       expect(observation).toEqual({
         sessionID,
         initial: false,
+        previous: { "test/context": Instructions.hash("unchanged") },
         current: { "test/context": Instructions.hash("unchanged") },
         delta: {},
         blobs: {},
       })
-      yield* InstructionState.commit(db, events, observation)
+      yield* InstructionState.commit(db, events, instructions, observation)
 
       expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
       expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual(beforeBlobs)
     }),
   )
 
-  it.effect("assembles a fresh private update without repairing a missing cache", () =>
+  it.effect("treats a missing state row as a fresh baseline without repairing it", () =>
     Effect.gen(function* () {
       const sessionID = SessionSchema.ID.make("ses_instruction_generate")
       const { db, events } = yield* setup(sessionID)
@@ -254,7 +274,7 @@ describe("InstructionState", () => {
 
       const assembled = yield* preview(db, sessionID, instructions)
 
-      expect(assembled).toEqual({ initial: "Initial context", updates: [], update: "Changed context" })
+      expect(assembled).toEqual({ initial: "Changed context", update: "" })
       expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
       expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual(beforeBlobs)
       expect(
@@ -268,7 +288,7 @@ describe("InstructionState", () => {
     }),
   )
 
-  it.effect("reads through a stale cache without repairing it", () =>
+  it.effect("trusts the projected state without consulting durable events", () =>
     Effect.gen(function* () {
       const sessionID = SessionSchema.ID.make("ses_instruction_generate_stale")
       const { db, events } = yield* setup(sessionID)
@@ -280,6 +300,7 @@ describe("InstructionState", () => {
       yield* InstructionState.prepare(db, events, instructions, sessionID)
       value = "Committed update"
       yield* InstructionState.prepare(db, events, instructions, sessionID)
+      // Tamper with the projected state; the authoritative row wins over event history.
       yield* db
         .update(InstructionStateTable)
         .set({ through_seq: 0, current_values: { "test/context": Instructions.hash("Initial context") } })
@@ -294,11 +315,45 @@ describe("InstructionState", () => {
       const assembled = yield* preview(db, sessionID, instructions)
 
       expect(assembled.initial).toBe("Initial context")
-      expect(assembled.updates.map((entry) => entry.message.text)).toEqual(["Committed update"])
       expect(assembled.update).toBe("Private update")
       expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
       expect(yield* db.select().from(InstructionBlobTable).all().pipe(Effect.orDie)).toEqual(beforeBlobs)
       expect(yield* db.select().from(InstructionStateTable).get().pipe(Effect.orDie)).toEqual(beforeState)
+    }),
+  )
+
+  it.effect("persists chronological updates as system messages", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionSchema.ID.make("ses_instruction_messages")
+      const { db, events } = yield* setup(sessionID)
+      let value = "Initial context"
+      const instructions = source(
+        "test/context",
+        Effect.sync(() => value),
+      )
+      const messages = () =>
+        db
+          .select()
+          .from(SessionMessageTable)
+          .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "system")))
+          .orderBy(asc(SessionMessageTable.seq))
+          .all()
+          .pipe(Effect.orDie)
+
+      // The initial baseline is not chronological history and produces no message.
+      yield* InstructionState.prepare(db, events, instructions, sessionID)
+      expect(yield* messages()).toEqual([])
+
+      value = "Changed context"
+      yield* InstructionState.prepare(db, events, instructions, sessionID)
+      const rows = yield* messages()
+      expect(rows).toHaveLength(1)
+      expect(rows[0]?.data).toMatchObject({ text: "Changed context" })
+      expect(rows.map((row) => row.seq)).toEqual([(yield* instructionEvents(db, sessionID)).at(-1)!.seq])
+
+      // A no-op observation adds nothing.
+      yield* InstructionState.prepare(db, events, instructions, sessionID)
+      expect(yield* messages()).toHaveLength(1)
     }),
   )
 
@@ -310,7 +365,6 @@ describe("InstructionState", () => {
 
       expect(yield* preview(db, sessionID, instructions)).toEqual({
         initial: "Initial context",
-        updates: [],
         update: "",
       })
       expect(yield* instructionEvents(db, sessionID)).toEqual([])
@@ -336,7 +390,6 @@ describe("InstructionState", () => {
 
       expect(yield* preview(db, sessionID, instructions)).toEqual({
         initial: "Committed context",
-        updates: [],
         update: "",
       })
       expect(yield* instructionEvents(db, sessionID)).toEqual(beforeEvents)
@@ -388,7 +441,7 @@ describe("InstructionState", () => {
       for (const next of ["initial", "changed", "changed", Instructions.removed] as const) {
         value = next
         yield* InstructionState.observe(db, observedInstructions, observedSessionID).pipe(
-          Effect.flatMap((observation) => InstructionState.commit(db, events, observation)),
+          Effect.flatMap((observation) => InstructionState.commit(db, events, observedInstructions, observation)),
         )
         yield* InstructionState.prepare(db, events, preparedInstructions, preparedSessionID)
       }

@@ -1,11 +1,11 @@
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 
 export function DialogExportResult(props: { path: string; onClose?: () => void }) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
 
   const close = () => {
     props.onClose?.()

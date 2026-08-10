@@ -4,7 +4,7 @@ import type { VcsFileStatus } from "@opencode-ai/client"
 import { createMemo, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FilePath } from "../ui/file-path"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useConfig } from "../config"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { getScrollAcceleration } from "../util/scroll"
@@ -31,8 +31,8 @@ export function DialogWorkspaceFileChanges(props: {
   message?: string
 }) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated")
-  const overlayTheme = useThemes().contextual("overlay")
+  const theme = useTheme("elevated")
+  const overlayTheme = useTheme("overlay")
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))

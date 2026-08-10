@@ -1,7 +1,6 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Проверить обновления...",
-  "desktop.menu.installCli": "Установить CLI...",
-  "desktop.menu.reloadWebview": "Перезагрузить Webview",
+  "desktop.menu.reloadWebview": "Перезагрузить WebView",
   "desktop.menu.restart": "Перезапустить",
 
   "desktop.dialog.chooseFolder": "Выберите папку",
@@ -19,9 +18,6 @@ export const dict = {
   "desktop.updater.installFailed.title": "Обновление не удалось",
   "desktop.updater.installFailed.message": "Не удалось установить обновление",
 
-  "desktop.cli.installed.title": "CLI установлен",
-  "desktop.cli.installed.message":
-    "CLI установлен в {{path}}\n\nПерезапустите терминал, чтобы использовать команду 'opencode'.",
-  "desktop.cli.failed.title": "Ошибка установки",
-  "desktop.cli.failed.message": "Не удалось установить CLI: {{error}}",
+  "desktop.error.dev.rootNotFound":
+    "Корневой элемент не найден. Вы забыли добавить его в index.html? Или, может быть, атрибут id был написан неправильно?",
 }

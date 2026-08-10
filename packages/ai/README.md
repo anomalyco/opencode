@@ -3,8 +3,9 @@
 Schema-first AI primitives for opencode. Provider quirks live in adapters, not in calling code.
 
 ```ts
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { LLM, LLMClient } from "@opencode-ai/ai"
+import { RequestExecutor } from "@opencode-ai/ai/route"
 import { OpenAI } from "@opencode-ai/ai/providers"
 
 const model = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).responses("gpt-4o-mini")
@@ -20,6 +21,10 @@ const program = Effect.gen(function* () {
   const response = yield* LLMClient.generate(request)
   console.log(response.text)
 })
+
+const llmLayer = LLMClient.layer.pipe(Layer.provide(RequestExecutor.fetchLayer))
+
+await Effect.runPromise(program.pipe(Effect.provide(llmLayer)))
 ```
 
 Run `LLMClient.stream(request)` instead of `generate` when you want incremental `LLMEvent`s. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses, Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
@@ -195,11 +200,36 @@ The hosted result is represented as a provider-executed tool call and tool resul
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
 - **`LLM.generate` / `LLM.stream`** — re-exported from `LLMClient` for one-import use.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
-- **`Model.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
-- **`LLMClient.prepare(request)`** — compile a request through protocol body construction, validation, and HTTP preparation without sending. Useful for inspection and testing.
+- **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
 - **`Image.generate({...})`** — generate images through a provider-neutral image request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
+
+## Testing
+
+Use the deterministic test client from `@opencode-ai/ai/testing` to script provider-neutral responses and inspect
+the requests sent by code under test:
+
+```ts
+import { Effect } from "effect"
+import { TestLLM } from "@opencode-ai/ai/testing"
+
+const testLLM = TestLLM.layer({
+  fallback: TestLLM.text("Hello from the test model", "text-1"),
+})
+
+// TestLLM.clientLayer provides LLMClient.Service and consumes TestLLM.Service.
+const programWithTestClient = Effect.gen(function* () {
+  const result = yield* program
+  const test = yield* TestLLM.Service
+  console.log(test.requests)
+  return result
+}).pipe(Effect.provide(TestLLM.clientLayer), Effect.provide(testLLM))
+```
+
+`TestLLM.push(...)` scripts one-shot responses, `TestLLM.always(...)` changes the fallback, and
+`TestLLM.wait(...)` lets concurrent tests wait until a request has arrived. Every received canonical request is
+available on the yielded `TestLLM.Service`.
 
 ## Caching
 
@@ -338,11 +368,12 @@ Other provider exports listed above remain direct facades until they explicitly 
 
 ## Provider options & HTTP overlays
 
-Three escape hatches in order of stability:
+Request options in order of stability:
 
 1. **`generation`** — portable knobs (`maxTokens`, `temperature`, `topP`, `topK`, penalties, seed, stop).
-2. **`providerOptions: { <provider>: {...} }`** — typed-at-the-facade provider-specific knobs (OpenAI `promptCacheKey`, Anthropic `thinking`, Gemini `thinkingConfig`, OpenRouter routing).
-3. **`http: { body, headers, query }`** — last-resort serializable overlays merged into the final HTTP request. Reach for this only when a stable typed path doesn't yet exist.
+2. **`promptCacheKey`** — stable cache affinity lowered by every protocol that supports it.
+3. **`providerOptions: { <provider>: {...} }`** — typed-at-the-facade provider-specific knobs (OpenAI `store`, Anthropic `thinking`, Gemini `thinkingConfig`, OpenRouter routing).
+4. **`http: { body, headers, query }`** — last-resort serializable overlays merged into the final HTTP request. Reach for this only when a stable typed path doesn't yet exist.
 
 Route/provider defaults are overridden by request-level values for each axis.
 

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260225215848_workspace",
   up(tx) {
     return Effect.gen(function* () {
@@ -16,4 +16,6 @@ export default {
       `)
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration

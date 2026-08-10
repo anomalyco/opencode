@@ -15,15 +15,26 @@ export interface Context {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly messageID: SessionMessage.ID
-  readonly callID: CallID
+  readonly id: CallID
   readonly progress: (update: Metadata) => Effect.Effect<void>
 }
 
-export interface Options {
+interface BaseOptions {
   readonly namespace?: string
-  readonly codemode?: boolean
   readonly permission?: string
 }
+
+export type Options = BaseOptions &
+  (
+    | {
+        readonly codemode?: true
+        readonly pinned?: boolean
+      }
+    | {
+        readonly codemode: boolean
+        readonly pinned?: never
+      }
+  )
 
 export type ValueSchema<A = unknown> =
   | Schema.Codec<A, any>

@@ -101,15 +101,12 @@ supplies the tool's name and options separately:
 import { Schema } from "effect"
 
 await ctx.tool.transform((tools) => {
-  tools.add(
-    "echo",
-    {
-      description: "Echo text",
-      input: Schema.Struct({ text: Schema.String }),
-      output: Schema.Struct({ text: Schema.String }),
-      execute: async ({ text }) => ({ output: { text }, content: text }),
-    },
-  )
+  tools.add("echo", {
+    description: "Echo text",
+    input: Schema.Struct({ text: Schema.String }),
+    output: Schema.Struct({ text: Schema.String }),
+    execute: async ({ text }) => ({ output: { text }, content: text }),
+  })
 })
 ```
 

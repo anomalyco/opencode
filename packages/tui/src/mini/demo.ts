@@ -373,7 +373,7 @@ function askPermission(state: State, item: Permit): void {
       resources: item.patterns,
       metadata: item.metadata ?? {},
       save: item.always,
-      source: { type: "tool", messageID: item.ref.msg, callID: item.ref.call },
+      source: { type: "tool", messageID: item.ref.msg, id: item.ref.call },
       tool,
     },
   })
@@ -805,7 +805,7 @@ function emitForm(state: State, kind: FormKind = "question"): void {
     title: form.title,
     metadata:
       kind === "question"
-        ? { kind: "question", tool: { messageID: ref.msg, callID: ref.call } }
+        ? { kind: "question", tool: { messageID: ref.msg, id: ref.call } }
         : { kind: "mcp", message: `Synthetic ${kind} MCP elicitation` },
     fields: form.fields,
   }

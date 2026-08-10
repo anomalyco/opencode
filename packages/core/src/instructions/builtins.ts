@@ -2,12 +2,13 @@ export * as InstructionBuiltIns from "./builtins"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { Global } from "@opencode-ai/util/global"
 import { Location } from "../location"
 import { SessionSchema } from "../session/schema"
 import { Instructions } from "./index"
 
 export interface Interface {
-  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.Instructions>
+  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionBuiltIns") {}
@@ -15,6 +16,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const global = yield* Global.Service
     const location = yield* Location.Service
     return Service.of({
       load: (sessionID) =>
@@ -26,19 +28,18 @@ const layer = Layer.effect(
               read: Effect.sync(() =>
                 [
                   "<env>",
-                  `  Session ID: ${sessionID}`,
+                  `  Current conversation session ID: ${sessionID}`,
                   `  Working directory: ${location.directory}`,
                   `  Workspace root folder: ${location.project.directory}`,
                   `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
                   `  Platform: ${process.platform}`,
+                  `  Use ${global.tmp} for temporary work outside the workspace; it already exists and is pre-approved for external directory access.`,
                   "</env>",
                 ].join("\n"),
               ),
               render: {
                 initial: (environment) =>
-                  ["Here is some useful information about the environment you are running in:", environment].join(
-                    "\n",
-                  ),
+                  ["Here is some useful information about the environment you are running in:", environment].join("\n"),
                 changed: (_previous, environment) =>
                   ["The environment you are running in is now:", environment].join("\n"),
               },
@@ -58,4 +59,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Location.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Global.node, Location.node] })

@@ -3,17 +3,18 @@ import { ConfigProvider, Effect, Layer, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
   LLM,
-  LLMError,
+  AIError,
   LLMEvent,
   LLMRequest,
   Message,
-  Model,
+  LanguageModel,
   ToolCallPart,
   ToolDefinition,
   ToolResultPart,
   Usage,
 } from "../../src"
 import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
+import { compileRequest } from "../../src/route/client"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as XAI from "../../src/providers/xai"
@@ -56,7 +57,7 @@ const expectToolOutput = (body: OpenAIResponses.OpenAIResponsesBody): OpenAITool
 describe("OpenAI Responses route", () => {
   it.effect("prepares OpenAI Responses target", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(request)
+      const prepared = yield* compileRequest(request)
 
       expect(prepared.body).toEqual({
         model: "gpt-4.1-mini",
@@ -74,7 +75,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers the hosted OpenAI image generation tool", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           prompt: "Show me a rooftop garden.",
@@ -92,7 +93,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("rejects invalid hosted image generation options locally", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           model,
           prompt: "Show me a rooftop garden.",
@@ -109,7 +110,7 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       const input = LLMRequest.update(request, { providerOptions: { openai: { serviceTier: "priority" } } })
       expect(input.providerOptions).toEqual({ openai: { serviceTier: "priority" } })
-      const prepared = yield* LLMClient.prepare(input)
+      const prepared = yield* compileRequest(input)
 
       expect(prepared.body).toMatchObject({ service_tier: "priority" })
       expect(prepared.body).not.toHaveProperty("serviceTier")
@@ -118,7 +119,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("passes through custom OpenAI reasoning effort strings", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLMRequest.update(request, { providerOptions: { openai: { reasoningEffort: "experimental" } } }),
       )
 
@@ -128,7 +129,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("omits unsupported semantic service tiers", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLMRequest.update(request, { providerOptions: { openai: { serviceTier: "unsupported" } } }),
       )
 
@@ -138,7 +139,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("flattens top-level object unions in function schemas", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           tools: [
             ToolDefinition.make({
@@ -191,7 +192,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers chronological system updates to escaped user wrappers in order", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -217,7 +218,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("prepares OpenAI Responses WebSocket target", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           model: OpenAIResponses.webSocketRoute
             .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
@@ -303,7 +304,9 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       yield* LLMClient.generate(
         LLMRequest.update(request, {
-          model: Model.update(model, { route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }) }),
+          model: LanguageModel.update(model, {
+            route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
+          }),
         }),
       ).pipe(
         Effect.provide(
@@ -395,7 +398,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("prepares function call and function output input items", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_result",
           model,
@@ -432,7 +435,7 @@ describe("OpenAI Responses route", () => {
         content: [],
         structured: {},
       }
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -453,7 +456,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("keeps primitive tool errors as plain text", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -469,7 +472,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("keeps non-JSON tool errors as plain text", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -487,7 +490,7 @@ describe("OpenAI Responses route", () => {
   // image data is not JSON-stringified into `function_call_output.output`.
   it.effect("lowers image tool-result content as structured input_image items", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_result_image",
           model,
@@ -516,7 +519,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers single-image tool-result content as structured input_image array", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_result_image_only",
           model,
@@ -540,7 +543,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers PDF tool-result content as structured input_file array", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_result_pdf",
           model,
@@ -575,7 +578,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("uses xAI inline file encoding for PDF tool results", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: xaiModel,
           messages: [
@@ -610,7 +613,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("rejects unsupported media in tool-result content with a clear error", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           id: "req_tool_result_unsupported_media",
           model,
@@ -633,7 +636,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("prepares the composed native continuation request", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         continuationRequest({
           id: "req_native_continuation_openai",
           model,
@@ -675,13 +678,13 @@ describe("OpenAI Responses route", () => {
 
   it.effect("maps OpenAI provider options to Responses options", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).model("gpt-5.2"),
           prompt: "think",
+          promptCacheKey: "session_123",
           providerOptions: {
             openai: {
-              promptCacheKey: "session_123",
               reasoningEffort: "high",
               reasoningSummary: "auto",
               include: ["reasoning.encrypted_content"],
@@ -700,7 +703,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("accepts the full ResponseIncludable union", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           prompt: "hi",
@@ -722,7 +725,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("filters unknown includable values out of the include array", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           prompt: "hi",
@@ -739,7 +742,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("treats an explicit empty include as no include at all", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({ model, prompt: "hi", providerOptions: { openai: { include: [] } } }),
       )
 
@@ -749,7 +752,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("treats an all-invalid include as no include at all", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({ model, prompt: "hi", providerOptions: { openai: { include: ["bogus.thing"] } } }),
       )
 
@@ -759,7 +762,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("omits include when no include is set", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({ model, prompt: "hi", providerOptions: { openai: { store: false } } }),
       )
 
@@ -773,7 +776,7 @@ describe("OpenAI Responses route", () => {
       // reasoningSummary: "auto" by default. Without `include`, a follow-up
       // turn cannot replay reasoning state, so the facade also opts into
       // `reasoning.encrypted_content` automatically.
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.2"),
           prompt: "hi",
@@ -788,7 +791,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lets callers opt out of the GPT-5 default include", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.2"),
           prompt: "hi",
@@ -800,17 +803,16 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("request OpenAI provider options override route defaults", () =>
+  it.effect("maps the request prompt cache key", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: OpenAI.configure({
             baseURL: "https://api.openai.test/v1/",
             apiKey: "test",
-            providerOptions: { openai: { promptCacheKey: "model_cache" } },
           }).model("gpt-4.1-mini"),
           prompt: "no cache",
-          providerOptions: { openai: { promptCacheKey: "request_cache" } },
+          promptCacheKey: "request_cache",
         }),
       )
 
@@ -934,9 +936,7 @@ describe("OpenAI Responses route", () => {
         },
       ])
 
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
-        LLM.request({ model, messages: [response.message] }),
-      )
+      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(prepared.body.input).toEqual([
         {
           role: "assistant",
@@ -986,9 +986,7 @@ describe("OpenAI Responses route", () => {
 
       for (const event of events) {
         const error = yield* LLMClient.generate(request).pipe(
-          Effect.provide(
-            fixedResponse(sseEvents(event, { type: "response.completed", response: { id: "resp_1" } })),
-          ),
+          Effect.provide(fixedResponse(sseEvents(event, { type: "response.completed", response: { id: "resp_1" } }))),
           Effect.flip,
         )
         expect(error.reason._tag).toBe("InvalidProviderOutput")
@@ -1270,7 +1268,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("preserves assistant content order around reasoning items", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_reasoning_order",
           model,
@@ -1308,7 +1306,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("references stored reasoning items by id", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -1330,7 +1328,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("references stored provider-executed hosted tool results by id", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -1367,7 +1365,7 @@ describe("OpenAI Responses route", () => {
   it.effect("continues stateless hosted image generation with the generated image", () =>
     Effect.gen(function* () {
       const imageTool = OpenAI.imageGeneration({ action: "edit" })
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
@@ -1408,7 +1406,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("joins streamed summary blocks into one continuation reasoning item", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_multi_summary_continuation",
           model,
@@ -1445,7 +1443,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("skips non-persisted reasoning ids without encrypted state", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_reasoning_without_encrypted_state",
           model,
@@ -1762,7 +1760,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers user image and PDF content", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_media",
           model,
@@ -1793,7 +1791,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("uses xAI inline file encoding for user PDFs", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: xaiModel,
           messages: [
@@ -1825,7 +1823,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("rejects unsupported user media content", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const error = yield* compileRequest(
         LLM.request({
           id: "req_media",
           model,
@@ -1844,7 +1842,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error).toBeInstanceOf(LLMError)
+      expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "RateLimit", message: "rate_limit_exceeded: Slow down" })
     }),
   )
@@ -2038,7 +2036,7 @@ describe("OpenAI Responses route", () => {
         Effect.flip,
       )
 
-      expect(error).toBeInstanceOf(LLMError)
+      expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect(error.message).toContain("HTTP 400")
     }),

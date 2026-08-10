@@ -45,7 +45,7 @@ export interface Prompt extends Schema.Schema.Type<typeof Prompt> {}
 
 export const Tool = Schema.Struct({
   messageID: Schema.String,
-  callID: Schema.String,
+  id: Schema.String,
 }).annotate({ identifier: "Question.Tool" })
 export interface Tool extends Schema.Schema.Type<typeof Tool> {}
 

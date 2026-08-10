@@ -7,8 +7,8 @@ OpenCode V2 accepts formatter configuration, but it does not yet include a
 formatter runtime. File writes and edits are not automatically formatted.
 
 <Callout type="warning">
-  V2 currently has no built-in formatters. The built-in formatter list and
-  automatic post-edit formatting documented for V1 do not apply to V2.
+  V2 currently has no built-in formatters. The built-in formatter list and automatic post-edit formatting documented for
+  V1 do not apply to V2.
 </Callout>
 
 ## Configuration
@@ -23,11 +23,11 @@ The `formatter` field accepts a boolean or an object keyed by formatter name:
       "disabled": false,
       "command": ["prettier", "--write", "$FILE"],
       "environment": {
-        "NODE_ENV": "development"
+        "NODE_ENV": "development",
       },
-      "extensions": [".js", ".jsx", ".ts", ".tsx"]
-    }
-  }
+      "extensions": [".js", ".jsx", ".ts", ".tsx"],
+    },
+  },
 }
 ```
 
@@ -36,12 +36,12 @@ command.
 
 Each named formatter entry supports these optional fields:
 
-| Field | Type | Current V2 behavior |
-| --- | --- | --- |
-| `disabled` | `boolean` | Accepted, but there is no runtime formatter to enable or disable. |
-| `command` | `string[]` | Accepted as an argument array, but not executed. |
-| `environment` | `Record<string, string>` | Accepts string environment variable names and values, but they are not applied. |
-| `extensions` | `string[]` | Accepted without extension-specific validation, but files are not matched against it. |
+| Field         | Type                     | Current V2 behavior                                                                   |
+| ------------- | ------------------------ | ------------------------------------------------------------------------------------- |
+| `disabled`    | `boolean`                | Accepted, but there is no runtime formatter to enable or disable.                     |
+| `command`     | `string[]`               | Accepted as an argument array, but not executed.                                      |
+| `environment` | `Record<string, string>` | Accepts string environment variable names and values, but they are not applied.       |
+| `extensions`  | `string[]`               | Accepted without extension-specific validation, but files are not matched against it. |
 
 All entry fields are optional. The schema therefore also accepts an empty entry
 such as `"prettier": {}`.
@@ -53,14 +53,14 @@ The schema accepts all of the following forms:
 ```jsonc
 // Omit `formatter`, or use false, when formatting is not requested.
 {
-  "formatter": false
+  "formatter": false,
 }
 ```
 
 ```jsonc
 // Reserved for enabling all built-ins once a V2 runtime provides them.
 {
-  "formatter": true
+  "formatter": true,
 }
 ```
 
@@ -71,9 +71,9 @@ The schema accepts all of the following forms:
     "prettier": { "disabled": true },
     "custom": {
       "command": ["custom-fmt", "$FILE"],
-      "extensions": [".foo"]
-    }
-  }
+      "extensions": [".foo"],
+    },
+  },
 }
 ```
 

@@ -552,7 +552,7 @@ export const SessionInfo = Schema.Struct({
   cost: optional(Schema.Finite),
   tokens: optional(SessionTokens),
   share: optional(SessionShare),
-  title: Schema.String,
+  title: optional(Schema.String),
   agent: optional(Schema.String),
   model: optional(SessionModel),
   version: Schema.String,

@@ -1,9 +1,9 @@
 import { RGBA } from "@opentui/core"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { Spinner } from "./spinner"
 
 export function Reconnecting() {
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
 
   return (
     <box

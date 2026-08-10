@@ -53,10 +53,10 @@ const discoverLocal = Effect.fnUntraced(function* (options: DiscoverOptions) {
 /** Ensure a healthy, compatible local service is running. */
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const contenders = new Set<Contender>()
+  let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
   let lastSpawn = 0
   let spawnDelay = 5_000
-  let ownerHeld = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
       if (announced) return
@@ -83,8 +83,19 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const registration = yield* registered(options.file, true)
     const info = registration.info
     const service = registration.service
+    if (registration.timedOut && info !== undefined) {
+      timeouts = {
+        info,
+        count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
+      }
+      if (timeouts.count >= 3) {
+        yield* announce("missing")
+        yield* evict(info, options)
+        timeouts = undefined
+        lastSpawn = Date.now() - spawnDelay
+      }
+    } else timeouts = undefined
     if (service !== undefined) {
-      ownerHeld = false
       spawnDelay = 5_000
       const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
       if (compatible && service.state === "ready") return Option.some(service)
@@ -97,14 +108,13 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       return Option.none<LocalService>()
     } else if (lastSpawn === 0 && info !== undefined) lastSpawn = Date.now()
 
-    const failure = [...contenders].map(contenderFailure).find((error): error is Error => error !== undefined)
-    if (failure !== undefined) return yield* Effect.fail(failure)
     const finished = [...contenders].filter(contenderFinished)
+    const failure = finished.map(contenderFailure).find((error): error is Error => error !== undefined)
     if (finished.some((item) => item.child.exitCode === 0)) {
-      ownerHeld = true
       spawnDelay = Math.min(spawnDelay * 2, 30_000)
     }
     finished.forEach((item) => contenders.delete(item))
+    if (failure !== undefined && contenders.size === 0) return yield* Effect.fail(failure)
     // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
     if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
       yield* announce("missing")
@@ -185,6 +195,10 @@ type LocalService = {
 }
 
 const probe = Effect.fnUntraced(function* (info: Info, allowLegacy = false) {
+  return (yield* probeResult(info, allowLegacy)).service
+})
+
+const probeResult = Effect.fnUntraced(function* (info: Info, allowLegacy = false) {
   const endpoint = {
     url: info.url,
     auth:
@@ -192,39 +206,53 @@ const probe = Effect.fnUntraced(function* (info: Info, allowLegacy = false) {
         ? undefined
         : { type: "basic" as const, username: "opencode", password: info.password },
   } satisfies Endpoint
-  const response = yield* Effect.tryPromise(() =>
+  const signal = AbortSignal.timeout(2_000)
+  const result = yield* Effect.promise(() =>
     fetch(new URL("/api/health", info.url), {
       headers: headers(endpoint),
-      signal: AbortSignal.timeout(2_000),
-    }),
-  ).pipe(Effect.option, Effect.map(Option.getOrUndefined))
-  if (response === undefined) return undefined
-  const body = yield* Effect.tryPromise(() => response.json()).pipe(Effect.option, Effect.map(Option.getOrUndefined))
+      signal,
+    })
+      .then(async (response) => ({ response, body: (await response.json()) as unknown }))
+      .then(
+        (value) => ({ value }),
+        (cause: unknown) => ({ cause }),
+      ),
+  )
+  if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
+  const response = result.value.response
+  const body = result.value.body
   const health = decodeHealth(body)
   if (Option.isSome(health)) {
-    if (health.value.pid !== info.pid) return undefined
-    if (info.version !== undefined && health.value.version !== info.version) return undefined
+    if (health.value.pid !== info.pid) return { service: undefined, timedOut: false }
+    if (info.version !== undefined && health.value.version !== info.version)
+      return { service: undefined, timedOut: false }
     return {
-      info,
-      endpoint,
-      version: health.value.version,
-      state: response.ok ? "ready" : response.status === 500 ? "failed" : "waiting",
-      legacy: false,
-    } satisfies LocalService
+      service: {
+        info,
+        endpoint,
+        version: health.value.version,
+        state: response.ok ? "ready" : response.status === 500 ? "failed" : "waiting",
+        legacy: false,
+      } satisfies LocalService,
+      timedOut: false,
+    }
   }
   if (
     !allowLegacy ||
     Option.isNone(decodeLegacyHealth(body)) ||
     (typeof body === "object" && body !== null && ("version" in body || "pid" in body))
   )
-    return undefined
-  return { info, endpoint, state: "ready", legacy: true } satisfies LocalService
+    return { service: undefined, timedOut: false }
+  return {
+    service: { info, endpoint, state: "ready", legacy: true } satisfies LocalService,
+    timedOut: false,
+  }
 })
 
 const registered = Effect.fnUntraced(function* (file?: string, allowLegacy = false) {
   const info = yield* read(file)
-  if (info === undefined) return { info: undefined, service: undefined }
-  return { info, service: yield* probe(info, allowLegacy) }
+  if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
+  return { info, ...(yield* probeResult(info, allowLegacy)) }
 })
 
 // Health-checked lookup without the version gate: lifecycle operations must be
@@ -251,6 +279,19 @@ const stopped = Effect.fnUntraced(function* (pid: number) {
 function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
+
+const evict = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }) {
+  const current = yield* read(options.file)
+  if (current === undefined || !same(current, info)) return
+  yield* signal(info.pid, "SIGTERM")
+  const done = yield* stopped(info.pid).pipe(Effect.retry(poll), Effect.option)
+  if (Option.isSome(done)) return
+
+  const latest = yield* read(options.file)
+  if (latest === undefined || !same(latest, info)) return
+  yield* signal(info.pid, "SIGKILL")
+  yield* stopped(info.pid).pipe(Effect.retry(poll))
+})
 
 const kill = Effect.fnUntraced(function* (service: LocalService, options: { readonly file?: string }) {
   const requested = yield* requestStop(service)

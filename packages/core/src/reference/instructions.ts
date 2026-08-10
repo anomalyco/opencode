@@ -54,7 +54,7 @@ const update = (previous: ReadonlyArray<typeof Summary.Type>, current: ReadonlyA
 }
 
 export interface Interface {
-  readonly load: () => Effect.Effect<Instructions.Instructions>
+  readonly load: () => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ReferenceInstructions") {}

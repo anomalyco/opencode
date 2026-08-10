@@ -62,8 +62,8 @@ for (const target of targets) {
   await rm("dist-node", { recursive: true, force: true })
   const assetHash = await hashNodeAssets(assets)
   const input = { version: Script.version, channel: Script.channel, models: modelsData, assetHash, target }
-  await build(mainConfig(input))
   await copyNodeAssets(assets)
+  await build(mainConfig(input))
 
   const host = target.platform === process.platform && target.arch === process.arch
   if (host) {

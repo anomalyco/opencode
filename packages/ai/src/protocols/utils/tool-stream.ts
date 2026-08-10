@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { LLMError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputError } from "../../schema"
+import { AIError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputError } from "../../schema"
 import { eventError, parseToolInput, type ToolAccumulator } from "../shared"
 
 type StreamKey = string | number
@@ -112,8 +112,8 @@ const appendTool = <K extends StreamKey>(
   }
 }
 
-export const isError = <K extends StreamKey>(result: AppendOutcome<K> | LLMError): result is LLMError =>
-  result instanceof LLMError
+export const isError = <K extends StreamKey>(result: AppendOutcome<K> | AIError): result is AIError =>
+  result instanceof AIError
 
 /**
  * Register a tool call whose start event arrived before any argument deltas.
@@ -138,7 +138,7 @@ export const appendOrStart = <K extends StreamKey>(
   key: K,
   delta: { readonly id?: string; readonly name?: string; readonly text: string },
   missingToolMessage: string,
-): AppendOutcome<K> | LLMError => {
+): AppendOutcome<K> | AIError => {
   const current = tools[key]
   const id = current?.id ?? delta.id
   const name = current?.name ?? delta.name
@@ -167,7 +167,7 @@ export const appendExisting = <K extends StreamKey>(
   key: K,
   text: string,
   missingToolMessage: string,
-): AppendOutcome<K> | LLMError => {
+): AppendOutcome<K> | AIError => {
   const current = tools[key]
   if (!current) return eventError(route, missingToolMessage)
   if (text.length === 0) return { tools, tool: current, events: [] }

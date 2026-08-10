@@ -47,13 +47,13 @@ describe("Project.list", () => {
       expect(yield* project.list()).toEqual([
         {
           id: Project.ID.make("newer"),
-          worktree: abs("/newer"),
+          canonical: abs("/newer"),
           time: { created: 2, updated: 2, initialized: 3 },
           sandboxes: [],
         },
         {
           id: Project.ID.make("older"),
-          worktree: abs("/older"),
+          canonical: abs("/older"),
           vcs: "git",
           name: "Older",
           icon: { color: "#000000" },
@@ -105,6 +105,7 @@ describe("Project.resolve", () => {
 
       expect(result.id).toBe(Project.ID.make("global"))
       expect(path.resolve(result.directory)).toBe(path.parse(tmp.path).root)
+      expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
       expect(result.vcs).toBeUndefined()
     }),
@@ -123,6 +124,7 @@ describe("Project.resolve", () => {
 
       expect(result.id).toBe(Project.ID.make("global"))
       expect(result.directory).toBe(yield* real(tmp.path))
+      expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
       expect(result.vcs?.type).toBe("git")
     }),
@@ -141,6 +143,7 @@ describe("Project.resolve", () => {
 
       expect(result.id).toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
       expect(result.directory).toBe(yield* real(tmp.path))
+      expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
       expect(result.vcs?.type).toBe("git")
     }),
@@ -327,13 +330,43 @@ describe("Project.resolve", () => {
       yield* Effect.promise(() => Bun.write(path.join(tmp.path, ".git", "opencode"), "old-id"))
       yield* Effect.promise(() => $`git worktree add ${worktree} -b test-${Date.now()}`.cwd(tmp.path).quiet())
       const project = yield* Project.Service
+      const db = (yield* Database.Service).db
+      const id = remoteID("github.com/owner/repo")
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id,
+          worktree: abs("/stale-worktree"),
+          vcs: "hg",
+          name: "Preserved name",
+          icon_color: "#123456",
+          commands: { start: "bun dev" },
+          sandboxes: [abs("/preserved-sandbox")],
+          time_created: 1,
+          time_updated: 1,
+          time_initialized: 2,
+        })
+        .run()
 
       const result = yield* project.resolve(abs(worktree))
 
       expect(result.directory).toBe(yield* real(worktree))
+      expect(result.canonical).toBe(yield* real(tmp.path))
       expect(result.previous).toBe(Project.ID.make("old-id"))
-      expect(result.id).toBe(remoteID("github.com/owner/repo"))
+      expect(result.id).toBe(id)
       expect(result.vcs?.type).toBe("git")
+      expect((yield* project.list()).find((item) => item.id === id)).toMatchObject({
+        canonical: yield* real(tmp.path),
+        vcs: "git",
+        name: "Preserved name",
+        icon: { color: "#123456" },
+        commands: { start: "bun dev" },
+        sandboxes: [abs("/preserved-sandbox")],
+        time: { created: 1, initialized: 2 },
+      })
+      expect(
+        (yield* project.directories({ projectID: id })).toSorted((a, b) => a.directory.localeCompare(b.directory)),
+      ).toEqual([{ directory: yield* real(tmp.path) }, { directory: yield* real(worktree), strategy: "git_worktree" }])
     }),
   )
 })

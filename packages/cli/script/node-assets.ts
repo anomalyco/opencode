@@ -3,7 +3,7 @@ import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { getNodeAssets } from "@opentui/core/node-assets"
-import { attentionSoundAssets, type NodeTarget, photonWasmAsset } from "../src/node/target"
+import { attentionSoundAssets, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "../src/node/target"
 
 const dir = path.resolve(import.meta.dirname, "..")
 
@@ -43,6 +43,10 @@ export async function collectNodeAssets(target: NodeTarget) {
       key: photonWasmAsset,
       source: fileURLToPath(import.meta.resolve(photonWasmAsset)),
     },
+    ...Object.values(shellParserWasmAssets).map((key) => ({
+      key,
+      source: fileURLToPath(import.meta.resolve(key)),
+    })),
     ...attentionSoundAssets.map((key) => ({
       key,
       source: path.resolve(dir, "../ui/src/assets/audio", path.basename(key)),
@@ -54,8 +58,9 @@ export async function collectNodeAssets(target: NodeTarget) {
         source: path.join(ptyRoot, relative),
       })),
   ]
-  await Promise.all(assets.map((asset) => stat(asset.source)))
-  return assets
+  const unique = [...new Map(assets.map((asset) => [asset.key, asset])).values()]
+  await Promise.all(unique.map((asset) => stat(asset.source)))
+  return unique
 }
 
 export async function hashNodeAssets(assets: readonly NodeAsset[]) {

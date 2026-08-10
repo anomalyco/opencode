@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For, Show } from "solid-js"
@@ -9,19 +9,25 @@ export type ExportFormat = "markdown" | "json"
 
 export type DialogExportOptionsProps = {
   defaultThinking: boolean
-  onConfirm?: (options: { action: "copy" | "export"; format: ExportFormat; thinking: boolean }) => void
+  onConfirm?: (options: {
+    action: "copy" | "export"
+    format: ExportFormat
+    thinking: boolean
+    sanitize: boolean
+  }) => void
   onCancel?: () => void
 }
 
-type Active = ExportFormat | "thinking" | "copy" | "export"
+type Active = ExportFormat | "thinking" | "sanitize" | "copy" | "export"
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
   const dialog = useDialog()
-  const theme = useThemes().contextual("elevated")
-  const overlayTheme = useThemes().contextual("overlay")
+  const theme = useTheme("elevated")
+  const overlayTheme = useTheme("overlay")
   const [store, setStore] = createStore({
     format: "markdown" as ExportFormat,
     thinking: props.defaultThinking,
+    sanitize: false,
     active: "markdown" as Active,
   })
 
@@ -30,6 +36,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
       action,
       format: store.format,
       thinking: store.thinking,
+      sanitize: store.sanitize,
     })
 
   const activate = () => {
@@ -38,6 +45,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
       return
     }
     if (store.active === "thinking") setStore("thinking", !store.thinking)
+    if (store.active === "sanitize") setStore("sanitize", !store.sanitize)
     if (store.active === "copy" || store.active === "export") confirm(store.active)
   }
 
@@ -52,7 +60,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           const order: Active[] =
             store.format === "markdown"
               ? ["markdown", "json", "thinking", "copy", "export"]
-              : ["markdown", "json", "copy", "export"]
+              : ["markdown", "json", "sanitize", "copy", "export"]
           setStore("active", order[(order.indexOf(store.active) + 1) % order.length])
         },
       },
@@ -153,6 +161,46 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           </text>
         </box>
       </Show>
+      <Show when={store.format === "json"}>
+        <box
+          flexDirection="row"
+          gap={1}
+          backgroundColor={
+            store.active === "sanitize"
+              ? theme.background.formfield.focused
+              : store.sanitize
+                ? theme.background.formfield.selected
+                : theme.background.formfield.default
+          }
+          onMouseUp={() => {
+            setStore("active", "sanitize")
+            setStore("sanitize", !store.sanitize)
+          }}
+        >
+          <text
+            fg={
+              store.active === "sanitize"
+                ? theme.text.formfield.focused
+                : store.sanitize
+                  ? theme.text.formfield.selected
+                  : theme.text.formfield.default
+            }
+          >
+            {store.sanitize ? "[x]" : "[ ]"}
+          </text>
+          <text
+            fg={
+              store.active === "sanitize"
+                ? theme.text.formfield.focused
+                : store.sanitize
+                  ? theme.text.formfield.selected
+                  : theme.text.formfield.default
+            }
+          >
+            Sanitize sensitive data
+          </text>
+        </box>
+      </Show>
       <box flexDirection="row" justifyContent="flex-end" gap={1} paddingBottom={1}>
         <box
           paddingLeft={4}
@@ -186,6 +234,7 @@ DialogExportOptions.show = (dialog: DialogContext, defaultThinking: boolean) => 
     action: "copy" | "export"
     format: ExportFormat
     thinking: boolean
+    sanitize: boolean
   } | null>((resolve) => {
     dialog.replace(
       () => (

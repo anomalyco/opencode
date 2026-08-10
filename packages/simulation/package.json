@@ -14,7 +14,7 @@
     "./recording": "./src/recording.ts"
   },
   "scripts": {
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo -b"
   },
   "dependencies": {
     "@fontsource/commit-mono": "5.2.5",

@@ -11,7 +11,7 @@ import {
 import { Auth, type Definition as AuthDefinition } from "../route/auth"
 import {
   InvalidProviderOutputReason,
-  LLMError,
+  AIError,
   Usage,
   mergeHttpOptions,
   mergeJsonRecords,
@@ -85,7 +85,7 @@ const nativeOptions = (options: OpenAIImageOptions | undefined) => {
 }
 
 const invalidOutput = (message: string) =>
-  new LLMError({
+  new AIError({
     module: ADAPTER,
     method: "generate",
     reason: new InvalidProviderOutputReason({ message, route: ADAPTER }),

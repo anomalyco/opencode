@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: "20260622202450_simplify_session_input",
   up(tx) {
     return Effect.gen(function* () {
@@ -14,4 +14,6 @@ export default {
       yield* tx.run(`DELETE FROM \`workspace\`;`)
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration

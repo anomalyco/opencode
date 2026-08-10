@@ -2,6 +2,7 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { serverName } from "@/context/server"
 import { displayName } from "@/pages/layout/helpers"
+import { sessionLabel } from "@/utils/session-title"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -23,7 +24,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     if (!value) return []
     return sessions.data
       .searchRecords()
-      .filter((record) => `${record.session.title} ${record.projectName}`.toLowerCase().includes(value))
+      .filter((record) => `${sessionLabel(record.session)} ${record.projectName}`.toLowerCase().includes(value))
   })
   const active = createMemo(() => {
     const records = results()

@@ -12,7 +12,6 @@ const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
 afterEach(() => {
   if (otelResourceAttributes === undefined) delete process.env.OTEL_RESOURCE_ATTRIBUTES
   else process.env.OTEL_RESOURCE_ATTRIBUTES = otelResourceAttributes
-
 })
 
 describe("resource", () => {

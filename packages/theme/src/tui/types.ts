@@ -7,7 +7,6 @@ import type {
   HueAlias,
   HueStep,
   MarkdownToken,
-  ContextKey,
   SyntaxToken,
 } from "./schema.js"
 
@@ -20,7 +19,7 @@ export type Categorical = readonly HueScale[]
 export type StatefulColor = Readonly<Record<ResolvedActionState, RGBA>>
 export type FormfieldColor = StatefulColor
 
-export type ResolvedThemeView = {
+export type ResolvedThemeTokens = {
   readonly hue: Hue
   readonly categorical: Categorical
   readonly source: (color: RGBA) => HueSource | undefined
@@ -63,6 +62,8 @@ export type ResolvedThemeView = {
   readonly markdown: Readonly<Record<MarkdownToken, RGBA>>
 }
 
-export type ResolvedTheme = ResolvedThemeView & {
-  readonly contexts: Readonly<Partial<Record<ContextKey, ResolvedThemeView>>>
+export type ContextName = "elevated" | "overlay"
+
+export type ResolvedTheme = ResolvedThemeTokens & {
+  readonly contextual: Readonly<Record<ContextName, ResolvedThemeTokens>>
 }

@@ -1,5 +1,5 @@
 import { getFilename } from "@opencode-ai/core/util/path"
-import type { Project } from "@opencode-ai/sdk/v2/client"
+import type { Project } from "@/types"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createMemo, onCleanup } from "solid-js"
@@ -14,7 +14,6 @@ import { useTabs } from "@/context/tabs"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { normalizeSessionInfo } from "@/utils/session"
 
 export type CommandPaletteEntry = {
   id: string
@@ -257,7 +256,6 @@ export function createServerSessionEntries(props: {
       .load(search, current.signal)
       .then((result) =>
         result.data
-          .map(normalizeSessionInfo)
           .filter((session) => !session.time.archived)
           .map((session) => {
             const project =
@@ -266,9 +264,9 @@ export function createServerSessionEntries(props: {
               id: `session:${props.server}:${session.id}`,
               type: "session" as const,
               title: session.title || props.untitled(),
-              description: project ? displayName(project) : getFilename(session.directory),
+              description: project ? displayName(project) : getFilename(session.location.directory),
               category: props.category(),
-              directory: session.directory,
+              directory: session.location.directory,
               sessionID: session.id,
               server: props.server,
               project,

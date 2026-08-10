@@ -9,14 +9,15 @@ if (mode === "record-start") {
 }
 if (mode === "signal") process.kill(process.pid, process.platform === "win32" ? "SIGTERM" : "SIGKILL")
 
-if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated") {
+if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" || mode === "coordinated-failed-loser") {
   await appendFile(registration + ".starts", process.pid + "\n")
   const owner = await writeFile(registration + ".owner", String(process.pid), { flag: "wx" })
     .then(() => true)
     .catch(() => false)
-  if (!owner) process.exit()
-  if (mode === "coordinated") {
+  if (!owner) process.exit(mode === "coordinated-failed-loser" ? 1 : 0)
+  if (mode === "coordinated" || mode === "coordinated-failed-loser") {
     while ((await Bun.file(registration + ".starts").text()).trim().split("\n").length < 2) await Bun.sleep(10)
+    if (mode === "coordinated-failed-loser") await Bun.sleep(1_500)
   } else await Bun.sleep(Number(delay))
   if (mode === "delayed-failed") process.exit(1)
 }
@@ -41,6 +42,10 @@ const server = Bun.serve({
     }
     if (pathname !== "/api/health") return new Response(null, { status: 404 })
     requests += 1
+    if (mode === "hanging") {
+      await appendFile(registration + ".requests", process.pid + "\n")
+      return new Promise<Response>(() => {})
+    }
     if (mode === "modern" && requests === 1) {
       await writeFile(registration + ".first-request", "")
       while (!(await Bun.file(registration + ".release").exists())) await Bun.sleep(5)
@@ -49,8 +54,7 @@ const server = Bun.serve({
     if (mode === "legacy") return Response.json({ healthy: true })
     if (mode === "starting" && !(await Bun.file(registration + ".release").exists()))
       return Response.json({ healthy: true, version, pid: process.pid }, { status: 503 })
-    if (mode === "failed-owner")
-      return Response.json({ healthy: true, version, pid: process.pid }, { status: 500 })
+    if (mode === "failed-owner") return Response.json({ healthy: true, version, pid: process.pid }, { status: 500 })
     if (mode === "starting" || mode === "graceful" || mode === "reject-stop")
       return Response.json({ healthy: true, version, pid: process.pid })
     return Response.json({ healthy: true, version, pid: process.pid })

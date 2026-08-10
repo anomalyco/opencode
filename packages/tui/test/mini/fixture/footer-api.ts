@@ -3,6 +3,10 @@ import type { FooterApi, FooterEvent, RunPrompt, StreamCommit } from "../../../s
 export function createFooterApiFixture(input: { events?: FooterEvent[]; commits?: StreamCommit[] } = {}) {
   const prompts = new Set<(input: RunPrompt) => void>()
   const closes = new Set<() => void>()
+  let ready!: () => void
+  const promptReady = new Promise<void>((resolve) => {
+    ready = resolve
+  })
   const events = input.events ?? []
   const commits = input.commits ?? []
   const calls: Array<{ type: "event"; value: FooterEvent } | { type: "commit"; value: StreamCommit }> = []
@@ -14,6 +18,7 @@ export function createFooterApiFixture(input: { events?: FooterEvent[]; commits?
     },
     onPrompt(fn) {
       prompts.add(fn)
+      ready()
       return () => prompts.delete(fn)
     },
     onClose(fn) {
@@ -50,9 +55,12 @@ export function createFooterApiFixture(input: { events?: FooterEvent[]; commits?
     events,
     commits,
     calls,
-    submit(text: string, mode?: RunPrompt["mode"]) {
-      const prompt: RunPrompt = mode ? { text, parts: [], mode } : { text, parts: [] }
+    promptReady,
+    submit(text: string, mode?: RunPrompt["mode"], delivery?: RunPrompt["delivery"]) {
+      if (prompts.size === 0) return false
+      const prompt: RunPrompt = { text, parts: [], ...(mode ? { mode } : {}), ...(delivery ? { delivery } : {}) }
       for (const fn of [...prompts]) fn(prompt)
+      return true
     },
   }
 }

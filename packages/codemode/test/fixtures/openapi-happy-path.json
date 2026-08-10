@@ -93,16 +93,10 @@
                   },
                   "role": {
                     "type": "string",
-                    "enum": [
-                      "admin",
-                      "member"
-                    ]
+                    "enum": ["admin", "member"]
                   }
                 },
-                "required": [
-                  "name",
-                  "email"
-                ],
+                "required": ["name", "email"],
                 "additionalProperties": false
               }
             }
@@ -143,9 +137,7 @@
                   "type": "integer"
                 }
               },
-              "required": [
-                "query"
-              ],
+              "required": ["query"],
               "additionalProperties": false
             }
           },
@@ -216,17 +208,10 @@
           },
           "role": {
             "type": "string",
-            "enum": [
-              "admin",
-              "member"
-            ]
+            "enum": ["admin", "member"]
           }
         },
-        "required": [
-          "id",
-          "name",
-          "email"
-        ],
+        "required": ["id", "name", "email"],
         "additionalProperties": false
       }
     },

@@ -1,9 +1,10 @@
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
-import { AssistantMessage, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
+import type { SessionMessageInfo, SessionStatus } from "@opencode-ai/client/promise"
+import type { AssistantMessage, Part, UserMessage } from "@/types"
 import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/message-part"
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
 import { uniqueSummaryDiffs } from "./summary-diffs"
+import { compareMessages } from "@/utils/session-message"
 
 export { TimelineRow, type SummaryDiff } from "./timeline-row"
 
@@ -71,12 +72,12 @@ export namespace Timeline {
       turns.push(turn)
       turnByUserID.set(user.id, turn)
     })
-    const latestUserMessageID = turns.at(-1)?.user.id
     projectedUserMessages.forEach((user) => {
       if (turnByUserID.has(user.id)) return
-      if (latestUserMessageID && user.id < latestUserMessageID) return
       const turn = { user, assistants: [] }
-      turns.push(turn)
+      const index = turns.findIndex((item) => compareMessages(user, item.user) < 0)
+      if (index < 0) turns.push(turn)
+      if (index >= 0) turns.splice(index, 0, turn)
       turnByUserID.set(user.id, turn)
     })
     const activeMessageID = turns.at(-1)?.user.id
@@ -116,7 +117,8 @@ export namespace Timeline {
     const compaction = userParts.some((p) => p.type === "compaction")
     const interruptedMessageIndex = assistantMessages.findIndex((m) => m.error?.name === "MessageAbortedError")
     const interrupted = interruptedMessageIndex !== -1
-    const error = assistantMessages.find((m) => m.error && m.error.name !== "MessageAbortedError")?.error
+    const latestError = assistantMessages.at(-1)?.error
+    const error = latestError?.name === "MessageAbortedError" ? undefined : latestError
 
     const assistantPartRefs = assistantMessages.flatMap((message, messageIndex) =>
       getMessageParts(message.id)
@@ -215,7 +217,7 @@ export namespace Timeline {
     }
 
     if (error) {
-      const data = error.data?.message
+      const data = error.data && "message" in error.data ? error.data.message : undefined
       rows.push(
         new TimelineRow.Error({
           userMessageID: userMessage.id,

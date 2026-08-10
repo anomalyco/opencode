@@ -3,7 +3,7 @@ export * as VcsGit from "./git"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
-import { FileStatus, Mode } from "@opencode-ai/schema/vcs"
+import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { AppProcess } from "@opencode-ai/util/process"
 import type { DiffOptions, Interface } from "../vcs"
 import { chunksByFile, emptyPatch, MAX_PATCH_BYTES, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./patch"
@@ -20,6 +20,12 @@ export function make(proc: AppProcess.Interface, input: { directory: string; wor
   const ctx: Ctx = { git: makeGit(proc), directory: input.directory, worktree: input.worktree }
 
   return {
+    info: Effect.fn("VcsGit.info")(function* () {
+      const [current, root] = yield* Effect.all([ctx.git.branch(ctx.directory), ctx.git.defaultBranch(ctx.directory)], {
+        concurrency: 2,
+      })
+      return { branch: { current, default: root?.name } } satisfies Info
+    }),
     status: Effect.fn("VcsGit.status")(function* () {
       const git = ctx.git
       const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
@@ -175,7 +181,10 @@ function makeGit(proc: AppProcess.Interface) {
     if (remote) {
       const head = yield* run(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd })
       if (head.exitCode === 0) {
-        const ref = head.text().trim().replace(/^refs\/remotes\//, "")
+        const ref = head
+          .text()
+          .trim()
+          .replace(/^refs\/remotes\//, "")
         const name = ref.startsWith(`${remote}/`) ? ref.slice(`${remote}/`.length) : ""
         if (name) return { name, ref } satisfies Base
       }

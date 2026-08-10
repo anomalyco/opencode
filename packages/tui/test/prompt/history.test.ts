@@ -41,5 +41,4 @@ describe("prompt history", () => {
     const b = entry("describe this", [{ name: "b.png", uri: "data:image/png;base64,BBB" }])
     expect(isDuplicateEntry(a, b)).toBe(false)
   })
-
 })

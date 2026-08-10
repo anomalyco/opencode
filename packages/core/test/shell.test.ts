@@ -34,12 +34,6 @@ describe("shell", () => {
     expect(ShellSelect.login("C:/tools/pwsh.exe")).toBe(false)
   })
 
-  test("detects posix shells", () => {
-    expect(ShellSelect.posix("/bin/bash")).toBe(true)
-    expect(ShellSelect.posix("/bin/fish")).toBe(false)
-    expect(ShellSelect.posix("C:/tools/pwsh.exe")).toBe(false)
-  })
-
   test("falls back when configured shell cannot be resolved", async () => {
     await withShell(undefined, async () => {
       const preferred = ShellSelect.preferred()
@@ -59,6 +53,13 @@ describe("shell", () => {
     expect(ShellSelect.args("/usr/bin/fish", "echo hi")).toEqual(["-c", "echo hi"])
     expect(ShellSelect.args("/bin/zsh", "echo hi")).toEqual(["-c", "echo hi"])
     expect(ShellSelect.args("/bin/bash", "echo hi")).toEqual(["-c", "echo hi"])
+    expect(ShellSelect.args("pwsh", "Write-Output hi")).toEqual([
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Write-Output hi",
+    ])
   })
 
   if (process.platform === "win32") {

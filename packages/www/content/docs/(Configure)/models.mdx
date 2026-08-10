@@ -44,7 +44,7 @@ Set `model` in `opencode.json` or `opencode.jsonc`:
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5"
+  "model": "anthropic/claude-sonnet-4-5",
 }
 ```
 
@@ -81,16 +81,16 @@ You can also map a friendly catalog ID to a different API model ID with `modelID
           "capabilities": {
             "tools": true,
             "input": ["text", "image"],
-            "output": ["text"]
+            "output": ["text"],
           },
           "limit": {
             "context": 200000,
-            "output": 32000
-          }
-        }
-      }
-    }
-  }
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
 }
 ```
 
@@ -109,12 +109,12 @@ OpenAI-compatible models that stream reasoning through a custom assistant-messag
       "models": {
         "reasoner": {
           "compatibility": {
-            "reasoningField": "reasoning_content"
-          }
-        }
-      }
-    }
-  }
+            "reasoningField": "reasoning_content",
+          },
+        },
+      },
+    },
+  },
 }
 ```
 
@@ -133,27 +133,27 @@ Add a variant, or override a catalog variant with the same ID, under the model's
       "models": {
         "gpt-5.2": {
           "settings": {
-            "reasoningEffort": "medium"
+            "reasoningEffort": "medium",
           },
           "variants": [
             {
               "id": "fast",
               "settings": {
-                "reasoningEffort": "low"
-              }
+                "reasoningEffort": "low",
+              },
             },
             {
               "id": "deep",
               "settings": {
                 "reasoningEffort": "high",
-                "reasoningSummary": "auto"
-              }
-            }
-          ]
-        }
-      }
-    }
-  }
+                "reasoningSummary": "auto",
+              },
+            },
+          ],
+        },
+      },
+    },
+  },
 }
 ```
 
@@ -173,7 +173,7 @@ For an OpenAI-compatible server, define a provider package, endpoint, and at lea
       "name": "Local server",
       "package": "aisdk:@ai-sdk/openai-compatible",
       "settings": {
-        "baseURL": "http://127.0.0.1:1234/v1"
+        "baseURL": "http://127.0.0.1:1234/v1",
       },
       "models": {
         "coder": {
@@ -181,16 +181,16 @@ For an OpenAI-compatible server, define a provider package, endpoint, and at lea
           "capabilities": {
             "tools": true,
             "input": ["text"],
-            "output": ["text"]
+            "output": ["text"],
           },
           "limit": {
             "context": 32768,
-            "output": 8192
-          }
-        }
-      }
-    }
-  }
+            "output": 8192,
+          },
+        },
+      },
+    },
+  },
 }
 ```
 
@@ -218,8 +218,8 @@ The expanded config form is equivalent when generated or programmatic configurat
 {
   "model": {
     "providerID": "openrouter",
-    "model": "anthropic/claude-sonnet-4.5"
-  }
+    "model": "anthropic/claude-sonnet-4.5",
+  },
 }
 ```
 

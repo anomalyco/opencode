@@ -12,10 +12,8 @@ import {
   User,
   UserData,
 } from "@opencode-ai/schema/session-pending"
-import { Event } from "@opencode-ai/schema/event"
 import type { Database } from "../database/database"
 import { Bus } from "../bus"
-import { EventTable } from "../event/sql"
 import { KeyedMutex } from "../effect/keyed-mutex"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
@@ -37,12 +35,9 @@ const decodeUser = Schema.decodeUnknownSync(UserData)
 const encodeUser = Schema.encodeSync(UserData)
 const decodeSynthetic = Schema.decodeUnknownSync(SyntheticData)
 const encodeSynthetic = Schema.encodeSync(SyntheticData)
-const decodeAdmittedEvent = Schema.decodeUnknownOption(SessionEvent.InputAdmitted.data)
-const admittedEventType = Bus.versionedType(
-  SessionEvent.InputAdmitted.type,
-  SessionEvent.InputAdmitted.durable.version,
-)
+const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
+type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
 
 export class LifecycleConflict extends Schema.TaggedErrorClass<LifecycleConflict>()(
   "SessionPending.LifecycleConflict",
@@ -53,7 +48,6 @@ export class LifecycleConflict extends Schema.TaggedErrorClass<LifecycleConflict
 
 const fromRow = (row: typeof SessionPendingTable.$inferSelect): Info => {
   const base = {
-    admittedSeq: row.admitted_seq,
     id: SessionMessage.ID.make(row.id),
     sessionID: SessionSchema.ID.make(row.session_id),
     timeCreated: DateTime.makeUnsafe(row.time_created),
@@ -104,47 +98,35 @@ export const compaction = Effect.fn("SessionPending.compaction")(function* (
   return entry.type === "compaction" ? entry : undefined
 })
 
-/**
- * Reconstruct the admitted record for a pending row that was already consumed
- * by promotion. The projected `session_message` row proves promotion happened;
- * the durable `session.input.admitted` event retains the exact admitted
- * message, including delivery.
- */
-const promotedFromHistory = Effect.fn("SessionPending.promotedFromHistory")(function* (
+const promotedFromMessage = Effect.fn("SessionPending.promotedFromMessage")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   id: SessionMessage.ID,
+  delivery: Delivery,
 ) {
-  const message = yield* db
+  const row = yield* db
     .select()
     .from(SessionMessageTable)
     .where(eq(SessionMessageTable.id, id))
     .get()
     .pipe(Effect.orDie)
-  if (message === undefined) return undefined
-  if (message.session_id !== sessionID || (message.type !== "user" && message.type !== "synthetic"))
+  if (row === undefined) return undefined
+  if (row.session_id !== sessionID || (row.type !== "user" && row.type !== "synthetic"))
     return yield* Effect.die(new LifecycleConflict({ id }))
-  const rows = yield* db
-    .select()
-    .from(EventTable)
-    .where(and(eq(EventTable.aggregate_id, sessionID), eq(EventTable.type, admittedEventType)))
-    .all()
-    .pipe(Effect.orDie)
-  for (const row of rows) {
-    const decoded = decodeAdmittedEvent(row.data)
-    if (decoded._tag !== "Some" || decoded.value.inputID !== id) continue
-    const base = {
-      admittedSeq: row.seq,
-      id,
-      sessionID,
-      timeCreated: DateTime.makeUnsafe(row.created),
-    }
-    return decoded.value.input.type === "user"
-      ? User.make({ ...base, ...decoded.value.input })
-      : Synthetic.make({ ...base, ...decoded.value.input })
-  }
-  // A projected message without an admitted event in this aggregate (for
-  // example fork-copied history) is not a retryable admission.
+  const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
+  const base = { id, sessionID, timeCreated: message.time.created, delivery }
+  if (message.type === "user")
+    return User.make({
+      ...base,
+      type: "user",
+      data: decodeUser(message),
+    })
+  if (message.type === "synthetic")
+    return Synthetic.make({
+      ...base,
+      type: "synthetic",
+      data: decodeSynthetic(message),
+    })
   return yield* Effect.die(new LifecycleConflict({ id }))
 })
 
@@ -162,7 +144,7 @@ export const admit = Effect.fn("SessionPending.admit")(function* (
     if (existing.type === "compaction") return yield* Effect.die(new LifecycleConflict({ id: request.id }))
     return existing
   }
-  const promoted = yield* promotedFromHistory(db, request.sessionID, request.id)
+  const promoted = yield* promotedFromMessage(db, request.sessionID, request.id, request.input.delivery)
   if (promoted !== undefined) return promoted
   return yield* bus
     .publish(SessionEvent.InputAdmitted, {
@@ -172,10 +154,7 @@ export const admit = Effect.fn("SessionPending.admit")(function* (
     })
     .pipe(
       Effect.flatMap((event) => {
-        if (event.durable === undefined)
-          return Effect.die(new Error("Session input admission event is missing aggregate sequence"))
         const base = {
-          admittedSeq: event.durable.seq,
           id: request.id,
           sessionID: request.sessionID,
           timeCreated: event.created,
@@ -316,10 +295,7 @@ export const projectCompactionAdmitted = Effect.fn("SessionPending.projectCompac
  */
 export const projectPromoted = Effect.fn("SessionPending.projectPromoted")(function* (
   db: DatabaseService,
-  input: {
-    readonly id: SessionMessage.ID
-    readonly sessionID: SessionSchema.ID
-  },
+  input: PendingRef,
 ) {
   if (yield* compaction(db, input.sessionID)) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
   const deleted = yield* db
@@ -333,6 +309,53 @@ export const projectPromoted = Effect.fn("SessionPending.projectPromoted")(funct
   if (stored.type === "compaction") return yield* Effect.die(new LifecycleConflict({ id: input.id }))
   return stored
 })
+
+export const projectCancelled = Effect.fn("SessionPending.projectCancelled")(function* (
+  db: DatabaseService,
+  input: PendingRef,
+) {
+  const deleted = yield* db
+    .delete(SessionPendingTable)
+    .where(
+      and(
+        eq(SessionPendingTable.id, input.id),
+        eq(SessionPendingTable.session_id, input.sessionID),
+        or(eq(SessionPendingTable.delivery, "queue"), eq(SessionPendingTable.delivery, "steer")),
+      ),
+    )
+    .returning({ id: SessionPendingTable.id })
+    .get()
+    .pipe(Effect.orDie)
+  if (!deleted) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+})
+
+const projectDelivery = Effect.fn("SessionPending.projectDelivery")(function* (
+  db: DatabaseService,
+  input: PendingRef & { readonly from: Delivery; readonly to: Delivery },
+) {
+  const updated = yield* db
+    .update(SessionPendingTable)
+    .set({ delivery: input.to })
+    .where(
+      and(
+        eq(SessionPendingTable.id, input.id),
+        eq(SessionPendingTable.session_id, input.sessionID),
+        eq(SessionPendingTable.delivery, input.from),
+      ),
+    )
+    .returning({ id: SessionPendingTable.id })
+    .get()
+    .pipe(Effect.orDie)
+  if (!updated) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+})
+
+export const projectSteered = Effect.fn("SessionPending.projectSteered")((db: DatabaseService, input: PendingRef) =>
+  projectDelivery(db, { ...input, from: "queue", to: "steer" }),
+)
+
+export const projectQueued = Effect.fn("SessionPending.projectQueued")((db: DatabaseService, input: PendingRef) =>
+  projectDelivery(db, { ...input, from: "steer", to: "queue" }),
+)
 
 export const settleCompaction = Effect.fn("SessionPending.settleCompaction")(function* (
   db: DatabaseService,
@@ -411,6 +434,39 @@ export const equivalent = (
   return false
 }
 
+const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
+  inboxLocks.withLock(input.sessionID)(effect).pipe(Effect.asVoid)
+
+export const cancel = Effect.fn("SessionPending.cancel")((bus: Bus.Interface, input: PendingRef) =>
+  publishMutation(
+    input,
+    bus.publish(SessionEvent.InputCancelled, {
+      sessionID: input.sessionID,
+      inputID: input.id,
+    }),
+  ),
+)
+
+export const steer = Effect.fn("SessionPending.steer")((bus: Bus.Interface, input: PendingRef) =>
+  publishMutation(
+    input,
+    bus.publish(SessionEvent.InputSteered, {
+      sessionID: input.sessionID,
+      inputID: input.id,
+    }),
+  ),
+)
+
+export const queue = Effect.fn("SessionPending.queue")((bus: Bus.Interface, input: PendingRef) =>
+  publishMutation(
+    input,
+    bus.publish(SessionEvent.InputQueued, {
+      sessionID: input.sessionID,
+      inputID: input.id,
+    }),
+  ),
+)
+
 const publish = Effect.fn("SessionPending.publish")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
@@ -431,7 +487,7 @@ const publish = Effect.fn("SessionPending.publish")(function* (
         .pipe(
           Effect.catchDefect((defect) =>
             defect instanceof LifecycleConflict
-              ? promotedFromHistory(db, sessionID, entry.id).pipe(
+              ? promotedFromMessage(db, sessionID, entry.id, entry.delivery).pipe(
                   Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
                 )
               : Effect.die(defect),

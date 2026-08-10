@@ -15,14 +15,14 @@ Configure references by alias in `opencode.json` or `opencode.jsonc`:
   "references": {
     "docs": {
       "path": "../product-docs",
-      "description": "Use for product behavior and terminology"
+      "description": "Use for product behavior and terminology",
     },
     "effect": {
       "repository": "Effect-TS/effect",
       "branch": "main",
-      "description": "Use for Effect implementation details"
-    }
-  }
+      "description": "Use for Effect implementation details",
+    },
+  },
 }
 ```
 
@@ -35,9 +35,9 @@ Use `path` for a local directory:
   "references": {
     "design-system": {
       "path": "../design-system",
-      "description": "Use when working with components or design tokens"
-    }
-  }
+      "description": "Use when working with components or design tokens",
+    },
+  },
 }
 ```
 
@@ -51,15 +51,14 @@ The string shorthand is useful when no other fields are needed:
 {
   "references": {
     "docs": "../docs",
-    "shared": "~/work/shared"
-  }
+    "shared": "~/work/shared",
+  },
 }
 ```
 
 <Callout type="note">
-  A shorthand string is treated as a local path only when it starts with `.`,
-  `/`, or `~`. Use `./docs`, not `docs`; a bare `docs` value is interpreted as
-  a Git repository.
+  A shorthand string is treated as a local path only when it starts with `.`, `/`, or `~`. Use `./docs`, not `docs`; a
+  bare `docs` value is interpreted as a Git repository.
 </Callout>
 
 ## Git repositories
@@ -72,13 +71,13 @@ Git URLs, host/path forms, and SCP-style remotes are supported.
   "references": {
     "effect": {
       "repository": "Effect-TS/effect",
-      "branch": "main"
+      "branch": "main",
     },
     "internal-sdk": {
       "repository": "git@gitlab.example.com:platform/sdk.git",
-      "branch": "release/v2"
-    }
-  }
+      "branch": "release/v2",
+    },
+  },
 }
 ```
 
@@ -93,8 +92,8 @@ Git references also support shorthand:
 {
   "references": {
     "effect": "Effect-TS/effect",
-    "sdk": "gitlab.com/platform/sdk"
-  }
+    "sdk": "gitlab.com/platform/sdk",
+  },
 }
 ```
 
@@ -115,9 +114,8 @@ reference can appear before its checkout is ready. Clone and refresh failures
 are logged and do not stop other references from loading.
 
 <Callout type="warning">
-  The cache has one checkout per normalized remote, not one per branch. Do not
-  configure the same repository at multiple branches; only one branch can be
-  exposed. Avoid editing cached checkouts because a refresh resets them.
+  The cache has one checkout per normalized remote, not one per branch. Do not configure the same repository at multiple
+  branches; only one branch can be exposed. Avoid editing cached checkouts because a refresh resets them.
 </Callout>
 
 ## Description and visibility
@@ -135,9 +133,9 @@ Set `hidden` to `true` to remove a reference from TUI `@` autocomplete:
     "internal": {
       "path": "../internal",
       "description": "Use for internal service behavior",
-      "hidden": true
-    }
-  }
+      "hidden": true,
+    },
+  },
 }
 ```
 
@@ -165,13 +163,13 @@ applicable edit permission.
 
 ## Fields
 
-| Field | Local | Git | Description |
-| --- | --- | --- | --- |
-| `path` | Required | No | Local directory path |
-| `repository` | No | Required | Remote Git repository |
-| `branch` | No | Optional | Branch to fetch and check out |
+| Field         | Local    | Git      | Description                                   |
+| ------------- | -------- | -------- | --------------------------------------------- |
+| `path`        | Required | No       | Local directory path                          |
+| `repository`  | No       | Required | Remote Git repository                         |
+| `branch`      | No       | Optional | Branch to fetch and check out                 |
 | `description` | Optional | Optional | Guidance describing when agents should use it |
-| `hidden` | Optional | Optional | Hide it from TUI `@` autocomplete |
+| `hidden`      | Optional | Optional | Hide it from TUI `@` autocomplete             |
 
 An alias cannot be empty or contain `/`, `\`, whitespace, a backtick, or a
 comma.

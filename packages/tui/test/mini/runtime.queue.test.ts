@@ -80,7 +80,7 @@ describe("run runtime queue", () => {
     ])
   })
 
-  test.each(["/compact", "/summarize"])("treats %s as a local compaction command", async (command) => {
+  test("treats /compact as a local compaction command", async () => {
     const ui = createFooterApiFixture()
     const seen: string[] = []
     let compacted = 0
@@ -96,7 +96,7 @@ describe("run runtime queue", () => {
       },
     })
 
-    ui.submit(command)
+    ui.submit("/compact")
     ui.submit("hello")
     await task
 
@@ -265,6 +265,33 @@ describe("run runtime queue", () => {
     await task
   })
 
+  test("preserves explicit steer and queue delivery for in-flight prompts", async () => {
+    const ui = createFooterApiFixture()
+    const admitted: string[] = []
+    const gate = Promise.withResolvers<void>()
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (_input, _signal, onAdmitted) => {
+        onAdmitted()
+        await gate.promise
+      },
+      admit: async (input, delivery) => {
+        admitted.push(`${input.text}:${delivery}`)
+      },
+      settle: async () => ui.api.close(),
+    })
+
+    ui.submit("one")
+    ui.submit("two", undefined, "steer")
+    ui.submit("three", undefined, "queue")
+    while (admitted.length < 2) await Bun.sleep(0)
+    expect(admitted).toEqual(["two:steer", "three:queue"])
+
+    gate.resolve()
+    await task
+  })
+
   test("continues durable admission after one fails", async () => {
     const ui = createFooterApiFixture()
     const admitted: string[] = []
@@ -308,7 +335,7 @@ describe("run runtime queue", () => {
         admitted()
         await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }))
       },
-      admit: async (_prompt, signal) => {
+      admit: async (_prompt, _delivery, signal) => {
         admissionStarted.resolve()
         await new Promise<void>((resolve) => {
           if (signal.aborted) {

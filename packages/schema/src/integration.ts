@@ -7,6 +7,7 @@ import { Connection } from "./connection.js"
 import { ascending } from "./identifier.js"
 import { statics } from "./schema.js"
 import { IntegrationID, IntegrationMethodID } from "./integration-id.js"
+import { Form } from "./form.js"
 
 export const ID = IntegrationID
 export type ID = typeof ID.Type
@@ -14,46 +15,12 @@ export type ID = typeof ID.Type
 export const MethodID = IntegrationMethodID
 export type MethodID = typeof MethodID.Type
 
-export interface When extends Schema.Schema.Type<typeof When> {}
-export const When = Schema.Struct({
-  key: Schema.String,
-  op: Schema.Literals(["eq", "neq"]),
-  value: Schema.String,
-}).annotate({ identifier: "Integration.When" })
-
-export interface TextPrompt extends Schema.Schema.Type<typeof TextPrompt> {}
-export const TextPrompt = Schema.Struct({
-  type: Schema.Literal("text"),
-  key: Schema.String,
-  message: Schema.String,
-  placeholder: optional(Schema.String),
-  when: optional(When),
-}).annotate({ identifier: "Integration.TextPrompt" })
-
-export interface SelectPrompt extends Schema.Schema.Type<typeof SelectPrompt> {}
-export const SelectPrompt = Schema.Struct({
-  type: Schema.Literal("select"),
-  key: Schema.String,
-  message: Schema.String,
-  options: Schema.Array(
-    Schema.Struct({
-      label: Schema.String,
-      value: Schema.String,
-      hint: optional(Schema.String),
-    }),
-  ),
-  when: optional(When),
-}).annotate({ identifier: "Integration.SelectPrompt" })
-
-export const Prompt = Schema.Union([TextPrompt, SelectPrompt]).pipe(Schema.toTaggedUnion("type"))
-export type Prompt = typeof Prompt.Type
-
 export interface OAuthMethod extends Schema.Schema.Type<typeof OAuthMethod> {}
 export const OAuthMethod = Schema.Struct({
   id: MethodID,
   type: Schema.Literal("oauth"),
   label: Schema.String,
-  prompts: optional(Schema.Array(Prompt)),
+  form: optional(Form.Fields),
 }).annotate({ identifier: "Integration.OAuthMethod" })
 
 export interface CommandMethod extends Schema.Schema.Type<typeof CommandMethod> {}
@@ -68,6 +35,7 @@ export interface KeyMethod extends Schema.Schema.Type<typeof KeyMethod> {}
 export const KeyMethod = Schema.Struct({
   type: Schema.Literal("key"),
   label: optional(Schema.String),
+  form: optional(Form.Fields),
 }).annotate({ identifier: "Integration.KeyMethod" })
 
 export interface EnvMethod extends Schema.Schema.Type<typeof EnvMethod> {}
@@ -80,9 +48,6 @@ export const Method = Schema.Union([OAuthMethod, CommandMethod, KeyMethod, EnvMe
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Integration.Method" })
 export type Method = typeof Method.Type
-
-export const Inputs = Schema.Record(Schema.String, Schema.String).annotate({ identifier: "Integration.Inputs" })
-export type Inputs = typeof Inputs.Type
 
 const Updated = ephemeral({
   type: "integration.updated",

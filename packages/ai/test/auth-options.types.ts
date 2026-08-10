@@ -1,13 +1,12 @@
 import { Config } from "effect"
 import { Auth } from "../src/route"
-import type { ModelFactory } from "../src/route/auth-options"
+import type { LanguageModelFactory } from "../src/route/auth-options"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import * as AmazonBedrock from "../src/providers/amazon-bedrock"
 import * as Anthropic from "../src/providers/anthropic"
 import * as AnthropicCompatible from "../src/providers/anthropic-compatible"
 import * as Azure from "../src/providers/azure"
 import * as Cloudflare from "../src/providers/cloudflare"
-import * as GitHubCopilot from "../src/providers/github-copilot"
 import * as Google from "../src/providers/google"
 import * as GoogleVertex from "../src/providers/google-vertex"
 import * as GoogleVertexChat from "../src/providers/google-vertex-chat"
@@ -23,13 +22,13 @@ type BaseOptions = {
   readonly headers?: Record<string, string>
 }
 
-type Model = {
+type LanguageModel = {
   readonly id: string
 }
 
 declare const auth: Auth.Definition
-declare const optionalAuthModel: ModelFactory<BaseOptions, "optional", Model>
-declare const requiredAuthModel: ModelFactory<BaseOptions, "required", Model>
+declare const optionalAuthModel: LanguageModelFactory<BaseOptions, "optional", LanguageModel>
+declare const requiredAuthModel: LanguageModelFactory<BaseOptions, "required", LanguageModel>
 const configApiKey = Config.redacted("OPENAI_API_KEY")
 
 OpenAIChat.route.model({ id: "gpt-4.1-mini" })
@@ -270,7 +269,3 @@ OpenAICompatible.deepseek.configure({ apiKey: "deepseek-key" }).model("deepseek-
 Cloudflare.CloudflareWorkersAI.configure({ accountId: "account", apiKey: "cf-key" }).model("@cf/meta/llama")
 // @ts-expect-error Cloudflare Workers AI model selectors only accept model ids.
 Cloudflare.CloudflareWorkersAI.configure({ accountId: "account", apiKey: "cf-key" }).model("@cf/meta/llama", {})
-
-GitHubCopilot.configure({ baseURL: "https://copilot.test", apiKey: "copilot-key" }).model("gpt-4.1")
-// @ts-expect-error GitHub Copilot model selectors only accept model ids.
-GitHubCopilot.configure({ baseURL: "https://copilot.test", apiKey: "copilot-key" }).model("gpt-4.1", {})

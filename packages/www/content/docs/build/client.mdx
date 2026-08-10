@@ -9,8 +9,7 @@ network. Its types and methods are generated from the same contract as the
 [API reference](/api).
 
 <Callout type="warning">
-  The V2 API and client are beta. Method names, inputs, and outputs may change
-  before the stable release.
+  The V2 API and client are beta. Method names, inputs, and outputs may change before the stable release.
 </Callout>
 
 ## Install
@@ -140,9 +139,7 @@ const program = Effect.gen(function* () {
   return yield* client.session.get({ sessionID: session.id })
 })
 
-const session = await Effect.runPromise(
-  program.pipe(Effect.provide(FetchHttpClient.layer)),
-)
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
 ```
 
 Streaming operations, including `client.event.subscribe()` and
@@ -175,9 +172,6 @@ const program = Effect.gen(function* () {
 })
 
 const health = await Effect.runPromise(
-  program.pipe(
-    Effect.provide(FetchHttpClient.layer),
-    Effect.provide(NodeFileSystem.layer),
-  ),
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
 )
 ```

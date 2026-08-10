@@ -3,8 +3,7 @@ import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, useThemes } from "../../context/theme"
-import type { PermissionRequest } from "@opencode-ai/client"
-import { useClient } from "../../context/client"
+import type { PermissionReply, PermissionRequest } from "@opencode-ai/client"
 import { SplitBorder } from "../../ui/border"
 import { useData } from "../../context/data"
 import { filetype } from "../../util/filetype"
@@ -14,6 +13,8 @@ import { useConfig } from "../../config"
 import { Keymap } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { SimulationSemantics } from "../../simulation/semantics"
+import { PatchDiff } from "../../component/patch-diff"
+import { useToast } from "../../ui/toast"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -50,8 +51,9 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
             },
           }}
         >
-          <diff
+          <PatchDiff
             diff={diff()}
+            hunkFg={theme.diff.text.hunkHeader}
             view={view()}
             filetype={ft()}
             syntaxStyle={syntax()}
@@ -108,8 +110,8 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
 }
 
 export function PermissionPrompt(props: { request: PermissionRequest; directory?: string }) {
-  const client = useClient()
   const data = useData()
+  const toast = useToast()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
   })
@@ -121,7 +123,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
     if (!tool) return { input: undefined, metadata: undefined }
     const message = data.session.message.get(props.request.sessionID, tool.messageID)
     if (message?.type !== "assistant") return { input: undefined, metadata: undefined }
-    const part = message.content.find((part) => part.type === "tool" && part.id === tool.callID)
+    const part = message.content.find((part) => part.type === "tool" && part.id === tool.id)
     if (part?.type === "tool" && part.state.status !== "streaming") {
       return { input: part.state.input, metadata: part.state.metadata }
     }
@@ -129,6 +131,12 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
   })
 
   const theme = useTheme()
+
+  function reply(value: PermissionReply, message?: string) {
+    void data.session.permission
+      .reply({ sessionID: props.request.sessionID, requestID: props.request.id, reply: value, message })
+      .catch((error: unknown) => toast.error(error))
+  }
 
   return (
     <Switch>
@@ -149,11 +157,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           onSelect={(option) => {
             setStore("stage", "permission")
             if (option === "cancel") return
-            void client.api.permission.reply({
-              sessionID: props.request.sessionID,
-              reply: "always",
-              requestID: props.request.id,
-            })
+            reply("always")
           }}
         />
       </Match>
@@ -162,12 +166,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           action={props.request.action}
           instance={props.request.id}
           onConfirm={(message) => {
-            void client.api.permission.reply({
-              sessionID: props.request.sessionID,
-              reply: "reject",
-              requestID: props.request.id,
-              message: message || undefined,
-            })
+            reply("reject", message || undefined)
           }}
           onCancel={() => {
             setStore("stage", "permission")
@@ -263,18 +262,10 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                     setStore("stage", "reject")
                     return
                   }
-                  void client.api.permission.reply({
-                    sessionID: props.request.sessionID,
-                    reply: "reject",
-                    requestID: props.request.id,
-                  })
+                  reply("reject")
                   return
                 }
-                void client.api.permission.reply({
-                  sessionID: props.request.sessionID,
-                  reply: "once",
-                  requestID: props.request.id,
-                })
+                reply("once")
               }}
             />
           )
@@ -297,7 +288,8 @@ function RejectPrompt(props: {
   onCancel: () => void
 }) {
   let input: TextareaRenderable
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
+  const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   Keymap.createLayer(() => ({
@@ -372,6 +364,7 @@ function RejectPrompt(props: {
           textColor={theme.text.default}
           focusedTextColor={theme.text.default}
           cursorColor={theme.text.default}
+          cursorStyle={config.cursor}
         />
         <box
           id="session.permission.reject.actions"
@@ -429,7 +422,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   fullscreen?: boolean
   onSelect: (option: keyof T) => void
 }) {
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const dimensions = useTerminalDimensions()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({

@@ -15,6 +15,8 @@ import type {
   ModelInfo,
   PermissionSavedInfo,
   PermissionRequest,
+  PermissionReplyInput,
+  Project,
   ProviderInfo,
   ReferenceInfo,
   SessionMessageInfo,
@@ -26,14 +28,17 @@ import type {
   SessionPendingInfo,
   ShellInfo,
   SkillInfo,
+  VcsInfo,
   OpenCodeEvent,
   WebSearchProvider,
 } from "@opencode-ai/client"
+import { isPermissionNotFoundError } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { nonEmptyToolContent } from "../util/tool-display"
+import type { SessionPending } from "@opencode-ai/schema/session-pending"
 import { createEffect, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
@@ -44,9 +49,11 @@ const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
 // server cannot recover their Location when settling them. Preserve the event Location
 // until MCP elicitations carry session ownership.
 export type FormWithLocation = FormInfo & { readonly location?: LocationRef }
+type ShellWithLocation = ShellInfo & { readonly location: LocationRef }
 
 type LocationData = {
   info?: LocationGetOutput
+  vcs?: VcsInfo
   agent?: AgentInfo[]
   command?: CommandInfo[]
   integration?: IntegrationInfo[]
@@ -60,7 +67,7 @@ type LocationData = {
   websearch?: WebSearchProvider[]
   // Currently running shell commands for this location, keyed by shell id. Entries are removed
   // once the command exits or is deleted, so this only ever holds in-flight shells.
-  shell?: Record<string, ShellInfo>
+  shell?: Record<string, ShellWithLocation>
   skill?: SkillInfo[]
 }
 
@@ -80,6 +87,7 @@ type Store = {
     form: Record<string, FormWithLocation[]>
   }
   project: {
+    info: Record<string, Project>
     permission: Record<string, PermissionSavedInfo[]>
   }
   location: Record<string, LocationData>
@@ -139,6 +147,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         form: {},
       },
       project: {
+        info: {},
         permission: {},
       },
       location: {},
@@ -162,12 +171,38 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     function removePending(sessionID: string, inputID?: string) {
       if (!inputID) return
+      if (store.session.pending[sessionID]?.some((item) => item.id === inputID))
+        setStore(
+          "session",
+          "pending",
+          sessionID,
+          (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inputID),
+        )
+      if (store.session.input[sessionID]?.includes(inputID))
+        setStore(
+          "session",
+          "input",
+          sessionID,
+          (store.session.input[sessionID] ?? []).filter((id) => id !== inputID),
+        )
+    }
+
+    function removePermission(sessionID: string, requestID: string) {
+      const requests = store.session.permission[sessionID]
+      if (!requests?.some((request) => request.id === requestID)) return
       setStore(
         "session",
-        "pending",
+        "permission",
         sessionID,
-        (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inputID),
+        requests.filter((request) => request.id !== requestID),
       )
+    }
+
+    function updatePending(sessionID: string, inputID: string, delivery: SessionPending.Delivery) {
+      const index = store.session.pending[sessionID]?.findIndex((item) => item.id === inputID) ?? -1
+      const item = store.session.pending[sessionID]?.[index]
+      if (index < 0 || !item || item.type === "compaction" || item.delivery === delivery) return
+      setStore("session", "pending", sessionID, index, { ...item, delivery })
     }
 
     const message = {
@@ -202,10 +237,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         const item = messages.findLast((item) => item.type === "compaction" && item.status === "running")
         return item?.type === "compaction" ? item : undefined
       },
-      latestTool(assistant: SessionMessageAssistant | undefined, callID?: string) {
+      latestTool(assistant: SessionMessageAssistant | undefined, id?: string) {
         return assistant?.content.findLast(
-          (item): item is SessionMessageAssistantTool =>
-            item.type === "tool" && (callID === undefined || item.id === callID),
+          (item): item is SessionMessageAssistantTool => item.type === "tool" && (id === undefined || item.id === id),
         )
       },
       latestText(assistant: SessionMessageAssistant | undefined) {
@@ -215,6 +249,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         return assistant?.content.findLast(
           (item): item is SessionMessageAssistantReasoning => item.type === "reasoning" && !item.time?.completed,
         )
+      },
+      reindex(messages: SessionMessageInfo[], index: Map<string, number>, start: number) {
+        for (let position = start; position < messages.length; position++) {
+          const item = messages[position]
+          if (item) index.set(item.id, position)
+        }
       },
     }
 
@@ -335,6 +375,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           result.location.skill.invalidate(event.location)
           void result.location.skill.sync(event.location)
           break
+        case "vcs.branch.updated":
+          setStore("location", locationKey(event.location ?? defaultLocation()), (data) => ({
+            ...data,
+            vcs: {
+              branch: {
+                ...data?.vcs?.branch,
+                current: event.data.branch,
+              },
+            },
+          }))
+          break
         case "session.agent.selected":
           if (store.session.info[event.data.sessionID])
             setStore("session", "info", event.data.sessionID, "agent", event.data.agent)
@@ -371,8 +422,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             .catch((error) => console.error("Failed to load projected model switch message", error))
           break
         case "session.renamed":
-          if (store.session.info[event.data.sessionID])
-            setStore("session", "info", event.data.sessionID, "title", event.data.title)
+          // Preserve the live title when it races the session's initial read.
+          void result.session.sync(event.data.sessionID).then(() => {
+            if (store.session.info[event.data.sessionID])
+              setStore("session", "info", event.data.sessionID, "title", event.data.title)
+          })
           break
         case "session.moved":
           if (store.session.info[event.data.sessionID]) {
@@ -383,31 +437,42 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           }
           break
         case "session.input.promoted": {
+          const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inputID) ?? false
           removePending(event.data.sessionID, event.data.inputID)
           message.update(event.data.sessionID, (draft, index) => {
             const position = index.get(event.data.inputID)
             if (position === undefined) return
             const existing = draft[position]
-            if (!existing || !store.session.input[event.data.sessionID]?.includes(event.data.inputID)) return
+            if (!existing || !admitted) return
             existing.time.created = event.created
             draft.splice(position, 1)
             draft.push(existing)
-            index.clear()
-            draft.forEach((message, indexValue) => index.set(message.id, indexValue))
+            message.reindex(draft, index, position)
           })
-          setStore(
-            "session",
-            "input",
-            event.data.sessionID,
-            (store.session.input[event.data.sessionID] ?? []).filter((id) => id !== event.data.inputID),
-          )
+          break
+        }
+        case "session.input.steered":
+          updatePending(event.data.sessionID, event.data.inputID, "steer")
+          break
+        case "session.input.queued":
+          updatePending(event.data.sessionID, event.data.inputID, "queue")
+          break
+        case "session.input.cancelled": {
+          removePending(event.data.sessionID, event.data.inputID)
+          if (messageIndex.get(event.data.sessionID)?.has(event.data.inputID))
+            message.update(event.data.sessionID, (draft, index) => {
+              const position = index.get(event.data.inputID)
+              if (position === undefined) return
+              draft.splice(position, 1)
+              index.delete(event.data.inputID)
+              message.reindex(draft, index, position)
+            })
           break
         }
         case "session.input.admitted":
           addPending({
             id: event.data.inputID,
             sessionID: event.data.sessionID,
-            admittedSeq: event.durable.seq,
             timeCreated: event.created,
             ...event.data.input,
           })
@@ -573,7 +638,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             message.assistant(draft, index, event.data.assistantMessageID)?.content.push({
               type: "tool",
-              id: event.data.callID,
+              id: event.data.id,
               name: event.data.name,
               time: { created: event.created },
               state: { status: "streaming", input: "" },
@@ -584,7 +649,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (match?.state.status === "streaming") match.state.input += event.data.delta
           })
@@ -593,7 +658,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (match?.state.status === "streaming") match.state.input = event.data.text
           })
@@ -602,7 +667,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (!match) return
             match.time.ran = event.created
@@ -615,7 +680,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (match?.state.status !== "running") return
             match.state.metadata = event.data.metadata
@@ -625,7 +690,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (match?.state.status !== "running") return
             match.state = {
@@ -643,7 +708,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           message.update(event.data.sessionID, (draft, index) => {
             const match = message.latestTool(
               message.assistant(draft, index, event.data.assistantMessageID),
-              event.data.callID,
+              event.data.id,
             )
             if (!match || (match.state.status !== "streaming" && match.state.status !== "running")) return
             match.state = {
@@ -702,7 +767,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           addPending({
             id: event.data.inputID,
             sessionID: event.data.sessionID,
-            admittedSeq: event.durable.seq,
             timeCreated: event.created,
             type: "compaction",
           })
@@ -822,14 +886,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           ])
           break
         case "permission.replied":
-          setStore(
-            "session",
-            "permission",
-            event.data.sessionID,
-            (store.session.permission[event.data.sessionID] ?? []).filter(
-              (request) => request.id !== event.data.requestID,
-            ),
-          )
+          removePermission(event.data.sessionID, event.data.requestID)
           break
         case "form.created":
           if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
@@ -850,7 +907,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "shell.created":
           setStore("location", locationKey(event.location ?? defaultLocation()), (data) => ({
             ...data,
-            shell: { ...data?.shell, [event.data.info.id]: event.data.info },
+            shell: {
+              ...data?.shell,
+              [event.data.info.id]: { ...event.data.info, location: event.location ?? defaultLocation() },
+            },
           }))
           break
         case "shell.exited":
@@ -956,10 +1016,26 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             sync.invalidate(`session.pending:${sessionID}`)
           },
         },
-        sync(sessionID: string) {
-          return sync.run(`session:${sessionID}`, async () => {
-            setStore("session", "info", sessionID, await client.api.session.get({ sessionID }))
-            registerSession(sessionID)
+        sync(sessionID: string, options?: { children?: boolean }) {
+          return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
+            const [info, children] = await Promise.all([
+              client.api.session.get({ sessionID }),
+              options?.children
+                ? client.api.session.list({ parentID: sessionID, order: "desc" }).then((response) => response.data)
+                : [],
+            ])
+            const sessions = [info, ...children]
+            setStore(
+              "session",
+              "info",
+              produce((draft) => {
+                for (const session of sessions) draft[session.id] = session
+              }),
+            )
+            for (const session of sessions) {
+              sync.complete(`session:${session.id}`)
+              registerSession(session.id)
+            }
           })
         },
         invalidate(sessionID: string) {
@@ -998,6 +1074,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           invalidate(sessionID: string) {
             sync.invalidate(`session.permission:${sessionID}`)
+          },
+          async reply(input: PermissionReplyInput) {
+            await client.api.permission.reply(input).catch((error: unknown) => {
+              if (!isPermissionNotFoundError(error)) throw error
+            })
+            removePermission(input.sessionID, input.requestID)
           },
         },
         form: {
@@ -1039,6 +1121,21 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         },
       },
       project: {
+        list() {
+          return Object.values(store.project.info).toSorted((a, b) => b.time.updated - a.time.updated)
+        },
+        get(projectID: string) {
+          return store.project.info[projectID]
+        },
+        sync() {
+          return sync.run("project", async () => {
+            const projects = await client.api.project.list()
+            setStore("project", "info", reconcile(Object.fromEntries(projects.map((project) => [project.id, project]))))
+          })
+        },
+        invalidate() {
+          sync.invalidate("project")
+        },
         permission: {
           list(projectID: string) {
             return store.project.permission[projectID]
@@ -1057,6 +1154,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         list(location?: LocationRef) {
           return Object.values(store.location[locationKey(location ?? defaultLocation())]?.shell ?? {})
         },
+        listBySession(sessionID: string) {
+          return Object.values(store.location)
+            .flatMap((data) => Object.values(data.shell ?? {}))
+            .filter((shell) => shell.metadata.sessionID === sessionID)
+        },
         get(id: string) {
           return Object.values(store.location)
             .map((data) => data.shell?.[id])
@@ -1069,7 +1171,18 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             const key = locationKey(response.location)
             setStore("location", key, {
               ...store.location[key],
-              shell: Object.fromEntries(response.data.map((info) => [info.id, info])),
+              shell: Object.fromEntries(
+                response.data.map((info) => [
+                  info.id,
+                  {
+                    ...info,
+                    location: {
+                      directory: response.location.directory,
+                      workspaceID: response.location.workspaceID,
+                    },
+                  },
+                ]),
+              ),
             })
           })
         },
@@ -1097,6 +1210,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           const location = ref ?? defaultLocation()
           await Promise.all([
+            result.location.vcs.sync(location),
             result.location.agent.sync(location),
             result.location.command.sync(location),
             result.location.integration.sync(location),
@@ -1113,6 +1227,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         invalidate(ref?: LocationRef) {
           const location = ref ?? defaultLocation()
           sync.invalidate(`location:${locationKey(location)}`)
+          result.location.vcs.invalidate(location)
           result.location.agent.invalidate(location)
           result.location.command.invalidate(location)
           result.location.integration.invalidate(location)
@@ -1124,6 +1239,22 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           result.location.skill.invalidate(location)
           result.shell.invalidate(location)
           result.session.form.invalidate("global", location)
+        },
+        vcs: {
+          info(location?: LocationRef) {
+            return store.location[locationKey(location ?? defaultLocation())]?.vcs
+          },
+          sync(ref?: LocationRef) {
+            const location = ref ?? defaultLocation()
+            return sync.run(`location.vcs:${locationKey(location)}`, async () => {
+              const response = await client.api.vcs.get({ location: locationQuery(location) })
+              const key = locationKey(response.location)
+              setStore("location", key, { ...store.location[key], vcs: response.data })
+            })
+          },
+          invalidate(ref?: LocationRef) {
+            sync.invalidate(`location.vcs:${locationKey(ref ?? defaultLocation())}`)
+          },
         },
         agent: {
           list(location?: LocationRef) {
@@ -1320,27 +1451,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             .then((location) => {
               const key = locationKey(location)
               setStore("location", key, { ...store.location[key], info: location })
-              return client.api.session.list({
-                project: location.project.id,
-                limit: 50,
-                order: "desc",
-                parentID: null,
-              })
             })
-            .then((response) => {
-              setStore(
-                "session",
-                "info",
-                produce((draft) => {
-                  for (const session of response.data) draft[session.id] = session
-                }),
-              )
-              for (const session of response.data) {
-                sync.complete(`session:${session.id}`)
-                registerSession(session.id)
-              }
-            })
-            .catch((error) => console.error("Failed to preload sessions", error))
+            .catch((error) => console.error("Failed to preload location", error))
+          void result.location.vcs.sync().catch((error) => console.error("Failed to preload VCS info", error))
+          void result.project.sync().catch((error) => console.error("Failed to preload projects", error))
           return
         }
         handleEvent(details)

@@ -20,7 +20,7 @@ const cacheRequest = LLM.request({
   system: LARGE_CACHEABLE_SYSTEM,
   prompt: "Say hi.",
   generation: { maxTokens: 16, temperature: 0 },
-  providerOptions: { openai: { promptCacheKey: "recorded-cache-test" } },
+  promptCacheKey: "recorded-cache-test",
 })
 
 const recorded = recordedTests({

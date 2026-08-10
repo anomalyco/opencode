@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import { resolve } from "node:path"
-import { replayMessages, streamTurn, type TurnControl } from "../../src/acp/event"
+import { replayMessages, streamTurn, type ChildSessionUpdate, type TurnControl } from "../../src/acp/event"
 import { createSseFixture, durableEvent, ephemeralEvent, withTimeout } from "./sse-fixture"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
@@ -191,6 +191,181 @@ describe("acp event behavior", () => {
     }
   })
 
+  test("projects foreground child session updates onto the parent turn", async () => {
+    const updates: SessionUpdateParams[] = []
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(durableEvent("session.input.promoted", { sessionID: "ses_parent", inputID: id }))
+        send(
+          durableEvent("session.created", {
+            sessionID: "ses_child",
+            ...childSession("ses_child", "ses_parent", "Explore code"),
+          }),
+        )
+        send(durableEvent("session.execution.started", { sessionID: "ses_child" }))
+        send(
+          durableEvent("session.tool.input.started", {
+            sessionID: "ses_child",
+            assistantMessageID: "msg_child",
+            id: "call_read",
+            name: "read",
+          }),
+        )
+        send(
+          durableEvent("session.tool.called", {
+            sessionID: "ses_child",
+            assistantMessageID: "msg_child",
+            id: "call_read",
+            input: { path: "/workspace/src/index.ts" },
+            executed: false,
+          }),
+        )
+        send(
+          durableEvent("session.tool.success", {
+            sessionID: "ses_child",
+            assistantMessageID: "msg_child",
+            id: "call_read",
+            metadata: {},
+            content: [{ type: "text", text: "source" }],
+            executed: true,
+          }),
+        )
+        send(durableEvent("session.execution.succeeded", { sessionID: "ses_child" }))
+        send(durableEvent("session.execution.succeeded", { sessionID: "ses_parent" }))
+      },
+    })
+
+    try {
+      const response = await turn({
+        fixture,
+        connection: recordingConnection(updates),
+        sessionID: "ses_parent",
+        inputID: "input_parent",
+      })
+
+      expect(updates.map((item) => [item.sessionId, item.update.sessionUpdate])).toEqual([
+        ["ses_parent", "tool_call"],
+        ["ses_parent", "tool_call_update"],
+        ["ses_parent", "tool_call_update"],
+      ])
+      expect(updates.map((item) => ("toolCallId" in item.update ? item.update.toolCallId : undefined))).toEqual([
+        "ses_child:call_read",
+        "ses_child:call_read",
+        "ses_child:call_read",
+      ])
+      expect(updates[0]?.update).toMatchObject({
+        title: "Explore code: read",
+        _meta: {
+          "opencode/child-session": {
+            id: "ses_child",
+            parentID: "ses_parent",
+            depth: 1,
+            title: "Explore code",
+          },
+        },
+      })
+      expect(response.stopReason).toBe("end_turn")
+    } finally {
+      await fixture.stop()
+    }
+  })
+
+  test("continues child extension updates after the parent turn ends", async () => {
+    const updates: SessionUpdateParams[] = []
+    const childUpdates: ChildSessionUpdate[] = []
+    const completed = Promise.withResolvers<void>()
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(durableEvent("session.input.promoted", { sessionID: "ses_parent", inputID: id }))
+        send(
+          durableEvent("session.created", {
+            sessionID: "ses_background",
+            ...childSession("ses_background", "ses_parent", "Background research"),
+          }),
+        )
+        send(durableEvent("session.execution.succeeded", { sessionID: "ses_parent" }))
+      },
+    })
+
+    try {
+      const response = await turn({
+        fixture,
+        connection: recordingConnection(updates),
+        sessionID: "ses_parent",
+        inputID: "input_parent",
+        childSessionUpdate: async (update) => {
+          childUpdates.push(update)
+          if (update.type === "status" && update.status === "completed") completed.resolve()
+        },
+      })
+      expect(response.stopReason).toBe("end_turn")
+
+      fixture.send(
+        durableEvent("session.created", {
+          sessionID: "ses_future",
+          ...childSession("ses_future", "ses_parent", "Later turn child"),
+        }),
+      )
+      fixture.send(durableEvent("session.execution.started", { sessionID: "ses_future" }))
+      fixture.send(durableEvent("session.execution.started", { sessionID: "ses_background" }))
+      fixture.send(
+        durableEvent("session.tool.input.started", {
+          sessionID: "ses_background",
+          assistantMessageID: "msg_background",
+          id: "call_shell",
+          name: "shell",
+        }),
+      )
+      fixture.send(
+        durableEvent("session.tool.called", {
+          sessionID: "ses_background",
+          assistantMessageID: "msg_background",
+          id: "call_shell",
+          input: { command: "pwd" },
+          executed: false,
+        }),
+      )
+      fixture.send(
+        durableEvent("session.tool.success", {
+          sessionID: "ses_background",
+          assistantMessageID: "msg_background",
+          id: "call_shell",
+          metadata: { exit: 0 },
+          content: [{ type: "text", text: "/workspace" }],
+          executed: true,
+        }),
+      )
+      fixture.send(durableEvent("session.execution.succeeded", { sessionID: "ses_background" }))
+      await withTimeout(completed.promise, "background child completion was not delivered")
+
+      expect(updates).toEqual([])
+      expect(
+        childUpdates.map((update) =>
+          update.type === "status" ? [update.type, update.status] : [update.type, update.update.sessionUpdate],
+        ),
+      ).toEqual([
+        ["status", "created"],
+        ["status", "running"],
+        ["update", "tool_call"],
+        ["update", "tool_call_update"],
+        ["update", "tool_call_update"],
+        ["status", "completed"],
+      ])
+      expect(childUpdates[2]).toMatchObject({
+        rootSessionId: "ses_parent",
+        childSessionId: "ses_background",
+        parentSessionId: "ses_parent",
+        depth: 1,
+        title: "Background research",
+        type: "update",
+        update: { toolCallId: "ses_background:call_shell" },
+      })
+      expect(childUpdates.some((update) => update.childSessionId === "ses_future")).toBe(false)
+    } finally {
+      await fixture.stop()
+    }
+  })
+
   test("streams tool pending, progress, success, and failure updates", async () => {
     const updates: SessionUpdateParams[] = []
     const fixture = createSseFixture({
@@ -200,7 +375,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.input.started", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_ok",
+            id: "call_ok",
             name: "shell",
           }),
         )
@@ -208,7 +383,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.called", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_ok",
+            id: "call_ok",
             input: { command: "printf done", workdir: "sub" },
             executed: false,
           }),
@@ -217,7 +392,7 @@ describe("acp event behavior", () => {
           ephemeralEvent("session.tool.progress", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_ok",
+            id: "call_ok",
             metadata: { phase: 1 },
           }),
         )
@@ -225,7 +400,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.success", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_ok",
+            id: "call_ok",
             metadata: { exit: 0 },
             content: [{ type: "text", text: "done" }],
             executed: true,
@@ -235,7 +410,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.input.started", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_fail",
+            id: "call_fail",
             name: "read",
           }),
         )
@@ -243,7 +418,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.called", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_fail",
+            id: "call_fail",
             input: { path: "/workspace/missing.ts" },
             executed: false,
           }),
@@ -252,7 +427,7 @@ describe("acp event behavior", () => {
           ephemeralEvent("session.tool.progress", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_fail",
+            id: "call_fail",
             metadata: { bytes: 0 },
           }),
         )
@@ -260,7 +435,7 @@ describe("acp event behavior", () => {
           durableEvent("session.tool.failed", {
             sessionID: "ses_tools",
             assistantMessageID: "msg_tools",
-            callID: "call_fail",
+            id: "call_fail",
             error: { type: "tool.error", message: "not found" },
             metadata: { bytes: 0 },
             content: [{ type: "text", text: "opening" }],
@@ -556,6 +731,7 @@ function turn(input: {
   readonly connection: Connection
   readonly sessionID: string
   readonly inputID: string
+  readonly childSessionUpdate?: (update: ChildSessionUpdate) => Promise<void>
 }) {
   return streamTurn({
     client: input.fixture.client,
@@ -565,9 +741,21 @@ function turn(input: {
     start: { type: "input", id: input.inputID },
     writeTextFile: false,
     control: { cancelled: false, admission: new AbortController() },
+    childSessionUpdate: input.childSessionUpdate,
     submit: (signal) =>
       input.fixture.client.session.prompt({ sessionID: input.sessionID, id: input.inputID, text: "hello" }, { signal }),
   })
+}
+
+function childSession(id: string, parentID: string, title: string) {
+  return {
+    slug: id,
+    projectID: "project",
+    location: { directory: "/workspace" },
+    parentID,
+    title,
+    version: "test",
+  }
 }
 
 function tokens() {

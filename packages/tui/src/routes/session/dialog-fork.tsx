@@ -20,24 +20,28 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
 
   const fork = async (messageID?: string) => {
     setPending(true)
-    const result = await client.api.session.fork({ sessionID: props.sessionID, messageID }).catch((error) => {
-      toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
-      return undefined
-    })
+    const result = await client.api.session
+      .fork({
+        sessionID: props.sessionID,
+        boundary: messageID ? { type: "before", messageID } : { type: "through" },
+      })
+      .catch((error) => {
+        toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
+        return undefined
+      })
     if (!result) return dialog.clear()
     const message = messageID ? data.session.message.get(props.sessionID, messageID) : undefined
     const prompt = message?.type === "user" ? projectedPromptInput(message) : undefined
     route.navigate({
       sessionID: result.id,
       type: "session",
-      prompt:
-        prompt
-          ? {
-              ...prompt,
-              agents: prompt.agents ?? [],
-              pasted: [],
-            }
-          : undefined,
+      prompt: prompt
+        ? {
+            ...prompt,
+            agents: prompt.agents ?? [],
+            pasted: [],
+          }
+        : undefined,
     })
     dialog.clear()
     toast.show({ message: "Forked session", variant: "success", duration: 4000 })
@@ -75,11 +79,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
         </box>
       }
     >
-      <DialogSelect
-        onMove={(option) => props.onMove?.(option.value)}
-        title="Fork session"
-        options={options()}
-      />
+      <DialogSelect onMove={(option) => props.onMove?.(option.value)} title="Fork session" options={options()} />
     </Show>
   )
 }

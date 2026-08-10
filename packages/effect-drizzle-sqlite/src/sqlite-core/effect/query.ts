@@ -19,9 +19,9 @@ import type { SQLiteTable } from "drizzle-orm/sqlite-core/table"
 import type { SQLiteEffectPreparedQuery, SQLiteEffectSession } from "./session"
 
 export class SQLiteEffectRelationalQueryBuilder<
-  TSchema extends TablesRelationalConfig,
+  out TSchema extends TablesRelationalConfig,
   TFields extends TableRelationalConfig,
-  TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+  out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
 > {
   static readonly [entityKind]: string = "SQLiteEffectRelationalQueryBuilderV2"
 

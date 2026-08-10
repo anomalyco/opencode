@@ -177,11 +177,7 @@ describe("Patch", () => {
   })
 
   test("preserves the end-of-file marker", () => {
-    expect(
-      parse(
-        "*** Begin Patch\n*** Update File: file.txt\n@@\n+quux\n*** End of File\n\n*** End Patch",
-      ),
-    ).toEqual([
+    expect(parse("*** Begin Patch\n*** Update File: file.txt\n@@\n+quux\n*** End of File\n\n*** End Patch")).toEqual([
       {
         type: "update",
         path: "file.txt",
@@ -192,16 +188,16 @@ describe("Patch", () => {
   })
 
   test("allows an end-of-file marker before an explicit chunk", () => {
-    expect(
-      parse("*** Begin Patch\n*** Update File: file.txt\n*** End of File\n@@\n-old\n+new\n*** End Patch"),
-    ).toEqual([
-      {
-        type: "update",
-        path: "file.txt",
-        movePath: undefined,
-        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined }],
-      },
-    ])
+    expect(parse("*** Begin Patch\n*** Update File: file.txt\n*** End of File\n@@\n-old\n+new\n*** End Patch")).toEqual(
+      [
+        {
+          type: "update",
+          path: "file.txt",
+          movePath: undefined,
+          chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined }],
+        },
+      ],
+    )
   })
 
   test("allows an end-of-file marker before an implicit chunk and move", () => {
@@ -247,9 +243,9 @@ describe("Patch", () => {
   })
 
   test("appends a pure-addition chunk to a nonempty file", () => {
-    expect(Patch.derive("update.txt", [{ oldLines: [], newLines: ["added 1", "added 2"] }], "line 1\nline 2\n").content).toBe(
-      "line 1\nline 2\nadded 1\nadded 2\n",
-    )
+    expect(
+      Patch.derive("update.txt", [{ oldLines: [], newLines: ["added 1", "added 2"] }], "line 1\nline 2\n").content,
+    ).toBe("line 1\nline 2\nadded 1\nadded 2\n")
   })
 
   test("applies a pure-addition chunk after an earlier replacement", () => {
@@ -303,27 +299,35 @@ describe("Patch", () => {
 
   test("matches Unicode minus signs and spaces", () => {
     expect(
-      Patch.derive("minus.txt", [{ oldLines: ["value - 1"], newLines: ["value - 2"] }], "value − 1\n")
-        .content,
+      Patch.derive("minus.txt", [{ oldLines: ["value - 1"], newLines: ["value - 2"] }], "value − 1\n").content,
     ).toBe("value - 2\n")
-    const spaces = ["\u00A0", "\u2002", "\u2003", "\u2004", "\u2005", "\u2006", "\u2007", "\u2008", "\u2009", "\u200A", "\u202F", "\u205F", "\u3000"]
-    spaces.forEach(
-      (space) => {
-        expect(
-          Patch.derive(
-            "spaces.txt",
-            [{ oldLines: ["hello world"], newLines: ["hello there"] }],
-            `hello${space}world\n`,
-          ).content,
-        ).toBe("hello there\n")
-      },
-    )
+    const spaces = [
+      "\u00A0",
+      "\u2002",
+      "\u2003",
+      "\u2004",
+      "\u2005",
+      "\u2006",
+      "\u2007",
+      "\u2008",
+      "\u2009",
+      "\u200A",
+      "\u202F",
+      "\u205F",
+      "\u3000",
+    ]
+    spaces.forEach((space) => {
+      expect(
+        Patch.derive("spaces.txt", [{ oldLines: ["hello world"], newLines: ["hello there"] }], `hello${space}world\n`)
+          .content,
+      ).toBe("hello there\n")
+    })
   })
 
   test("does not normalize ellipses", () => {
-    expect(() =>
-      Patch.derive("ellipsis.txt", [{ oldLines: ["wait..."], newLines: ["done"] }], "wait…\n"),
-    ).toThrow("Failed to find expected lines")
+    expect(() => Patch.derive("ellipsis.txt", [{ oldLines: ["wait..."], newLines: ["done"] }], "wait…\n")).toThrow(
+      "Failed to find expected lines",
+    )
   })
 
   test("prefers a later exact match over an earlier normalized match", () => {
@@ -357,9 +361,9 @@ describe("Patch", () => {
   })
 
   test("identifies a missing blank line", () => {
-    expect(() =>
-      Patch.derive("update.txt", [{ oldLines: [""], newLines: ["added"] }], "content\n"),
-    ).toThrow("Failed to find an expected blank line in update.txt")
+    expect(() => Patch.derive("update.txt", [{ oldLines: [""], newLines: ["added"] }], "content\n")).toThrow(
+      "Failed to find an expected blank line in update.txt",
+    )
   })
 
   test("parses an update without an explicit first chunk header", () => {
@@ -483,7 +487,9 @@ describe("Patch", () => {
       "Invalid hunk at line 4: Unexpected line found in update hunk: '@@'",
     )
     expect(() =>
-      parse("*** Begin Patch\n*** Update File: file.txt\n@@\n*** Update File: other.txt\n@@\n-old\n+new\n*** End Patch"),
+      parse(
+        "*** Begin Patch\n*** Update File: file.txt\n@@\n*** Update File: other.txt\n@@\n-old\n+new\n*** End Patch",
+      ),
     ).toThrow("Invalid hunk at line 4: Unexpected line found in update hunk: '*** Update File: other.txt'")
     expect(() => parse("*** Begin Patch\n*** Update File: file.txt\n@@\nbad\n*** End Patch")).toThrow(
       "Invalid hunk at line 4: Unexpected line found in update hunk: 'bad'",
@@ -497,7 +503,9 @@ describe("Patch", () => {
     expect(() => parse("*** Begin Patch\n*** Update File: file.txt\n@@foo\n*** End Patch")).toThrow(
       "Invalid hunk at line 3: Unexpected line found in update hunk: '@@foo'",
     )
-    expect(() => parse("*** Begin Patch\n*** Update File: file.txt\n@@\n-old\n*** Frobnicate File: foo\n*** End Patch")).toThrow(
+    expect(() =>
+      parse("*** Begin Patch\n*** Update File: file.txt\n@@\n-old\n*** Frobnicate File: foo\n*** End Patch"),
+    ).toThrow(
       "Invalid hunk at line 5: Expected update hunk to start with a @@ context marker, got: '*** Frobnicate File: foo'",
     )
   })

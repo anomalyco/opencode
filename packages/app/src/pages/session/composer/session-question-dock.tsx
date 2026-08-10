@@ -6,7 +6,7 @@ import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { showToast } from "@/utils/toast"
-import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/client/promise"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -472,7 +472,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                         data-answered={answered(i())}
                         disabled={sending()}
                         onClick={() => jump(i())}
-                        aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
+                        aria-label={language.t("ui.tool.questions.numbered", { number: i() + 1 })}
                       />
                     )}
                   </For>

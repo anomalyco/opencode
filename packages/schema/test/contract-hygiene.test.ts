@@ -16,8 +16,9 @@ import { FileDiff } from "../src/file-diff.js"
 import { Money } from "../src/money.js"
 import { Skill } from "../src/skill.js"
 import { Shell } from "../src/shell.js"
+import { Vcs } from "../src/vcs.js"
 import { PersistedRevert } from "../src/session-revert.js"
-import { optional } from "../src/schema.js"
+import { AbsolutePath, optional } from "../src/schema.js"
 
 describe("contract hygiene", () => {
   test("restricts agent colors to six-digit hex values", () => {
@@ -52,6 +53,41 @@ describe("contract hygiene", () => {
         metadata: undefined,
       }),
     ).toEqual({ text: "completed" })
+
+    expect(
+      Schema.encodeSync(Session.Info)({
+        id: Session.ID.make("ses_untitled"),
+        projectID: Project.ID.make("global"),
+        cost: Money.USD.zero,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+        title: undefined,
+        location: { directory: AbsolutePath.make("/project") },
+      }),
+    ).not.toHaveProperty("title")
+  })
+
+  test("pending session items omit the internal admission sequence", () => {
+    expect(
+      Schema.encodeSync(SessionPending.Info)(
+        Schema.decodeUnknownSync(SessionPending.Info)({
+          admittedSeq: 3,
+          id: "msg_pending",
+          sessionID: "ses_pending",
+          timeCreated: 1,
+          type: "user",
+          data: { text: "hello" },
+          delivery: "steer",
+        }),
+      ),
+    ).toEqual({
+      id: "msg_pending",
+      sessionID: "ses_pending",
+      timeCreated: 1,
+      type: "user",
+      data: { text: "hello" },
+      delivery: "steer",
+    })
   })
 
   test("forms require at least one field", () => {
@@ -99,6 +135,10 @@ describe("contract hygiene", () => {
     expect(Pty.ID.create()).toStartWith("pty_")
   })
 
+  test("VCS info omits unavailable branch names", () => {
+    expect(Schema.encodeSync(Vcs.Info)({ branch: { current: undefined, default: undefined } })).toEqual({ branch: {} })
+  })
+
   test("reusable public identifiers are stable and unique", () => {
     const identifiers = [
       Agent.Color,
@@ -131,6 +171,8 @@ describe("contract hygiene", () => {
       SessionPending.SyntheticData,
       SessionPending.User,
       SessionPending.Synthetic,
+      Vcs.Branch,
+      Vcs.Info,
     ].map((schema) => schema.ast.annotations?.identifier)
 
     expect(identifiers.every((identifier) => typeof identifier === "string")).toBe(true)
@@ -146,9 +188,12 @@ describe("contract hygiene", () => {
     )
     const source = sources.map((item) => item.source).join("\n")
 
-    expect(sources.filter((item) => item.file !== "provider.ts").map((item) => item.source).join("\n")).not.toContain(
-      "Schema.Any",
-    )
+    expect(
+      sources
+        .filter((item) => item.file !== "provider.ts")
+        .map((item) => item.source)
+        .join("\n"),
+    ).not.toContain("Schema.Any")
     expect(sources.find((item) => item.file === "provider.ts")?.source.match(/Schema\.Any/g)).toHaveLength(4)
     expect(source).not.toContain("Schema.mutable")
   })

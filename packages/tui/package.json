@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo -b"
   },
   "exports": {
     ".": "./src/index.tsx",
@@ -20,6 +20,7 @@
     "./context/exit": "./src/context/exit.tsx",
     "./context/log": "./src/context/log.tsx",
     "./context/runtime": "./src/context/runtime.tsx",
+    "./context/storage": "./src/context/storage.tsx",
     "./context/client": "./src/context/client.tsx",
     "./context/theme": "./src/context/theme.tsx",
     "./theme/discovery": "./src/theme/discovery.ts",
@@ -71,11 +72,17 @@
       "bun": "./src/editor-zed-sqlite.bun.ts",
       "node": "./src/editor-zed-sqlite.node.ts",
       "default": "./src/editor-zed-sqlite.bun.ts"
+    },
+    "#runtime-plugin-support": {
+      "bun": "./src/plugin/runtime-plugin-support.bun.ts",
+      "node": "./src/plugin/runtime-plugin-support.node.ts",
+      "default": "./src/plugin/runtime-plugin-support.node.ts"
     }
   },
   "dependencies": {
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/merman": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/simulation": "workspace:*",
@@ -87,7 +94,6 @@
     "@opentui/solid": "catalog:",
     "@solid-primitives/event-bus": "1.1.2",
     "clipboardy": "4.0.0",
-    "diff": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
     "get-east-asian-width": "catalog:",

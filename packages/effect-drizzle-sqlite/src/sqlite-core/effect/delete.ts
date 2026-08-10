@@ -110,12 +110,12 @@ export type SQLiteEffectDelete<
 export type AnySQLiteEffectDelete = SQLiteEffectDeleteBase<any, any, any, any, any, any>
 
 export interface SQLiteEffectDeleteBase<
-  TTable extends SQLiteTable,
-  TRunResult,
-  TReturning extends Record<string, unknown> | undefined = undefined,
-  TDynamic extends boolean = false,
+  out TTable extends SQLiteTable,
+  out TRunResult,
+  out TReturning extends Record<string, unknown> | undefined = undefined,
+  out TDynamic extends boolean = false,
   _TExcludedMethods extends string = never,
-  TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+  out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
 > extends RunnableQuery<TReturning extends undefined ? TRunResult : TReturning[], "sqlite">,
     SQLWrapper,
     Effect.Effect<
@@ -137,12 +137,12 @@ export interface SQLiteEffectDeleteBase<
 }
 
 export class SQLiteEffectDeleteBase<
-    TTable extends SQLiteTable,
-    TRunResult,
-    TReturning extends Record<string, unknown> | undefined = undefined,
-    TDynamic extends boolean = false,
+    out TTable extends SQLiteTable,
+    out TRunResult,
+    out TReturning extends Record<string, unknown> | undefined = undefined,
+    out TDynamic extends boolean = false,
     _TExcludedMethods extends string = never,
-    TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+    out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
   >
   implements RunnableQuery<TReturning extends undefined ? TRunResult : TReturning[], "sqlite">, SQLWrapper
 {

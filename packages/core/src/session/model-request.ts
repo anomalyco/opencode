@@ -1,9 +1,11 @@
 export * as SessionModelRequest from "./model-request"
 
 import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
+import type { StreamOptions } from "@opencode-ai/ai/route"
 import type { Content } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Cause, Config, Context, Effect, Layer, Result } from "effect"
+import { Cause, Config, Context, Effect, Layer, Result, Stream } from "effect"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app"
 import { Model } from "../model"
@@ -13,10 +15,16 @@ import { QuestionTool } from "../tool/plugin/question"
 import { Tool } from "../tool"
 import { SessionContext } from "./context"
 import { SessionModelHeaders } from "./model-headers"
+import { SessionPromptCacheKey } from "./prompt-cache-key"
 import { PromptCacheDiagnostics } from "./prompt-cache-diagnostics"
 import { MAX_STEPS_PROMPT } from "./runner/max-steps"
 import PROMPT_DEFAULT from "./runner/prompt/base.txt"
 import { toLLMMessages } from "./runner/to-llm-message"
+
+const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
+const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
+const IMAGE_REMOVED =
+  "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 
 /** Failures a prepared execution can surface: infrastructure errors plus user declines resurfaced from the defect tunnel. */
 export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError
@@ -37,13 +45,12 @@ const declineDefect = (cause: Cause.Cause<Tool.Error>) => {
 
 interface Prepared {
   readonly request: LLMRequest
+  readonly options: StreamOptions
   /**
    * One request-scoped execution operation. Unknown, hook-removed, and
    * step-limit-violating calls fail individually through the same seam.
    */
-  readonly executeTool: (
-    input: Parameters<Tool.Snapshot["execute"]>[0],
-  ) => Effect.Effect<Tool.Result, ExecuteError>
+  readonly executeTool: (input: Parameters<Tool.Snapshot["execute"]>[0]) => Effect.Effect<Tool.Result, ExecuteError>
   /** True when this request is the final Step; violating calls are rejected and no continuation follows. */
   readonly stepLimitReached: boolean
 }
@@ -92,6 +99,55 @@ export const unsupportedParts = (messages: LLMRequest["messages"], capabilities:
     }),
   )
 
+export const boundImages = (messages: LLMRequest["messages"]) => {
+  const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
+  const size = (data: string | Uint8Array) =>
+    typeof data === "string" ? Buffer.byteLength(data) : Math.ceil(data.byteLength / 3) * 4
+  const imageBytes = messages.reduce(
+    (total, message) =>
+      total +
+      message.content.reduce((sum, part) => {
+        if (part.type === "media" && isImage(part.mediaType)) return sum + size(part.data)
+        if (part.type !== "tool-result" || part.result.type !== "content") return sum
+        return (
+          sum +
+          part.result.value.reduce(
+            (bytes: number, item: Content) =>
+              bytes + (item.type === "file" && isImage(item.mime) ? Buffer.byteLength(item.uri) : 0),
+            0,
+          )
+        )
+      }, 0),
+    0,
+  )
+  if (imageBytes <= IMAGE_BYTES_TRIGGER) return messages
+
+  let removed = 0
+  return messages.map((message) =>
+    Message.make({
+      ...message,
+      content: message.content.map((part) => {
+        if (part.type === "media" && isImage(part.mediaType) && imageBytes - removed > IMAGE_BYTES_TARGET) {
+          removed += size(part.data)
+          return Message.text(IMAGE_REMOVED)
+        }
+        if (part.type !== "tool-result" || part.result.type !== "content") return part
+        return {
+          ...part,
+          result: {
+            ...part.result,
+            value: part.result.value.map((item: Content) => {
+              if (item.type !== "file" || !isImage(item.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET) return item
+              removed += Buffer.byteLength(item.uri)
+              return { type: "text" as const, text: IMAGE_REMOVED }
+            }),
+          },
+        }
+      }),
+    }),
+  )
+}
+
 /**
  * Builds an outbound model request and captures the tool-call capability that
  * must remain paired with it. It does not execute the request or mutate
@@ -126,42 +182,82 @@ export const layer = Layer.effect(
       // The final Step keeps definitions available to protocols with native "none",
       // preserving their prompt cache prefix. Calls are still rejected at execution.
       const tools = input.context.tools
-      const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const system = [agent.info.system ? agent.info.system : PROMPT_DEFAULT, input.context.initial]
         .filter((part) => part.length > 0)
         .map(SystemPart.make)
       const history = toLLMMessages(input.context.messages, resolved.ref, providerMetadataKey)
       const messages = stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history
-      const toolDefinitions = tools.definitions
-      const toolsByName = new Map(toolDefinitions.map((tool) => [tool.name, tool]))
-      // Hooks may reshape available definitions but cannot advertise tools omitted by permissions or the Step limit.
-      const contextEvent = yield* hooks.trigger("session", "context", {
+      const registry = new Map(tools.definitions.map((tool) => [tool.name, tool]))
+      // The definition objects we hand to hooks, mapped back to their tools. Hooks rename a
+      // tool by moving its definition to a new key; recognizing the object recovers the tool.
+      const given = new Map(
+        tools.definitions.map(
+          (tool) => [{ description: tool.description, input: { ...tool.inputSchema } }, tool] as const,
+        ),
+      )
+      // Hooks mutate this record in place: edit descriptions and schemas, rename, or remove.
+      const context = yield* hooks.trigger("session", "context", {
         sessionID: session.id,
         agent: agent.id,
         model: resolved.ref,
         system,
         messages,
-        tools: Object.fromEntries(
-          toolDefinitions.map((tool) => [tool.name, { description: tool.description, input: { ...tool.inputSchema } }]),
-        ),
+        tools: Object.fromEntries(Array.from(given, ([definition, tool]) => [tool.name, definition])),
       })
-      const hookedTools = Object.entries(contextEvent.tools).flatMap(([name, tool]) => {
-        const registered = toolsByName.get(name)
-        return registered
-          ? [{ ...registered, description: tool.description, inputSchema: tool.input }]
-          : []
-      })
+      // Match each surviving entry back to its tool, by recognizing a moved definition or
+      // by key. Identity wins so a definition moved onto another tool's name still executes
+      // the tool it describes. Entries matching neither were invented by a hook and dropped.
+      // `tool.name` stays canonical so execution can translate renamed calls back.
+      const hooked = new Map(
+        Object.entries(context.tools).flatMap(([name, definition]) => {
+          const tool = given.get(definition) ?? registry.get(name)
+          if (!tool) return []
+          return [[name, { ...tool, description: definition.description, inputSchema: definition.input }] as const]
+        }),
+      )
       const request = LLM.request({
         model,
         http: {
           headers: SessionModelHeaders.make(session, app),
         },
-        providerOptions: { openai: { promptCacheKey } },
-        system: contextEvent.system,
-        messages: unsupportedParts(contextEvent.messages, resolved.capabilities),
-        tools: hookedTools,
+        promptCacheKey: SessionPromptCacheKey.make(session.id),
+        system: context.system,
+        messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
+        tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
         toolChoice: stepLimitReached ? "none" : undefined,
       })
+      const options: StreamOptions = {
+        http: (request, handler) =>
+          Effect.gen(function* () {
+            const before = yield* hooks.trigger("session", "http.request", {
+              sessionID: session.id,
+              agent: agent.id,
+              model: resolved.ref,
+              request: yield* HttpClientRequest.toWeb(request),
+            })
+            let sent = HttpClientRequest.fromWeb(before.request)
+            if (before.request.body)
+              sent = HttpClientRequest.bodyUint8Array(
+                sent,
+                new Uint8Array(yield* Effect.promise(() => before.request.clone().arrayBuffer())),
+                before.request.headers.get("content-type") ?? undefined,
+              )
+            const response = yield* handler(sent)
+            const after = yield* hooks.trigger("session", "http.response", {
+              sessionID: session.id,
+              agent: agent.id,
+              model: resolved.ref,
+              request: before.request,
+              response: new Response(
+                [204, 205, 304].includes(response.status)
+                  ? null
+                  : yield* Stream.toReadableStreamEffect(response.stream),
+                { status: response.status, headers: response.headers },
+              ),
+            })
+            return HttpClientResponse.fromWeb(sent, after.response)
+          }).pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause))))),
+      }
       if (promptCacheSnapshots) {
         const current = PromptCacheDiagnostics.snapshot(request)
         const comparison = PromptCacheDiagnostics.compare(promptCacheSnapshots.get(session.id), current)
@@ -179,17 +275,19 @@ export const layer = Layer.effect(
           }),
         )
       }
-      const executeTool: Prepared["executeTool"] = (executeInput) => {
-        if (stepLimitReached)
-          return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
-        if (toolsByName.has(executeInput.call.name) && !Object.hasOwn(contextEvent.tools, executeInput.call.name))
-          return new Tool.Error({ message: `Tool is not available for this request: ${executeInput.call.name}` })
+      const executeTool: Prepared["executeTool"] = (input) => {
+        if (stepLimitReached) return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
+        const tool = hooked.get(input.call.name)
+        // A registered tool absent from the hooked set was removed or renamed by a hook.
+        if (!tool && registry.has(input.call.name))
+          return new Tool.Error({ message: `Tool is not available for this request: ${input.call.name}` })
         return tools
-          .execute(executeInput)
+          .execute(tool ? { ...input, call: { ...input.call, name: tool.name } } : input)
           .pipe(Effect.catchCauseFilter(declineDefect, (decline) => Effect.fail(decline)))
       }
       return {
         request,
+        options,
         executeTool,
         stepLimitReached,
       }

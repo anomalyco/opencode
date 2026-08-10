@@ -4,11 +4,10 @@ import type { Session } from "@opencode-ai/schema/session"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { Hooks, Transform } from "./registration.js"
 
-interface ToolDraft {
-  add<
-    Input extends Tool.ValueSchema<any>,
-    Output extends Tool.ValueSchema<any> | undefined,
-  >(tool: Tool.Info<Input, Output>): void
+export interface ToolDraft {
+  add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
+    tool: Tool.Info<Input, Output>,
+  ): void
 }
 
 export interface ToolHooks {
@@ -17,7 +16,7 @@ export interface ToolHooks {
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID
-    readonly callID: Tool.CallID
+    readonly id: Tool.CallID
     input: unknown
   }
   readonly "execute.after": {
@@ -25,7 +24,7 @@ export interface ToolHooks {
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID
-    readonly callID: Tool.CallID
+    readonly id: Tool.CallID
     readonly input: unknown
   } & (
     | {

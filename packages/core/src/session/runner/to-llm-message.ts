@@ -184,6 +184,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       return []
     case "user":
       const content = [
+        ...(message.skills ?? []).map((skill) => Message.text(skill.text)),
         ...(message.text === "" ? [] : [Message.text(message.text)]),
         ...(message.files ?? []).flatMap(attachmentContent),
       ]

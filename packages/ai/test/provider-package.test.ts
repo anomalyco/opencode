@@ -21,12 +21,47 @@ describe("provider package entrypoints", () => {
       import("@opencode-ai/ai/providers/google-vertex/chat"),
       import("@opencode-ai/ai/providers/google-vertex/responses"),
       import("@opencode-ai/ai/providers/google-vertex/messages"),
+      import("@opencode-ai/ai/providers/openrouter"),
+      import("@opencode-ai/ai/providers/xai"),
+      import("@opencode-ai/ai/providers/amazon-bedrock/mantle"),
+      import("@opencode-ai/ai/providers/amazon-bedrock/mantle/chat"),
+      import("@opencode-ai/ai/providers/amazon-bedrock/mantle/responses"),
     ])
 
     for (const module of modules) expect(module.model).toBeFunction()
     expect(modules[0].model).toBe(modules[1].model)
     expect(modules[8].model).toBe(modules[9].model)
     expect(modules[12].model).toBe(modules[13].model)
+    expect(modules[19].model).toBe(modules[20].model)
+  })
+
+  test("maps OpenRouter and xAI package settings onto executable models", async () => {
+    const OpenRouter = await import("@opencode-ai/ai/providers/openrouter")
+    const XAI = await import("@opencode-ai/ai/providers/xai")
+    const settings = {
+      apiKey: "fixture",
+      baseURL: "https://provider.example.test/v1",
+      headers: { "x-application": "opencode" },
+      body: { service_tier: "priority" },
+      limits: { context: 200_000, output: 64_000 },
+    }
+    const openrouter = OpenRouter.model("anthropic/claude-sonnet-4", {
+      ...settings,
+      providerOptions: { openrouter: { usage: true } },
+    })
+    const xai = XAI.model("grok-4", {
+      ...settings,
+      providerOptions: { xai: { reasoningEffort: "high" } },
+    })
+
+    for (const selected of [openrouter, xai]) {
+      expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
+      expect(selected.route.defaults.headers).toEqual(settings.headers)
+      expect(selected.route.defaults.http?.body).toEqual(settings.body)
+      expect(selected.route.defaults.limits).toEqual(settings.limits)
+    }
+    expect(openrouter.route.defaults.providerOptions).toEqual({ openrouter: { usage: true } })
+    expect(xai.route.defaults.providerOptions).toMatchObject({ xai: { reasoningEffort: "high", store: false } })
   })
 
   test("maps package settings onto the executable model", () => {
@@ -172,6 +207,27 @@ describe("provider package entrypoints", () => {
     expect(responses.route.defaults.http?.body).toEqual({ service_tier: "priority" })
     expect(responses.route.defaults.limits).toEqual({ context: 200_000, output: 64_000 })
     expect(chat.route.id).toBe("azure-openai-chat")
+  })
+
+  test("constructs Azure deployment URLs and preserves custom gateway URLs", async () => {
+    const Azure = await import("@opencode-ai/ai/providers/azure")
+    const deployment = Azure.model("custom-deployment", {
+      apiKey: "fixture",
+      resourceName: "opencode-test",
+      apiVersion: "2025-01-01-preview",
+      useDeploymentBasedUrls: true,
+    })
+    const gateway = Azure.model("gateway-model", {
+      apiKey: "fixture",
+      baseURL: "https://gateway.example/azure/",
+    })
+
+    expect(deployment.route.endpoint).toMatchObject({
+      baseURL: "https://opencode-test.openai.azure.com/openai/deployments/custom-deployment",
+      query: { "api-version": "2025-01-01-preview" },
+    })
+    expect(gateway.route.endpoint.baseURL).toBe("https://gateway.example/azure")
+    expect(gateway.route.endpoint.query).toBeUndefined()
   })
 
   test("maps Google package settings onto the Gemini model", async () => {

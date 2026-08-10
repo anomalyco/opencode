@@ -178,6 +178,7 @@ test("shows all and expands historical diff summary without overlap", async ({ p
     summary: {
       diffs: Array.from({ length: 12 }, (_, index) => ({
         file: `src/diff-${index}.ts`,
+        status: "modified",
         additions: 1,
         deletions: 1,
         patch: `@@ -1 +1 @@\n-export const value = ${index}\n+export const value = ${index + 1}`,

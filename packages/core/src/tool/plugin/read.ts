@@ -11,6 +11,7 @@ import { Permission } from "../../permission"
 import { SessionInstructions } from "../../session/instructions"
 import { AbsolutePath } from "../../schema"
 import { ReadToolFileSystem } from "../read-filesystem"
+import { Environment } from "../../environment"
 
 export const name = "read"
 const FILENAME = "AGENTS.md"
@@ -25,11 +26,7 @@ const LocationInput = Schema.Struct({
   }),
 })
 export const Input = LocationInput
-const Output = Schema.Union([
-  ReadToolFileSystem.FileContent,
-  ReadToolFileSystem.TextPage,
-  ReadToolFileSystem.ListPage,
-])
+const Output = Schema.Union([ReadToolFileSystem.FileContent, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
 
 export const Plugin = {
   id: "opencode.tool.read",
@@ -43,105 +40,99 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((draft) =>
-        draft.add(
-          ({
-            name,
-            options: { codemode: false },
-            description:
-              "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
-            input: Input,
-            output: Output,
-            execute: (input, context) => {
-              return Effect.gen(function* () {
-                const source = {
-                  type: "tool" as const,
-                  messageID: context.messageID,
-                  callID: context.callID,
-                }
-                const target = yield* mutation.resolve({ path: input.path, kind: "directory" })
-                const external = target.externalDirectory
-                if (external)
-                  yield* permission.assert({
-                    ...LocationMutation.externalDirectoryPermission(external),
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source,
-                  })
-                const resource = target.resource
-                const absolute = AbsolutePath.make(target.canonical)
+        draft.add({
+          name,
+          options: { codemode: false },
+          description:
+            "Read the contents of a file or directory. Supports text files, images, and PDFs. Images and PDFs are presented directly to the model. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+          input: Input,
+          output: Output,
+          execute: (input, context) => {
+            return Effect.gen(function* () {
+              const source = {
+                type: "tool" as const,
+                messageID: context.messageID,
+                id: context.id,
+              }
+              const target = yield* mutation.resolve({ path: input.path })
+              const external = target.externalDirectory
+              if (external)
                 yield* permission.assert({
-                  action: name,
-                  resources: [resource],
-                  save: ["*"],
+                  ...LocationMutation.externalDirectoryPermission(external),
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source,
                 })
-                const type = yield* reader.inspect(absolute).pipe(
-                  Effect.catchReason("PlatformError", "NotFound", () => missing(input.path, target.canonical)),
-                )
-                const content =
-                  type === "directory"
-                    ? yield* reader.list(absolute, { offset: input.offset, limit: input.limit })
-                    : yield* reader.read(absolute, resource, {
-                        offset: input.offset,
-                        limit: input.limit,
-                      })
-                // After a successful read, discover nearby AGENTS.md walking up to the Location
-                // root exclusive and inject them as durable synthetic instructions. For a
-                // directory listing the walk starts at the directory itself (so its own AGENTS.md
-                // is discovered); for a file it starts at the file's dirname. External reads are
-                // skipped, and discovery failures never fail the read.
-                yield* Effect.gen(function* () {
-                  if (target.externalDirectory !== undefined) return
-                  const resolved = yield* fs.resolve(target.canonical)
-                  const root = yield* fs.resolve(location.directory)
-                  // up() searches its stop directory, so the Location-root AGENTS.md (already
-                  // supplied by core initial instructions) is dropped by the dirname filter.
-                  const discovered = yield* fs.up({
-                    targets: [FILENAME],
-                    start: type === "directory" ? resolved : dirname(resolved),
-                    stop: root,
-                  })
-                  const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(
-                    (file) => dirname(file) !== root,
-                  )
-                  if (candidates.length === 0) return
-                  yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
-                }).pipe(
-                  Effect.catch(() => Effect.void),
-                  Effect.catchDefect(() => Effect.void),
-                )
-                if (content.type === "file" && content.encoding === "base64" && !SUPPORTED_MEDIA_MIMES.has(content.mime))
-                  return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
-                return content
-              }).pipe(
-                Effect.map((output) => ({
-                  output,
-                  content: toModelContent(input.path, input.offset, output),
-                })),
-                Effect.mapError((error) => {
-                  if (error instanceof ToolFailure) return error
-                  const message =
-                    error instanceof ReadToolFileSystem.BinaryFileError ||
-                    error instanceof ReadToolFileSystem.MediaIngestLimitError ||
-                    error instanceof ReadToolFileSystem.MalformedUtf8Error ||
-                    error instanceof ReadToolFileSystem.OffsetOutOfRangeError ||
-                    error instanceof ReadToolFileSystem.PathKindError
-                      ? error.message
-                      : `Unable to read ${input.path}`
-                  return new ToolFailure({ message, error })
-                }),
+              const resource = target.resource
+              const absolute = AbsolutePath.make(target.absolute)
+              yield* permission.assert({
+                action: name,
+                resources: [resource],
+                save: ["*"],
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source,
+              })
+              const content = yield* reader.read(absolute, resource, { offset: input.offset, limit: input.limit }).pipe(
+                Effect.catchIf(
+                  (error) => error instanceof Environment.NotFound,
+                  () => missing(input.path, target.absolute),
+                ),
               )
-            },
-          }),
-        ),
+              // After a successful read, discover nearby AGENTS.md walking up to the Location
+              // root exclusive and inject them as durable synthetic instructions. For a
+              // directory listing the walk starts at the directory itself (so its own AGENTS.md
+              // is discovered); for a file it starts at the file's dirname. External reads are
+              // skipped, and discovery failures never fail the read.
+              yield* Effect.gen(function* () {
+                if (target.externalDirectory !== undefined) return
+                const resolved = yield* fs.resolve(target.absolute)
+                const root = yield* fs.resolve(location.directory)
+                // up() searches its stop directory, so the Location-root AGENTS.md (already
+                // supplied by core initial instructions) is dropped by the dirname filter.
+                const discovered = yield* fs.up({
+                  targets: [FILENAME],
+                  start: content.type === "list-page" ? resolved : dirname(resolved),
+                  stop: root,
+                })
+                const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(
+                  (file) => dirname(file) !== root,
+                )
+                if (candidates.length === 0) return
+                yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
+              }).pipe(
+                Effect.catch(() => Effect.void),
+                Effect.catchDefect(() => Effect.void),
+              )
+              if (content.type === "file" && content.encoding === "base64" && !SUPPORTED_MEDIA_MIMES.has(content.mime))
+                return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
+              return content
+            }).pipe(
+              Effect.map((output) => ({
+                output,
+                content: toModelContent(input.path, input.offset, output),
+                metadata: { truncated: output.type === "file" ? false : output.truncated },
+              })),
+              Effect.mapError((error) => {
+                if (error instanceof ToolFailure) return error
+                const message =
+                  error instanceof ReadToolFileSystem.BinaryFileError ||
+                  error instanceof ReadToolFileSystem.MediaIngestLimitError ||
+                  error instanceof ReadToolFileSystem.OffsetOutOfRangeError ||
+                  error instanceof ReadToolFileSystem.PathKindError
+                    ? error.message
+                    : `Unable to read ${input.path}`
+                return new ToolFailure({ message, error })
+              }),
+            )
+          },
+        }),
       )
       .pipe(Effect.orDie)
 
-    const missing = Effect.fn("ReadTool.missing")(function* (input: string, canonical: string) {
+    const missing = Effect.fn("ReadTool.missing")(function* (input: string, absolute: string) {
       const base = basename(input).toLowerCase()
-      const suggestions = yield* fs.readDirectory(dirname(canonical)).pipe(
+      const suggestions = yield* fs.readDirectory(dirname(absolute)).pipe(
         Effect.map((entries) =>
           entries
             .filter((entry) => {

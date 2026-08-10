@@ -1,13 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:anthropic-messages-cache",
-      "provider:anthropic",
-      "protocol:anthropic-messages",
-      "cache",
-      "tool"
-    ],
+    "tags": ["prefix:anthropic-messages-cache", "provider:anthropic", "protocol:anthropic-messages", "cache", "tool"],
     "name": "anthropic-messages-cache/keeps-a-long-tool-turn-inside-the-cache-lookback",
     "recordedAt": "2026-07-24T16:22:29.494Z"
   },

@@ -1,4 +1,5 @@
-import type { FilePart, Project, UserMessage, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FilePart, Project, UserMessage } from "@/types"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
@@ -159,7 +160,7 @@ export function SessionPage() {
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
   const serverSync = useServerSync()
-  const directory = createMemo(() => serverSync().session.lineage.peek(params.id)?.session.directory)
+  const directory = createMemo(() => serverSync().session.lineage.peek(params.id)?.session.location.directory)
   return (
     // Settings must keep the target-server SDK, sync, and models context and remain registered
     // when session content falls back to the route error boundary.
@@ -252,7 +253,7 @@ function ResolvedTargetSessionRoute() {
     () => params.id,
     () => sync().session.lineage,
   )
-  const directory = createMemo(() => current()?.session.directory)
+  const directory = createMemo(() => current()?.session.location.directory)
   const targetDirectory = () => directory()!
 
   createEffect(() => {
@@ -687,6 +688,8 @@ export default function Page() {
     return {
       queryKey: [...vcsKey(), mode] as const,
       enabled,
+      refetchOnMount: "always" as const,
+      refetchOnWindowFocus: true,
       queryFn: mode
         ? () =>
             sdk()
@@ -700,6 +703,16 @@ export default function Page() {
     }
   })
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
+  createEffect(
+    on(
+      () => desktopReviewOpen() || mobileChanges(),
+      (open, previous) => {
+        if (!open || previous || !desktopFileTreeOpen() || vcsQuery.isFetching) return
+        refreshVcs()
+      },
+      { defer: true },
+    ),
+  )
   const reviewDiffs = () => {
     if (reviewMode() === "git" || reviewMode() === "branch")
       // avoids suspense
@@ -718,13 +731,13 @@ export default function Page() {
     if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
     return true
   }
-  const loadReviewDiff = async (file: string, version?: number): Promise<VcsFileDiff | undefined> => {
+  const loadReviewDiff = async (file: string, version?: number): Promise<FileDiffInfo | undefined> => {
     const mode = vcsMode()
     if (!mode) return
     const root = reviewRootDirectory(sync().project?.worktree ?? sdk().directory)
     const directory = reviewDiffDirectory(root, file)
     const source = reviewDiffs().find((diff) => diff.file === file)
-    const valid = (diff: VcsFileDiff | undefined) => {
+    const valid = (diff: FileDiffInfo | undefined) => {
       if (!diff || !source) return
       if (diff.additions !== source.additions || diff.deletions !== source.deletions) return
       if (reviewDiffNeedsLoad(diff)) return
@@ -847,11 +860,8 @@ export default function Page() {
   }
 
   const gitMutation = useMutation(() => ({
-    mutationFn: () => sdk().client.project.initGit(),
-    onSuccess: (x) => {
-      if (!x.data) return
-      upsert(x.data)
-    },
+    // TODO: Restore Git initialization when the V2 client exposes this operation.
+    mutationFn: async () => Promise.reject(new Error("Git initialization is unavailable")),
     onError: (err) => {
       showToast({
         variant: "error",
@@ -948,19 +958,6 @@ export default function Page() {
       { defer: true },
     ),
   )
-
-  const stopVcs = sdk().event.listen((evt) => {
-    const details = evt.details as { type: string; properties?: unknown }
-    if (details.type !== "file.watcher.updated" && details.type !== "filesystem.changed") return
-    const props =
-      typeof details.properties === "object" && details.properties
-        ? (details.properties as Record<string, unknown>)
-        : undefined
-    const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
-    refreshVcs()
-  })
-  onCleanup(stopVcs)
 
   createEffect(
     on(
@@ -1217,11 +1214,7 @@ export default function Page() {
           {language.t("session.review.noVcs.createGit.description")}
         </div>
       </div>
-      <Button size="large" disabled={gitMutation.isPending} onClick={initGit}>
-        {gitMutation.isPending
-          ? language.t("session.review.noVcs.createGit.actionLoading")
-          : language.t("session.review.noVcs.createGit.action")}
-      </Button>
+      {/* TODO: Restore the init button when the V2 client exposes Git initialization. */}
     </div>
   )
 
@@ -1254,7 +1247,8 @@ export default function Page() {
       return <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
     }
     if (reviewMode() === "turn" && nogit()) {
-      return <SessionReviewEmptyNoGitV2 pending={gitMutation.isPending} onInitGit={initGit} />
+      // TODO: Restore SessionReviewEmptyNoGitV2 when the V2 client exposes Git initialization.
+      return empty(language.t("session.review.noVcs.createGit.description"))
     }
     return <SessionReviewEmptyChangesV2 />
   }
@@ -1727,6 +1721,7 @@ export default function Page() {
         api: sdk().api.session,
         sync: sync(),
         serverSync: serverSync(),
+        session: () => sync().session.get(input.sessionID),
         draft: item,
         optimisticBusy: item.sessionDirectory === sdk().directory,
       }).catch((err) => {
@@ -1851,7 +1846,9 @@ export default function Page() {
 
       const session = sdk().api.session
       const target = sync()
-      const next = userMessages().find((item) => item.id > id)
+      const index = userMessages().findIndex((item) => item.id === id)
+      if (index < 0) return
+      const next = userMessages()[index + 1]
       const last = target.session.get(sessionID)?.revert
 
       await runPromptRollbackMutation({
@@ -1891,8 +1888,10 @@ export default function Page() {
   const rolled = createMemo(() => {
     const id = revertMessageID()
     if (!id) return []
+    const index = userMessages().findIndex((item) => item.id === id)
+    if (index < 0) return []
     return userMessages()
-      .filter((item) => item.id >= id)
+      .slice(index)
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
@@ -2282,7 +2281,7 @@ export default function Page() {
             <div onPointerDown={() => size.start()}>
               <ResizeHandle
                 classList={{
-                  "-right-1": settings.general.newLayoutDesigns(),
+                  "-end-1": settings.general.newLayoutDesigns(),
                 }}
                 direction="horizontal"
                 size={sessionPanelResizedWidth()}

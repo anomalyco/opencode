@@ -129,7 +129,10 @@ describe("built-in web search providers", () => {
       yield* WebSearchParallel.Plugin.effect(
         host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
       )
-      yield* integrations.connection.key({ integrationID: Integration.ID.make("parallel"), key: "parallel-secret" })
+      yield* integrations.connection.key({
+        integrationID: Integration.ID.make("parallel"),
+        key: "parallel-secret",
+      })
 
       const output = yield* websearch.query({
         query: "effect layers",

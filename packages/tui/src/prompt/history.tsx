@@ -1,7 +1,7 @@
 import path from "path"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
-import type { SessionPromptInput } from "@opencode-ai/client"
+import type { PromptInput } from "@opencode-ai/schema"
 import type { Types } from "effect"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
@@ -16,17 +16,17 @@ export type PastedText = {
   }
 }
 
-export type PromptInfo = Types.DeepMutable<Pick<SessionPromptInput, "text" | "files" | "agents">> & {
+export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "files" | "agents" | "skills">> & {
   pasted: PastedText[]
   mode?: "normal" | "shell"
 }
 
 export type PromptPartRef = {
-  type: "file" | "agent" | "pasted"
+  type: "file" | "agent" | "skill" | "pasted"
   index: number
 }
 
-export const emptyPrompt = (): PromptInfo => ({ text: "", files: [], agents: [], pasted: [] })
+export const emptyPrompt = (): PromptInfo => ({ text: "", files: [], agents: [], skills: [], pasted: [] })
 
 export const MAX_HISTORY_ENTRIES = 50
 

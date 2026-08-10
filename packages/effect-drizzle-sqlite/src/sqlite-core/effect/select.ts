@@ -44,11 +44,12 @@ export type SQLiteEffectSelectPrepare<
   TEffectHKT
 >
 
+// Explicit variance prevents comparisons from recursively scanning Drizzle's conditional select types.
 export class SQLiteEffectSelectBuilder<
-  TSelection extends SelectedFields | undefined,
-  TRunResult,
-  TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
-  TBuilderMode extends "db" | "qb" = "db",
+  out TSelection extends SelectedFields | undefined,
+  out TRunResult,
+  out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+  out TBuilderMode extends "db" | "qb" = "db",
 > {
   static readonly [entityKind]: string = "SQLiteEffectSelectBuilder"
 
@@ -151,18 +152,18 @@ export interface SQLiteEffectSelectHKT<TEffectHKT extends QueryEffectHKTBase = Q
 }
 
 export interface SQLiteEffectSelectBase<
-  TTableName extends string | undefined,
-  TRunResult,
-  TSelection extends ColumnsSelection,
-  TSelectMode extends SelectMode = "single",
-  TNullabilityMap extends Record<string, JoinNullability> = TTableName extends string
+  out TTableName extends string | undefined,
+  out TRunResult,
+  out TSelection extends ColumnsSelection,
+  out TSelectMode extends SelectMode = "single",
+  out TNullabilityMap extends Record<string, JoinNullability> = TTableName extends string
     ? Record<TTableName, "not-null">
     : {},
-  TDynamic extends boolean = false,
+  out TDynamic extends boolean = false,
   TExcludedMethods extends string = never,
-  TResult extends any[] = SelectResult<TSelection, TSelectMode, TNullabilityMap>[],
-  TSelectedFields extends ColumnsSelection = BuildSubquerySelection<TSelection, TNullabilityMap>,
-  TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+  out TResult extends any[] = SelectResult<TSelection, TSelectMode, TNullabilityMap>[],
+  out TSelectedFields extends ColumnsSelection = BuildSubquerySelection<TSelection, TNullabilityMap>,
+  out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
 > extends SQLiteSelectQueryBuilderBase<
       SQLiteEffectSelectHKT<TEffectHKT>,
       TTableName,
@@ -179,18 +180,18 @@ export interface SQLiteEffectSelectBase<
     Effect.Effect<TResult, TEffectHKT["error"], TEffectHKT["context"]> {}
 
 export class SQLiteEffectSelectBase<
-    TTableName extends string | undefined,
-    TRunResult,
-    TSelection extends ColumnsSelection,
-    TSelectMode extends SelectMode = "single",
-    TNullabilityMap extends Record<string, JoinNullability> = TTableName extends string
+    out TTableName extends string | undefined,
+    out TRunResult,
+    out TSelection extends ColumnsSelection,
+    out TSelectMode extends SelectMode = "single",
+    out TNullabilityMap extends Record<string, JoinNullability> = TTableName extends string
       ? Record<TTableName, "not-null">
       : {},
-    TDynamic extends boolean = false,
+    out TDynamic extends boolean = false,
     TExcludedMethods extends string = never,
-    TResult extends any[] = SelectResult<TSelection, TSelectMode, TNullabilityMap>[],
-    TSelectedFields extends ColumnsSelection = BuildSubquerySelection<TSelection, TNullabilityMap>,
-    TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
+    out TResult extends any[] = SelectResult<TSelection, TSelectMode, TNullabilityMap>[],
+    out TSelectedFields extends ColumnsSelection = BuildSubquerySelection<TSelection, TNullabilityMap>,
+    out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
   >
   extends SQLiteSelectQueryBuilderBase<
     SQLiteEffectSelectHKT<TEffectHKT>,

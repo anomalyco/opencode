@@ -1,4 +1,4 @@
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/utils/persist"
@@ -12,6 +12,7 @@ import { sessionHref } from "@/utils/session-route"
 import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
 import { createDraftPromptSession, type PromptModel } from "./prompt-state"
+import { migrateTabs } from "./tab-migration"
 
 export type SessionTab = {
   type: "session"
@@ -45,7 +46,7 @@ export const tabHref = (tab: Tab) =>
 
 export const tabKey = (tab: Tab) => (tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${tabHref(tab)}`)
 
-export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: Session) {
+export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: SessionInfo) {
   return tabs.some((tab) => tab.type === "session" && tab.server === server && tab.sessionId === session.id)
 }
 
@@ -59,13 +60,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const [store, setStore, _, ready] = persisted(
       {
         ...Persist.window("tabs"),
-        migrate: (value: unknown) => {
-          if (!Array.isArray(value)) return value
-          return value.map((tab) => {
-            if (!tab || typeof tab !== "object" || "server" in tab) return tab
-            return { ...tab, server: fallback }
-          })
-        },
+        migrate: (value: unknown) => migrateTabs(value, fallback),
       },
       createStore<Tab[]>([]),
     )
@@ -106,7 +101,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     }
 
     const removeDraftPersisted = (draftID: string) => {
-      for (const key of draftPersistedKeys()) removePersisted(Persist.draft(draftID, key), platform)
+      for (const key of draftPersistedKeys()) {
+        const target = Persist.draft(draftID, key)
+        removePersisted(key === "prompt" ? Persist.prompt(target) : target, platform)
+      }
     }
 
     const removeInfo = (key: string) => {
@@ -349,10 +347,11 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         for (const key of removed) memory.remove(key)
         for (const key of removed) removeInfo(key)
       },
-      rememberSessionInfo(tab: SessionTab, session: Session) {
+      rememberSessionInfo(tab: SessionTab, session: SessionInfo) {
         const key = tabKey(tab)
-        const next = { title: session.title, directory: session.directory }
+        const next = { title: session.title, directory: session.location.directory }
         const current = info[key]
+        console.log({ tab, session, current })
         if (current?.title === next.title && current.directory === next.directory) return
         setInfo(key, next)
       },

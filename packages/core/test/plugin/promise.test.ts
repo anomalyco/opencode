@@ -62,7 +62,6 @@ describe("fromPromise", () => {
             seen = value
             return Effect.succeed(
               SessionPending.Synthetic.make({
-                admittedSeq: 1,
                 id: SessionMessage.ID.make(input.id),
                 sessionID: Session.ID.make(input.sessionID),
                 timeCreated: DateTime.makeUnsafe(0),
@@ -149,7 +148,9 @@ describe("fromPromise", () => {
             expect((await ctx.agent.get({ agentID: Agent.ID.make("reviewer") })).data).toMatchObject({
               description: "Reviews code",
             })
-            await expect(ctx.agent.get({ agentID: Agent.ID.make("missing") })).rejects.toThrow("Agent not found: missing")
+            await expect(ctx.agent.get({ agentID: Agent.ID.make("missing") })).rejects.toThrow(
+              "Agent not found: missing",
+            )
             const models = (await ctx.catalog.model.list()).data
             expect(models.find((model) => model.providerID === "test" && model.id === "alias")).toMatchObject({
               modelID: "gpt-5",
@@ -219,6 +220,48 @@ describe("fromPromise", () => {
 
       expect(event.system.map((part) => part.text)).toEqual(["Initial", "Promise hook"])
       expect(event.tools).toEqual({})
+    }),
+  )
+
+  it.effect("adapts promise session HTTP request and response hooks", () =>
+    Effect.gen(function* () {
+      const plugin = yield* Plugin.Service
+      const hooks = yield* PluginHooks.Service
+      const host = yield* PluginHost.make(plugin)
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-session-http",
+          setup: async (ctx) => {
+            await ctx.session.hook("http.request", (event) => {
+              event.request = new Request("https://provider.test/changed", event.request)
+              event.request.headers.set("x-hook", "promise")
+            })
+            await ctx.session.hook("http.response", async (event) => {
+              event.response = new Response(`${await event.response.text()}-response`, {
+                status: event.response.status,
+              })
+            })
+          },
+        }),
+      ).effect(host)
+      const context = {
+        sessionID: Session.ID.make("ses_promise_session_http"),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("model") }),
+      }
+
+      const request = yield* hooks.trigger("session", "http.request", {
+        ...context,
+        request: new Request("https://provider.test", { method: "POST", body: "payload" }),
+      })
+      const response = yield* hooks.trigger("session", "http.response", {
+        ...context,
+        request: request.request,
+        response: new Response(request.request.headers.get("x-hook") ?? "missing"),
+      })
+
+      expect(request.request.url).toBe("https://provider.test/changed")
+      expect(yield* Effect.promise(() => response.response.text())).toBe("promise-response")
     }),
   )
 
@@ -316,19 +359,17 @@ describe("fromPromise", () => {
         id: "promise-tool",
         setup: async (ctx) => {
           await ctx.tool.transform((tools) => {
-            tools.add(
-              {
-                name: "hello",
-                options: { codemode: false },
-                description: "Hello",
-                input: Schema.Struct({ name: Schema.String }),
-                output: Schema.String,
-                execute: async ({ name }, context) => {
-                  await context.progress({ phase: "greeting" })
-                  return { output: `Hello, ${name}!` }
-                },
+            tools.add({
+              name: "hello",
+              options: { codemode: false },
+              description: "Hello",
+              input: Schema.Struct({ name: Schema.String }),
+              output: Schema.String,
+              execute: async ({ name }, context) => {
+                await context.progress({ phase: "greeting" })
+                return { output: `Hello, ${name}!` }
               },
-            )
+            })
           })
         },
       })

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Duration, Schema } from "effect"
-import { Config } from "../../src/config"
+import { Info } from "@opencode-ai/schema/config"
 
-const decode = Schema.decodeUnknownSync(Config.Info)
+const decode = Schema.decodeUnknownSync(Info)
 
 describe("config warming", () => {
   test("accepts boolean enablement", () => {

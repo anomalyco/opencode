@@ -33,7 +33,7 @@ Keep durable identity separate from runtime capability:
 
 - Durable identity is small serializable data like `{ providerID, modelID }` for
   config, sessions, logs, and catalogs.
-- Runtime capability is a `Model` with a route value, protocol, transport, auth,
+- Runtime capability is a `LanguageModel` with a route value, protocol, transport, auth,
   and defaults. It is allowed to contain functions and schemas.
 - If persisted identity needs to become executable, resolve it through an app
   boundary first. Do not make `LLMRequest` recover behavior from a global route
@@ -137,7 +137,7 @@ starts hiding the real provider-specific config.
    - accepts model id only
    - returns executable models
    - does not accept endpoint/auth/deployment overrides
-4. **Model**
+4. **Language Model**
    - model id
    - route value
    - provider id
@@ -164,7 +164,7 @@ execution mechanism:
 ```ts
 type ProviderFacade<APIs, Config> = {
   readonly id: ProviderID
-  readonly model: (id: string) => Model
+  readonly model: (id: string) => LanguageModel
   readonly configure: (input?: Config) => ProviderFacade<APIs, Config>
 } & APIs
 ```
@@ -181,8 +181,8 @@ export const OpenAI = {
   configure: configureOpenAI,
 } satisfies ProviderFacade<
   {
-    responses: (id: string) => Model
-    chat: (id: string) => Model
+    responses: (id: string) => LanguageModel
+    chat: (id: string) => LanguageModel
   },
   OpenAIConfig
 >
@@ -528,7 +528,7 @@ The chosen split is:
 ```txt
 Route = execution mechanics
 Provider facade = configured route group
-Model = selected executable model carrying route value
+LanguageModel = selected executable model carrying route value
 App boundary = explicit durable-config -> typed-provider call
 ```
 
@@ -549,13 +549,13 @@ App boundary = explicit durable-config -> typed-provider call
   entrypoint maps its scoped `transport` setting before constructing the model.
 - No separate public `LLMClient.layerWithWebSocket`. The runtime should expose one
   client layer with the available transport capabilities.
-- No executable `ModelRef`. The executable handle is `Model`; durable model
+- No executable `ModelRef`. The executable handle is `LanguageModel`; durable model
   identity stays separate and cannot execute on its own.
 
 ## Implementation Todo
 
-- [x] Replace the current executable `ModelRef` with `Model`.
-- [x] Change `Model.route` to carry a route value, not a `RouteID` string.
+- [x] Replace the current executable `ModelRef` with `LanguageModel`.
+- [x] Change `LanguageModel.route` to carry a route value, not a `RouteID` string.
 - [ ] Keep a separate durable model identity type for persisted/session/catalog
       data, likely `{ providerID, modelID }`, and make it clear that it cannot
       execute without resolver context.
@@ -566,9 +566,9 @@ App boundary = explicit durable-config -> typed-provider call
 - [x] Remove endpoint/auth escape hatches from route model selection; callers must
       configure endpoint/auth through `route.with(...)` or provider facades before
       calling `.model(...)`.
-- [x] Remove request-shaping defaults from `Model`; selected models now carry only
+- [x] Remove request-shaping defaults from `LanguageModel`; selected models now carry only
       id, provider, and configured route while defaults live on routes or requests.
-- [x] Rework `LLMClient.prepare` / `stream` / `generate` to read
+- [x] Rework `LLMClient.stream` / `generate` to read
       `request.model.route` directly instead of calling `registeredRoute(...)`.
 - [x] Remove `Route.make(...)` global registration from the normal execution
       path; keep route ids only as diagnostics/provider API labels.

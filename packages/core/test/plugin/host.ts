@@ -1,5 +1,5 @@
 import { Plugin } from "@opencode-ai/plugin/effect"
-import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import type { IntegrationMethod, IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
@@ -15,7 +15,6 @@ import { Effect, Stream } from "effect"
 type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
   readonly session?: Partial<Plugin.Context["session"]>
 }
-
 export function host(overrides: Overrides = {}): Plugin.Context {
   return {
     app: overrides.app ?? { name: "test", version: "test", channel: "test" },
@@ -86,6 +85,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       transform: () => Effect.die("unused skill.transform"),
       reload: () => Effect.die("unused skill.reload"),
     },
+    shell: overrides.shell ?? {
+      hook: () => Effect.die("unused shell.hook"),
+    },
     tool: overrides.tool ?? {
       transform: () => Effect.die("unused tool.transform"),
       hook: () => Effect.die("unused tool.hook"),
@@ -103,8 +105,10 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       prompt: overrides.session?.prompt ?? (() => Effect.die("unused session.prompt")),
       generate: overrides.session?.generate ?? (() => Effect.die("unused session.generate")),
       command: overrides.session?.command ?? (() => Effect.die("unused session.command")),
+      rename: overrides.session?.rename ?? (() => Effect.die("unused session.rename")),
       synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
+      wait: overrides.session?.wait ?? (() => Effect.die("unused session.wait")),
     },
   }
 }
@@ -118,7 +122,11 @@ export function agentHost(agent: Agent.Interface): Plugin.Context["agent"] {
             ? Effect.succeed({
                 location: new Location.Info({
                   directory: AbsolutePath.make("/"),
-                  project: { id: Project.ID.make("test"), directory: AbsolutePath.make("/") },
+                  project: {
+                    id: Project.ID.make("test"),
+                    directory: AbsolutePath.make("/"),
+                    canonical: AbsolutePath.make("/"),
+                  },
                 }),
                 data: agentInfo(value),
               })
@@ -160,7 +168,11 @@ export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog
           Effect.map((data) => ({
             location: new Location.Info({
               directory: AbsolutePath.make("/"),
-              project: { id: Project.ID.make("test"), directory: AbsolutePath.make("/") },
+              project: {
+                id: Project.ID.make("test"),
+                directory: AbsolutePath.make("/"),
+                canonical: AbsolutePath.make("/"),
+              },
             }),
             data: data.map(modelInfo),
           })),
@@ -213,8 +225,7 @@ export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog
                   })),
                 })
               }),
-            remove: (providerID, modelID) =>
-              draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+            remove: (providerID, modelID) => draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
             default: {
               get: () => {
                 const value = draft.model.default.get()
@@ -266,7 +277,7 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
           update: (id, update) => draft.update(Integration.ID.make(id), update),
           remove: (id) => draft.remove(Integration.ID.make(id)),
           method: {
-            list: (id) => draft.method.list(Integration.ID.make(id)).map(method),
+            list: (id) => draft.method.list(Integration.ID.make(id)),
             update: (input) => {
               if ("authorize" in input) {
                 const methodID = Integration.MethodID.make(input.method.id)
@@ -274,8 +285,8 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 draft.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: { ...input.method, id: methodID },
-                  authorize: (inputs) =>
-                    input.authorize(inputs).pipe(
+                  authorize: (answer) =>
+                    input.authorize(answer).pipe(
                       Effect.map((authorization) => {
                         if (authorization.mode === "auto") {
                           return {
@@ -324,7 +335,7 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
               if (input.method.type === "env") {
                 draft.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
-                  method: { ...input.method, names: [...input.method.names] },
+                  method: input.method,
                 })
                 return
               }
@@ -334,7 +345,6 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                   method: {
                     ...input.method,
                     id: Integration.MethodID.make(input.method.id),
-                    command: [...input.method.command],
                   },
                 })
                 return
@@ -354,7 +364,11 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
 export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["websearch"] {
   const location = Location.Info.make({
     directory: AbsolutePath.make("/tmp/websearch-test"),
-    project: { id: Project.ID.make("websearch-test"), directory: AbsolutePath.make("/tmp/websearch-test") },
+    project: {
+      id: Project.ID.make("websearch-test"),
+      directory: AbsolutePath.make("/tmp/websearch-test"),
+      canonical: AbsolutePath.make("/tmp/websearch-test"),
+    },
   })
   return {
     providers: () => websearch.providers().pipe(Effect.map((data) => ({ location, data }))),
@@ -385,37 +399,11 @@ function oauthCredential(value: Credential.OAuth) {
   return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }
 
-function method(value: Integration.Method) {
-  if (value.type === "env") return { type: value.type, names: [...value.names] }
-  if (value.type === "key") return { type: value.type, label: value.label }
-  if (value.type === "command") return { ...value, command: [...value.command] }
-  return {
-    type: value.type,
-    id: value.id,
-    label: value.label,
-    prompts: value.prompts?.map((prompt) => {
-      if (prompt.type === "text") return { ...prompt }
-      return { ...prompt, options: prompt.options.map((option) => ({ ...option })) }
-    }),
+function internalMethod(value: IntegrationMethod): Integration.Method {
+  if (value.type === "oauth" || value.type === "command") {
+    return { ...value, id: Integration.MethodID.make(value.id) }
   }
-}
-
-function internalMethod(
-  value: IntegrationMethodRegistration["method"],
-): Integration.Method {
-  if (value.type === "env") return value
-  if (value.type === "key") return value
-  if (value.type === "command") {
-    return {
-      ...value,
-      id: Integration.MethodID.make(value.id),
-      command: [...value.command],
-    }
-  }
-  return {
-    ...value,
-    id: Integration.MethodID.make(value.id),
-  }
+  return value
 }
 
 function agentInfo(value: Agent.Info) {

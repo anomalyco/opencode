@@ -1,6 +1,6 @@
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Config as ConfigSchema } from "@opencode-ai/schema/config"
+import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Command } from "@opencode-ai/core/command"
@@ -22,7 +22,7 @@ import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
-const decode = Schema.decodeUnknownSync(Config.Info)
+const decode = Schema.decodeUnknownSync(Info)
 const document = path.join(import.meta.dir, "opencode.json")
 
 describe("config plugin reloads", () => {
@@ -53,7 +53,8 @@ describe("config plugin reloads", () => {
       expect(yield* catalog.provider.get(Provider.ID.make("first"))).toBeDefined()
 
       yield* test.setEntries([config("second")])
-      yield* bus.publish(ConfigSchema.Event.Updated, {})
+      yield* Effect.yieldNow
+      yield* bus.publish(Event.Updated, {})
       yield* waitUntil(
         Effect.gen(function* () {
           return (
@@ -82,7 +83,7 @@ describe("config plugin reloads", () => {
 })
 
 function config(name: string) {
-  return new Config.Document({
+  return new Document({
     type: "document",
     path: document,
     info: decode({

@@ -24,9 +24,7 @@ const capture = (providerMetadataKey = "anthropic", options?: { readonly interru
       const publish = Effect.sync(() => {
         const event = { id: Event.ID.create(), type: definition.type, data } as Event.Payload<typeof definition>
         published.push({
-          type: definition.durable
-            ? Bus.versionedType(definition.type, definition.durable.version)
-            : definition.type,
+          type: definition.durable ? Bus.versionedType(definition.type, definition.durable.version) : definition.type,
           data,
         })
         return event
@@ -226,9 +224,7 @@ test("provider-executed tool metadata is flattened using the route key", async (
 test("binary failure emits no success event", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(publisher.publish(call))
-  await Effect.runPromise(
-    publisher.failTool(call.id, { type: "tool.execution", message: "Cannot read binary file" }),
-  )
+  await Effect.runPromise(publisher.failTool(call.id, { type: "tool.execution", message: "Cannot read binary file" }))
   expect(published.some((event) => event.type === "session.tool.success.2")).toBe(false)
   expect(published.some((event) => event.type === "session.tool.failed.2")).toBe(true)
 })
@@ -237,7 +233,7 @@ test("success event data can carry provider-executed result state", () => {
   const decoded = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)({
     sessionID,
     assistantMessageID: SessionMessage.ID.create(),
-    callID: "call-old",
+    id: "call-old",
     content: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }],
     executed: true,
     resultState: {

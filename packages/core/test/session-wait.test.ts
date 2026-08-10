@@ -17,7 +17,7 @@ import { testEffect } from "./lib/effect"
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const awaited: Session.ID[] = []
 const projects = Layer.mock(Project.Service, {
-  resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory }),
+  resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
 })
 const execution = Layer.mock(SessionExecution.Service, {
   awaitIdle: (sessionID) => Effect.sync(() => awaited.push(sessionID)),

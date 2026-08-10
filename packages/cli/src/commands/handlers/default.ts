@@ -22,6 +22,7 @@ export default Runtime.handler(Commands, (input) =>
     const server = yield* ServerConnection.resolve({
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
+      mismatch: "replace",
       onStart: (reason, previousVersion) => {
         if (reason === "version-mismatch" && preflight.begin(previousVersion)) return
         process.stderr.write(
@@ -45,7 +46,11 @@ export default Runtime.handler(Commands, (input) =>
     const runPromise = Effect.runPromiseWith(context)
     const service = server.service
     yield* run({
-      app: { name: process.env.OPENCODE_CLIENT ?? "cli", version: OPENCODE_VERSION, channel: OPENCODE_CHANNEL },
+      app: {
+        name: process.env.OPENCODE_CLIENT ?? "cli",
+        version: OPENCODE_VERSION,
+        channel: process.env.OPENCODE_TUI_CHANNEL ?? OPENCODE_CHANNEL,
+      },
       server: {
         endpoint: server.endpoint,
         service: service

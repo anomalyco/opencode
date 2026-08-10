@@ -3,10 +3,11 @@ import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src"
 import { Auth, LLMClient } from "../../src/route"
+import { compileRequest } from "../../src/route/client"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { it } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
+import { dynamicResponse, fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
 const Json = Schema.fromJsonString(Schema.Unknown)
@@ -52,7 +53,7 @@ const providerFamilies = [
 describe("OpenAI-compatible Chat route", () => {
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLMRequest.update(request, {
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
           toolChoice: ToolChoice.make({ type: "required" }),
@@ -127,7 +128,7 @@ describe("OpenAI-compatible Chat route", () => {
 
   it.effect("matches AI SDK compatible basic request body fixture", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(request)
+      const prepared = yield* compileRequest(request)
 
       expect(prepared.body).toEqual({
         model: "deepseek-chat",
@@ -143,9 +144,23 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("configures the max tokens request field", () =>
+    Effect.gen(function* () {
+      const compatible = OpenAICompatibleChat.route
+        .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+        .model({ id: "custom-model", compatibility: { maxTokensField: "max_completion_tokens" } })
+      const prepared = yield* compileRequest(
+        LLM.request({ model: compatible, prompt: "Say hello.", generation: { maxTokens: 20 } }),
+      )
+
+      expect(prepared.body).toMatchObject({ max_completion_tokens: 20 })
+      expect(prepared.body).not.toHaveProperty("max_tokens")
+    }),
+  )
+
   it.effect("matches AI SDK compatible tool request body fixture", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_parity",
           model,
@@ -236,6 +251,110 @@ describe("OpenAI-compatible Chat route", () => {
         type: "finish",
         reason: { normalized: "stop", raw: "stop" },
       })
+    }),
+  )
+
+  it.effect("accepts nullable usage and preserves provider fields", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              usageChunk({
+                prompt_tokens: null,
+                completion_tokens: null,
+                total_tokens: null,
+                prompt_tokens_details: { cached_tokens: null, vendor_cache_tokens: 3 },
+                completion_tokens_details: {
+                  reasoning_tokens: null,
+                  accepted_prediction_tokens: null,
+                  rejected_prediction_tokens: null,
+                },
+                cost: "0.001",
+              }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+        providerMetadata: {
+          openai: {
+            prompt_tokens: null,
+            completion_tokens: null,
+            total_tokens: null,
+            prompt_tokens_details: { cached_tokens: null, vendor_cache_tokens: 3 },
+            cost: "0.001",
+          },
+        },
+      })
+    }),
+  )
+
+  it.effect("assembles indexless parallel tool calls across sparse chunks", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [
+            ToolDefinition.make({ name: "weather", description: "Get weather", inputSchema: { type: "object" } }),
+          ],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({
+                tool_calls: [
+                  { id: "call_paris", function: { name: "weather", arguments: '{"city":"' } },
+                  { index: null, id: "call_london", function: { name: "weather", arguments: '{"city":"' } },
+                ],
+              }),
+              deltaChunk({ tool_calls: [{ function: { arguments: 'London"}' } }] }),
+              deltaChunk({ tool_calls: [{ id: "call_paris", function: { arguments: 'Paris"}' } }] }),
+              deltaChunk({}, "tool_calls"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([
+        { id: "call_paris", name: "weather", input: { city: "Paris" } },
+        { id: "call_london", name: "weather", input: { city: "London" } },
+      ])
+    }),
+  )
+
+  it.effect("treats an empty finish reason as terminal", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "")))),
+      )
+
+      expect(response.finishReason).toEqual({ normalized: "unknown", raw: "" })
+    }),
+  )
+
+  it.effect("rejects content after a terminal chunk", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: "{}" } }] }),
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.message).toContain("OpenAI Chat received content after the finish reason")
     }),
   )
 })

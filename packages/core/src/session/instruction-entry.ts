@@ -25,7 +25,7 @@ export interface Interface {
   }) => Effect.Effect<void, InstructionEntry.ValueTooLargeError>
   readonly remove: (input: { readonly sessionID: SessionSchema.ID; readonly key: Key }) => Effect.Effect<void>
   /** Produces one Instructions source per stored entry, keyed `api/<key>`. */
-  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.Instructions>
+  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionEntry") {}

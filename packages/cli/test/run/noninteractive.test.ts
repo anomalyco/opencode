@@ -109,7 +109,7 @@ function failedTool(inputID: string): V2Event[] {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_failed_tool",
-        callID: "call_failed_tool",
+        id: "call_failed_tool",
         name: "shell",
       },
     },
@@ -121,7 +121,7 @@ function failedTool(inputID: string): V2Event[] {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_failed_tool",
-        callID: "call_failed_tool",
+        id: "call_failed_tool",
         input: { command: "printf partial && false" },
         executed: true,
       },
@@ -133,7 +133,7 @@ function failedTool(inputID: string): V2Event[] {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_failed_tool",
-        callID: "call_failed_tool",
+        id: "call_failed_tool",
         metadata: { checkpoint: 1 },
       },
     },
@@ -145,7 +145,7 @@ function failedTool(inputID: string): V2Event[] {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_failed_tool",
-        callID: "call_failed_tool",
+        id: "call_failed_tool",
         error: { type: "unknown", message: "tool failed" },
         metadata: { checkpoint: 1 },
         content: [{ type: "text", text: "partial output" }],
@@ -168,7 +168,7 @@ function successfulGrep(inputID: string): V2Event[] {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_grep",
-        callID: "call_grep",
+        id: "call_grep",
         name: "grep",
       },
     },
@@ -180,7 +180,7 @@ function successfulGrep(inputID: string): V2Event[] {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_grep",
-        callID: "call_grep",
+        id: "call_grep",
         input: { pattern: "needle" },
         executed: true,
       },
@@ -193,7 +193,7 @@ function successfulGrep(inputID: string): V2Event[] {
       data: {
         sessionID: "ses_1",
         assistantMessageID: "msg_grep",
-        callID: "call_grep",
+        id: "call_grep",
         metadata: { matches: 2 },
         content: [{ type: "text", text }],
         executed: false,
@@ -267,7 +267,7 @@ async function run(input: {
     values.push(...input.turn(messageID))
     wake?.()
     wake = undefined
-    return ok({ admittedSeq: 1, id: messageID, sessionID: "ses_1", timeCreated: 1 }) as never
+    return ok({ id: messageID, sessionID: "ses_1", timeCreated: 1 }) as never
   })
   await runNonInteractivePrompt({
     client: sdk,
@@ -503,8 +503,8 @@ describe("runNonInteractivePrompt", () => {
       turn: (messageID) => [
         prompted(messageID),
         stepStarted(),
-        stepFailed("Provider stream ended without a terminal finish event"),
-        executionFailed("Provider stream ended without a terminal finish event"),
+        stepFailed("The provider response ended unexpectedly."),
+        executionFailed("The provider response ended unexpectedly."),
       ],
     })
 
@@ -561,7 +561,7 @@ describe("runNonInteractivePrompt", () => {
       type: "tool_use",
       part: {
         type: "tool",
-        callID: "call_failed_tool",
+        id: "call_failed_tool",
         tool: "shell",
         state: {
           status: "error",

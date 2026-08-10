@@ -1,9 +1,9 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
-import { useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { Spinner } from "./spinner"
 
 export function StartupLoading(props: { ready: () => boolean }) {
-  const theme = useThemes().contextual("elevated")
+  const theme = useTheme("elevated")
   const [show, setShow] = createSignal(false)
   const text = createMemo(() => (props.ready() ? "Finishing startup..." : "Loading plugins..."))
   let wait: NodeJS.Timeout | undefined

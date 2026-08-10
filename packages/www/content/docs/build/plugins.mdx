@@ -177,7 +177,7 @@ and plugin options.
 | `ctx.integration`      | `list`, `get`, `connect`, `attempt`, `transform`, `reload`, and connection lookup/resolution |
 | `ctx.plugin`           | `list` currently active plugin IDs                                                           |
 | `ctx.reference`        | `list`, `transform`, `reload`                                                                |
-| `ctx.session`          | `create`, `get`, `prompt`, `command`, `synthetic`, `interrupt`, and `hook`                   |
+| `ctx.session`          | `create`, `get`, `prompt`, `command`, `rename`, `synthetic`, `interrupt`, `wait`, and `hook` |
 | `ctx.skill`            | `list`, `transform`, `reload`                                                                |
 | `ctx.tool`             | `transform` and `hook`                                                                       |
 | `ctx.aisdk`            | `hook`                                                                                       |
@@ -239,16 +239,37 @@ without restarting OpenCode.
 
 ### Runtime hooks
 
-Runtime hooks intercept live operations. Their event objects expose specific
-mutable fields:
+Runtime hooks intercept live operations:
 
-| Hook                                        | Mutable fields                                                                 |
-| ------------------------------------------- | ------------------------------------------------------------------------------ |
-| `ctx.aisdk.hook("sdk", callback)`           | `sdk`, after inspecting `model`, `package`, and `options`                      |
-| `ctx.aisdk.hook("language", callback)`      | `language`, after inspecting `model`, `sdk`, and `options`                     |
-| `ctx.session.hook("request", callback)`     | `system`, `messages`, and the `tools` record immediately before model dispatch |
-| `ctx.tool.hook("execute.before", callback)` | `input`, before the selected tool executes                                     |
-| `ctx.tool.hook("execute.after", callback)`  | Terminal `result` on success or `error` on failure                            |
+| Hook                                          | Mutable fields                                                                 |
+| --------------------------------------------- | ------------------------------------------------------------------------------ |
+| `ctx.aisdk.hook("sdk", callback)`             | `sdk`, after inspecting `model`, `package`, and `options`                      |
+| `ctx.aisdk.hook("language", callback)`        | `language`, after inspecting `model`, `sdk`, and `options`                     |
+| `ctx.session.hook("context", callback)`       | `system`, `messages`, and the `tools` record immediately before model dispatch |
+| `ctx.session.hook("http.request", callback)`  | `request`, immediately before provider dispatch                                |
+| `ctx.session.hook("http.response", callback)` | `response`, immediately after the provider responds                            |
+| `ctx.tool.hook("execute.before", callback)`   | `input`, before the selected tool executes                                     |
+| `ctx.tool.hook("execute.after", callback)`    | Terminal `result` on success or `error` on failure                             |
+
+HTTP hooks can modify requests and responses. They apply to native models; AI
+SDK models do not currently pass through these hooks. Request and response
+bodies are one-shot streams. Use `clone()` when you intentionally need a
+separate reader, but be aware that its slower branch may buffer data. To inspect
+or modify chunks while preserving streaming, replace the body with one piped
+through a `TransformStream`.
+
+```ts
+await ctx.session.hook("http.request", (event) => {
+  event.request.headers.set("x-session-id", event.sessionID)
+})
+
+await ctx.session.hook("http.response", (event) => {
+  event.response = new Response(event.response.body, {
+    status: event.response.status,
+    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "enabled" },
+  })
+})
+```
 
 For example, remove a tool from selected model requests and normalize another
 tool's input:
@@ -259,7 +280,7 @@ import { Plugin } from "@opencode-ai/plugin"
 export default Plugin.define({
   id: "acme.guards",
   setup: async (ctx) => {
-    await ctx.session.hook("request", (event) => {
+    await ctx.session.hook("context", (event) => {
       delete event.tools.write
     })
 
@@ -288,33 +309,30 @@ export default Plugin.define({
   id: "acme.greeting",
   setup: async (ctx) => {
     await ctx.tool.transform((tools) => {
-      tools.add(
-        "greeting",
-        {
-          description: "Create a greeting",
-          input: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-            },
-            required: ["name"],
-            additionalProperties: false,
+      tools.add("greeting", {
+        description: "Create a greeting",
+        input: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
           },
-          output: {
-            type: "object",
-            properties: { greeting: { type: "string" } },
-            required: ["greeting"],
-            additionalProperties: false,
-          },
-          execute: async ({ name }) => {
-            const text = `Hello, ${name}!`
-            return {
-              output: { greeting: text },
-              content: text,
-            }
-          },
+          required: ["name"],
+          additionalProperties: false,
         },
-      )
+        output: {
+          type: "object",
+          properties: { greeting: { type: "string" } },
+          required: ["greeting"],
+          additionalProperties: false,
+        },
+        execute: async ({ name }) => {
+          const text = `Hello, ${name}!`
+          return {
+            output: { greeting: text },
+            content: text,
+          }
+        },
+      })
     })
   },
 })
@@ -331,8 +349,8 @@ argument to `tools.add` to configure the registration with
   `execute` CodeMode tool. Set `codemode: false` to expose it directly to the
   provider.
 
-The executor receives a second context argument containing `sessionID`,
-`agent`, `messageID`, `callID`, and `progress`. A tool with `output`
+The executor receives a second context argument containing `id`, `sessionID`,
+`agent`, `messageID`, and `progress`. A tool with `output`
 must return `output`; Effect and Standard Schema codecs validate it, while raw
 JSON Schema definitions enforce JSON compatibility only. A tool
 without `output` returns model-visible `content` instead.

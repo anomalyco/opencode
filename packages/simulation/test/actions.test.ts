@@ -43,6 +43,25 @@ test("normalizes named keys for OpenTUI", async () => {
   ])
 })
 
+test("headless input mirrors the configured kitty keyboard protocol", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const renderer = yield* SimulationRenderer.create({ useKittyKeyboard: {} })
+        const harness = createHarness(renderer)
+        let key: { readonly name: string; readonly source: string } | undefined
+        renderer.keyInput.once("keypress", (event) => {
+          key = event
+        })
+
+        yield* execute(harness, { type: "ui.press", key: "escape" })
+
+        expect(key).toMatchObject({ name: "escape", source: "kitty" })
+      }),
+    ),
+  )
+})
+
 test("clicks a target at relative coordinates through descendant text", async () => {
   await Effect.runPromise(
     Effect.scoped(

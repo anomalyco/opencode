@@ -1,9 +1,9 @@
 import type { Effect, Stream } from "effect"
 import { Endpoint } from "../endpoint"
 import { Auth } from "../auth"
-import type { Interface as RequestExecutorInterface } from "../executor"
+import type { HttpMiddleware, Interface as RequestExecutorInterface } from "../executor"
 import type { Interface as WebSocketExecutorInterface } from "./websocket"
-import type { LLMError, LLMRequest } from "../../schema"
+import type { AIError, LLMRequest } from "../../schema"
 
 export interface TransportRuntime {
   readonly http: RequestExecutorInterface
@@ -12,12 +12,8 @@ export interface TransportRuntime {
 
 export interface Transport<Body, Prepared, Frame> {
   readonly id: string
-  readonly prepare: (input: TransportPrepareInput<Body>) => Effect.Effect<Prepared, LLMError>
-  readonly frames: (
-    prepared: Prepared,
-    request: LLMRequest,
-    runtime: TransportRuntime,
-  ) => Stream.Stream<Frame, LLMError>
+  readonly prepare: (input: TransportPrepareInput<Body>) => Effect.Effect<Prepared, AIError>
+  readonly frames: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => Stream.Stream<Frame, AIError>
 }
 
 export interface TransportPrepareInput<Body> {
@@ -27,7 +23,9 @@ export interface TransportPrepareInput<Body> {
   readonly auth: Auth.Definition
   readonly encodeBody: (body: Body) => string
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
+  readonly middleware?: HttpMiddleware
 }
 
 export * as HttpTransport from "./http"
+export type { HttpHandler, HttpMiddleware } from "../executor"
 export { WebSocketExecutor, WebSocketTransport } from "./websocket"

@@ -17,7 +17,7 @@ export const Source = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("tool"),
     messageID: Schema.String,
-    callID: Schema.String,
+    id: Schema.String,
   }),
 ]).annotate({ identifier: "Permission.Source" })
 export type Source = typeof Source.Type

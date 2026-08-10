@@ -14,9 +14,8 @@ import { Model } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Provider } from "@opencode-ai/core/provider"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -24,6 +23,7 @@ import { SessionPending } from "@opencode-ai/core/session/pending"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
 import { tmpdir } from "./fixture/tmpdir"
@@ -32,15 +32,22 @@ const projects = Layer.succeed(
   Project.Service,
   Project.Service.of({
     list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory }),
+    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
     directories: () => Effect.succeed([]),
-    commit: () => Effect.void,
   }),
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      Session.node,
+      SessionTransfer.node,
+    ]),
     [
+      [Bus.node, Bus.configured({ persist: true })],
       [Project.node, projects],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
@@ -71,6 +78,27 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("Session.create", () => {
+  it.effect("persists a missing title until one is generated or supplied", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const { db } = yield* Database.Service
+
+      const created = yield* session.create({ location })
+      const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, created.id)).get().pipe(Effect.orDie)
+      const event = yield* db
+        .select({ data: EventTable.data })
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, created.id))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(created.title).toBeUndefined()
+      expect(row?.title).toBeNull()
+      expect(event?.data).not.toHaveProperty("title")
+      expect((yield* session.create({ location, title: "Explicit title" })).title).toBe("Explicit title")
+    }),
+  )
+
   it.effect("creates a fresh projected session when the ID is omitted", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -171,6 +199,30 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("orders sessions by their latest prompt", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const { db } = yield* Database.Service
+      const active = yield* session.create({ location, title: "active" })
+      const newer = yield* session.create({ location, title: "newer" })
+
+      yield* db
+        .update(SessionTable)
+        .set({ time_created: -2, time_updated: -2 })
+        .where(eq(SessionTable.id, active.id))
+        .run()
+      yield* db
+        .update(SessionTable)
+        .set({ time_created: -1, time_updated: -1 })
+        .where(eq(SessionTable.id, newer.id))
+        .run()
+
+      yield* session.prompt({ sessionID: active.id, text: "continue", resume: false })
+
+      expect((yield* session.list()).data.map((item) => item.id)).toEqual([active.id, newer.id])
+    }),
+  )
+
   it.effect("filters direct child sessions by parent ID", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -181,6 +233,26 @@ describe("Session.create", () => {
       const page = yield* session.list({ parentID: parent.id })
 
       expect(page.data.map((item) => item.id)).toEqual([child.id])
+    }),
+  )
+
+  it.effect("filters project sessions by subpath", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const { db } = yield* Database.Service
+      const root = yield* session.create({ location, title: "root" })
+      const nested = yield* session.create({ location, title: "nested" })
+
+      yield* db.update(SessionTable).set({ path: "packages/tui" }).where(eq(SessionTable.id, nested.id)).run()
+
+      const page = yield* session.list({
+        project: Project.ID.global,
+        subpath: RelativePath.make("packages/tui"),
+        parentID: null,
+      })
+
+      expect(page.data.map((item) => item.id)).toEqual([nested.id])
+      expect(page.data.map((item) => item.id)).not.toContain(root.id)
     }),
   )
 
@@ -199,7 +271,7 @@ describe("Session.create", () => {
       yield* session.synthetic({ sessionID: parent.id, text: "parent note", resume: false })
       yield* SessionPending.promote(db, bus, parent.id, "steer")
 
-      const forked = yield* session.fork({ sessionID: parent.id })
+      const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
       const parentContext = yield* session.context(parent.id)
       const forkContext = yield* session.context(forked.id)
       const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
@@ -219,13 +291,9 @@ describe("Session.create", () => {
       })
       expect(yield* SessionPending.find(db, forkContext[0].id)).toBeUndefined()
       expect(yield* SessionPending.find(db, forkContext[1].id)).toBeUndefined()
-      // Fork-copied messages have no admitted event in the fork aggregate, so
-      // reusing their IDs as prompt IDs is conflicting reuse, not a retry.
       expect(
-        yield* session
-          .prompt({ id: forkContext[0].id, sessionID: forked.id, text: "First", resume: false })
-          .pipe(Effect.flip),
-      ).toMatchObject({ _tag: "Session.PromptConflictError", messageID: forkContext[0].id })
+        yield* session.prompt({ id: forkContext[0].id, sessionID: forked.id, text: "First", resume: false }),
+      ).toMatchObject({ id: forkContext[0].id, type: "user", data: { text: "First" } })
 
       yield* session.prompt({
         sessionID: parent.id,
@@ -249,6 +317,34 @@ describe("Session.create", () => {
         ),
       ).toEqual([0, 5, 6])
       expect(yield* SessionPending.find(db, admitted.id)).toBeUndefined()
+    }),
+  )
+
+  it.effect("keeps a fork untitled when its parent is untitled", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location })
+      yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
+      yield* SessionPending.promote(db, bus, parent.id, "steer")
+
+      const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
+      const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, forked.id)).get().pipe(Effect.orDie)
+
+      expect(forked.title).toBeUndefined()
+      expect(row?.title).toBeNull()
+    }),
+  )
+
+  it.effect("rejects forking an empty session", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const parent = yield* session.create({ location })
+
+      expect(
+        yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } }).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.ForkEmptyError", sessionID: parent.id })
     }),
   )
 
@@ -286,16 +382,27 @@ describe("Session.create", () => {
         tokens: { input: 6, output: 3, reasoning: 1, cache: { read: 2, write: 1 } },
       })
 
-      const forked = yield* session.fork({ sessionID: parent.id, messageID: second.id })
-      const beforeFirst = yield* session.fork({ sessionID: parent.id, messageID: first.id })
-      const complete = yield* session.fork({ sessionID: parent.id })
+      const forked = yield* session.fork({
+        sessionID: parent.id,
+        boundary: { type: "before", messageID: second.id },
+      })
+      const beforeFirst = yield* session.fork({
+        sessionID: parent.id,
+        boundary: { type: "before", messageID: first.id },
+      })
+      const complete = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
 
       const context = yield* session.context(forked.id)
       const history = Array.from(yield* Stream.runCollect(logEvents(session, forked.id)))
-      expect(forked.fork).toEqual({ sessionID: parent.id, messageID: second.id })
+      expect(forked.fork).toEqual({
+        sessionID: parent.id,
+        boundary: { type: "before", messageID: second.id },
+      })
       expect(context).toMatchObject([{ text: "First" }])
       expect(context[0]?.id).not.toBe(first.id)
-      expect(history[0]).toMatchObject({ data: { from: second.id } })
+      expect(history[0]).toMatchObject({
+        data: { boundary: { type: "before", messageID: second.id } },
+      })
       expect(forked).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
       expect(yield* session.context(beforeFirst.id)).toEqual([])
       expect(beforeFirst).toMatchObject({ cost: 0, tokens: { input: 0, output: 0, reasoning: 0 } })
@@ -352,32 +459,7 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("returns the current Session projection after projected updates", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const bus = yield* Bus.Service
-      const input = { id, location }
-      const created = yield* session.create(input)
-
-      yield* bus.publish(SessionV1.Event.Updated, {
-        sessionID: id,
-        info: SessionV1.SessionInfo.make({
-          id,
-          slug: "updated",
-          version: "test",
-          projectID: created.projectID,
-          directory: created.location.directory,
-          title: "updated",
-          agent: "build",
-          time: { created: 0, updated: 1 },
-        }),
-      })
-
-      expect(yield* session.create(input)).toMatchObject({ id, agent: "build" })
-    }),
-  )
-
-  it.effect("persists creation through the existing legacy created event", () =>
+  it.effect("persists creation through the current created event", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const { db } = yield* Database.Service
@@ -385,7 +467,7 @@ describe("Session.create", () => {
 
       expect(
         yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
-      ).toMatchObject([{ type: Bus.versionedType(SessionV1.Event.Created.type, 1) }])
+      ).toMatchObject([{ type: Bus.versionedType(SessionEvent.Created.type, 1) }])
     }),
   )
 
@@ -403,7 +485,7 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("omits legacy creation rows from the Session event stream", () =>
+  it.effect("includes current creation rows in the Session event stream", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
       const bus = yield* Bus.Service
@@ -417,8 +499,9 @@ describe("Session.create", () => {
       yield* SessionPending.promote(db, bus, created.id, "steer")
 
       expect(
-        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(2), Stream.runCollect)),
+        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(3), Stream.runCollect)),
       ).toMatchObject([
+        { durable: { seq: 0 }, type: "session.created" },
         {
           durable: { seq: 1 },
           type: "session.input.admitted",
@@ -463,7 +546,10 @@ describe("Session.create", () => {
       const targetDatabase = Database.layer({ path: path.join(tmp.path, "target.sqlite") })
       const targetLayer = AppNodeBuilder.build(
         LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node]),
-        [[Database.node, targetDatabase]],
+        [
+          [Database.node, targetDatabase],
+          [Bus.node, Bus.configured({ persist: true })],
+        ],
       )
 
       yield* Effect.gen(function* () {
@@ -484,7 +570,6 @@ describe("Session.create", () => {
           type: "user",
           data: { text: "Replay lifecycle" },
           delivery: "steer",
-          admittedSeq: 1,
         })
         expect(yield* store.context(created.id)).toEqual([])
 
@@ -502,7 +587,7 @@ describe("Session.create", () => {
             .all()
             .pipe(Effect.orDie)).map((event) => [event.seq, event.type]),
         ).toEqual([
-          [0, Bus.versionedType(SessionV1.Event.Created.type, 1)],
+          [0, Bus.versionedType(SessionEvent.Created.type, 1)],
           [1, Bus.versionedType(SessionEvent.InputAdmitted.type, 1)],
           [2, Bus.versionedType(SessionEvent.InputPromoted.type, 1)],
         ])
@@ -515,7 +600,7 @@ describe("Session.create", () => {
       const session = yield* Session.Service
       const event = yield* Bus.Service
       const defect = new Error("unrelated projector defect")
-      yield* event.project(SessionV1.Event.Created, () => Effect.die(defect))
+      yield* event.project(SessionEvent.Created, () => Effect.die(defect))
 
       expect(yield* session.create({ id, location }).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
     }),
@@ -569,7 +654,7 @@ describe("Session.create", () => {
 
       expect(yield* session.get(created.id)).toMatchObject({ agent: "plan" })
       expect(
-        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(1), Stream.runCollect)),
+        Array.from(yield* logEvents(session, created.id, true).pipe(Stream.drop(1), Stream.take(1), Stream.runCollect)),
       ).toMatchObject([{ type: "session.agent.selected", data: { agent: "plan" } }])
     }),
   )
@@ -601,7 +686,9 @@ describe("Session.create", () => {
       yield* session.switchModel({ sessionID: created.id, model })
 
       expect(yield* session.get(created.id)).toMatchObject({ model })
-      const bus = Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(1), Stream.runCollect))
+      const bus = Array.from(
+        yield* logEvents(session, created.id, true).pipe(Stream.drop(1), Stream.take(1), Stream.runCollect),
+      )
       expect(bus).toMatchObject([{ type: "session.model.selected" }])
       expect(bus[0]?.data).toEqual({ sessionID: created.id, model })
     }),
@@ -658,6 +745,80 @@ describe("Session.create", () => {
             Effect.map((error) => error._tag),
           ),
       ).toBe("Session.NotFoundError")
+    }),
+  )
+})
+
+describe("SessionTransfer", () => {
+  it.effect("imports projected messages and reserves their aggregate sequence", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const template = yield* session.create({ location, title: "Exported" })
+      const sessionID = Session.ID.create()
+      const sourceMessageID = SessionMessage.ID.create()
+      const errorMessageID = SessionMessage.ID.create()
+
+      const imported = yield* transfer.import({
+        data: {
+          info: { ...template, id: sessionID },
+          messages: [
+            {
+              id: sourceMessageID,
+              type: "user",
+              text: "Imported message",
+              time: { created: DateTime.makeUnsafe(100) },
+            },
+            {
+              id: errorMessageID,
+              type: "compaction",
+              status: "failed",
+              reason: "manual",
+              error: { type: "test_error", message: "Original error" },
+              time: { created: DateTime.makeUnsafe(101) },
+            },
+          ],
+        },
+        location,
+      })
+      const messages = yield* session.messages({ sessionID, order: "asc" })
+
+      expect(imported).toMatchObject({ id: sessionID, title: "Exported", location })
+      expect(messages).toMatchObject([
+        { id: sourceMessageID, type: "user", text: "Imported message" },
+        { id: errorMessageID, type: "compaction", error: { type: "test_error", message: "Original error" } },
+      ])
+      expect(yield* Bus.latestSequence(db, sessionID)).toBe(2)
+      expect((yield* transfer.export({ sessionID })).messages).toEqual(messages)
+      expect((yield* transfer.export({ sessionID, sanitize: true })).messages).toMatchObject([
+        { id: sourceMessageID, text: `[redacted:text:${sourceMessageID}]` },
+        { id: errorMessageID, error: { type: "test_error", message: "Original error" } },
+      ])
+
+      yield* session.prompt({ sessionID, text: "Continue", resume: false })
+      yield* SessionPending.promote(db, bus, sessionID, "steer")
+
+      expect((yield* session.messages({ sessionID, order: "asc" })).map((message) => message.type)).toEqual([
+        "user",
+        "compaction",
+        "user",
+      ])
+      expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
+    }),
+  )
+
+  it.effect("rejects an existing session ID without changing its transcript", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const existing = yield* session.create({ location, title: "Existing" })
+      const exit = yield* Effect.exit(transfer.import({ data: { info: existing, messages: [] }, location }))
+
+      expect(exit._tag).toBe("Failure")
+      expect((yield* session.get(existing.id)).title).toBe("Existing")
+      expect(yield* session.messages({ sessionID: existing.id })).toEqual([])
     }),
   )
 })

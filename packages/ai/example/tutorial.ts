@@ -33,9 +33,10 @@ const model = OpenAI.configure({
 //
 //   - `generation`: common controls such as max tokens, temperature, topP/topK,
 //     penalties, seed, and stop sequences.
+//   - `promptCacheKey`: stable cache affinity for protocols that support it.
 //   - `providerOptions`: namespaced provider-native behavior. For example,
-//     OpenAI cache keys and store behavior, Anthropic thinking, Gemini thinking
-//     config, or OpenRouter routing/reasoning.
+//     OpenAI store behavior, Anthropic thinking, Gemini thinking config, or
+//     OpenRouter routing/reasoning.
 //   - `http`: last-resort serializable overlays for final request body, headers,
 //     and query params. Prefer typed `providerOptions` when a field is stable.
 //
@@ -45,21 +46,7 @@ const request = LLM.request({
   system: "You are concise and practical.",
   prompt: "Tell me a joke",
   generation: { maxTokens: 80, temperature: 0.7 },
-  providerOptions: {
-    openai: { promptCacheKey: "tutorial-joke" },
-  },
-})
-
-// `http` is intentionally not needed for normal calls. This shows the shape for
-// newly released provider fields before they deserve a typed provider option.
-const rawOverlayExample = LLM.request({
-  model,
-  prompt: "Show the final HTTP overlay shape.",
-  http: {
-    body: { metadata: { example: "tutorial" } },
-    headers: { "x-opencode-tutorial": "1" },
-    query: { debug: "1" },
-  },
+  promptCacheKey: "tutorial-joke",
 })
 
 // 3. `generate` sends the request and collects the event stream into one
@@ -222,33 +209,15 @@ const FakeEcho = {
   }),
 }
 
-// `LLMClient.prepare` is the lower-level inspection hook: it compiles through
-// body conversion, validation, endpoint, auth, and HTTP construction without
-// sending anything over the network.
-const inspectFakeProvider = Effect.gen(function* () {
-  const prepared = yield* LLMClient.prepare(
-    LLM.request({
-      model: FakeEcho.configure().model("tiny-echo"),
-      prompt: "Show me the provider pipeline.",
-    }),
-  )
-
-  console.log("\n== fake provider prepare ==")
-  console.log("route:", prepared.route)
-  console.log("body:", Formatter.formatJson(prepared.body, { space: 2 }))
-})
-
 // Provide the LLM runtime and the HTTP request executor once. Keep one path
-// enabled at a time so the tutorial can demonstrate generate, prepare, stream,
-// or tool-loop behavior without spending tokens on every example.
+// enabled at a time so the tutorial can demonstrate generate, stream, or
+// tool-loop behavior without spending tokens on every example.
 const requestExecutorLayer = RequestExecutor.fetchLayer
 const llmDeps = Layer.mergeAll(requestExecutorLayer, WebSocketExecutor.layer)
 const llmClientLayer = LLMClient.layer.pipe(Layer.provide(llmDeps))
 
 const program = Effect.gen(function* () {
   // yield* generateOnce
-  // yield* inspectFakeProvider
-  // yield* LLMClient.prepare(rawOverlayExample).pipe(Effect.andThen((prepared) => Effect.sync(() => console.log(prepared.body))))
   // yield* streamText
   // yield* generateStructuredObject
   // yield* generateDynamicObject.pipe(Effect.andThen((response) => Effect.sync(() => console.log(response.object))))

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import {
+  assistantID,
   assistantMessage,
   reasoningPart,
   setupTimeline,
@@ -70,7 +71,7 @@ for (const profile of profiles) {
     await timeline.send(status("busy"), 150)
 
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(profile.thinking ? 1 : 0)
-    await expect(page.locator(`[data-timeline-part-id="${reasoningID}"]`)).toHaveCount(profile.body ? 1 : 0)
+    await expect(page.locator(`[data-timeline-part-id="${assistantID}:reasoning:0"]`)).toHaveCount(profile.body ? 1 : 0)
     if (!profile.summaries && profile.reasoning.trim()) {
       await expect(page.getByText("Inspecting stability", { exact: true })).toBeVisible()
     }
@@ -89,5 +90,5 @@ test("does not infer reasoning visibility from provider identity", async ({ page
 
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
   await expect(page.locator('[data-timeline-part-id*="reasoning"]')).toHaveCount(0)
-  await expect(page.locator('[data-timeline-part-id="prt_provider_text"]')).toBeVisible()
+  await expect(page.locator(`[data-timeline-part-id="${assistantID}:text:0"]`)).toBeVisible()
 })

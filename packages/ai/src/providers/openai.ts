@@ -86,10 +86,15 @@ export const configure = (input: Config = {}) => {
   const chatRoute = configuredRoute(OpenAIChat.route, input)
   const modelDefaults = defaults(input)
   const responses = (id: string | ModelID) =>
-    responsesRoute.with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true })).model({ id })
+    responsesRoute
+      .with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true }))
+      .model<OpenAIProviderOptionsInput>({ id })
   const responsesWebSocket = (id: string | ModelID) =>
-    responsesWebSocketRoute.with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true })).model({ id })
-  const chat = (id: string | ModelID) => chatRoute.with(withOpenAIOptions(id, modelDefaults)).model({ id })
+    responsesWebSocketRoute
+      .with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true }))
+      .model<OpenAIProviderOptionsInput>({ id })
+  const chat = (id: string | ModelID) =>
+    chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({ id })
   const image = (modelID: string | ModelID) =>
     OpenAIImages.model({
       id: modelID,
@@ -132,15 +137,17 @@ const config = (settings: Settings): Config => {
   }
 }
 
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) => {
   const configured = configure(config(settings))
   if (settings.transport === undefined || settings.transport === "http") return configured.responses(modelID)
   if (settings.transport === "websocket") return configured.responsesWebSocket(modelID)
   throw new Error(`Unsupported OpenAI Responses transport: ${String(settings.transport)}`)
 }
 
-export const chatModel: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
-  configure(config(settings)).chat(modelID)
+export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) => configure(config(settings)).chat(modelID)
 export const responses = provider.responses
 export const responsesWebSocket = provider.responsesWebSocket
 export const chat = provider.chat

@@ -45,14 +45,9 @@ import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import type {
-  AssistantMessage,
-  Message as MessageType,
-  Part as PartType,
-  ToolPart,
-  UserMessage,
-} from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message as MessageType, Part as PartType, ToolPart, UserMessage } from "@/types"
 import { showToast } from "@/utils/toast"
+import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { normalize } from "@opencode-ai/session-ui/session-diff"
@@ -161,10 +156,7 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
     >
       <div data-slot="session-turn-diffs-header">
         <span data-slot="session-turn-diffs-label">
-          {language.t(
-            props.diffs.length === 1 ? "ui.sessionTurn.diffs.changed.one" : "ui.sessionTurn.diffs.changed.other",
-            { count: String(props.diffs.length) },
-          )}
+          {language.plural("ui.sessionTurn.diffs.changed", props.diffs.length)}
         </span>
         <DiffChanges changes={props.diffs} />
         <Show when={overflow() > 0}>
@@ -289,7 +281,9 @@ export function MessageTimeline(props: {
     const visible = new Set(props.userMessages.map((message) => message.id))
     const boundary = sessionMessages().find((message) => message.role === "user" && !visible.has(message.id))?.id
     const messages = sync().data.session_message[id] ?? []
-    return boundary ? messages.filter((message) => message.id < boundary) : messages
+    if (!boundary) return messages
+    const index = messages.findIndex((message) => message.id === boundary)
+    return index < 0 ? messages : messages.slice(0, index)
   })
   const info = createMemo(() => {
     const id = sessionID()
@@ -298,8 +292,10 @@ export function MessageTimeline(props: {
   })
   const titleValue = createMemo(() => info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
-  const shareUrl = createMemo(() => info()?.share?.url)
-  const shareEnabled = createMemo(() => sync().data.config.share !== "disabled")
+  const shareUrl = (): string | undefined => undefined
+  // TODO: Restore these actions when the V2 client exposes session sharing.
+  // const shareEnabled = createMemo(() => sync().data.config.share !== "disabled")
+  const shareEnabled = () => false
   const parentID = createMemo(() => info()?.parentID)
   const parent = createMemo(() => {
     const id = parentID()
@@ -646,7 +642,7 @@ export function MessageTimeline(props: {
   const viewShare = () => {
     const url = shareUrl()
     if (!url) return
-    platform.openLink(url)
+    platform.openExternal(url)
   }
 
   const errorMessage = (err: unknown) => {
@@ -659,14 +655,16 @@ export function MessageTimeline(props: {
   }
 
   const shareMutation = useMutation(() => ({
-    mutationFn: (id: string) => serverSDK().client.session.share({ sessionID: id }),
+    // TODO: Restore sharing when the V2 client exposes a session sharing API.
+    mutationFn: async (_id: string) => Promise.reject(new Error("Session sharing is unavailable")),
     onError: (err) => {
       console.error("Failed to share session", err)
     },
   }))
 
   const unshareMutation = useMutation(() => ({
-    mutationFn: (id: string) => serverSDK().client.session.unshare({ sessionID: id }),
+    // TODO: Restore unsharing when the V2 client exposes a session sharing API.
+    mutationFn: async (_id: string) => Promise.reject(new Error("Session sharing is unavailable")),
     onError: (err) => {
       console.error("Failed to unshare session", err)
     },
@@ -809,34 +807,27 @@ export function MessageTimeline(props: {
     navigate(`/${params.dir}/session`)
   }
 
-  const archiveSession = async (sessionID: string) => {
-    const session = sync().session.get(sessionID)
-    if (!session) return
-    if ((await sdk().protocol) !== "v1") return
-
-    const sessions = sync().data.session ?? []
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-
-    await sdk()
-      .client.session.update({ sessionID, directory: sdk().directory, time: { archived: Date.now() } })
-      .then(() => {
-        sync().set(
-          produce((draft) => {
-            const index = draft.session.findIndex((s) => s.id === sessionID)
-            if (index !== -1) draft.session.splice(index, 1)
-          }),
-        )
-        sync().session.evict(sessionID)
-        navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
-        notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [sessionID] })
+  const exportSession = async (sessionID: string) => {
+    try {
+      const data = await fetchSessionExport({
+        sessionID,
+        api: sdk().api,
       })
-      .catch((err) => {
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: errorMessage(err),
-        })
+      const filename = sessionExportFilename(data.info)
+      downloadSessionExport(filename, data)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("toast.session.export.success.title"),
+        description: language.t("toast.session.export.success.description", { filename }),
       })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.export.failed.title"),
+        description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
+      })
+    }
   }
 
   const deleteSession = async (sessionID: string) => {
@@ -1106,7 +1097,7 @@ export function MessageTimeline(props: {
         return (
           <TimelineRowFrame row={commentStripRow}>
             <div class="w-full px-4 md:px-5 pb-2">
-              <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+              <div class="ms-auto max-w-[82%] overflow-x-auto no-scrollbar">
                 <div class="flex w-max min-w-full justify-end gap-2">
                   <Index each={comments()}>
                     {(comment) => (
@@ -1567,9 +1558,10 @@ export function MessageTimeline(props: {
                                     </DropdownMenu.ItemLabel>
                                   </DropdownMenu.Item>
                                 </Show>
-                                <DropdownMenu.Item onSelect={() => void archiveSession(id)}>
-                                  <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
+                                <DropdownMenu.Item onSelect={() => exportSession(id)}>
+                                  <DropdownMenu.ItemLabel>{language.t("common.export")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
+                                {/* TODO: Need a V2 session archive API. */}
                                 <DropdownMenu.Separator />
                                 <DropdownMenu.Item
                                   onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}
@@ -1638,9 +1630,10 @@ export function MessageTimeline(props: {
                                   {language.t("session.share.action.share")}...
                                 </MenuV2.Item>
                               </Show>
-                              <MenuV2.Item onSelect={() => void archiveSession(id)}>
-                                {language.t("common.archive")}
+                              <MenuV2.Item onSelect={() => exportSession(id)}>
+                                {language.t("common.export")}...
                               </MenuV2.Item>
+                              {/* TODO: Need a V2 session archive API. */}
                               <MenuV2.Separator />
                               <MenuV2.Item onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}>
                                 {language.t("common.delete")}...

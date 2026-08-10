@@ -13,6 +13,7 @@ import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { toolFiletype, toolStructuredFinal } from "./tool"
 import { RUN_THEME_FALLBACK, transparent, type RunTheme } from "./theme"
 import type { EntryLayout, RunEntryBody, ScrollbackOptions, StreamCommit, TurnSummary } from "./types"
+import { PatchDiff } from "../component/patch-diff"
 
 export function entryGroupKey(commit: StreamCommit): string | undefined {
   if (!commit.partID) {
@@ -178,8 +179,9 @@ export function RunEntryContent(props: {
               </text>
               {item.diff.trim() ? (
                 <box width="100%" paddingLeft={1}>
-                  <diff
+                  <PatchDiff
                     diff={item.diff}
+                    hunkFg={theme().block.diffLineNumber}
                     view="unified"
                     filetype={toolFiletype(item.file)}
                     syntaxStyle={syntax()}

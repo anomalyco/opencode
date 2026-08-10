@@ -14,10 +14,7 @@ export type FragmentUpdate = FragmentRef & {
   text: string
 }
 
-export type FragmentRestore =
-  | { type: "append"; suffix: string }
-  | { type: "covered" }
-  | { type: "conflict" }
+export type FragmentRestore = { type: "append"; suffix: string } | { type: "covered" } | { type: "conflict" }
 
 export function fragmentRef(messageID: string, kind: "text" | "reasoning", ordinal: number): FragmentRef {
   return { messageID, partID: `${kind}:${ordinal}` }

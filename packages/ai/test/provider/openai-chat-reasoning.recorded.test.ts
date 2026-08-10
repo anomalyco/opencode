@@ -1,17 +1,18 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMResponse, Model } from "../../src"
+import { LLM, LLMEvent, LLMResponse, LanguageModel } from "../../src"
 import { OpenAIChat } from "../../src/protocols/openai-chat"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenRouter from "../../src/providers/openrouter"
 import { LLMClient } from "../../src/route"
+import { compileRequest } from "../../src/route/client"
 import { recordedTests } from "../recorded-test"
 import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop } from "../recorded-scenarios"
 
 const cases = [
   {
     name: "OpenRouter",
-    model: Model.update(
+    model: LanguageModel.update(
       OpenRouter.configure({
         apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
         providerOptions: { openrouter: { reasoning: { max_tokens: 1024 } } },
@@ -24,7 +25,7 @@ const cases = [
   },
   {
     name: "Vercel AI Gateway",
-    model: Model.update(
+    model: LanguageModel.update(
       OpenAICompatible.configure({
         provider: "vercel-ai-gateway",
         baseURL: "https://ai-gateway.vercel.sh/v1",
@@ -84,9 +85,7 @@ for (const item of cases) {
             ),
           ).toBe(true)
 
-          const replay = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-            LLM.request({ model: item.model, messages: [response.message] }),
-          )
+          const replay = yield* compileRequest(LLM.request({ model: item.model, messages: [response.message] }))
           expect(replay.body.messages).toMatchObject([
             { role: "assistant", content: response.text, reasoning: response.reasoning },
           ])

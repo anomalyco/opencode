@@ -65,10 +65,7 @@ describe("CerebrasPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
         model: Model.Info.make({
-          ...Model.Info.default(
-            Provider.ID.make("custom-cerebras"),
-            Model.ID.make("llama-4-scout-17b-16e-instruct"),
-          ),
+          ...Model.Info.default(Provider.ID.make("custom-cerebras"), Model.ID.make("llama-4-scout-17b-16e-instruct")),
           modelID: Model.ID.make("llama-4-scout-17b-16e-instruct"),
           package: "aisdk:test-provider",
         }),
@@ -88,10 +85,7 @@ describe("CerebrasPlugin", () => {
       yield* addPlugin()
       yield* aisdk.runSDK({
         model: Model.Info.make({
-          ...Model.Info.default(
-            Provider.ID.make("custom-cerebras"),
-            Model.ID.make("llama-4-scout-17b-16e-instruct"),
-          ),
+          ...Model.Info.default(Provider.ID.make("custom-cerebras"), Model.ID.make("llama-4-scout-17b-16e-instruct")),
           modelID: Model.ID.make("llama-4-scout-17b-16e-instruct"),
           package: "aisdk:test-provider",
         }),
@@ -110,10 +104,7 @@ describe("CerebrasPlugin", () => {
       yield* addPlugin()
       const result = yield* aisdk.runSDK({
         model: Model.Info.make({
-          ...Model.Info.default(
-            Provider.ID.make("custom-cerebras"),
-            Model.ID.make("llama-4-scout-17b-16e-instruct"),
-          ),
+          ...Model.Info.default(Provider.ID.make("custom-cerebras"), Model.ID.make("llama-4-scout-17b-16e-instruct")),
           modelID: Model.ID.make("llama-4-scout-17b-16e-instruct"),
           package: "aisdk:test-provider",
         }),
