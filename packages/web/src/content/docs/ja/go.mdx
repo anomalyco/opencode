@@ -60,6 +60,7 @@ OpenCode Goをサブスクライブできるのは、1つのワークスペー�
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Qwen3.8 Max**
 - **Qwen3.7 Max**
 - **Qwen3.7 Plus**
 - **Qwen3.6 Plus**
@@ -96,7 +97,8 @@ OpenCode Goには以下の制限が含まれています：
 | MiMo-V2.5-Pro     | 3,250                     | 8,150            | 16,300           |
 | MiniMax M3        | 3,200                     | 8,000            | 16,000           |
 | MiniMax M2.7      | 3,400                     | 8,500            | 17,000           |
-| Qwen3.7 Max       | 950                       | 2,390            | 4,770            |
+| Qwen3.8 Max       | 160                       | 400              | 810              |
+| Qwen3.7 Max       | 340                       | 840              | 1,690            |
 | Qwen3.7 Plus      | 4,300                     | 10,800           | 21,600           |
 | Qwen3.6 Plus      | 3,300                     | 8,200            | 16,300           |
 | DeepSeek V4 Pro   | 3,450                     | 8,550            | 17,150           |
@@ -114,6 +116,7 @@ OpenCode Goには以下の制限が含まれています：
 - DeepSeek V4 Flash — リクエストあたり 入力 790トークン、キャッシュ 68,000トークン、出力 280トークン
 - MiniMax M3 — リクエストあたり 入力 510トークン、キャッシュ 56,000トークン、出力 190トークン
 - MiniMax M2.7 — リクエストあたり 入力 300トークン、キャッシュ 55,000トークン、出力 125トークン
+- Qwen3.8 Max — リクエストあたり 入力 420トークン、キャッシュ 66,000トークン、出力 200トークン
 - Qwen3.7 Max — リクエストあたり 入力 420トークン、キャッシュ 66,000トークン、出力 200トークン
 - Qwen3.7 Plus — リクエストあたり 入力 500トークン、キャッシュ 57,000トークン、出力 190トークン
 - Qwen3.6 Plus — リクエストあたり 入力 500トークン、キャッシュ 57,000トークン、出力 190トークン
@@ -138,6 +141,7 @@ OpenCode Goには以下の制限が含まれています：
 | MiniMax M3                   | $0.30  | $1.20  | $0.06       | -            | $60   |
 | MiniMax M2.7                 | $0.30  | $1.20  | $0.06       | $0.375       | $60   |
 | MiniMax M2.5                 | $0.30  | $1.20  | $0.06       | $0.375       | $60   |
+| Qwen3.8 Max                  | $2.00  | $6.00  | $0.25       | $2.50        | $15   |
 | Qwen3.7 Max                  | $2.50  | $7.50  | $0.50       | $3.125       | $60   |
 | Qwen3.7 Plus (≤ 256K tokens) | $0.40  | $1.60  | $0.04       | $0.50        | $60   |
 | Qwen3.7 Plus (> 256K tokens) | $1.20  | $4.80  | $0.12       | $1.50        | $60   |
@@ -195,6 +199,7 @@ Goでは月額$10を支払い、その6倍の利用枠を提供することを�
 | MiniMax M3        | minimax-m3        | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.8 Max       | qwen3.8-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -227,17 +232,19 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K2.6         | 使用なし             | 0日        |
 | MiMo-V2.5-Pro     | 使用なし             | 0日        |
 | MiMo-V2.5         | 使用なし             | 0日        |
+| Qwen3.8 Max       | 使用なし             | 0日        |
 | Qwen3.7 Max       | 使用なし             | 0日        |
 | Qwen3.7 Plus      | 使用なし             | 0日        |
 | Qwen3.6 Plus      | 使用なし             | 0日        |
 | MiniMax M3        | 使用なし             | 0日        |
 | MiniMax M2.7      | 使用なし             | 0日        |
 | DeepSeek V4 Pro   | 使用なし             | 0日        |
-| DeepSeek V4 Flash | 使用あり             | 契約なし   |
+| DeepSeek V4 Flash | 使用なし             | 0日        |
 | Hy3               | 使用なし             | 0日        |
 
 - **Grok 4.5:** ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。[詳しく見る](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
 - **GPT 5.6 Luna:** 不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。[詳しく見る](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
+- **DeepSeek V4 Flash:** ZDR契約は毎月更新されます。現在の契約は2026年8月31日まで有効です。
 
 ---
 

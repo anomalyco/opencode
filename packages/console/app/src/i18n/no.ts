@@ -254,7 +254,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "følgende unntak",
 
   "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
-  "go.banner.text": "GPT 5.6 Luna får 2x bruksgrense i en begrenset periode",
+  "go.banner.text": "DeepSeek V4 Flash får 2x bruksgrense i en begrenset periode",
   "go.meta.description":
     "Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse bruksgrenser og pålitelig tilgang til ledende kodemodeller.",
   "go.hero.title": "Rimelige kodemodeller for alle",
@@ -351,6 +351,8 @@ export const dict = {
   "go.faq.a5.gptRetention":
     "Logger for overvåking av misbruk genereres for all bruk av API-funksjoner og oppbevares i opptil 30 dager.",
   "go.faq.a5.learnMore": "Les mer",
+  "go.faq.a5.deepseekRetention":
+    "ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 31. august 2026.",
 
   "go.faq.a5.beforeExceptions":
     "Go-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",

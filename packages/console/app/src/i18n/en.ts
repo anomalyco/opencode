@@ -253,7 +253,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "following exceptions",
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
-  "go.banner.text": "GPT 5.6 Luna gets 2× usage limits for a limited time",
+  "go.banner.text": "DeepSeek V4 Flash gets 2× usage limits for a limited time",
   "go.meta.description":
     "Go starts at $5 for your first month, then $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
@@ -348,6 +348,8 @@ export const dict = {
     "ZDR disables important API features that depend on stored data, including the stateful Responses API, Files and Collections, and the Batch API.",
   "go.faq.a5.gptRetention":
     "Abuse monitoring logs are generated for all API feature usage and retained for up to 30 days.",
+  "go.faq.a5.deepseekRetention":
+    "ZDR agreement is renewed monthly. The current agreement is valid through August 31, 2026.",
   "go.faq.a5.learnMore": "Learn more",
 
   "go.faq.a5.beforeExceptions":

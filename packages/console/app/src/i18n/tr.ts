@@ -256,7 +256,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
-  "go.banner.text": "GPT 5.6 Luna sınırlı bir süre için 2x kullanım limiti sunuyor",
+  "go.banner.text": "DeepSeek V4 Flash sınırlı bir süre için 2x kullanım limiti sunuyor",
   "go.meta.description":
     "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
@@ -354,6 +354,8 @@ export const dict = {
   "go.faq.a5.gptRetention":
     "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
   "go.faq.a5.learnMore": "Daha fazla bilgi",
+  "go.faq.a5.deepseekRetention":
+    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ağustos 2026 tarihine kadar geçerlidir.",
 
   "go.faq.a5.beforeExceptions":
     "Go modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",

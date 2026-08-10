@@ -86,8 +86,8 @@ OpenCode Zen は、OpenCode のほかのプロバイダーと同じように動�
 | Gemini 3.5 Flash Lite  | gemini-3.5-flash-lite  | `https://opencode.ai/zen/v1/models/gemini-3.5-flash-lite` | `@ai-sdk/google`            |
 | Gemini 3.1 Pro         | gemini-3.1-pro         | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`        | `@ai-sdk/google`            |
 | Gemini 3 Flash         | gemini-3-flash         | `https://opencode.ai/zen/v1/models/gemini-3-flash`        | `@ai-sdk/google`            |
-| Grok 4.5               | grok-4.5               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Grok 4.5               | grok-4.5               | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Qwen3.7 Max            | qwen3.7-max            | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
@@ -107,7 +107,8 @@ OpenCode Zen は、OpenCode のほかのプロバイダーと同じように動�
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free         | mimo-v2.5-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Laguna S 2.1 Free      | laguna-s-2.1-free      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Ling-3.0-flash Free    | ling-3.0-flash-free    | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Ling-3.0-tiny Free     | ling-3.0-tiny-free     | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| LongCat-2.0 Free       | longcat-2.0-free       | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | North Mini Code Free   | north-mini-code-free   | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -136,7 +137,8 @@ https://opencode.ai/zen/v1/models
 | DeepSeek V4 Flash Free            | Free   | Free    | Free        | -            |
 | MiMo-V2.5 Free                    | Free   | Free    | Free        | -            |
 | Laguna S 2.1 Free                 | Free   | Free    | Free        | -            |
-| Ling-3.0-flash Free               | Free   | Free    | Free        | -            |
+| Ling-3.0-tiny Free                | Free   | Free    | Free        | -            |
+| LongCat-2.0 Free                  | Free   | Free    | Free        | -            |
 | North Mini Code Free              | Free   | Free    | Free        | -            |
 | Nemotron 3 Ultra Free             | Free   | Free    | Free        | -            |
 | MiniMax M3                        | $0.30  | $1.20   | $0.06       | -            |
@@ -212,7 +214,8 @@ https://opencode.ai/zen/v1/models
 - DeepSeek V4 Flash Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - MiMo-V2.5 Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - Laguna S 2.1 Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
-- Ling-3.0-flash Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
+- Ling-3.0-tiny Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
+- LongCat-2.0 Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - North Mini Code Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - Nemotron 3 Ultra Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - Big Pickle はステルスモデルで、期間限定で OpenCode で無料提供されています。チームはこの期間中にフィードバックを集め、モデルを改善しています。
@@ -270,7 +273,8 @@ https://opencode.ai/zen/v1/models
 - DeepSeek V4 Flash Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - MiMo-V2.5 Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - Laguna S 2.1 Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
-- Ling-3.0-flash Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
+- Ling-3.0-tiny Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
+- LongCat-2.0 Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - North Mini Code Free: 無料提供期間中、収集されたデータは保持され、モデルの改善に使用される場合があります。個人情報や機密情報を送信しないでください。詳しくは、[利用規約](https://cohere.com/terms-of-use)および[プライバシーポリシー](https://cohere.com/privacy)をご覧ください。
 - Nemotron 3 Ultra Free（NVIDIA の無料エンドポイント）: 試用専用です — 個人情報や機密データは送信しないでください。お客様の利用は、セキュリティ目的および NVIDIA の製品とサービスの改善のために記録されます。改善目的で記録されたセッションデータは、お客様の身元や永続的な識別子とは関連付けられません。当社のデータ処理慣行の詳細については、[プライバシーポリシー](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)をご覧ください。このエンドポイントを利用することで、お客様はそのような情報の当社による収集、記録、利用、および [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) に同意したものとみなされます。
 - OpenAI APIs: リクエストは [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) に従って 30 日間保持されます。

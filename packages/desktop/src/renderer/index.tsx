@@ -9,9 +9,11 @@ import {
   type Locale,
   type Platform,
   PlatformProvider,
+  createDraftStore,
   ServerConnection,
   useCommand,
   useWslServers,
+  useLanguage,
 } from "@opencode-ai/app"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import * as Sentry from "@sentry/solid"
@@ -20,7 +22,7 @@ import { createMemoryHistory, MemoryRouter, type BaseRouterProps } from "@solidj
 import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
-import { initI18n, t } from "./i18n"
+import { t } from "./i18n"
 import { initializationData } from "./initialization"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
@@ -32,7 +34,7 @@ import { useTheme } from "@opencode-ai/ui/theme/context"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
-  throw new Error(t("error.dev.rootNotFound"))
+  throw new Error(t("desktop.error.dev.rootNotFound"))
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {
@@ -57,8 +59,6 @@ if (import.meta.env.VITE_SENTRY_DSN) {
     },
   })
 }
-
-void initI18n()
 
 const [updaterState, setUpdaterState] = createSignal<UpdaterState>({ status: "disabled" })
 void window.api.updater.subscribe(setUpdaterState)
@@ -174,14 +174,14 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     async openDirectoryPickerDialog(opts) {
       return window.api.openDirectoryPicker({
         multiple: opts?.multiple ?? false,
-        title: opts?.title ?? t("desktop.dialog.chooseFolder"),
+        title: opts?.title,
       })
     },
 
     async openAttachmentPickerDialog(opts, onFile) {
       const result = await window.api.openFilePicker({
         multiple: opts?.multiple ?? false,
-        title: opts?.title ?? t("desktop.dialog.chooseFile"),
+        title: opts?.title,
         defaultPath: opts?.defaultPath,
         extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
       })
@@ -203,7 +203,7 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
 
     async saveFilePickerDialog(opts) {
       return window.api.saveFilePicker({
-        title: opts?.title ?? t("desktop.dialog.saveFile"),
+        title: opts?.title,
         defaultPath: opts?.defaultPath,
       })
     },
@@ -226,6 +226,13 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     },
 
     storage,
+    draftStore: createDraftStore({
+      get: window.api.draftGet,
+      set: window.api.draftSet,
+      remove: window.api.draftDelete,
+      putBlob: (blob) => blob.arrayBuffer().then(window.api.draftBlobPut),
+      getBlob: (id) => window.api.draftBlobGet(id).then((data) => data && new Blob([data])),
+    }),
 
     updater: {
       state: updaterState,
@@ -368,6 +375,7 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 
   function App() {
     const wslServers = useWslServers()
+    const language = useLanguage()
     const ready = createMemo(
       () => !defaultServer.loading && !sidecar.loading && !locale.loading && !wslServers.isLoading,
     )
@@ -376,7 +384,7 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
       const list: ServerConnection.Any[] = []
       if (data) {
         list.push({
-          displayName: "Local Server",
+          displayName: language.t("desktop.server.local"),
           type: "sidecar",
           variant: "base",
           http: {
@@ -386,7 +394,7 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
           },
         })
       }
-      list.push(...readyWslConnections(wslServers.data))
+      list.push(...readyWslConnections(wslServers.data, language.t("wsl.server.label")))
       return list
     })
     const effectiveDefaultServer = createMemo(() =>
@@ -418,7 +426,10 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 
   return (
     <PlatformProvider value={platform}>
-      <AppBaseProviders locale={locale.latest}>
+      <AppBaseProviders
+        locale={locale.latest}
+        onNativeTranslations={(bundle) => void window.api.setNativeTranslations(bundle).catch(() => undefined)}
+      >
         <Show when={true}>{(_) => <App />}</Show>
       </AppBaseProviders>
     </PlatformProvider>

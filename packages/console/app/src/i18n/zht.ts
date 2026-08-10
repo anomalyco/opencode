@@ -244,7 +244,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情況",
 
   "go.title": "OpenCode Go | 低成本全民編碼模型",
-  "go.banner.text": "GPT 5.6 Luna 限時享有 2 倍使用額度",
+  "go.banner.text": "DeepSeek V4 Flash 限時享有 2 倍使用額度",
   "go.meta.description": "Go 首月 $5，之後 $10/月，提供充裕的使用限額，並可穩定存取領先的編碼模型。",
   "go.hero.title": "低成本全民編碼模型",
   "go.hero.body":
@@ -333,6 +333,7 @@ export const dict = {
     "ZDR 會停用依賴儲存資料的重要 API 功能，包括具狀態的 Responses API、Files and Collections 與 Batch API。",
   "go.faq.a5.gptRetention": "所有 API 功能的使用都會產生濫用監控日誌，並保留最多 30 天。",
   "go.faq.a5.learnMore": "了解更多",
+  "go.faq.a5.deepseekRetention": "ZDR 協議每月續簽。目前的協議有效至 2026 年 8 月 31 日。",
   "go.faq.a5.beforeExceptions": "Go 模型託管在美國。供應商遵循零留存政策，不會將你的資料用於模型訓練，但有",
   "go.faq.a5.exceptionsLink": "以下例外",
   "go.faq.q6": "我可以儲值額度嗎？",
