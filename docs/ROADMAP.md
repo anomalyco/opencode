@@ -53,19 +53,23 @@ We mold the OpenCode fork — we do not rebuild the harness from zero.
 
 ### 4. Edges (read-first)
 
-- [ ] Wire **Ashby MCP read** (config + allowlist) when sandbox exists
-- [ ] Until sandbox: mock MCP or recorded fixtures
-- [ ] Deny / confirm MCP **writes** by default
+- [x] Wire **Ashby MCP read** (config + allowlist) — sample `packages/opencode/src/product/fixtures/mcp/opencode.ashby-mock.json`; helpers `src/product/ashby-edge.ts`; `ta` agent merges allow-reads/deny-writes (live Ashby sandbox still TBD)
+- [x] Until sandbox: mock MCP + fixtures — `src/product/fixtures/mcp/ashby-mock.ts` + `ashby-data.json`
+- [x] Deny MCP **writes** by default — `ashby_change_stage` / `ashby_create_note` deny on `ta` + sample config; mock returns error pointing at propose/apply
 - [ ] Optional notes read later — don’t block v0
 
 ### 5. Headless mode (not a pillar)
 
-- [ ] Same verbs via headless / `--json` (scriptable, exit codes)
-- [ ] No separate CLI product roadmap until kernel-on
+- [x] Same verbs via headless / `--json` (scriptable, exit codes)
+  - Decision: `propose|status|apply --json` (apply exit 2 = `needs_confirm`)
+  - Agent: `run --json` ≡ `--format json` (NDJSON events); still reject mini+json
+  - Docs: `packages/opencode/src/product/headless.md` + README / fixtures notes
+  - Smoke: `test/product/headless.test.ts` + existing `test/decision/cli-smoke.test.ts`
+- [x] No separate CLI product roadmap until kernel-on
 
 ### 6. Light success check
 
-- [ ] Know (even manually) whether an eng-TA ran a real req this week
+- [x] Know (even manually) whether an eng-TA ran a real req this week — `moks activity --days 7` summarizes local decision receipts (propose/apply). Signal is light automation only; “real req” vs fixtures remains a human judgment in the TUI. No phone-home telemetry.
 
 ## Explicitly defer
 

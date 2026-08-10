@@ -50,6 +50,24 @@ Record a disposition (receipts only — no ATS write):
 bun run --conditions=browser src/index.ts propose --action advance \
   --target-kind candidate --target-id jordan-lee \
   --reason "strong event + postgres signal"
+
+# weekly decision signal (local receipts; "real req" is still a human judgment)
+bun run --conditions=browser src/index.ts activity --days 7
+```
+
+### Scriptable / headless
+
+Same verbs; add `--json` for machine-readable stdout. Full contract: [`packages/opencode/src/product/headless.md`](packages/opencode/src/product/headless.md).
+
+```bash
+# Decision receipts (apply exit 2 = needs_confirm)
+moks propose --action note --json
+moks status --json
+moks apply --proposal-id dec_… --json
+moks apply --proposal-id dec_… --confirm --json
+
+# Agent NDJSON events (--json ≡ --format json); --auto for CI permissions
+moks run --json --agent ta -f jd.md -f resume.md -- "Score this candidate"
 ```
 
 ### Optional: install script

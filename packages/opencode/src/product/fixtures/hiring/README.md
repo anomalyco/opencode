@@ -56,4 +56,13 @@ moks apply --proposal-id <id>          # non-adverse
 moks apply --proposal-id <id> --confirm  # reject | offer | hire
 ```
 
+Scriptable (`--json`, exit codes): see [`../../headless.md`](../../headless.md).
+
+```bash
+moks propose --action advance --target-kind candidate --target-id jordan-lee --json
+moks status --json
+moks apply --proposal-id dec_… --json              # exit 2 if needs_confirm
+moks run --json --agent ta -f jd.md -f resume.md -- "Score this candidate"
+```
+
 All names and companies are fictional.

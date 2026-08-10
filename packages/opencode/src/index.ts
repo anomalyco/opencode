@@ -31,6 +31,7 @@ import { PluginCommand } from "./cli/cmd/plug"
 import { ProposeCommand } from "./cli/cmd/propose"
 import { StatusCommand } from "./cli/cmd/status"
 import { ApplyCommand } from "./cli/cmd/apply"
+import { ActivityCommand } from "./cli/cmd/activity"
 import { Heap } from "./cli/heap"
 
 const args = hideBin(process.argv)
@@ -107,6 +108,7 @@ const cli = yargs(args)
   .command(ProposeCommand)
   .command(StatusCommand)
   .command(ApplyCommand)
+  .command(ActivityCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||

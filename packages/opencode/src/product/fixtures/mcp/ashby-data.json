@@ -1,0 +1,57 @@
+{
+  "jobs": [
+    {
+      "id": "job_senior_backend",
+      "title": "Senior Backend Engineer",
+      "company": "Northline Analytics",
+      "status": "open",
+      "team": "Data Platform",
+      "location": "Remote (US time zones)",
+      "level": "IC4 / Senior"
+    },
+    {
+      "id": "job_staff_platform",
+      "title": "Staff Platform Engineer",
+      "company": "Northline Analytics",
+      "status": "open",
+      "team": "Infrastructure",
+      "location": "Hybrid SF",
+      "level": "IC5 / Staff"
+    },
+    {
+      "id": "job_closed_fe",
+      "title": "Frontend Engineer",
+      "company": "Northline Analytics",
+      "status": "closed",
+      "team": "Product",
+      "location": "Remote",
+      "level": "IC3 / Mid"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "cand_jordan_lee",
+      "name": "Jordan Lee",
+      "email": "jordan.lee@example.invalid",
+      "job_id": "job_senior_backend",
+      "stage": "technical_screen",
+      "location": "Oakland, CA"
+    },
+    {
+      "id": "cand_sam_okonkwo",
+      "name": "Sam Okonkwo",
+      "email": "sam.okonkwo@example.invalid",
+      "job_id": "job_senior_backend",
+      "stage": "recruiter_screen",
+      "location": "Austin, TX"
+    },
+    {
+      "id": "cand_riley_chen",
+      "name": "Riley Chen",
+      "email": "riley.chen@example.invalid",
+      "job_id": "job_staff_platform",
+      "stage": "onsite",
+      "location": "Seattle, WA"
+    }
+  ]
+}

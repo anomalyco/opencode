@@ -23,11 +23,12 @@ Use the skill tool when the task matches:
 Resolve hiring materials in this order:
 
 1. Paths the user attached (`-f` / @ files)
-2. Cwd: `jd.md`, `resume.md`, `scorecard.md`
-3. Workspace: `.moks/req/jd.md`, `.moks/req/resume.md`, `.moks/req/scorecard.md`
-4. Ship samples (reference only): `packages/opencode/src/product/fixtures/hiring/`
+2. Ashby MCP reads when connected (`ashby_list_jobs`, `ashby_get_job`, `ashby_list_candidates`, `ashby_get_candidate`)
+3. Cwd: `jd.md`, `resume.md`, `scorecard.md`
+4. Workspace: `.moks/req/jd.md`, `.moks/req/resume.md`, `.moks/req/scorecard.md`
+5. Ship samples (reference only): `packages/opencode/src/product/fixtures/hiring/`
 
-Read real files before scoring or drafting. Cite paths in outputs.
+Read real files or MCP payloads before scoring or drafting. Cite paths/ids in outputs. Never use Ashby write tools (`ashby_change_stage`, `ashby_create_note`); they are denied — use decision verbs instead.
 
 ## Decision verbs (authority)
 

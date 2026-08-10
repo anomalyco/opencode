@@ -10,11 +10,12 @@ Score one candidate against the active req. Cite evidence; never invent employme
 ## Discover inputs
 
 1. User-attached paths
-2. Cwd: `jd.md`, `resume.md`, `scorecard.md`
-3. `.moks/req/{jd,resume,scorecard}.md`
-4. Product fixture samples only as last resort
+2. If Ashby MCP tools are available, prefer `ashby_get_candidate` / `ashby_list_candidates` (and job reads) over inventing ATS state; still load local resume text when scoring depth needs it
+3. Cwd: `jd.md`, `resume.md`, `scorecard.md`
+4. `.moks/req/{jd,resume,scorecard}.md`
+5. Product fixture samples only as last resort
 
-Load JD + resume at minimum. Use scorecard dimensions when present; otherwise derive dimensions from JD must-haves.
+Load JD + resume at minimum. Use scorecard dimensions when present; otherwise derive dimensions from JD must-haves. Never call Ashby write tools; stage moves use `moks propose` / `moks apply` only.
 
 ## Output format
 

@@ -10,9 +10,9 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 //   3. Interactive attach (`opencode --mini --attach`): connects to a running
 //      opencode server and runs interactive mode against it.
 //
-// Also supports `--command` for slash-command execution, `--format json` for
-// raw event streaming, `--continue` / `--session` for session resumption,
-// and `--fork` for forking before continuing.
+// Also supports `--command` for slash-command execution, `--format json` /
+// `--json` for raw event streaming, `--continue` / `--session` for session
+// resumption, and `--fork` for forking before continuing.
 import type { Argv } from "yargs"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -177,6 +177,11 @@ export const RunCommand = effectCmd({
         default: "default",
         describe: "format: default (formatted) or json (raw JSON events)",
       })
+      .option("json", {
+        type: "boolean",
+        default: false,
+        describe: "alias for --format json (raw JSON events)",
+      })
       .option("file", {
         alias: ["f"],
         type: "string",
@@ -271,6 +276,7 @@ export const RunCommand = effectCmd({
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const interactive = args.mini
+      const format = args.json ? "json" : args.format
       const auto = args.auto || args.yolo || args["dangerously-skip-permissions"]
       const thinking = interactive ? (args.thinking ?? true) : (args.thinking ?? false)
       const die = (message: string): never => {
@@ -301,8 +307,8 @@ export const RunCommand = effectCmd({
         die("--demo requires --mini")
       }
 
-      if (interactive && args.format === "json") {
-        die("--mini cannot be used with --format json")
+      if (interactive && format === "json") {
+        die("--mini cannot be used with --json / --format json")
       }
 
       if (args["replay-limit"] !== undefined && !interactive) {
@@ -676,7 +682,7 @@ export const RunCommand = effectCmd({
         const sessionID = sess.id
 
         function emit(type: string, data: Record<string, unknown>) {
-          if (args.format === "json") {
+          if (format === "json") {
             process.stdout.write(
               JSON.stringify({
                 type,
@@ -703,7 +709,7 @@ export const RunCommand = effectCmd({
               event.type === "message.updated" &&
               event.properties.sessionID === sessionID &&
               event.properties.info.role === "assistant" &&
-              args.format !== "json" &&
+              format !== "json" &&
               toggles.get("start") !== true
             ) {
               UI.empty()
@@ -730,7 +736,7 @@ export const RunCommand = effectCmd({
                 part.type === "tool" &&
                 part.tool === "task" &&
                 part.state.status === "running" &&
-                args.format !== "json"
+                format !== "json"
               ) {
                 if (toggles.get(part.id) === true) continue
                 await tool(part)
@@ -988,6 +994,7 @@ export async function runMini(input: MiniCommandInput) {
     model: input.model,
     agent: input.agent,
     format: "default",
+    json: false,
     file: undefined,
     title: undefined,
     attach: input.attach,

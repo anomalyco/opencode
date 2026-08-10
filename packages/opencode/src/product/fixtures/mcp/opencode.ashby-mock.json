@@ -1,0 +1,18 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "ashby": {
+      "type": "local",
+      "command": ["bun", "run", "REPLACE_WITH_PATH/ashby-mock.ts"],
+      "enabled": true
+    }
+  },
+  "permission": {
+    "ashby_list_jobs": "allow",
+    "ashby_get_job": "allow",
+    "ashby_list_candidates": "allow",
+    "ashby_get_candidate": "allow",
+    "ashby_change_stage": "deny",
+    "ashby_create_note": "deny"
+  }
+}

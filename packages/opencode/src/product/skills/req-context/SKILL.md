@@ -12,11 +12,12 @@ Build a structured req brief from local materials. Do not invent company secrets
 Resolve in order (stop when found):
 
 1. User-attached paths (`-f` / @ files)
-2. Cwd: `jd.md`, optional `notes.md` / `scorecard.md`
-3. `.moks/req/jd.md`, `.moks/req/notes.md`, `.moks/req/scorecard.md`
-4. Samples only if nothing else: ship path under product fixtures/hiring
+2. If Ashby MCP tools are available (`ashby_list_jobs`, `ashby_get_job`, …), prefer reading open jobs/req metadata via those tools
+3. Cwd: `jd.md`, optional `notes.md` / `scorecard.md`
+4. `.moks/req/jd.md`, `.moks/req/notes.md`, `.moks/req/scorecard.md`
+5. Samples only if nothing else: ship path under product fixtures/hiring
 
-Read every file you will cite.
+Read every file or MCP payload you will cite. Never call Ashby write tools (`ashby_change_stage`, `ashby_create_note`); dispositions go through `moks propose` / `moks apply`.
 
 ## Output format
 
