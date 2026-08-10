@@ -15,41 +15,44 @@ type DatabaseShape = Effect.Success<typeof makeDatabase>
 
 export interface Interface {
   db: DatabaseShape
+  path: string
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/storage/Database") {}
 
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const db = yield* makeDatabase
+const layer = (filename: string) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const db = yield* makeDatabase
 
-    yield* db.run("PRAGMA journal_mode = WAL")
-    yield* db.run("PRAGMA synchronous = NORMAL")
-    yield* db.run("PRAGMA busy_timeout = 5000")
-    yield* db.run("PRAGMA cache_size = -64000")
-    yield* db.run("PRAGMA foreign_keys = ON")
-    yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
-    yield* DatabaseMigration.apply(db)
+      yield* db.run("PRAGMA journal_mode = WAL")
+      yield* db.run("PRAGMA synchronous = NORMAL")
+      yield* db.run("PRAGMA busy_timeout = 5000")
+      yield* db.run("PRAGMA cache_size = -64000")
+      yield* db.run("PRAGMA foreign_keys = ON")
+      yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+      yield* DatabaseMigration.apply(db)
 
-    return { db }
-  }).pipe(Effect.orDie),
-)
+      return { db, path: filename }
+    }).pipe(Effect.orDie),
+  )
 
-const readOnlyLayer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const db = yield* makeDatabase
-    return { db }
-  }),
-)
+const readOnlyLayer = (filename: string) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const db = yield* makeDatabase
+      return { db, path: filename }
+    }),
+  )
 
 export function layerFromPath(filename: string) {
-  return layer.pipe(Layer.provide(sqliteLayer({ filename })))
+  return layer(filename).pipe(Layer.provide(sqliteLayer({ filename })))
 }
 
 export function readOnlyLayerFromPath(filename: string) {
-  return readOnlyLayer.pipe(
+  return readOnlyLayer(filename).pipe(
     Layer.provide(sqliteLayer({ filename, readonly: true, readwrite: false, create: false, disableWAL: true })),
   )
 }

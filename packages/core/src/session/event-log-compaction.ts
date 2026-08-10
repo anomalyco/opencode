@@ -62,6 +62,11 @@ export type ReclaimReport = {
   readonly bytesReclaimed: number
 }
 
+export type CopyReport = {
+  readonly path: string
+  readonly integrity: "ok"
+}
+
 export type IndexedBatch = {
   readonly report: Report
   readonly cursor?: number
@@ -556,6 +561,53 @@ export const prepareIndex = Effect.fn("SessionEventLogCompaction.prepareIndex")(
     .pipe(Effect.orDie)
 })
 
+const indexedCandidates = Effect.fn("SessionEventLogCompaction.indexedCandidates")(function* (
+  db: Database.Interface["db"],
+  cursor: number,
+  limit: number,
+) {
+  const selected = yield* db
+    .all<Candidate>(
+      sql`
+      SELECT snapshot.scan_id AS scanID, event.id, event.aggregate_id AS aggregateID, event.seq,
+             snapshot.entity_id AS entityID, event.type, length(event.data) AS bytes,
+             replacement.id AS supersededBy, replacement.data AS latestData,
+             coalesce(message.data, part.data) AS projectionData,
+             part.message_id AS projectionParentID, session.workspace_id AS workspaceID,
+             event_sequence.owner_id AS ownerID
+      FROM event_compaction_snapshot AS snapshot
+      JOIN event ON event.id = snapshot.event_id AND event.type = snapshot.type
+      JOIN event_compaction_snapshot AS head ON head.event_id = (
+        SELECT candidate.event_id
+        FROM event_compaction_snapshot AS candidate
+        WHERE candidate.aggregate_id = snapshot.aggregate_id
+          AND candidate.type = snapshot.type
+          AND candidate.entity_id = snapshot.entity_id
+        ORDER BY candidate.seq DESC
+        LIMIT 1
+      )
+      JOIN event AS replacement ON replacement.id = head.event_id
+      LEFT JOIN message ON snapshot.type = ${policies[0].type}
+        AND message.id = snapshot.entity_id AND message.session_id = snapshot.aggregate_id
+      LEFT JOIN part ON snapshot.type = ${policies[1].type}
+        AND part.id = snapshot.entity_id AND part.session_id = snapshot.aggregate_id
+      JOIN session ON session.id = snapshot.aggregate_id
+      JOIN event_sequence ON event_sequence.aggregate_id = snapshot.aggregate_id
+      WHERE snapshot.scan_id > ${cursor} AND snapshot.seq < head.seq
+        AND coalesce(message.data, part.data) IS NOT NULL
+      ORDER BY snapshot.scan_id
+      LIMIT ${limit + 1}
+    `,
+    )
+    .pipe(Effect.orDie)
+  return selected
+    .map((candidate) => ({
+      ...candidate,
+      policy: policies.find((policy) => policy.type === candidate.type),
+    }))
+    .filter((candidate): candidate is Candidate & { policy: Policy } => candidate.policy !== undefined)
+})
+
 export const compactIndexed = Effect.fn("SessionEventLogCompaction.compactIndexed")(function* (
   db: Database.Interface["db"],
   limit = DEFAULT_LIMIT,
@@ -576,46 +628,7 @@ export const compactIndexed = Effect.fn("SessionEventLogCompaction.compactIndexe
             )
             .pipe(Effect.orDie)
           if (!state) throw new Error("Prepare the event compaction index first")
-          const selected = yield* db
-            .all<Candidate>(
-              sql`
-              SELECT snapshot.scan_id AS scanID, event.id, event.aggregate_id AS aggregateID, event.seq,
-                     snapshot.entity_id AS entityID, event.type, length(event.data) AS bytes,
-                     replacement.id AS supersededBy, replacement.data AS latestData,
-                     coalesce(message.data, part.data) AS projectionData,
-                     part.message_id AS projectionParentID, session.workspace_id AS workspaceID,
-                     event_sequence.owner_id AS ownerID
-              FROM event_compaction_snapshot AS snapshot
-              JOIN event ON event.id = snapshot.event_id AND event.type = snapshot.type
-              JOIN event_compaction_snapshot AS head ON head.event_id = (
-                SELECT candidate.event_id
-                FROM event_compaction_snapshot AS candidate
-                WHERE candidate.aggregate_id = snapshot.aggregate_id
-                  AND candidate.type = snapshot.type
-                  AND candidate.entity_id = snapshot.entity_id
-                ORDER BY candidate.seq DESC
-                LIMIT 1
-              )
-              JOIN event AS replacement ON replacement.id = head.event_id
-              LEFT JOIN message ON snapshot.type = ${policies[0].type}
-                AND message.id = snapshot.entity_id AND message.session_id = snapshot.aggregate_id
-              LEFT JOIN part ON snapshot.type = ${policies[1].type}
-                AND part.id = snapshot.entity_id AND part.session_id = snapshot.aggregate_id
-              JOIN session ON session.id = snapshot.aggregate_id
-              JOIN event_sequence ON event_sequence.aggregate_id = snapshot.aggregate_id
-              WHERE snapshot.scan_id > ${state.cursor} AND snapshot.seq < head.seq
-                AND coalesce(message.data, part.data) IS NOT NULL
-              ORDER BY snapshot.scan_id
-              LIMIT ${limit + 1}
-            `,
-            )
-            .pipe(Effect.orDie)
-          const rows = selected
-            .map((candidate) => ({
-              ...candidate,
-              policy: policies.find((policy) => policy.type === candidate.type),
-            }))
-            .filter((candidate): candidate is Candidate & { policy: Policy } => candidate.policy !== undefined)
+          const rows = yield* indexedCandidates(db, state.cursor, limit)
           const result = report(rows, state.malformed, "indexed", true, limit)
           const inspected = rows.slice(0, limit)
           const eligible = inspected.filter(
@@ -650,7 +663,9 @@ export const dropIndex = Effect.fn("SessionEventLogCompaction.dropIndex")(functi
   yield* db.run(sql`DROP TABLE IF EXISTS event_compaction_state`).pipe(Effect.orDie)
 })
 
-const size = Effect.fn("SessionEventLogCompaction.size")(function* (db: Database.Interface["db"]) {
+export const allocatedBytes = Effect.fn("SessionEventLogCompaction.allocatedBytes")(function* (
+  db: Database.Interface["db"],
+) {
   const row = yield* db
     .get<{ pageCount: number; pageSize: number }>(
       sql`
@@ -662,7 +677,7 @@ const size = Effect.fn("SessionEventLogCompaction.size")(function* (db: Database
   return (row?.pageCount ?? 0) * (row?.pageSize ?? 0)
 })
 
-const quickCheck = Effect.fn("SessionEventLogCompaction.quickCheck")(function* (
+export const verify = Effect.fn("SessionEventLogCompaction.verify")(function* (
   db: Database.Interface["db"],
   schema?: string,
 ) {
@@ -674,22 +689,29 @@ const quickCheck = Effect.fn("SessionEventLogCompaction.quickCheck")(function* (
   }
 })
 
+export const copy = Effect.fn("SessionEventLogCompaction.copy")(function* (
+  db: Database.Interface["db"],
+  target: string,
+) {
+  yield* verify(db)
+  yield* db.run(sql`VACUUM INTO ${target}`).pipe(Effect.orDie)
+  yield* db.run(sql`ATTACH DATABASE ${target} AS compaction_backup`).pipe(Effect.orDie)
+  yield* verify(db, "compaction_backup").pipe(
+    Effect.ensuring(db.run(sql`DETACH DATABASE compaction_backup`).pipe(Effect.orDie)),
+  )
+  return { path: target, integrity: "ok" } satisfies CopyReport
+})
+
 export const reclaim = Effect.fn("SessionEventLogCompaction.reclaim")(function* (
   db: Database.Interface["db"],
   backup?: string,
 ) {
-  const bytesBefore = yield* size(db)
-  yield* quickCheck(db)
-  if (backup) {
-    yield* db.run(sql`VACUUM INTO ${backup}`).pipe(Effect.orDie)
-    yield* db.run(sql`ATTACH DATABASE ${backup} AS compaction_backup`).pipe(Effect.orDie)
-    yield* quickCheck(db, "compaction_backup").pipe(
-      Effect.ensuring(db.run(sql`DETACH DATABASE compaction_backup`).pipe(Effect.orDie)),
-    )
-  }
+  const bytesBefore = yield* allocatedBytes(db)
+  yield* verify(db)
+  if (backup) yield* copy(db, backup)
   yield* db.run(sql`VACUUM`).pipe(Effect.orDie)
-  yield* quickCheck(db)
-  const bytesAfter = yield* size(db)
+  yield* verify(db)
+  const bytesAfter = yield* allocatedBytes(db)
   return {
     backup,
     integrity: "ok",

@@ -1,4 +1,5 @@
 export const dict = {
+  ...STORAGE_FALLBACK,
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "Bestand",
   "desktop.menu.edit": "Bewerken",
@@ -1169,3 +1170,4 @@ export const dict = {
   "workspace.reset.note":
     "Hierdoor wordt de werkruimte opnieuw ingesteld zodat deze overeenkomt met de standaardbranch.",
 }
+import { STORAGE_FALLBACK } from "./storage"
