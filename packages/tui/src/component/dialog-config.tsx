@@ -189,6 +189,15 @@ export const settings: Setting[] = [
     keywords: ["paste summary", "clipboard", "pasted content"],
   },
   {
+    title: "Image previews",
+    category: "Input",
+    path: ["prompt", "image_preview"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["attachments", "clipboard", "images", "prompt"],
+  },
+  {
     title: "Leader timeout",
     category: "Input",
     path: ["leader", "timeout"],

@@ -114,6 +114,9 @@ export const Info = Schema.Struct({
       paste: Schema.optional(Schema.Literals(["compact", "full"])).annotate({
         description: "Display large pastes as compact placeholders or full text",
       }),
+      image_preview: Schema.optional(Schema.Boolean).annotate({
+        description: "Show image attachment previews above the prompt input",
+      }),
     }),
   ).annotate({ description: "Prompt input behavior" }),
   session: Schema.optional(

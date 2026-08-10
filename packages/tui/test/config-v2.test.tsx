@@ -23,6 +23,7 @@ test("validates the session tabs setting", () => {
   })
   expect(() => decode({ tabs: { layout: true } })).toThrow()
   expect(() => decode({ tabs: { enabled: "on" } })).toThrow()
+  expect(decode({ prompt: { image_preview: true } })).toEqual({ prompt: { image_preview: true } })
 })
 
 test("resolves nested config and keybind defaults", () => {

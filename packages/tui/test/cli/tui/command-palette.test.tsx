@@ -74,11 +74,11 @@ test("searches settings globally and opens the matching setting", async () => {
     await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
 
     app.mockInput.pressArrow("down")
-    for (const key of "sounds") app.mockInput.pressKey(key)
+    for (const key of "image preview") app.mockInput.pressKey(key)
     app.mockInput.pressEnter()
-    await app.waitForFrame((frame) => frame.includes("Settings") && frame.includes("Sounds"))
+    await app.waitForFrame((frame) => frame.includes("Settings") && frame.includes("Image previews"))
     app.mockInput.pressEnter()
-    await app.waitFor(() => current.attention?.sound === false)
+    await app.waitFor(() => current.prompt?.image_preview === true)
   } finally {
     app.renderer.destroy()
   }
