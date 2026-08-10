@@ -11,12 +11,28 @@ import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { useSettings } from "@/context/settings"
-import {
-  type ServerDomainController,
-  type ServerFormController,
-  useServerDomainController,
-  useServerFormController,
-} from "@/components/server/server-management-controller"
+import { type ServerDomainController } from "@/components/server/server-management-controller"
+
+type ServerConnectionFormController = {
+  state: {
+    adding: () => boolean
+    busy: () => boolean
+    value: () => string
+    name: () => string
+    username: () => string
+    password: () => string
+    error: () => string
+    status: () => boolean | undefined
+  }
+  change: {
+    value: (value: string) => void
+    name: (value: string) => void
+    username: (value: string) => void
+    password: (value: string) => void
+  }
+  reset: () => void
+  submit: () => void
+}
 
 interface ServerFormProps {
   value: string
@@ -97,37 +113,6 @@ function ServerForm(props: ServerFormProps) {
         </div>
       </div>
     </div>
-  )
-}
-
-export function DialogSelectServer() {
-  const dialog = useDialog()
-  const language = useLanguage()
-  const domain = useServerDomainController({ onSelect: () => dialog.close() })
-  const form = useServerFormController({ onSelect: () => dialog.close() })
-  const title = () => {
-    if (!form.state.open()) return language.t("dialog.server.title")
-    return (
-      <div class="flex items-center gap-2 -ml-2">
-        <IconButton icon="arrow-left" variant="ghost" onClick={form.reset} aria-label={language.t("common.goBack")} />
-        <span>
-          {form.state.adding() ? language.t("dialog.server.add.title") : language.t("dialog.server.edit.title")}
-        </span>
-      </div>
-    )
-  }
-
-  return (
-    <Dialog title={title()}>
-      <div class="flex flex-1 min-h-0 flex-col px-5">
-        <Show
-          when={form.state.open()}
-          fallback={<ServerConnectionList domain={domain} onAdd={form.start.add} onEdit={form.start.edit} />}
-        >
-          <ServerConnectionForm form={form} />
-        </Show>
-      </div>
-    </Dialog>
   )
 }
 
@@ -253,7 +238,7 @@ export function ServerConnectionList(props: {
   )
 }
 
-export function ServerConnectionForm(props: { form: ServerFormController }) {
+export function ServerConnectionForm(props: { form: ServerConnectionFormController }) {
   const language = useLanguage()
 
   return (

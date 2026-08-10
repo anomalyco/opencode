@@ -1,20 +1,13 @@
 import { useNavigate } from "@solidjs/router"
-import { useMutation } from "@tanstack/solid-query"
-import { createEffect, createMemo, createResource, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, createResource } from "solid-js"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
+import { ServerConnection, useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { useTabs } from "@/context/tabs"
-import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
+import { type ServerHealth } from "@/utils/server-health"
 import { showToast } from "@/utils/toast"
-import { createServerHealthPreview, replaceServerConnection, type ServerFormValues } from "./server-management"
-
-const DEFAULT_USERNAME = "opencode"
-
-type FormMode = "list" | "add" | "edit"
 
 function showRequestError(language: ReturnType<typeof useLanguage>, err: unknown) {
   showToast({
@@ -52,23 +45,6 @@ function useDefaultServer() {
     key: () => defaultKey.latest,
     available: createMemo(() => !!platform.getDefaultServer && !!platform.setDefaultServer),
     set,
-  }
-}
-
-function useServerMutations() {
-  const server = useServer()
-  const tabs = useTabs()
-
-  return {
-    add: (connection: ServerConnection.Http) => server.add(connection),
-    replace: (originalKey: ServerConnection.Key, next: ServerConnection.Http) =>
-      replaceServerConnection(originalKey, next, {
-        active: () => server.key,
-        removeTabs: (key) => tabs.removeServer(key),
-        add: (connection) => server.add(connection),
-        setActive: (key) => server.setActive(key),
-        remove: (key) => server.remove(key),
-      }),
   }
 }
 
@@ -163,161 +139,3 @@ export function useServerDomainController(options: { onSelect?: () => void } = {
 }
 
 export type ServerDomainController = ReturnType<typeof useServerDomainController>
-
-export function useServerFormController(options: { onSelect?: () => void; navigateOnAdd?: boolean } = {}) {
-  const navigate = useNavigate()
-  const server = useServer()
-  const global = useGlobal()
-  const language = useLanguage()
-  const mutations = useServerMutations()
-  const checkServerHealth = useCheckServerHealth()
-  const healthPreview = createServerHealthPreview(checkServerHealth)
-  const [store, setStore] = createStore({
-    mode: "list" as FormMode,
-    originalUrl: undefined as string | undefined,
-    values: { url: "", name: "", username: DEFAULT_USERNAME, password: "" },
-    error: "",
-    status: undefined as boolean | undefined,
-  })
-
-  onCleanup(healthPreview.cancel)
-
-  const reset = () => {
-    healthPreview.cancel()
-    setStore({
-      mode: "list",
-      originalUrl: undefined,
-      values: { url: "", name: "", username: DEFAULT_USERNAME, password: "" },
-      error: "",
-      status: undefined,
-    })
-  }
-  const allServers = () => {
-    if (!server.current || server.list.includes(server.current)) return server.list
-    return [server.current, ...server.list]
-  }
-  const editing = createMemo(() =>
-    allServers().find((item) => item.type === "http" && item.http.url === store.originalUrl),
-  )
-
-  const request = useMutation(() => ({
-    mutationFn: async () => {
-      const normalized = normalizeServerUrl(store.values.url)
-      if (!normalized) {
-        reset()
-        return
-      }
-
-      const original = store.mode === "edit" ? editing() : undefined
-      if (store.mode === "edit" && !original) return
-      const name = store.values.name.trim() || undefined
-      const username = store.values.username || undefined
-      const password = store.values.password || undefined
-      if (
-        original?.type === "http" &&
-        normalized === original.http.url &&
-        name === original.displayName &&
-        username === original.http.username &&
-        password === original.http.password
-      ) {
-        reset()
-        return
-      }
-
-      const connection: ServerConnection.Http = {
-        type: "http",
-        displayName: name,
-        http: {
-          url: normalized,
-          username: store.mode === "add" && !password ? undefined : username,
-          password,
-        },
-      }
-      const result = await checkServerHealth(connection.http)
-      if (!result.healthy) {
-        setStore("error", language.t("dialog.server.add.error"))
-        return
-      }
-      if (original?.type === "http") {
-        if (normalized === original.http.url) mutations.add(connection)
-        if (normalized !== original.http.url) mutations.replace(ServerConnection.key(original), connection)
-        reset()
-        return
-      }
-
-      reset()
-      if (options.navigateOnAdd === false) {
-        mutations.add(connection)
-        options.onSelect?.()
-        return
-      }
-      mutations.add(connection)
-      options.onSelect?.()
-      navigate("/")
-    },
-  }))
-
-  const preview = () => void healthPreview.preview(store.values, (status) => setStore("status", status))
-  const change = (field: keyof ServerFormValues, value: string) => {
-    if (request.isPending) return
-    setStore("values", field, value)
-    setStore("error", "")
-    if (field !== "name") preview()
-  }
-  const startAdd = () => {
-    reset()
-    setStore("mode", "add")
-  }
-  const startEdit = (connection: ServerConnection.Http) => {
-    reset()
-    setStore({
-      mode: "edit",
-      originalUrl: connection.http.url,
-      values: {
-        url: connection.http.url,
-        name: connection.displayName ?? "",
-        username: connection.http.username ?? "",
-        password: connection.http.password ?? "",
-      },
-      error: "",
-      status: global.servers.health[ServerConnection.key(connection)]?.healthy,
-    })
-  }
-  const submit = () => {
-    if (store.mode === "list" || request.isPending) return
-    setStore("error", "")
-    request.mutate()
-  }
-
-  createEffect(() => {
-    if (store.mode !== "edit") return
-    if (editing()) return
-    reset()
-  })
-
-  return {
-    state: {
-      mode: () => store.mode,
-      open: () => store.mode !== "list",
-      adding: () => store.mode === "add",
-      busy: () => request.isPending,
-      value: () => store.values.url,
-      name: () => store.values.name,
-      username: () => store.values.username,
-      password: () => store.values.password,
-      error: () => store.error,
-      status: () => store.status,
-    },
-    change: {
-      value: (value: string) => change("url", value),
-      name: (value: string) => change("name", value),
-      username: (value: string) => change("username", value),
-      password: (value: string) => change("password", value),
-    },
-    start: { add: startAdd, edit: startEdit },
-    reset,
-    submit,
-  }
-}
-
-export type ServerFormController = ReturnType<typeof useServerFormController>

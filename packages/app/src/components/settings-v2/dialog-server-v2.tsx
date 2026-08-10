@@ -3,11 +3,24 @@ import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@op
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { type Component, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { useMutation } from "@tanstack/solid-query"
+import { type Component, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { createStore } from "solid-js/store"
+import {
+  createServerHealthPreview,
+  replaceServerConnection,
+  type ServerFormValues,
+} from "@/components/server/server-management"
+import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
-import { type ServerConnection } from "@/context/server"
-import { useServerFormController } from "../server/server-management-controller"
+import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
+import { useTabs } from "@/context/tabs"
+import { useCheckServerHealth } from "@/utils/server-health"
 import "./settings-v2.css"
+
+const DEFAULT_USERNAME = "opencode"
+
+type FormMode = "list" | "add" | "edit"
 
 export const DialogServerV2: Component<{
   mode: "add" | "edit"
@@ -15,9 +28,8 @@ export const DialogServerV2: Component<{
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
-  const form = useServerFormController({
+  const form = createFormController({
     onSelect: () => dialog.close(),
-    navigateOnAdd: false,
   })
   const [opened, setOpened] = createSignal(false)
 
@@ -131,4 +143,162 @@ export const DialogServerV2: Component<{
       </DialogFooter>
     </Dialog>
   )
+}
+
+function createFormController(options: { onSelect?: () => void } = {}) {
+  const server = useServer()
+  const tabs = useTabs()
+  const global = useGlobal()
+  const language = useLanguage()
+  const checkServerHealth = useCheckServerHealth()
+  const healthPreview = createServerHealthPreview(checkServerHealth)
+  const [store, setStore] = createStore({
+    mode: "list" as FormMode,
+    originalUrl: undefined as string | undefined,
+    values: { url: "", name: "", username: DEFAULT_USERNAME, password: "" },
+    error: "",
+    status: undefined as boolean | undefined,
+  })
+
+  onCleanup(healthPreview.cancel)
+
+  const reset = () => {
+    healthPreview.cancel()
+    setStore({
+      mode: "list",
+      originalUrl: undefined,
+      values: { url: "", name: "", username: DEFAULT_USERNAME, password: "" },
+      error: "",
+      status: undefined,
+    })
+  }
+  const allServers = () => {
+    if (!server.current || server.list.includes(server.current)) return server.list
+    return [server.current, ...server.list]
+  }
+  const editing = createMemo(() =>
+    allServers().find((item) => item.type === "http" && item.http.url === store.originalUrl),
+  )
+  const add = (connection: ServerConnection.Http) => server.add(connection)
+  const replace = (originalKey: ServerConnection.Key, next: ServerConnection.Http) =>
+    replaceServerConnection(originalKey, next, {
+      active: () => server.key,
+      removeTabs: (key) => tabs.removeServer(key),
+      add,
+      setActive: (key) => server.setActive(key),
+      remove: (key) => server.remove(key),
+    })
+
+  const request = useMutation(() => ({
+    mutationFn: async () => {
+      const normalized = normalizeServerUrl(store.values.url)
+      if (!normalized) {
+        reset()
+        return
+      }
+
+      const original = store.mode === "edit" ? editing() : undefined
+      if (store.mode === "edit" && !original) return
+      const name = store.values.name.trim() || undefined
+      const username = store.values.username || undefined
+      const password = store.values.password || undefined
+      if (
+        original?.type === "http" &&
+        normalized === original.http.url &&
+        name === original.displayName &&
+        username === original.http.username &&
+        password === original.http.password
+      ) {
+        reset()
+        return
+      }
+
+      const connection: ServerConnection.Http = {
+        type: "http",
+        displayName: name,
+        http: {
+          url: normalized,
+          username: store.mode === "add" && !password ? undefined : username,
+          password,
+        },
+      }
+      const result = await checkServerHealth(connection.http)
+      if (!result.healthy) {
+        setStore("error", language.t("dialog.server.add.error"))
+        return
+      }
+      if (original?.type === "http") {
+        if (normalized === original.http.url) add(connection)
+        if (normalized !== original.http.url) replace(ServerConnection.key(original), connection)
+        reset()
+        return
+      }
+
+      reset()
+      add(connection)
+      options.onSelect?.()
+    },
+  }))
+
+  const preview = () => void healthPreview.preview(store.values, (status) => setStore("status", status))
+  const change = (field: keyof ServerFormValues, value: string) => {
+    if (request.isPending) return
+    setStore("values", field, value)
+    setStore("error", "")
+    if (field !== "name") preview()
+  }
+  const startAdd = () => {
+    reset()
+    setStore("mode", "add")
+  }
+  const startEdit = (connection: ServerConnection.Http) => {
+    reset()
+    setStore({
+      mode: "edit",
+      originalUrl: connection.http.url,
+      values: {
+        url: connection.http.url,
+        name: connection.displayName ?? "",
+        username: connection.http.username ?? "",
+        password: connection.http.password ?? "",
+      },
+      error: "",
+      status: global.servers.health[ServerConnection.key(connection)]?.healthy,
+    })
+  }
+  const submit = () => {
+    if (store.mode === "list" || request.isPending) return
+    setStore("error", "")
+    request.mutate()
+  }
+
+  createEffect(() => {
+    if (store.mode !== "edit") return
+    if (editing()) return
+    reset()
+  })
+
+  return {
+    state: {
+      mode: () => store.mode,
+      open: () => store.mode !== "list",
+      adding: () => store.mode === "add",
+      busy: () => request.isPending,
+      value: () => store.values.url,
+      name: () => store.values.name,
+      username: () => store.values.username,
+      password: () => store.values.password,
+      error: () => store.error,
+      status: () => store.status,
+    },
+    change: {
+      value: (value: string) => change("url", value),
+      name: (value: string) => change("name", value),
+      username: (value: string) => change("username", value),
+      password: (value: string) => change("password", value),
+    },
+    start: { add: startAdd, edit: startEdit },
+    reset,
+    submit,
+  }
 }

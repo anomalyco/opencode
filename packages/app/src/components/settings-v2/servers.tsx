@@ -19,16 +19,16 @@ import "./settings-v2.css"
 export const SettingsServersV2: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
-  const domain = useServerCollectionController()
+  const controller = useServerCollectionController()
   const [store, setStore] = createStore({ filter: "" })
   const wslServers = useFilteredWslServers(() => store.filter)
 
   const showSearch = createMemo(
-    () => domain.collection.items().filter((item) => !isWslServer(item)).length + wslServers().length > 1,
+    () => controller.collection.items().filter((item) => !isWslServer(item)).length + wslServers().length > 1,
   )
 
   const filtered = createMemo(() => {
-    const items = domain.collection.items().filter((item) => !isWslServer(item))
+    const items = controller.collection.items().filter((item) => !isWslServer(item))
     const query = store.filter.trim()
     if (!query) return items
     return fuzzysort
@@ -97,12 +97,12 @@ export const SettingsServersV2: Component = () => {
           }
         >
           <SettingsListV2>
-            <WslServerSettings domain={domain} servers={wslServers} />
+            <WslServerSettings domain={controller} servers={wslServers} />
             <For each={filtered()}>
               {(item) => {
                 const key = ServerConnection.key(item)
-                const health = () => domain.collection.health()[key]
-                const isDefault = () => domain.defaults.key() === key
+                const health = () => controller.collection.health()[key]
+                const isDefault = () => controller.defaults.key() === key
                 return (
                   <div class="settings-v2-servers-row">
                     <div class="settings-v2-servers-lead">
@@ -122,10 +122,10 @@ export const SettingsServersV2: Component = () => {
                       </div>
                     </div>
                     <div class="settings-v2-servers-actions">
-                      <Show when={domain.defaults.available() && isDefault()}>
+                      <Show when={controller.defaults.available() && isDefault()}>
                         <Tag>{language.t("dialog.server.status.default")}</Tag>
                       </Show>
-                      <ServerRowMenu server={item} domain={domain} onEdit={openEdit} />
+                      <ServerRowMenu server={item} domain={controller} onEdit={openEdit} />
                     </div>
                   </div>
                 )
