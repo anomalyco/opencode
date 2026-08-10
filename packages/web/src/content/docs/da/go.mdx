@@ -70,6 +70,7 @@ Den nuværende liste over modeller inkluderer:
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Qwen3.8 Max**
 - **Qwen3.7 Max**
 - **Qwen3.7 Plus**
 - **Qwen3.6 Plus**
@@ -106,7 +107,8 @@ Tabellen nedenfor giver et estimeret antal anmodninger baseret på typiske Go-fo
 | MiMo-V2.5-Pro     | 3,250                   | 8,150               | 16,300                |
 | MiniMax M3        | 3,200                   | 8,000               | 16,000                |
 | MiniMax M2.7      | 3,400                   | 8,500               | 17,000                |
-| Qwen3.7 Max       | 950                     | 2,390               | 4,770                 |
+| Qwen3.8 Max       | 160                     | 400                 | 810                   |
+| Qwen3.7 Max       | 340                     | 840                 | 1,690                 |
 | Qwen3.7 Plus      | 4,300                   | 10,800              | 21,600                |
 | Qwen3.6 Plus      | 3,300                   | 8,200               | 16,300                |
 | DeepSeek V4 Pro   | 3,450                   | 8,550               | 17,150                |
@@ -124,6 +126,7 @@ Estimaterne er baseret på observerede anmodningsmønstre:
 - DeepSeek V4 Flash — 790 input, 68.000 cachelagrede, 280 output-tokens pr. anmodning
 - MiniMax M3 — 510 input, 56.000 cachelagrede, 190 output-tokens pr. anmodning
 - MiniMax M2.7 — 300 input, 55.000 cachelagrede, 125 output-tokens pr. anmodning
+- Qwen3.8 Max — 420 input, 66.000 cachelagrede, 200 output-tokens pr. anmodning
 - Qwen3.7 Max — 420 input, 66.000 cachelagrede, 200 output-tokens pr. anmodning
 - Qwen3.7 Plus — 500 input, 57.000 cachelagrede, 190 output-tokens pr. anmodning
 - Qwen3.6 Plus — 500 input, 57.000 cachelagrede, 190 output-tokens pr. anmodning
@@ -148,6 +151,7 @@ Estimaterne er også baseret på følgende priser pr. 1M tokens og det månedlig
 | MiniMax M3                   | $0.30  | $1.20  | $0.06       | -            | $60     |
 | MiniMax M2.7                 | $0.30  | $1.20  | $0.06       | $0.375       | $60     |
 | MiniMax M2.5                 | $0.30  | $1.20  | $0.06       | $0.375       | $60     |
+| Qwen3.8 Max                  | $2.00  | $6.00  | $0.25       | $2.50        | $15     |
 | Qwen3.7 Max                  | $2.50  | $7.50  | $0.50       | $3.125       | $60     |
 | Qwen3.7 Plus (≤ 256K tokens) | $0.40  | $1.60  | $0.04       | $0.50        | $60     |
 | Qwen3.7 Plus (> 256K tokens) | $1.20  | $4.80  | $0.12       | $1.50        | $60     |
@@ -207,6 +211,7 @@ Du kan også få adgang til Go-modeller gennem følgende API-endpoints.
 | MiniMax M3        | minimax-m3        | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.8 Max       | qwen3.8-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -241,6 +246,7 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K2.6         | Ikke brugt   | 0 dage         |
 | MiMo-V2.5-Pro     | Ikke brugt   | 0 dage         |
 | MiMo-V2.5         | Ikke brugt   | 0 dage         |
+| Qwen3.8 Max       | Ikke brugt   | 0 dage         |
 | Qwen3.7 Max       | Ikke brugt   | 0 dage         |
 | Qwen3.7 Plus      | Ikke brugt   | 0 dage         |
 | Qwen3.6 Plus      | Ikke brugt   | 0 dage         |
