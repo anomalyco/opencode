@@ -185,6 +185,46 @@ describe("session.list", () => {
   )
 
   it.instance(
+    "lists non-git sessions from other directories with scope project",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const nested = path.join(test.directory, "nested")
+        yield* Effect.promise(() => mkdir(nested, { recursive: true }))
+
+        const rootSession = yield* withSession({ title: "non-git-root" })
+        const nestedSession = yield* withSession({ title: "non-git-nested" }).pipe(provideInstance(nested))
+
+        // Non-git projects have no repository worktree, so the TUI lists them
+        // project-wide; sessions from other directories must be included.
+        const ids = (yield* SessionNs.Service.use((session) =>
+          session.list({ scope: "project" }),
+        )).map((session) => session.id)
+        expect(ids).toContain(rootSession.id)
+        expect(ids).toContain(nestedSession.id)
+      }),
+  )
+
+  it.instance(
+    "stores non-git sessions relative to the directory's own root",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const created = yield* withSession({ title: "non-git-path" })
+
+        const info = yield* SessionNs.use.get(created.id)
+        const anchored = path.relative(path.parse(test.directory).root, test.directory).replaceAll("\\", "/")
+        expect(info.path).toBe(anchored)
+
+        // A path query in the anchored form must find it back.
+        const ids = (yield* SessionNs.Service.use((session) =>
+          session.list({ path: anchored }),
+        )).map((session) => session.id)
+        expect(ids).toContain(created.id)
+      }),
+  )
+
+  it.instance(
     "falls back to directory when filtering legacy sessions without path",
     () =>
       Effect.gen(function* () {
