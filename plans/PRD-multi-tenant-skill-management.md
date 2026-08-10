@@ -76,20 +76,22 @@ Introduce a three-layer architecture:
 ### Modules
 
 #### M1: UserContext Service (deep module)
+- Defined in `packages/schema/src/user-context.ts` (Schema layer) — type and Service tag referenced by both Core and Server
 - Encapsulates JWT parsing and validation
-- Provides `UserContext` data class: `{userId, username, departmentCode, role}`
+- Provides `UserContext` data class: `{userId, username, departmentCode, role, permissions}`
 - Injected into Effect request context via middleware
 - Interface: `UserContext.Service.get()` → `UserContext`
 - Testable in isolation: given a valid/invalid/expired JWT, returns correct context or error
 
 #### M2: Session Ownership (medium module)
-- Extends session schema with `userId`, `departmentCode` columns
+- Extends session schema with `userId`, `departmentCode` columns (Drizzle ORM schema, shared by SQLite/PostgreSQL)
 - Wraps existing session CRUD with owner checks
 - Interface: extends existing `Session.Service` with ownership validation
 - Ownership rules: user → self only; dept_admin → self + same department; global_admin → all
+- Sessions with null departmentCode visible only to owner and global_admin
 
 #### M3: Skill Scope (deep module)
-- Extends `Skill.Info` with `scope` field (`{type: "global"|"department"|"user", owner?: string}`)
+- Extends `Skill.Info` with `scope` field (`{type: "global"|"department"|"user", departmentCode?: string, userID?: string}`)
 - `list()` accepts `UserContext`, filters by scope visibility rules
 - Interface: `SkillV2.Service.list(userContext)` → filtered skills
 - Testable in isolation: given a set of skills and a user context, returns correct subset
@@ -102,17 +104,32 @@ Introduce a three-layer architecture:
 
 #### M5: Auth Middleware (shallow module)
 - Coexists with existing Basic Auth middleware
-- Detects `Authorization: Bearer <jwt>` → validates via M1
-- Skips JWT validation if Basic Auth credentials match server password (migration path)
+- Priority: if JWT present → validate it (401 on invalid/expired); if JWT absent → fall back to Basic Auth
+- Invalid JWT must NOT silently downgrade to Basic Auth — returns 401
+- Migration path: during transition, both auth methods accepted
+
+### Permission Composition: User-level vs Agent-level
+
+| Dimension | Control point | When | Source |
+|-----------|--------------|------|--------|
+| User-level RBAC | Skill list visibility, Session ownership, Skill CRUD | API request handling | JWT claims |
+| Agent-level Permission | Runtime tool execution permission | Agent executing tool calls | Agent config |
+
+**Composition rules:**
+- Skill list display: only user-level scope filtering
+- Agent executing skill tool: **both** user-level scope AND agent-level `skill:<name>` must pass
+- Session management / Skill CRUD: user-level only (not routed through Agent)
+
+**Simplified default**: Default Agents get `skill:* = allow` in their permission config. This applies to all built-in agents (build, plan, explore). User-level RBAC is the sole gate for skill visibility and usage.
 
 ### Schema Changes
 
-**Session table adds:**
+**Session table adds (Drizzle ORM schema, shared by SQLite and PostgreSQL):**
 - `user_id TEXT NOT NULL`
-- `user_department_code TEXT`
+- `user_department_code TEXT` (nullable — null sessions visible only to owner and global_admin)
 
 **Skill.Info adds:**
-- `scope: { type: "global" | "department" | "user", owner?: string }`
+- `scope: { type: "global" | "department" | "user", departmentCode?: string, userID?: string }`
 
 ### API Contracts
 
@@ -120,16 +137,18 @@ Introduce a three-layer architecture:
 
 ```
 POST   /api/skill          # Create skill
-  Body: { name, description, content, scope: { type, owner? } }
-  Response: 201 { id, name, scope, location }
+  Body: { name, description, content, scope: { type, departmentCode?, userID? } }
+  Response: 201 { name, scope, location }
 
 PUT    /api/skill/:name     # Update skill
   Body: { description?, content?, scope? }
-  Response: 200 { id, name, scope, location }
+  Response: 200 { name, scope, location }
 
 DELETE /api/skill/:name     # Delete skill
   Response: 204 No Content
 ```
+
+Skill identity is `name` (directory name) — no separate id field.
 
 **Modified endpoints:**
 
@@ -179,6 +198,7 @@ Tests should verify external behavior, not implementation details. For this proj
 - Session list is filtered by user
 - Session prompt rejects non-owner
 - Dept admin lists own dept sessions
+- Sessions with null departmentCode visible only to owner and global_admin
 
 **M4 Skill CRUD (integration tests needed):**
 - Create with valid scope succeeds

@@ -83,11 +83,20 @@
 #### User Context 定义
 
 ```typescript
+// packages/schema/src/user-context.ts — Schema 层定义类型 + Service tag
+// Core 和 Server 层都依赖 Schema，不违反依赖方向
 interface UserContext {
   userID: string
   username: string
   departmentCode: string      // 对应 scopeDeptCode
   role: "global_admin" | "dept_admin" | "user"
+}
+
+// SkillScope 定义在 packages/schema/src/skill.ts
+interface SkillScope {
+  type: "global" | "department" | "user"
+  departmentCode?: string  // 当 type === "department" 时使用
+  userID?: string          // 当 type === "user" 时使用
 }
 ```
 
@@ -135,12 +144,13 @@ Skill 按 scope 通过目录隔离（兼容现有文件系统 discovery 机制�
 #### SkillV2.Service 改造
 
 ```typescript
+// packages/schema/src/skill.ts — 增加 scope 字段
 interface SkillScope {
   type: "global" | "department" | "user"
-  owner?: string  // departmentCode 或 userId
+  departmentCode?: string  // type === "department" 时必填
+  userID?: string          // type === "user" 时必填
 }
 
-// Skill.Info 增加 scope 字段
 interface SkillInfo {
   name: string
   description?: string
@@ -205,6 +215,39 @@ ROLE_RULES = {
 }
 ```
 
+### 5. 权限组合策略：用户级 vs Agent 级
+
+系统中存在两个独立的权限维度，需要明确组合规则：
+
+| 权限维度 | 控制点 | 作用时机 | 数据来源 |
+|----------|--------|----------|----------|
+| **用户级 RBAC**（新增） | Skill 列表可见性、Session 归属、Skill CRUD 权限 | API 请求处理时 | JWT claims（role） |
+| **Agent 级 Permission**（已有） | Agent 运行时是否允许执行某 action | Agent 执行 tool 调用时 | Agent 配置（`agent.permissions`） |
+
+#### 组合规则
+
+| 场景 | 用户级权限 | Agent 级权限 | 生效规则 |
+|------|-----------|-------------|----------|
+| Skill 列表展示 | `skill.view` | 不涉及 | 通过 scope 过滤，用户能看到的就展示 |
+| Agent 执行 skill 工具 | 用户能看到该 Skill（scope 过滤通过） | Agent 的 `skill:<name>` 规则 | **两者都需要通过**。用户能看到但 Agent 拒绝 → 报错不可用 |
+| Session 管理 | `session.list`/`prompt` 等 | 不涉及 | 用户级权限直接决定 |
+| Skill CRUD | `skill.create`/`edit`/`delete` | 不涉及 | API 层校验，不经过 Agent |
+
+**核心原则**：用户级权限控制"能否看到/管理"，Agent 级权限控制"执行时能否操作"。两者是 AND 关系——需要同时通过。
+
+#### 简化建议
+
+普通用户使用的 Agent 配置中设置 `skill:* = allow`，由用户级 RBAC 通过 scope 过滤兜底。这样 `skill.use` 只受 scope 过滤控制，简化心智模型。
+
+### 6. 角色粒度的扩展性
+
+当前方案使用扁平的三角色模型（`global_admin` / `dept_admin` / `user`），覆盖 MVP。如果未来需要更细粒度的角色（如只读用户、power user、审计角色），有两种扩展方式：
+
+1. **JWT 携带权限 claim 列表**：opencode 侧不做角色映射硬编码，直接根据 JWT 中的 `permissions` 数组做判定
+2. **Java 后端提供权限查询接口**：opencode 通过 HTTP 调用 Java 后端 `/has-permission` 实时判定
+
+建议 Phase 1 就采用方式 1：JWT 中携带 `permissions: string[]`（如 `["skill.view", "skill.create:user"]`），opencode 解析 claims 而非硬编码三角色。
+
 ## 隐患分析（已排除 Git 文件冲突）
 
 由于用户只跟 Agent 对话，不操作项目代码，以下隐患已**不适用**：
@@ -219,7 +262,7 @@ ROLE_RULES = {
 |------|------|--------|------|
 | Session 数据互相可见 | 信息泄露 | **高** | Session 表加 `user_id`，API 层过滤 |
 | Session 可被他人操作 | 数据安全 | **高** | `session.prompt`/`interrupt` 校验 owner |
-| 多服务器无 Session 协调 | 请求路由到无状态的服务器 | **中** | Session 亲和性路由 |
+| 多服务器无 Session 协调 | 请求路由到无状态的服务器 | **低** | 已由 Session 亲和性路由方案覆盖（见下文） |
 | Skill 缓存不一致（多服务器） | 管理操作后列表未刷新 | **中** | 短 TTL 或显式失效 API |
 | 权限规则缓存 | 角色变更后未生效 | **低** | 短 TTL，或 Java 后端通知刷新 |
 | 文档存储权限 | 用户上传的文档被他人访问 | **中** | 文档按用户目录隔离 |
@@ -233,7 +276,7 @@ ROLE_RULES = {
 | 角色 | 数量 | 说明 |
 |------|------|------|
 | opencode serve | 3-5 台 | 横向扩展，承载用户 Session |
-| PostgreSQL / MySQL | 1 套 | 共享 Session 数据（替代 SQLite） |
+| PostgreSQL | 1 套 | 共享 Session 数据（替代 SQLite） |
 | 共享文件系统（NFS/EFS） | 1 套 | 存储 Skill 文件、用户文档 |
 | Java 后端 | 现有 | 认证 + RBAC + 路由 |
 | Redis（可选） | 1 套 | Session 亲和性 + 分布式锁（文档操作） |
@@ -309,11 +352,12 @@ Dashboard (React)              opencode serve               文件系统
 
 ## 实现路径
 
-### Phase 1 — 用户身份接入
+### Phase 1 — 用户身份接入 + Schema 统一
 
+- Schema 层定义 `UserContext` 类型和 Service tag（`packages/schema/src/user-context.ts`）
 - Server 层增加 JWT 验证中间件（与现有 Basic Auth 共存）
-- 定义 `UserContext` 并注入 Effect 链路
-- Session 表增加 `user_id`、`user_department_code`
+- 注入 `UserContext` 到 Effect 链路
+- Session 表增加 `user_id`、`user_department_code`（Drizzle ORM Schema，与未来 PostgreSQL 共用）
 - Session 创建时记录用户身份
 - `session.list`/`session.get`/`session.prompt` 增加 owner 校验
 
@@ -359,9 +403,10 @@ Dashboard (React)              opencode serve               文件系统
 | `packages/server/src/middleware/authorization.ts` | 扩展支持 Bearer Token + Basic Auth 共存 | P1 |
 | `packages/core/src/session.ts` | Session 创建/查询增加 user_id 维度 | P1 |
 | `packages/core/src/session/sql.ts` | SessionTable 增加 user_id 列 | P1 |
-| `packages/protocol/src/groups/session.ts` | session.list 支持按用户过滤 | P1 |
-| `packages/server/src/handlers/session.ts` | session.get/prompt 等增加 owner 校验 | P1 |
-| `packages/schema/src/skill.ts` | Skill.Info 增加 scope 字段 | P2 |
+| `packages/protocol/src/groups/session.ts` | session.list 增加按 user 筛选的请求参数 | P1 |
+| `packages/server/src/handlers/session.ts` | session.get/prompt 等增加 owner 校验；session.list 过滤 | P1 |
+| `packages/schema/src/skill.ts` | Skill.Info 增加 scope 字段；新增 SkillScope 类型，departmentCode 和 userID 分开 | P2 |
+| `packages/schema/src/user-context.ts` | **新文件**—定义 UserContext 类型和 Service tag（Schema 层，供 Core/Server 共同引用） | P1 |
 | `packages/core/src/skill.ts` | list() 按 scope + 用户身份过滤 | P2 |
 | `packages/protocol/src/groups/skill.ts` | 增加 CRUD 端点定义 | P3 |
 | `packages/server/src/handlers/skill.ts` | 实现 CRUD handler，注入权限检查 | P3 |
@@ -370,9 +415,12 @@ Dashboard (React)              opencode serve               文件系统
 ## 注意事项
 
 1. **向后兼容性**：现有的 Basic Auth + 未分类 Skill 目录仍能正常工作
-   - JWT 中间件与 Basic Auth 共存，JWT 优先
+   - JWT 和 Basic Auth 共存策略：**有 JWT 时强制验证（无效则 401），无 JWT 时回退到 Basic Auth**
+   - 无效的 JWT 不会降级到 Basic Auth（安全加固），避免绕过 Java 后端的认证
    - 无 scope 的已有 Skill 默认为 `global`
 2. **JWT 信任模型**：opencode serve 信任由 Java 后端签发的 JWT，需共享签名密钥（HMAC Shared Secret 或 RSA Public Key）
-3. **Skill 缓存一致性**：多服务器场景下，Skill 变更需要广播失效。初期可采用短 TTL（30s）的惰性过期，后期可加 Redis Pub/Sub
+3. **Skill 缓存一致性**：多服务器场景下，Skill 变更需要广播失效。初期可采用短 TTL（30s）的惰性过期，后期可加 Redis Pub/Sub。注意 `reload()` 必须正确处理 scope 目录（`dept_xxx`、`user_xxx`），防止将目录名误解析为 skill name
 4. **文档存储**：用户上传的文档应存储在 `user_<userId>/docs/` 目录下，天然隔离
 5. **Session 数据库**：初期 SQLite 够用，到 50+ 用户时建议切 PostgreSQL，避免多服务器数据孤岛
+6. **user_department_code 为空处理**：departmentCode 为空的 Session 仅 owner 和 global_admin 可见，不暴露给 dept_admin
+7. **内置 Agent 权限变更**：简化建议要求所有内置 Agent（build、plan、explore）的配置中增加 `skill:* = allow`，由用户级 RBAC 兜底
