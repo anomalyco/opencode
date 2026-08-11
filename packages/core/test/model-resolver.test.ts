@@ -152,6 +152,46 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("resolves Bedrock Mantle catalog endpoints from the configured region", () =>
+    withEnv({ AWS_REGION: undefined }, () =>
+      Effect.gen(function* () {
+        const catalog = model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+          providerID: Provider.ID.amazonBedrock,
+          modelID: "openai.gpt-5.5",
+          settings: {
+            region: "us-west-2",
+            baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
+          },
+        })
+        const resolved = yield* ModelResolver.fromCatalogModel(catalog)
+
+        expect(resolved.route).toMatchObject({
+          id: "bedrock-mantle-responses",
+          endpoint: { baseURL: "https://bedrock-mantle.us-west-2.api.aws/openai/v1" },
+        })
+        expect(catalog.settings?.baseURL).toBe("https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1")
+      }),
+    ),
+  )
+
+  it.effect("prefers the configured Mantle region over the environment", () =>
+    withEnv({ AWS_REGION: "us-east-1" }, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+            modelID: "openai.gpt-5.5",
+            settings: {
+              region: "us-west-2",
+              baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
+            },
+          }),
+        )
+
+        expect(resolved.route.endpoint.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
+      }),
+    ),
+  )
+
   it.effect("uses the API modelID instead of the catalog ID for native OpenAI routes", () =>
     Effect.gen(function* () {
       const catalog = model(Provider.aisdk("@ai-sdk/openai"), {
@@ -265,7 +305,7 @@ describe("ModelResolver", () => {
     ),
   )
 
-  it.effect("rejects unresolved provider URL variables before route construction", () =>
+  it.effect("rejects unresolved variables in constructed provider routes", () =>
     withEnv({ REQUIRED_HOST: undefined }, () =>
       Effect.gen(function* () {
         const failure = yield* ModelResolver.fromCatalogModel(
@@ -821,6 +861,25 @@ describe("ModelResolver", () => {
 
       expect(resolved).toMatchObject({ id: "mistral-api-model", provider: "test-provider" })
     }),
+  )
+
+  it.effect("rejects unresolved variables before loading opaque AISDK packages", () =>
+    withEnv({ REQUIRED_HOST: undefined }, () =>
+      Effect.gen(function* () {
+        const failure = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/mistral"), {
+            settings: { baseURL: "https://${REQUIRED_HOST}/v1" },
+          }),
+          undefined,
+          { loadAISDK: () => Effect.die("AI SDK loader should not be called") },
+        ).pipe(Effect.flip)
+
+        expect(failure).toMatchObject({
+          _tag: "SessionRunnerModel.UnresolvedProviderVariablesError",
+          variables: ["REQUIRED_HOST"],
+        })
+      }),
+    ),
   )
 
   it.effect("rejects AISDK packages without an available loader", () =>

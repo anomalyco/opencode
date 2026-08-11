@@ -158,17 +158,13 @@ export const fromCatalogModel = (
   model: Info,
   credential?: Credential.Value,
   dependencies?: Dependencies,
-): Effect.Effect<LanguageModel, UnsupportedPackageError | UnresolvedProviderVariablesError> => {
-  const prepared = prepareRuntimeModel(model, credential)
-  if (prepared.unresolved.length > 0)
-    return Effect.fail(
-      new UnresolvedProviderVariablesError({
-        providerID: model.providerID,
-        modelID: model.id,
-        variables: prepared.unresolved,
-      }),
-    )
-  const resolved = prepared.model
+): Effect.Effect<LanguageModel, UnsupportedPackageError | UnresolvedProviderVariablesError> =>
+  resolveCatalogModel(model, credential, dependencies).pipe(
+    Effect.flatMap((resolved) => validateProviderVariables(model, resolved)),
+  )
+
+const resolveCatalogModel = (model: Info, credential?: Credential.Value, dependencies?: Dependencies) => {
+  const resolved = prepareRuntimeModel(model, credential)
   const packageName = Provider.packageName(resolved.package)
   const key = apiKey(resolved, credential)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
@@ -208,7 +204,8 @@ export const fromCatalogModel = (
     : undefined
   const native = mapping?.package ?? resolved.package
   if (Provider.isAISDK(resolved.package) && !mapping) {
-    if (!dependencies?.loadAISDK) return Effect.fail(unsupported(resolved))
+    const loadAISDK = dependencies?.loadAISDK
+    if (!loadAISDK) return Effect.fail(unsupported(resolved))
     const runtime = produce(resolved, (draft) => {
       draft.settings = Provider.mergeOverlay(draft.settings, {
         ...nativeCredentialSettings(resolved.package ?? "", credential),
@@ -216,7 +213,9 @@ export const fromCatalogModel = (
         ...configuration,
       })
     })
-    return dependencies.loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))
+    return prepareOpaqueAISDKModel(resolved, runtime).pipe(
+      Effect.flatMap((runtime) => loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))),
+    )
   }
   if (!native) return Effect.fail(unsupported(resolved))
 
@@ -249,23 +248,55 @@ export const fromCatalogModel = (
 }
 
 function prepareRuntimeModel(model: Info, credential: Credential.Value | undefined) {
-  const prepared = produce(model, (draft) => {
+  return produce(model, (draft) => {
     if (draft.settings?.apiKey === "") delete draft.settings.apiKey
     if (credential?.type === "key" && credential.metadata !== undefined)
       draft.body = Provider.mergeOverlay(draft.body, credential.metadata)
-    if (typeof draft.settings?.baseURL !== "string") return
-    draft.settings.baseURL = draft.settings.baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => {
-      return process.env[name] ?? placeholder
-    })
   })
-  const baseURL = prepared.settings?.baseURL
-  const unresolved =
-    typeof baseURL === "string"
-      ? Array.from(baseURL.matchAll(/\$\{([^}]+)\}/g), (match) => match[1]).filter(
-          (name, index, names) => names.indexOf(name) === index,
-        )
-      : []
-  return { model: prepared, unresolved }
+}
+
+function validateProviderVariables(
+  model: Info,
+  resolved: LanguageModel,
+): Effect.Effect<LanguageModel, UnresolvedProviderVariablesError> {
+  const baseURL = resolved.route.endpoint.baseURL
+  if (typeof baseURL !== "string") return Effect.succeed(resolved)
+  const prepared = resolveProviderURL(baseURL)
+  const failure = unresolvedProviderVariables(model, prepared)
+  if (failure) return Effect.fail(failure)
+  if (prepared === baseURL) return Effect.succeed(resolved)
+  return Effect.succeed(
+    LanguageModel.update(resolved, {
+      route: resolved.route.with({ endpoint: { baseURL: prepared } }),
+    }),
+  )
+}
+
+function prepareOpaqueAISDKModel(model: Info, runtime: Info): Effect.Effect<Info, UnresolvedProviderVariablesError> {
+  const baseURL = runtime.settings?.baseURL
+  if (typeof baseURL !== "string") return Effect.succeed(runtime)
+  const prepared = resolveProviderURL(baseURL)
+  const failure = unresolvedProviderVariables(model, prepared)
+  if (failure) return Effect.fail(failure)
+  return Effect.succeed(
+    produce(runtime, (draft) => {
+      if (draft.settings) draft.settings.baseURL = prepared
+    }),
+  )
+}
+
+const providerVariablePattern = /\$\{([^}]+)\}/g
+
+function resolveProviderURL(baseURL: string) {
+  return baseURL.replace(providerVariablePattern, (placeholder, name: string) => process.env[name] ?? placeholder)
+}
+
+function unresolvedProviderVariables(model: Info, baseURL: string) {
+  const variables = Array.from(baseURL.matchAll(providerVariablePattern), (match) => match[1]).filter(
+    (name, index, names) => names.indexOf(name) === index,
+  )
+  if (variables.length === 0) return
+  return new UnresolvedProviderVariablesError({ providerID: model.providerID, modelID: model.id, variables })
 }
 
 const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {

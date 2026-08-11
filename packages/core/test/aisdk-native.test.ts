@@ -123,6 +123,16 @@ describe("AISDKNative", () => {
     expect(map("@ai-sdk/amazon-bedrock/mantle", settings, "openai.gpt-oss-safeguard-20b")?.package).toBe(
       "@opencode-ai/ai/providers/amazon-bedrock/mantle/chat",
     )
+    expect(
+      map(
+        "@ai-sdk/amazon-bedrock/mantle",
+        {
+          region: "us-west-2",
+          baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
+        },
+        "openai.gpt-5.5",
+      ),
+    ).toMatchObject({ settings: { baseURL: "https://bedrock-mantle.us-west-2.api.aws/openai/v1" } })
   })
 
   test("maps static Bedrock Mantle credentials without leaking connection options", () => {
@@ -134,8 +144,9 @@ describe("AISDKNative", () => {
             accessKeyId: "key",
             secretAccessKey: "secret",
             sessionToken: "session",
+            region: "eu-west-1",
           },
-          region: "eu-west-1",
+          baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/v1",
           profile: "ignored",
           credentialProvider: "ignored",
           fetch: "ignored",
@@ -152,7 +163,7 @@ describe("AISDKNative", () => {
           sessionToken: "session",
           region: "eu-west-1",
         },
-        region: "eu-west-1",
+        baseURL: "https://bedrock-mantle.eu-west-1.api.aws/v1",
         providerOptions: { openai: { store: false } },
       },
     })

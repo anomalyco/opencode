@@ -26,7 +26,7 @@ export function map(input: MapInput): Mapping | undefined {
         ...mapBedrockRequest(input),
       }
     case "@ai-sdk/amazon-bedrock/mantle":
-      return mapBedrockMantle(input, baseSettings)
+      return mapBedrockMantle(input)
     case "@ai-sdk/azure":
       return {
         package: `@opencode-ai/ai/providers/azure/${input.settings.useCompletionUrls === true ? "chat" : "responses"}`,
@@ -65,13 +65,24 @@ export function map(input: MapInput): Mapping | undefined {
   }
 }
 
-function mapBedrockMantle(input: MapInput, baseSettings: Readonly<Record<string, unknown>>): Mapping | undefined {
+function mapBedrockMantle(input: MapInput): Mapping | undefined {
   const settings = input.settings
   const chat = input.modelID === "openai.gpt-oss-safeguard-20b" || input.modelID === "openai.gpt-oss-safeguard-120b"
+  const credentials = isRecord(settings.credentials) ? settings.credentials : undefined
+  const region =
+    typeof settings.region === "string"
+      ? settings.region
+      : typeof credentials?.region === "string"
+        ? credentials.region
+        : undefined
+  const baseURL =
+    typeof settings.baseURL === "string" && region !== undefined
+      ? settings.baseURL.replaceAll("${AWS_REGION}", region)
+      : settings.baseURL
   return {
     package: `@opencode-ai/ai/providers/amazon-bedrock/mantle/${chat ? "chat" : "responses"}`,
     settings: {
-      ...mapBedrockSettings(settings, baseSettings),
+      ...mapBedrockSettings(settings, typeof baseURL === "string" ? { baseURL } : {}),
       ...mapOpenAIOptions(settings),
     },
     ...(isStringRecord(settings.headers) ? { headers: settings.headers } : {}),
