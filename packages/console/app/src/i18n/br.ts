@@ -256,7 +256,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "seguintes exceções",
 
   "go.title": "OpenCode Go | Modelos de codificação de baixo custo para todos",
-  "go.banner.text": "GPT 5.6 Luna tem limites de uso 2x maiores por tempo limitado",
+  "go.banner.text": "DeepSeek V4 Flash tem limites de uso 2x maiores por tempo limitado",
   "go.meta.description":
     "O Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos de uso e acesso confiável aos principais modelos de codificação.",
   "go.hero.title": "Modelos de codificação de baixo custo para todos",

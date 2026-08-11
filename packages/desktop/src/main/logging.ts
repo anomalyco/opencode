@@ -189,6 +189,11 @@ async function writeZip(output: string, entries: Entry[]) {
 }
 
 function initConsoleTransport() {
+  if (app.isPackaged) {
+    log.transports.console.level = false
+    return
+  }
+
   const write = log.transports.console.writeFn.bind(log.transports.console)
   log.transports.console.writeFn = (options) => {
     try {
