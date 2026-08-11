@@ -69,6 +69,7 @@ export const AgentSelected = Event.durable({
   schema: {
     ...Base,
     agent: Agent.ID,
+    previous: Agent.ID.pipe(optional),
   },
 })
 export type AgentSelected = typeof AgentSelected.Type

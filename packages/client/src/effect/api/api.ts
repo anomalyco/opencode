@@ -339,7 +339,11 @@ export type Endpoint5_31Output =
           readonly type: "session.agent.selected"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly agent: Agent.ID }
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly agent: Agent.ID
+            readonly previous?: Agent.ID | undefined
+          }
         }
       | {
           readonly id: Event.ID

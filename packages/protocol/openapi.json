@@ -14373,6 +14373,9 @@
               },
               "agent": {
                 "type": "string"
+              },
+              "previous": {
+                "type": "string"
               }
             },
             "required": ["sessionID", "agent"],

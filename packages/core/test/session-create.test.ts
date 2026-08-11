@@ -654,7 +654,7 @@ describe("Session.create", () => {
       expect(yield* session.get(created.id)).toMatchObject({ agent: "plan" })
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.drop(1), Stream.take(1), Stream.runCollect)),
-      ).toMatchObject([{ type: "session.agent.selected", data: { agent: "plan" } }])
+      ).toMatchObject([{ type: "session.agent.selected", data: { agent: "plan", previous: "build" } }])
       expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toMatchObject([
         { type: "agent-switched", agent: "plan", previous: "build" },
       ])
