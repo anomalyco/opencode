@@ -205,6 +205,8 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     : undefined
   const native = mapping?.package ?? resolved.package
   if (Provider.isAISDK(resolved.package) && !mapping) {
+    const loadAISDK = dependencies?.loadAISDK
+    if (!loadAISDK) return yield* unsupported(resolved)
     const settings = yield* prepareProviderSettings(
       resolved,
       Provider.mergeOverlay(resolved.settings, {
@@ -213,8 +215,6 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         ...configuration,
       }) ?? {},
     )
-    const loadAISDK = dependencies?.loadAISDK
-    if (!loadAISDK) return yield* unsupported(resolved)
     const runtime = produce(resolved, (draft) => {
       draft.settings = settings
     })
@@ -249,6 +249,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
 })
 
 function prepareRuntimeModel(model: Info, credential: Credential.Value | undefined) {
+  if (model.settings?.apiKey !== "" && (credential?.type !== "key" || credential.metadata === undefined)) return model
   return produce(model, (draft) => {
     if (draft.settings?.apiKey === "") delete draft.settings.apiKey
     if (credential?.type === "key" && credential.metadata !== undefined)
@@ -262,15 +263,8 @@ function validateProviderVariables(
 ): Effect.Effect<LanguageModel, UnresolvedProviderVariablesError> {
   const baseURL = resolved.route.endpoint.baseURL
   if (typeof baseURL !== "string") return Effect.succeed(resolved)
-  return prepareProviderURL(model, baseURL).pipe(
-    Effect.map((prepared) =>
-      prepared === baseURL
-        ? resolved
-        : LanguageModel.update(resolved, {
-            route: resolved.route.with({ endpoint: { baseURL: prepared } }),
-          }),
-    ),
-  )
+  const failure = unresolvedProviderVariables(model, baseURL)
+  return failure ? Effect.fail(failure) : Effect.succeed(resolved)
 }
 
 function prepareProviderModel(model: Info): Effect.Effect<Info, UnresolvedProviderVariablesError> {
@@ -299,21 +293,19 @@ function prepareProviderSettings(
 
 function prepareProviderURL(model: Info, baseURL: string): Effect.Effect<string, UnresolvedProviderVariablesError> {
   if (!baseURL.includes("${")) return Effect.succeed(baseURL)
-  const variables = new Set<string>()
-  const prepared = baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => {
-    const value = process.env[name]
-    if (value !== undefined) return value
-    variables.add(name)
-    return placeholder
+  const prepared = baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => process.env[name] ?? placeholder)
+  const failure = unresolvedProviderVariables(model, prepared)
+  return failure ? Effect.fail(failure) : Effect.succeed(prepared)
+}
+
+function unresolvedProviderVariables(model: Info, baseURL: string) {
+  const variables = new Set(Array.from(baseURL.matchAll(/\$\{([^}]+)\}/g), (match) => match[1]))
+  if (variables.size === 0) return
+  return new UnresolvedProviderVariablesError({
+    providerID: model.providerID,
+    modelID: model.id,
+    variables: Array.from(variables),
   })
-  if (variables.size === 0) return Effect.succeed(prepared)
-  return Effect.fail(
-    new UnresolvedProviderVariablesError({
-      providerID: model.providerID,
-      modelID: model.id,
-      variables: Array.from(variables),
-    }),
-  )
 }
 
 const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {

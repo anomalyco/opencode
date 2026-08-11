@@ -900,6 +900,25 @@ describe("ModelResolver", () => {
     ),
   )
 
+  it.effect("rejects placeholders introduced by environment expansion before loading providers", () =>
+    withEnv({ PROVIDER_HOST: "${MISSING_HOST}", MISSING_HOST: undefined }, () =>
+      Effect.gen(function* () {
+        const failure = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/mistral"), {
+            settings: { baseURL: "https://${PROVIDER_HOST}/v1" },
+          }),
+          undefined,
+          { loadAISDK: () => Effect.die("AI SDK loader should not be called") },
+        ).pipe(Effect.flip)
+
+        expect(failure).toMatchObject({
+          _tag: "SessionRunnerModel.UnresolvedProviderVariablesError",
+          variables: ["MISSING_HOST"],
+        })
+      }),
+    ),
+  )
+
   it.effect("rejects unresolved variables before loading native provider packages", () =>
     withEnv({ REQUIRED_HOST: undefined }, () =>
       Effect.gen(function* () {
