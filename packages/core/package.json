@@ -28,7 +28,7 @@
       "workerd": "./src/database/sqlite.workerd.ts",
       "bun": "./src/database/sqlite.bun.ts",
       "node": "./src/database/sqlite.node.ts",
-      "default": "./src/database/sqlite.bun.ts"
+      "default": "./src/database/sqlite.node.ts"
     },
     "#pty": {
       "bun": "./src/pty/pty.bun.ts",
