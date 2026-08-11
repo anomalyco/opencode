@@ -11,6 +11,7 @@ import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
 import { KV } from "./kv.js"
+import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
@@ -519,8 +520,6 @@ function modelInfo(
 
 export { Event } from "@opencode-ai/schema/models-dev"
 
-declare const OPENCODE_MODELS_DEV: Record<string, SourceProvider> | undefined
-
 export interface Interface {
   readonly get: () => Effect.Effect<readonly Snapshot[]>
   readonly refresh: (force?: boolean) => Effect.Effect<void>
@@ -530,12 +529,17 @@ export const Options = Schema.Struct({
   url: Schema.optional(Schema.String),
   file: Schema.optional(Schema.String),
   fetch: Schema.optional(Schema.Boolean),
+  snapshot: Schema.optional(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
 const CatalogJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+const decodeCatalog = (text: string) =>
+  Schema.decodeUnknownEffect(CatalogJson)(text).pipe(
+    Effect.map((catalog) => catalog as Record<string, SourceProvider>),
+  )
 const Cache = Schema.Struct({
   updatedAt: Schema.Number,
   body: CatalogJson,
@@ -605,13 +609,15 @@ export const layer = (options?: Options) =>
           )
         : Effect.succeed(undefined)
 
-      const loadSnapshot = Effect.sync(() =>
-        typeof OPENCODE_MODELS_DEV === "undefined" ? undefined : OPENCODE_MODELS_DEV,
-      )
+      // Bundled snapshot of https://models.opencode.ai/api.json, committed at
+      // packages/core/src/models-dev/snapshot.txt and refreshed via
+      // `bun run script/update-models-snapshot.ts`. It is the boot-time floor
+      // for the catalog; the periodic fetch below still refreshes on top.
+      const loadSnapshot = options?.snapshot === false ? Effect.succeed(undefined) : decodeCatalog(snapshotText)
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const text = yield* fetchApi()
-        const catalog = (yield* Schema.decodeUnknownEffect(CatalogJson)(text)) as Record<string, SourceProvider>
+        const catalog = yield* decodeCatalog(text)
         // Best-effort: a cache-write failure must never kill catalog
         // population. The payload has outgrown some KV backends' per-value
         // limits (Durable Object SQLite caps values at 2 MB and api.json
