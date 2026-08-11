@@ -81,6 +81,9 @@ export const dict = {
   "command.session.share.description": "이 세션을 공유하고 URL을 클립보드에 복사",
   "command.session.unshare": "세션 공유 중지",
   "command.session.unshare.description": "이 세션 공유 중지",
+  "command.session.export": "세션 내보내기",
+  "command.session.export.description": "전체 세션 기록을 JSON으로 내보내기",
+
   "palette.search.placeholder": "파일, 명령어 및 세션 검색",
   "palette.search.placeholder.home": "명령어 및 세션 검색",
   "palette.empty": "결과 없음",
@@ -336,6 +339,8 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "작업 공간 시작 스크립트",
   "dialog.project.edit.worktree.startup.description": "새 작업 공간(작업 트리)을 만든 뒤 실행됩니다.",
   "dialog.project.edit.worktree.startup.placeholder": "예: bun install",
+  "dialog.usageExceeded.dontShowAgain": "다시 표시하지 않기",
+
   "context.breakdown.title": "컨텍스트 분석",
   "context.breakdown.note": '입력 토큰의 대략적인 분석입니다. "기타"에는 도구 정의 및 오버헤드가 포함됩니다.',
   "context.breakdown.system": "시스템",
@@ -345,6 +350,8 @@ export const dict = {
   "context.breakdown.other": "기타",
   "context.systemPrompt.title": "시스템 프롬프트",
   "context.rawMessages.title": "원시 메시지",
+  "context.export.session": "세션 내보내기",
+
   "context.stats.session": "세션",
   "context.stats.messages": "메시지",
   "context.stats.provider": "공급자",
@@ -410,6 +417,11 @@ export const dict = {
   "toast.session.unshare.success.description": "세션 공유가 성공적으로 해제되었습니다!",
   "toast.session.unshare.failed.title": "세션 공유 해제 실패",
   "toast.session.unshare.failed.description": "세션 공유를 해제하는 동안 오류가 발생했습니다",
+  "toast.session.export.success.title": "세션을 내보냈습니다",
+  "toast.session.export.success.description": "세션 저장 위치: {{filename}}",
+  "toast.session.export.failed.title": "세션 내보내기 실패",
+  "toast.session.export.failed.description": "세션을 내보내는 동안 오류가 발생했습니다",
+
   "toast.session.listFailed.title": "{{project}}에 대한 세션을 로드하지 못했습니다",
   "toast.update.title": "업데이트 가능",
   "toast.update.description": "OpenCode의 새 버전({{version}})을 설치할 수 있습니다.",
@@ -544,6 +556,7 @@ export const dict = {
   "common.moreOptions": "더 많은 옵션",
   "common.learnMore": "더 알아보기",
   "common.rename": "이름 바꾸기",
+  "common.export": "내보내기",
   "common.reset": "초기화",
   "common.archive": "보관",
   "common.delete": "삭제",

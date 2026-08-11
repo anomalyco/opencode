@@ -33,6 +33,29 @@ function global(payload: GlobalEvent["payload"]): GlobalEvent {
   return { directory: "/tmp/other", project: "proj_test", payload }
 }
 
+test("live messages use creation time with an ID tie-break", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+  const { app, emit, sync } = await mount(undefined, tmp.path)
+  const messages = [
+    { ...assistant, id: "msg_a", time: { created: 30, completed: 31 } },
+    { ...assistant, id: "msg_z", time: { created: 10, completed: 11 } },
+    { ...assistant, id: "msg_m", time: { created: 20, completed: 21 } },
+    { ...assistant, id: "msg_b", time: { created: 20, completed: 21 } },
+  ]
+
+  try {
+    for (const info of messages) {
+      emit(global({ id: `evt_${info.id}`, type: "message.updated", properties: { sessionID, info } }))
+    }
+    await wait(() => sync.data.message[sessionID]?.length === messages.length)
+
+    expect(sync.data.message[sessionID].map((message) => message.id)).toEqual(["msg_z", "msg_b", "msg_m", "msg_a"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("stale session hydration does not overwrite live message parts", async () => {
   await using tmp = await tmpdir()
   await Bun.write(`${tmp.path}/kv.json`, "{}")
