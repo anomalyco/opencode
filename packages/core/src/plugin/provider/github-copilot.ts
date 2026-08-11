@@ -245,6 +245,8 @@ export const GithubCopilotPlugin = define({
         if (evt.model.providerID !== Provider.ID.githubCopilot) return
         if (evt.agent === Agent.ID.make("title"))
           evt.request.headers.set("X-Interaction-Type", "conversation-background")
+        if (evt.agent === Agent.ID.make("compaction"))
+          evt.request.headers.set("X-Interaction-Type", "conversation-compaction")
         const token = evt.request.headers.get("x-api-key")
         if (!token) return
         const text = yield* Effect.promise(() => evt.request.clone().text())

@@ -1,6 +1,7 @@
 export * as SessionCompaction from "./compaction"
 
 import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest, type LanguageModel } from "@opencode-ai/ai"
+import type { StreamOptions } from "@opencode-ai/ai/route"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Document, type Entry } from "@opencode-ai/schema/config"
 import { Context, Effect, Layer, Stream } from "effect"
@@ -11,14 +12,17 @@ import { llmClient } from "../effect/app-node-platform"
 import { SessionEvent } from "./event"
 import type { SessionMessage } from "./message"
 import { SessionModelHeaders } from "./model-headers"
+import { SessionModelHttp } from "./model-http"
 import { SessionPromptCacheKey } from "./prompt-cache-key"
 import { App } from "../app"
 import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
 import { toSessionError } from "./to-session-error"
 import { Token } from "../util/token"
-import type { Info } from "../model"
+import type { Info, Ref } from "../model"
 import { SessionUsage } from "./usage"
+import { PluginHooks } from "../plugin/hooks"
+import { Agent } from "../agent"
 
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 15_000
@@ -66,16 +70,18 @@ type Dependencies = {
   readonly app: App.Info
   readonly bus: Bus.Interface
   readonly llm: {
-    readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, AIError>
+    readonly stream: (request: LLMRequest, options?: StreamOptions) => Stream.Stream<LLMEvent, AIError>
   }
   readonly models: SessionRunnerModel.Interface
   readonly config: Settings
+  readonly hooks: PluginHooks.Interface
 }
 
 export type AutoInput = {
   readonly session: SessionSchema.Info
   readonly messages: readonly SessionMessage.Info[]
   readonly model: LanguageModel
+  readonly ref: Ref
   readonly cost: Info["cost"]
 }
 
@@ -85,9 +91,12 @@ export type ManualInput = {
   readonly inputID: SessionMessage.ID
 }
 
+type RequiredInput = Omit<AutoInput, "ref">
+
 type Plan = {
   readonly session: SessionSchema.Info
   readonly model: LanguageModel
+  readonly ref: Ref
   readonly cost: Info["cost"]
   readonly reason: SessionMessage.Compaction["reason"]
   readonly prompt: string
@@ -100,7 +109,7 @@ export type Outcome =
   | Pick<SessionMessage.CompactionFailed, "status" | "error">
 
 export interface Interface {
-  readonly required: (input: AutoInput) => boolean
+  readonly required: (input: RequiredInput) => boolean
   readonly compact: (input: AutoInput) => Effect.Effect<Outcome>
   readonly compactManual: (input: ManualInput) => Effect.Effect<Outcome>
 }
@@ -265,6 +274,13 @@ const make = (dependencies: Dependencies) => {
           messages: [Message.user(plan.prompt)],
           tools: [],
         }),
+        {
+          http: SessionModelHttp.middleware(dependencies.hooks, {
+            sessionID: plan.session.id,
+            agent: Agent.ID.make("compaction"),
+            model: plan.ref,
+          }),
+        },
       )
       .pipe(
         Stream.runForEach((event) => {
@@ -331,6 +347,7 @@ const make = (dependencies: Dependencies) => {
       return yield* execute({
         session: input.session,
         model: input.model,
+        ref: input.ref,
         cost: input.cost,
         reason: "auto",
         ...content,
@@ -342,7 +359,7 @@ const make = (dependencies: Dependencies) => {
       error,
     })
   })
-  const required = (input: AutoInput) => {
+  const required = (input: RequiredInput) => {
     if (!config.auto) return false
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
@@ -385,6 +402,7 @@ const make = (dependencies: Dependencies) => {
     return yield* execute({
       session: input.session,
       model: resolved.model,
+      ref: resolved.ref,
       cost: resolved.cost,
       reason: "manual",
       inputID: input.inputID,
@@ -406,12 +424,13 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const models = yield* SessionRunnerModel.Service
     const app = yield* App.Metadata
-    return make({ bus, llm, models, config: settings(yield* config.entries()), app })
+    const hooks = yield* PluginHooks.Service
+    return make({ bus, llm, models, config: settings(yield* config.entries()), app, hooks })
   }),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, llmClient, Config.node, SessionRunnerModel.node, App.node],
+  deps: [Bus.node, llmClient, Config.node, SessionRunnerModel.node, App.node, PluginHooks.node],
 })
