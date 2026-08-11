@@ -1,5 +1,5 @@
 import { createMemo, createSignal } from "solid-js"
-import { useConfig } from "../config"
+import { TabPosition, useConfig } from "../config"
 import { useThemes } from "../context/theme"
 import { DialogSelect } from "../ui/dialog-select"
 import { useToast } from "../ui/toast"
@@ -110,12 +110,12 @@ export const settings: Setting[] = [
     labels: ["current directory", "global"],
   },
   {
-    title: "Layout",
+    title: "Position",
     category: "Tabs",
-    path: ["tabs", "layout"],
-    default: "horizontal",
-    values: ["horizontal", "vertical"],
-    keywords: ["sidebar", "orientation", "left"],
+    path: ["tabs", "position"],
+    default: "top",
+    values: TabPosition.literals,
+    keywords: ["sidebar", "orientation", "layout"],
   },
   {
     title: "Layout",

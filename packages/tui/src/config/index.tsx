@@ -44,6 +44,9 @@ export const Cursor = Schema.Struct({
   }),
 }).annotate({ description: "Terminal cursor settings" })
 
+export const TabPosition = Schema.Literals(["top", "bottom", "left", "right"])
+export type TabPosition = Schema.Schema.Type<typeof TabPosition>
+
 export const Info = Schema.Struct({
   theme: Schema.optional(
     Schema.Struct({
@@ -147,8 +150,8 @@ export const Info = Schema.Struct({
       scope: Schema.optional(Schema.Literals(["global", "cwd"])).annotate({
         description: "Share tabs globally or keep a separate set for each working directory",
       }),
-      layout: Schema.optional(Schema.Literals(["horizontal", "vertical"])).annotate({
-        description: "Show tabs in a horizontal strip or vertical sidebar",
+      position: Schema.optional(TabPosition).annotate({
+        description: "Show tabs along the top, bottom, left, or right edge",
       }),
     }),
   ).annotate({ description: "Tab strip settings" }),
@@ -214,7 +217,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   tabs: {
     enabled: boolean
     scope: "global" | "cwd"
-    layout: "horizontal" | "vertical"
+    position: TabPosition
   }
 }
 
@@ -256,7 +259,7 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
       ...input.tabs,
       enabled: input.tabs?.enabled ?? true,
       scope: input.tabs?.scope ?? "cwd",
-      layout: input.tabs?.layout ?? "horizontal",
+      position: input.tabs?.position ?? "top",
     },
   }
 }

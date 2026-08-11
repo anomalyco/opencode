@@ -68,7 +68,7 @@ import { errorMessage } from "../../util/error"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
-import { sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
+import { sessionTabSidebarWidth } from "../../ui/layout"
 import { projectedPromptInput } from "../../prompt/codec"
 import { deduplicateVisibleImages } from "../../prompt/attachment"
 import { useEpilogue } from "../../context/epilogue"
@@ -232,9 +232,7 @@ export function Session() {
   const availableWidth = createMemo(
     () =>
       dimensions().width -
-      (config.tabs?.enabled && config.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width)
-        ? SESSION_SIDEBAR_WIDTH
-        : 0),
+      (config.tabs?.enabled ? sessionTabSidebarWidth(config.tabs.position, dimensions().width) : 0),
   )
   const wide = createMemo(() => availableWidth() > 120)
   const sidebarVisible = createMemo(() => {
