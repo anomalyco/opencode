@@ -1,13 +1,15 @@
 import {
-  BoxRenderable,
   RGBA,
-  TextareaRenderable,
-  MouseEvent,
-  PasteEvent,
   decodePasteBytes,
+  type BoxRenderable,
+  type MouseEvent,
   type KeyEvent,
+  type PasteEvent,
   type Renderable,
+  type TextareaRenderable,
 } from "@opentui/core"
+/* eslint-disable jsx-a11y/no-static-element-interactions */
+/* oxlint-disable jsx-a11y/no-static-element-interactions */
 import type { CommandContext } from "@opentui/keymap"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import { registerOpencodeSpinner } from "../register-spinner"
@@ -34,10 +36,19 @@ import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
+
+// Clickable text uses mouse-UP: the root box treats mouse-up as copy-on-select,
+// and down-then-up across a re-render is what made an earlier attempt flash.
+function ClickText(props: JSX.IntrinsicElements["text"]) {
+  return <text {...props} />
+}
+
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import { parseLoopArgs } from "@opencode-ai/sdk/v2"
+import { DialogLoopList } from "../dialog-loop-list"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
@@ -228,11 +239,118 @@ export function Prompt(props: PromptProps) {
     setDismissedEditorSelectionKey(editorSelectionKey(editorContext()))
     editor.clearSelection()
   }
-  const fileStyleId = syntax().getStyleId("extmark.file")!
-  const agentStyleId = syntax().getStyleId("extmark.agent")!
-  const pasteStyleId = syntax().getStyleId("extmark.paste")!
+  const requireStyleId = (name: string): number => {
+    const styleId = syntax().getStyleId(name)
+    if (styleId === null) {
+      throw new Error(`Missing syntax style id: ${name}`)
+    }
+    return styleId
+  }
+  const fileStyleId = requireStyleId("extmark.file")
+  const agentStyleId = requireStyleId("extmark.agent")
+  const pasteStyleId = requireStyleId("extmark.paste")
   let promptPartTypeId = 0
   const event = useEvent()
+
+  // Track a loop running/paused in THIS session so the UI can show it and the
+  // interrupt/submit paths can stop it (a loop re-prompts the session, so it
+  // must be cancelled to hand control back to the user).
+  const [activeLoop, setActiveLoop] = createSignal<
+    | {
+        id: string
+        status: string
+        iteration: number
+        maxIterations: number
+        currentChange?: string
+        currentGate?: string
+      }
+    | undefined
+  >()
+function matchesVerb(input: string, verb: string): boolean {
+  return input === verb || input.startsWith(`${verb} `) || input.startsWith(`${verb}\n`)
+}
+
+/**
+ * `/loop` and `/queue` are intercepted before server prompt-templates so they
+ * can take arguments. Matching is exact-verb-then-boundary so a genuine message
+ * like "/loopback is broken" is still sent to the model.
+ */
+function isLoopCommand(input: string): boolean {
+  return matchesVerb(input, "/loop") || matchesVerb(input, "/auto") || matchesVerb(input, "/queue")
+}
+
+/**
+ * `/nudge <text>` corrects a running loop without stopping it.
+ *
+ * Deliberately NOT merged with `/btw`, which is the other "type something that
+ * does not blow up the run" verb. The test that separates them is whether what
+ * you typed leaves a trace: `/btw` asks a question, is answered from context,
+ * and never joins the conversation — that is its whole value. A correction has
+ * to persist, or the next iteration forgets it.
+ *
+ * One verb doing both would make that property flip invisibly depending on what
+ * is running, and typing "what was that file called?" would inject it into the
+ * run's standing instructions.
+ */
+function isNudgeCommand(input: string): boolean {
+  return matchesVerb(input, "/nudge")
+}
+
+/**
+ * Inputs that must NOT cancel a running loop: the run-management verbs, `/btw`,
+ * whose whole purpose is asking something without disturbing the work in
+ * progress, and `/nudge`, which exists precisely so a correction does not cost
+ * you the run.
+ */
+function isRunControlInput(input: string): boolean {
+  return isLoopCommand(input) || matchesVerb(input, "/btw") || isNudgeCommand(input)
+}
+
+  const isLoopLive = (status: string) => status === "running" || status === "paused"
+  const refreshActiveLoop = async () => {
+    if (!props.sessionID) {
+      setActiveLoop(undefined)
+      return
+    }
+    const result = await sdk.client.loop.list().catch(() => undefined)
+    const live = (result?.data ?? [])
+      .filter((loop) => loop.sessionID === props.sessionID && isLoopLive(loop.status))
+      .sort((a, b) => b.startedAt - a.startedAt)[0]
+    setActiveLoop(
+      live
+        ? {
+            id: live.id,
+            status: live.status,
+            iteration: live.iteration,
+            maxIterations: live.maxIterations,
+            currentChange: live.currentChange,
+            currentGate: live.currentGate,
+          }
+        : undefined,
+    )
+  }
+  createEffect(
+    on(
+      () => props.sessionID,
+      () => void refreshActiveLoop(),
+    ),
+  )
+  event.on("loop.updated", (evt) => {
+    const loop = evt.properties.loop
+    if (loop.sessionID !== props.sessionID) return
+    setActiveLoop(
+      isLoopLive(loop.status)
+        ? {
+            id: loop.id,
+            status: loop.status,
+            iteration: loop.iteration,
+            maxIterations: loop.maxIterations,
+            currentChange: loop.currentChange,
+            currentGate: loop.currentGate,
+          }
+        : undefined,
+    )
+  })
 
   event.on("tui.prompt.append", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
@@ -272,11 +390,9 @@ export function Prompt(props: PromptProps) {
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     if (tokens <= 0) return
 
-    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = session?.cost ?? 0
     return {
-      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
+      context: Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
     }
   })
@@ -394,7 +510,9 @@ export function Prompt(props: PromptProps) {
         name: "session.interrupt",
         category: "Session",
         hidden: true,
-        enabled: status().type !== "idle",
+        // Also enabled while a loop is live but the session is momentarily
+        // idle between iterations — otherwise escape can't reach the loop.
+        enabled: status().type !== "idle" || activeLoop() !== undefined,
         run: () => {
           if (auto()?.visible) return
           if (!input.focused) return
@@ -404,6 +522,21 @@ export function Prompt(props: PromptProps) {
             return
           }
           if (!props.sessionID) return
+
+          // A loop keeps re-prompting the session, so aborting the current
+          // turn alone can never stop it — cancel the loop on the first
+          // escape (it also aborts the in-flight iteration server-side).
+          const loop = activeLoop()
+          if (loop) {
+            void sdk.client.loop.cancel({ loopID: loop.id }).then(() => {
+              toast.show({ variant: "success", message: "Loop stopped" })
+            })
+            setActiveLoop(undefined)
+            void sdk.client.session.abort({ sessionID: props.sessionID })
+            setStore("interrupt", 0)
+            dialog.clear()
+            return
+          }
 
           setStore("interrupt", store.interrupt + 1)
 
@@ -616,7 +749,7 @@ export function Prompt(props: PromptProps) {
     const saved = stashed
     stashed = undefined
     if (store.prompt.input) return
-    if (saved && saved.prompt.input) {
+    if (saved?.prompt.input) {
       input.setText(saved.prompt.input)
       setStore("prompt", saved.prompt)
       restoreExtmarksFromParts(saved.prompt.parts)
@@ -965,6 +1098,20 @@ export function Prompt(props: PromptProps) {
       void exit()
       return true
     }
+    // Sending a message while a loop drives this session would race the loop's
+    // own iteration prompts, so a real message stops the loop first and takes
+    // over. Not everything typed is a real message though: `/btw` is a side
+    // question that runs no tools and never joins the conversation, and
+    // `/loop` / `/queue` manage runs rather than compete with them. Cancelling
+    // an hours-long backlog run because someone asked "what was that file
+    // called?" is the opposite of what those commands are for.
+    if (activeLoop() && !isRunControlInput(trimmed)) {
+      const loop = activeLoop()!
+      await sdk.client.loop.cancel({ loopID: loop.id }).catch(() => undefined)
+      await sdk.client.session.abort({ sessionID: props.sessionID! }).catch(() => undefined)
+      setActiveLoop(undefined)
+      toast.show({ variant: "success", message: "Loop stopped — sending your message" })
+    }
     const selectedModel = local.model.current()
     if (!selectedModel) {
       void promptModelWarning()
@@ -1068,6 +1215,96 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (isNudgeCommand(inputText)) {
+      const text = inputText.slice(inputText.indexOf("/nudge") + "/nudge".length).trim()
+      const loop = activeLoop()
+      if (!text) {
+        toast.show({ variant: "error", message: "/nudge needs something to say — e.g. /nudge leave the CLI alone" })
+      } else if (!loop) {
+        // Never fall back to sending it as a normal message: that would cancel
+        // the very run the correction was meant to preserve.
+        toast.show({ variant: "error", message: "No running loop in this session to steer" })
+      } else {
+        move.startSubmit()
+        sdk.client.loop
+          .nudge({ loopID: loop.id, text })
+          .then((result) => {
+            if (result.error || !result.data) {
+              toast.show({ title: "Nudge not delivered", message: errorMessage(result.error), variant: "error" })
+              return
+            }
+            toast.show({ variant: "success", message: "Noted — applies from the next iteration" })
+          })
+          .catch((err) => toast.show({ title: "Nudge failed", message: String(err), variant: "error" }))
+        store.prompt.input = ""
+      }
+      setStore("mode", "normal")
+    } else if (isLoopCommand(inputText)) {
+      // /loop and /queue are imperative TUI commands (start a background run),
+      // not server prompt-template commands, so they don't go through
+      // session.command — they parse their own argument string and either
+      // start a run directly or open the management dialog.
+      //
+      // /queue is its own verb rather than a flag on /loop: the two do
+      // different things (repeat a prompt vs work the openspec backlog), and
+      // hiding one behind a parameter of the other reads as an afterthought.
+      // `/loop --queue` still works so nothing that already exists breaks.
+      const firstLineEnd = inputText.indexOf("\n")
+      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
+      const verb = firstLine.startsWith("/auto")
+        ? "/auto"
+        : firstLine.startsWith("/queue")
+          ? "/queue"
+          : "/loop"
+      const rest = firstLine.slice(verb.length).trim()
+      try {
+        const parsedArgs = parseLoopArgs(rest)
+        // `/auto …` (and its `/queue` alias) means "find the planned work
+        // yourself" even without the flag.
+        const parsed = verb === "/loop" ? parsedArgs : { ...parsedArgs, queue: true }
+        if (!parsed.prompt && !parsed.queue) {
+          dialog.replace(() => <DialogLoopList />)
+        } else {
+          move.startSubmit()
+          sdk.client.loop
+            .create({
+              prompt: parsed.queue ? "" : parsed.prompt,
+              // Runs in the session you are looking at, including /auto: work
+              // you cannot see is work you cannot supervise.
+              sessionID: props.sessionID,
+              interval: parsed.interval,
+              maxIterations: parsed.max,
+              noProgressLimit: parsed.noProgressLimit,
+              completionToken: parsed.completionToken,
+              mode: parsed.queue ? "queue" : undefined,
+              queue: parsed.queue && parsed.prompt ? parsed.prompt.split(/\s+/) : undefined,
+              queueSync: parsed.queue && parsed.sync ? true : undefined,
+              queuePush: parsed.queue && !parsed.push ? false : undefined,
+              queueGuidance: parsed.queue ? parsed.guidance : undefined,
+              queueOptions:
+                parsed.queue && (parsed.gateCwd || parsed.testCommand || parsed.verifyCommand)
+                  ? { cwd: parsed.gateCwd, testCommand: parsed.testCommand, verifyCommand: parsed.verifyCommand }
+                  : undefined,
+            })
+            .then((result) => {
+              if (result.error || !result.data) {
+                toast.show({ title: "Failed to start loop", message: errorMessage(result.error), variant: "error" })
+                return
+              }
+              toast.show({
+                variant: "success",
+                message: parsed.queue
+                  ? `Auto started (${result.data.id}) — works planned tasks until none are left, pushing each completed branch${parsed.push ? "" : " (push disabled)"}`
+                  : `Loop ${result.data.id} started (max ${result.data.maxIterations} iterations, stops on ${result.data.completionToken})`,
+              })
+            })
+            .catch((error) => {
+              toast.show({ title: "Failed to start loop", message: errorMessage(error), variant: "error" })
+            })
+        }
+      } catch (error) {
+        toast.show({ title: `Invalid ${verb} arguments`, message: errorMessage(error), variant: "error" })
+      }
     } else if (
       inputText.startsWith("/") &&
       sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
@@ -1453,6 +1690,26 @@ export function Prompt(props: PromptProps) {
                         <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
                       </Show>
                       <Show when={store.mode === "normal"}>
+                        <Show when={activeLoop()}>
+                          {(live) => (
+                            // No mode name here any more: there is nothing to
+                            // set. `/loop` and `/auto` are verbs, so the only
+                            // honest thing to show is what is running, and
+                            // nothing at all when nothing is.
+                            // ClickText is the file's existing clickable-text
+                            // idiom (mouse-up, as the retry link uses) rather
+                            // than a hand-rolled handler — the hand-rolled one
+                            // fought the root box's copy-on-select.
+                            <ClickText
+                              fg={fadeColor(theme.success, modelMetaAlpha())}
+                              onMouseUp={() => dialog.replace(() => <DialogLoopList />)}
+                            >
+                              {live().currentChange
+                                ? `● auto ${live().currentChange} [${live().currentGate ?? "?"}] ${live().iteration}/${live().maxIterations}`
+                                : `● loop ${live().iteration}/${live().maxIterations}`}
+                            </ClickText>
+                          )}
+                        </Show>
                         <box flexDirection="row" gap={1}>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
                           <text
@@ -1576,9 +1833,13 @@ export function Prompt(props: PromptProps) {
 
                       return (
                         <Show when={retry()}>
-                          <box onMouseUp={handleMessageClick}>
-                            <text fg={theme.error}>{retryText()}</text>
-                          </box>
+                          {(() => {
+                            return (
+                              <ClickText fg={theme.error} onMouseUp={handleMessageClick}>
+                                {retryText()}
+                              </ClickText>
+                            )
+                          })()}
                         </Show>
                       )
                     })()}
@@ -1654,6 +1915,15 @@ export function Prompt(props: PromptProps) {
           </Switch>
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">
+              <Show when={activeLoop()}>
+                {(loop) => (
+                  <text fg={theme.accent} wrapMode="none">
+                    ⟳ loop {loop().iteration}/{loop().maxIterations}
+                    {loop().status === "paused" ? " (paused)" : ""}
+                    <span style={{ fg: theme.textMuted }}> · esc to stop</span>
+                  </text>
+                )}
+              </Show>
               <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
                 {(file) => (
                   <text fg={editorContextLabelState() === "pending" ? theme.secondary : theme.textMuted}>{file()}</text>

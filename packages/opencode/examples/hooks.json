@@ -1,0 +1,39 @@
+{
+  "hooks": {
+    "ai-enhanced": {
+      "type": "cli",
+      "command": "opencode run --cli",
+      "instructionFile": "~/.opencode/hook-instructions.txt",
+      "fallback": "continue",
+      "timeout": 15000,
+      "maxRetries": 2,
+      "retryDelay": 1000,
+      "env": {
+        "OPENCODE_AUTO_REPLY": "1"
+      }
+    },
+    "simple-fallback": {
+      "type": "cli", 
+      "command": "echo 'continue'",
+      "fallback": "go on",
+      "timeout": 5000
+    },
+    "external-api": {
+      "type": "http",
+      "url": "https://api.example.com/autoreply",
+      "fallback": "proceed",
+      "timeout": 10000,
+      "maxRetries": 3,
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer YOUR_API_KEY_HERE"
+      }
+    },
+    "local-script": {
+      "type": "file",
+      "command": "/path/to/custom-responder.sh",
+      "fallback": "carry on",
+      "timeout": 8000
+    }
+  }
+}

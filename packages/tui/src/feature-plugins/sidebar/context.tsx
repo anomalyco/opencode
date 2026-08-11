@@ -1,14 +1,143 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
-import { createMemo } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
+import { DialogModelCtx } from "../../component/dialog-model-ctx"
+import { DialogTuning } from "../../component/dialog-tuning"
+import { createClient, createConfig } from "../../local/llama-skein/gen/client"
+import { LlamaSkeinClient } from "../../local/llama-skein/gen/sdk.gen"
+import type { ResourceSnapshot, TuningStatus } from "../../local/llama-skein/gen/types.gen"
+import { TextAttributes } from "@opentui/core"
 
 const id = "internal:sidebar-context"
 
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-})
+const BAR_WIDTH = 20
+
+function fmtCtxK(n: number): string {
+  if (n >= 1024 && n % 1024 === 0) return `${n / 1024}k`
+  if (n >= 1000) return `${Math.round(n / 1024)}k`
+  return `${n}`
+}
+
+function fmtTokensPerSecond(n: number): string {
+  return n >= 10 ? Math.round(n).toLocaleString() : n.toFixed(1)
+}
+
+function fmtGB(mb: number): string {
+  return (mb / 1024).toFixed(1)
+}
+
+const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+
+type MemSnapshot = {
+  usedMb: number
+  totalMb: number
+  freeMb: number
+  label: string
+  modelMb: number
+  kvEstMb: number
+}
+
+type Seg = { chars: number; color: string; filled: boolean }
+
+// Account balance for pay-as-you-go cloud providers (fork: see provider/balance.ts).
+type ProviderBalance = { remaining?: number; limit?: number; used?: number; currency?: string }
+
+function extractMem(hw: ResourceSnapshot): MemSnapshot | null {
+  const modelMb = hw.loaded_model?.model_mb ?? 0
+  const kvEstMb = hw.loaded_model?.kv_estimate_mb ?? 0
+  if (hw.vram?.total_mb && hw.vram.total_mb > 100) {
+    return { usedMb: hw.vram.used_mb ?? 0, freeMb: hw.vram.free_mb ?? 0, totalMb: hw.vram.total_mb, label: "VRAM", modelMb, kvEstMb }
+  }
+  if (hw.memory?.total_mb) {
+    return {
+      usedMb: hw.memory.used_mb ?? 0,
+      freeMb: hw.memory.free_mb ?? 0,
+      totalMb: hw.memory.total_mb,
+      label: hw.memory.type === "unified" ? "Unified" : "RAM",
+      modelMb,
+      kvEstMb,
+    }
+  }
+  return null
+}
+
+function normalizeBaseURL(url: string): string {
+  return url.replace(/\/+$/, "").replace(/\/v1$/, "")
+}
+
+function Bar(props: { segs: Seg[]; percent?: number | null; theme: any; onClick?: () => void }) {
+  const t = props.theme
+  return (
+    <text onMouseUp={props.onClick}>
+      <For each={props.segs}>
+        {(s) => <span style={{ fg: s.color }}>{(s.filled ? "▓" : "░").repeat(Math.max(0, s.chars))}</span>}
+      </For>
+      <Show when={props.percent != null}>
+        {"  "}<span style={{ fg: t.textMuted }}>{props.percent}%</span>
+      </Show>
+    </text>
+  )
+}
+
+function emptySegs(t: any): Seg[] {
+  return [{ chars: BAR_WIDTH, color: t.textMuted, filled: false }]
+}
+
+function tokenSegs(percent: number, t: any): Seg[] {
+  const used = Math.max(1, Math.min(BAR_WIDTH, Math.round((percent / 100) * BAR_WIDTH)))
+  return [
+    { chars: used, color: t.accent, filled: true },
+    { chars: BAR_WIDTH - used, color: t.textMuted, filled: false },
+  ]
+}
+
+function vramSegs(m: MemSnapshot, tokenPercent: number | null, t: any): Seg[] {
+  const total = m.totalMb || 1
+  if (m.modelMb > 0) {
+    const modelChars = Math.max(1, Math.round((m.modelMb / total) * BAR_WIDTH))
+    const remaining = BAR_WIDTH - modelChars
+    const ctxTotalChars = Math.max(0, Math.min(remaining, Math.round((m.kvEstMb / total) * BAR_WIDTH)))
+    const freeChars = Math.max(0, remaining - ctxTotalChars)
+    if (tokenPercent !== null && ctxTotalChars > 0) {
+      const ctxActiveChars = Math.max(0, Math.min(ctxTotalChars, Math.round((tokenPercent / 100) * ctxTotalChars)))
+      const ctxHeadroomChars = ctxTotalChars - ctxActiveChars
+      return [
+        { chars: modelChars, color: t.warning, filled: true },
+        { chars: ctxActiveChars, color: t.accent, filled: true },
+        { chars: ctxHeadroomChars, color: t.accent, filled: false },
+        { chars: freeChars, color: t.textMuted, filled: false },
+      ]
+    }
+    return [
+      { chars: modelChars, color: t.warning, filled: true },
+      { chars: ctxTotalChars, color: t.accent, filled: true },
+      { chars: freeChars, color: t.textMuted, filled: false },
+    ]
+  }
+  const usedChars = Math.max(1, Math.min(BAR_WIDTH, Math.round((m.usedMb / total) * BAR_WIDTH)))
+  return [
+    { chars: usedChars, color: t.warning, filled: true },
+    { chars: BAR_WIDTH - usedChars, color: t.textMuted, filled: false },
+  ]
+}
+
+function MemBreakdown(props: { mem: MemSnapshot; theme: any }) {
+  const m = props.mem
+  const t = props.theme
+  const total = `${fmtGB(m.totalMb)} GB`
+  if (m.modelMb > 0) {
+    return (
+      <text fg={t.textMuted}>
+        <span style={{ fg: t.warning }}>mod</span>{" "}{fmtGB(m.modelMb)}
+        {" + "}
+        <span style={{ fg: t.accent }}>ctx</span>{" "}{fmtGB(m.kvEstMb)}
+        {" / "}{total}
+      </text>
+    )
+  }
+  return <text fg={t.textMuted}>{fmtGB(m.usedMb)} / {total}</text>
+}
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
@@ -16,32 +145,204 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const session = createMemo(() => props.api.state.session.get(props.session_id))
   const cost = createMemo(() => session()?.cost ?? 0)
 
+  const [mem, setMem] = createSignal<MemSnapshot | null>(null)
+  const [balance, setBalance] = createSignal<ProviderBalance | null>(null)
+  const [tuning, setTuning] = createSignal<TuningStatus | null>(null)
+
   const state = createMemo(() => {
     const last = msg().findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
-    if (!last) {
-      return {
-        tokens: 0,
-        percent: null,
-      }
-    }
-
-    const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    const model = props.api.state.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    const tokens = last
+      ? last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+      : 0
+    const sessionModel = session()?.model
+    const providerID = sessionModel?.providerID ?? last?.providerID
+    const modelID = sessionModel?.id ?? last?.modelID
+    const provider = providerID ? props.api.state.provider.find((item) => item.id === providerID) : undefined
+    const model = provider && modelID ? provider.models[modelID] : undefined
+    // Show the enforced hard context ceiling (configured_ctx / --ctx-size),
+    // not the safe trim budget or a models.dev catalog native — the latter
+    // displayed "467k" while the backend rejected prompts at 3072. contextMax
+    // is the wall the request actually hits; fall back to context (the safe
+    // budget) for providers that don't report a distinct hard ceiling (cloud).
+    const ctx = model?.limit.contextMax ?? model?.limit.context ?? 0
+    const seconds = last?.time.completed ? Math.max(0, (last.time.completed - last.time.created) / 1000) : 0
+    const tokensPerSecond = last && seconds > 0 && last.tokens.output > 0 ? last.tokens.output / seconds : null
+    const isLocal = Boolean(provider?.options?.["baseURL"])
+    const baseURL = (provider?.options?.["baseURL"]) as string | undefined
     return {
       tokens,
-      percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
+      percent: ctx > 0 && tokens > 0 ? Math.round((tokens / ctx) * 100) : null,
+      ctxWindow: ctx > 0 ? fmtCtxK(ctx) : null,
+      tokensPerSecond,
+      isLocal,
+      providerID: providerID ?? null,
+      modelID: modelID ?? null,
+      baseURL: baseURL ?? null,
     }
   })
 
+  // String-equality memo: state() is a fresh object per message update, so
+  // keying the effect on it directly would restart the poll every stream tick.
+  const hardwareBaseURL = createMemo(() => state().baseURL)
+
+  createEffect(on(
+    hardwareBaseURL,
+    (url) => {
+      // The last committed sample belongs to the previous provider — drop it
+      // before polling the new one, or its totals render against the new host
+      // (and stick forever if the new backend lacks /api/hardware).
+      setMem(null)
+      setTuning(null)
+      if (!url) return
+      const llamaClient = new LlamaSkeinClient({
+        client: createClient(createConfig({ baseUrl: normalizeBaseURL(url) })),
+      })
+      // A sample may only render for the provider it was requested from: on
+      // provider switch, a slow in-flight response from the old baseURL must
+      // not overwrite the new provider's reading (fork: stale-sample fix).
+      let cancelled = false
+      const aborter = new AbortController()
+      const poll = async () => {
+        try {
+          const res = await llamaClient.getHardware({ signal: aborter.signal })
+          if (!cancelled && res.data) setMem(extractMem(res.data))
+        } catch { /* backend may not support /api/hardware */ }
+        // Fold the tuning read into the same poll — no separate loop, reusing
+        // the cancelled/abort guard so a provider switch can't write stale data.
+        try {
+          const res = await llamaClient.getTuning({ signal: aborter.signal })
+          if (!cancelled) setTuning(res.data ?? null)
+        } catch {
+          if (!cancelled) setTuning(null) /* older/non-llama-skein backend */
+        }
+      }
+      poll()
+      const pollId = setInterval(poll, 30_000)
+      onCleanup(() => {
+        cancelled = true
+        aborter.abort()
+        clearInterval(pollId)
+      })
+    },
+  ))
+
+  // fork: poll remaining credits for pay-as-you-go cloud providers. Server-side
+  // probe registry decides support per provider (provider/balance.ts); local
+  // providers and providers without a probe simply return nothing.
+  const balanceProviderID = createMemo(() => (state().isLocal ? null : state().providerID))
+
+  createEffect(on(
+    balanceProviderID,
+    (providerID) => {
+      setBalance(null)
+      if (!providerID) return
+      const poll = async () => {
+        try {
+          const res = await props.api.client.provider.balance({ providerID })
+          const d = res.data
+          setBalance(
+            d
+              ? {
+                  remaining: typeof d.remaining === "number" ? d.remaining : undefined,
+                  limit: typeof d.limit === "number" ? d.limit : undefined,
+                  used: typeof d.used === "number" ? d.used : undefined,
+                  currency: typeof d.currency === "string" ? d.currency : undefined,
+                }
+              : null,
+          )
+        } catch {
+          setBalance(null)
+        }
+      }
+      poll()
+      const pollId = setInterval(poll, 60_000)
+      onCleanup(() => clearInterval(pollId))
+    },
+  ))
+
+  function openCtxDialog() {
+    const { providerID, modelID } = state()
+    if (!providerID || !modelID) return
+    props.api.ui.dialog.replace(() => <DialogModelCtx providerID={providerID} modelID={modelID} />)
+  }
+
+  function openTuningDialog() {
+    const { providerID } = state()
+    if (!providerID) return
+    props.api.ui.dialog.replace(() => <DialogTuning providerID={providerID} />)
+  }
+
+  const canOpenDialog = () => state().isLocal && Boolean(state().ctxWindow)
+  const clickProps = () => canOpenDialog() ? { onMouseUp: openCtxDialog } : {}
+
   return (
     <box>
-      <text fg={theme().text}>
-        <b>Context</b>
-      </text>
-      <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
-      <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
-      <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      {/* ── Context ── */}
+      <text fg={theme().text} attributes={TextAttributes.BOLD} {...clickProps()}>Context</text>
+      <Bar
+        segs={state().percent !== null ? tokenSegs(state().percent!, theme()) : emptySegs(theme())}
+        percent={state().percent}
+        theme={theme()}
+        onClick={canOpenDialog() ? openCtxDialog : undefined}
+      />
+      <Show when={state().percent !== null}>
+        <text fg={theme().textMuted} {...clickProps()}>
+          {state().tokens.toLocaleString()}
+          {" / "}
+          <span style={{ fg: canOpenDialog() ? theme().accent : theme().textMuted }}>
+            {state().ctxWindow}
+          </span>
+        </text>
+      </Show>
+
+      {/* ── VRAM (local) or Cost (cloud) ── */}
+      <Show
+        when={state().isLocal}
+        fallback={
+          <>
+            <text fg={theme().text} attributes={TextAttributes.BOLD}>Cost</text>
+            <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+            <Show when={balance()?.remaining != null}>
+              <text fg={theme().textMuted}>{money.format(balance()!.remaining!)} left</text>
+            </Show>
+          </>
+        }
+      >
+        <Show when={mem()}>
+          {(m) => (
+            <>
+              <text fg={theme().text} attributes={TextAttributes.BOLD}>{m().label}</text>
+              <Bar
+                segs={vramSegs(m(), state().percent, theme())}
+                percent={Math.round(((m().modelMb > 0 ? m().modelMb + m().kvEstMb : m().usedMb) / (m().totalMb || 1)) * 100)}
+                theme={theme()}
+              />
+              <MemBreakdown mem={m()} theme={theme()} />
+            </>
+          )}
+        </Show>
+      </Show>
+
+      {/* ── GPU tuning badge (local llama-skein only) ── */}
+      <Show when={state().isLocal && tuning()?.detected_gfx}>
+        {(gfx) => {
+          const t = () => tuning()!
+          const verified = () => t().profile?.verified === true && t().enabled
+          return (
+            <text onMouseUp={openTuningDialog} fg={verified() ? theme().accent : theme().textMuted}>
+              {gfx()}{" "}
+              <span style={{ fg: theme().textMuted }}>
+                {!t().enabled ? "· tuning off" : verified() ? "✓ tuned" : "· default"}
+              </span>
+            </text>
+          )
+        }}
+      </Show>
+
+      {/* ── Speed ── */}
+      <Show when={state().tokensPerSecond !== null}>
+        <text fg={theme().textMuted}>{fmtTokensPerSecond(state().tokensPerSecond!)} t/s</text>
+      </Show>
     </box>
   )
 }

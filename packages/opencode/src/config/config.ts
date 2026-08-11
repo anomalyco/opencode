@@ -18,7 +18,7 @@ import { isRecord } from "@/util/record"
 import type { ConsoleState } from "@opencode-ai/core/v1/config/console-state"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
-import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
+import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Ref, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
@@ -108,7 +108,7 @@ async function resolveLoadedPlugins<T extends { plugin?: ConfigPluginV1.Spec[] }
   return config
 }
 
-type Info = ConfigV1.Info & {
+export type Info = ConfigV1.Info & {
   // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
   // with the file and scope it came from so later runtime code can make location-sensitive decisions.
   plugin_origins?: ConfigPlugin.Origin[]
@@ -126,7 +126,10 @@ export interface Interface {
   readonly getGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
-  readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
+  readonly updateGlobal: (
+    config: Info,
+    options?: { replace?: readonly string[] },
+  ) => Effect.Effect<{ info: Info; changed: boolean }>
   readonly invalidate: () => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
@@ -135,6 +138,14 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
 
 export const use = serviceUse(Service)
+
+/**
+ * Settings that can be written while the app is running, and so must take
+ * effect without waiting for the instance to reload. Keep this to simple
+ * scalars: see the overlay comment on `get()` for why structural keys must not
+ * be listed here.
+ */
+const RUNTIME_OVERLAY_KEYS = ["auto_mode"] as const
 
 function globalConfigFile() {
   const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
@@ -158,6 +169,18 @@ function patchJsonc(input: string, patch: unknown, path: string[] = []): string 
   }
 
   return Object.entries(patch).reduce((result, [key, value]) => patchJsonc(result, value, [...path, key]), input)
+}
+
+// Wholesale value replacement at a jsonc path — unlike patchJsonc, which recurses
+// into records and therefore can only set keys, never remove them.
+function setJsonc(input: string, path: string[], value: unknown): string {
+  const edits = modify(input, path, value, {
+    formattingOptions: {
+      insertSpaces: true,
+      tabSize: 2,
+    },
+  })
+  return applyEdits(input, edits)
 }
 
 function writable(info: Info) {
@@ -603,8 +626,25 @@ const layer = Layer.effect(
       }),
     )
 
+    // `get()` answers from a per-instance snapshot built by loadInstanceState,
+    // which resolves plugins through npm — far too expensive to rebuild every
+    // time a single setting is written. But without SOMETHING, a value written
+    // at runtime never reaches `get()`: it lands on disk and in `getGlobal()`
+    // while every reader keeps seeing the old one, so a toggle silently does
+    // nothing until the instance happens to reload.
+    //
+    // The overlay closes that gap for exactly the keys that are written at
+    // runtime. It is an allowlist rather than "whatever was written" on
+    // purpose: overlaying a structural key like `provider` would shadow the
+    // per-project merging that loadInstanceState did, which is a much subtler
+    // bug than the one being fixed.
+    const overlay = yield* Ref.make<Partial<Info>>({})
+
     const get = Effect.fn("Config.get")(function* () {
-      return yield* InstanceState.use(state, (s) => s.config)
+      const base = yield* InstanceState.use(state, (s) => s.config)
+      const patch = yield* Ref.get(overlay)
+      for (const _ in patch) return { ...base, ...patch }
+      return base
     })
 
     const directories = Effect.fn("Config.directories")(function* () {
@@ -634,28 +674,48 @@ const layer = Layer.effect(
       yield* invalidateGlobal
     })
 
-    const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
+    const updateGlobal = Effect.fn("Config.updateGlobal")(function* (
+      config: Info,
+      options?: { replace?: readonly string[] },
+    ) {
       const file = globalConfigFile()
       const before = (yield* readConfigFile(file)) ?? "{}"
       const patch = writableGlobal(config)
+      // Keys the caller owns wholesale. mergeDeep can only add/override keys, never
+      // remove them, so read-modify-write callers (provider sync, local
+      // connect/disconnect) pass the full map and have it replace the on-disk value.
+      const replaceKeys = (options?.replace ?? []).filter((key) => key in patch)
 
       let next: Info
       let changed: boolean
       if (!file.endsWith(".jsonc")) {
         const existing = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(before, file), file)
-        const merged = mergeDeep(writable(existing), patch)
+        const merged = mergeDeep(writable(existing), patch) as Record<string, unknown>
+        for (const key of replaceKeys) merged[key] = (patch as Record<string, unknown>)[key]
         const serialized = JSON.stringify(merged, null, 2)
         changed = serialized !== before
         if (changed) yield* fs.writeFileString(file, serialized).pipe(Effect.orDie)
-        next = merged
+        next = merged as Info
       } else {
-        const updated = patchJsonc(before, patch)
+        const mergePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => !replaceKeys.includes(key)))
+        let updated = patchJsonc(before, mergePatch)
+        for (const key of replaceKeys) updated = setJsonc(updated, [key], (patch as Record<string, unknown>)[key])
         next = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(updated, file), file)
         changed = updated !== before
         if (changed) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
       }
 
-      if (changed) yield* invalidate()
+      if (changed) {
+        yield* invalidate()
+        const runtime: Partial<Info> = {}
+        for (const key of RUNTIME_OVERLAY_KEYS) {
+          if (key in patch) (runtime as Record<string, unknown>)[key] = (patch as Record<string, unknown>)[key]
+        }
+        for (const _ in runtime) {
+          yield* Ref.update(overlay, (current) => ({ ...current, ...runtime }))
+          break
+        }
+      }
       return { info: next, changed }
     })
 

@@ -60,6 +60,10 @@ export interface DialogSelectOption<T = any> {
   description?: string
   details?: string[]
   footer?: JSX.Element | string
+  // Shown alongside (never instead of) the footer once a flattened list is
+  // filtered — e.g. a provider name — so a flattened row's group is still
+  // legible without displacing footer content like a model's size.
+  provenance?: string
   titleWidth?: number
   truncateTitle?: boolean | "left"
   category?: string
@@ -75,6 +79,18 @@ export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
   moveTo(value: T): void
+}
+
+// A flattened, filtered list used to show `category` in place of `footer` —
+// so typing a filter silently replaced a model's GB size with its provider
+// name. Show both: provenance can only combine with a string footer (a JSX
+// footer falls back to the previous behavior, since the two can't concatenate).
+export function flattenedFooter(option: DialogSelectOption): JSX.Element | string | undefined {
+  const provenance = option.provenance ?? option.category
+  if (!provenance) return option.footer
+  if (option.footer === undefined) return provenance
+  if (typeof option.footer !== "string") return option.footer
+  return `${option.footer} · ${provenance}`
 }
 
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
@@ -685,7 +701,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                             <Option
                               title={option.title}
                               titleView={option.titleView}
-                              footer={flatten() ? (option.category ?? option.footer) : option.footer}
+                              footer={flatten() ? flattenedFooter(option) : option.footer}
                               titleWidth={option.titleWidth}
                               truncateTitle={option.truncateTitle}
                               description={option.description !== category ? option.description : undefined}

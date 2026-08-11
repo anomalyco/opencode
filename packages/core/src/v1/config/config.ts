@@ -53,6 +53,20 @@ export const Info = Schema.Struct({
     description:
       "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
   }),
+  auto_mode: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Enable or disable auto-approving tool permission prompts. When true, all tool permission prompts are automatically approved for the session. Independent of 'auto_continue'; the TUI's 'Toggle auto mode' command enables both together as a convenience. Defaults to false.",
+  }),
+  auto_continue: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "@deprecated No longer read. Continuing after a turn is what the /loop command does, so it is a verb rather " +
+      "than a setting; the key is still accepted so existing config files keep loading.",
+  }),
+  auto_queue: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "@deprecated No longer read. Working the planned backlog is what the /auto command does; the key is still " +
+      "accepted so config files written while it existed keep loading.",
+  }),
   plugin: Schema.optional(Schema.mutable(Schema.Array(ConfigPluginV1.Spec))),
   share: Schema.optional(Schema.Literals(["manual", "auto", "disabled"])).annotate({
     description:
@@ -113,6 +127,11 @@ export const Info = Schema.Struct({
   mcp: Schema.optional(
     Schema.Record(Schema.String, Schema.Union([ConfigMCPV1.Info, Schema.Struct({ enabled: Schema.Boolean })])),
   ).annotate({ description: "MCP (Model Context Protocol) server configurations" }),
+  mcpToolProfiles: Schema.optional(Schema.Record(Schema.String, Schema.mutable(Schema.Array(Schema.String)))).annotate({
+    description:
+      "Named tool allowlists (profile name -> list of tool names) for MCP servers. Referenced by a server's " +
+      "`mcp.<name>.toolProfile` field; a server with no toolProfile set exposes all of its tools unfiltered.",
+  }),
   formatter: Schema.optional(ConfigFormatterV1.Info).annotate({
     description:
       "Enable or configure formatters. Omit or set to false to disable, true to enable built-ins, or an object to enable built-ins with overrides.",
@@ -181,6 +200,44 @@ export const Info = Schema.Struct({
       }),
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
+      }),
+      mcp_protocol_mode: Schema.optional(ConfigMCPV1.ProtocolMode).annotate({
+        description: "Default protocolMode for MCP servers that don't set their own. Falls back to 'auto' if unset.",
+      }),
+      local_subagent_placement: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "When the parent session runs on a local llama-skein provider, place subagents on an idle peer provider instead of queueing behind the parent (default: true)",
+      }),
+      local_subagent_placement_models: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+        description:
+          "Model IDs trusted for local subagent placement (the parent's own model is always trusted). Unset: any tool-capable model on an idle provider qualifies",
+      }),
+      queue_gate: Schema.optional(
+        Schema.Struct({
+          cwd: Schema.optional(Schema.String),
+          test_command: Schema.optional(Schema.String),
+          verify_command: Schema.optional(Schema.String),
+          default_branch: Schema.optional(Schema.String),
+        }),
+      ).annotate({
+        description:
+          "Default gate commands for `loop --queue` / `/loop --queue`. Set once per repo so the queue works " +
+          "without retyping flags: 'cwd' is where the commands run (some repos refuse to run tests from the root), " +
+          "'test_command' and 'verify_command' are the test and verify gates, and 'default_branch' is the branch " +
+          "the commit gate must never commit to. Per-loop options override these.",
+      }),
+      queue_personas: Schema.optional(
+        Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Literal(false)])),
+      ).annotate({
+        description:
+          "Agent bound to each gate of `loop --queue` / `/auto`, e.g. {\"verify\": \"reviewer\"}. Defaults to " +
+          "implement→coder, test→tester, verify→reviewer where those agents exist. A gate bound to an agent " +
+          "runs that agent as a subagent and takes its verdict; set a gate to false to keep the plain " +
+          "command behaviour. Naming an agent that does not exist is reported when the run starts.",
+      }),
+      stream_inactivity_seconds: Schema.optional(PositiveInt).annotate({
+        description:
+          "Fail a provider stream that delivers no events for this many seconds (default: 300, 0 disables). Guards against half-open connections that would otherwise park a turn forever.",
       }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",

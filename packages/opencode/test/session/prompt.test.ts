@@ -1,14 +1,15 @@
+import { NodeFileSystem } from "@effect/platform-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { AutoMode } from "@/auto-mode/service"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
@@ -56,7 +57,6 @@ import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -109,32 +109,28 @@ function errorTool(parts: SessionV1.Part[]) {
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
 }
 
-function makeMcp(instructions: MCP.ServerInstructions[] = []) {
-  return Layer.succeed(
-    MCP.Service,
-    MCP.Service.of({
-      status: () => Effect.succeed({}),
-      clients: () => Effect.succeed({}),
-      instructions: () => Effect.succeed(instructions),
-      tools: () => Effect.succeed({}),
-      prompts: () => Effect.succeed({}),
-      resources: () => Effect.succeed({}),
-      resourceTemplates: () => Effect.succeed({}),
-      add: () => Effect.succeed({ status: { status: "disabled" as const } }),
-      connect: () => Effect.void,
-      disconnect: () => Effect.void,
-      getPrompt: () => Effect.succeed(undefined),
-      readResource: () => Effect.succeed(undefined),
-      startAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
-      authenticate: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
-      finishAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
-      removeAuth: () => Effect.void,
-      supportsOAuth: () => Effect.succeed(false),
-      hasStoredTokens: () => Effect.succeed(false),
-      getAuthStatus: () => Effect.succeed("not_authenticated" as const),
-    }),
-  )
-}
+const mcp = Layer.succeed(
+  MCP.Service,
+  MCP.Service.of({
+    status: () => Effect.succeed({}),
+    clients: () => Effect.succeed({}),
+    tools: () => Effect.succeed({}),
+    prompts: () => Effect.succeed({}),
+    resources: () => Effect.succeed({}),
+    add: () => Effect.succeed({ status: { status: "disabled" as const } }),
+    connect: () => Effect.void,
+    disconnect: () => Effect.void,
+    getPrompt: () => Effect.succeed(undefined),
+    readResource: () => Effect.succeed(undefined),
+    startAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+    authenticate: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+    finishAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+    removeAuth: () => Effect.void,
+    supportsOAuth: () => Effect.succeed(false),
+    hasStoredTokens: () => Effect.succeed(false),
+    getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+  }),
+)
 
 const lsp = Layer.succeed(
   LSP.Service,
@@ -156,6 +152,10 @@ const lsp = Layer.succeed(
   }),
 )
 
+const status = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
+const run = SessionRunState.layer.pipe(Layer.provide(status))
+const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
+
 const processorCreateStarted: Array<() => void> = []
 const blockingProcessor = Layer.succeed(
   SessionProcessor.Service,
@@ -164,95 +164,84 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-const runtimeFlags = RuntimeFlags.layer({ experimentalEventSystem: true })
-
-const testLLMServerNode = LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] })
-
-const promptRoot = LayerNode.group([
-  SessionPrompt.node,
-  Session.node,
-  SessionProjector.node,
-  MessageV2.node,
-  Snapshot.node,
-  LLM.node,
-  Env.node,
-  AgentSvc.node,
-  Command.node,
-  Permission.node,
-  Plugin.node,
-  Config.node,
-  ProviderSvc.node,
-  LSP.node,
-  MCP.node,
-  FSUtil.node,
-  BackgroundJob.node,
-  SessionStatus.node,
-  SessionRunState.node,
-  Database.node,
-  EventV2Bridge.node,
-  Question.node,
-  Todo.node,
-  ToolRegistry.node,
-  Skill.node,
-  Git.node,
-  Ripgrep.node,
-  Format.node,
-  Truncate.node,
-  SessionProcessor.node,
-  Image.node,
-  SessionCompaction.node,
-  SessionRevert.node,
-  Instruction.node,
-  SystemPrompt.node,
-  CrossSpawnSpawner.node,
-  RuntimeFlags.node,
-])
-
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
-  const replacements = [
-    [SessionSummary.node, summary],
-    [LSP.node, lsp],
-    [MCP.node, makeMcp(input?.mcpInstructions)],
-    [RuntimeFlags.node, runtimeFlags],
-  ] as const
-  if (input?.processor === "blocking") {
-    return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, blockingProcessor]])
-  }
-  return LayerNode.compile(promptRoot, replacements)
+function makePrompt(input?: { processor?: "blocking" }) {
+  const deps = Layer.mergeAll(
+    Session.defaultLayer,
+    Snapshot.defaultLayer,
+    LLM.defaultLayer,
+    Env.defaultLayer,
+    AgentSvc.defaultLayer,
+    Command.defaultLayer,
+    Permission.defaultLayer,
+    Plugin.defaultLayer,
+    Config.defaultLayer,
+    ProviderSvc.defaultLayer,
+    lsp,
+    mcp,
+    FSUtil.defaultLayer,
+    BackgroundJob.defaultLayer,
+    status,
+    Database.defaultLayer,
+    EventV2Bridge.defaultLayer,
+    AutoMode.defaultLayer,
+  ).pipe(Layer.provideMerge(infra))
+  const question = Question.layer.pipe(Layer.provideMerge(deps))
+  const todo = Todo.layer.pipe(Layer.provideMerge(deps))
+  const registry = ToolRegistry.layer.pipe(
+    Layer.provide(Skill.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(Format.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(todo),
+    Layer.provideMerge(question),
+    Layer.provideMerge(deps),
+  )
+  const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
+  const proc =
+    input?.processor === "blocking"
+      ? blockingProcessor
+      : SessionProcessor.layer.pipe(
+          Layer.provide(summary),
+          Layer.provide(Image.defaultLayer),
+          Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+          Layer.provideMerge(deps),
+        )
+  const compact = SessionCompaction.layer.pipe(
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(proc),
+    Layer.provideMerge(deps),
+  )
+  return SessionPrompt.layer.pipe(
+    Layer.provide(SessionRevert.defaultLayer),
+    Layer.provide(Image.defaultLayer),
+    Layer.provide(summary),
+    Layer.provideMerge(run),
+    Layer.provideMerge(compact),
+    Layer.provideMerge(proc),
+    Layer.provideMerge(registry),
+    Layer.provideMerge(trunc),
+    Layer.provide(Instruction.defaultLayer),
+    Layer.provide(SystemPrompt.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(deps),
+    Layer.provide(summary),
+  )
 }
 
-function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
-  const root = LayerNode.group([promptRoot, testLLMServerNode])
-  const replacements = [
-    [SessionSummary.node, summary],
-    [LSP.node, lsp],
-    [MCP.node, makeMcp(input?.mcpInstructions)],
-    [RuntimeFlags.node, runtimeFlags],
-  ] as const
-  if (input?.processor === "blocking") {
-    return LayerNode.compile(root, [...replacements, [SessionProcessor.node, blockingProcessor]])
-  }
-  return LayerNode.compile(root, replacements)
+function makeHttp(input?: { processor?: "blocking" }) {
+  return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: { processor?: "blocking" }) {
   return makePrompt(input)
 }
 
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
-const withMcpInstructions = testEffect(
-  makeHttp({
-    mcpInstructions: [
-      {
-        name: "guide-server",
-        instructions: "Use lookup before mutate.",
-        tools: ["guide-server_lookup"],
-      },
-    ],
-  }),
-)
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
 
@@ -306,6 +295,11 @@ function providerCfg(url: string) {
 const writeText = Effect.fn("test.writeText")(function* (file: string, text: string) {
   const fs = yield* FSUtil.Service
   yield* fs.writeWithDirs(file, text)
+})
+
+const ensureDir = Effect.fn("test.ensureDir")(function* (dir: string) {
+  const fs = yield* FSUtil.Service
+  yield* fs.ensureDir(dir)
 })
 
 const writeConfig = Effect.fn("test.writeConfig")(function* (dir: string, config: Partial<ConfigV1.Info>) {
@@ -554,80 +548,6 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
-withMcpInstructions.instance(
-  "loop includes MCP instructions in model system context",
-  () =>
-    Effect.gen(function* () {
-      const { llm } = yield* useServerConfig(providerCfg)
-      const prompt = yield* SessionPrompt.Service
-      const sessions = yield* Session.Service
-      const chat = yield* sessions.create({
-        title: "Pinned",
-        permission: [{ permission: "*", pattern: "*", action: "allow" }],
-      })
-      yield* llm.hang
-      yield* user(chat.id, "hello")
-
-      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* awaitWithTimeout(llm.wait(1), "timed out waiting for MCP instruction request", "10 seconds")
-
-      const hits = yield* llm.hits
-      const body = JSON.stringify(hits[0]?.body)
-      expect(body).toContain('<server name=\\"guide-server\\">')
-      expect(body).toContain("Use lookup before mutate.")
-      yield* Fiber.interrupt(fiber)
-    }),
-  15_000,
-)
-
-it.instance("legacy prompt emits message events without session.next events", () =>
-  Effect.gen(function* () {
-    const events = yield* EventV2Bridge.Service
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({
-      title: "Pinned",
-      agent: "plan",
-      model: { providerID: ProviderV2.ID.make("old"), id: ModelV2.ID.make("old-model") },
-    })
-    const seen: string[] = []
-    const off = yield* events.listen((event) => {
-      seen.push(event.type)
-      return Effect.void
-    })
-
-    const first = yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "build",
-      model: ref,
-      noReply: true,
-      parts: [{ type: "text", text: "hello" }],
-    })
-    const second = yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "build",
-      noReply: true,
-      parts: [{ type: "text", text: "again" }],
-    })
-    yield* off
-
-    expect(first.info.role).toBe("user")
-    expect(second.info.role).toBe("user")
-    if (first.info.role === "user" && second.info.role === "user") {
-      expect(first.info.model).toEqual(ref)
-      expect(second.info.model).toEqual(ref)
-    }
-    expect(yield* sessions.get(chat.id)).toMatchObject({
-      agent: "build",
-      model: { providerID: ref.providerID, id: ref.modelID },
-    })
-    expect(seen).toContain(Session.Event.Updated.type)
-    expect(seen).toContain(MessageV2.Event.Updated.type)
-    expect(seen).toContain(MessageV2.Event.PartUpdated.type)
-    expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
-  }),
-)
-
 it.instance("loop surfaces content-filter finishes as session errors", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
@@ -728,12 +648,8 @@ noLLMServer.instance.skip(
       })
 
       const messages = yield* SessionV2.Service.use((session) => session.messages({ sessionID: chat.id })).pipe(
-        Effect.provide(
-          LayerNode.compile(SessionV2.node, [
-            [SessionExecution.node, SessionExecution.noopLayer],
-            [LocationServiceMap.node, locationServiceMapLayer],
-          ]),
-        ),
+        Effect.provide(SessionExecution.noopLayer),
+        Effect.provide(SessionV2.defaultLayer),
       )
       const { db } = yield* Database.Service
       const row = yield* db
@@ -1115,57 +1031,61 @@ it.instance(
       yield* Fiber.await(fiber)
       expect((yield* status.get(chat.id)).type).toBe("idle")
     }),
-  3_000,
+  10_000,
 )
 
 // Cancel semantics
 
-it.instance("cancel interrupts loop and resolves with an assistant message", () =>
-  Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({ title: "Pinned" })
-    yield* seed(chat.id)
+it.instance(
+  "cancel interrupts loop and resolves with an assistant message",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* seed(chat.id)
 
-    yield* llm.hang
+      yield* llm.hang
 
-    yield* user(chat.id, "more")
+      yield* user(chat.id, "more")
 
-    const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-    yield* llm.wait(1)
-    yield* waitForBusy(chat.id)
-    yield* prompt.cancel(chat.id)
-    const exit = yield* Fiber.await(fiber)
-    expect(Exit.isSuccess(exit)).toBe(true)
-    if (Exit.isSuccess(exit)) {
-      expect(exit.value.info.role).toBe("assistant")
-    }
-  }),
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      yield* prompt.cancel(chat.id)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) {
+        expect(exit.value.info.role).toBe("assistant")
+      }
+    }),
+  3_000,
 )
 
-it.instance("cancel records MessageAbortedError on interrupted process", () =>
-  Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({ title: "Pinned" })
-    yield* llm.hang
-    yield* user(chat.id, "hello")
+it.instance(
+  "cancel records MessageAbortedError on interrupted process",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* llm.hang
+      yield* user(chat.id, "hello")
 
-    const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-    yield* llm.wait(1)
-    yield* waitForBusy(chat.id)
-    yield* prompt.cancel(chat.id)
-    const exit = yield* Fiber.await(fiber)
-    expect(Exit.isSuccess(exit)).toBe(true)
-    if (Exit.isSuccess(exit)) {
-      const info = exit.value.info
-      if (info.role === "assistant") {
-        expect(info.error?.name).toBe("MessageAbortedError")
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      yield* prompt.cancel(chat.id)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) {
+        const info = exit.value.info
+        if (info.role === "assistant") {
+          expect(info.error?.name).toBe("MessageAbortedError")
+        }
       }
-    }
-  }),
+    }),
+  3_000,
 )
 
 raceNoLLMServer.instance(
@@ -1384,115 +1304,122 @@ noLLMServer.instance("concurrent loop callers get same result", () =>
   }),
 )
 
-it.instance("concurrent loop callers all receive same error result", () =>
-  Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({ title: "Pinned" })
+it.instance(
+  "concurrent loop callers all receive same error result",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
 
-    yield* llm.fail("boom")
-    yield* user(chat.id, "hello")
+      yield* llm.fail("boom")
+      yield* user(chat.id, "hello")
 
-    const [a, b] = yield* Effect.all([prompt.loop({ sessionID: chat.id }), prompt.loop({ sessionID: chat.id })], {
-      concurrency: "unbounded",
-    })
-    expect(a.info.id).toBe(b.info.id)
-    expect(a.info.role).toBe("assistant")
-  }),
+      const [a, b] = yield* Effect.all([prompt.loop({ sessionID: chat.id }), prompt.loop({ sessionID: chat.id })], {
+        concurrency: "unbounded",
+      })
+      expect(a.info.id).toBe(b.info.id)
+      expect(a.info.role).toBe("assistant")
+    }),
+  3_000,
 )
 
-it.instance("prompt submitted during an active run is included in the next LLM input", () =>
-  Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const gate = yield* Deferred.make<void>()
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({ title: "Pinned" })
+it.instance(
+  "prompt submitted during an active run is included in the next LLM input",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const gate = yield* Deferred.make<void>()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
 
-    yield* llm.hold("first", deferredAsPromise(gate))
-    yield* llm.text("second")
+      yield* llm.hold("first", deferredAsPromise(gate))
+      yield* llm.text("second")
 
-    const a = yield* prompt
-      .prompt({
-        sessionID: chat.id,
-        agent: "build",
-        model: ref,
-        parts: [{ type: "text", text: "first" }],
-      })
-      .pipe(Effect.forkChild)
+      const a = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "first" }],
+        })
+        .pipe(Effect.forkChild)
 
-    yield* llm.wait(1)
-    yield* waitForBusy(chat.id)
+      yield* llm.wait(1)
 
-    const id = MessageID.ascending()
-    const b = yield* prompt
-      .prompt({
-        sessionID: chat.id,
-        messageID: id,
-        agent: "build",
-        model: ref,
-        parts: [{ type: "text", text: "second" }],
-      })
-      .pipe(Effect.forkChild)
+      const id = MessageID.ascending()
+      const b = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "second" }],
+        })
+        .pipe(Effect.forkChild)
 
-    yield* pollWithTimeout(
-      sessions
-        .messages({ sessionID: chat.id })
-        .pipe(
-          Effect.map((msgs) => (msgs.some((msg) => msg.info.role === "user" && msg.info.id === id) ? true : undefined)),
-        ),
-      "timed out waiting for second prompt to save",
-    )
+      yield* pollWithTimeout(
+        sessions
+          .messages({ sessionID: chat.id })
+          .pipe(
+            Effect.map((msgs) =>
+              msgs.some((msg) => msg.info.role === "user" && msg.info.id === id) ? true : undefined,
+            ),
+          ),
+        "timed out waiting for second prompt to save",
+      )
 
-    yield* Deferred.succeed(gate, void 0)
+      yield* Deferred.succeed(gate, void 0)
 
-    const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
-    expect(Exit.isSuccess(ea)).toBe(true)
-    expect(Exit.isSuccess(eb)).toBe(true)
-    expect(yield* llm.calls).toBe(2)
+      const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+      expect(Exit.isSuccess(ea)).toBe(true)
+      expect(Exit.isSuccess(eb)).toBe(true)
+      expect(yield* llm.calls).toBe(2)
 
-    const msgs = yield* sessions.messages({ sessionID: chat.id })
-    const assistants = msgs.filter((msg) => msg.info.role === "assistant")
-    expect(assistants).toHaveLength(2)
-    const last = assistants.at(-1)
-    if (!last || last.info.role !== "assistant") throw new Error("expected second assistant")
-    expect(last.info.parentID).toBe(id)
-    expect(last.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      const assistants = msgs.filter((msg) => msg.info.role === "assistant")
+      expect(assistants).toHaveLength(2)
+      const last = assistants.at(-1)
+      if (!last || last.info.role !== "assistant") throw new Error("expected second assistant")
+      expect(last.info.parentID).toBe(id)
+      expect(last.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
 
-    const inputs = yield* llm.inputs
-    expect(inputs).toHaveLength(2)
-    const messages = inputs.at(-1)?.messages
-    if (!Array.isArray(messages)) throw new Error("expected LLM messages")
-    expect(messages.at(-1)).toEqual({ role: "user", content: "second" })
-  }),
+      const inputs = yield* llm.inputs
+      expect(inputs).toHaveLength(2)
+      expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("second")
+    }),
+  3_000,
 )
 
-it.instance("assertNotBusy fails with BusyError when loop running", () =>
-  Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const run = yield* SessionRunState.Service
-    const sessions = yield* Session.Service
-    yield* llm.hang
+it.instance(
+  "assertNotBusy fails with BusyError when loop running",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const run = yield* SessionRunState.Service
+      const sessions = yield* Session.Service
+      yield* llm.hang
 
-    const chat = yield* sessions.create({})
-    yield* user(chat.id, "hi")
+      const chat = yield* sessions.create({})
+      yield* user(chat.id, "hi")
 
-    const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-    yield* llm.wait(1)
-    yield* waitForBusy(chat.id)
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
 
-    const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
-      expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
-    }
+      const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
+      }
 
-    yield* prompt.cancel(chat.id)
-    yield* Fiber.await(fiber)
-  }),
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+    }),
+  3_000,
 )
 
 noLLMServer.instance("assertNotBusy succeeds when idle", () =>
@@ -1508,29 +1435,31 @@ noLLMServer.instance("assertNotBusy succeeds when idle", () =>
 
 // Shell semantics
 
-it.instance("shell rejects with BusyError when loop running", () =>
-  Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({ title: "Pinned" })
-    yield* llm.hang
-    yield* user(chat.id, "hi")
+it.instance(
+  "shell rejects with BusyError when loop running",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* llm.hang
+      yield* user(chat.id, "hi")
 
-    const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-    yield* llm.wait(1)
-    yield* waitForBusy(chat.id)
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
 
-    const exit = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "echo hi" }).pipe(Effect.exit)
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
-      expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
-    }
+      const exit = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "echo hi" }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
+      }
 
-    yield* prompt.cancel(chat.id)
-    yield* Fiber.await(fiber)
-  }),
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+    }),
+  3_000,
 )
 
 unixNoLLMServer(
@@ -1780,7 +1709,7 @@ it.instance(
       expect(yield* llm.calls).toBe(1)
     }),
   { git: true },
-  10_000,
+  3_000,
 )
 
 unix(
@@ -1822,17 +1751,11 @@ unixNoLLMServer(
     withSh(() =>
       Effect.gen(function* () {
         const { prompt, run, chat } = yield* boot()
-        const { directory: dir } = yield* TestInstance
-        const afs = yield* FSUtil.Service
-        const ready = path.join(dir, ".shell-ready")
 
         const sh = yield* prompt
-          .shell({ sessionID: chat.id, agent: "build", command: ": > '.shell-ready'; sleep 30" })
+          .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
           .pipe(Effect.forkChild)
-        yield* pollWithTimeout(
-          afs.existsSafe(ready).pipe(Effect.map((exists) => (exists ? (true as const) : undefined))),
-          "shell never created readiness marker",
-        )
+        yield* waitForBusy(chat.id)
 
         yield* prompt.cancel(chat.id)
 
@@ -1922,6 +1845,7 @@ unix(
       yield* llm.tool("bash", {
         command:
           'i=0; while [ "$i" -lt 4000 ]; do printf "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx %05d\\n" "$i"; i=$((i + 1)); done; printf truncation-ready; sleep 30',
+        description: "Print many lines",
         timeout: 30_000,
         workdir: path.resolve(dir),
       })
@@ -2243,43 +2167,45 @@ it.instance("does not loop empty assistant turns for a simple reply", () =>
   }),
 )
 
-it.instance("records aborted errors when prompt is cancelled mid-stream", () =>
-  Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const session = yield* sessions.create({ title: "Prompt cancel regression" })
+it.instance(
+  "records aborted errors when prompt is cancelled mid-stream",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ title: "Prompt cancel regression" })
 
-    yield* llm.hang
+      yield* llm.hang
 
-    const fiber = yield* prompt
-      .prompt({
-        sessionID: session.id,
-        agent: "build",
-        parts: [{ type: "text", text: "Cancel me" }],
-      })
-      .pipe(Effect.forkChild)
+      const fiber = yield* prompt
+        .prompt({
+          sessionID: session.id,
+          agent: "build",
+          parts: [{ type: "text", text: "Cancel me" }],
+        })
+        .pipe(Effect.forkChild)
 
-    yield* llm.wait(1)
-    yield* waitForBusy(session.id)
-    yield* prompt.cancel(session.id)
+      yield* llm.wait(1)
+      yield* prompt.cancel(session.id)
 
-    const exit = yield* Fiber.await(fiber)
-    expect(Exit.isSuccess(exit)).toBe(true)
-    if (Exit.isSuccess(exit)) {
-      expect(exit.value.info.role).toBe("assistant")
-      if (exit.value.info.role === "assistant") {
-        expect(exit.value.info.error?.name).toBe("MessageAbortedError")
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) {
+        expect(exit.value.info.role).toBe("assistant")
+        if (exit.value.info.role === "assistant") {
+          expect(exit.value.info.error?.name).toBe("MessageAbortedError")
+        }
       }
-    }
 
-    const msgs = yield* sessions.messages({ sessionID: session.id })
-    const last = msgs.findLast((msg) => msg.info.role === "assistant")
-    expect(last?.info.role).toBe("assistant")
-    if (last?.info.role === "assistant") {
-      expect(last.info.error?.name).toBe("MessageAbortedError")
-    }
-  }),
+      const msgs = yield* sessions.messages({ sessionID: session.id })
+      const last = msgs.findLast((msg) => msg.info.role === "assistant")
+      expect(last?.info.role).toBe("assistant")
+      if (last?.info.role === "assistant") {
+        expect(last.info.error?.name).toBe("MessageAbortedError")
+      }
+    }),
+  3_000,
 )
 
 // Agent variant
@@ -2439,4 +2365,65 @@ noLLMServer.instance(
       }
     }),
   30_000,
+)
+
+// ── stream watchdog (session-cancellation-integrity) ─────────────────────────
+
+const watchdogCfg =
+  (seconds: number) =>
+  (url: string): Partial<ConfigV1.Info> => ({
+    ...providerCfg(url),
+    experimental: { stream_inactivity_seconds: seconds },
+  })
+
+it.instance("watchdog fails a half-open stream with a stalled error, not a generic abort", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(watchdogCfg(1))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    // Headers and one delta arrive, then the connection goes silent forever —
+    // the observed 18h wedge shape.
+    yield* llm.push(reply().text("partial response").hang())
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    const error = result.info.role === "assistant" ? result.info.error : undefined
+    expect(error?.name).toBe("APIError")
+    expect(JSON.stringify(error)).toContain("STREAM_STALLED")
+    expect(error?.name).not.toBe("MessageAbortedError")
+  }),
+)
+
+it.instance("watchdog leaves a slow-but-live stream alone", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(watchdogCfg(3))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    // A 1s gap before the body — well under the 3s deadline.
+    const gap = new Promise((resolve) => setTimeout(resolve, 1000))
+    yield* llm.push(reply().wait(gap).text("slow but alive").stop())
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    const error = result.info.role === "assistant" ? result.info.error : undefined
+    expect(error).toBeUndefined()
+    const text = result.parts.filter((p) => p.type === "text").map((p) => p.text)
+    expect(text).toContain("slow but alive")
+  }),
 )

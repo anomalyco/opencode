@@ -64,10 +64,15 @@ function unquoteGitPath(input: string) {
 }
 
 export interface Interface {
-  readonly summarize: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<void>
+  readonly summarize: (input: { sessionID: SessionID; messageID: MessageID; force?: boolean }) => Effect.Effect<void>
   readonly diff: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Snapshot.FileDiff[]>
   readonly computeDiff: (input: { messages: SessionV1.WithParts[] }) => Effect.Effect<Snapshot.FileDiff[]>
 }
+
+// Below this, a full run re-persists the whole diff (patch text included) —
+// worth doing every step, not worth doing every 200ms. force:true (turn end)
+// always bypasses this so the final state is never left stale.
+const MinFullRunIntervalMs = 5_000
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionSummary") {}
 
@@ -99,31 +104,59 @@ const layer = Layer.effect(
       return []
     })
 
+    // fork: processor.ts calls summarize() on every step of every turn (not
+    // once per turn), and each call re-publishes the triggering user message's
+    // full `summary.diffs` (the whole turn's accumulated file diffs, patch text
+    // included) as a new event row — event-sourced storage never overwrites, so
+    // every intermediate snapshot is kept forever. On a fast-moving turn, calls
+    // also stack up faster than diffFull can complete, each finishing by writing
+    // its own multi-MB copy. Observed 2026-07-26: one session had 12,881
+    // message.updated rows / 1.6 GB from this alone, one row 20 MB.
+    //
+    // Two guards: (1) cap in-flight summarize to one per session — a step whose
+    // call lands while one is already running skips cleanly, since computeDiff
+    // always reads the live snapshot rather than an incremental delta; (2) even
+    // single-threaded, throttle the expensive path (full diff + patch text +
+    // persist) to once per MinFullRunIntervalMs per session — a turn with many
+    // fast steps no longer writes one full snapshot per step. `force` (used at
+    // turn end, prompt.ts) bypasses the throttle so the final persisted state is
+    // always accurate, never left stale from a skipped intermediate call.
+    const summarizing = new Set<SessionID>()
+    const lastFullRun = new Map<SessionID, number>()
+
     const summarize = Effect.fn("SessionSummary.summarize")(function* (input: {
       sessionID: SessionID
       messageID: MessageID
+      force?: boolean
     }) {
-      yield* sessions.setSummary({
-        sessionID: input.sessionID,
-        summary: {
-          additions: 0,
-          deletions: 0,
-          files: 0,
-        },
-      })
-      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
-      if ((yield* config.get()).snapshot === false) return
-      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
-      if (!all.length) return
+      if (summarizing.has(input.sessionID)) return
+      const last = lastFullRun.get(input.sessionID) ?? 0
+      if (!input.force && Date.now() - last < MinFullRunIntervalMs) return
+      summarizing.add(input.sessionID)
+      lastFullRun.set(input.sessionID, Date.now())
+      yield* Effect.gen(function* () {
+        yield* sessions.setSummary({
+          sessionID: input.sessionID,
+          summary: {
+            additions: 0,
+            deletions: 0,
+            files: 0,
+          },
+        })
+        yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
+        if ((yield* config.get()).snapshot === false) return
+        const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+        if (!all.length) return
 
-      const messages = all.filter(
-        (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
-      )
-      const target = messages.find((m) => m.info.id === input.messageID)
-      if (!target || target.info.role !== "user") return
-      const msgDiffs = yield* computeDiff({ messages })
-      target.info.summary = { ...target.info.summary, diffs: msgDiffs }
-      yield* sessions.updateMessage(target.info)
+        const messages = all.filter(
+          (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+        )
+        const target = messages.find((m) => m.info.id === input.messageID)
+        if (!target || target.info.role !== "user") return
+        const msgDiffs = yield* computeDiff({ messages })
+        target.info.summary = { ...target.info.summary, diffs: msgDiffs }
+        yield* sessions.updateMessage(target.info)
+      }).pipe(Effect.ensuring(Effect.sync(() => summarizing.delete(input.sessionID))))
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {

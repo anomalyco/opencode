@@ -4,6 +4,8 @@ import { client } from "./client.gen.js"
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from "./client/index.js"
 import type {
   AgentPartInput,
+  AgentsListErrors,
+  AgentsListResponses,
   AppAgentsErrors,
   AppAgentsResponses,
   AppLogErrors,
@@ -76,6 +78,11 @@ import type {
   FindTextResponses,
   FormatterStatusErrors,
   FormatterStatusResponses,
+  GalleryEvaluateErrors,
+  GalleryEvaluatePayload,
+  GalleryEvaluateResponses,
+  GalleryHostsErrors,
+  GalleryHostsResponses,
   GlobalConfigGetErrors,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
@@ -90,7 +97,38 @@ import type {
   GlobalUpgradeResponses,
   InstanceDisposeErrors,
   InstanceDisposeResponses,
+  LocalCapacityErrors,
+  LocalCapacityResponses,
+  LocalConnectErrors,
+  LocalConnectPayload,
+  LocalConnectResponses,
+  LocalCtxSizePayload,
+  LocalDisconnectErrors,
+  LocalDisconnectResponses,
+  LocalModelOffloadRecommendationErrors,
+  LocalModelOffloadRecommendationResponses,
+  LocalModelSetCtxSizeErrors,
+  LocalModelSetCtxSizeResponses,
+  LocalModelSetOffloadErrors,
+  LocalModelSetOffloadResponses,
+  LocalOffloadPayload,
+  LocalScanErrors,
+  LocalScanResponses,
   LocationRef,
+  LoopCancelErrors,
+  LoopCancelResponses,
+  LoopNudgeErrors,
+  LoopNudgeResponses,
+  LoopCreateErrors,
+  LoopCreateResponses,
+  LoopGetErrors,
+  LoopGetResponses,
+  LoopListErrors,
+  LoopListResponses,
+  LoopPauseErrors,
+  LoopPauseResponses,
+  LoopResumeErrors,
+  LoopResumeResponses,
   LspStatusErrors,
   LspStatusResponses,
   McpAddErrors,
@@ -145,6 +183,8 @@ import type {
   PromptInput,
   ProviderAuthErrors,
   ProviderAuthResponses,
+  ProviderBalanceErrors,
+  ProviderBalanceResponses,
   ProviderListErrors,
   ProviderListResponses,
   ProviderOauthAuthorizeErrors,
@@ -211,6 +251,8 @@ import type {
   SessionShareResponses,
   SessionShellErrors,
   SessionShellResponses,
+  SessionSideQuestionErrors,
+  SessionSideQuestionResponses,
   SessionStatusErrors,
   SessionStatusResponses,
   SessionSummarizeErrors,
@@ -1513,6 +1555,38 @@ export class Config2 extends HeyApiClient {
   }
 }
 
+export class Agents extends HeyApiClient {
+  /**
+   * List Agent presence
+   *
+   * List live Agent metadata for this opencode instance without session content.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AgentsListResponses, AgentsListErrors, ThrowOnError>({
+      url: "/agents",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Tool extends HeyApiClient {
   /**
    * List tools
@@ -2246,6 +2320,599 @@ export class Formatter extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<FormatterStatusResponses, FormatterStatusErrors, ThrowOnError>({
       url: "/formatter",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Model extends HeyApiClient {
+  /**
+   * Set model context window size
+   *
+   * Patch the ctx_size for a model on a llama-swap backend.
+   */
+  public setCtxSize<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      modelID: string
+      directory?: string
+      workspace?: string
+      localCtxSizePayload?: LocalCtxSizePayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "modelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "localCtxSizePayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      LocalModelSetCtxSizeResponses,
+      LocalModelSetCtxSizeErrors,
+      ThrowOnError
+    >({
+      url: "/local/model/{providerID}/{modelID}/ctx-size",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Set model CPU/MoE offload
+   *
+   * Patch CPU/MoE offload settings (n_cpu_moe, cpu_moe, cpu_offload_gb, override_tensor) for a model on a llama-skein backend.
+   */
+  public setOffload<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      modelID: string
+      directory?: string
+      workspace?: string
+      localOffloadPayload?: LocalOffloadPayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "modelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "localOffloadPayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      LocalModelSetOffloadResponses,
+      LocalModelSetOffloadErrors,
+      ThrowOnError
+    >({
+      url: "/local/model/{providerID}/{modelID}/offload",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Recommend model CPU/MoE offload
+   *
+   * Fetch llama-skein's recommended n_cpu_moe for a model given current free VRAM. MoE-scoped.
+   */
+  public offloadRecommendation<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      modelID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "modelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      LocalModelOffloadRecommendationResponses,
+      LocalModelOffloadRecommendationErrors,
+      ThrowOnError
+    >({
+      url: "/local/model/{providerID}/{modelID}/offload-recommendation",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Local extends HeyApiClient {
+  /**
+   * Scan for local providers
+   *
+   * Browse the local network via mDNS for llama-swap instances and probe each for its model list.
+   */
+  public scan<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LocalScanResponses, LocalScanErrors, ThrowOnError>({
+      url: "/local/scan",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Add local provider to config
+   *
+   * Write an openai-compatible provider entry for a local llama-swap instance to the global config.
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      localConnectPayload?: LocalConnectPayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "localConnectPayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LocalConnectResponses, LocalConnectErrors, ThrowOnError>({
+      url: "/local/connect",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove local provider from config
+   *
+   * Delete a local llama-swap provider entry from the global config.
+   */
+  public disconnect<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<LocalDisconnectResponses, LocalDisconnectErrors, ThrowOnError>({
+      url: "/local/connect/{providerID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Provider capacity snapshots
+   *
+   * Probe every known local provider for hardware telemetry and return a normalised capacity snapshot per host. The signal field distinguishes exact queue depth from GPU-utilisation inference.
+   */
+  public capacity<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LocalCapacityResponses, LocalCapacityErrors, ThrowOnError>({
+      url: "/local/capacity",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _model?: Model
+  get model(): Model {
+    return (this._model ??= new Model({ client: this.client }))
+  }
+}
+
+export class Gallery extends HeyApiClient {
+  /**
+   * List gallery hosts
+   *
+   * Project opencode's existing llama-skein discovery into gallery hosts. Offline hosts are included so the UI can distinguish 'that host is down' from 'you have no such host'.
+   */
+  public hosts<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<GalleryHostsResponses, GalleryHostsErrors, ThrowOnError>({
+      url: "/gallery/hosts",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Evaluate candidates across hosts
+   *
+   * Batch each candidate's variants through bounded concurrent hypothetical-fit calls to every compatible host, then filter, classify and rank. Entries carry an explained score breakdown rather than a bare number.
+   */
+  public evaluate<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      galleryEvaluatePayload?: GalleryEvaluatePayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "galleryEvaluatePayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<GalleryEvaluateResponses, GalleryEvaluateErrors, ThrowOnError>({
+      url: "/gallery/evaluate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Loop extends HeyApiClient {
+  /**
+   * List loops
+   *
+   * List loops known to the server, most recently created first.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LoopListResponses, LoopListErrors, ThrowOnError>({
+      url: "/loop",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create loop
+   *
+   * Start a loop that repeats a prompt until it signals completion, hits the max iteration count, or stalls with no progress.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      prompt?: string
+      sessionID?: string
+      maxIterations?: number
+      interval?: number
+      noProgressLimit?: number
+      completionToken?: string
+      mode?: "prompt" | "queue"
+      queue?: Array<string>
+      queueGuidance?: string
+      queueSync?: boolean
+      queuePush?: boolean
+      queueOptions?: {
+        testCommand?: string
+        verifyCommand?: string
+        defaultBranch?: string
+        cwd?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "prompt" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "maxIterations" },
+            { in: "body", key: "interval" },
+            { in: "body", key: "noProgressLimit" },
+            { in: "body", key: "completionToken" },
+            { in: "body", key: "mode" },
+            { in: "body", key: "queue" },
+            { in: "body", key: "queueGuidance" },
+            { in: "body", key: "queueSync" },
+            { in: "body", key: "queuePush" },
+            { in: "body", key: "queueOptions" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LoopCreateResponses, LoopCreateErrors, ThrowOnError>({
+      url: "/loop",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get loop
+   *
+   * Retrieve the current state of a loop, including its iteration history.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      loopID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "loopID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LoopGetResponses, LoopGetErrors, ThrowOnError>({
+      url: "/loop/{loopID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Pause loop
+   *
+   * Pause a running loop before its next iteration.
+   */
+  public pause<ThrowOnError extends boolean = false>(
+    parameters: {
+      loopID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "loopID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LoopPauseResponses, LoopPauseErrors, ThrowOnError>({
+      url: "/loop/{loopID}/pause",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Resume loop
+   *
+   * Resume a paused loop.
+   */
+  public resume<ThrowOnError extends boolean = false>(
+    parameters: {
+      loopID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "loopID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LoopResumeResponses, LoopResumeErrors, ThrowOnError>({
+      url: "/loop/{loopID}/resume",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Steer loop
+   *
+   * Give a running or paused loop a correction carried into every subsequent iteration.
+   */
+  public nudge<ThrowOnError extends boolean = false>(
+    parameters: {
+      loopID: string
+      directory?: string
+      workspace?: string
+      text: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "loopID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LoopNudgeResponses, LoopNudgeErrors, ThrowOnError>({
+      url: "/loop/{loopID}/nudge",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Cancel loop
+   *
+   * Cancel a running or paused loop.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      loopID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "loopID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LoopCancelResponses, LoopCancelErrors, ThrowOnError>({
+      url: "/loop/{loopID}/cancel",
       ...options,
       ...params,
     })
@@ -3353,6 +4020,38 @@ export class Provider extends HeyApiClient {
     })
   }
 
+  /**
+   * Get provider account balance
+   *
+   * Get the remaining credits/balance for a pay-as-you-go provider (e.g. OpenRouter). Returns undefined when the provider does not expose a balance or no key is configured.
+   */
+  public balance<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProviderBalanceResponses, ProviderBalanceErrors, ThrowOnError>({
+      url: "/provider/{providerID}/balance",
+      ...options,
+      ...params,
+    })
+  }
+
   private _oauth?: Oauth
   get oauth(): Oauth {
     return (this._oauth ??= new Oauth({ client: this.client }))
@@ -4203,6 +4902,54 @@ export class Session2 extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  /**
+   * Ask side question
+   *
+   * Ask a quick side question without adding to conversation history. The response has full visibility into the current conversation but does not persist to history.
+   */
+  public sideQuestion<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      question?: string
+      agent?: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "question" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionSideQuestionResponses, SessionSideQuestionErrors, ThrowOnError>(
+      {
+        url: "/session/{sessionID}/side_question",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
   }
 
   /**
@@ -5873,7 +6620,7 @@ export class Session3 extends HeyApiClient {
   }
 }
 
-export class Model extends HeyApiClient {
+export class Model2 extends HeyApiClient {
   /**
    * List models
    *
@@ -7008,9 +7755,9 @@ export class V2 extends HeyApiClient {
     return (this._session ??= new Session3({ client: this.client }))
   }
 
-  private _model?: Model
-  get model(): Model {
-    return (this._model ??= new Model({ client: this.client }))
+  private _model?: Model2
+  get model(): Model2 {
+    return (this._model ??= new Model2({ client: this.client }))
   }
 
   private _provider?: Provider2
@@ -7112,6 +7859,11 @@ export class OpencodeClient extends HeyApiClient {
     return (this._config ??= new Config2({ client: this.client }))
   }
 
+  private _agents?: Agents
+  get agents(): Agents {
+    return (this._agents ??= new Agents({ client: this.client }))
+  }
+
   private _tool?: Tool
   get tool(): Tool {
     return (this._tool ??= new Tool({ client: this.client }))
@@ -7160,6 +7912,21 @@ export class OpencodeClient extends HeyApiClient {
   private _formatter?: Formatter
   get formatter(): Formatter {
     return (this._formatter ??= new Formatter({ client: this.client }))
+  }
+
+  private _local?: Local
+  get local(): Local {
+    return (this._local ??= new Local({ client: this.client }))
+  }
+
+  private _gallery?: Gallery
+  get gallery(): Gallery {
+    return (this._gallery ??= new Gallery({ client: this.client }))
+  }
+
+  private _loop?: Loop
+  get loop(): Loop {
+    return (this._loop ??= new Loop({ client: this.client }))
   }
 
   private _mcp?: Mcp

@@ -83,6 +83,12 @@ delete process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
 delete process.env["OTEL_EXPORTER_OTLP_HEADERS"]
 delete process.env["OTEL_RESOURCE_ATTRIBUTES"]
 
+// Keep tests off the real network: without this, Provider.defaultLayer's
+// LocalProviderSync scans the LAN via mDNS, writes any discovered llama-skein
+// fleet into the (test-scoped) global config, and default model resolution
+// can then route test prompts to a real machine.
+process.env["OPENCODE_DISABLE_LOCAL_SYNC"] = "1"
+
 // Use in-memory sqlite
 process.env["OPENCODE_DB"] = ":memory:"
 

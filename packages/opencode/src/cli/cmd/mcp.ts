@@ -2,10 +2,7 @@ import { cmd } from "./cmd"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { effectCmd } from "../effect-cmd"
 import { Cause } from "effect"
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
-import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
-import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js"
+import { Client, StreamableHTTPClientTransport, UnauthorizedError, LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/client"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { MCP } from "../../mcp"
@@ -140,6 +137,19 @@ export const McpListCommand = effectCmd({
         statusText = "connected"
         if (hasOAuth && hasStoredTokens) {
           hint = " (OAuth)"
+        }
+        // fork(mcp-dual-era-client B3): surface what actually got negotiated,
+        // not just that the connection succeeded — era/protocol/transport/
+        // capabilities are the visible protocol/capability diagnostic the
+        // proposal calls for.
+        const diagParts = [
+          status.era ? `era: ${status.era}` : undefined,
+          status.protocolVersion ? `protocol: ${status.protocolVersion}` : undefined,
+          status.transport ? `transport: ${status.transport}` : undefined,
+          status.capabilities?.length ? `capabilities: ${status.capabilities.join(", ")}` : undefined,
+        ].filter((part): part is string => part !== undefined)
+        if (diagParts.length > 0) {
+          hint += `\n    ${UI.Style.TEXT_DIM}${diagParts.join("  ")}`
         }
       } else if (status.status === "disabled") {
         statusIcon = "○"
@@ -451,7 +461,7 @@ export const McpAddCommand = effectCmd({
       }),
   handler: Effect.fn("Cli.mcp.add")(function* (args) {
     const maybeCtx = yield* InstanceRef
-    if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
+    if (!maybeCtx) return yield* Effect.die(new Error("InstanceRef not provided in 'mcp add' — command requires a project instance"))
     const ctx = maybeCtx
     yield* Effect.promise(async () => {
       const command = args["--"] ?? []

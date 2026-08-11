@@ -1,0 +1,98 @@
+[
+  {
+    "note": "dotted minor version carried through",
+    "name": "Qwen3.6-35B-A3B-GGUF",
+    "family": "qwen",
+    "version": 3.6
+  },
+  {
+    "note": "integer version, size marker correctly excluded",
+    "name": "qwen3-35b-a3b",
+    "family": "qwen",
+    "version": 3
+  },
+  {
+    "note": "trailing modifier after the version",
+    "name": "gemma-4-26B-it",
+    "family": "gemma",
+    "version": 4
+  },
+  {
+    "note": "explicit v-prefixed version",
+    "name": "deepseek-v4-gguf",
+    "family": "deepseek",
+    "version": 4
+  },
+  {
+    "note": "letters before the versioned family concatenate",
+    "name": "qwopus3.6-27b-v2-mtp-q8-0",
+    "family": "qwopus",
+    "version": 3.6
+  },
+  {
+    "note": "family split across two words concatenates without a separator",
+    "name": "mistral-small-3.1-24b",
+    "family": "mistralsmall",
+    "version": 3.1
+  },
+  {
+    "note": "no version anywhere",
+    "name": "no-version-here",
+    "family": "",
+    "version": 0
+  },
+  {
+    "note": "a bare size marker is not mistaken for a version",
+    "name": "plainmodel-35B",
+    "family": "",
+    "version": 0
+  },
+  {
+    "note": "two-word brand, dotted version",
+    "name": "Meta-Llama-3.1-70B-Instruct",
+    "family": "metallama",
+    "version": 3.1
+  },
+  {
+    "note": "trailing non-version digits after the version are not re-matched",
+    "name": "Qwen3-30B-A3B-Instruct-2507",
+    "family": "qwen",
+    "version": 3
+  },
+  {
+    "note": "single-letter version codes (R1) are not letters{3,}: no match at all",
+    "name": "DeepSeek-R1-Distill-Qwen-32B",
+    "family": "",
+    "version": 0
+  },
+  {
+    "note": "plain integer version",
+    "name": "Phi-4-14B",
+    "family": "phi",
+    "version": 4
+  },
+  {
+    "note": "no version present: correctly empty, not a defect",
+    "name": "gpt-oss-20b",
+    "family": "",
+    "version": 0
+  },
+  {
+    "note": "DEFECT: the MoE '8x7B' marker is read as version 8 — 'x' is not 'b', so the size-marker exclusion does not fire",
+    "name": "Mixtral-8x7B-Instruct-v0.1",
+    "family": "mixtral",
+    "version": 8
+  },
+  {
+    "note": "single-letter codes before a real name concatenate as noise",
+    "name": "L3-8B-Stheno-v3.2",
+    "family": "lbstheno",
+    "version": 3.2
+  },
+  {
+    "note": "DEFECT: underscore-separated minor version truncates to the major version only — '_5' is dropped because only '.' is accepted",
+    "name": "internlm2_5-20b-chat",
+    "family": "internlm",
+    "version": 2
+  }
+]

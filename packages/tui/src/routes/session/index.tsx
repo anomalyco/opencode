@@ -78,6 +78,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
+import { DialogModelCtx } from "../../component/dialog-model-ctx"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
@@ -119,6 +120,7 @@ const sessionBindingCommands = [
   "session.timeline",
   "session.fork",
   "session.compact",
+  "session.model.ctx",
   "session.unshare",
   "session.undo",
   "session.redo",
@@ -325,7 +327,8 @@ export function Session() {
   })
 
   let lastSwitch: string | undefined = undefined
-  event.on("message.part.updated", (evt) => {
+  event.subscribe((evt) => {
+    if (evt.type !== "message.part.updated") return
     const part = evt.properties.part
     if (part.type !== "tool") return
     if (part.sessionID !== route.sessionID) return
@@ -583,6 +586,36 @@ export function Session() {
           providerID: selectedModel.providerID,
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "Set context size",
+      value: "session.model.ctx",
+      category: "Session",
+      slash: {
+        name: "ctx",
+        aliases: ["context", "context-size"],
+      },
+      run: () => {
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({
+            variant: "warning",
+            message: "Select a model first",
+            duration: 3000,
+          })
+          return
+        }
+        const provider = sync.data.provider.find((item) => item.id === selectedModel.providerID)
+        if (!provider?.options?.baseURL) {
+          toast.show({
+            variant: "warning",
+            message: "Context size is only available for local providers",
+            duration: 3000,
+          })
+          return
+        }
+        dialog.replace(() => <DialogModelCtx providerID={selectedModel.providerID} modelID={selectedModel.modelID} />)
       },
     },
     {
@@ -1025,12 +1058,30 @@ export function Session() {
       category: "Session",
       hidden: true,
       enabled: foregroundTasks().length > 0,
-      run: () => {
-        void sdk.client.experimental.session.background({
-          sessionID: route.sessionID,
-          workspace: project.workspace.current(),
-        })
+      run: async () => {
         dialog.clear()
+        // fork: the footer advertises this keybind whenever a foreground
+        // subagent is running, but the server refuses it (returns false)
+        // unless background subagents are enabled — and the response used to
+        // be discarded, so the keypress was a silent no-op. Say why instead.
+        await sdk.client.experimental.session
+          .background({
+            sessionID: route.sessionID,
+            workspace: project.workspace.current(),
+          })
+          .then((res) => {
+            if (res.data === true) return
+            toast.show({
+              message: "Background subagents are disabled — set OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true",
+              variant: "error",
+            })
+          })
+          .catch((error) => {
+            toast.show({
+              message: error instanceof Error ? error.message : "Failed to background subagents",
+              variant: "error",
+            })
+          })
       },
     },
     {
@@ -1473,7 +1524,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const { theme } = useTheme()
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
-  const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  // fork: local models are served by several hosts under identical IDs —
+  // prefix the provider so "which machine ran this" is answerable at a glance.
+  const model = createMemo(() => {
+    const name = Model.name(ctx.providers(), props.message.providerID, props.message.modelID)
+    const provider = ctx.providers()?.get(props.message.providerID)
+    return provider?.options?.["baseURL"] ? `${provider.id}/${name}` : name
+  })
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1633,7 +1690,14 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           <box paddingLeft={inMinimal() ? 2 : 0} marginTop={1}>
             <code
               filetype="markdown"
-              drawUnstyledText={false}
+              // fork: draw unstyled text immediately (the @opentui default) instead
+              // of waiting for tree-sitter. With drawUnstyledText={false} the body
+              // renders zero pixels until highlightOnce() resolves — and on the huge
+              // reasoning dumps local models produce (hundreds of KB, with fenced
+              // code blocks that trigger grammar downloads with no timeout), that
+              // can take minutes or never happen. Symptom: "Thought: 9m 55s" header
+              // whose expansion reveals nothing. Highlighting still layers in when
+              // (if) it completes.
               streaming={true}
               syntaxStyle={syntax()}
               content={summary().body}
@@ -2272,6 +2336,19 @@ function Task(props: ToolProps) {
     return assistant - first
   })
 
+  // fork: where the subagent actually runs. The task tool records its model
+  // choice in metadata; surface it whenever it differs from the parent
+  // message's model — otherwise a placed subagent silently looks like it
+  // inherited the parent's provider.
+  const placed = createMemo(() => {
+    const model = props.metadata.model as { providerID?: string; modelID?: string } | undefined
+    if (!model?.providerID || !model.modelID) return undefined
+    const parent = (sync.data.message[props.part.sessionID] ?? []).find((x) => x.id === props.part.messageID)
+    if (parent?.role === "assistant" && parent.providerID === model.providerID && parent.modelID === model.modelID)
+      return undefined
+    return `${model.providerID}/${model.modelID}`
+  })
+
   const content = createMemo(() => {
     const description = stringValue(props.input.description)
     if (!description) return ""
@@ -2280,6 +2357,7 @@ function Task(props: ToolProps) {
         Locale.titlecase(stringValue(props.input.subagent_type) ?? "General"),
         description,
         props.metadata.background === true,
+        placed(),
       ),
     ]
 
@@ -2327,8 +2405,8 @@ export function formatSubagentToolcalls(count: number) {
   return `${count} toolcall${count === 1 ? "" : "s"}`
 }
 
-export function formatSubagentTitle(agent: string, description: string, background: boolean) {
-  return `${agent} Task${background ? " (background)" : ""} — ${description}`
+export function formatSubagentTitle(agent: string, description: string, background: boolean, placed?: string) {
+  return `${agent} Task${background ? " (background)" : ""}${placed ? ` @ ${placed}` : ""} — ${description}`
 }
 
 export function formatSubagentRetry(attempt: number, message: string) {
