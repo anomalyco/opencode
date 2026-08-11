@@ -3024,6 +3024,17 @@ export function executeCallSummary(call: ExecuteCall, last = false) {
   return `${last ? "└─" : "├─"} ${call.tool}${call.status === "error" ? " (failed)" : ""}${args ? ` ${args}` : ""}`
 }
 
+function blendColor(from: RGBA, to: RGBA, amount: number) {
+  const start = from.toInts()
+  const end = to.toInts()
+  return RGBA.fromInts(
+    Math.round(start[0] + (end[0] - start[0]) * amount),
+    Math.round(start[1] + (end[1] - start[1]) * amount),
+    Math.round(start[2] + (end[2] - start[2]) * amount),
+    Math.round(start[3] + (end[3] - start[3]) * amount),
+  )
+}
+
 function ExecuteCallView(props: { call: ExecuteCall; error?: string; last: boolean }) {
   const theme = useTheme()
   const renderer = useRenderer()
@@ -3034,6 +3045,10 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string; last: boole
   const title = createMemo(
     () => `${props.last ? "└─" : "├─"} ${props.call.tool}${props.call.status === "error" ? " (failed)" : ""}`,
   )
+  const connectorColor = (index: number) => {
+    if (!hover()) return theme.text.subdued
+    return blendColor(theme.text.default, theme.text.subdued, [0.35, 0.7, 1][Math.min(index, 2)] ?? 1)
+  }
 
   return (
     <box
@@ -3059,14 +3074,15 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string; last: boole
         {expanded() ? title() : executeCallSummary(props.call, props.last)}
       </text>
       <Show when={expanded()}>
-        <box
-          border={props.last ? undefined : ["left"]}
-          borderColor={theme.text.subdued}
-          paddingLeft={props.last ? 3 : 2}
-        >
+        <box>
           <For each={input()}>
-            {([key, value]) => (
-              <box flexDirection="row">
+            {([key, value], index) => (
+              <box
+                flexDirection="row"
+                border={props.last ? undefined : ["left"]}
+                borderColor={connectorColor(index())}
+                paddingLeft={props.last ? 3 : 2}
+              >
                 <text flexShrink={0} fg={theme.text.subdued}>
                   {key}:{" "}
                 </text>
@@ -3078,7 +3094,12 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string; last: boole
           </For>
           <Show when={props.error}>
             {(error) => (
-              <box flexDirection="row">
+              <box
+                flexDirection="row"
+                border={props.last ? undefined : ["left"]}
+                borderColor={connectorColor(input().length)}
+                paddingLeft={props.last ? 3 : 2}
+              >
                 <text flexShrink={0} fg={theme.text.feedback.error.default}>
                   error:{" "}
                 </text>
