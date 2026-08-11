@@ -1,148 +1,206 @@
 import { expect, test } from "bun:test"
-import type { RegionClaim } from "@opencode-ai/plugin/tui/context"
-import { resolveStructure, type Claim, type Part, type Placement } from "../src/plugin/structure"
+import type { SlotClaim } from "@opencode-ai/plugin/tui/context"
+import { resolveSlots, type Claim, type Placement } from "../src/plugin/structure"
 
-// Type-level canaries, checked by `bun typecheck`: the placement sum and the
-// part union are exclusive — nonsense shapes must not compile.
+// Type-level canaries, checked by `bun typecheck`: exactly one placement key,
+// absolute paths only, and the render input follows the targeted path.
 export const canaries = () => {
-  const claims: RegionClaim<"prompt.footer">[] = []
-  claims.push({ at: "end", render: () => null })
+  const claims: SlotClaim[] = []
+  claims.push({ append: "prompt.footer", render: (input) => (input.mode === "shell" ? null : null) })
+  claims.push({ after: "prompt.footer.status", render: () => null })
   // @ts-expect-error two placement keys cannot coexist
-  claims.push({ at: "end", before: "status", render: () => null })
+  claims.push({ append: "prompt.footer", before: "prompt.footer.status", render: () => null })
   // @ts-expect-error replace does not combine with an anchor
-  claims.push({ replace: "status", after: "file", render: () => null })
-  // @ts-expect-error a part is a leaf or a container, never both
-  const hybrid: Part<string> = { id: "x", render: "x", parts: [] }
-  return { claims, hybrid }
+  claims.push({ replace: "prompt.footer.status", after: "prompt.footer.file", render: () => null })
+  // @ts-expect-error targets must be absolute published paths
+  claims.push({ after: "status", render: () => null })
+  // @ts-expect-error the render input is the targeted slot's input
+  claims.push({ append: "prompt.footer", render: (input: { mode: number }) => null })
+  return claims
 }
 
-// The resolver is generic over render types; strings make ordering
-// assertions read as layouts.
-function claim(plugin: string, placement: Placement, render?: string): Claim<string> {
-  return { key: `${plugin}/${render ?? JSON.stringify(placement)}`, plugin, placement, render: render ?? plugin }
+// The resolver is generic over render values; strings make layout assertions
+// read as layouts.
+function claim(plugin: string, placement: Placement, render: string): Claim<string> {
+  return { key: `${plugin}/${render}`, plugin, placement, render }
 }
 
-function layout(result: ReturnType<typeof resolveStructure<string, string>>) {
-  return result.entries.map((entry) => (entry.kind === "part" ? entry.id : entry.claim.render))
+// A host slot tree for tests: a node's children are its child slots, a leaf's
+// content is its own name. Mirrors how nested <Slot> components mount.
+type Node = { readonly path: string; readonly children?: ReadonlyArray<Node> }
+
+function paths(nodes: ReadonlyArray<Node>, into = new Set<string>()): Set<string> {
+  for (const node of nodes) {
+    into.add(node.path)
+    paths(node.children ?? [], into)
+  }
+  return into
 }
 
-const footer: Part<string>[] = [
-  { id: "status", render: "status" },
-  { id: "file", render: "file" },
+// Fold the tree with a resolution into the flat render order, mirroring the
+// <Slot> component: before + (replace | prepend + own content + append) + after.
+function layout(nodes: ReadonlyArray<Node>, resolved: ReturnType<typeof resolveSlots<string>>): ReadonlyArray<string> {
+  return nodes.flatMap((node) => {
+    const slotted = resolved.slotted.get(node.path)
+    const own = node.children ? layout(node.children, resolved) : [leafName(node.path)]
+    const inside = slotted?.replace
+      ? [slotted.replace.render]
+      : [
+          ...(slotted?.prepend ?? []).map((item) => item.render),
+          ...own,
+          ...(slotted?.append ?? []).map((item) => item.render),
+        ]
+    return [
+      ...(slotted?.before ?? []).map((item) => item.render),
+      ...inside,
+      ...(slotted?.after ?? []).map((item) => item.render),
+    ]
+  })
+}
+
+function leafName(path: string) {
+  return path.slice(path.lastIndexOf(".") + 1)
+}
+
+function resolve(tree: ReadonlyArray<Node>, claims: ReadonlyArray<Claim<string>>) {
+  return resolveSlots({ paths: paths(tree), claims })
+}
+
+const footer: Node[] = [
+  {
+    path: "prompt.footer",
+    children: [{ path: "prompt.footer.status" }, { path: "prompt.footer.file" }],
+  },
 ]
 
-const tree: Part<string>[] = [
-  { id: "left", parts: [{ id: "mode", render: "mode" }] },
+const tree: Node[] = [
   {
-    id: "right",
-    parts: [
-      { id: "directory", render: "directory" },
-      { id: "model", render: "model" },
-      { id: "tokens", render: "tokens" },
+    path: "prompt.footer",
+    children: [
+      { path: "prompt.footer.left", children: [{ path: "prompt.footer.left.mode" }] },
+      {
+        path: "prompt.footer.right",
+        children: [
+          { path: "prompt.footer.right.directory" },
+          { path: "prompt.footer.right.model" },
+          { path: "prompt.footer.right.tokens" },
+        ],
+      },
     ],
   },
 ]
 
-test("no claims renders the host parts in order", () => {
-  const result = resolveStructure<string, string>({ region: "prompt.footer", parts: footer, claims: [] })
-  expect(layout(result)).toEqual(["status", "file"])
+test("no claims renders the host tree in order", () => {
+  const result = resolve(footer, [])
+  expect(layout(footer, result)).toEqual(["status", "file"])
   expect(result.suppressed).toEqual([])
   expect(result.degraded).toEqual([])
 })
 
-test("edge claims land at the region's edges, several in enable order", () => {
-  const result = resolveStructure({
-    region: "prompt.footer",
-    parts: footer,
-    claims: [
-      claim("a", { at: "end" }, "a1"),
-      claim("b", { at: "start" }, "b1"),
-      claim("a", { at: "end" }, "a2"),
-    ],
-  })
-  expect(layout(result)).toEqual(["b1", "status", "file", "a1", "a2"])
+test("prepend and append land inside a boundary's edges, several in enable order", () => {
+  const result = resolve(footer, [
+    claim("a", { append: "prompt.footer" }, "a1"),
+    claim("b", { prepend: "prompt.footer" }, "b1"),
+    claim("a", { append: "prompt.footer" }, "a2"),
+  ])
+  expect(layout(footer, result)).toEqual(["b1", "status", "file", "a1", "a2"])
 })
 
-test("before and after anchor to a part, wherever the host keeps it", () => {
-  const result = resolveStructure({
-    region: "prompt.footer",
-    parts: footer,
-    claims: [claim("a", { after: "status" }, "chip"), claim("b", { before: "status" }, "vim")],
-  })
-  expect(layout(result)).toEqual(["vim", "status", "chip", "file"])
+test("before and after anchor to a slot, wherever the host keeps it", () => {
+  const result = resolve(footer, [
+    claim("a", { after: "prompt.footer.status" }, "chip"),
+    claim("b", { before: "prompt.footer.status" }, "vim"),
+  ])
+  expect(layout(footer, result)).toEqual(["vim", "status", "chip", "file"])
 })
 
-test("a missing anchor degrades to the end instead of disappearing", () => {
-  const result = resolveStructure({
-    region: "prompt.footer",
-    parts: footer,
-    claims: [claim("a", { after: "tokens" }, "chip")],
-  })
-  expect(layout(result)).toEqual(["status", "file", "chip"])
-  expect(result.degraded.map((item) => item.render)).toEqual(["chip"])
+test("a missing anchor degrades to the nearest surviving ancestor's end", () => {
+  const result = resolve(footer, [claim("a", { after: "prompt.footer.tokens" }, "chip")])
+  expect(layout(footer, result)).toEqual(["status", "file", "chip"])
+  expect(result.degraded).toEqual([
+    { claim: claim("a", { after: "prompt.footer.tokens" }, "chip"), to: "prompt.footer" },
+  ])
 })
 
-test("replacing a part swaps content but keeps the position and its anchors", () => {
-  const result = resolveStructure({
-    region: "prompt.footer",
-    parts: footer,
-    claims: [claim("a", { replace: "status" }, "fancy-status"), claim("b", { after: "status" }, "chip")],
-  })
-  expect(layout(result)).toEqual(["fancy-status", "chip", "file"])
+test("an additive claim with no surviving ancestor is suppressed", () => {
+  const result = resolve(footer, [claim("a", { append: "session.composer.top" }, "chip")])
+  expect(layout(footer, result)).toEqual(["status", "file"])
+  expect(result.suppressed).toEqual([{ claim: claim("a", { append: "session.composer.top" }, "chip") }])
+})
+
+test("a missing replacement is suppressed, never degraded into a widget", () => {
+  const result = resolve(footer, [claim("a", { replace: "prompt.footer.tokens" }, "cost")])
+  expect(layout(footer, result)).toEqual(["status", "file"])
+  expect(result.suppressed).toEqual([{ claim: claim("a", { replace: "prompt.footer.tokens" }, "cost") }])
+  expect(result.degraded).toEqual([])
+})
+
+test("replacing a slot swaps content but keeps the boundary and its outside anchors", () => {
+  const fancy = claim("a", { replace: "prompt.footer.status" }, "fancy-status")
+  const result = resolve(footer, [fancy, claim("b", { after: "prompt.footer.status" }, "chip")])
+  expect(layout(footer, result)).toEqual(["fancy-status", "chip", "file"])
   expect(result.suppressed).toEqual([])
 })
 
-test("same target: the last-enabled claim wins and the loser is recorded", () => {
-  const first = claim("a", { replace: "status" }, "first")
-  const second = claim("b", { replace: "status" }, "second")
-  const result = resolveStructure({ region: "prompt.footer", parts: footer, claims: [first, second] })
-  expect(layout(result)).toEqual(["second", "file"])
+test("inside contributions to a replaced boundary are suppressed", () => {
+  const takeover = claim("a", { replace: "prompt.footer" }, "powerline")
+  const badge = claim("b", { append: "prompt.footer" }, "badge")
+  const result = resolve(footer, [badge, takeover])
+  expect(layout(footer, result)).toEqual(["powerline"])
+  expect(result.suppressed).toEqual([{ claim: badge, by: takeover }])
+})
+
+test("same target: the last-enabled replacement wins and the loser is recorded", () => {
+  const first = claim("a", { replace: "prompt.footer.status" }, "first")
+  const second = claim("b", { replace: "prompt.footer.status" }, "second")
+  const result = resolve(footer, [first, second])
+  expect(layout(footer, result)).toEqual(["second", "file"])
   expect(result.suppressed).toEqual([{ claim: first, by: second }])
 })
 
 test("container takeover suppresses everything anchored in the subtree", () => {
-  const takeover = claim("theme", { replace: "right" }, "my-right")
-  const chip = claim("pr", { after: "model" }, "chip")
-  const inner = claim("x", { replace: "tokens" }, "cost")
-  const result = resolveStructure({ region: "prompt.footer", parts: tree, claims: [takeover, chip, inner] })
-  expect(layout(result)).toEqual(["mode", "my-right"])
+  const takeover = claim("theme", { replace: "prompt.footer.right" }, "my-right")
+  const chip = claim("pr", { after: "prompt.footer.right.model" }, "chip")
+  const inner = claim("x", { replace: "prompt.footer.right.tokens" }, "cost")
+  const result = resolve(tree, [takeover, chip, inner])
+  expect(layout(tree, result)).toEqual(["mode", "my-right"])
   expect(result.suppressed).toEqual([
-    { claim: chip, by: takeover },
     { claim: inner, by: takeover },
+    { claim: chip, by: takeover },
   ])
 })
 
 test("hierarchy beats timeline: an ancestor takeover wins over a later descendant claim", () => {
   // The descendant replace was enabled after the container takeover; the
-  // container still wins because its target contains the descendant's.
-  const inner = claim("x", { replace: "model" }, "swap-model")
-  const outer = claim("theme", { replace: "right" }, "my-right")
-  const result = resolveStructure({ region: "prompt.footer", parts: tree, claims: [outer, inner] })
-  expect(layout(result)).toEqual(["mode", "my-right"])
+  // container still wins because its path contains the descendant's.
+  const inner = claim("x", { replace: "prompt.footer.right.model" }, "swap-model")
+  const outer = claim("theme", { replace: "prompt.footer.right" }, "my-right")
+  const result = resolve(tree, [outer, inner])
+  expect(layout(tree, result)).toEqual(["mode", "my-right"])
   expect(result.suppressed).toEqual([{ claim: inner, by: outer }])
 })
 
-test("root takeover: nothing original survives, all other claims suppressed", () => {
+test("root takeover: nothing original survives, all inside claims suppressed", () => {
   const theme = claim("powerline", { replace: "prompt.footer" }, "powerline")
-  const chip = claim("pr", { at: "end" }, "chip")
-  const result = resolveStructure({ region: "prompt.footer", parts: tree, claims: [chip, theme] })
-  expect(layout(result)).toEqual(["powerline"])
+  const chip = claim("pr", { append: "prompt.footer" }, "chip")
+  const result = resolve(tree, [chip, theme])
+  expect(layout(tree, result)).toEqual(["powerline"])
   expect(result.suppressed).toEqual([{ claim: chip, by: theme }])
 })
 
-test("root takeover at the same node: last enabled wins", () => {
-  const first = claim("a", { replace: "home.footer" }, "first")
-  const second = claim("b", { replace: "home.footer" }, "second")
-  const result = resolveStructure<string, string>({ region: "home.footer", parts: [], claims: [first, second] })
-  expect(layout(result)).toEqual(["second"])
-  expect(result.suppressed).toEqual([{ claim: first, by: second }])
+test("a degraded claim landing inside a replaced boundary is suppressed, not shown", () => {
+  const takeover = claim("theme", { replace: "prompt.footer.right" }, "my-right")
+  const stray = claim("pr", { after: "prompt.footer.right.gone" }, "chip")
+  const result = resolve(tree, [takeover, stray])
+  expect(layout(tree, result)).toEqual(["mode", "my-right"])
+  expect(result.suppressed).toEqual([{ claim: stray, by: takeover }])
+  expect(result.degraded).toEqual([])
 })
 
-test("containers flatten in order and anchors on a container wrap its whole span", () => {
-  const result = resolveStructure({
-    region: "prompt.footer",
-    parts: tree,
-    claims: [claim("a", { before: "right" }, "divider"), claim("b", { after: "right" }, "clock")],
-  })
-  expect(layout(result)).toEqual(["mode", "divider", "directory", "model", "tokens", "clock"])
+test("anchors on a container wrap its whole span", () => {
+  const result = resolve(tree, [
+    claim("a", { before: "prompt.footer.right" }, "divider"),
+    claim("b", { after: "prompt.footer.right" }, "clock"),
+  ])
+  expect(layout(tree, result)).toEqual(["mode", "divider", "directory", "model", "tokens", "clock"])
 })

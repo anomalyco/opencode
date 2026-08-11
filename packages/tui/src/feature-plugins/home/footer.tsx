@@ -64,6 +64,6 @@ export default Plugin.define({
   setup(context) {
     // Root takeover: an external plugin replacing home.footer wins (last-
     // enabled) and this builtin shows as suppressed, not silently gone.
-    context.ui.slot("home.footer", { replace: "home.footer", render: () => <View context={context} /> })
+    context.ui.slot({ replace: "home.footer", render: () => <View context={context} /> })
   },
 })

@@ -1,18 +1,20 @@
-// Pure resolution of a region's structure: the host's part tree plus plugin
-// claims in, an ordered render list plus suppressions out. No solid, no I/O —
-// every policy rule (takeover, hierarchy-beats-timeline, last-enabled-wins,
-// missing-anchor degradation) is testable as a data transform.
+// Pure resolution of the slot tree: the mounted slot paths plus plugin claims
+// in, per-path placement buckets plus diagnostics out. No solid, no I/O —
+// every policy rule (replacement takeover, hierarchy-beats-timeline,
+// last-enabled-wins, missing-target degradation) is testable as a data
+// transform.
 
-// Mirrors the public RegionPlacement type (plugin package) with part ids
-// erased to strings so the resolver stays independent of the region map.
-// Keep the two unions' variants in sync.
+// Mirrors the public SlotClaim type (plugin package) with target paths erased
+// to strings so the resolver stays independent of the slot map. Keep the two
+// unions' variants in sync.
 export type Placement =
-  | { readonly at: "start" | "end" }
+  | { readonly prepend: string }
+  | { readonly append: string }
   | { readonly before: string }
   | { readonly after: string }
   | { readonly replace: string }
 
-// One plugin's registered slot, in enable order within the claims array.
+// One plugin's registered slot claim, in enable order within the claims array.
 export type Claim<Render> = {
   readonly key: string
   readonly plugin: string
@@ -20,106 +22,142 @@ export type Claim<Render> = {
   readonly render: Render
 }
 
-// Host furniture: a leaf renders, a container groups — never both. Part ids
-// are the stable anchor vocabulary and must be unique within a region.
-export type Part<Render, Id extends string = string> =
-  | { readonly id: Id; readonly render: Render; readonly parts?: never }
-  | { readonly id: Id; readonly parts: ReadonlyArray<Part<Render, Id>>; readonly render?: never }
-
-export type Entry<PartRender, ClaimRender> =
-  | { readonly kind: "part"; readonly id: string; readonly render: PartRender }
-  | { readonly kind: "claim"; readonly claim: Claim<ClaimRender> }
-
-export function resolveStructure<PartRender extends {}, ClaimRender>(input: {
-  readonly region: string
-  readonly parts: ReadonlyArray<Part<PartRender>>
-  readonly claims: ReadonlyArray<Claim<ClaimRender>>
-}): {
-  readonly entries: ReadonlyArray<Entry<PartRender, ClaimRender>>
-  readonly suppressed: ReadonlyArray<{ readonly claim: Claim<ClaimRender>; readonly by: Claim<ClaimRender> }>
-  readonly degraded: ReadonlyArray<Claim<ClaimRender>>
-} {
-  // Root takeover: the region's content is the winning claim, full stop.
-  // Every other claim — including edge-anchored ones — is suppressed, so a
-  // theme can never be silently decorated by chips it didn't plan for.
-  const takeover = input.claims
-    .filter((claim) => "replace" in claim.placement && claim.placement.replace === input.region)
-    .at(-1)
-  if (takeover)
-    return {
-      entries: [{ kind: "claim", claim: takeover }],
-      suppressed: input.claims.filter((claim) => claim !== takeover).map((claim) => ({ claim, by: takeover })),
-      degraded: [],
-    }
-
-  const known = new Set<string>()
-  const register = (parts: ReadonlyArray<Part<PartRender>>) => {
-    for (const part of parts) {
-      known.add(part.id)
-      if (part.parts !== undefined) register(part.parts)
-    }
-  }
-  register(input.parts)
-
-  const entries: Entry<PartRender, ClaimRender>[] = []
-  const suppressed: { claim: Claim<ClaimRender>; by: Claim<ClaimRender> }[] = []
-
-  // A container takeover orphans everything anchored to (or replacing) the
-  // parts inside it. Recorded so the host can surface it (plugins dialog,
-  // in a follow-up) — never silently dropped.
-  const suppressSubtree = (parts: ReadonlyArray<Part<PartRender>>, by: Claim<ClaimRender>) => {
-    for (const part of parts) {
-      for (const claim of input.claims) if (anchor(claim.placement) === part.id) suppressed.push({ claim, by })
-      if (part.parts !== undefined) suppressSubtree(part.parts, by)
-    }
-  }
-
-  const walk = (parts: ReadonlyArray<Part<PartRender>>) => {
-    for (const part of parts) {
-      for (const claim of input.claims)
-        if ("before" in claim.placement && claim.placement.before === part.id) entries.push({ kind: "claim", claim })
-      // Replacing keeps the part's position: before/after anchors on the
-      // replaced id stay valid, only the content (and subtree) changes hands.
-      const replacers = input.claims.filter(
-        (claim) => "replace" in claim.placement && claim.placement.replace === part.id,
-      )
-      const winner = replacers.at(-1)
-      if (winner) {
-        for (const loser of replacers.slice(0, -1)) suppressed.push({ claim: loser, by: winner })
-        entries.push({ kind: "claim", claim: winner })
-        // Hierarchy beats timeline: claims into the subtree lose to the
-        // container's winner no matter when they were enabled.
-        if (part.parts !== undefined) suppressSubtree(part.parts, winner)
-      }
-      if (!winner && part.parts !== undefined) walk(part.parts)
-      if (!winner && part.render !== undefined) entries.push({ kind: "part", id: part.id, render: part.render })
-      for (const claim of input.claims)
-        if ("after" in claim.placement && claim.placement.after === part.id) entries.push({ kind: "claim", claim })
-    }
-  }
-
-  for (const claim of input.claims)
-    if ("at" in claim.placement && claim.placement.at === "start") entries.push({ kind: "claim", claim })
-  walk(input.parts)
-  for (const claim of input.claims)
-    if ("at" in claim.placement && claim.placement.at === "end") entries.push({ kind: "claim", claim })
-
-  // A claim aimed at a part the host no longer publishes degrades to the
-  // region's end rather than vanishing: an anchor rename must never silently
-  // cost a plugin its render. Degraded claims land after end-edge claims,
-  // in enable order.
-  const degraded = input.claims.filter((claim) => {
-    const id = anchor(claim.placement)
-    return id !== undefined && !known.has(id)
-  })
-  for (const claim of degraded) entries.push({ kind: "claim", claim })
-
-  return { entries, suppressed, degraded }
+// Everything one mounted slot renders besides its own children: siblings
+// around the boundary, contributions inside it, and at most one takeover.
+export type Slotted<Render> = {
+  readonly before: ReadonlyArray<Claim<Render>>
+  readonly prepend: ReadonlyArray<Claim<Render>>
+  readonly append: ReadonlyArray<Claim<Render>>
+  readonly after: ReadonlyArray<Claim<Render>>
+  readonly replace?: Claim<Render>
 }
 
-function anchor(placement: Placement) {
-  if ("before" in placement) return placement.before
-  if ("after" in placement) return placement.after
-  if ("replace" in placement) return placement.replace
+export type Suppressed<Render> = {
+  readonly claim: Claim<Render>
+  // The winning claim for a conflict or boundary suppression; absent when a
+  // replacement's target no longer exists (missing replacements never degrade).
+  readonly by?: Claim<Render>
+}
+
+export type Degraded<Render> = {
+  readonly claim: Claim<Render>
+  // The surviving ancestor path the claim was appended to.
+  readonly to: string
+}
+
+const EMPTY: Slotted<never> = { before: [], prepend: [], append: [], after: [] }
+
+export function emptySlotted<Render>(): Slotted<Render> {
+  return EMPTY
+}
+
+// `paths` is the set of currently mounted slot paths; `claims` is every
+// active claim in plugin enable order. The result maps each targeted path to
+// its placement buckets — untargeted paths are absent and render as empty.
+export function resolveSlots<Render>(input: {
+  readonly paths: ReadonlySet<string>
+  readonly claims: ReadonlyArray<Claim<Render>>
+}): {
+  readonly slotted: ReadonlyMap<string, Slotted<Render>>
+  readonly suppressed: ReadonlyArray<Suppressed<Render>>
+  readonly degraded: ReadonlyArray<Degraded<Render>>
+} {
+  const suppressed: Suppressed<Render>[] = []
+  const degraded: Degraded<Render>[] = []
+
+  // Pass 1 — replacement boundaries. Per target the last-enabled claim wins;
+  // then an accepted boundary swallows every replacement strictly inside it,
+  // regardless of enable order (hierarchy beats timeline).
+  const winners = new Map<string, Claim<Render>>()
+  for (const claim of input.claims) {
+    if (!("replace" in claim.placement)) continue
+    if (!input.paths.has(claim.placement.replace)) {
+      suppressed.push({ claim })
+      continue
+    }
+    const prior = winners.get(claim.placement.replace)
+    if (prior) suppressed.push({ claim: prior, by: claim })
+    winners.set(claim.placement.replace, claim)
+  }
+  const boundaries = new Map<string, Claim<Render>>()
+  const containing = (path: string) => {
+    for (const [boundary, winner] of boundaries) if (path.startsWith(boundary + ".")) return winner
+    return undefined
+  }
+  // Shallow boundaries first, so a nested replacement meets its container.
+  for (const [path, winner] of [...winners].sort((a, b) => depth(a[0]) - depth(b[0]))) {
+    const outer = containing(path)
+    if (outer) {
+      suppressed.push({ claim: winner, by: outer })
+      continue
+    }
+    boundaries.set(path, winner)
+  }
+
+  // Pass 2 — additive claims, in enable order. A claim whose target sits
+  // inside a replaced boundary is suppressed; a claim whose target is gone
+  // degrades to appending on the nearest surviving ancestor.
+  const buckets = new Map<
+    string,
+    { before: Claim<Render>[]; prepend: Claim<Render>[]; append: Claim<Render>[]; after: Claim<Render>[] }
+  >()
+  const bucket = (path: string) => {
+    const existing = buckets.get(path)
+    if (existing) return existing
+    const fresh = { before: [], prepend: [], append: [], after: [] }
+    buckets.set(path, fresh)
+    return fresh
+  }
+  for (const claim of input.claims) {
+    if ("replace" in claim.placement) continue
+    const [kind, path] =
+      "prepend" in claim.placement
+        ? (["prepend", claim.placement.prepend] as const)
+        : "append" in claim.placement
+          ? (["append", claim.placement.append] as const)
+          : "before" in claim.placement
+            ? (["before", claim.placement.before] as const)
+            : (["after", claim.placement.after] as const)
+    // Inside placements targeting a replaced boundary are part of its
+    // contents; sibling placements on the boundary itself stay outside it.
+    const inside = kind === "prepend" || kind === "append" ? boundaries.get(path) : undefined
+    const outer = inside ?? containing(path)
+    if (outer) {
+      suppressed.push({ claim, by: outer })
+      continue
+    }
+    if (input.paths.has(path)) {
+      bucket(path)[kind].push(claim)
+      continue
+    }
+    const ancestor = survivingAncestor(path, input.paths)
+    if (ancestor === undefined) {
+      suppressed.push({ claim })
+      continue
+    }
+    const boundary = boundaries.get(ancestor)
+    if (boundary) {
+      suppressed.push({ claim, by: boundary })
+      continue
+    }
+    degraded.push({ claim, to: ancestor })
+    bucket(ancestor).append.push(claim)
+  }
+
+  const slotted = new Map<string, Slotted<Render>>()
+  for (const [path, lists] of buckets) slotted.set(path, lists)
+  for (const [path, winner] of boundaries) slotted.set(path, { ...(buckets.get(path) ?? EMPTY), replace: winner })
+  return { slotted, suppressed, degraded }
+}
+
+function depth(path: string) {
+  return path.split(".").length
+}
+
+function survivingAncestor(path: string, paths: ReadonlySet<string>) {
+  for (let index = path.lastIndexOf("."); index !== -1; index = path.lastIndexOf(".", index - 1)) {
+    const ancestor = path.slice(0, index)
+    if (paths.has(ancestor)) return ancestor
+  }
   return undefined
 }

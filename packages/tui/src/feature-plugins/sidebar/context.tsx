@@ -44,8 +44,8 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
 export default Plugin.define({
   id: "internal:sidebar-context",
   setup(context) {
-    context.ui.slot("sidebar.content", {
-      at: "end",
+    context.ui.slot({
+      append: "sidebar.content",
       render: (props) => <SidebarContext context={context} sessionID={props.sessionID} />,
     })
   },

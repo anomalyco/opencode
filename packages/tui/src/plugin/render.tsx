@@ -4,14 +4,15 @@ import {
   ErrorBoundary,
   For,
   mergeProps,
+  onCleanup,
   onMount,
   Show,
   type JSX,
   type ParentProps,
 } from "solid-js"
-import type { RegionMap, RegionName } from "@opencode-ai/plugin/tui/context"
-import type { RegionRender } from "./api"
-import { resolveStructure, type Entry, type Part } from "./structure"
+import type { SlotMap, SlotPath } from "@opencode-ai/plugin/tui/context"
+import type { SlotRender } from "./api"
+import { emptySlotted, type Claim } from "./structure"
 import { useRoute } from "../context/route"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
@@ -66,69 +67,69 @@ export function PluginRoute(props: { readonly fallback: (id: string, name: strin
   )
 }
 
-type HostRender = () => JSX.Element
-
-// One extensible area of the host UI: the host's parts plus every active
-// plugin claim, resolved into one ordered child list. Placement policy —
-// takeover suppression, last-enabled-wins, missing-anchor degradation —
-// lives in resolveStructure; this component only renders the result.
-export function Region<Name extends RegionName>(props: {
-  readonly name: Name
-  readonly input: RegionMap[Name]["input"]
-  readonly parts?: ReadonlyArray<Part<HostRender, RegionMap[Name]["part"]>>
-}) {
+// One named boundary of the host UI's slot tree. The host's own content are
+// the children; every active plugin claim targeting this path resolves into
+// siblings around it, contributions inside it, or one takeover of it.
+// Placement policy — boundary suppression, last-enabled-wins, missing-target
+// degradation — lives in resolveSlots; this component only renders its own
+// path's buckets.
+export function Slot<Path extends SlotPath>(
+  props: ParentProps<{ readonly path: Path; readonly input?: SlotMap[Path] }>,
+) {
   const plugins = usePlugin()
-  // resolveStructure builds fresh entry objects each run, but <For> diffs
-  // rows by reference: cache entries so untouched rows (and the plugin
-  // state inside them) survive unrelated claim changes. Part entries key on
-  // their documented-stable id — render-function identity would break if
-  // the compiled parts prop ever rebuilt its closures. Claim entries key on
-  // the render function (weakly, so hot-reloaded generations collect).
-  const partEntries = new Map<string, Entry<HostRender, RegionRender>>()
-  const claimEntries = new WeakMap<RegionRender, Entry<HostRender, RegionRender>>()
-  const entries = createMemo(
-    () =>
-      resolveStructure<HostRender, RegionRender>({
-        region: props.name,
-        parts: props.parts ?? [],
-        claims: plugins.claims(props.name),
-      }).entries.map((entry) => {
-        if (entry.kind === "part") {
-          const cached = partEntries.get(entry.id)
-          if (cached) return cached
-          partEntries.set(entry.id, entry)
-          return entry
-        }
-        const cached = claimEntries.get(entry.claim.render)
-        if (cached) return cached
-        claimEntries.set(entry.claim.render, entry)
-        return entry
-      }),
-    [] as ReadonlyArray<Entry<HostRender, RegionRender>>,
-    // Rows are reference-stable, so an elementwise comparison makes a claim
-    // change in some other region a complete no-op for this one.
-    { equals: (a, b) => a.length === b.length && a.every((entry, index) => entry === b[index]) },
+  // A slot's path is its identity for the whole mount; instances are
+  // reference-counted so the same path may be mounted several times (one
+  // composer footer per session tab).
+  const path = props.path
+  onCleanup(plugins.slots.register(path))
+  const slotted = createMemo(
+    () => plugins.slots.resolved().slotted.get(path) ?? emptySlotted<SlotRender>(),
+    emptySlotted<SlotRender>(),
+    // Claim objects are reference-stable across resolutions, so a bucketwise
+    // comparison makes a claim change elsewhere in the tree a no-op here.
+    {
+      equals: (a, b) =>
+        same(a.before, b.before) &&
+        same(a.prepend, b.prepend) &&
+        same(a.append, b.append) &&
+        same(a.after, b.after) &&
+        a.replace === b.replace,
+    },
+  )
+  // Component semantics: the render body runs once and untracked, so signals
+  // and intervals created inside are stable, while the slot input stays
+  // reactive through the merged getter. A bare render(props.input) call
+  // would run inside the host's tracked scope and re-execute the whole body
+  // (resetting plugin state) on every tracked read.
+  const contribution = (claim: Claim<SlotRender>) => (
+    <PluginBoundary id={claim.plugin} where={`slot ${path}`}>
+      {createComponent(
+        claim.render,
+        mergeProps(() => props.input ?? ({} as SlotMap[Path])),
+      )}
+    </PluginBoundary>
   )
   return (
-    <For each={entries()}>
-      {(entry) =>
-        // A row's entry object is cached, so its kind never changes within
-        // the row's lifetime — a plain branch is safe here.
-        entry.kind === "part" ? (
-          entry.render()
-        ) : (
-          <PluginBoundary id={entry.claim.plugin} where={`region ${props.name}`}>
-            {
-              // Component semantics: the render body runs once and untracked, so
-              // signals and intervals created inside are stable, while props stay
-              // reactive through the merged getter. A bare render(props.input)
-              // call would run inside the host's tracked scope and re-execute the
-              // whole body (resetting plugin state) on every tracked read.
-              createComponent(entry.claim.render, mergeProps(() => props.input) as RegionMap[RegionName]["input"])
-            }
-          </PluginBoundary>
-        )
-      }
-    </For>
+    <>
+      <For each={slotted().before}>{contribution}</For>
+      <Show
+        keyed
+        when={slotted().replace}
+        fallback={
+          <>
+            <For each={slotted().prepend}>{contribution}</For>
+            {props.children}
+            <For each={slotted().append}>{contribution}</For>
+          </>
+        }
+      >
+        {contribution}
+      </Show>
+      <For each={slotted().after}>{contribution}</For>
+    </>
   )
+}
+
+function same(a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>) {
+  return a.length === b.length && a.every((item, index) => item === b[index])
 }

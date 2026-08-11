@@ -8,7 +8,7 @@ import type {
   KeymapCommand,
   KeymapLayer,
   Page,
-  RegionClaim,
+  SlotClaim,
   Route,
 } from "@opencode-ai/plugin/tui/context"
 import { ThemeProvider, useThemes } from "../../../src/context/theme"
@@ -143,7 +143,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
   const commands = new Map<string, KeymapCommand>()
   let current = initialRoute ?? startRoute
   let renderDiff: Page["render"] | undefined
-  let renderCommands: RegionClaim<"app">["render"] | undefined
+  let renderCommands: SlotClaim<"app">["render"] | undefined
   let vcsDiffInput: unknown
   const config = createTuiResolvedConfig()
   const transport = createFetch((url) => {
@@ -200,7 +200,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
           },
           current: () => current,
         },
-        slot(_name: string, claim: RegionClaim<"app">) {
+        slot(claim: SlotClaim<"app">) {
           renderCommands = claim.render
           return () => {}
         },

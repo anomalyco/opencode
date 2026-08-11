@@ -19,6 +19,6 @@ function View(props: { context: Plugin.Context }) {
 export default Plugin.define({
   id: "opencode.sidebar-footer",
   setup(context) {
-    context.ui.slot("sidebar.footer", { replace: "sidebar.footer", render: () => <View context={context} /> })
+    context.ui.slot({ replace: "sidebar.footer", render: () => <View context={context} /> })
   },
 })

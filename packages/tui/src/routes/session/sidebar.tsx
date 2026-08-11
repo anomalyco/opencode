@@ -2,7 +2,7 @@ import { useData } from "../../context/data"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useConfig } from "../../config"
-import { Region } from "../../plugin/render"
+import { Slot } from "../../plugin/render"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 
 import { getScrollAcceleration } from "../../util/scroll"
@@ -52,12 +52,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <text fg={theme.text.subdued}>{session()!.location.workspaceID}</text>
               </Show>
             </box>
-            <Region name="sidebar.content" input={{ sessionID: props.sessionID }} />
+            <Slot path="sidebar.content" input={{ sessionID: props.sessionID }} />
           </box>
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
-          <Region name="sidebar.footer" input={{}} />
+          <Slot path="sidebar.footer" />
         </box>
       </box>
     </Show>

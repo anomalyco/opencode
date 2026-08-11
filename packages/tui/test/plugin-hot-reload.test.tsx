@@ -140,7 +140,7 @@ import { appendFile } from "node:fs/promises"
 export default {
   id: "test.crash",
   setup: async (context: any) => {
-    context.ui.slot("home.footer", {
+    context.ui.slot({
       replace: "home.footer",
       render: () => {
         throw new Error("boom")
