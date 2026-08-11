@@ -3019,36 +3019,19 @@ function executeCalls(value: unknown): ExecuteCall[] {
   })
 }
 
-export function executeCallSummary(call: ExecuteCall, last = false) {
+export function executeCallSummary(call: ExecuteCall) {
   const args = primitiveInputSummary(call.input ?? {})
-  return `${last ? "└─" : "├─"} ${call.tool}${call.status === "error" ? " (failed)" : ""}${args ? ` ${args}` : ""}`
+  return `↳ ${call.tool}${call.status === "error" ? " (failed)" : ""}${args ? ` ${args}` : ""}`
 }
 
-function blendColor(from: RGBA, to: RGBA, amount: number) {
-  const start = from.toInts()
-  const end = to.toInts()
-  return RGBA.fromInts(
-    Math.round(start[0] + (end[0] - start[0]) * amount),
-    Math.round(start[1] + (end[1] - start[1]) * amount),
-    Math.round(start[2] + (end[2] - start[2]) * amount),
-    Math.round(start[3] + (end[3] - start[3]) * amount),
-  )
-}
-
-function ExecuteCallView(props: { call: ExecuteCall; error?: string; last: boolean }) {
+function ExecuteCallView(props: { call: ExecuteCall; error?: string }) {
   const theme = useTheme()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
   const [hover, setHover] = createSignal(false)
   const input = createMemo(() => Object.entries(props.call.input ?? {}))
   const expandable = createMemo(() => input().length > 0 || Boolean(props.error))
-  const title = createMemo(
-    () => `${props.last ? "└─" : "├─"} ${props.call.tool}${props.call.status === "error" ? " (failed)" : ""}`,
-  )
-  const connectorColor = (index: number) => {
-    if (!hover()) return theme.text.subdued
-    return blendColor(theme.text.default, theme.text.subdued, [0.35, 0.7, 1][Math.min(index, 2)] ?? 1)
-  }
+  const title = createMemo(() => `↳ ${props.call.tool}${props.call.status === "error" ? " (failed)" : ""}`)
 
   return (
     <box
@@ -3071,18 +3054,13 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string; last: boole
               : theme.text.subdued
         }
       >
-        {expanded() ? title() : executeCallSummary(props.call, props.last)}
+        {expanded() ? title() : executeCallSummary(props.call)}
       </text>
       <Show when={expanded()}>
-        <box>
+        <box paddingLeft={2}>
           <For each={input()}>
-            {([key, value], index) => (
-              <box
-                flexDirection="row"
-                border={props.last ? undefined : ["left"]}
-                borderColor={connectorColor(index())}
-                paddingLeft={props.last ? 3 : 2}
-              >
+            {([key, value]) => (
+              <box flexDirection="row">
                 <text flexShrink={0} fg={theme.text.subdued}>
                   {key}:{" "}
                 </text>
@@ -3094,12 +3072,7 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string; last: boole
           </For>
           <Show when={props.error}>
             {(error) => (
-              <box
-                flexDirection="row"
-                border={props.last ? undefined : ["left"]}
-                borderColor={connectorColor(input().length)}
-                paddingLeft={props.last ? 3 : 2}
-              >
+              <box flexDirection="row">
                 <text flexShrink={0} fg={theme.text.feedback.error.default}>
                   error:{" "}
                 </text>
@@ -3139,13 +3112,7 @@ function Execute(props: ToolProps) {
         execute
       </InlineTool>
       <For each={calls()}>
-        {(call, index) => (
-          <ExecuteCallView
-            call={call}
-            error={call.status === "error" ? outputPreview() : undefined}
-            last={index() === calls().length - 1}
-          />
-        )}
+        {(call) => <ExecuteCallView call={call} error={call.status === "error" ? outputPreview() : undefined} />}
       </For>
       <Show when={calls().length === 0 && showOutput()}>
         <box paddingLeft={3}>
