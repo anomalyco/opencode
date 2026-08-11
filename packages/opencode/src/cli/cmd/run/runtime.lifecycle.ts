@@ -298,12 +298,18 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     let sigintRegistered = false
 
     // Fallback for environments that never deliver SIGWINCH (Termux/proot):
-    // poll the true terminal size via ioctl and resize the renderer when it
-    // changes. Ignored when the ioctl shim could not be loaded.
+    // poll the true terminal size via ioctl(TIOCGWINSZ) and notify the renderer
+    // when it changes. v3: drop the process.stdout.isTTY gate (opencode may swap
+    // process.stdout during TUI setup, which would silently disable the poll),
+    // and on change take BOTH insurance paths:
+    //   1) renderer.resize() — external resize API (may be a no-op in some builds)
+    //   2) process.kill(self, SIGWINCH) — reliably wakes OpenTUI's SIGWINCH
+    //      handler, which re-reads the real terminal size and repaints. This is
+    //      the path verified to actually reflow under Termux+proot.
     let pollTimer: ReturnType<typeof setInterval> | undefined
     let lastPollSize: Winsize | undefined
     const startSizePoll = () => {
-      if (pollTimer || !process.stdout.isTTY) {
+      if (pollTimer) {
         return
       }
 
@@ -326,7 +332,16 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
         }
 
         lastPollSize = size
-        renderer.resize(size.cols, size.rows)
+        try {
+          renderer.resize(size.cols, size.rows)
+        } catch {
+          // ignore
+        }
+        try {
+          process.kill(process.pid, "SIGWINCH")
+        } catch {
+          // ignore
+        }
       }, 300)
     }
     startSizePoll()
