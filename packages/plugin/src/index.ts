@@ -307,6 +307,12 @@ export interface Hooks {
     output: { context: string[]; prompt?: string },
   ) => Promise<void>
   /**
+   * Called after an assistant turn is persisted and immediately before the
+   * session would become idle. Adding context keeps the session running by
+   * creating a hidden synthetic user turn containing that context.
+   */
+  "experimental.session.stopping"?: (input: { sessionID: string }, output: { context: string[] }) => Promise<void>
+  /**
    * Called after compaction succeeds and before a synthetic user
    * auto-continue message is added.
    *

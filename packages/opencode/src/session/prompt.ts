@@ -1125,6 +1125,31 @@ const layer = Layer.effect(
                 callID: orphan.callID,
               })
             }
+            const stopping = yield* plugin.trigger("experimental.session.stopping", { sessionID }, { context: [] })
+            if (stopping.context.length > 0) {
+              const continueMsg = yield* sessions.updateMessage({
+                id: MessageID.ascending(),
+                role: "user",
+                sessionID,
+                time: { created: Date.now() },
+                agent: lastUser.agent,
+                model: lastUser.model,
+              })
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: continueMsg.id,
+                sessionID,
+                type: "text",
+                text: stopping.context.join("\n\n"),
+                metadata: { session_stopping: true },
+                synthetic: true,
+                time: {
+                  start: Date.now(),
+                  end: Date.now(),
+                },
+              })
+              continue
+            }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
             break
           }
