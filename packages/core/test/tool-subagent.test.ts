@@ -4,6 +4,7 @@ import path from "path"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Global } from "@opencode-ai/util/global"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { Bus } from "@opencode-ai/core/bus"
@@ -26,6 +27,7 @@ import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { SubagentTool } from "@opencode-ai/core/tool/plugin/subagent"
 import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
+import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
 import { executeTool, toolIdentity, waitForTool } from "./lib/tool"
 
@@ -100,7 +102,10 @@ const layer = AppNodeBuilder.build(
     PluginRuntime.providerNode,
     LocationServiceMap.node,
   ]),
-  [[SessionExecution.node, executionNode]],
+  [
+    [SessionExecution.node, executionNode],
+    [Global.node, tempGlobalLayer],
+  ],
 )
 
 const it = testEffect(layer)

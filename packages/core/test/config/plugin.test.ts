@@ -8,6 +8,7 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { ConfigPluginSource } from "@opencode-ai/core/config/plugin/source"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Global } from "@opencode-ai/util/global"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
@@ -20,14 +21,18 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Effect, Fiber, Logger, Stream } from "effect"
 import { Database } from "../../src/database/database"
 import { tmpdir } from "../fixture/tmpdir"
+import { tempGlobalLayer } from "../fixture/global"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node])),
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+    [Global.node, tempGlobalLayer],
+  ]),
 )
 const staticIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
     [ConfigPluginSource.node, ConfigPluginSource.empty],
+    [Global.node, tempGlobalLayer],
   ]),
 )
 

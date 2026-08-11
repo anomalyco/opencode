@@ -33,6 +33,7 @@ import { ShellTool } from "@opencode-ai/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode-ai/core/tool-output"
 import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
+import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, toolDefinitions, waitForTool } from "./lib/tool"
 
@@ -138,6 +139,7 @@ const layer = AppNodeBuilder.build(
   [
     [SessionExecution.node, executionNode],
     [Permission.node, permission],
+    [Global.node, tempGlobalLayer],
   ],
 )
 
