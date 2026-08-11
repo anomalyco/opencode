@@ -168,6 +168,69 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
+  it.live("loads auto-discovered plugin packages from package metadata", () =>
+    withLocation(
+      undefined,
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* Plugin.Service
+        expect((yield* plugins.list()).map((plugin) => String(plugin.id))).toContain("package-metadata")
+      }),
+      false,
+      async (directory) => {
+        const plugin = path.join(directory, ".opencode", "plugins", "package-metadata")
+        await fs.mkdir(plugin, { recursive: true })
+        await fs.writeFile(path.join(plugin, "package.json"), JSON.stringify({ exports: "./entry.ts" }))
+        await fs.writeFile(path.join(plugin, "entry.ts"), discoveredPlugin("package-metadata"))
+      },
+    ),
+  )
+
+  it.live("loads auto-discovered plugin packages from index fallback", () =>
+    withLocation(
+      undefined,
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* Plugin.Service
+        expect((yield* plugins.list()).map((plugin) => String(plugin.id))).toContain("index-fallback")
+      }),
+      false,
+      async (directory) => {
+        const plugin = path.join(directory, ".opencode", "plugins", "index-fallback")
+        await fs.mkdir(plugin, { recursive: true })
+        await fs.writeFile(path.join(plugin, "index.js"), discoveredPlugin("index-fallback"))
+      },
+    ),
+  )
+
+  it.live("prefers package metadata over index fallback", () =>
+    withLocation(
+      undefined,
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* Plugin.Service
+        const ids = (yield* plugins.list()).map((plugin) => String(plugin.id))
+        expect(ids).toContain("metadata-precedence")
+        expect(ids).not.toContain("module-collision")
+        expect(ids).not.toContain("main-collision")
+        expect(ids).not.toContain("index-collision")
+      }),
+      false,
+      async (directory) => {
+        const plugin = path.join(directory, ".opencode", "plugins", "collision")
+        await fs.mkdir(plugin, { recursive: true })
+        await fs.writeFile(
+          path.join(plugin, "package.json"),
+          JSON.stringify({ exports: "./entry.js", module: "./module.js", main: "./main.js" }),
+        )
+        await fs.writeFile(path.join(plugin, "entry.js"), discoveredPlugin("metadata-precedence"))
+        await fs.writeFile(path.join(plugin, "module.js"), discoveredPlugin("module-collision"))
+        await fs.writeFile(path.join(plugin, "main.js"), discoveredPlugin("main-collision"))
+        await fs.writeFile(path.join(plugin, "index.js"), discoveredPlugin("index-collision"))
+      },
+    ),
+  )
+
   staticIt.live("uses only internal and SDK plugins when the static source is wired", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
@@ -388,4 +451,8 @@ export default Plugin.define({
   },
 })
 `
+}
+
+function discoveredPlugin(id: string) {
+  return `export default { id: ${JSON.stringify(id)}, setup() {} }`
 }

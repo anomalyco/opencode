@@ -4,7 +4,7 @@ import { Directory, Document, type Entry } from "@opencode-ai/schema/config"
 import { ConfigPlugin } from "@opencode-ai/schema/config/plugin"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Effect, Layer, Option, PubSub, Scope, Stream } from "effect"
+import { Context, Effect, Layer, Option, PubSub, Schema, Scope, Stream } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { Config } from "../../config"
@@ -154,6 +154,12 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
 })
 
 const sourceDirectories = ["plugin", "plugins"] as const
+const Package = Schema.Struct({
+  exports: Schema.optional(Schema.Unknown),
+  module: Schema.optional(Schema.Unknown),
+  main: Schema.optional(Schema.Unknown),
+})
+const decodePackage = Schema.decodeUnknownOption(Package)
 
 function discoverDirectory(fs: FSUtil.Interface, directory: string) {
   return Effect.gen(function* () {
@@ -166,7 +172,38 @@ function discoverDirectory(fs: FSUtil.Interface, directory: string) {
         symlink: true,
       })
       .pipe(Effect.orElseSucceed(() => []))
-    return files.sort().map((target): Operation => ({ type: "add", target, options: {} }))
+    const children = yield* fs
+      .scan(`{${sourceDirectories.join(",")}}/*`, {
+        cwd: directory,
+        absolute: true,
+        include: "all",
+        dot: true,
+        symlink: true,
+      })
+      .pipe(Effect.orElseSucceed(() => []))
+    const directories = yield* Effect.filter(children.sort(), fs.isDir)
+    const packages = yield* Effect.forEach(directories, (child) => discoverPackage(fs, child))
+    return [...files.sort(), ...packages.filter((target): target is string => typeof target === "string")].map(
+      (target): Operation => ({ type: "add", target, options: {} }),
+    )
+  })
+}
+
+function discoverPackage(fs: FSUtil.Interface, directory: string) {
+  return Effect.gen(function* () {
+    const manifest = yield* fs
+      .readJson(path.join(directory, "package.json"))
+      .pipe(Effect.map(decodePackage), Effect.orElseSucceed(Option.none))
+    const configured = Option.isSome(manifest)
+      ? [manifest.value.exports, manifest.value.module, manifest.value.main].filter(
+          (entry): entry is string => typeof entry === "string",
+        )
+      : []
+    const target = yield* Effect.findFirst(
+      [...configured, "index.ts", "index.js"].map((entry) => path.resolve(directory, entry)),
+      fs.isFile,
+    )
+    return Option.getOrUndefined(target)
   })
 }
 
