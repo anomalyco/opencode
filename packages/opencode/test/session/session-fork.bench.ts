@@ -20,6 +20,7 @@ import { testEffect } from "../lib/effect"
 
 const messageCount = 986
 const partCount = 5_657
+const stepFinishCount = messageCount / 2
 const largeSummaryMessage = 84
 const compactionMessage = 100
 const compactionTail = 10
@@ -87,7 +88,7 @@ it.instance(
           : {
               role: "assistant" as const,
               time: { created: index, completed: index },
-              parentID: messageIDs[index - 1]!,
+              parentID: messageIDs[index - 1],
               modelID: "benchmark",
               providerID: "benchmark",
               mode: "build",
@@ -109,7 +110,20 @@ it.instance(
           const data =
             index === compactionMessage && partIndex === 0
               ? { type: "compaction" as const, auto: true, tail_start_id: messageIDs[compactionTail] }
-              : { type: "text" as const, text: `message ${index} part ${partIndex}` }
+              : !user && partIndex === partsForMessage - 1
+                ? {
+                    type: "step-finish" as const,
+                    reason: "stop",
+                    cost: 0.005,
+                    tokens: {
+                      total: 1_500,
+                      input: 500,
+                      output: 800,
+                      reasoning: 200,
+                      cache: { read: 100, write: 50 },
+                    },
+                  }
+                : { type: "text" as const, text: `message ${index} part ${partIndex}` }
           parts.push({
             id: PartID.ascending(),
             message_id: id,
@@ -141,12 +155,20 @@ it.instance(
         .where(eq(EventTable.aggregate_id, fork.id))
         .get()
         .pipe(Effect.orDie)
+      const forkInfo = yield* session.get(fork.id)
 
       expect(forked).toHaveLength(messageCount)
       expect(forked.reduce((total, message) => total + message.parts.length, 0)).toBe(partCount)
       expect(forked[1]?.info.role === "assistant" && forked[1].info.parentID).toBe(forked[0]?.info.id)
       expect(compaction?.type === "compaction" && compaction.tail_start_id).toBe(forked[compactionTail]?.info.id)
       expect(events?.value).toBe(1 + messageCount + partCount)
+      expect(forkInfo.cost).toBeCloseTo(stepFinishCount * 0.005)
+      expect(forkInfo.tokens).toEqual({
+        input: stepFinishCount * 500,
+        output: stepFinishCount * 800,
+        reasoning: stepFinishCount * 200,
+        cache: { read: stepFinishCount * 100, write: stepFinishCount * 50 },
+      })
 
       console.log(
         `session fork: ${duration.toFixed(1)}ms (${messageCount} messages, ${partCount} parts, ${(largePatch.length / 1024 / 1024).toFixed(0)} MiB summary)`,

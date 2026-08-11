@@ -16,20 +16,36 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
 
+    const currentLocation = Effect.gen(function* () {
+      const ctx = yield* InstanceRef
+      if (!ctx) return undefined
+      const workspaceID = yield* WorkspaceRef
+      return new Location.Info({
+        directory: AbsolutePath.make(ctx.directory),
+        ...(workspaceID ? { workspaceID } : {}),
+        project: { id: Project.ID.make(ctx.project.id), directory: AbsolutePath.make(ctx.worktree) },
+      })
+    })
+
     const publish: EventV2.Interface["publish"] = (definition, data, options) =>
       Effect.gen(function* () {
         if (options?.location) return yield* events.publish(definition, data, options)
-        const ctx = yield* InstanceRef
-        if (!ctx) return yield* events.publish(definition, data, options)
-        const workspaceID = yield* WorkspaceRef
+        const location = yield* currentLocation
+        if (!location) return yield* events.publish(definition, data, options)
         return yield* events.publish(definition, data, {
           ...options,
-          location: new Location.Info({
-            directory: AbsolutePath.make(ctx.directory),
-            ...(workspaceID ? { workspaceID } : {}),
-            project: { id: Project.ID.make(ctx.project.id), directory: AbsolutePath.make(ctx.worktree) },
-          }),
+          location,
         })
+      })
+
+    const publishBatch: EventV2.Interface["publishBatch"] = (input) =>
+      Effect.gen(function* () {
+        if (input.every((item) => item.options?.location)) return yield* events.publishBatch(input)
+        const location = yield* currentLocation
+        if (!location) return yield* events.publishBatch(input)
+        return yield* events.publishBatch(
+          input.map((item) => (item.options?.location ? item : { ...item, options: { ...item.options, location } })),
+        )
       })
 
     const unsubscribe = yield* events.listen((event) =>
@@ -62,7 +78,7 @@ const layer = Layer.effect(
     )
     yield* Effect.addFinalizer(() => unsubscribe)
 
-    return Service.of({ ...events, publish })
+    return Service.of({ ...events, publish, publishBatch })
   }),
 )
 
