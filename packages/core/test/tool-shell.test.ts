@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import { realpathSync } from "node:fs"
 import os from "os"
 import path from "path"
-import { describe, expect } from "bun:test"
+import { describe, expect, setDefaultTimeout } from "bun:test"
 import { DateTime, Deferred, Duration, Effect, Fiber, Layer, Scope, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -145,6 +145,9 @@ const layer = AppNodeBuilder.build(
 )
 
 const it = testEffect(layer)
+
+// Each test boots a complete Location and plugin runtime before exercising a real shell.
+setDefaultTimeout(15_000)
 
 const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
   sessionID,
