@@ -351,8 +351,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const key = tabKey(tab)
         const next = { title: session.title, directory: session.location.directory }
         const current = info[key]
-        console.log({ tab, session, current })
-        if (current?.title === next.title && current.directory === next.directory) return
+        if (current && current.title === next.title && current.directory === next.directory) return
         setInfo(key, next)
       },
       select: navigateTab,
