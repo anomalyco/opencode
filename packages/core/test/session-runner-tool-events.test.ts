@@ -134,3 +134,56 @@ test("step finish records settlement without publishing step ended", async () =>
   expect(published.some((event) => event.type === "session.next.step.ended.2")).toBe(false)
   expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
 })
+
+test("reasoning-only step with content records usable output", async () => {
+  const { publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(publisher.publish(LLMEvent.reasoningStart({ id: "reasoning-0" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.reasoningDelta({ id: "reasoning-0", text: "thinking" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.reasoningEnd({ id: "reasoning-0" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "stop" })))
+
+  expect(publisher.hasUsableOutput()).toBe(true)
+  expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
+})
+
+test("empty reasoning-only step records no usable output", async () => {
+  const { publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(publisher.publish(LLMEvent.reasoningStart({ id: "reasoning-0" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.reasoningEnd({ id: "reasoning-0" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "stop" })))
+
+  expect(publisher.hasUsableOutput()).toBe(false)
+})
+
+test("empty text fragment records no usable output", async () => {
+  const { publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(publisher.publish(LLMEvent.textStart({ id: "text-0" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.textEnd({ id: "text-0" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "stop" })))
+
+  expect(publisher.hasUsableOutput()).toBe(false)
+})
+
+test("text content records usable output", async () => {
+  const { publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(publisher.publish(LLMEvent.textStart({ id: "text-0" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.textDelta({ id: "text-0", text: "Hello" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.textEnd({ id: "text-0" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "stop" })))
+
+  expect(publisher.hasUsableOutput()).toBe(true)
+})
+
+test("tool call records usable output", async () => {
+  const { publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: "tool-calls" })))
+
+  expect(publisher.hasUsableOutput()).toBe(true)
+})
+

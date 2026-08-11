@@ -315,25 +315,29 @@ const layer = Layer.effect(
           }
           const stepSettlement = publisher.stepSettlement()
           if (stepSettlement && !publisher.hasProviderError()) {
-            const endSnapshot = yield* snapshots.capture()
-            const files =
-              startSnapshot && endSnapshot
-                ? yield* snapshots
-                    .files({ from: startSnapshot, to: endSnapshot })
-                    .pipe(Effect.catch(() => Effect.succeed(undefined)))
-                : undefined
-            yield* withPublication(
-              events.publish(SessionEvent.Step.Ended, {
-                sessionID: session.id,
-                timestamp: yield* DateTime.now,
-                assistantMessageID: yield* publisher.startAssistant(),
-                finish: stepSettlement.finish,
-                cost: 0,
-                tokens: stepSettlement.tokens,
-                snapshot: endSnapshot,
-                files,
-              }),
-            )
+            if (!publisher.hasUsableOutput()) {
+              yield* withPublication(publisher.failAssistant("Provider returned an empty response"))
+            } else {
+              const endSnapshot = yield* snapshots.capture()
+              const files =
+                startSnapshot && endSnapshot
+                  ? yield* snapshots
+                      .files({ from: startSnapshot, to: endSnapshot })
+                      .pipe(Effect.catch(() => Effect.succeed(undefined)))
+                  : undefined
+              yield* withPublication(
+                events.publish(SessionEvent.Step.Ended, {
+                  sessionID: session.id,
+                  timestamp: yield* DateTime.now,
+                  assistantMessageID: yield* publisher.startAssistant(),
+                  finish: stepSettlement.finish,
+                  cost: 0,
+                  tokens: stepSettlement.tokens,
+                  snapshot: endSnapshot,
+                  files,
+                }),
+              )
+            }
           }
           if (publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
