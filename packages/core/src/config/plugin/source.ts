@@ -4,7 +4,7 @@ import { Directory, Document, type Entry } from "@opencode-ai/schema/config"
 import { ConfigPlugin } from "@opencode-ai/schema/config/plugin"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Effect, Layer, Option, PubSub, Schema, Scope, Stream } from "effect"
+import { Context, Effect, Layer, Option, Predicate, PubSub, Schema, Scope, Stream } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { Config } from "../../config"
@@ -163,29 +163,30 @@ const decodePackage = Schema.decodeUnknownOption(Package)
 
 function discoverDirectory(fs: FSUtil.Interface, directory: string) {
   return Effect.gen(function* () {
-    const files = yield* fs
-      .scan(`{${sourceDirectories.join(",")}}/*.{ts,js}`, {
-        cwd: directory,
-        absolute: true,
-        include: "file",
-        dot: true,
-        symlink: true,
-      })
-      .pipe(Effect.orElseSucceed(() => []))
-    const children = yield* fs
-      .scan(`{${sourceDirectories.join(",")}}/*`, {
-        cwd: directory,
-        absolute: true,
-        include: "all",
-        dot: true,
-        symlink: true,
-      })
-      .pipe(Effect.orElseSucceed(() => []))
-    const directories = yield* Effect.filter(children.sort(), fs.isDir)
-    const packages = yield* Effect.forEach(directories, (child) => discoverPackage(fs, child))
-    return [...files.sort(), ...packages.filter((target): target is string => typeof target === "string")].map(
-      (target): Operation => ({ type: "add", target, options: {} }),
-    )
+    const children = (yield* Effect.forEach(sourceDirectories, (source) =>
+      fs.readDirectoryEntries(path.join(directory, source)).pipe(
+        Effect.orElseSucceed(() => []),
+        Effect.map((entries) =>
+          entries.map((entry) => ({ ...entry, target: path.join(directory, source, entry.name) })),
+        ),
+      ),
+    ))
+      .flat()
+      .sort((a, b) => a.target.localeCompare(b.target))
+    const targets = yield* Effect.forEach(children, (entry) => discoverChild(fs, entry))
+    return targets.flatMap(Option.toArray).map((target): Operation => ({ type: "add", target, options: {} }))
+  })
+}
+
+function discoverChild(fs: FSUtil.Interface, entry: FSUtil.DirEntry & { target: string }) {
+  return Effect.gen(function* () {
+    const source = entry.target.endsWith(".ts") || entry.target.endsWith(".js")
+    if (entry.type === "file" && source) return Option.some(entry.target)
+    if (entry.type === "directory") return yield* discoverPackage(fs, entry.target)
+    if (entry.type !== "symlink") return Option.none<string>()
+    if (source && (yield* fs.isFile(entry.target))) return Option.some(entry.target)
+    if (yield* fs.isDir(entry.target)) return yield* discoverPackage(fs, entry.target)
+    return Option.none<string>()
   })
 }
 
@@ -195,15 +196,15 @@ function discoverPackage(fs: FSUtil.Interface, directory: string) {
       .readJson(path.join(directory, "package.json"))
       .pipe(Effect.map(decodePackage), Effect.orElseSucceed(Option.none))
     const configured = Option.isSome(manifest)
-      ? [manifest.value.exports, manifest.value.module, manifest.value.main].filter(
-          (entry): entry is string => typeof entry === "string",
-        )
+      ? [manifest.value.exports, manifest.value.module, manifest.value.main].filter(Predicate.isString)
       : []
-    const target = yield* Effect.findFirst(
-      [...configured, "index.ts", "index.js"].map((entry) => path.resolve(directory, entry)),
+    return yield* Effect.findFirst(
+      [...configured, "index.ts", "index.js"]
+        .filter((entry) => !path.isAbsolute(entry))
+        .map((entry) => path.resolve(directory, entry))
+        .filter((entry) => FSUtil.contains(directory, entry)),
       fs.isFile,
     )
-    return Option.getOrUndefined(target)
   })
 }
 
