@@ -716,11 +716,10 @@ const layer = Layer.effect(
             .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
       }),
       switchAgent: Effect.fn("Session.switchAgent")(function* (input) {
-        const session = yield* result.get(input.sessionID)
+        yield* result.get(input.sessionID)
         yield* bus.publish(SessionEvent.AgentSelected, {
           sessionID: input.sessionID,
           agent: input.agent,
-          previous: session.agent,
         })
       }),
       switchModel: Effect.fn("Session.switchModel")(function* (input) {

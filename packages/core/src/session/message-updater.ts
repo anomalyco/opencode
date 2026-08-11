@@ -61,7 +61,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.usage.recorded": () => Effect.void,
       "session.agent.selected": (event) => {
         return Effect.gen(function* () {
-          const previous = event.data.previous ?? (yield* adapter.getAgent())
+          const previous = yield* adapter.getAgent()
           yield* adapter.appendMessage(
             SessionMessage.AgentSelected.make({
               id: SessionMessage.ID.fromEvent(event.id),

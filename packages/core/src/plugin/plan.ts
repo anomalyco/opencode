@@ -2,6 +2,7 @@ export * as PlanPlugin from "./plan"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import { define } from "@opencode-ai/plugin/effect/plugin"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Effect, Stream } from "effect"
 import { Agent } from "../agent"
 
@@ -37,18 +38,18 @@ export const Plugin = define({
 
     yield* ctx.event.subscribe().pipe(
       Stream.filter((event) => event.type === "session.agent.selected"),
-      Stream.runForEach((event) => {
-        if (event.data.agent === event.data.previous) return Effect.void
-        const text = event.data.agent === plan ? enter : event.data.previous === plan ? leave : undefined
-        if (!text) return Effect.void
-        return ctx.session
-          .synthetic({
+      Stream.runForEach((event) =>
+        Effect.gen(function* () {
+          const message = yield* ctx.session.message({
             sessionID: event.data.sessionID,
-            text,
-            resume: false,
+            messageID: SessionMessage.ID.fromEvent(event.id),
           })
-          .pipe(Effect.catch(() => Effect.void))
-      }),
+          if (message?.type !== "agent-switched" || message.agent === message.previous) return
+          const text = message.agent === plan ? enter : message.previous === plan ? leave : undefined
+          if (!text) return
+          yield* ctx.session.synthetic({ sessionID: event.data.sessionID, text, resume: false })
+        }).pipe(Effect.catch(() => Effect.void)),
+      ),
       Effect.forkScoped({ startImmediately: true }),
     )
   }),

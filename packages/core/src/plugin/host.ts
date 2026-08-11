@@ -349,6 +349,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
             input?.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
         }),
       get: (input) => runtime.session.get(input.sessionID),
+      message: runtime.session.message,
       prompt: runtime.session.prompt,
       generate: (input) => runtime.session.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: runtime.session.command,
