@@ -27,6 +27,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Permission } from "@opencode-ai/core/permission"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Shell } from "@opencode-ai/core/shell"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { ShellTool } from "@opencode-ai/core/tool/plugin/shell"
@@ -35,7 +36,7 @@ import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
-import { toolIdentity, executeTool, toolDefinitions, waitForTool } from "./lib/tool"
+import { toolIdentity, executeTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_shell_tool_test")
 const sessionModel = Model.Ref.make({ id: Model.ID.make("test"), providerID: Provider.ID.make("test") })
@@ -195,8 +196,8 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
     const locations = yield* LocationServiceMap.Service
     const locationLayer = locations.get(location)
     return yield* Effect.gen(function* () {
+      yield* (yield* PluginSupervisor.Service).flush
       const registry = yield* Tool.Service
-      yield* waitForTool(registry, ShellTool.name)
       return yield* body(registry)
     }).pipe(Effect.provide(locationLayer), Effect.ensuring(locations.invalidate(location)))
   })
