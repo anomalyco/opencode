@@ -75,6 +75,7 @@ const makeCtx = () => {
 
 const readText = (filepath: string) => Effect.promise(() => fs.readFile(filepath, "utf-8"))
 const writeText = (filepath: string, content: string) => Effect.promise(() => fs.writeFile(filepath, content, "utf-8"))
+const writeBytes = (filepath: string, content: Uint8Array) => Effect.promise(() => fs.writeFile(filepath, content))
 const makeDir = (dir: string) => Effect.promise(() => fs.mkdir(dir, { recursive: true }))
 
 const expectFailure = <A, E, R>(effect: Effect.Effect<A, E, R>, message?: string) =>
@@ -363,6 +364,48 @@ describe("tool.apply_patch freeform", () => {
       const patchText = "*** Begin Patch\n*** Delete File: dir\n*** End Patch"
 
       yield* expectFailure(execute({ patchText }, ctx))
+    }),
+  )
+
+  it.instance("deletes binary files without embedding their contents in metadata", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx, calls } = makeCtx()
+      const target = path.join(test.directory, "archive.zip")
+      const content = new Uint8Array(128 * 1024)
+      content.set([0x50, 0x4b, 0x03, 0x04])
+      yield* writeBytes(target, content)
+
+      const result = yield* execute(
+        { patchText: "*** Begin Patch\n*** Delete File: archive.zip\n*** End Patch" },
+        ctx,
+      )
+
+      expect(result.metadata.diff.length).toBeLessThan(1024)
+      expect(result.metadata.files[0]?.patch.length).toBeLessThan(1024)
+      expect(calls[0]?.metadata.diff.length).toBeLessThan(1024)
+      expect(calls[0]?.metadata.files[0]?.patch.length).toBeLessThan(1024)
+      yield* expectReadFailure(target)
+    }),
+  )
+
+  it.instance("deletes oversized text files without embedding their contents in metadata", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx, calls } = makeCtx()
+      const target = path.join(test.directory, "large.txt")
+      yield* writeText(target, "x".repeat(1024 * 1024 + 1))
+
+      const result = yield* execute(
+        { patchText: "*** Begin Patch\n*** Delete File: large.txt\n*** End Patch" },
+        ctx,
+      )
+
+      expect(result.metadata.diff.length).toBeLessThan(1024)
+      expect(result.metadata.files[0]?.patch.length).toBeLessThan(1024)
+      expect(calls[0]?.metadata.diff.length).toBeLessThan(1024)
+      expect(calls[0]?.metadata.files[0]?.patch.length).toBeLessThan(1024)
+      yield* expectReadFailure(target)
     }),
   )
 
