@@ -404,8 +404,13 @@ const layer = Layer.effect(
         }
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-          for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
-            yield* merge(file, yield* loadFile(file, authEnv), "local")
+          // Both base names are walked. `opviera` is loaded LAST so it wins on conflict, while the
+          // upstream name keeps working for anyone who already has one — removing it breaks
+          // schema generation, v1 migration and managed-settings paths that key off it literally.
+          for (const name of ["opencode", "opviera"]) {
+            for (const file of yield* ConfigPaths.files(name, ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
+              yield* merge(file, yield* loadFile(file, authEnv), "local")
+            }
           }
         }
 
@@ -465,9 +470,10 @@ const layer = Layer.effect(
           yield* mergePluginOrigins(dir, list)
         }
 
-        if (process.env.OPENCODE_CONFIG_CONTENT) {
+        const inlineConfig = Flag.env("OPENCODE_CONFIG_CONTENT")
+        if (inlineConfig) {
           const source = "OPENCODE_CONFIG_CONTENT"
-          const next = yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
+          const next = yield* loadConfig(inlineConfig, {
             dir: ctx.directory,
             source,
           })

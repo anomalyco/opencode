@@ -1,33 +1,55 @@
 name: "Setup Git Committer"
-description: "Create app token and configure git user"
+description: "Resolve a push token and configure the git user"
 inputs:
-  opencode-app-id:
-    description: "OpenCode GitHub App ID"
-    required: true
-  opencode-app-secret:
-    description: "OpenCode GitHub App private key"
-    required: true
+  opviera-app-id:
+    description: "Opviera GitHub App ID (optional — falls back to GITHUB_TOKEN when unset)"
+    required: false
+    default: ""
+  opviera-app-secret:
+    description: "Opviera GitHub App private key (optional — falls back to GITHUB_TOKEN when unset)"
+    required: false
+    default: ""
+  github-token:
+    description: "Fallback token used when no GitHub App credentials are supplied"
+    required: false
+    default: ${{ github.token }}
 outputs:
   token:
-    description: "GitHub App token"
-    value: ${{ steps.apptoken.outputs.token }}
+    description: "Token to authenticate pushes and gh CLI calls"
+    value: ${{ steps.resolve.outputs.token }}
   app-slug:
-    description: "GitHub App slug"
-    value: ${{ steps.apptoken.outputs.app-slug }}
+    description: "Committer slug (the app's slug, or github-actions)"
+    value: ${{ steps.resolve.outputs.slug }}
 runs:
   using: "composite"
   steps:
+    # A GitHub App is optional. Supplying one gives commits a Virstack identity and lets pushes
+    # bypass branch protection that excludes GITHUB_TOKEN; without it the workflow still runs on the
+    # built-in token, which this repo's workflows already grant `contents: write`.
     - name: Create app token
       id: apptoken
+      if: inputs.opviera-app-id != ''
       uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
       with:
-        app-id: ${{ inputs.opencode-app-id }}
-        private-key: ${{ inputs.opencode-app-secret }}
+        app-id: ${{ inputs.opviera-app-id }}
+        private-key: ${{ inputs.opviera-app-secret }}
         owner: ${{ github.repository_owner }}
+
+    - name: Resolve committer identity
+      id: resolve
+      run: |
+        if [ -n "${{ inputs.opviera-app-id }}" ]; then
+          echo "token=${{ steps.apptoken.outputs.token }}" >> "$GITHUB_OUTPUT"
+          echo "slug=${{ steps.apptoken.outputs.app-slug }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "token=${{ inputs.github-token }}" >> "$GITHUB_OUTPUT"
+          echo "slug=github-actions" >> "$GITHUB_OUTPUT"
+        fi
+      shell: bash
 
     - name: Configure git user
       run: |
-        slug="${{ steps.apptoken.outputs.app-slug }}"
+        slug="${{ steps.resolve.outputs.slug }}"
         git config --global user.name "${slug}[bot]"
         git config --global user.email "${slug}[bot]@users.noreply.github.com"
       shell: bash
@@ -39,5 +61,5 @@ runs:
 
     - name: Configure git remote
       run: |
-        git remote set-url origin https://x-access-token:${{ steps.apptoken.outputs.token }}@github.com/${{ github.repository }}
+        git remote set-url origin https://x-access-token:${{ steps.resolve.outputs.token }}@github.com/${{ github.repository }}
       shell: bash

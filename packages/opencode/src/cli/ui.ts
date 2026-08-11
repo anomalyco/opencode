@@ -2,11 +2,14 @@ import { EOL } from "os"
 import { Schema } from "effect"
 import { logo as glyphs } from "./logo"
 
+// The non-TTY wordmark. A SECOND, independent copy of the brand art (the shaded one lives in
+// packages/tui/src/logo.ts) — it contains no "opviera" substring, so a grep-driven rename will
+// miss it. Keep the two in sync by hand.
 const wordmark = [
-  `⠀                                ▄     `,
-  `█▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█`,
-  `█  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀`,
-  `▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`,
+  `⠀                ▄                 `,
+  `█▀▀█ █▀▀█ █  █   █  █▀▀█ █▀▀▄ ▄▀▀█`,
+  `█  █ █  █ █  █   █  █▀▀▀ █    █▄▄█`,
+  `▀▀▀▀ █▀▀▀ ▀▄▄▀   ▀  ▀▀▀▀ ▀    ▀▀▀▀`,
 ]
 
 export class CancelledError extends Schema.TaggedErrorClass<CancelledError>()("UICancelledError", {}) {}

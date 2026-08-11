@@ -29,8 +29,8 @@ jobs:
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          opviera-app-id: ${{ vars.OPVIERA_APP_ID }}
+          opviera-app-secret: ${{ secrets.OPVIERA_APP_SECRET }}
 
       - name: Compute changed English docs
         id: changes

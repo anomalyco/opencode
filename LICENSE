@@ -1,5 +1,9 @@
 MIT License
 
+Opviera CLI is a derivative work of opencode (https://github.com/anomalyco/opencode).
+The upstream copyright notice below is retained as the MIT licence requires.
+
+Copyright (c) 2026 Virstack
 Copyright (c) 2025 opencode
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

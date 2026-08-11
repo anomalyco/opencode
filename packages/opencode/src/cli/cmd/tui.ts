@@ -71,12 +71,12 @@ export function resolveThreadDirectory(project?: string, envPWD = process.env.PW
 
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
-  describe: "start opencode tui",
+  describe: "start Opviera tui",
   builder: (yargs) =>
     withNetworkOptions(yargs)
       .positional("project", {
         type: "string",
-        describe: "path to start opencode in",
+        describe: "path to start Opviera in",
       })
       .option("model", {
         type: "string",
@@ -206,6 +206,11 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
+
+      // Opviera is a single-platform CLI: no gateway credential, no agent. Runs here — main
+      // thread, TTY still attached, before the worker or any instance exists.
+      const { ensureAuthenticated } = await import("../opviera/gate")
+      await ensureAuthenticated()
 
       const worker = new Worker(file, {
         env: Object.fromEntries(

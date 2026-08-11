@@ -1,3 +1,4 @@
+import { Flag } from "../flag/flag"
 import { Formatter, Logger, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global"
@@ -54,7 +55,7 @@ export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id
 const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))
 
 export function minimumLogLevel() {
-  const value = process.env.OPENCODE_LOG_LEVEL?.toUpperCase()
+  const value = Flag.env("OPENCODE_LOG_LEVEL")?.toUpperCase()
   const levels = {
     DEBUG: "Debug",
     INFO: "Info",
@@ -65,7 +66,7 @@ export function minimumLogLevel() {
 }
 
 export function loggers() {
-  return process.env.OPENCODE_PRINT_LOGS === "1" ? [fileLogger(), stderrLogger] : [fileLogger()]
+  return Flag.env("OPENCODE_PRINT_LOGS") === "1" ? [fileLogger(), stderrLogger] : [fileLogger()]
 }
 
 export * as Logging from "./logging"

@@ -15,7 +15,10 @@ import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
 import type { Plugin } from "@/plugin"
 import { mergeDeep } from "remeda"
 
-const USER_AGENT = `opencode/${InstallationVersion}`
+// Sent on every model request. The AI SDK appends its own
+// `ai-sdk/provider-utils/… runtime/bun/…` suffix, so this is the brand-visible prefix the gateway
+// (and anything else on the wire) sees.
+const USER_AGENT = `opviera/${InstallationVersion}`
 
 type PrepareInput = {
   readonly user: SessionV1.User

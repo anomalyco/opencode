@@ -6,7 +6,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 export const ServeCommand = effectCmd({
   command: "serve",
   builder: (yargs) => withNetworkOptions(yargs),
-  describe: "starts a headless opencode server",
+  describe: "starts a headless Opviera server",
   // Server loads instances per-request via x-opencode-directory header — no
   // need for an ambient project InstanceContext at startup.
   instance: false,

@@ -1,3 +1,4 @@
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
 import { Effect, Layer, Record, Result, Schema, Context } from "effect"
@@ -56,9 +57,10 @@ const layer = Layer.effect(
     const decode = Schema.decodeUnknownOption(Info)
 
     const all = Effect.fn("Auth.all")(function* () {
-      if (process.env.OPENCODE_AUTH_CONTENT) {
+      const injected = Flag.env("OPENCODE_AUTH_CONTENT")
+      if (injected) {
         try {
-          return JSON.parse(process.env.OPENCODE_AUTH_CONTENT)
+          return JSON.parse(injected)
         } catch (err) {}
       }
 

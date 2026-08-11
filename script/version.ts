@@ -7,7 +7,10 @@ const output = [`version=${Script.version}`]
 const sha = process.env.GITHUB_SHA ?? (await $`git rev-parse HEAD`.text()).trim()
 
 if (!Script.preview) {
-  await $`bun script/changelog.ts --to ${sha}`.cwd(process.cwd())
+  // Best-effort: changelog.ts AI-generates release notes by shelling out to a coding agent. That is
+  // no longer installed in CI (it was upstream's own CLI, and needed their API key), so a failure
+  // here must not abort the release — the notes fall back to "No notable changes" below.
+  await $`bun script/changelog.ts --to ${sha}`.cwd(process.cwd()).nothrow()
   const file = `${process.cwd()}/UPCOMING_CHANGELOG.md`
   const body = await Bun.file(file)
     .text()

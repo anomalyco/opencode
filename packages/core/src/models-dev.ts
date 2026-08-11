@@ -20,7 +20,7 @@ const InterleavedField = Schema.Union([
   Schema.String,
 ])
 
-const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
+const USER_AGENT = `opviera/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 
 const CostTier = Schema.Struct({
   input: Schema.Finite,

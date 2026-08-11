@@ -8,7 +8,7 @@
       "dependsOn": [],
       "outputs": ["dist/**"]
     },
-    "opencode#test": {
+    "opviera#test": {
       "dependsOn": ["^build"],
       "outputs": [],
       "passThroughEnv": ["*"]

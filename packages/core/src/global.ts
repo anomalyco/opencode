@@ -7,7 +7,10 @@ import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
 
-const app = "opencode"
+// Names every XDG directory the CLI owns (~/.config/opviera, ~/.local/share/opviera, …). This must
+// differ from upstream opencode: sharing those directories would mean sharing auth.json, the model
+// cache and session state with a genuine opencode install on the same machine.
+const app = "opviera"
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
