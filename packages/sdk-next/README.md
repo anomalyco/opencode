@@ -13,6 +13,19 @@ const session = yield * opencode.sessions.get({ sessionID })
 
 It also exports `Tool` for plugins that add tools with `ctx.tool.transform(...)`. Embedded plugins run through the ordinary discovery flow and register tools into each Location's `ToolRegistry` through the normal `Tools.Service.register(...)` path. Closing the owning Effect Scope releases router resources, location services, fibers, and scoped tool registrations.
 
+Embedded hosts are silent by default. Set `log` to receive structured log entries at the selected minimum level:
+
+```ts
+const opencode =
+  yield *
+  OpenCode.create({
+    log: {
+      level: "warn",
+      emit: (entry) => console.error(entry.message, entry.attributes, entry.cause),
+    },
+  })
+```
+
 `sessions.events({ sessionID, after })` replays durable events after the optional aggregate sequence, then emits newly committed durable events. `sessions.interrupt(...)` targets execution owned by this host, and `sessions.message(...)` retrieves one projected Session message.
 
 The same constructor is available as a service Layer:
@@ -26,4 +39,4 @@ const program = Effect.gen(function* () {
 yield * program.pipe(Effect.provide(OpenCode.layer))
 ```
 
-`OpenCode.layer` adapts `OpenCode.create()` for dependency injection; it does not define another host implementation.
+`OpenCode.layer` adapts the silent default `OpenCode.create()` for dependency injection; use `OpenCode.layerWith(options)` to configure the host.

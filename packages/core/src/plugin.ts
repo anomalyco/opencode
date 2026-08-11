@@ -4,7 +4,7 @@ export { Event, ID, Info } from "@opencode-ai/schema/plugin"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "./app"
-import { Context, Effect, Exit, Layer, Scope, Semaphore } from "effect"
+import { Context, Effect, Exit, Layer, Logger, References, Scope, Semaphore } from "effect"
 import { Agent } from "./agent"
 import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
@@ -44,7 +44,12 @@ const layer = Layer.effect(
       const inherit = yield* State.inherit()
       const loaded = yield* Effect.suspend(() => plugin.effect(host)).pipe(
         inherit,
-        Effect.updateContext((_context: Context.Context<never>) => Context.make(Scope.Scope, child)),
+        Effect.updateContext((context: Context.Context<never>) =>
+          Context.make(Scope.Scope, child).pipe(
+            Context.add(Logger.CurrentLoggers, Context.get(context, Logger.CurrentLoggers)),
+            Context.add(References.MinimumLogLevel, Context.get(context, References.MinimumLogLevel)),
+          ),
+        ),
         Effect.withSpan("Plugin.load", { attributes: { "plugin.id": plugin.id } }),
         Effect.andThen(bus.publish(Plugin.Event.Added, { id: Plugin.ID.make(plugin.id) })),
         Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),

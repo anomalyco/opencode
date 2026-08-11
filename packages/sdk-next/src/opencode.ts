@@ -2,18 +2,27 @@ import { OpenCode } from "@opencode-ai/client/effect"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { createEmbeddedRoutes } from "@opencode-ai/server/routes"
 import type { ServerOptions } from "@opencode-ai/server/options"
-import { Context, Effect, Layer, ManagedRuntime } from "effect"
-import { FetchHttpClient, HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http"
+import { Context, Effect, Layer, ManagedRuntime, Scope } from "effect"
+import { FetchHttpClient, HttpEffect, HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
+import * as Logging from "./logging"
 
-export const create = Effect.fn("OpenCode.create")(function* (options: ServerOptions = {}) {
+export type { LogEntry, LogLevel, LogOptions, LogWriter } from "./logging"
+import type { LogOptions } from "./logging"
+
+export type CreateOptions = ServerOptions & {
+  readonly log?: LogOptions
+}
+
+export const create = Effect.fn("OpenCode.create")(function* (options: CreateOptions = {}) {
+  const { log, ...server } = options
   const runtime = yield* Effect.acquireRelease(
     Effect.sync(() =>
       ManagedRuntime.make(
         createEmbeddedRoutes({
-          ...options,
-          app: { ...options.app, name: options.app?.name ?? "sdk" },
-          database: { path: ":memory:", ...options.database },
-        }).pipe(Layer.provide(HttpServer.layerServices)),
+          ...server,
+          app: { ...server.app, name: server.app?.name ?? "sdk" },
+          database: { path: ":memory:", ...server.database },
+        }).pipe(Layer.provide(HttpServer.layerServices), Layer.provideMerge(Logging.layer(log))),
       ),
     ),
     (runtime) => runtime.disposeEffect,
@@ -21,7 +30,9 @@ export const create = Effect.fn("OpenCode.create")(function* (options: ServerOpt
   const context = yield* runtime.contextEffect
   const plugins = Context.get(context, SdkPlugins.Service)
   const router = Context.get(context, HttpRouter.HttpRouter)
-  const handler = HttpEffect.toWebHandler(router.asHttpEffect())
+  const handler = HttpEffect.toWebHandlerWith<never, HttpServerRequest.HttpServerRequest | Scope.Scope>(
+    Logging.context(context),
+  )(router.asHttpEffect())
   const fetch = Object.assign((input: RequestInfo | URL, init?: RequestInit) => handler(new Request(input, init)), {
     preconnect: () => undefined,
   }) satisfies typeof globalThis.fetch
