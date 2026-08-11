@@ -724,7 +724,7 @@ const layer: Layer.Layer<
           definition: SessionV1.Event.MessageUpdated,
           data: { sessionID: cloned.sessionID, info: cloned },
         })
-        if (batch.length === 1_000) {
+        if (batch.length === 3_000) {
           yield* events.publishBatch(batch)
           batch.length = 0
         }
@@ -743,7 +743,7 @@ const layer: Layer.Layer<
             definition: SessionV1.Event.PartUpdated,
             data: { sessionID: p.sessionID, part: structuredClone(p), time: Date.now() },
           })
-          if (batch.length === 1_000) {
+          if (batch.length === 3_000) {
             yield* events.publishBatch(batch)
             batch.length = 0
           }
@@ -854,7 +854,7 @@ const layer: Layer.Layer<
         )).items
       }
 
-      const size = 500
+      const size = 1_000
       const result = [] as SessionV1.WithParts[]
       let before: string | undefined
       while (true) {
