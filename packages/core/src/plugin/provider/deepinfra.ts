@@ -3,8 +3,8 @@ import { createProviderPlugin } from "./factory"
 export const DeepInfraPlugin = createProviderPlugin({
   id: "opencode.provider.deepinfra",
   package: "@ai-sdk/deepinfra",
-  load: async () => {
+  load: async (options) => {
     const { createDeepInfra } = await import("@ai-sdk/deepinfra")
-    return (options) => createDeepInfra(options)
+    return createDeepInfra(options)
   },
 })

@@ -5,7 +5,7 @@ import { Effect } from "effect"
 export function createProviderPlugin(input: {
   readonly id: string
   readonly package: string
-  readonly load: () => Promise<(options: AISDKHooks["sdk"]["options"]) => unknown>
+  readonly load: (options: AISDKHooks["sdk"]["options"]) => Promise<unknown>
 }) {
   return define({
     id: input.id,
@@ -14,8 +14,7 @@ export function createProviderPlugin(input: {
         "sdk",
         Effect.fn(function* (evt) {
           if (evt.package !== input.package) return
-          const create = yield* Effect.promise(input.load)
-          evt.sdk = create(evt.options)
+          evt.sdk = yield* Effect.promise(() => input.load(evt.options))
         }),
       )
     }),

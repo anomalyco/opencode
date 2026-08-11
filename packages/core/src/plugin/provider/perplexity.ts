@@ -3,8 +3,8 @@ import { createProviderPlugin } from "./factory"
 export const PerplexityPlugin = createProviderPlugin({
   id: "opencode.provider.perplexity",
   package: "@ai-sdk/perplexity",
-  load: async () => {
+  load: async (options) => {
     const { createPerplexity } = await import("@ai-sdk/perplexity")
-    return (options) => createPerplexity(options)
+    return createPerplexity(options)
   },
 })

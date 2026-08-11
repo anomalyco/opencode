@@ -3,8 +3,8 @@ import { createProviderPlugin } from "./factory"
 export const CoherePlugin = createProviderPlugin({
   id: "opencode.provider.cohere",
   package: "@ai-sdk/cohere",
-  load: async () => {
+  load: async (options) => {
     const { createCohere } = await import("@ai-sdk/cohere")
-    return (options) => createCohere(options)
+    return createCohere(options)
   },
 })
