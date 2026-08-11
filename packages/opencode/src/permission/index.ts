@@ -89,7 +89,7 @@ const layer = Layer.effect(
         sessionID: request.sessionID,
         permission: request.permission,
         patterns: request.patterns,
-        metadata: request.metadata,
+        metadata: Object.fromEntries(Object.entries(request.metadata).filter(([, value]) => value !== undefined)),
         always: request.always,
         tool: request.tool,
       }

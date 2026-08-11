@@ -31,7 +31,7 @@ export const GlobTool = Tool.define(
             always: ["*"],
             metadata: {
               pattern: params.pattern,
-              path: params.path,
+              ...(params.path !== undefined && { path: params.path }),
             },
           })
 
