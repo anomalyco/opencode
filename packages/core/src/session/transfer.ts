@@ -18,6 +18,7 @@ import { Session } from "../session"
 import { Slug } from "../util/slug"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
+import { SessionMessageRow } from "./message-row"
 import { SessionProjector } from "./projector"
 import { SessionMessageTable, SessionTable } from "./sql"
 
@@ -47,8 +48,6 @@ const layer = Layer.effect(
     const { db } = yield* Database.Service
     const projects = yield* Project.Service
     const sessions = yield* Session.Service
-    const encodeMessage = Schema.encodeSync(SessionMessage.Info)
-
     const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
 
     return Service.of({
@@ -71,15 +70,14 @@ const layer = Layer.effect(
         const project = yield* projects.resolve(input.location.directory)
         yield* persistProject(project)
         const messages = input.data.messages.map((message, index) => {
-          const encoded = encodeMessage(message)
-          const { id: _, type, ...data } = encoded
+          const row = SessionMessageRow.encode(message)
           return {
             id: message.id,
             session_id: sessionID,
-            type,
+            type: row.type,
             seq: index + 1,
             time_created: DateTime.toEpochMillis(message.time.created),
-            data,
+            data: row.data,
           }
         })
         yield* bus

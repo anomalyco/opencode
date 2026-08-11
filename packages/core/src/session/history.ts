@@ -1,16 +1,15 @@
 import { and, asc, desc, eq, gte, sql } from "drizzle-orm"
-import { Effect, Schema } from "effect"
+import { Effect } from "effect"
 import { Database } from "../database/database"
 import { MessageDecodeError } from "./error"
 import { SessionMessage } from "./message"
+import { SessionMessageRow } from "./message-row"
 import { SessionSchema } from "./schema"
 import { Instructions } from "../instructions/index"
 import { InstructionState } from "./instruction-state"
 import { SessionMessageTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
-
-const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
 
 export const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
   return yield* db
@@ -50,7 +49,7 @@ const messageRows = Effect.fnUntraced(function* (
 })
 
 const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
-  decode({ ...row.data, id: row.id, type: row.type }).pipe(
+  SessionMessageRow.decode(row).pipe(
     Effect.mapError(
       () =>
         new MessageDecodeError({

@@ -8,6 +8,7 @@ import { RelativePath } from "../schema"
 import { Snapshot } from "../snapshot"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
+import { SessionMessageRow } from "./message-row"
 import { SessionSchema } from "./schema"
 import { SessionMessageTable } from "./sql"
 
@@ -46,10 +47,9 @@ const plan = Effect.fn("SessionRevert.plan")(function* (input: BoundaryInput) {
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
-  const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
   const files = new Map<RelativePath, Snapshot.ID>()
   for (const row of rows) {
-    const message = yield* decode({ ...row.data, id: row.id, type: row.type }).pipe(Effect.orDie)
+    const message = yield* SessionMessageRow.decode(row).pipe(Effect.orDie)
     if (message.type !== "assistant" || !message.snapshot?.start) continue
     for (const file of message.snapshot.files ?? [])
       if (!files.has(file)) files.set(file, Snapshot.ID.make(message.snapshot.start))

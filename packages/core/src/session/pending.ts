@@ -17,6 +17,7 @@ import { Bus } from "../bus"
 import { KeyedMutex } from "../effect/keyed-mutex"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
+import { SessionMessageRow } from "./message-row"
 import { SessionSchema } from "./schema"
 import { SessionMessageTable, SessionPendingTable } from "./sql"
 
@@ -35,7 +36,6 @@ const decodeUser = Schema.decodeUnknownSync(UserData)
 const encodeUser = Schema.encodeSync(UserData)
 const decodeSynthetic = Schema.decodeUnknownSync(SyntheticData)
 const encodeSynthetic = Schema.encodeSync(SyntheticData)
-const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
 type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
 
@@ -113,7 +113,7 @@ const promotedFromMessage = Effect.fn("SessionPending.promotedFromMessage")(func
   if (row === undefined) return undefined
   if (row.session_id !== sessionID || (row.type !== "user" && row.type !== "synthetic"))
     return yield* Effect.die(new LifecycleConflict({ id }))
-  const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
+  const message = SessionMessageRow.decodeSync(row)
   const base = { id, sessionID, timeCreated: message.time.created, delivery }
   if (message.type === "user")
     return User.make({

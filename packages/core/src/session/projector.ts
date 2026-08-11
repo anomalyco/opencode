@@ -9,6 +9,7 @@ import { Agent } from "../agent"
 import { Model } from "../model"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
+import { SessionMessageRow } from "./message-row"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionPending } from "./pending"
 import { Workspace } from "../workspace"
@@ -21,9 +22,6 @@ import type { SessionSchema } from "./schema"
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
 type MessageEvent = Exclude<CurrentDurableEvent, typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type>
-
-const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
-const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -210,22 +208,15 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
 
 function run(db: DatabaseService, event: MessageEvent) {
   return Effect.gen(function* () {
-    const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
-      decodeMessage({ ...row.data, id: row.id, type: row.type })
+    const decodeRow = (row: typeof SessionMessageTable.$inferSelect) => SessionMessageRow.decodeSync(row)
     const updateMessage = (message: SessionMessage.Info) => {
       if (event.durable === undefined)
         return Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-      const encoded = encodeMessage(message)
-      const { id, type, ...data } = encoded
+      const row = SessionMessageRow.encode(message)
       return db
         .update(SessionMessageTable)
-        .set({ type, time_created: DateTime.toEpochMillis(message.time.created), data })
-        .where(
-          and(
-            eq(SessionMessageTable.id, SessionMessage.ID.make(id)),
-            eq(SessionMessageTable.session_id, event.data.sessionID),
-          ),
-        )
+        .set({ type: row.type, time_created: DateTime.toEpochMillis(message.time.created), data: row.data })
+        .where(and(eq(SessionMessageTable.id, row.id), eq(SessionMessageTable.session_id, event.data.sessionID)))
         .run()
         .pipe(Effect.orDie)
     }
@@ -343,17 +334,16 @@ function run(db: DatabaseService, event: MessageEvent) {
 
 function insertMessage(db: DatabaseService, event: SessionEvent.DurableEvent, message: SessionMessage.Info) {
   if (event.durable === undefined) return Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-  const encoded = encodeMessage(message)
-  const { id, type, ...data } = encoded
+  const row = SessionMessageRow.encode(message)
   return db
     .insert(SessionMessageTable)
     .values({
-      id: SessionMessage.ID.make(id),
+      id: row.id,
       session_id: event.data.sessionID,
-      type,
+      type: row.type,
       seq: event.durable.seq,
       time_created: DateTime.toEpochMillis(message.time.created),
-      data,
+      data: row.data,
     })
     .run()
     .pipe(Effect.orDie)
