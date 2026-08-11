@@ -152,7 +152,7 @@ describe("run permission shared", () => {
     })
   })
 
-  test("uses source patch text when an edit has no generated diff", () => {
+  test("uses the resource display when an edit has no generated diff", () => {
     const patch = '*** Begin Patch\n*** Update File: src/index.ts\n@@\n-old\n+const arrow = "→"\n*** End Patch'
     const request = req({
       action: "edit",
@@ -171,13 +171,11 @@ describe("run permission shared", () => {
     expect(permissionInfo(request)).toMatchObject({
       title: "Edit src/index.ts",
       diff: undefined,
-      patch,
     })
     expect(permissionInfo(request, undefined, true)).toMatchObject({
       title: "Edit src/index.ts",
-      lines: [patch],
+      lines: [],
       diff: undefined,
-      patch: undefined,
     })
   })
 

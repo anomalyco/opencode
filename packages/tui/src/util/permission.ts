@@ -38,7 +38,6 @@ export function permissionPresentation(
       title: `Edit ${formatPath(file)}`,
       lines: [],
       diff,
-      patch: diff ? undefined : text(input.patchText) || undefined,
       file,
     }
   }

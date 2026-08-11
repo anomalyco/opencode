@@ -11,11 +11,9 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Bom } from "@opencode-ai/util/bom"
 import { Effect, Schema } from "effect"
-import path from "path"
 import { Environment } from "../../environment"
 import { FileMutation } from "../../file-mutation"
 import { Formatter } from "../../formatter"
-import { Location } from "../../location"
 import { LocationMutation } from "../../location-mutation"
 import { Permission } from "../../permission"
 import { fileDiff } from "./file-diff"
@@ -87,7 +85,7 @@ const findLineOccurrences = (content: string, search: string) => {
     if (
       !actual.every(
         (item, lineIndex) =>
-          normalizeForMatch(item.text.trimEnd()) === normalizeForMatch(expected[lineIndex]!.trimEnd()),
+          normalizeForMatch(item.text.trimEnd()) === normalizeForMatch(expected[lineIndex].trimEnd()),
       )
     )
       return []
@@ -114,7 +112,6 @@ export const Plugin = {
     const fileMutation = yield* FileMutation.Service
     const environment = yield* Environment.Service
     const formatter = yield* Formatter.Service
-    const location = yield* Location.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
@@ -154,72 +151,69 @@ export const Plugin = {
                   source: permissionSource,
                 })
               }
-
-              const original = yield* FileMutation.readText(environment.files, target.absolute).pipe(
-                Effect.catchTag("Environment.NotFound", () =>
-                  Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
-                ),
-                Effect.catchTag("Environment.WrongKind", (error) =>
-                  error.actual === "directory"
-                    ? Effect.fail(new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` }))
-                    : Effect.fail(new ToolFailure({ message: `Unable to edit ${input.path}`, error })),
-                ),
-              )
-              const source = original.text
-              const ending = source.includes(crlf) ? crlf : "\n"
-              const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
-              const newString = input.newString.replaceAll(crlf, "\n").replaceAll("\n", ending)
-              const exact = findOccurrences(source, oldString)
-              // These one-to-one mappings preserve offsets into the original source.
-              const unicode =
-                exact.length > 0 ? [] : findOccurrences(normalizeForMatch(source), normalizeForMatch(oldString))
-              const trailing = exact.length > 0 || unicode.length > 0 ? [] : findLineOccurrences(source, oldString)
-              const matches = exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing
-              const replacements = matches.length
-              const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
-                .toReversed()
-                .reduce(
-                  (content, match) => `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`,
-                  source,
-                )
-              const preview =
-                replacements > 0 && (replacements === 1 || input.replaceAll === true)
-                  ? fileDiff(target.resource, source, replaced)
-                  : undefined
               yield* permission.assert({
                 action: "edit",
                 resources: [target.resource],
                 save: ["*"],
-                metadata: preview ? { files: [preview] } : undefined,
                 sessionID: context.sessionID,
                 agent: context.agent,
                 source: permissionSource,
               })
-              if (replacements === 0) {
-                return yield* new ToolFailure({
-                  message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.`,
-                })
-              }
-              if (replacements > 1 && input.replaceAll !== true) {
-                return yield* new ToolFailure({
-                  message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
-                })
-              }
-              const replacementBom = replaced.startsWith("\uFEFF")
-              const result = yield* fileMutation.write({
-                target,
-                content: Bom.join(replaced, original.bom || replacementBom),
-              })
-              const bom = original.bom || replacementBom
-              const formatted = (yield* formatter.file(target.absolute))
-                ? yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
-                : (yield* FileMutation.readText(environment.files, target.absolute)).text
-              return {
-                files: [fileDiff(result.resource, source, formatted)],
-                replacements,
-              } satisfies Output
+              return yield* fileMutation.withLock([target.absolute])(
+                Effect.gen(function* () {
+                  const original = yield* FileMutation.readText(environment.files, target.absolute).pipe(
+                    Effect.catchTag("Environment.NotFound", () =>
+                      Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
+                    ),
+                    Effect.catchTag("Environment.WrongKind", (error) =>
+                      error.actual === "directory"
+                        ? Effect.fail(new ToolFailure({ message: `Path is a directory, not a file: ${input.path}` }))
+                        : Effect.fail(new ToolFailure({ message: `Unable to edit ${input.path}`, error })),
+                    ),
+                  )
+                  const source = original.text
+                  const ending = source.includes(crlf) ? crlf : "\n"
+                  const oldString = input.oldString.replaceAll(crlf, "\n").replaceAll("\n", ending)
+                  const newString = input.newString.replaceAll(crlf, "\n").replaceAll("\n", ending)
+                  const exact = findOccurrences(source, oldString)
+                  // These one-to-one mappings preserve offsets into the original source.
+                  const unicode =
+                    exact.length > 0 ? [] : findOccurrences(normalizeForMatch(source), normalizeForMatch(oldString))
+                  const trailing = exact.length > 0 || unicode.length > 0 ? [] : findLineOccurrences(source, oldString)
+                  const matches = exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing
+                  const replacements = matches.length
+                  const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
+                    .toReversed()
+                    .reduce(
+                      (content, match) => `${content.slice(0, match.start)}${newString}${content.slice(match.end)}`,
+                      source,
+                    )
+                  if (replacements === 0) {
+                    return yield* new ToolFailure({
+                      message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.`,
+                    })
+                  }
+                  if (replacements > 1 && input.replaceAll !== true) {
+                    return yield* new ToolFailure({
+                      message: `Found ${replacements} matches for oldString, but expected exactly one. Add more surrounding context to make oldString unique, or set replaceAll to true to replace every occurrence.`,
+                    })
+                  }
+                  const replacementBom = replaced.startsWith("\uFEFF")
+                  const result = yield* fileMutation.write({
+                    target,
+                    content: Bom.join(replaced, original.bom || replacementBom),
+                  })
+                  const bom = original.bom || replacementBom
+                  const formatted = (yield* formatter.file(target.absolute))
+                    ? yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
+                    : (yield* FileMutation.readText(environment.files, target.absolute)).text
+                  return {
+                    files: [fileDiff(result.resource, source, formatted)],
+                    replacements,
+                  } satisfies Output
+                }),
+              )
             }).pipe(
-              fileMutation.withLock([path.resolve(location.directory, input.path)]),
               Effect.map((output) => ({
                 output,
                 content: `Edited ${output.files[0]?.file} (${output.replacements} replacement${output.replacements === 1 ? "" : "s"})`,

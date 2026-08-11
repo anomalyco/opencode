@@ -110,49 +110,6 @@ describe("FileMutation", () => {
     ),
   )
 
-  it.live("serializes concurrent writes to the same absolute target", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
-        const targetPath = path.join(directory, "shared.txt")
-        yield* Effect.promise(() => fs.writeFile(targetPath, "initial"))
-        const firstStarted = yield* Deferred.make<void>()
-        const releaseFirst = yield* Deferred.make<void>()
-        const secondStarted = yield* Deferred.make<void>()
-        let writes = 0
-        const filesystem = instrumentWrites((write) =>
-          Effect.gen(function* () {
-            writes++
-            if (writes === 1) {
-              yield* Deferred.succeed(firstStarted, undefined)
-              yield* Deferred.await(releaseFirst)
-            } else {
-              yield* Deferred.succeed(secondStarted, undefined)
-            }
-            yield* write
-          }),
-        )
-
-        yield* Effect.gen(function* () {
-          const mutation = yield* LocationMutation.Service
-          const files = yield* FileMutation.Service
-          const firstPlan = yield* mutation.resolve({ path: "shared.txt" })
-          const secondPlan = yield* mutation.resolve({ path: "shared.txt" })
-          const first = yield* files.write({ target: firstPlan, content: "first" }).pipe(Effect.forkChild)
-          yield* Deferred.await(firstStarted)
-          const second = yield* files.write({ target: secondPlan, content: "second" }).pipe(Effect.forkChild)
-          yield* Effect.yieldNow
-          expect(yield* Deferred.isDone(secondStarted)).toBe(false)
-
-          yield* Deferred.succeed(releaseFirst, undefined)
-          yield* Deferred.await(secondStarted)
-          yield* Fiber.join(first)
-          yield* Fiber.join(second)
-          expect(yield* Effect.promise(() => fs.readFile(targetPath, "utf8"))).toBe("second")
-        }).pipe(provide(directory, filesystem))
-      }),
-    ),
-  )
-
   it.live("shares transaction locks across Location service instances", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -203,46 +160,4 @@ describe("FileMutation", () => {
       }).pipe(provide(directory)),
     ),
   )
-
-  it.live("allows distinct absolute targets to proceed independently", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
-        const firstStarted = yield* Deferred.make<void>()
-        const releaseFirst = yield* Deferred.make<void>()
-        const secondFinished = yield* Deferred.make<void>()
-        const secondPath = path.join(directory, "second.txt")
-        let writes = 0
-        const filesystem = instrumentWrites((write) =>
-          ++writes === 1
-            ? Deferred.succeed(firstStarted, undefined).pipe(
-                Effect.andThen(Deferred.await(releaseFirst)),
-                Effect.andThen(write),
-              )
-            : write.pipe(Effect.andThen(Deferred.succeed(secondFinished, undefined))),
-        )
-
-        yield* Effect.gen(function* () {
-          const mutation = yield* LocationMutation.Service
-          const files = yield* FileMutation.Service
-          const firstPlan = yield* mutation.resolve({ path: "first.txt" })
-          const secondPlan = yield* mutation.resolve({ path: "second.txt" })
-          const first = yield* files.write({ target: firstPlan, content: "first" }).pipe(Effect.forkChild)
-          yield* Deferred.await(firstStarted)
-          const second = yield* files.write({ target: secondPlan, content: "second" }).pipe(Effect.forkChild)
-          yield* Deferred.await(secondFinished)
-          expect(yield* Effect.promise(() => fs.readFile(secondPath, "utf8"))).toBe("second")
-
-          yield* Deferred.succeed(releaseFirst, undefined)
-          yield* Fiber.join(first)
-          yield* Fiber.join(second)
-        }).pipe(provide(directory, filesystem))
-      }),
-    ),
-  )
 })
-
-function instrumentWrites(
-  run: <E>(write: Effect.Effect<void, E>, target: string) => Effect.Effect<void, E>,
-): EnvironmentFilesTransform {
-  return (files) => ({ write: (target, content) => run(files.write(target, content), target) })
-}

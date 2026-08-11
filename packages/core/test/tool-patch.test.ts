@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Layer, Schema } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Environment } from "@opencode-ai/core/environment"
@@ -33,9 +33,11 @@ let denyAction: string | undefined
 let failRemoveTarget: string | undefined
 let failRemoveErrorTarget: string | undefined
 let failWriteTarget: string | undefined
+let reads = 0
 let readsBeforeEditApproval = 0
 let editApproved = false
-let afterEditApproval = (): Effect.Effect<void> => Effect.void
+let afterEditApproval = (_input: Permission.AssertInput): Effect.Effect<void> => Effect.void
+let afterRead = (_target: string, _content: Uint8Array): Effect.Effect<void> => Effect.void
 let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
 
 const permission = Layer.succeed(
@@ -46,7 +48,7 @@ const permission = Layer.succeed(
         assertions.push(input)
         if (input.action === "edit") editApproved = true
       }).pipe(
-        Effect.andThen(input.action === "edit" ? Effect.suspend(afterEditApproval) : Effect.void),
+        Effect.andThen(input.action === "edit" ? Effect.suspend(() => afterEditApproval(input)) : Effect.void),
         Effect.andThen(
           input.action === denyAction
             ? Effect.fail(
@@ -77,9 +79,11 @@ const reset = () => {
   failRemoveTarget = undefined
   failRemoveErrorTarget = undefined
   failWriteTarget = undefined
+  reads = 0
   readsBeforeEditApproval = 0
   editApproved = false
   afterEditApproval = () => Effect.void
+  afterRead = () => Effect.void
   formatFile = () => Effect.succeed(false)
 }
 
@@ -104,8 +108,12 @@ const withTool = <A, E, R>(
           transformEnvironmentFiles(activeLocation, (files) => ({
             read: (target, range) =>
               Effect.sync(() => {
+                reads++
                 if (!editApproved) readsBeforeEditApproval++
-              }).pipe(Effect.andThen(files.read(target, range))),
+              }).pipe(
+                Effect.andThen(files.read(target, range)),
+                Effect.tap((result) => Effect.suspend(() => afterRead(target, result.bytes))),
+              ),
             remove: (target) => {
               if (failRemoveTarget && path.basename(target) === failRemoveTarget)
                 return Effect.die("forced remove failure")
@@ -219,14 +227,10 @@ describe("PatchTool", () => {
                     action: "edit",
                     resources: ["nested/new.txt", "update.txt", "remove.txt"],
                     save: ["*"],
-                    metadata: {
-                      filepath: "nested/new.txt, update.txt, remove.txt",
-                      diff: expect.stringContaining("Index:"),
-                      files: expect.any(Array),
-                    },
                   },
                 ])
-                expect(readsBeforeEditApproval).toBe(2)
+                expect(assertions[0]?.metadata).toBeUndefined()
+                expect(readsBeforeEditApproval).toBe(0)
                 expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "nested/new.txt"), "utf8"))).toBe(
                   "created\n",
                 )
@@ -267,38 +271,67 @@ describe("PatchTool", () => {
   it.live("serializes concurrent patch transactions", () =>
     withTempTool((directory, registry) => {
       const target = path.join(directory, "concurrent.txt")
-      afterEditApproval = () =>
-        assertions.filter((input) => input.action === "edit").length === 1 ? Effect.sleep("50 millis") : Effect.void
-      return Effect.promise(() => fs.writeFile(target, "one\ntwo\n")).pipe(
-        Effect.andThen(
-          Effect.all(
-            [
-              executeTool(
-                registry,
-                call(
-                  "*** Begin Patch\n*** Update File: concurrent.txt\n@@\n-one\n+ONE\n*** End Patch",
-                  "call-patch-one",
-                ),
-              ),
-              executeTool(
-                registry,
-                call(
-                  "*** Begin Patch\n*** Update File: concurrent.txt\n@@\n-two\n+TWO\n*** End Patch",
-                  "call-patch-two",
-                ),
-              ),
-            ],
-            { concurrency: "unbounded" },
-          ),
-        ),
-        Effect.andThen((results) =>
-          Effect.gen(function* () {
-            expect(results.map((result) => result.status)).toEqual(["completed", "completed"])
-            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("ONE\nTWO\n")
-          }),
-        ),
-      )
+      return Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(target, "one\ntwo\n"))
+        const firstRead = yield* Deferred.make<void>()
+        const releaseFirst = yield* Deferred.make<void>()
+        const secondApproved = yield* Deferred.make<void>()
+        afterRead = () =>
+          reads === 1
+            ? Deferred.succeed(firstRead, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst)))
+            : Effect.void
+        afterEditApproval = (input) =>
+          input.source?.id === "call-patch-two"
+            ? Deferred.succeed(secondApproved, undefined).pipe(Effect.asVoid)
+            : Effect.void
+
+        const first = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Update File: concurrent.txt\n@@\n-one\n+ONE\n*** End Patch", "call-patch-one"),
+        ).pipe(Effect.forkChild)
+        yield* Deferred.await(firstRead)
+        const second = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Update File: concurrent.txt\n@@\n-two\n+TWO\n*** End Patch", "call-patch-two"),
+        ).pipe(Effect.forkChild)
+        yield* Deferred.await(secondApproved)
+        expect(reads).toBe(1)
+
+        yield* Deferred.succeed(releaseFirst, undefined)
+        expect((yield* Fiber.join(first)).status).toBe("completed")
+        expect((yield* Fiber.join(second)).status).toBe("completed")
+        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("ONE\nTWO\n")
+      })
     }),
+  )
+
+  it.live("validates patch context after permission succeeds", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const target = path.join(directory, "current.txt")
+        yield* Effect.promise(() => fs.writeFile(target, "before\n"))
+        const permissionReached = yield* Deferred.make<void>()
+        const releasePermission = yield* Deferred.make<void>()
+        afterEditApproval = () =>
+          Deferred.succeed(permissionReached, undefined).pipe(Effect.andThen(Deferred.await(releasePermission)))
+
+        const patch = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Update File: current.txt\n@@\n-before\n+after\n*** End Patch"),
+        ).pipe(Effect.forkChild)
+        yield* Deferred.await(permissionReached)
+        expect(reads).toBe(0)
+        yield* Effect.promise(() => fs.writeFile(target, "newer\n"))
+        yield* Deferred.succeed(releasePermission, undefined)
+
+        expect(yield* Fiber.join(patch)).toMatchObject({
+          status: "error",
+          error: { message: expect.stringContaining("Failed to find expected lines") },
+        })
+        expect(reads).toBe(1)
+        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("newer\n")
+      }),
+    ),
   )
 
   it.live("returns file diffs for final formatted content", () =>
@@ -783,7 +816,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("approves an external directory before reading and requests edit permission afterward", () =>
+  it.live("approves external-directory and edit access before reading", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
       ([active, outside]) => {
@@ -800,7 +833,7 @@ describe("PatchTool", () => {
                   ),
                 ).toMatchObject({ status: "completed" })
                 expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
-                expect(readsBeforeEditApproval).toBe(1)
+                expect(readsBeforeEditApproval).toBe(0)
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
               }),
             ),
@@ -931,7 +964,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("approves a relative external target before reading and requests edit permission afterward", () =>
+  it.live("approves a relative external target before reading", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
       ([active, outside]) => {
@@ -949,7 +982,7 @@ describe("PatchTool", () => {
                   ),
                 ).toMatchObject({ status: "completed" })
                 expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
-                expect(readsBeforeEditApproval).toBe(1)
+                expect(readsBeforeEditApproval).toBe(0)
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
               }),
             ),

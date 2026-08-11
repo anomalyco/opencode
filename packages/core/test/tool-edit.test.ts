@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Environment } from "@opencode-ai/core/environment"
@@ -40,6 +40,7 @@ const assertions: Permission.AssertInput[] = []
 const writes: string[] = []
 let reads = 0
 let denyAction: string | undefined
+let afterPermission = (_input: Permission.AssertInput): Effect.Effect<void> => Effect.void
 let afterRead = (_target: string, _content: Uint8Array): Effect.Effect<void> => Effect.void
 let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
 
@@ -48,6 +49,7 @@ const permission = Layer.succeed(
   Permission.Service.of({
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
+        Effect.andThen(Effect.suspend(() => afterPermission(input))),
         Effect.andThen(
           input.action === denyAction
             ? Effect.fail(
@@ -77,6 +79,7 @@ const reset = () => {
   writes.length = 0
   reads = 0
   denyAction = undefined
+  afterPermission = () => Effect.void
   afterRead = () => Effect.void
   formatFile = () => Effect.succeed(false)
 }
@@ -174,17 +177,7 @@ describe("EditTool", () => {
                 })
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\nrest\n")
                 expect(assertions).toMatchObject([{ sessionID, action: "edit", resources: ["hello.txt"], save: ["*"] }])
-                expect(assertions[0]?.metadata).toMatchObject({
-                  files: [
-                    {
-                      file: "hello.txt",
-                      status: "modified",
-                      additions: 1,
-                      deletions: 1,
-                      patch: expect.stringContaining("-before\n+after"),
-                    },
-                  ],
-                })
+                expect(assertions[0]?.metadata).toBeUndefined()
                 expect(writes).toEqual([yield* Effect.promise(() => fs.realpath(target))])
               }),
             ),
@@ -349,7 +342,7 @@ describe("EditTool", () => {
             error: { type: "permission.rejected", message: "Permission denied: edit" },
           })
           expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
-          expect(reads).toBe(1)
+          expect(reads).toBe(0)
           expect(writes).toEqual([])
           expect(yield* Effect.promise(() => fs.readFile(external, "utf8"))).toBe("before")
         }),
@@ -386,7 +379,7 @@ describe("EditTool", () => {
                 })
                 expect(missing).toEqual(matching)
                 expect(assertions.map((input) => input.action)).toEqual(["edit", "edit"])
-                expect(reads).toBe(2)
+                expect(reads).toBe(0)
                 expect(writes).toEqual([])
               }),
             ),
@@ -643,58 +636,77 @@ describe("EditTool", () => {
       (tmp) => {
         reset()
         const target = path.join(tmp.path, "concurrent.txt")
-        afterRead = () => (reads === 1 ? Effect.sleep("50 millis") : Effect.void)
-        return Effect.promise(() => fs.writeFile(target, "one\ntwo\n")).pipe(
-          Effect.andThen(
-            withTool(tmp.path, (registry) =>
-              Effect.all(
-                [
-                  executeTool(
-                    registry,
-                    call({ path: "concurrent.txt", oldString: "one", newString: "ONE" }, "call-edit-one"),
-                  ),
-                  executeTool(
-                    registry,
-                    call({ path: "concurrent.txt", oldString: "two", newString: "TWO" }, "call-edit-two"),
-                  ),
-                ],
-                { concurrency: "unbounded" },
-              ),
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => fs.writeFile(target, "one\ntwo\n"))
+          const firstRead = yield* Deferred.make<void>()
+          const releaseFirst = yield* Deferred.make<void>()
+          const secondApproved = yield* Deferred.make<void>()
+          afterRead = () =>
+            reads === 1
+              ? Deferred.succeed(firstRead, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst)))
+              : Effect.void
+          afterPermission = (input) =>
+            input.source?.id === "call-edit-two"
+              ? Deferred.succeed(secondApproved, undefined).pipe(Effect.asVoid)
+              : Effect.void
+
+          const first = yield* withTool(tmp.path, (registry) =>
+            executeTool(
+              registry,
+              call({ path: "concurrent.txt", oldString: "one", newString: "ONE" }, "call-edit-one"),
             ),
-          ),
-          Effect.andThen((results) =>
-            Effect.gen(function* () {
-              expect(results.map((result) => result.status)).toEqual(["completed", "completed"])
-              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("ONE\nTWO\n")
-            }),
-          ),
-        )
+          ).pipe(Effect.forkChild)
+          yield* Deferred.await(firstRead)
+          const second = yield* withTool(tmp.path, (registry) =>
+            executeTool(
+              registry,
+              call({ path: "concurrent.txt", oldString: "two", newString: "TWO" }, "call-edit-two"),
+            ),
+          ).pipe(Effect.forkChild)
+          yield* Deferred.await(secondApproved)
+          expect(reads).toBe(1)
+
+          yield* Deferred.succeed(releaseFirst, undefined)
+          expect((yield* Fiber.join(first)).status).toBe("completed")
+          expect((yield* Fiber.join(second)).status).toBe("completed")
+          expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("ONE\nTWO\n")
+        })
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
 
-  it.live("applies the edit when content changes after matching", () =>
+  it.live("validates current content after permission succeeds", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
         reset()
         const target = path.join(tmp.path, "concurrent.txt")
-        afterRead = () => (reads === 1 ? Effect.promise(() => fs.writeFile(target, "newer\n")) : Effect.void)
-        return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
-          Effect.andThen(
-            withTool(tmp.path, (registry) =>
-              executeTool(registry, call({ path: "concurrent.txt", oldString: "before", newString: "after" })),
-            ),
-          ),
-          Effect.andThen((result) =>
-            Effect.gen(function* () {
-              expect(result).toMatchObject({ status: "completed", output: { replacements: 1 } })
-              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
-              expect(writes).toEqual([target])
-            }),
-          ),
-        )
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => fs.writeFile(target, "before\n"))
+          const permissionReached = yield* Deferred.make<void>()
+          const releasePermission = yield* Deferred.make<void>()
+          afterPermission = (input) =>
+            input.action === "edit"
+              ? Deferred.succeed(permissionReached, undefined).pipe(Effect.andThen(Deferred.await(releasePermission)))
+              : Effect.void
+
+          const edit = yield* withTool(tmp.path, (registry) =>
+            executeTool(registry, call({ path: "concurrent.txt", oldString: "before", newString: "after" })),
+          ).pipe(Effect.forkChild)
+          yield* Deferred.await(permissionReached)
+          expect(reads).toBe(0)
+          yield* Effect.promise(() => fs.writeFile(target, "newer\n"))
+          yield* Deferred.succeed(releasePermission, undefined)
+
+          expect(yield* Fiber.join(edit)).toMatchObject({
+            status: "error",
+            error: { message: expect.stringContaining("Could not find oldString") },
+          })
+          expect(reads).toBe(1)
+          expect(writes).toEqual([])
+          expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("newer\n")
+        })
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),

@@ -1,7 +1,5 @@
-import type { AgentSideConnection, PermissionOption, ToolCallContent, ToolCallLocation } from "@agentclientprotocol/sdk"
+import type { AgentSideConnection, PermissionOption, ToolCallLocation } from "@agentclientprotocol/sdk"
 import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
-import { Patch } from "@opencode-ai/util/patch"
-import { Result } from "effect"
 import { isAbsolute, resolve } from "node:path"
 import { pendingToolCall, stringValue, toLocations, toToolKind, type ToolInput } from "./tool"
 
@@ -28,9 +26,8 @@ export async function replyPermission(input: {
 }) {
   const toolName = input.tool?.name ?? input.event.data.action
   const toolInput = { ...input.event.data.metadata, ...input.tool?.input }
-  const previews = await permissionPreviews(toolName, toolInput, input.cwd)
   const toolCallID = input.event.data.source?.id ?? input.event.data.id
-  const title = permissionTitle(toolName, toolInput, previews)
+  const title = permissionTitle(toolName, toolInput, input.event.data.resources)
   const result = await input.connection
     .requestPermission({
       sessionId: input.clientSessionID ?? input.sessionID,
@@ -44,8 +41,7 @@ export async function replyPermission(input: {
           },
           cwd: input.cwd,
         }),
-        locations: permissionLocations(toolName, toolInput, input.event.data.resources, input.cwd, previews),
-        ...(previews.length > 0 ? { content: previews } : {}),
+        locations: permissionLocations(toolName, toolInput, input.event.data.resources, input.cwd),
       },
       options,
     })
@@ -94,54 +90,8 @@ export async function syncEditedFiles(input: {
   )
 }
 
-async function permissionPreviews(toolName: string, input: ToolInput, cwd: string): Promise<ToolCallContent[]> {
-  const tool = toolName.toLocaleLowerCase()
-  if (tool === "patch" || tool === "apply_patch") return patchPreviews(input, cwd)
-  const path = filePath(input)
-  if (!path) return []
-  const oldText = await readText(path, cwd)
-  if (tool === "write") {
-    const content = stringValue(input.content)
-    return content === undefined ? [] : [{ type: "diff", path, oldText, newText: content }]
-  }
-  if (tool !== "edit") return []
-  const oldString = stringValue(input.oldString)
-  const newString = stringValue(input.newString)
-  if (oldString === undefined || newString === undefined) return []
-  const newText =
-    input.replaceAll === true ? oldText.replaceAll(oldString, newString) : oldText.replace(oldString, newString)
-  return [{ type: "diff", path, oldText, newText }]
-}
-
-async function patchPreviews(input: ToolInput, cwd: string): Promise<ToolCallContent[]> {
-  const patchText = stringValue(input.patchText)
-  if (!patchText) return []
-  try {
-    const parsed = Patch.parse(patchText)
-    if (Result.isFailure(parsed)) return []
-    return await Promise.all(
-      parsed.success.map(async (hunk): Promise<ToolCallContent> => {
-        const oldText = hunk.type === "add" ? "" : await readText(hunk.path, cwd)
-        if (hunk.type === "add") {
-          const newText = hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
-          return { type: "diff", path: hunk.path, oldText, newText }
-        }
-        if (hunk.type === "delete") return { type: "diff", path: hunk.path, oldText, newText: "" }
-        return {
-          type: "diff",
-          path: hunk.movePath ?? hunk.path,
-          oldText,
-          newText: Patch.derive(hunk.path, hunk.chunks, oldText).content,
-        }
-      }),
-    )
-  } catch {
-    return []
-  }
-}
-
-function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyArray<ToolCallContent>) {
-  if (previews.length > 1) return `${previews.length} files`
+function permissionTitle(toolName: string, input: ToolInput, resources: ReadonlyArray<string>) {
+  if (toToolKind(toolName) === "edit" && resources.length > 1) return `${resources.length} files`
   switch (toolName.toLocaleLowerCase()) {
     case "external_directory":
       return stringValue(input.description) ?? stringValue(input.command) ?? stringValue(input.parentDir)
@@ -157,7 +107,7 @@ function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyA
     case "write":
     case "patch":
     case "apply_patch":
-      return filePath(input) ?? (previews[0]?.type === "diff" ? previews[0].path : undefined)
+      return filePath(input)
     default:
       return undefined
   }
@@ -168,19 +118,10 @@ function permissionLocations(
   input: ToolInput,
   resources: ReadonlyArray<string>,
   cwd: string,
-  previews: ReadonlyArray<ToolCallContent>,
 ): ToolCallLocation[] {
-  const paths = previews.flatMap((preview) => (preview.type === "diff" ? [preview.path] : []))
-  if (paths.length > 0) return [...new Set(paths)].map((path) => ({ path }))
   const locations = toLocations(toolName, input, cwd)
   if (locations.length > 0) return locations
   return resources.filter((resource) => resource !== "*").map((path) => ({ path }))
-}
-
-function readText(path: string, cwd: string) {
-  return Bun.file(resolvePath(path, cwd))
-    .text()
-    .catch(() => "")
 }
 
 function filePath(input: ToolInput) {

@@ -48,15 +48,13 @@ export const readText = Effect.fn("FileMutation.readText")(function* (files: Fil
   return Bom.decodeBytes((yield* files.read(target)).bytes)
 })
 
-export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
-  files: Files,
-  target: string,
-  bom: boolean,
-) {
-  const synced = Bom.syncBytes((yield* files.read(target)).bytes, bom)
-  if (synced.bytes) yield* files.write(target, synced.bytes)
-  return synced.text
-})
+export const syncTextBom = Effect.fn("FileMutation.syncTextBom")((files: Files, target: string, bom: boolean) =>
+  Effect.gen(function* () {
+    const synced = Bom.syncBytes((yield* files.read(target)).bytes, bom)
+    if (synced.bytes) yield* files.write(target, synced.bytes)
+    return synced.text
+  }).pipe(Effect.uninterruptible),
+)
 
 /** Share transaction locks across Location graphs that address the same file. */
 const transactionLocks = KeyedMutex.makeUnsafe<string>()
@@ -70,15 +68,10 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const environment = yield* Environment.Service
-    const locks = KeyedMutex.makeUnsafe<string>()
     const withLock: Interface["withLock"] = (targets) => (effect) =>
       [...new Set(targets.map(FSUtil.resolve))]
         .sort()
         .reduceRight((result, target) => transactionLocks.withLock(target)(result), effect)
-    const withTargetLock =
-      (target: Target) =>
-      <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        locks.withLock(target.absolute)(Effect.uninterruptible(effect))
 
     const writeResult = (target: Target, existed: boolean): WriteResult => ({
       operation: "write",
@@ -88,36 +81,32 @@ const layer = Layer.effect(
     })
 
     const write = Effect.fn("FileMutation.write")((input: WriteInput) =>
-      withTargetLock(input.target)(
-        Effect.gen(function* () {
-          const existed = yield* environment.files.stat(input.target.absolute).pipe(
-            Effect.as(true),
-            Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
-          )
-          yield* environment.files.write(
-            input.target.absolute,
-            typeof input.content === "string" ? new TextEncoder().encode(input.content) : input.content,
-          )
-          return writeResult(input.target, existed)
-        }),
-      ),
+      Effect.gen(function* () {
+        const existed = yield* environment.files.stat(input.target.absolute).pipe(
+          Effect.as(true),
+          Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
+        )
+        yield* environment.files.write(
+          input.target.absolute,
+          typeof input.content === "string" ? new TextEncoder().encode(input.content) : input.content,
+        )
+        return writeResult(input.target, existed)
+      }).pipe(Effect.uninterruptible),
     )
 
     const writeTextPreservingBom = Effect.fn("FileMutation.writeTextPreservingBom")((input: TextWriteInput) =>
-      withTargetLock(input.target)(
-        Effect.gen(function* () {
-          const next = Bom.split(input.content)
-          const current = yield* environment.files.read(input.target.absolute, { offset: 0, length: 3 }).pipe(
-            Effect.map((result) => result.bytes),
-            Effect.catchTag("Environment.NotFound", () => Effect.succeed(undefined)),
-          )
-          yield* environment.files.write(
-            input.target.absolute,
-            new TextEncoder().encode(Bom.join(next.text, Boolean(current && Bom.has(current)) || next.bom)),
-          )
-          return writeResult(input.target, current !== undefined)
-        }),
-      ),
+      Effect.gen(function* () {
+        const next = Bom.split(input.content)
+        const current = yield* environment.files.read(input.target.absolute, { offset: 0, length: 3 }).pipe(
+          Effect.map((result) => result.bytes),
+          Effect.catchTag("Environment.NotFound", () => Effect.succeed(undefined)),
+        )
+        yield* environment.files.write(
+          input.target.absolute,
+          new TextEncoder().encode(Bom.join(next.text, Boolean(current && Bom.has(current)) || next.bom)),
+        )
+        return writeResult(input.target, current !== undefined)
+      }).pipe(Effect.uninterruptible),
     )
 
     return Service.of({ withLock, write, writeTextPreservingBom })

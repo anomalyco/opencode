@@ -211,7 +211,7 @@ describe("acp permission behavior", () => {
     }
   })
 
-  test("previews edits during approval and syncs the completed file", async () => {
+  test("authorizes edit resources and syncs the completed file", async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-acp-permission-"))
     const file = path.join(cwd, "file.ts")
     await fs.writeFile(file, "before")
@@ -240,6 +240,7 @@ describe("acp permission behavior", () => {
         send(
           permissionAsked("ses_edit", "perm_edit", {
             action: "edit",
+            resources: ["file.ts"],
             source: { type: "tool", messageID: "msg_edit", id: "call_edit" },
           }),
         )
@@ -278,8 +279,8 @@ describe("acp permission behavior", () => {
         title: "file.ts",
         kind: "edit",
         locations: [{ path: "file.ts" }],
-        content: [{ type: "diff", path: "file.ts", oldText: "before", newText: "after" }],
       })
+      expect(permissionRequests[0]?.toolCall.content).toBeUndefined()
       expect(writes).toEqual([{ sessionId: "ses_edit", path: file, content: "after" }])
     } finally {
       await fixture.stop()
@@ -287,7 +288,7 @@ describe("acp permission behavior", () => {
     }
   })
 
-  test("previews and syncs each file in a patch", async () => {
+  test("authorizes and syncs each file in a patch", async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-acp-patch-permission-"))
     await Promise.all([
       fs.writeFile(path.join(cwd, "first.ts"), "one\n"),
@@ -330,6 +331,7 @@ describe("acp permission behavior", () => {
         send(
           permissionAsked("ses_patch", "perm_patch", {
             action: "edit",
+            resources: ["first.ts", "second.ts"],
             source: { type: "tool", messageID: "msg_patch", id: "call_patch" },
           }),
         )
@@ -371,11 +373,8 @@ describe("acp permission behavior", () => {
         title: "2 files",
         kind: "edit",
         locations: [{ path: "first.ts" }, { path: "second.ts" }],
-        content: [
-          { type: "diff", path: "first.ts", oldText: "one\n", newText: "two\n" },
-          { type: "diff", path: "second.ts", oldText: "alpha\n", newText: "beta\n" },
-        ],
       })
+      expect(permissionRequests[0]?.toolCall.content).toBeUndefined()
       expect(writes.toSorted((a, b) => a.path.localeCompare(b.path))).toEqual([
         { sessionId: "ses_patch", path: path.join(cwd, "first.ts"), content: "two\n" },
         { sessionId: "ses_patch", path: path.join(cwd, "second.ts"), content: "beta\n" },
@@ -556,6 +555,7 @@ function permissionAsked(
   id: string,
   input: {
     readonly action?: string
+    readonly resources?: ReadonlyArray<string>
     readonly metadata?: Record<string, unknown>
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
   } = {},
@@ -564,7 +564,7 @@ function permissionAsked(
     id,
     sessionID,
     action: input.action ?? "shell",
-    resources: ["*"],
+    resources: [...(input.resources ?? ["*"])],
     metadata: input.metadata ?? { command: "printf hello" },
     ...(input.source ? { source: input.source } : {}),
   })
