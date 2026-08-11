@@ -22,6 +22,22 @@ interface ModelOptions {
   readonly limit?: Info["limit"]
 }
 
+const withEnv =
+  (env: Record<string, string | undefined>) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) => {
+    const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]))
+    const apply = (values: Record<string, string | undefined>) => {
+      for (const [key, value] of Object.entries(values)) {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+    }
+    return Effect.sync(() => apply(env)).pipe(
+      Effect.andThen(effect),
+      Effect.ensuring(Effect.sync(() => apply(saved))),
+    )
+  }
+
 const model = (packageName: string | undefined, options: ModelOptions = {}) =>
   Info.make({
     id: ID.make("test-model"),
@@ -608,6 +624,97 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("resolves Bedrock credentials from the AWS default chain when none are configured", () =>
+    Effect.gen(function* () {
+      const native = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/openai"), {
+          settings: { baseURL: "https://openai.example/v1" },
+        }),
+      )
+      const env = {
+        AWS_ACCESS_KEY_ID: "chain-access",
+        AWS_SECRET_ACCESS_KEY: "chain-secret",
+        AWS_SESSION_TOKEN: "chain-session",
+        AWS_REGION: "eu-west-1",
+        AWS_PROFILE: undefined,
+        AWS_BEARER_TOKEN_BEDROCK: undefined,
+      }
+      yield* Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model("@opencode-ai/ai/providers/amazon-bedrock", { settings: {} }),
+          undefined,
+          {
+            loadPackage: () =>
+              Effect.succeed({
+                model: (modelID, settings) => {
+                  expect(settings.credentials).toEqual({
+                    region: "eu-west-1",
+                    accessKeyId: "chain-access",
+                    secretAccessKey: "chain-secret",
+                    sessionToken: "chain-session",
+                  })
+                  expect(settings).not.toHaveProperty("apiKey")
+                  return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
+                },
+              }),
+          },
+        )
+        expect(resolved).toMatchObject({ id: "api-test-model", provider: "test-provider" })
+      }).pipe(withEnv(env))
+    }),
+  )
+
+  it.effect("uses the Bedrock bearer token env before the AWS default chain", () =>
+    Effect.gen(function* () {
+      const native = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/openai"), {
+          settings: { baseURL: "https://openai.example/v1" },
+        }),
+      )
+      yield* Effect.gen(function* () {
+        yield* ModelResolver.fromCatalogModel(
+          model("@opencode-ai/ai/providers/amazon-bedrock", { settings: { region: "us-west-2" } }),
+          undefined,
+          {
+            loadPackage: () =>
+              Effect.succeed({
+                model: (modelID, settings) => {
+                  expect(settings.apiKey).toBe("bearer-token")
+                  expect(settings).not.toHaveProperty("credentials")
+                  return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
+                },
+              }),
+          },
+        )
+      }).pipe(withEnv({ AWS_BEARER_TOKEN_BEDROCK: "bearer-token" }))
+    }),
+  )
+
+  it.effect("keeps explicitly configured Bedrock credentials untouched", () =>
+    Effect.gen(function* () {
+      const native = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/openai"), {
+          settings: { baseURL: "https://openai.example/v1" },
+        }),
+      )
+      const credentials = { region: "us-east-1", accessKeyId: "configured", secretAccessKey: "configured-secret" }
+      yield* ModelResolver.fromCatalogModel(
+        model("@opencode-ai/ai/providers/amazon-bedrock", { settings: { credentials } }),
+        undefined,
+        {
+          loadPackage: () =>
+            Effect.succeed({
+              model: (modelID, settings) => {
+                expect(settings.credentials).toEqual(credentials)
+                expect(settings).not.toHaveProperty("apiKey")
+                return LanguageModel.make({ id: modelID, provider: "package-provider", route: native.route })
+              },
+            }),
+        },
+      )
+    }),
+  )
+
   it.effect("maps OAuth credentials to native provider auth settings", () =>
     Effect.gen(function* () {
       const native = yield* ModelResolver.fromCatalogModel(
@@ -754,12 +861,14 @@ describe("ModelResolver", () => {
           settings: { region: "us-east-1", topP: 0.8, serviceTier: "priority" },
           body: {},
         }),
+        Credential.Key.make({ type: "key", key: "secret" }),
       )
       const mantle = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
           modelID: "openai.gpt-oss-120b",
           settings: { region: "us-east-1" },
         }),
+        Credential.Key.make({ type: "key", key: "secret" }),
       )
 
       expect(google.route.id).toBe("gemini")

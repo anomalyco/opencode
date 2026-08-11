@@ -233,9 +233,12 @@ export const fromCatalogModel = (
       body: Provider.mergeOverlay(mapping?.body, resolved.body),
       limits: { context: resolved.limit.context, input: resolved.limit.input, output: resolved.limit.output },
     }
+    const finalized = specifier.startsWith("@opencode-ai/ai/providers/amazon-bedrock")
+      ? yield* withBedrockCredentials(settings, configured)
+      : settings
     return yield* Effect.try({
       try: () => {
-        const runtime = module.model(resolved.modelID ?? resolved.id, settings)
+        const runtime = module.model(resolved.modelID ?? resolved.id, finalized)
         return LanguageModel.update(runtime, {
           provider: resolved.providerID,
           compatibility: resolved.compatibility
@@ -288,6 +291,53 @@ const withoutNativeAuthSettings = (settings: Record<string, unknown>) => {
   const { accessToken: _accessToken, apiKey: _apiKey, authToken: _authToken, ...rest } = settings
   return rest
 }
+
+// Chain providers cache and refresh resolved credentials internally, so reuse one per
+// AWS profile instead of re-walking SSO, shared config, and instance metadata each turn.
+const bedrockChains = new Map<
+  string,
+  () => Promise<{ accessKeyId: string; secretAccessKey: string; sessionToken?: string }>
+>()
+
+// Bedrock signs requests with static credentials captured at model build time; the route
+// never refreshes them. Model resolution runs before every provider turn, so falling back
+// to the AWS default chain (env, shared config, SSO, process, instance roles) here keeps
+// credentials fresh without persisting them.
+const withBedrockCredentials = Effect.fnUntraced(function* (
+  settings: Readonly<Record<string, unknown>>,
+  configured: Readonly<Record<string, unknown>>,
+) {
+  const base =
+    typeof settings.region !== "string" && process.env.AWS_REGION
+      ? { ...settings, region: process.env.AWS_REGION }
+      : settings
+  if (typeof base.apiKey === "string" || base.credentials !== undefined) return base
+  if (process.env.AWS_BEARER_TOKEN_BEDROCK) return { ...base, apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK }
+  const profile = typeof configured.profile === "string" ? configured.profile : process.env.AWS_PROFILE
+  const identity = yield* Effect.tryPromise(() => {
+    const chain = bedrockChains.get(profile ?? "")
+    if (chain) return chain()
+    return import("@aws-sdk/credential-providers").then((mod) => {
+      const created = mod.fromNodeProviderChain(profile === undefined ? {} : { profile })
+      bedrockChains.set(profile ?? "", created)
+      return created()
+    })
+  }).pipe(
+    Effect.catch((cause) =>
+      Effect.logWarning("AWS credential chain resolution failed for Bedrock", { cause }).pipe(Effect.as(undefined)),
+    ),
+  )
+  if (!identity) return base
+  return {
+    ...base,
+    credentials: {
+      region: typeof base.region === "string" ? base.region : "us-east-1",
+      accessKeyId: identity.accessKeyId,
+      secretAccessKey: identity.secretAccessKey,
+      ...(identity.sessionToken === undefined ? {} : { sessionToken: identity.sessionToken }),
+    },
+  }
+})
 
 const unsupported = (model: Info) =>
   new UnsupportedPackageError({
