@@ -828,7 +828,7 @@ describe("V1Migration database workflow", () => {
     )
   })
 
-  test("imports previous V2 sessions and messages as part of the migration", async () => {
+  test("imports previous V2 sessions and messages containing apostrophes", async () => {
     await using tmp = await tmpdir()
     const filename = path.join(tmp.path, "opencode-next.db")
     const sqlite = await import("bun:sqlite")
@@ -864,7 +864,7 @@ describe("V1Migration database workflow", () => {
         ('ses_existing', 'next-project', 'source-existing', '/tmp/next', 'Source existing', '2', NULL, NULL, 11, 21),
         ('ses_orphan', 'missing-project', 'orphan', '/tmp/orphan', 'Orphan', '2', NULL, NULL, 12, 22);
       INSERT INTO session_message VALUES
-        ('msg_next', 'ses_next', 'user', 4, 12, 13, '{"text":"from next","time":{"created":12}}'),
+        ('msg_next', 'ses_next', 'user', 4, 12, 13, '{"text":"from next''s history","time":{"created":12}}'),
         ('msg_source_existing', 'ses_existing', 'user', 2, 12, 13, '{"text":"source","time":{"created":12}}'),
         ('msg_orphan', 'ses_orphan', 'user', 0, 12, 13, '{"text":"orphan","time":{"created":12}}');
     `)
@@ -909,7 +909,7 @@ describe("V1Migration database workflow", () => {
           {
             id: "msg_next",
             seq: 4,
-            data: '{"text":"from next","time":{"created":12}}',
+            data: '{"text":"from next\'s history","time":{"created":12}}',
           },
         ])
         expect(yield* db.get(sql`SELECT seq, owner_id FROM event_sequence WHERE aggregate_id = 'ses_next'`)).toEqual({
@@ -989,7 +989,7 @@ describe("V1Migration database workflow", () => {
     )
   })
 
-  test("replaces projections, updates sessions, preserves V1 rows, and checkpoints completion", async () => {
+  test("replaces projections containing apostrophes and checkpoints completion", async () => {
     await database(
       Effect.gen(function* () {
         const { db } = yield* Database.Service
@@ -1006,7 +1006,7 @@ describe("V1Migration database workflow", () => {
           1, 2, 3, 4
         )`)
         const source = user("msg_000000000040aaaaaaaaaaaaaa")
-        const sourcePart = part("prt_1", source.id, { type: "text", text: "hello" })
+        const sourcePart = part("prt_1", source.id, { type: "text", text: "don't stop" })
         yield* db.run(
           sql`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (${source.id}, 'ses_test', 10, 11, ${source.data})`,
         )
@@ -1029,7 +1029,7 @@ describe("V1Migration database workflow", () => {
               seq: 0,
               time_created: 10,
               time_updated: 11,
-              data: '{"text":"hello","time":{"created":10}}',
+              data: '{"text":"don\'t stop","time":{"created":10}}',
             },
           ],
         )

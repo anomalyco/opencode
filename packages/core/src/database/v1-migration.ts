@@ -578,10 +578,18 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                 )
                 yield* tx.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, next.id)).run()
                 yield* Effect.forEach(transformed.messages, (message) =>
-                  tx.run(sql`
-                    INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
-                    VALUES (${message.id}, ${message.session_id}, ${message.type}, ${message.seq}, ${message.time_created}, ${message.time_updated}, ${JSON.stringify(message.data)})
-                  `),
+                  tx
+                    .insert(SessionMessageTable)
+                    .values({
+                      id: SessionMessage.ID.make(message.id),
+                      session_id: SessionSchema.ID.make(message.session_id),
+                      type: message.type,
+                      seq: message.seq,
+                      time_created: message.time_created,
+                      time_updated: message.time_updated,
+                      data: sql`${JSON.stringify(message.data)}`,
+                    })
+                    .run(),
                 )
                 yield* tx
                   .update(SessionTable)
@@ -739,13 +747,18 @@ function importNextDatabase(
                 )
               `)
               yield* Effect.forEach(messages, (message) =>
-                tx.run(sql`
-                  INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
-                  VALUES (
-                    ${message.id}, ${message.session_id}, ${message.type}, ${message.seq},
-                    ${message.time_created}, ${message.time_updated}, ${message.data}
-                  )
-                `),
+                tx
+                  .insert(SessionMessageTable)
+                  .values({
+                    id: SessionMessage.ID.make(message.id),
+                    session_id: SessionSchema.ID.make(message.session_id),
+                    type: message.type as SessionMessage.Type,
+                    seq: message.seq,
+                    time_created: message.time_created,
+                    time_updated: message.time_updated,
+                    data: sql`${message.data}`,
+                  })
+                  .run(),
               )
               yield* tx
                 .insert(EventSequenceTable)
