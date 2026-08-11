@@ -123,6 +123,24 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("resolves environment templates before native providers inspect endpoints", () =>
+    withEnv({ AZURE_HOST: "resource.openai.azure.com" }, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/azure"), {
+            providerID: Provider.ID.azure,
+            settings: { baseURL: "https://${AZURE_HOST}/openai" },
+          }),
+        )
+
+        expect(resolved.route.endpoint).toMatchObject({
+          baseURL: "https://resource.openai.azure.com/openai/v1",
+          query: { "api-version": "v1" },
+        })
+      }),
+    ),
+  )
+
   it.effect("maps Bedrock Mantle models to native Responses and safeguards to Chat", () =>
     Effect.gen(function* () {
       const credential = Credential.Key.make({ type: "key", key: "secret" })
@@ -872,6 +890,25 @@ describe("ModelResolver", () => {
           }),
           undefined,
           { loadAISDK: () => Effect.die("AI SDK loader should not be called") },
+        ).pipe(Effect.flip)
+
+        expect(failure).toMatchObject({
+          _tag: "SessionRunnerModel.UnresolvedProviderVariablesError",
+          variables: ["REQUIRED_HOST"],
+        })
+      }),
+    ),
+  )
+
+  it.effect("rejects unresolved variables before loading native provider packages", () =>
+    withEnv({ REQUIRED_HOST: undefined }, () =>
+      Effect.gen(function* () {
+        const failure = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/google"), {
+            settings: { baseURL: "https://${REQUIRED_HOST}/v1" },
+          }),
+          undefined,
+          { loadPackage: () => Effect.die("Native package loader should not be called") },
         ).pipe(Effect.flip)
 
         expect(failure).toMatchObject({

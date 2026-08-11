@@ -68,13 +68,7 @@ export function map(input: MapInput): Mapping | undefined {
 function mapBedrockMantle(input: MapInput): Mapping | undefined {
   const settings = input.settings
   const chat = input.modelID === "openai.gpt-oss-safeguard-20b" || input.modelID === "openai.gpt-oss-safeguard-120b"
-  const credentials = isRecord(settings.credentials) ? settings.credentials : undefined
-  const region =
-    typeof settings.region === "string"
-      ? settings.region
-      : typeof credentials?.region === "string"
-        ? credentials.region
-        : undefined
+  const region = bedrockRegion(settings)
   const baseURL =
     typeof settings.baseURL === "string" && region !== undefined
       ? settings.baseURL.replaceAll("${AWS_REGION}", region)
@@ -168,12 +162,7 @@ function mapBedrockRequest(input: MapInput): Pick<Mapping, "headers" | "body"> {
 
 function mapBedrockCredentials(settings: Readonly<Record<string, unknown>>) {
   const credentials = isRecord(settings.credentials) ? settings.credentials : settings
-  const region =
-    typeof settings.region === "string"
-      ? settings.region
-      : typeof credentials.region === "string"
-        ? credentials.region
-        : undefined
+  const region = bedrockRegion(settings)
   if (
     region === undefined ||
     typeof credentials.accessKeyId !== "string" ||
@@ -186,6 +175,15 @@ function mapBedrockCredentials(settings: Readonly<Record<string, unknown>>) {
     secretAccessKey: credentials.secretAccessKey,
     ...(typeof credentials.sessionToken === "string" ? { sessionToken: credentials.sessionToken } : {}),
   }
+}
+
+function bedrockRegion(settings: Readonly<Record<string, unknown>>) {
+  const credentials = isRecord(settings.credentials) ? settings.credentials : settings
+  return typeof settings.region === "string"
+    ? settings.region
+    : typeof credentials.region === "string"
+      ? credentials.region
+      : undefined
 }
 
 function mapOpenAIOptions(settings: Readonly<Record<string, unknown>>) {

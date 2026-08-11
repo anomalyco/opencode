@@ -163,36 +163,37 @@ export const fromCatalogModel = (
     Effect.flatMap((resolved) => validateProviderVariables(model, resolved)),
   )
 
-const resolveCatalogModel = (model: Info, credential?: Credential.Value, dependencies?: Dependencies) => {
+const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(function* (
+  model: Info,
+  credential?: Credential.Value,
+  dependencies?: Dependencies,
+) {
   const resolved = prepareRuntimeModel(model, credential)
   const packageName = Provider.packageName(resolved.package)
   const key = apiKey(resolved, credential)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
 
   if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/openai") {
-    return Effect.succeed(
-      withDefaults(resolved, OpenAIResponses.route)
-        .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
-        .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
-    )
+    const runtime = yield* prepareProviderModel(resolved)
+    return withDefaults(runtime, OpenAIResponses.route)
+      .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
+      .model({ id: runtime.modelID ?? runtime.id, compatibility: runtime.compatibility })
   }
   if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/anthropic") {
-    return Effect.succeed(
-      withDefaults(resolved, AnthropicMessages.route)
-        .with({ auth: key === undefined ? Auth.none : Auth.header("x-api-key", key) })
-        .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
-    )
+    const runtime = yield* prepareProviderModel(resolved)
+    return withDefaults(runtime, AnthropicMessages.route)
+      .with({ auth: key === undefined ? Auth.none : Auth.header("x-api-key", key) })
+      .model({ id: runtime.modelID ?? runtime.id, compatibility: runtime.compatibility })
   }
   if (
     Provider.isAISDK(resolved.package) &&
     packageName === "@ai-sdk/openai-compatible" &&
     typeof resolved.settings?.baseURL === "string"
   ) {
-    return Effect.succeed(
-      withDefaults(resolved, OpenAICompatibleChat.route)
-        .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
-        .model({ id: resolved.modelID ?? resolved.id, compatibility: resolved.compatibility }),
-    )
+    const runtime = yield* prepareProviderModel(resolved)
+    return withDefaults(runtime, OpenAICompatibleChat.route)
+      .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
+      .model({ id: runtime.modelID ?? runtime.id, compatibility: runtime.compatibility })
   }
   const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
   const mapping = Provider.isAISDK(resolved.package)
@@ -204,48 +205,48 @@ const resolveCatalogModel = (model: Info, credential?: Credential.Value, depende
     : undefined
   const native = mapping?.package ?? resolved.package
   if (Provider.isAISDK(resolved.package) && !mapping) {
-    const loadAISDK = dependencies?.loadAISDK
-    if (!loadAISDK) return Effect.fail(unsupported(resolved))
-    const runtime = produce(resolved, (draft) => {
-      draft.settings = Provider.mergeOverlay(draft.settings, {
+    const settings = yield* prepareProviderSettings(
+      resolved,
+      Provider.mergeOverlay(resolved.settings, {
         ...nativeCredentialSettings(resolved.package ?? "", credential),
         ...credential?.metadata,
         ...configuration,
-      })
-    })
-    return prepareOpaqueAISDKModel(resolved, runtime).pipe(
-      Effect.flatMap((runtime) => loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))),
+      }) ?? {},
     )
+    const loadAISDK = dependencies?.loadAISDK
+    if (!loadAISDK) return yield* unsupported(resolved)
+    const runtime = produce(resolved, (draft) => {
+      draft.settings = settings
+    })
+    return yield* loadAISDK(runtime).pipe(Effect.mapError(() => unsupported(resolved)))
   }
-  if (!native) return Effect.fail(unsupported(resolved))
+  if (!native) return yield* unsupported(resolved)
 
   const specifier = native
-  return Effect.gen(function* () {
-    const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
-      Effect.mapError(() => unsupported(resolved)),
-    )
-    const mapped = mapping?.settings ?? configured
-    const settings = {
-      ...(credential ? withoutNativeAuthSettings(mapped) : mapped),
-      ...nativeCredentialSettings(specifier, credential),
-      headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
-      body: Provider.mergeOverlay(mapping?.body, resolved.body),
-      limits: { context: resolved.limit.context, input: resolved.limit.input, output: resolved.limit.output },
-    }
-    return yield* Effect.try({
-      try: () => {
-        const runtime = module.model(resolved.modelID ?? resolved.id, settings)
-        return LanguageModel.update(runtime, {
-          provider: resolved.providerID,
-          compatibility: resolved.compatibility
-            ? Object.assign({}, runtime.compatibility, resolved.compatibility)
-            : runtime.compatibility,
-        })
-      },
-      catch: () => unsupported(resolved),
-    })
+  const mapped = yield* prepareProviderSettings(resolved, mapping?.settings ?? configured)
+  const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
+    Effect.mapError(() => unsupported(resolved)),
+  )
+  const settings = {
+    ...(credential ? withoutNativeAuthSettings(mapped) : mapped),
+    ...nativeCredentialSettings(specifier, credential),
+    headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
+    body: Provider.mergeOverlay(mapping?.body, resolved.body),
+    limits: { context: resolved.limit.context, input: resolved.limit.input, output: resolved.limit.output },
+  }
+  return yield* Effect.try({
+    try: () => {
+      const runtime = module.model(resolved.modelID ?? resolved.id, settings)
+      return LanguageModel.update(runtime, {
+        provider: resolved.providerID,
+        compatibility: resolved.compatibility
+          ? Object.assign({}, runtime.compatibility, resolved.compatibility)
+          : runtime.compatibility,
+      })
+    },
+    catch: () => unsupported(resolved),
   })
-}
+})
 
 function prepareRuntimeModel(model: Info, credential: Credential.Value | undefined) {
   return produce(model, (draft) => {
@@ -261,42 +262,58 @@ function validateProviderVariables(
 ): Effect.Effect<LanguageModel, UnresolvedProviderVariablesError> {
   const baseURL = resolved.route.endpoint.baseURL
   if (typeof baseURL !== "string") return Effect.succeed(resolved)
-  const prepared = resolveProviderURL(baseURL)
-  const failure = unresolvedProviderVariables(model, prepared)
-  if (failure) return Effect.fail(failure)
-  if (prepared === baseURL) return Effect.succeed(resolved)
-  return Effect.succeed(
-    LanguageModel.update(resolved, {
-      route: resolved.route.with({ endpoint: { baseURL: prepared } }),
+  return prepareProviderURL(model, baseURL).pipe(
+    Effect.map((prepared) =>
+      prepared === baseURL
+        ? resolved
+        : LanguageModel.update(resolved, {
+            route: resolved.route.with({ endpoint: { baseURL: prepared } }),
+          }),
+    ),
+  )
+}
+
+function prepareProviderModel(model: Info): Effect.Effect<Info, UnresolvedProviderVariablesError> {
+  if (!model.settings) return Effect.succeed(model)
+  return prepareProviderSettings(model, model.settings).pipe(
+    Effect.map((settings) =>
+      settings === model.settings
+        ? model
+        : produce(model, (draft) => {
+            draft.settings = settings
+          }),
+    ),
+  )
+}
+
+function prepareProviderSettings(
+  model: Info,
+  settings: Readonly<Record<string, unknown>>,
+): Effect.Effect<Readonly<Record<string, unknown>>, UnresolvedProviderVariablesError> {
+  const baseURL = settings.baseURL
+  if (typeof baseURL !== "string") return Effect.succeed(settings)
+  return prepareProviderURL(model, baseURL).pipe(
+    Effect.map((prepared) => (prepared === baseURL ? settings : { ...settings, baseURL: prepared })),
+  )
+}
+
+function prepareProviderURL(model: Info, baseURL: string): Effect.Effect<string, UnresolvedProviderVariablesError> {
+  if (!baseURL.includes("${")) return Effect.succeed(baseURL)
+  const variables = new Set<string>()
+  const prepared = baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => {
+    const value = process.env[name]
+    if (value !== undefined) return value
+    variables.add(name)
+    return placeholder
+  })
+  if (variables.size === 0) return Effect.succeed(prepared)
+  return Effect.fail(
+    new UnresolvedProviderVariablesError({
+      providerID: model.providerID,
+      modelID: model.id,
+      variables: Array.from(variables),
     }),
   )
-}
-
-function prepareOpaqueAISDKModel(model: Info, runtime: Info): Effect.Effect<Info, UnresolvedProviderVariablesError> {
-  const baseURL = runtime.settings?.baseURL
-  if (typeof baseURL !== "string") return Effect.succeed(runtime)
-  const prepared = resolveProviderURL(baseURL)
-  const failure = unresolvedProviderVariables(model, prepared)
-  if (failure) return Effect.fail(failure)
-  return Effect.succeed(
-    produce(runtime, (draft) => {
-      if (draft.settings) draft.settings.baseURL = prepared
-    }),
-  )
-}
-
-const providerVariablePattern = /\$\{([^}]+)\}/g
-
-function resolveProviderURL(baseURL: string) {
-  return baseURL.replace(providerVariablePattern, (placeholder, name: string) => process.env[name] ?? placeholder)
-}
-
-function unresolvedProviderVariables(model: Info, baseURL: string) {
-  const variables = Array.from(baseURL.matchAll(providerVariablePattern), (match) => match[1]).filter(
-    (name, index, names) => names.indexOf(name) === index,
-  )
-  if (variables.length === 0) return
-  return new UnresolvedProviderVariablesError({ providerID: model.providerID, modelID: model.id, variables })
 }
 
 const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {
