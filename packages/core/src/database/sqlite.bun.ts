@@ -1,58 +1,32 @@
-import { Database } from "bun:sqlite"
+import { Database, type SQLQueryBindings } from "bun:sqlite"
 import { drizzle } from "drizzle-orm/bun-sqlite"
-import { Context, Effect, Fiber, Layer, Scope, Semaphore, Stream } from "effect"
-import { identity } from "effect/Function"
+import { Context, Effect, Layer } from "effect"
 import { Reactivity } from "effect/unstable/reactivity"
-import { SqlClient, Statement } from "effect/unstable/sql"
-import type { Connection } from "effect/unstable/sql/SqlConnection"
+import { SqlClient } from "effect/unstable/sql"
 import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError"
 import { Sqlite } from "./sqlite"
 
-const ATTR_DB_SYSTEM_NAME = "db.system.name"
-
 const TypeId = "~@opencode-ai/core/database/SqliteBun" as const
-type TypeId = typeof TypeId
 
-interface SqliteClient extends SqlClient.SqlClient {
-  readonly [TypeId]: TypeId
-  readonly config: Config
-  readonly export: Effect.Effect<Uint8Array, SqlError>
-  readonly loadExtension: (path: string) => Effect.Effect<void, SqlError>
-  readonly updateValues: never
-}
-
-interface Config {
+interface Config extends Sqlite.ClientConfig {
   readonly filename: string
   readonly readonly?: boolean
   readonly create?: boolean
   readonly readwrite?: boolean
   readonly disableWAL?: boolean
-  readonly spanAttributes?: Record<string, unknown>
-  readonly transformResultNames?: (str: string) => string
-  readonly transformQueryNames?: (str: string) => string
-}
-
-interface SqliteConnection extends Connection {
-  readonly export: Effect.Effect<Uint8Array, SqlError>
-  readonly loadExtension: (path: string) => Effect.Effect<void, SqlError>
 }
 
 const make = (options: Config) =>
   Effect.gen(function* () {
     const native = (yield* Sqlite.Native) as Database
 
-    const compiler = Statement.makeCompilerSqlite(options.transformQueryNames)
-    const transformRows = options.transformResultNames
-      ? Statement.defaultTransforms(options.transformResultNames).array
-      : undefined
-
     const run = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
-        const statement = native.query(query)
+        const statement = native.query<Record<string, unknown>, SQLQueryBindings[]>(query)
         // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
         statement.safeIntegers(Context.get(fiber.context, SqlClient.SafeIntegers))
         try {
-          return Effect.succeed((statement.all(...(params as any)) ?? []) as Array<Record<string, unknown>>)
+          return Effect.succeed(statement.all(...(params as SQLQueryBindings[])) ?? [])
         } catch (cause) {
           return Effect.fail(
             new SqlError({
@@ -64,11 +38,11 @@ const make = (options: Config) =>
 
     const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<unknown[]>, SqlError>((fiber) => {
-        const statement = native.query(query)
+        const statement = native.query<unknown, SQLQueryBindings[]>(query)
         // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
         statement.safeIntegers(Context.get(fiber.context, SqlClient.SafeIntegers))
         try {
-          return Effect.succeed((statement.values(...(params as any)) ?? []) as Array<unknown[]>)
+          return Effect.succeed(statement.values(...(params as SQLQueryBindings[])) ?? [])
         } catch (cause) {
           return Effect.fail(
             new SqlError({
@@ -78,25 +52,7 @@ const make = (options: Config) =>
         }
       })
 
-    const connection = identity<SqliteConnection>({
-      execute(query, params, transformRows) {
-        return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
-      },
-      executeRaw(query, params) {
-        return run(query, params)
-      },
-      executeValues(query, params) {
-        return runValues(query, params)
-      },
-      executeValuesUnprepared(query, params) {
-        return runValues(query, params)
-      },
-      executeUnprepared(query, params, transformRows) {
-        return this.execute(query, params, transformRows)
-      },
-      executeStream() {
-        return Stream.die("executeStream not implemented")
-      },
+    const connection = Sqlite.makeConnection(run, runValues, {
       export: Effect.try({
         try: () => native.serialize(),
         catch: (cause) =>
@@ -104,7 +60,7 @@ const make = (options: Config) =>
             reason: classifySqliteError(cause, { message: "Failed to export database", operation: "export" }),
           }),
       }),
-      loadExtension: (path) =>
+      loadExtension: (path: string) =>
         Effect.try({
           try: () => native.loadExtension(path),
           catch: (cause) =>
@@ -114,37 +70,10 @@ const make = (options: Config) =>
         }),
     })
 
-    const semaphore = yield* Semaphore.make(1)
-    const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
-    const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
-      const fiber = Fiber.getCurrent()!
-      const scope = Context.getUnsafe(fiber.context, Scope.Scope)
-      return Effect.as(
-        Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
-        connection,
-      )
-    })
-
-    const client = Object.assign(
-      (yield* SqlClient.make({
-        acquirer,
-        compiler,
-        transactionAcquirer,
-        spanAttributes: [
-          ...(options.spanAttributes ? Object.entries(options.spanAttributes) : []),
-          [ATTR_DB_SYSTEM_NAME, "sqlite"],
-        ],
-        transformRows,
-      })) as SqliteClient,
-      {
-        [TypeId]: TypeId,
-        config: options,
-        export: Effect.flatMap(acquirer, (_) => _.export),
-        loadExtension: (path: string) => Effect.flatMap(acquirer, (_) => _.loadExtension(path)),
-      },
-    )
-
-    return client
+    return yield* Sqlite.makeClient(options, connection, TypeId, (acquirer) => ({
+      export: Effect.flatMap(acquirer, (_) => _.export),
+      loadExtension: (path: string) => Effect.flatMap(acquirer, (_) => _.loadExtension(path)),
+    }))
   })
 
 const nativeLayer = (config: Config) =>
