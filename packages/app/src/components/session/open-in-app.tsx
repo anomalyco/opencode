@@ -104,7 +104,7 @@ export function detectOpenAppOS(platform: ReturnType<typeof usePlatform>): OpenA
 export function openAppFileManager(os: OpenAppOS) {
   if (os === "macos") return { label: "session.header.open.finder", icon: "finder" as const }
   if (os === "windows") return { label: "session.header.open.fileExplorer", icon: "file-explorer" as const }
-  return { label: "session.header.open.fileManager", icon: "finder" as const }
+  return { label: "session.header.open.fileManager", icon: "file-manager" as const }
 }
 
 export function openAppsForOS(os: OpenAppOS) {
