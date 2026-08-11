@@ -3,6 +3,7 @@ import type { UpdaterState } from "@/updater"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
+import { formatServerError } from "@/utils/server-errors"
 
 export function updaterAction(state: UpdaterState | undefined) {
   if (!state) return { label: "settings.updates.action.checkNow" as const }
@@ -35,7 +36,7 @@ export function useUpdaterAction() {
         return platform.updater?.install().catch((error) => {
           showToast({
             title: language.t("common.requestFailed"),
-            description: error instanceof Error ? error.message : String(error),
+            description: formatServerError(error, language.t, language.t("common.requestFailed")),
           })
         })
       }
