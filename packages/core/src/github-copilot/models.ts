@@ -129,6 +129,9 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
   const pdf =
     (remote.capabilities.supports.vision ?? false) &&
     (remote.capabilities.limits.vision?.supported_media_types.includes("application/pdf") ?? false)
+  const input = ["text"]
+  if (image) input.push("image")
+  if (pdf) input.push("pdf")
   const prices = remote.billing?.token_prices
   // Copilot reports AIC per billing batch; OpenCode stores USD per million tokens.
   const usdPerMillion = prices && prices.batch_size > 0 ? 10_000 / prices.batch_size : 0
@@ -153,7 +156,7 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
     body: previous?.body,
     capabilities: {
       tools: remote.capabilities.supports.tool_calls,
-      input: pdf ? ["text", "image", "pdf"] : image ? ["text", "image"] : ["text"],
+      input,
       output: ["text"],
     },
     variants: variants(remote, messages),
