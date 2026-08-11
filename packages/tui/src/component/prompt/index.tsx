@@ -61,8 +61,8 @@ import { abbreviateHome } from "../../runtime"
 import { PluginSlot } from "../../plugin/render"
 import type { SessionPending } from "@opencode-ai/schema/session-pending"
 import {
-  deduplicatePromptAttachments,
-  isReusablePromptAttachment,
+  deduplicatePromptImages,
+  preserveMentionlessPromptAttachments,
   promptAttachmentLabel,
 } from "../../prompt/attachment"
 import { DialogImagePreview } from "../dialog-image-preview"
@@ -336,7 +336,7 @@ export function Prompt(props: PromptProps) {
   }
 
   const imageAttachments = createMemo(() =>
-    (store.prompt.files ?? []).filter((file) => file.uri.startsWith("data:image/")),
+    (deduplicatePromptImages(store.prompt.files) ?? []).filter((file) => file.uri.startsWith("data:image/")),
   )
   const imagePreviewHeight = createMemo(() => Math.max(4, Math.min(8, Math.floor(dimensions().height / 4))))
   const imagePreviewWidth = createMemo(() => imagePreviewHeight() * 2)
@@ -752,13 +752,6 @@ export function Prompt(props: PromptProps) {
           if (ref.type === "file") {
             const part = draft.prompt.files?.[ref.index]
             if (!part?.mention) continue
-            const duplicate = isReusablePromptAttachment(part.uri)
-              ? files.findIndex((file) => file.uri === part.uri)
-              : -1
-            if (duplicate >= 0) {
-              newMap.set(extmark.id, { type: "file", index: duplicate })
-              continue
-            }
             part.mention.start = extmark.start
             part.mention.end = extmark.end
             const index = files.length
@@ -795,8 +788,14 @@ export function Prompt(props: PromptProps) {
           newMap.set(extmark.id, { type: "pasted", index })
         }
 
+        const nextFiles = preserveMentionlessPromptAttachments(draft.prompt.files, files)
+
         draft.extmarkToPart = newMap
-        draft.prompt.files = files
+        if (
+          nextFiles.length !== draft.prompt.files?.length ||
+          nextFiles.some((file, index) => file !== draft.prompt.files?.[index])
+        )
+          draft.prompt.files = nextFiles
         draft.prompt.agents = agents
         draft.prompt.skills = skills
         draft.prompt.pasted = pasted
@@ -1150,8 +1149,6 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
-    const files = deduplicatePromptAttachments(store.prompt.files)
-
     if (store.mode === "shell") {
       move.startSubmit()
       void client.api.session.shell({
@@ -1171,7 +1168,7 @@ export function Prompt(props: PromptProps) {
           arguments: slashHead.arguments,
           agent: agent.id,
           model,
-          files,
+          files: store.prompt.files,
           agents: store.prompt.agents,
           skills: store.prompt.skills?.length ? store.prompt.skills : undefined,
           delivery,
@@ -1238,7 +1235,7 @@ export function Prompt(props: PromptProps) {
         .prompt({
           sessionID,
           text: inputText,
-          files,
+          files: store.prompt.files,
           agents: store.prompt.agents,
           skills: store.prompt.skills?.length ? store.prompt.skills : undefined,
           delivery,
@@ -1389,7 +1386,7 @@ export function Prompt(props: PromptProps) {
   function pasteAttachment(file: { filename?: string; uri: string }) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
-    const virtualText = promptAttachmentLabel(store.prompt.files, file.uri)
+    const virtualText = promptAttachmentLabel(store.prompt.files, { uri: file.uri, name: file.filename })
     const extmarkEnd = extmarkStart + virtualText.length
     const textToInsert = virtualText + " "
 
@@ -1415,11 +1412,8 @@ export function Prompt(props: PromptProps) {
     setStore(
       produce((draft) => {
         const files = (draft.prompt.files ??= [])
-        const duplicate = isReusablePromptAttachment(file.uri)
-          ? files.findIndex((attachment) => attachment.uri === file.uri)
-          : -1
-        const index = duplicate >= 0 ? duplicate : files.length
-        if (duplicate < 0) files.push(part)
+        const index = files.length
+        files.push(part)
         draft.extmarkToPart.set(extmarkId, { type: "file", index })
       }),
     )

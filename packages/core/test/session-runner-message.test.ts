@@ -373,6 +373,97 @@ Recent work
     ])
   })
 
+  test("deduplicates provider media while preserving durable attachment references", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-duplicate-image"),
+          type: "user",
+          text: "[Image 1] [Image 1] [Image 2]",
+          files: [
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 0, end: 9, text: "[Image 1]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 10, end: 19, text: "[Image 1]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              description: "alternate use",
+              mention: { start: 20, end: 29, text: "[Image 2]" },
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "[Image 1] [Image 1] [Image 2]" },
+      { type: "media", mediaType: "image/png", data, filename: "image.png" },
+      {
+        type: "media",
+        mediaType: "image/png",
+        data,
+        filename: "image.png",
+        metadata: { description: "alternate use" },
+      },
+    ])
+  })
+
+  test("preserves provider media with distinct labels or URI sources", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-distinct-images"),
+          type: "user",
+          text: "[Image 1] [Image 2]",
+          files: [
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 0, end: 9, text: "[Image 1]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 10, end: 19, text: "[Image 2]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "uri", uri: "file:///project/image.png" },
+              name: "image.png",
+              mention: { start: 0, end: 9, text: "[Image 1]" },
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content.filter((part) => part.type === "media")).toHaveLength(3)
+  })
+
   test("replays durable tool media into canonical tool messages without structured base64", () => {
     const messages = toLLMMessages(
       [

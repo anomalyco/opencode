@@ -70,6 +70,7 @@ import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
 import { sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 import { projectedPromptInput } from "../../prompt/codec"
+import { deduplicateVisibleImages } from "../../prompt/attachment"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
@@ -1899,7 +1900,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const ctx = use()
   const data = useData()
   const local = useLocal()
-  const files = createMemo(() => props.message.files ?? [])
+  const files = createMemo(() => deduplicateVisibleImages(props.message.files ?? []))
   const skills = createMemo(() => props.message.skills ?? [])
   const images = createMemo(() =>
     files().flatMap((file) =>
