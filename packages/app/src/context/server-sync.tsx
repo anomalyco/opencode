@@ -6,6 +6,7 @@ import type {
   ProviderAuthResponse,
   SessionStatus,
 } from "@opencode-ai/sdk/v2/client"
+import { retry } from "@opencode-ai/core/util/retry"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { type Accessor, batch, createMemo, getOwner, onCleanup, onMount, untrack } from "solid-js"
@@ -104,12 +105,13 @@ export const loadMcpQuery = (
     readonly [ServerScope, string, "mcp"]
   >({
     queryKey: [scope, directory, "mcp"] as const,
-    queryFn: async () => {
-      if ((await protocol) === "v1" && legacy) return (await legacy.mcp.status()).data ?? {}
-      return api
-        .list({ location: { directory } })
-        .then((result) => Object.fromEntries(result.data.map((server) => [server.name, server.status])))
-    },
+    queryFn: () =>
+      retry(async () => {
+        if ((await protocol) === "v1" && legacy) return (await legacy.mcp.status()).data ?? {}
+        return api
+          .list({ location: { directory } })
+          .then((result) => Object.fromEntries(result.data.map((server) => [server.name, server.status])))
+      }),
   })
 
 export const loadMcpResourcesQuery = (
@@ -126,21 +128,22 @@ export const loadMcpResourcesQuery = (
     readonly [ServerScope, string, "mcpResources"]
   >({
     queryKey: [scope, directory, "mcpResources"] as const,
-    queryFn: async () => {
-      if ((await protocol) === "v1" && legacy) {
-        return Object.fromEntries(
-          Object.entries((await legacy.experimental.resource.list()).data ?? {}).map(([key, resource]) => [
-            key,
-            { ...resource, server: resource.client },
-          ]),
-        )
-      }
-      return api.resource
-        .catalog({ location: { directory } })
-        .then((result) =>
-          Object.fromEntries(result.data.resources.map((resource) => [`${resource.server}:${resource.uri}`, resource])),
-        )
-    },
+    queryFn: () =>
+      retry(async () => {
+        if ((await protocol) === "v1" && legacy) {
+          return Object.fromEntries(
+            Object.entries((await legacy.experimental.resource.list()).data ?? {}).map(([key, resource]) => [
+              key,
+              { ...resource, server: resource.client },
+            ]),
+          )
+        }
+        return api.resource
+          .catalog({ location: { directory } })
+          .then((result) =>
+            Object.fromEntries(result.data.resources.map((resource) => [`${resource.server}:${resource.uri}`, resource])),
+          )
+      }),
     placeholderData: {},
   })
 
