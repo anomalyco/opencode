@@ -512,8 +512,10 @@ export const {
             })
           })
         })
-        .then(() => {
+        .catch(() => {})
+        .finally(() => {
           if (store.status !== "complete") setStore("status", "partial")
+        })
           // non-blocking
           void Promise.all([
             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
