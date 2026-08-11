@@ -60,7 +60,7 @@ describe("web UI", () => {
           const fallback = yield* Effect.promise(() => fetch(`${origin}/workspace/example`))
           expect(yield* Effect.promise(() => fallback.text())).toContain("embedded")
           expect(fallback.headers.get("content-security-policy")).toContain("default-src 'self'")
-          expect(fallback.headers.get("content-security-policy")).toContain("connect-src 'self'")
+          expect(fallback.headers.get("content-security-policy")).toContain("connect-src * data: blob:")
         }),
       ).pipe(Effect.provide(NodeFileSystem.layer)),
     )
