@@ -1,4 +1,5 @@
 import { MCP } from "@opencode-ai/core/mcp/index"
+import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { McpServerNotFoundError } from "@opencode-ai/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
@@ -30,7 +31,9 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
         "mcp.add",
         Effect.fn(function* (ctx) {
           const service = yield* MCP.Service
+          const tools = yield* McpTool.Service
           yield* service.add(ctx.params.server, ctx.payload.config)
+          yield* tools.reconcile
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -38,7 +41,9 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
         "mcp.remove",
         Effect.fn(function* (ctx) {
           const service = yield* MCP.Service
+          const tools = yield* McpTool.Service
           yield* notFound(service.remove(ctx.params.server))
+          yield* tools.reconcile
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -46,7 +51,9 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
         "mcp.connect",
         Effect.fn(function* (ctx) {
           const service = yield* MCP.Service
+          const tools = yield* McpTool.Service
           yield* notFound(service.connect(ctx.params.server))
+          yield* tools.reconcile
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -54,7 +61,9 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
         "mcp.disconnect",
         Effect.fn(function* (ctx) {
           const service = yield* MCP.Service
+          const tools = yield* McpTool.Service
           yield* notFound(service.disconnect(ctx.params.server))
+          yield* tools.reconcile
           return HttpApiSchema.NoContent.make()
         }),
       )
