@@ -89,6 +89,18 @@ const it = testEffect(
 )
 
 describe("QuestionTool", () => {
+  it.effect("emits one item schema for the nonempty questions array", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const definition = (yield* toolDefinitions(registry)).find((tool) => tool.name === QuestionTool.name)
+
+      expect(definition?.inputSchema).toHaveProperty("properties.questions.type", "array")
+      expect(definition?.inputSchema).toHaveProperty("properties.questions.minItems", 1)
+      expect(definition?.inputSchema).toHaveProperty("properties.questions.items")
+      expect(definition?.inputSchema).not.toHaveProperty("properties.questions.prefixItems")
+    }),
+  )
+
   it.effect("omits a catalog-denied question and enforces its leaf permission", () =>
     Effect.gen(function* () {
       captured = undefined
