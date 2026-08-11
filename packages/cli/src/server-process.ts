@@ -1,7 +1,7 @@
 export * as ServerProcess from "./server-process"
 
 import { NodeServices } from "@effect/platform-node"
-import { Service, type DiscoverOptions, type Info } from "@opencode-ai/client/effect/service"
+import { Service, type DiscoverOptions, type Endpoint, type Info } from "@opencode-ai/client/effect/service"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Global } from "@opencode-ai/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
@@ -16,10 +16,11 @@ import { Updater } from "./services/updater"
 import { WebUi } from "./services/web-ui"
 import open from "open"
 
-export type Mode = "default" | "service" | "stdio" | "web"
+export type Mode = "default" | "service" | "stdio"
 
 export type Options = {
   readonly mode: Mode
+  readonly open?: boolean
   readonly hostname?: string
   readonly port?: number
 }
@@ -44,17 +45,19 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
   if (options.mode === "service") yield* Effect.sync(() => process.chdir(Global.Path.home))
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      const foreground = options.mode === "default" || options.mode === "web"
+      const foreground = options.mode === "default"
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
-      if (
-        serviceOptions !== undefined &&
-        port !== undefined &&
-        (yield* Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })) !== undefined
-      )
+      const incumbent =
+        serviceOptions !== undefined && port !== undefined
+          ? yield* Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
+          : undefined
+      if (incumbent !== undefined) {
+        if (options.open) yield* openWeb(incumbent.endpoint)
         return
+      }
       const { start } = yield* Effect.promise(() => import("@opencode-ai/server/process"))
       const environmentPassword = yield* Env.password
       // Keep the lease credential out of the environment inherited by tools.
@@ -148,11 +151,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (foreground && !environmentPassword) console.log(`server password ${password}`)
-      if (options.mode === "web") {
-        const target = new URL(WebUi.url({ url, auth: { type: "basic", username: "opencode", password } }))
-        if (target.hostname === "0.0.0.0" || target.hostname === "::") target.hostname = "localhost"
-        yield* Effect.promise(() => open(target.toString()).catch(() => undefined))
-      }
+      if (options.open)
+        yield* openWeb({ url, auth: { type: "basic", username: "opencode", password } })
       const updater = yield* Updater.Service
       yield* updater.check().pipe(Effect.schedule(Schedule.spaced("10 minutes")), Effect.forkScoped)
       return yield* options.mode === "service"
@@ -221,6 +221,12 @@ const recognizeIncumbent = Effect.fnUntraced(function* (options: DiscoverOptions
 
 function serviceURL(hostname: string, port: number) {
   return `http://${hostname.includes(":") ? `[${hostname}]` : hostname}:${port}`
+}
+
+function openWeb(endpoint: Endpoint) {
+  const target = new URL(WebUi.url(endpoint))
+  if (target.hostname === "0.0.0.0" || target.hostname === "::") target.hostname = "localhost"
+  return Effect.promise(() => open(target.toString()).catch(() => undefined))
 }
 
 function truthy(value?: string) {

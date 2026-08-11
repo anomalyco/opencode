@@ -1,32 +1,50 @@
-import { readdir } from "node:fs/promises"
+import { Effect, FileSystem, Option } from "effect"
 import path from "node:path"
+import { OPENCODE_LOCAL } from "./version"
 
-export type AssetMap = Readonly<Record<string, string>>
+export type AssetMap = Readonly<Record<string, string | Uint8Array>>
+type EncodedAssetMap = Readonly<
+  Record<string, { readonly content: string; readonly encoding: "utf8" | "base64" }>
+>
 
-let result: Promise<AssetMap> | undefined
+export const load = Effect.fn("cli.app-assets.load")(function* () {
+  const embedded = yield* Effect.tryPromise(() => import("virtual:opencode-app-assets")).pipe(Effect.option)
+  if (Option.isSome(embedded) && Object.keys(embedded.value.default).length > 0)
+    return decode(embedded.value.default)
+  if (!OPENCODE_LOCAL) return yield* Effect.fail(new Error("Web UI assets are missing from the CLI build"))
+  return decode(yield* sourceAssets())
+})
 
-export function load() {
-  return (result ??= import("virtual:opencode-app-assets")
-    .then((module) => module.default)
-    .catch(() => ({}))
-    .then((assets) => (Object.keys(assets).length > 0 ? assets : sourceAssets())))
-}
-
-async function sourceAssets(): Promise<AssetMap> {
+const sourceAssets = Effect.fnUntraced(function* () {
+  const fs = yield* FileSystem.FileSystem
   const root = path.resolve(import.meta.dirname, "../../app/dist")
-  const entries = await files(root).catch(() => [])
-  return Object.fromEntries(entries.filter((file) => !file.endsWith(".map")).map((file) => [file, path.join(root, file)]))
+  const files = yield* fs.readDirectory(root, { recursive: true })
+  return Object.fromEntries(
+    (
+      yield* Effect.forEach(
+        files.filter((file) => !file.endsWith(".map")),
+        Effect.fnUntraced(function* (file) {
+          const target = path.join(root, file)
+          if ((yield* fs.stat(target)).type === "Directory") return
+          const body = Buffer.from(yield* fs.readFile(target))
+          const encoding = isText(file) ? "utf8" : "base64"
+          return [file, { encoding, content: body.toString(encoding) }] as const
+        }),
+        { concurrency: "unbounded" },
+      )
+    ).filter((asset) => asset !== undefined),
+  )
+})
+
+function decode(assets: EncodedAssetMap): AssetMap {
+  return Object.fromEntries(
+    Object.entries(assets).map(([key, asset]) => [
+      key,
+      asset.encoding === "utf8" ? asset.content : Buffer.from(asset.content, "base64"),
+    ]),
+  )
 }
 
-async function files(root: string, current = root): Promise<string[]> {
-  return (
-    await Promise.all(
-      (await readdir(current, { withFileTypes: true })).map((entry) => {
-        const target = path.join(current, entry.name)
-        return entry.isDirectory() ? files(root, target) : [path.relative(root, target).replaceAll(path.sep, "/")]
-      }),
-    )
-  )
-    .flat()
-    .toSorted()
+function isText(file: string) {
+  return file === "_headers" || /\.(?:css|html|js|json|svg|txt|webmanifest|xml)$/.test(file)
 }

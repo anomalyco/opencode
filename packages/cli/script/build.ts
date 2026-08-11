@@ -24,7 +24,6 @@ await rm(outdir, { recursive: true, force: true })
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
-const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
 const solidPlugin = createSolidTransformPlugin()
 
 const allTargets: {
@@ -56,7 +55,7 @@ const targets = singleFlag
   : allTargets
 
 if (!skipInstall) await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
-const appAssets = skipEmbedWebUi ? [] : await buildAppAssets(Script.channel)
+const appAssets = await buildAppAssets(Script.channel)
 const appAssetsPlugin: BunPlugin = {
   name: "opencode-app-assets",
   setup(build) {
@@ -66,10 +65,11 @@ const appAssetsPlugin: BunPlugin = {
     }))
     build.onLoad({ filter: /^opencode-app-assets$/, namespace: "opencode" }, () => ({
       loader: "js",
-      contents: `${appAssets
-        .map((asset, index) => `import asset_${index} from ${JSON.stringify(asset.source)} with { type: "file" }`)
-        .join("\n")}
-export default {${appAssets.map((asset, index) => `${JSON.stringify(asset.key)}: asset_${index}`).join(",")}}`,
+      contents: `export default ${JSON.stringify(
+        Object.fromEntries(
+          appAssets.map((asset) => [asset.key, { content: asset.content, encoding: asset.encoding }]),
+        ),
+      )}`,
     }))
   },
 }

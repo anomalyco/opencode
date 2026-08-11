@@ -27,7 +27,6 @@ if (outdir === path.join(dir, "dist-node")) {
 const bundleOnly = process.argv.includes("--bundle-only")
 const single = process.argv.includes("--single")
 const skipInstall = process.argv.includes("--skip-install")
-const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
 const requested = process.argv.find((arg) => arg.startsWith("--target="))?.slice("--target=".length)
 const allTargets = [
   nodeTarget("linux", "arm64"),
@@ -57,14 +56,11 @@ const builder =
   !bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch)
     ? await resolveHostNode()
     : undefined
-const appAssets = skipEmbedWebUi ? [] : await buildAppAssets(Script.channel)
+const appAssets = await buildAppAssets(Script.channel)
 
 for (const target of targets) {
   console.log(`building cli-node-${targetName(target)}`)
-  const assets = [
-    ...(await collectNodeAssets(target)),
-    ...appAssets.map((asset) => ({ key: `app/${asset.key}`, source: asset.source })),
-  ]
+  const assets = await collectNodeAssets(target)
   await rm("dist-node", { recursive: true, force: true })
   const assetHash = await hashNodeAssets(assets)
   const input = {
@@ -73,7 +69,9 @@ for (const target of targets) {
     models: modelsData,
     assetHash,
     target,
-    appAssets: appAssets.map((asset) => asset.key),
+    appAssets: Object.fromEntries(
+      appAssets.map((asset) => [asset.key, { content: asset.content, encoding: asset.encoding }]),
+    ),
   }
   await copyNodeAssets(assets)
   await build(mainConfig(input))

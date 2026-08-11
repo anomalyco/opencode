@@ -271,6 +271,8 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       params: {
         hostname: Flag.string("hostname").pipe(Flag.optional),
         port: Flag.integer("port").pipe(Flag.optional),
+        service: Flag.boolean("service").pipe(Flag.withDefault(false)),
+        stdio: Flag.boolean("stdio").pipe(Flag.withDefault(false)),
       },
     }),
     Spec.make("serve", {
