@@ -138,7 +138,11 @@ describe("EditTool", () => {
           Effect.andThen(
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
-                expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["edit", "execute"])
+                const definitions = yield* toolDefinitions(registry)
+                expect(definitions.map((tool) => tool.name)).toEqual(["edit", "execute"])
+                expect(definitions.find((tool) => tool.name === "edit")?.description).toBe(
+                  "Edit a file by replacing exact text. When using Read output, preserve indentation and omit line-number prefixes such as `1: `. oldString must be unique unless replaceAll is true; add surrounding context to disambiguate it.",
+                )
                 expect(
                   (yield* toolDefinitions(registry, [{ action: "edit", resource: "*", effect: "deny" }])).map(
                     (tool) => tool.name,

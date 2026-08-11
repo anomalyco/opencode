@@ -22,12 +22,11 @@ const createCodeMode = (tools: ReadonlyMap<string, Info>) =>
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [
-      "Run JavaScript in a confined Code Mode runtime to orchestrate tool calls and compose their results.",
-      "Imports, direct filesystem access, and timers are unavailable. Do not use `fetch`; all external access goes through `tools`.",
-      "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by `search`. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-      'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
-      "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-      "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.all`.",
+      "Run JavaScript in a confined Code Mode runtime to call catalog tools and compose their results.",
+      "Use only exact `tools` paths and signatures listed in Code Mode instructions or returned by `search`; other tools are unavailable.",
+      "Imports, direct filesystem access, timers, and `fetch` are unavailable.",
+      "Await every call whose completion matters, using `Promise.all` for independent calls.",
+      "Return a value explicitly; otherwise the final top-level expression is returned.",
     ].join("\n"),
   )
 })

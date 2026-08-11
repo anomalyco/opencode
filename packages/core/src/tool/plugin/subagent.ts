@@ -37,9 +37,6 @@ export const Output = Schema.Struct({
 export const description = [
   "Spawns an agent in a child session to work on the specified task.",
   "Include all relevant context and instructions in the prompt because the child starts with fresh context.",
-  "Foreground (default) runs the subagent to completion and returns its final response.",
-  "Background mode (background=true) launches it asynchronously and returns immediately; you are notified when it finishes.",
-  "Use background only for independent work that can run while you continue elsewhere.",
 ].join("\n")
 
 export const Plugin = {

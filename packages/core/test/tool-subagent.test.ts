@@ -151,7 +151,9 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           yield* waitForTool(registry, SubagentTool.name)
-          expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
+          const definition = (yield* registry.snapshot()).definitions.find((tool) => tool.name === SubagentTool.name)
+          expect(definition?.description).not.toContain("Background mode")
+          expect(definition?.inputSchema).toHaveProperty("properties.background.description")
           expect(
             yield* executeTool(registry, {
               sessionID: parent.id,

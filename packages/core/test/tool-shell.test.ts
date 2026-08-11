@@ -212,6 +212,8 @@ describe("ShellTool", () => {
             const definitions = yield* toolDefinitions(registry)
             const definition = definitions.find((tool) => tool.name === "shell")
             expect(definition?.description).toStartWith("Execute a shell command and return its output.")
+            expect(definition?.description).not.toContain("background")
+            expect(definition?.inputSchema).toHaveProperty("properties.background.description")
             expect(definition?.inputSchema).not.toHaveProperty("properties.timeout.maximum")
             // Code Mode receives the declared output schema, including the command output text.
             expect(definition?.outputSchema).toHaveProperty("properties.output")

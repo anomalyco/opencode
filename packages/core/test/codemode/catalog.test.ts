@@ -140,7 +140,7 @@ describe("CodeModeInstructions.render", () => {
 
   test("renders only the no-tools notice for an empty catalog", () => {
     expect(render([])).toBe(
-      "No Code Mode tools are currently available. Later Code Mode catalog updates may add or remove tools. Do not call `execute` unless there is at least one available Code Mode tool.",
+      "`execute` can call only tools listed in the Code Mode catalog. None are currently available; wait for a catalog update before calling it.",
     )
   })
 })
