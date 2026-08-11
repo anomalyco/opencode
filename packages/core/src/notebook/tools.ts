@@ -9,6 +9,7 @@ import { PermissionV2 } from "../permission"
 import { ToolRegistry } from "../tool/registry"
 import { Tool } from "../tool/tool"
 import { Tools } from "../tool/tools"
+import { NotebookEvidence } from "./evidence"
 import { allNotebooks, buildSkeleton, hydrateBasedOn, itemFreshness, loadNotebook, notebookPathFor } from "./store"
 import {
   applyOps,
@@ -300,6 +301,7 @@ const layer = Layer.effectDiscard(
             yield* fs.ensureDir(edit.abs.split("/").slice(0, -1).join("/") || ".")
             yield* fs.writeWithDirs(edit.abs, serializeNotebook(edit.notebook))
           }
+          NotebookEvidence.markCommitted(context.sessionID)
 
           const result: string[] = []
           for (const edit of edits) result.push(`- ${edit.label}: ${edit.changes.join("; ")}`)
