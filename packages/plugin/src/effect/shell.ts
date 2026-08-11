@@ -1,4 +1,4 @@
-import type { Hooks } from "./registration.js"
+import type { Hooks, NoFailures } from "./registration.js"
 
 export interface ShellCreateBefore {
   command: string
@@ -12,6 +12,8 @@ export interface ShellHooks {
   readonly "create.before": ShellCreateBefore
 }
 
+export type ShellFailures = NoFailures<ShellHooks>
+
 export interface ShellDomain {
-  readonly hook: Hooks<ShellHooks>
+  readonly hook: Hooks<ShellHooks, ShellFailures>
 }

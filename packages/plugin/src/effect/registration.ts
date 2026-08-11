@@ -4,6 +4,8 @@ export interface Registration {
   readonly dispose: Effect.Effect<void>
 }
 
+export type NoFailures<Spec> = { readonly [Name in keyof Spec]: never }
+
 export type Hooks<Spec, Failures extends Record<keyof Spec, unknown> = Record<keyof Spec, never>> = <
   Name extends keyof Spec,
 >(

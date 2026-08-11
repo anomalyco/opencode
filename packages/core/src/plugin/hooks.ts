@@ -1,8 +1,8 @@
 export * as PluginHooks from "./hooks"
 
-import type { AISDKHooks } from "@opencode-ai/plugin/effect/aisdk"
-import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
-import type { ShellHooks } from "@opencode-ai/plugin/effect/shell"
+import type { AISDKFailures, AISDKHooks } from "@opencode-ai/plugin/effect/aisdk"
+import type { SessionFailures, SessionHooks } from "@opencode-ai/plugin/effect/session"
+import type { ShellFailures, ShellHooks } from "@opencode-ai/plugin/effect/shell"
 import type { ToolFailures, ToolHooks } from "@opencode-ai/plugin/effect/tool"
 import { Context, Effect, Layer, Scope } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -15,13 +15,11 @@ export interface Domains {
   readonly tool: ToolHooks
 }
 
-type NoFailures<Spec> = { readonly [Name in keyof Spec]: never }
-
-// Failure channel for each hook event. Only tool execute.before may fail: a Tool.Error rejects the call before it runs.
+// Each domain declares its own failure spec next to its hooks; this map only mirrors Domains.
 interface Failures extends Record<keyof Domains, unknown> {
-  readonly aisdk: NoFailures<AISDKHooks>
-  readonly session: NoFailures<SessionHooks>
-  readonly shell: NoFailures<ShellHooks>
+  readonly aisdk: AISDKFailures
+  readonly session: SessionFailures
+  readonly shell: ShellFailures
   readonly tool: ToolFailures
 }
 
