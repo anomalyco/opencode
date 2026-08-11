@@ -31,7 +31,14 @@ export function useUpdaterAction() {
     action,
     async run() {
       const run = action().run
-      if (run === "install") return platform.updater?.install()
+      if (run === "install") {
+        return platform.updater?.install().catch((error) => {
+          showToast({
+            title: language.t("common.requestFailed"),
+            description: error instanceof Error ? error.message : String(error),
+          })
+        })
+      }
       if (run !== "check") return
 
       const state = await platform.updater?.check()
