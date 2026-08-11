@@ -300,3 +300,39 @@ export const DESKTOP_MENU: DesktopMenu[] = [
 export function desktopMenuVisible(item: { platforms?: DesktopMenuPlatform[] }, platform: DesktopMenuPlatform) {
   return !item.platforms || item.platforms.includes(platform)
 }
+
+// Desktop variants (windows/linux) render the menu in-app instead of a native
+// menu, so their accelerators must be wired to actions in the renderer.
+export function desktopMenuActionBinds(platform: DesktopMenuPlatform) {
+  const binds: { action: DesktopMenuAction; accelerator: string; labelKey?: DesktopNativeKey }[] = []
+
+  for (const menu of DESKTOP_MENU) {
+    for (const entry of menu.items ?? []) {
+      if (entry.type !== "item" || entry.role || !entry.action) continue
+      if (!desktopMenuVisible(entry, platform)) continue
+      const accelerator = entry.accelerator?.[platform]
+      if (!accelerator) continue
+      binds.push({ action: entry.action, accelerator, labelKey: entry.labelKey })
+    }
+  }
+
+  return binds
+}
+
+// Converts an Electron accelerator ("Ctrl+Shift+N") into the keybind config
+// syntax understood by the renderer command system ("ctrl+shift+n").
+export function desktopMenuAcceleratorKeybind(accelerator: string) {
+  return accelerator
+    .split("+")
+    .map((part) => {
+      const token = part.toLowerCase()
+      if (token === "command" || token === "cmd" || token === "cmdorctrl") return "mod"
+      if (token === "option") return "alt"
+      if (token === "control") return "ctrl"
+      if (token === ",") return "comma"
+      if (token === "+") return "plus"
+      if (token === " ") return "space"
+      return token
+    })
+    .join("+")
+}
