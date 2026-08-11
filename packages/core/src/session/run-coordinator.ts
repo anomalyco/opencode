@@ -10,8 +10,8 @@ export interface Coordinator<Key, E, Reason = never> {
   readonly run: (key: Key) => Effect.Effect<void, E>
   /** Rings the doorbell: an idle key starts an execution; an active one drains again before settling. */
   readonly wake: (key: Key) => Effect.Effect<void>
-  /** Stops the active execution, clears its doorbell, and waits for cleanup. No-op when idle. */
-  readonly interrupt: (key: Key, reason?: Reason) => Effect.Effect<void>
+  /** Stops the active execution and waits for cleanup. Clears its doorbell unless preservation is requested. */
+  readonly interrupt: (key: Key, reason?: Reason, options?: { preserveWake?: boolean }) => Effect.Effect<void>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void>
 }
@@ -124,12 +124,12 @@ export const make = <Key, E, Reason = never>(options: {
         start(key, false)
       })
 
-    const interrupt = (key: Key, reason?: Reason): Effect.Effect<void> =>
+    const interrupt = (key: Key, reason?: Reason, options?: { preserveWake?: boolean }): Effect.Effect<void> =>
       Effect.suspend(() => {
         const execution = executions.get(key)
         if (execution?.owner === undefined || execution.stopping) return Effect.void
         execution.stopping = true
-        execution.pendingWake = false
+        if (!options?.preserveWake) execution.pendingWake = false
         execution.interruptionReason = reason
         return Fiber.interrupt(execution.owner)
       })

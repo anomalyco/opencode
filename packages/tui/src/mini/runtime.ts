@@ -374,7 +374,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       void (
         state.stream
           ? state.stream.then((item) => item.handle.interruptActiveTurn())
-          : state.sdk.session.interrupt({ sessionID: state.sessionID })
+          : state.sdk.session.interrupt({ sessionID: state.sessionID, continue: true })
       )
         .catch(() => {})
         .finally(() => {
@@ -401,7 +401,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     },
     onSubagentInterrupt: (sessionID) => {
       log?.write("send.subagent.interrupt", { sessionID })
-      void state.sdk.session.interrupt({ sessionID }).catch(() => {})
+      void state.sdk.session.interrupt({ sessionID, continue: true }).catch(() => {})
     },
     onSubagentSelect: (sessionID) => {
       state.selectSubagent?.(sessionID)

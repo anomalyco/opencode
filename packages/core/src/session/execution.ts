@@ -20,7 +20,7 @@ export interface Interface {
   /** Registers newly recorded work. Repeated wakeups may coalesce. */
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   /** Interrupt active work owned by this process. Idle interruption is a no-op. */
-  readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly interrupt: (sessionID: SessionSchema.ID, options?: { continue?: boolean }) => Effect.Effect<void>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
   readonly awaitIdle: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
@@ -119,7 +119,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       active: coordinator.active,
-      interrupt: (sessionID) => coordinator.interrupt(sessionID, "user"),
+      interrupt: (sessionID, options) => coordinator.interrupt(sessionID, "user", { preserveWake: options?.continue }),
       resume: coordinator.run,
       wake: coordinator.wake,
       awaitIdle: coordinator.awaitIdle,

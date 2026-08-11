@@ -217,7 +217,7 @@ export function SubagentsTab(props: { sessionID: string }) {
         run() {
           const entry = selectedEntry()
           if (!entry || entry.status !== "running") return
-          void client.api.session.interrupt({ sessionID: entry.sessionID })
+          void client.api.session.interrupt({ sessionID: entry.sessionID, continue: true })
         },
       },
     ],

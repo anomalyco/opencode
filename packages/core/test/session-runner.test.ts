@@ -394,7 +394,8 @@ const execution = Layer.effect(
       active: coordinator.active,
       resume: coordinator.run,
       wake: coordinator.wake,
-      interrupt: coordinator.interrupt,
+      interrupt: (sessionID, options) =>
+        coordinator.interrupt(sessionID, undefined, { preserveWake: options?.continue }),
       awaitIdle: coordinator.awaitIdle,
     })
   }),

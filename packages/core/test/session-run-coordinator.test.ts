@@ -301,6 +301,37 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
+  it.effect("continues pending work after interruption when preserving the wake", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const firstStarted = yield* Deferred.make<void>()
+        const secondStarted = yield* Deferred.make<void>()
+        let runs = 0
+        const coordinator = yield* SessionRunCoordinator.make<string, never, string>({
+          drain: () =>
+            Effect.sync(() => ++runs).pipe(
+              Effect.flatMap((run) =>
+                run === 1
+                  ? Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Effect.never))
+                  : Deferred.succeed(secondStarted, undefined),
+              ),
+            ),
+        })
+
+        const resumed = yield* coordinator.run("session").pipe(Effect.forkChild)
+        yield* Deferred.await(firstStarted)
+        yield* coordinator.wake("session")
+        yield* coordinator.interrupt("session", "user", { preserveWake: true })
+        yield* Deferred.await(secondStarted)
+
+        const exit = yield* Fiber.await(resumed)
+        expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBeTrue()
+        yield* coordinator.awaitIdle("session")
+        expect(runs).toBe(2)
+      }),
+    ),
+  )
+
   it.effect("runs a wake registered during interruption cleanup", () =>
     Effect.scoped(
       Effect.gen(function* () {
