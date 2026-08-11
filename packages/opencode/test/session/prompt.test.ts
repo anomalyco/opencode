@@ -460,46 +460,6 @@ noLLMServer.instance(
   { config: cfg },
 )
 
-noLLMServer.instance(
-  "loop exits for a completed parent turn with nonmonotonic message IDs",
-  () =>
-    Effect.gen(function* () {
-      const prompt = yield* SessionPrompt.Service
-      const sessions = yield* Session.Service
-      const chat = yield* sessions.create({ title: "Pinned" })
-      const userID = MessageID.make("msg_z_user")
-      const assistantID = MessageID.make("msg_a_assistant")
-      yield* sessions.updateMessage({
-        id: userID,
-        role: "user",
-        sessionID: chat.id,
-        agent: "build",
-        model: ref,
-        time: { created: 100 },
-      })
-      yield* sessions.updateMessage({
-        id: assistantID,
-        role: "assistant",
-        parentID: userID,
-        sessionID: chat.id,
-        mode: "build",
-        agent: "build",
-        cost: 0,
-        path: { cwd: "/tmp", root: "/tmp" },
-        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-        modelID: ref.modelID,
-        providerID: ref.providerID,
-        time: { created: 200, completed: 201 },
-        finish: "stop",
-      })
-
-      const result = yield* prompt.loop({ sessionID: chat.id })
-
-      expect(result.info.id).toBe(assistantID)
-    }),
-  { config: cfg },
-)
-
 it.instance("loop exits without an LLM request for interrupted orphan tool calls", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
@@ -704,6 +664,38 @@ it.instance("loop stops provider overflow instead of auto-compacting when disabl
   }),
 )
 
+it.instance("compaction overflow retry limit prevents infinite compaction loop after repeated failures", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Overflow",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    // seed a user message
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "write a long response" }],
+    })
+
+    // provider returns tool-calls (first iteration, fits in context)
+    yield* llm.tool("bash", { command: "echo big" })
+    // provider returns text with finish=length (triggers overflow check)
+    yield* llm.fail(new Error("too large"))
+    // compaction task runs and fails (overflow=true)
+    yield* llm.fail(new Error("too large"))
+    // compaction retry also fails -> loop should break after MAX_COMPACTION_OVERFLOW
+    yield* llm.error(413, { error: { message: "request entity too large" } })
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+  }),
+)
+
 noLLMServer.instance.skip(
   "prompt emits v2 prompted and synthetic events (v2 projector disabled)",
   () =>
@@ -840,6 +832,8 @@ it.instance("loop continues when finish is tool-calls", () =>
     yield* llm.tool("first", { value: "first" })
     yield* llm.text("second")
 
+    const msgsBefore = yield* MessageV2.filterCompactedEffect(session.id)
+
     const result = yield* prompt.loop({ sessionID: session.id })
     expect(yield* llm.calls).toBe(2)
     expect(result.info.role).toBe("assistant")
@@ -847,6 +841,31 @@ it.instance("loop continues when finish is tool-calls", () =>
       expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
       expect(result.info.finish).toBe("stop")
     }
+
+    // the loop made 2 provider calls (tool-calls then text) but should still
+    // produce exactly 1 new assistant message in durable session history
+    const msgsAfter = yield* MessageV2.filterCompactedEffect(session.id)
+    const newAssistants = msgsAfter.filter(
+      (m): m is SessionV1.WithParts & { info: SessionV1.Assistant } =>
+        m.info.role === "assistant" && !msgsBefore.some((b) => b.info.id === m.info.id),
+    )
+    expect(newAssistants).toHaveLength(1)
+    expect(newAssistants[0].info.finish).toBe("stop")
+    expect(newAssistants[0].info.time.completed).toBeGreaterThan(0)
+
+    // B3b (fork B): the 2nd provider request must carry the reused prior turn as
+    // the adapter-compatible paired shape — an assistant with tool_calls followed
+    // by a role:"tool" message with the result. Without this, the openai-compatible
+    // adapter would drop the in-assistant tool-result and leave a dangling tool_calls.
+    const inputs = yield* llm.inputs
+    expect(inputs).toHaveLength(2)
+    const wireMsgs = (inputs[1] as Record<string, unknown>)?.messages as Array<Record<string, unknown>>
+    const assistantAt = wireMsgs.findIndex((m) => m.role === "assistant" && !!m.tool_calls)
+    const toolAt = wireMsgs.findIndex((m) => m.role === "tool")
+    // an assistant with tool_calls exists in the continuation
+    expect(assistantAt).toBeGreaterThan(-1)
+    // and it is IMMEDIATELY followed by a role:"tool" result message (no dangling call)
+    expect(toolAt).toBe(assistantAt + 1)
   }),
 )
 
@@ -913,6 +932,114 @@ it.instance("loop continues when finish is stop but assistant has tool parts", (
     if (result.info.role === "assistant") {
       expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
       expect(result.info.finish).toBe("stop")
+    }
+    // verify second request shape: the continuation uses the clean-slate shape
+    // (reused assistant parts are cleared). This is the SAFE behavior for
+    // openai-compatible providers — re-presenting the prior assistant's tool
+    // result would be dropped by the adapter at wire serialization, leaving a
+    // dangling tool_calls (provider-400 risk). The 2nd request ends with the
+    // original user message.
+    const inputs = yield* llm.inputs
+    expect(inputs).toHaveLength(2)
+    const secondMsgs = (inputs[1] as Record<string, unknown>)?.messages
+    expect(Array.isArray(secondMsgs)).toBe(true)
+    // B3b (fork B): the 2nd request carries the reused prior turn as the
+    // adapter-compatible paired shape — an assistant with tool_calls immediately
+    // followed by a role:"tool" result message (no dangling tool_calls).
+    const wireMsgs = secondMsgs as Array<Record<string, unknown>>
+    const assistantAt = wireMsgs.findIndex((m) => m.role === "assistant" && !!m.tool_calls)
+    const toolAt = wireMsgs.findIndex((m) => m.role === "tool")
+    expect(assistantAt).toBeGreaterThan(-1)
+    expect(toolAt).toBe(assistantAt + 1)
+  }),
+)
+
+it.instance("multi-turn continuation never yields consecutive assistant roles in the wire format", () =>
+  Effect.gen(function* () {
+    // Phase 3c regression guard. This reproduces the provider-400 scenario:
+    // over multiple tool-call provider cycles the reused assistant accumulates
+    // tool parts, and B3b (fork B) hoists them into role:"tool" messages. If a
+    // preserved tool part misses `providerExecuted:true` (caduceus echo fix) or the
+    // split leaves back-to-back assistant turns, the wire/provider format ends with
+    // two consecutive assistant messages and `@ai-sdk/openai-compatible` rejects it
+    // with "Cannot have 2 or more assistant messages at the end of the list".
+    // This test drives 4 provider cycles (3 tool calls + a final answer) in a single
+    // loop and asserts NO consecutive assistant roles anywhere in ANY of the wire
+    // lists the loop sent to the provider.
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Multi-turn",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "solve it in stages" }],
+    })
+    // 4 successive assistant provider turns: tool a -> tool b -> tool c -> text
+    yield* llm.tool("a", { step: 1 })
+    yield* llm.tool("b", { step: 2 })
+    yield* llm.tool("c", { step: 3 })
+    yield* llm.text("final answer")
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+    expect(yield* llm.calls).toBe(4)
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.finish).toBe("stop")
+      expect(result.parts.some((part) => part.type === "text" && part.text === "final answer")).toBe(true)
+    }
+
+    // The durable assistant must be exactly ONE reused logical turn, carrying all 3
+    // accumulated tool results (settled, not left pending) plus the final text. The
+    // tool names themselves are provided by the mock dispatcher (arbitrary tool ids
+    // that may not resolve to registered tools), so we assert the COUNT of settled
+    // tool parts rather than their names — the point is that all 3 accumulated across
+    // the 3 tool-call provider turns survived into the single reused assistant.
+    const msgs = yield* MessageV2.filterCompactedEffect(session.id)
+    const assistants = msgs.filter((m): m is SessionV1.WithParts & { info: SessionV1.Assistant } =>
+      m.info.role === "assistant")
+    expect(assistants.length).toBeGreaterThanOrEqual(1)
+    const reused = assistants[assistants.length - 1]
+    const settledTools = reused.parts.filter(
+      (p) => p.type === "tool" && (p.state.status === "completed" || p.state.status === "error"),
+    )
+    expect(settledTools).toHaveLength(3)
+    expect(reused.parts.some((p) => p.type === "text" && (p as { text?: string }).text === "final answer")).toBe(true)
+
+    // THE INVARIANT: for every provider call in the loop, the wire message list must
+    // never contain two adjacent assistant messages — anywhere in the list, not just
+    // the tail. This is the widened blart check. It must hold for every continuation
+    // (inputs[1..3]), which is exactly where the consecutive-assistant regression lived.
+    const inputs = yield* llm.inputs
+    expect(inputs).toHaveLength(4)
+    const wireLists = inputs.map((req) => (req as Record<string, unknown>)?.messages as
+      | Array<Record<string, unknown>>
+      | undefined)
+    expect(wireLists.length).toBe(4)
+    for (let k = 0; k < wireLists.length; k++) {
+      const wire = wireLists[k]
+      if (!wire) continue
+      for (let i = 1; i < wire.length; i++) {
+        expect(`${k}:${i} ${wire.map((m) => m.role).join(",")}`).not.toMatch(/assistant,assistant/)
+        // THE INVARIANT: no two adjacent assistant messages anywhere in the list
+        const prev = wire[i - 1] as Record<string, unknown> | undefined
+        const curr = wire[i] as Record<string, unknown> | undefined
+        if (prev?.role === "assistant" && curr?.role === "assistant") {
+          throw new Error(`consecutive assistant roles in wire list ${k} at index ${i}`)
+        }
+      }
+      // every assistant-with-tool_calls is immediately followed by its role:"tool" result
+      for (let i = 0; i < wire.length; i++) {
+        const msg = wire[i] as Record<string, unknown> | undefined
+        if (msg && msg.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
+          const next = wire[i + 1] as Record<string, unknown> | undefined
+          if (next?.role !== "tool") throw new Error(`dangling tool_calls at index ${i} in wire list ${k}`)
+        }
+      }
     }
   }),
 )

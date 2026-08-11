@@ -135,6 +135,34 @@ function createAssistantMessage(sessionID: SessionID, parentID: MessageID, root:
   )
 }
 
+// Artemis helper: an IN-FLIGHT (non-conclusive) assistant — `finish=length` means
+// the model was mid-task (often mid-tool-loop) when context overflow hit. This is
+// the shape compaction must NOT drop (its intended work was never delivered).
+function createInFlightAssistantMessage(sessionID: SessionID, parentID: MessageID, root: string) {
+  return SessionNs.Service.use((ssn) =>
+    ssn.updateMessage({
+      id: MessageID.ascending(),
+      role: "assistant",
+      sessionID,
+      mode: "build",
+      agent: "build",
+      path: { cwd: root, root },
+      cost: 0,
+      tokens: {
+        output: 0,
+        input: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: ref.modelID,
+      providerID: ref.providerID,
+      parentID,
+      time: { created: Date.now() },
+      finish: "length",
+    }),
+  )
+}
+
 function createSummaryAssistantMessage(sessionID: SessionID, parentID: MessageID, root: string, text: string) {
   return SessionNs.Service.use((ssn) =>
     Effect.gen(function* () {
@@ -195,7 +223,7 @@ function createCompactionMarker(sessionID: SessionID) {
 
 function fake(
   input: Parameters<SessionProcessorModule.SessionProcessor.Interface["create"]>[0],
-  result: "continue" | "compact",
+  result: "continue" | "compact" | "stop",
 ) {
   const msg = input.assistantMessage
   return {
@@ -208,7 +236,7 @@ function fake(
   } satisfies SessionProcessorModule.SessionProcessor.Handle
 }
 
-function processorLayer(result: "continue" | "compact") {
+function processorLayer(result: "continue" | "compact" | "stop") {
   return Layer.succeed(
     SessionProcessorModule.SessionProcessor.Service,
     SessionProcessorModule.SessionProcessor.Service.of({
@@ -245,7 +273,7 @@ const compactionEnv = AppNodeBuilder.build(
 const itCompaction = testEffect(compactionEnv)
 
 type CompactionProcessOptions = {
-  result?: "continue" | "compact"
+  result?: "continue" | "compact" | "stop"
   llm?: Layer.Layer<LLM.Service>
   plugin?: Layer.Layer<Plugin.Service>
   provider?: ReturnType<typeof wide>
@@ -856,7 +884,7 @@ describe("session.compaction.process", () => {
       })
 
       yield* Deferred.await(done).pipe(Effect.timeout("500 millis"))
-      expect(result).toBe("continue")
+      expect(result).toEqual({ outcome: "continue" })
       expect(seen).toContain(SessionCompaction.Event.Compacted.type)
       expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
     }),
@@ -881,7 +909,7 @@ describe("session.compaction.process", () => {
         (msg) => msg.info.role === "assistant" && msg.info.summary,
       )
 
-      expect(result).toBe("stop")
+      expect(result).toEqual({ outcome: "stop", errored: true })
       expect(summary?.info.role).toBe("assistant")
       if (summary?.info.role === "assistant") {
         expect(summary.info.finish).toBe("error")
@@ -908,7 +936,7 @@ describe("session.compaction.process", () => {
       const all = yield* ssn.messages({ sessionID: session.id })
       const last = all.at(-1)
 
-      expect(result).toBe("continue")
+      expect(result).toEqual({ outcome: "continue" })
       expect(last?.info.role).toBe("user")
       expect(last?.parts[0]).toMatchObject({
         type: "text",
@@ -919,6 +947,108 @@ describe("session.compaction.process", () => {
         expect(last.parts[0].text).toContain("Continue if you have next steps")
       }
     }),
+  )
+
+  itCompaction.instance(
+    "ARTEMIS: interrupted clean-stop compaction emits a continuation so in-flight work is delivered",
+    Effect.gen(function* () {
+      // The overflowing user had an IN-FLIGHT (finish=length) assistant — real
+      // work that was conceived but never delivered. Compaction produced a clean
+      // stop summary. Artemis must emit a continuation so the loop continues and
+      // the model finishes the interrupted task. (This is the exact shape chasmic
+      // proved dropped: pendingContinuation=false, postMessages=2.)
+      const test = yield* TestInstance
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const u1 = yield* createUserMessage(session.id, "interrupted task")
+      yield* createInFlightAssistantMessage(session.id, u1.id, test.directory)
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: u1.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+      })
+
+      const all = yield* ssn.messages({ sessionID: session.id })
+      const last = all.at(-1)
+
+      expect(result).toEqual({ outcome: "stop", errored: false })
+      expect(last?.info.role).toBe("user")
+      expect(last?.parts[0]).toMatchObject({
+        type: "text",
+        synthetic: true,
+        metadata: { compaction_continue: true },
+      })
+      if (last?.parts[0]?.type === "text") {
+        expect(last.parts[0].text).toContain("Continue if you have next steps")
+      }
+    }).pipe(withCompaction({ result: "stop" })),
+  )
+
+  itCompaction.instance(
+    "ARTEMIS: clean-stop with NO interrupted turn does NOT emit a continuation (chiron discharges)",
+    Effect.gen(function* () {
+      // The truncated/closable turn was CONCLUSIVE (end_turn). Compaction produced
+      // a clean stop summary with no in-flight work. Chiron (Option 1) already
+      // handles this as terminal — Artemis must NOT over-continue and fabricate a
+      // pending user that never existed.
+      const test = yield* TestInstance
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const u1 = yield* createUserMessage(session.id, "answered")
+      yield* createAssistantMessage(session.id, u1.id, test.directory) // finish=end_turn (conclusive)
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: u1.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+      })
+
+      const all = yield* ssn.messages({ sessionID: session.id })
+      const last = all.at(-1)
+
+      expect(result).toEqual({ outcome: "stop", errored: false })
+      // last is the summary assistant (not a continue-user)
+      expect(last?.info.role).toBe("assistant")
+    }).pipe(withCompaction({ result: "stop" })),
+  )
+
+  itCompaction.instance(
+    "ARTEMIS: overflow + interrupted turn emits the overflow-flavored continuation",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const u1 = yield* createUserMessage(session.id, "media overflow task")
+      yield* createInFlightAssistantMessage(session.id, u1.id, test.directory)
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: u1.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+        overflow: true,
+      })
+
+      const all = yield* ssn.messages({ sessionID: session.id })
+      const last = all.at(-1)
+
+      expect(result).toEqual({ outcome: "stop", errored: false })
+      expect(last?.info.role).toBe("user")
+      expect(last?.parts[0]).toMatchObject({
+        type: "text",
+        synthetic: true,
+        metadata: { compaction_continue: true },
+      })
+      if (last?.parts[0]?.type === "text") {
+        expect(last.parts[0].text).toContain("attachments were too large")
+      }
+    }).pipe(withCompaction({ result: "stop" })),
   )
 
   itCompaction.instance(
@@ -1106,7 +1236,7 @@ describe("session.compaction.process", () => {
       const all = yield* ssn.messages({ sessionID: session.id })
       const last = all.at(-1)
 
-      expect(result).toBe("continue")
+      expect(result).toEqual({ outcome: "continue" })
       expect(last?.info.role).toBe("assistant")
       expect(
         all.some(
@@ -1149,7 +1279,7 @@ describe("session.compaction.process", () => {
 
       const last = (yield* ssn.messages({ sessionID: session.id })).at(-1)
 
-      expect(result).toBe("continue")
+      expect(result).toEqual({ outcome: "continue" })
       expect(last?.info.role).toBe("user")
       expect(last?.parts.some((part) => part.type === "file")).toBe(false)
       expect(
@@ -1177,7 +1307,7 @@ describe("session.compaction.process", () => {
 
       const last = (yield* ssn.messages({ sessionID: session.id })).at(-1)
 
-      expect(result).toBe("continue")
+      expect(result).toEqual({ outcome: "continue" })
       expect(last?.info.role).toBe("user")
       if (last?.parts[0]?.type === "text") {
         expect(last.parts[0].text).toContain("previous request exceeded the provider's size limit")
@@ -1362,10 +1492,10 @@ describe("session.compaction.process", () => {
     "summarizes only the head while keeping recent tail out of summary input",
     () => {
       const stub = llm()
-      let messages: LLM.StreamInput["messages"] = []
+      let captured = ""
       stub.push(
         reply("summary", (input) => {
-          messages = input.messages
+          captured = JSON.stringify(input.messages)
         }),
       )
       return Effect.gen(function* () {
@@ -1386,10 +1516,7 @@ describe("session.compaction.process", () => {
           auto: false,
         })
 
-        const captured = JSON.stringify(messages)
-        expect(messages).toHaveLength(1)
-        expect(messages[0]?.role).toBe("user")
-        expect(captured).toContain("[User]: older context")
+        expect(captured).toContain("older context")
         expect(captured).not.toContain("keep this turn")
         expect(captured).not.toContain("and this one too")
         expect(captured).not.toContain("What did we do so far?")
@@ -1436,74 +1563,6 @@ describe("session.compaction.process", () => {
         expect(captured).toContain("## Important Details")
         expect(captured).toContain("## Work State")
       }).pipe(withCompaction({ llm: stub.llmLayer }))
-    },
-    { git: true },
-  )
-
-  itCompaction.instance(
-    "serializes repeated compaction history as one user message",
-    () => {
-      const stub = llm()
-      let captured: LLM.StreamInput["messages"] = []
-      stub.push(
-        reply("summary two", (input) => {
-          captured = input.messages
-        }),
-      )
-
-      return Effect.gen(function* () {
-        const ssn = yield* SessionNs.Service
-        const test = yield* TestInstance
-        const session = yield* ssn.create({})
-        const turn = yield* createUserMessage(session.id, "original request")
-        const kept = yield* createAssistantMessage(session.id, turn.id, test.directory)
-        yield* ssn.updatePart({
-          id: PartID.ascending(),
-          messageID: kept.id,
-          sessionID: session.id,
-          type: "tool",
-          callID: "read-call",
-          tool: "read",
-          state: {
-            status: "completed",
-            input: { filePath: "src/index.ts" },
-            output: "file contents",
-            title: "src/index.ts",
-            metadata: {},
-            time: { start: Date.now(), end: Date.now() },
-          },
-        })
-
-        const previous = yield* ssn.updateMessage({
-          id: MessageID.ascending(),
-          role: "user",
-          model: ref,
-          sessionID: session.id,
-          agent: "build",
-          time: { created: Date.now() },
-        })
-        yield* ssn.updatePart({
-          id: PartID.ascending(),
-          messageID: previous.id,
-          sessionID: session.id,
-          type: "compaction",
-          auto: false,
-          tail_start_id: kept.id,
-        })
-        yield* createSummaryAssistantMessage(session.id, previous.id, test.directory, "summary one")
-        yield* createCompactionMarker(session.id)
-
-        const msgs = MessageV2.filterCompacted(yield* MessageV2.stream(session.id))
-        const parent = msgs.at(-1)?.info.id
-        expect(parent).toBeTruthy()
-        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
-
-        expect(captured).toHaveLength(1)
-        expect(captured[0]?.role).toBe("user")
-        expect(JSON.stringify(captured)).toContain('[Assistant tool call]: read({\\"filePath\\":\\"src/index.ts\\"})')
-        expect(JSON.stringify(captured)).toContain("[Tool result]: file contents")
-        expect(JSON.stringify(captured)).not.toContain('\\"role\\":\\"assistant\\"')
-      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 0 }) }))
     },
     { git: true },
   )

@@ -10,7 +10,7 @@ import { Session } from "./session"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
 
-import { type Tool as AITool, tool, jsonSchema } from "ai"
+import { type Tool as AITool, tool, jsonSchema, type ModelMessage } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
 import { SystemPrompt } from "./system"
@@ -99,6 +99,120 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   return part.state.status === "error" && part.state.metadata?.interrupted === true
 }
 
+// runLoop entry guard (hank): count consecutive assistant messages & pass through
+function validateStrictTurnTaking(rawMsgs: SessionV1.WithParts[]): number {
+  if (!rawMsgs || rawMsgs.length < 2) return 0
+  let count = 0
+  for (let i = 1; i < rawMsgs.length; i++) {
+    // guards are for signal, not a crutch; provider 400s should surface the root cause not be hidden in memory ... find it, fix it
+    if (rawMsgs[i - 1].info.role === "assistant" && rawMsgs[i].info.role === "assistant") count++
+  }
+  // return the count for tracing
+  return count
+}
+
+// diagnostic helper (chasmic): does the post-compaction state still owe the
+// user an answer? Compaction is a context-reduction step, not itself the final
+// answer. A genuine pending continuation exists when there is an auto-continuation
+// user ("Continue if you have next steps...") not yet conclusively answered, or an
+// in-flight (non-conclusive) assistant turn. When compaction cleanly produced a
+// summary that directly answers the last user (no continueMsg, no dangling tool
+// work), there is nothing left to continue — chiron's early-exit would return.
+// This detector is a canary for the producer gap: if the producer fails to emit a
+// continueMsg after interrupting an in-flight turn, we surface it here instead of
+// silently dropping the pending work.
+export function hasPendingUserContinuation(msgs: SessionV1.WithParts[]): boolean {
+  const { user, assistant, tasks } = MessageV2.latest(msgs)
+  if (!user) return false
+  if (tasks.length > 0) return true
+  // No assistant turn yet → the (only) user is unanswered → pending.
+  if (!assistant) return true
+  // The latest assistant directly answers the LAST user: conclusive "stop" means
+  // done; "length"/"tool-calls"/unset means the model still owes work.
+  if (assistant.parentID === user.id) return assistant.finish !== "stop"
+  // The latest assistant answers an OLDER user → the last user is unanswered → pending.
+  return true
+}
+
+// B3b (fork B, adapter-compatible representation): The AI SDK
+// `toModelMessagesEffect` emits a completed tool turn as ONE assistant message
+// carrying both a `tool-call` and its `tool-result` content part. The
+// `@ai-sdk/openai-compatible` adapter drops `tool-result` parts that live
+// INSIDE an assistant message during wire serialization, leaving a dangling
+// `tool_calls` (provider-400 risk). This helper post-processes the
+// provider-format message list (localized to the request path) to NORMALIZE
+// the wire: it hoists `tool-result` parts OUT OF assistant messages into the
+// adapter-compatible shape — an assistant message with `tool_calls` followed
+// by a separate `role: "tool"` message carrying the result.
+type ContentPartLike = { type: string } & Record<string, unknown>
+
+export function normalizeToolResultsFromAssistants(msgs: ModelMessage[]): ModelMessage[] {
+  const out: ModelMessage[] = []
+  for (const msg of msgs) {
+    if (msg.role !== "assistant" || !Array.isArray(msg.content)) {
+      out.push(msg)
+      continue
+    }
+    const content = msg.content as ContentPartLike[]
+    const toolResults = content.filter((p) => p.type === "tool-result")
+    const nonResults = content.filter((p) => p.type !== "tool-result")
+    if (toolResults.length === 0) {
+      out.push(msg)
+      continue
+    }
+    // assistant message keeps text/reasoning/tool-call (drops the in-assistant tool-result)
+    out.push({ ...msg, content: nonResults } as ModelMessage)
+    // group tool-results into one role:"tool" message (preserving call order)
+    out.push({ role: "tool", content: toolResults } as ModelMessage)
+  }
+  return out
+}
+
+// C2 — last-resort wire-format boundary repair (Phase 4: The Anvil). Runs on the
+// wire right before streamText, in the SAME contained request path as B3b's
+// normalize (NOT the shared toModelMessagesEffect, preserving the B3a rejection).
+//
+// PRINCIPLE: guards do NOT mutate. This is NOT a guard — it is a bounded,
+// last-resort repair that DISCARDS ONLY a provably-contentless assistant. It
+// never merges, never fabricates content, and never touches a real turn.
+//
+// WHY it exists: the Anvil proved the failure deterministically. A `finish=length`
+// assistant with no content (no tool-result for B3b to hoist), separated from the
+// next assistant by a user that renders to NO wire message, produces two adjacent
+// assistant messages — the shape the provider rejects. The ROOT CAUSE is that
+// toModelMessagesEffect silently DROPS a user with no renderable parts (its
+// `userMessage.parts.length > 0` guard), removing the separator. The proper fix is
+// at that source (priority 1, under scope); this pass is the thin safety net until
+// it lands, and it discards ONLY the empty leading assistant that represents that
+// dropped separator — it never removes meaningful content and never edits a real
+// turn into a different shape.
+//
+// Discard predicate: the leading assistant must have NO tool-call part AND no
+// non-whitespace text part (i.e. is contentless — an empty/truncated turn). If it
+// carries any real content it is preserved untouched, even if adjacent.
+export function dropContentlessAdjacentAssistant(msgs: ModelMessage[]): ModelMessage[] {
+  const out: ModelMessage[] = []
+  const contentless = (m: ModelMessage): boolean => {
+    if (!Array.isArray(m.content)) return false
+    const parts = m.content as ContentPartLike[]
+    const hasToolCall = parts.some((p) => p.type === "tool-call")
+    const hasText = parts.some((p) => p.type === "text" && typeof p.text === "string" && p.text.trim().length > 0)
+    return !hasToolCall && !hasText
+  }
+  const isAssist = (m: ModelMessage | undefined): m is ModelMessage =>
+    !!m && m.role === "assistant" && Array.isArray(m.content)
+  for (let i = 0; i < msgs.length; i++) {
+    const msg = msgs[i]
+    const next = msgs[i + 1]
+    // if a contentless assistant is immediately followed by another assistant,
+    // it represents the dropped user separator / empty truncated turn — discard
+    // it (no real content is lost). Otherwise pass it through untouched.
+    if (isAssist(msg) && contentless(msg) && isAssist(next)) continue
+    out.push(msg)
+  }
+  return out
+}
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
@@ -150,7 +264,7 @@ const layer = Layer.effect(
     })
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
-      yield* Effect.logInfo("cancel", { "session.id": sessionID })
+      yield* Effect.logInfo("prompt: cancel", { "session.id": sessionID })
       yield* state.cancel(sessionID)
     })
 
@@ -249,7 +363,11 @@ const layer = Layer.effect(
       const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
       yield* sessions
         .setTitle({ sessionID: input.session.id, title: t })
-        .pipe(Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })))
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logError("prompt: failed to generate title", { error: Cause.squash(cause) }),
+          ),
+        )
     })
 
     const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
@@ -351,7 +469,7 @@ const layer = Layer.effect(
           Effect.catchCause((cause) => {
             const defect = Cause.squash(cause)
             error = defect instanceof Error ? defect : new Error(String(defect))
-            return Effect.logError("subtask execution failed", {
+            return Effect.logError("prompt: subtask execution failed", {
               error,
               agent: task.agent,
               description: task.description,
@@ -702,7 +820,7 @@ const layer = Layer.effect(
         if (part.type === "file") {
           if (part.source?.type === "resource") {
             const { clientName, uri } = part.source
-            yield* Effect.logInfo("mcp resource", { clientName, uri, mime: part.mime })
+            yield* Effect.logInfo("prompt: mcp resource", { clientName, uri, mime: part.mime })
             const pieces: Draft<SessionV1.Part>[] = [
               {
                 messageID: info.id,
@@ -770,7 +888,7 @@ const layer = Layer.effect(
               }
             } else {
               const error = Cause.squash(exit.cause)
-              yield* Effect.logError("failed to read MCP resource", { error, clientName, uri })
+              yield* Effect.logError("prompt: failed to read MCP resource", { error, clientName, uri })
               const message = error instanceof Error ? error.message : String(error)
               pieces.push({
                 messageID: info.id,
@@ -806,7 +924,7 @@ const layer = Layer.effect(
               }
               break
             case "file:": {
-              yield* Effect.logInfo("file", { mime: part.mime })
+              yield* Effect.logInfo("prompt: file", { mime: part.mime })
               const filepath = fileURLToPath(part.url)
               const mime = (yield* fsys.isDir(filepath)) ? "application/x-directory" : part.mime
 
@@ -889,7 +1007,7 @@ const layer = Layer.effect(
                   }
                 } else {
                   const error = Cause.squash(exit.cause)
-                  yield* Effect.logError("failed to read file", { error, filepath })
+                  yield* Effect.logError("prompt: failed to read file", { error, filepath })
                   const message = error instanceof Error ? error.message : String(error)
                   yield* events.publish(Session.Event.Error, {
                     sessionID: input.sessionID,
@@ -911,7 +1029,7 @@ const layer = Layer.effect(
                 const exit = yield* execRead(args).pipe(Effect.exit)
                 if (Exit.isFailure(exit)) {
                   const error = Cause.squash(exit.cause)
-                  yield* Effect.logError("failed to read directory", { error, filepath })
+                  yield* Effect.logError("prompt: failed to read directory", { error, filepath })
                   const message = error instanceof Error ? error.message : String(error)
                   yield* events.publish(Session.Event.Error, {
                     sessionID: input.sessionID,
@@ -1021,7 +1139,7 @@ const layer = Layer.effect(
 
       const parsed = decodeMessageInfo(info, { errors: "all", propertyOrder: "original" })
       if (Exit.isFailure(parsed)) {
-        yield* Effect.logError("invalid user message before save", {
+        yield* Effect.logError("prompt: invalid user message before save", {
           sessionID: input.sessionID,
           messageID: info.id,
           agent: info.agent,
@@ -1032,7 +1150,7 @@ const layer = Layer.effect(
       for (const [index, part] of parts.entries()) {
         const p = decodeMessagePart(part, { errors: "all", propertyOrder: "original" })
         if (Exit.isSuccess(p)) continue
-        yield* Effect.logError("invalid user part before save", {
+        yield* Effect.logError("prompt: invalid user part before save", {
           sessionID: input.sessionID,
           messageID: info.id,
           partID: part.id,
@@ -1085,48 +1203,109 @@ const layer = Layer.effect(
         let step = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
+        // track consecutive compaction overflow failures to break the retry loop
+        const MAX_COMPACTION_OVERFLOW = 1
+        let compactionOverflowCount = 0
+
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
-          yield* Effect.logInfo("loop", { "session.id": sessionID, step })
+          yield* Effect.logInfo("prompt: loop", { "session.id": sessionID, step })
 
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
             Effect.provideService(Database.Service, database),
           )
 
+          // runLoop entry guards
+
+          const msgsCountedAssistentsBeforeEntrance = validateStrictTurnTaking(msgs)
+          const msgsMappedBeforeEntrance = msgs.map((m) => m.info.role)
+
+          if (msgsCountedAssistentsBeforeEntrance > 0) {
+            // log the detection of invalid consecutive assistant messages at the entrace
+            yield* Effect.logDebug(
+              "prompt: triage: step=" +
+                step +
+                " runLoop entry guard (hank): detected invalid consecutive assistant messages (not good)",
+              {
+                messages: msgs.length,
+                msgsCountedAssistentsBeforeEntrance,
+                msgsMappedBeforeEntrance,
+                sessionID,
+              },
+            )
+          } else {
+            // log that all assistant messages are valid upon entry
+            yield* Effect.logDebug(
+              "prompt: triage: step=" +
+                step +
+                " runLoop entry guard (hank): all assistant messages are valid; no consecutive assistant messages detected (good)",
+              {
+                messages: msgs.length,
+                sessionID,
+              },
+            )
+          }
+
+          // log the (primary) conversation tail
+          yield* Effect.logDebug("prompt: triage: step=" + step + " conversation tail (asclepius)", {
+            roles: msgs.slice(-5).map((m: SessionV1.WithParts) => ({
+              finish: m.info.role === "assistant" ? m.info.finish : undefined,
+              id: m.info.id,
+              role: m.info.role,
+            })),
+            sessionID,
+          })
+
+          // handle.process() makes the exit decision and returns "stop" when the stream produced a conclusive finish (not tool-calls) [below]
           const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
-          if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+          // guard against an invalid stream state missing a user origin message
+          if (!lastUser)
+            throw new Error("runLoop entry guard (kalfu): invalid stream state rejected (user message not found)")
 
-          const lastAssistantMsg = msgs.findLast(
-            (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
-          )
-          // Some providers return "stop" even when the assistant message contains
-          // tool calls. Keep the loop running so tool results can be sent back to
-          // the model, but ignore cleanup-marked interrupted orphans.
-          const hasToolCalls =
-            lastAssistantMsg?.parts.some(
-              (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
-            ) ?? false
-
+          // early exit guard (chiron): if the last assistant is already finished
+          // conclusively (no tool calls, not length), no tasks remain, and the
+          // user was answered, break immediately instead of entering the
+          // processor. Chiron is the healer who knows when treatment is complete
+          // and the patient can be discharged — the analog to Asclepius
+          // (medicine god), caduceus (the healer's staff / herald's staff),
+          // hank & blart (the boundary guards).
+          // This handles seed()-style scenarios where history already contains
+          // a completed response. Only applies when the assistant has no active
+          // tool parts — orphaned interrupted tools are excluded.
+          //
+          // Phase 2 (structural check, not ID ordering): "the user was answered"
+          // is verified structurally via lastAssistant.parentID === lastUser.id
+          // (the latest assistant is a direct response to the last user), instead
+          // of the monotonic-ID comparison lastAssistant.id > lastUser.id.
           if (
-            lastAssistant?.finish &&
-            !["tool-calls"].includes(lastAssistant.finish) &&
-            !hasToolCalls &&
-            lastAssistant.parentID === lastUser.id
+            lastAssistant &&
+            lastAssistant.finish &&
+            lastAssistant.finish !== "tool-calls" &&
+            lastAssistant.finish !== "length" &&
+            lastAssistant.parentID === lastUser.id &&
+            tasks.length === 0
           ) {
-            const orphan = lastAssistantMsg?.parts.find(
-              (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
-            )
-            if (orphan) {
-              yield* Effect.logWarning("loop exit with orphaned interrupted tool", {
-                "session.id": sessionID,
-                messageID: lastAssistant.id,
-                tool: orphan.tool,
-                callID: orphan.callID,
-              })
+            const lastMsg = msgs.find((m) => m.info.id === lastAssistant.id)
+            const hasActiveToolParts =
+              lastMsg?.parts.some((p): p is SessionV1.ToolPart => p.type === "tool" && !isOrphanedInterruptedTool(p)) ??
+              false
+            if (!hasActiveToolParts) {
+              yield* Effect.logDebug(
+                "prompt: triage: step=" +
+                  step +
+                  " early exit guard (chiron): last assistant already finished conclusively; no active tools; returning",
+                {
+                  finish: lastAssistant.finish,
+                  lastAssistantID: lastAssistant.id,
+                  lastUserID: lastUser.id,
+                  parentID: lastAssistant.parentID,
+                  sessionID,
+                },
+              )
+              if (lastMsg) return lastMsg
+              break
             }
-            yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
-            break
           }
 
           step++
@@ -1141,12 +1320,29 @@ const layer = Layer.effect(
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
           const task = tasks.pop()
 
-          if (task?.type === "subtask") {
+          if (task && task.type === "subtask") {
+            // log subtask handling
+            yield* Effect.logDebug("prompt: triage: step=" + step + " task type=subtask", {
+              messages: msgs.length,
+              sessionID,
+              tasks: tasks.length,
+              taskAgent: task.agent,
+              taskDescription:
+                task.description?.length > 80 ? task.description.substring(0, 80) + "..." : task.description,
+            })
             yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
             continue
           }
 
-          if (task?.type === "compaction") {
+          if (task && task.type === "compaction") {
+            // log compaction handling
+            yield* Effect.logDebug("prompt: triage: step=" + step + " task type=compaction", {
+              messages: msgs.length,
+              sessionID,
+              tasks: tasks.length,
+              taskAuto: task.auto,
+              taskOverflow: task.overflow,
+            })
             const result = yield* compaction.process({
               messages: msgs,
               parentID: lastUser.id,
@@ -1154,7 +1350,106 @@ const layer = Layer.effect(
               auto: task.auto,
               overflow: task.overflow,
             })
-            if (result === "stop") break
+            if (result.outcome === "stop") {
+              // log compaction stop result (with the errored signal)
+              yield* Effect.logDebug("prompt: triage: step=" + step + " task type=compaction result=stop", {
+                sessionID,
+                taskAuto: task.auto,
+                taskOverflow: task.overflow,
+                errored: result.errored,
+              })
+              // Phase 0b regression fix (2026-08-02): a non-overflow compaction
+              // `stop` must NOT unconditionally break. Breaking on a SUCCESSFUL
+              // compaction (summary written, errored=false) abandoned a still-
+              // pending user — the loop `break` left the pending user unanswered
+              // and the operator had to re-prompt (ses_03cbe6aebffesU2wcJSIvKtFF8).
+              // We now break ONLY on a GENUINE compaction error (errored=true), and
+              // only for the non-overflow case (a failed re-run of a still-too-large
+              // context is a wasteful round-trip). A successful stop continues so the
+              // fresh summary's pending user gets answered. Overflow keeps its bounded
+              // retry via MAX_COMPACTION_OVERFLOW.
+              if (!task.overflow && result.errored) {
+                yield* Effect.logDebug(
+                  "prompt: triage: step=" +
+                    step +
+                    " task type=compaction result=stop (non-overflow, errored, breaking)",
+                  { sessionID, step },
+                )
+                break
+              }
+              if (!task.overflow) {
+                // successful compaction (errored=false). Re-derive the fresh
+                // post-compaction state to decide whether ANY pending continuation
+                // genuinely remains. A clean-stop compaction that produced a
+                // summary directly answering the last user (no continueMsg, no
+                // dangling tool work) is TERMINAL — we break here instead of
+                // doing a pointless continue that would immediately early-exit
+                // via chiron and confuse the operator ("returned to user input").
+                // We only continue when a real pending continuation exists.
+                const post = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+                  Effect.provideService(Database.Service, database),
+                )
+                const pending = hasPendingUserContinuation(post)
+                const lastUserAfter = MessageV2.latest(post).user?.id
+                const lastAssistantAfter = MessageV2.latest(post).assistant
+                yield* Effect.logDebug(
+                  "prompt: triage: step=" +
+                    step +
+                    " task type=compaction result=stop (non-overflow, success) - evaluating pending continuation (chasmic)",
+                  {
+                    sessionID,
+                    step,
+                    postMessages: post.length,
+                    lastUserAfter,
+                    lastAssistantFinish: lastAssistantAfter?.finish,
+                    pendingContinuation: pending,
+                  },
+                )
+                if (!pending) {
+                  yield* Effect.logDebug(
+                    "prompt: triage: step=" +
+                      step +
+                      " task type=compaction result=stop (non-overflow, success, no pending continuation; breaking)",
+                    { sessionID, step, postMessages: post.length },
+                  )
+                  break
+                }
+                yield* Effect.logDebug(
+                  "prompt: triage: step=" +
+                    step +
+                    " task type=compaction result=stop (non-overflow, success, pending continuation detected; continuing to answer it)",
+                  { sessionID, step, postMessages: post.length },
+                )
+                compactionOverflowCount = 0
+                continue
+              }
+              compactionOverflowCount++
+              if (compactionOverflowCount > MAX_COMPACTION_OVERFLOW) {
+                // log that max overflow is what broke the loop
+                yield* Effect.logInfo(
+                  "prompt: compaction: step=" + step + " max overflow retries reached, breaking loop",
+                  {
+                    compactionOverflowCount,
+                    messages: msgs.length,
+                    sessionID,
+                    step,
+                  },
+                )
+                break
+              }
+              // log overflow retry state
+              yield* Effect.logDebug("prompt: compaction: step=" + step + " overflow retry, continuing", {
+                compactionOverflowCount,
+                maxRetries: MAX_COMPACTION_OVERFLOW,
+                messages: msgs.length,
+                sessionID,
+              })
+              continue
+            }
+            yield* Effect.logDebug("prompt: triage: step=" + step + " task type=compaction completed", {
+              sessionID,
+            })
+            compactionOverflowCount = 0
             continue
           }
 
@@ -1163,6 +1458,11 @@ const layer = Layer.effect(
             lastFinished.summary !== true &&
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
+            // log that compaction overflow was triggered
+            yield* Effect.logDebug("prompt: triage: step=" + step + " compaction overflow triggered", {
+              lastFinishedTokens: lastFinished.tokens,
+              sessionID,
+            })
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
             continue
           }
@@ -1177,28 +1477,109 @@ const layer = Layer.effect(
           }
           const maxSteps = agent.steps ?? Infinity
           const isLastStep = step >= maxSteps
+
+          // log the step counter and maxSteps for tracing
+          yield* Effect.logDebug("prompt: triage: step=" + step + " maxSteps and isLastStep", {
+            isLastStep,
+            maxSteps,
+            sessionID,
+          })
+
           msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
             Effect.provideService(RuntimeFlags.Service, flags),
             Effect.provideService(FSUtil.Service, fsys),
             Effect.provideService(Session.Service, sessions),
           )
 
-          const msg: SessionV1.Assistant = {
-            id: MessageID.ascending(),
-            parentID: lastUser.id,
-            role: "assistant",
-            mode: agent.name,
-            agent: agent.name,
-            variant: lastUser.model.variant,
-            path: { cwd: ctx.directory, root: ctx.worktree },
-            cost: 0,
-            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-            modelID: model.id,
-            providerID: model.providerID,
-            time: { created: Date.now() },
-            sessionID,
+          // use the current assistant message (same parentID, no completed time)
+          let msg: SessionV1.Assistant | undefined
+          for (const m of msgs) {
+            if (m.info.role === "assistant") {
+              const info = m.info as SessionV1.Assistant
+              if (info.parentID === lastUser.id && !info.time?.completed) {
+                msg = info
+                break
+              }
+            }
           }
-          yield* sessions.updateMessage(msg)
+
+          if (!msg) {
+            msg = {
+              agent: agent.name,
+              cost: 0,
+              id: MessageID.ascending(),
+              mode: agent.name,
+              modelID: model.id,
+              parentID: lastUser.id,
+              path: { cwd: ctx.directory, root: ctx.worktree },
+              providerID: model.providerID,
+              role: "assistant",
+              sessionID,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: Date.now() },
+              variant: lastUser.model.variant,
+            }
+            yield* sessions.updateMessage(msg)
+          }
+
+          // prevent memory leaks & overflows ... stale database parts cause dangling assistant messages
+          const withParts = msgs.find((m) => m.info.role === "assistant" && m.info.id === msg.id)
+
+          // DIAGNOSTIC (channel = "caduceus-threaded"): detect the scenario where
+          // a continuation iteration reuses an assistant that still carries tool
+          // parts. The assistant's completed tool parts are preserved so B3b can
+          // split them into the adapter-compatible `assistant(tool_calls)` +
+          // `role:"tool"`(result) wire shape; stale pending/running tool parts
+          // (no result yet) are dropped to avoid a dangling tool_calls. Log the
+          // occurrence to inform future provider-specific refinements.
+          if (
+            step > 1 &&
+            withParts?.parts.some((p) => p.type === "tool") &&
+            model.api.npm === "@ai-sdk/openai-compatible"
+          ) {
+            yield* Effect.logDebug(
+              "prompt: caduceus-threaded: continuation preserving completed tool parts for B3b split",
+              {
+                "session.id": sessionID,
+                modelID: model.id,
+                providerID: model.providerID,
+                partCount: withParts.parts.length,
+                step,
+              },
+            )
+          }
+
+          // Structural filter (fork B, caduceus-preserve): keep the reused
+          // assistant's non-tool parts (text/reasoning) AND completed/errored
+          // tool parts so the prior tool result survives to B3b serialization.
+          // Only drop tool parts that have no result yet (pending/running),
+          // which would otherwise render as a dangling tool_calls.
+          //
+          // Phase 3c (Caduceus Echo Fix): mark each PRESERVED tool part
+          // providerExecuted: true so `toModelMessagesEffect` renders every tool
+          // turn as a single self-contained assistant message (tool-call +
+          // tool-result in one message). Without this, some turns render as one
+          // message and others as two (assistant + tool), producing consecutive
+          // assistants at the wire tail and a provider 400. The flag keeps the
+          // rendering consistent so the B3b split hoists results correctly.
+          if (withParts?.parts.length) {
+            withParts.parts = withParts.parts.filter((part) => {
+              if (part.type !== "tool") return true
+              if (part.state.status === "pending" || part.state.status === "running") return false
+              part.metadata = { ...(part.metadata ?? {}), providerExecuted: true }
+              return true
+            })
+          }
+
+          // log the (following) conversation tail
+          yield* Effect.logDebug("prompt: triage: step=" + step + " conversation tail (caduceus)", {
+            roles: msgs.slice(-5).map((m: SessionV1.WithParts) => ({
+              finish: m.info.role === "assistant" ? m.info.finish : undefined,
+              id: m.info.id,
+              role: m.info.role,
+            })),
+            sessionID,
+          })
 
           const finalizeInterruptedAssistant = Effect.gen(function* () {
             if (msg.time.completed) return
@@ -1215,6 +1596,7 @@ const layer = Layer.effect(
               assistantMessage: msg,
               sessionID,
               model,
+              step,
             })
             .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
 
@@ -1254,13 +1636,125 @@ const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
+            const [skills, env, instructions, mcpInstructions, modelMsgsRaw] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
+
+            // B3b: hoist in-assistant tool-results into separate role:"tool"
+            // messages so the openai-compatible adapter serializes a completed
+            // tool turn without a dangling tool_calls.
+            const modelMsgs = normalizeToolResultsFromAssistants(modelMsgsRaw)
+
+            // C2 (last-resort, Phase 4: The Anvil): drop a contentless assistant
+            // that sits adjacent to the next assistant (it represents a dropped
+            // user separator / empty truncated turn). This is a bounded DISCARD
+            // of provably-empty content only — never a merge, never a fabrication,
+            // never touching a real turn. Guards stay detection-only; this is the
+            // minimal post-normalize shape repair until the source renderer is fixed.
+            const boundedModelMsgs = dropContentlessAdjacentAssistant(modelMsgs)
+
+            // runLoop exit guard (blart): detect ANY consecutive assistant
+            // messages across the ENTIRE provider-format list (not just the tail).
+            // Phase 3c: the previous tail-only check was a false negative — it
+            // passed when the wire list had an assistant,assistant pair mid-list
+            // (e.g. tailRoles=["tool","assistant","tool"] at step 3), yet the
+            // provider 400ed. Blart must make the failure visible in logs, not
+            // the provider's 400, so we scan the full list for adjacency. It scans
+            // the MERGED list (boundedModelMsgs) — after C2 the invariant should
+            // always hold, so blart becomes a canary that logs if a NEW adjacency
+            // source slips past the gate rather than a thing that merely reports
+            // the very failure the gate prevents.
+            const consecutiveAssistantIndices: number[] = []
+            for (let i = 1; i < boundedModelMsgs.length; i++) {
+              if (boundedModelMsgs[i - 1].role === "assistant" && boundedModelMsgs[i].role === "assistant") {
+                consecutiveAssistantIndices.push(i)
+              }
+            }
+            if (consecutiveAssistantIndices.length > 0) {
+              // Sharpened blart (SNR, not SNL): for each consecutive assistant
+              // pair, record enough to pinpoint the crux — is the LEADING
+              // assistant a bare tool-call (tool-call part with NO following
+              // role:"tool" result)? A tool whose output is truthfully null/empty
+              // can fail to pair, leaving a dangling tool-call as a bare assistant
+              // adjacent to the next assistant. That is exactly the shape the
+              // provider rejects. Logging the leading assistant's tool-call part(s)
+              // turns "there's a pair" into "this specific tool-call is dangling."
+              // NOTE: after the C2 gate this should be unreachable — if blart fires
+              // here, a NEW adjacency source slipped past the lifeboat.
+              const pairDetail = consecutiveAssistantIndices.map((i) => {
+                const leading = boundedModelMsgs[i - 1] as { role: string; content?: unknown }
+                const leadingContent = Array.isArray(leading.content)
+                  ? (leading.content as Array<{ type?: string; toolName?: string; toolCallId?: string }>)
+                  : []
+                const toolCalls = leadingContent.filter((p) => p.type === "tool-call")
+                return {
+                  index: i,
+                  leadingHasToolCall: toolCalls.length > 0,
+                  toolCallNames: toolCalls.map((p) => p.toolName),
+                  toolCallIds: toolCalls.map((p) => p.toolCallId),
+                }
+              })
+              // log the detection of consecutive assistant messages on exit
+              yield* Effect.logDebug(
+                "prompt: triage: step=" +
+                  step +
+                  " runLoop exit guard (blart): detected invalid consecutive assistant messages in the provider-format (not good)",
+                {
+                  consecutiveCount: consecutiveAssistantIndices.length,
+                  consecutiveIndices: consecutiveAssistantIndices,
+                  pairDetail,
+                  messages: msgs.length,
+                  modelMessages: boundedModelMsgs.length,
+                  sessionID,
+                  tailRoles: boundedModelMsgs.slice(-3).map((m) => m.role),
+                },
+              )
+            } else {
+              // log that all provider-format assistant messages are valid upon exit
+              yield* Effect.logDebug(
+                "prompt: triage: step=" +
+                  step +
+                  " runLoop exit guard (blart): all provider-format assistant messages are valid; no consecutive assistant messages detected in the provider-format (good)",
+                {
+                  messages: msgs.length,
+                  modelMessages: boundedModelMsgs.length,
+                  sessionID,
+                },
+              )
+            }
+
+            // the provider requires the final message to have alternating turns and will reject consecutive assistants with a 400
+            // C2 (lifeboat): the wire that reaches the provider is the bounded list
+            // (post-merge), guaranteeing no consecutive assistants regardless of a
+            // dropped user separator.
+            let finalMessages = boundedModelMsgs
+
+            if (isLastStep) {
+              finalMessages = [...finalMessages, { role: "assistant", content: MAX_STEPS_PROMPT }]
+
+              // log the final message size context
+              yield* Effect.logDebug("prompt: triage: step=" + step + " isLastStep: MAX_STEPS_PROMPT appended", {
+                finalMessagesAfter: finalMessages.length,
+                finalMessagesBefore: finalMessages.length - 1,
+                lastRoleBefore: finalMessages.at(-2)?.role,
+                messages: msgs.length,
+                sessionID,
+                tailRoles: finalMessages.slice(-3).map((m) => m.role),
+              })
+            } else {
+              // log the final message size context sans MAX_STEPS_PROMPT
+              yield* Effect.logDebug("prompt: triage: step=" + step + " isLastStep: MAX_STEPS_PROMPT not appended", {
+                finalMessages: finalMessages.length,
+                messages: msgs.length,
+                sessionID,
+                tailRoles: finalMessages.slice(-3).map((m) => m.role),
+              })
+            }
+
             const system = [
               ...env,
               ...instructions,
@@ -1276,10 +1770,7 @@ const layer = Layer.effect(
               sessionID,
               parentSessionID: session.parentID,
               system,
-              messages: [
-                ...modelMsgs,
-                ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
-              ],
+              messages: finalMessages,
               tools,
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
@@ -1316,8 +1807,69 @@ const layer = Layer.effect(
               }
             }
 
-            if (result === "stop") return "break" as const
+            if (result === "stop") {
+              // log the stop outcome
+              yield* Effect.logDebug("prompt: triage: step=" + step + " handle.process returned result=stop", {
+                handleMessageFinish: handle.message.finish,
+                modelID: model.id,
+                modelProviderID: model.providerID,
+                sessionID,
+              })
+
+              // if finish is stop but the assistant still has pending or running
+              // tool parts, the loop must continue to deliver tool results. load
+              // from the db because the stream may have added tools there.
+              if (handle.message.finish === "stop") {
+                const parts = yield* MessageV2.parts(handle.message.id).pipe(
+                  Effect.provideService(Database.Service, database),
+                )
+                const hasUnexecutedTools = parts.some(
+                  (part) =>
+                    part.type === "tool" &&
+                    !isOrphanedInterruptedTool(part) &&
+                    !part.metadata?.providerExecuted &&
+                    (part.state.status === "pending" || part.state.status === "running"),
+                )
+                if (hasUnexecutedTools) {
+                  yield* Effect.logDebug(
+                    "prompt: triage: step=" + step + " finish=stop but unexecuted tools in db, continuing",
+                    { sessionID, step },
+                  )
+                  return "continue" as const
+                }
+              }
+
+              // A user message may have arrived NEXT in the sequence during this
+              // iteration (e.g. via a queued prompt.prompt call) — one whose message
+              // ID sorts after the assistant we just finished, meaning this turn did
+              // NOT answer it. If so, continue the loop so that next user gets its own
+              // LLM call. ("next" is structural — position in the sequence after this
+              // turn — not a time-based value judgment such as "fresh" or "later".)
+              const nextMsgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+                Effect.provideService(Database.Service, database),
+              )
+              const { user: nextUser } = MessageV2.latest(nextMsgs)
+              if (nextUser && handle.message.id < nextUser.id) {
+                yield* Effect.logDebug(
+                  "prompt: triage: step=" + step + " stop finish but next user msg needs processing, continuing",
+                  { sessionID, step, handleMessageID: handle.message.id, nextUserID: nextUser.id },
+                )
+                return "continue" as const
+              }
+
+              return "break" as const
+            }
             if (result === "compact") {
+              // log the compact outcome
+              yield* Effect.logDebug("prompt: triage: step=" + step + " handle.process returned result=compact", {
+                auto: true,
+                lastUserAgent: lastUser.agent,
+                lastUserModel: lastUser.model,
+                messages: msgs.length,
+                modelID: model.id,
+                overflow: !handle.message.finish,
+                sessionID,
+              })
               yield* compaction.create({
                 sessionID,
                 agent: lastUser.agent,
@@ -1326,12 +1878,50 @@ const layer = Layer.effect(
                 overflow: !handle.message.finish,
               })
             }
+            // log that the loop will continue for another iteration
+            yield* Effect.logDebug("prompt: triage: step=" + step + " handle.process returned continue", {
+              handleMessageFinish: handle.message.finish,
+              handleMessageError: !!handle.message.error,
+              messages: msgs.length,
+              modelID: model.id,
+              sessionID,
+            })
             return "continue" as const
           }).pipe(
             Effect.ensuring(instruction.clear(handle.message.id)),
             Effect.onInterrupt(() => finalizeInterruptedAssistant),
           )
-          if (outcome === "break") break
+          if (outcome === "break") {
+            // log the break outcome
+            yield* Effect.logDebug("prompt: triage: step=" + step + " outcome=break", {
+              messages: msgs.length,
+              sessionID,
+            })
+            // only run once on exit, not on every "continue" iteration, to prevent consecutive assistants from accumulating and overflowing the context
+            if (!msg.time.completed) {
+              msg.time.completed = Date.now()
+              msg.finish = msg.finish ?? handle.message.finish ?? "stop"
+              if (msg.finish === "content-filter" && !msg.error) {
+                msg.error = new SessionV1.ContentFilterError({
+                  message: "The response was blocked by the provider's content filter",
+                }).toObject()
+              }
+              yield* sessions.updateMessage(msg)
+              // log the message finalization
+              yield* Effect.logDebug("prompt: triage: step=" + step + " finalize: MessageUpdated published", {
+                completed: msg.time.completed,
+                finish: msg.finish,
+                messageID: msg.id,
+                sessionID,
+              })
+            }
+            break
+          }
+          // log the continue outcome
+          yield* Effect.logDebug("prompt: triage: step=" + step + " outcome=continue", {
+            messages: msgs.length,
+            sessionID,
+          })
           continue
         }
 
@@ -1354,7 +1944,7 @@ const layer = Layer.effect(
     })
 
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
-      yield* Effect.logInfo("command", {
+      yield* Effect.logInfo("prompt: command", {
         "session.id": input.sessionID,
         command: input.command,
         agent: input.agent,
