@@ -52,7 +52,11 @@ export const Plugin = define({
             text,
             resume: false,
           })
-          .pipe(Effect.catch(() => Effect.void))
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("failed to inject Plan mode reminder", { sessionID: event.data.sessionID, cause }),
+            ),
+          )
       }),
       Effect.forkScoped({ startImmediately: true }),
     )
