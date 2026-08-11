@@ -17,6 +17,7 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/server": "workspace:*",
+    "@opencode-ai/util": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
