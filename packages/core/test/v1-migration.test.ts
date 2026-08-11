@@ -777,7 +777,7 @@ describe("V1Migration database workflow", () => {
     `)
   })
 
-  const database = <A, E>(effect: Effect.Effect<A, E, Database.Service | Scope.Scope>) =>
+  const database = <A, E>(effect: Effect.Effect<A, E, Database.Service | Global.Service | Scope.Scope>) =>
     run(
       Effect.gen(function* () {
         const db = yield* makeDb
