@@ -16,6 +16,7 @@ export type ID = import("@opencode-ai/schema/event").ID
 export type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 
 export type Subscriber<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
+export type BatchSubscriber<D extends Definition = Definition> = (events: readonly Payload<D>[]) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
 
 export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
@@ -150,7 +151,12 @@ export interface Interface {
   readonly durable: (input: { readonly aggregateID: string; readonly after?: number }) => Stream.Stream<Payload>
   /** @deprecated Use `all()` and consume the returned stream. */
   readonly listen: (listener: Subscriber) => Effect.Effect<Unsubscribe>
-  readonly project: <D extends Definition>(definition: D, projector: Subscriber<D>) => Effect.Effect<void>
+  /** Replaces per-event projection only when every projector in a batch opts in and no local commit hook is present. */
+  readonly project: <D extends Definition>(
+    definition: D,
+    projector: Subscriber<D>,
+    batchProjector?: BatchSubscriber<D>,
+  ) => Effect.Effect<void>
   readonly replay: (
     event: SerializedEvent,
     options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
@@ -192,7 +198,15 @@ export const layerWith = (options?: LayerOptions) =>
         durable: new Map<string, Set<PubSub.PubSub<void>>>(),
         typed: new Map<string, PubSub.PubSub<Payload>>(),
       }
-      const projectors = new Map<string, Subscriber[]>()
+      const projectors = new Map<
+        string,
+        { readonly type: string; readonly single: Subscriber; readonly batch?: BatchSubscriber }[]
+      >()
+      const projectorOrder = new Array<{
+        readonly type: string
+        readonly single: Subscriber
+        readonly batch?: BatchSubscriber
+      }>()
       // TODO: Bind durable projectors to exact type+version before supporting incompatible historical payloads.
       const listeners = new Array<Subscriber>()
       const { db } = yield* Database.Service
@@ -271,6 +285,7 @@ export const layerWith = (options?: LayerOptions) =>
         },
         commit?: (seq: number) => Effect.Effect<void>,
         state?: BatchCommitState,
+        project = true,
       ) {
         return Effect.gen(function* () {
           const durable = definition.durable
@@ -351,8 +366,10 @@ export const layerWith = (options?: LayerOptions) =>
             ...event,
             durable: { aggregateID, seq, version: durable.version },
           } as Payload
-          for (const projector of projectors.get(event.type) ?? []) {
-            yield* projector(committed)
+          if (project) {
+            for (const projector of projectors.get(event.type) ?? []) {
+              yield* projector.single(committed)
+            }
           }
           if (commit) yield* commit(seq)
           const storedEvent = {
@@ -526,7 +543,10 @@ export const layerWith = (options?: LayerOptions) =>
             )
           }
 
-          const committed = yield* Effect.uninterruptible(
+          const projectAsBatch = pending.every(
+            (item) => !item.commit && (projectors.get(item.event.type) ?? []).every((projector) => projector.batch),
+          )
+          const result = yield* Effect.uninterruptible(
             db
               .transaction(
                 () =>
@@ -562,6 +582,7 @@ export const layerWith = (options?: LayerOptions) =>
                         undefined,
                         item.commit,
                         state,
+                        !projectAsBatch,
                       ),
                     )
                     const latest = committed.at(-1)
@@ -573,6 +594,39 @@ export const layerWith = (options?: LayerOptions) =>
                         }),
                       )
                     }
+                    const result = new Array<Payload>()
+                    for (const [index, item] of pending.entries()) {
+                      const durable = item.definition.durable
+                      const stored = committed[index]
+                      if (!durable || !stored) {
+                        return yield* Effect.die(
+                          new InvalidDurableEventError({
+                            type: item.event.type,
+                            message: "Durable batch event was not committed",
+                          }),
+                        )
+                      }
+                      result.push({
+                        ...item.event,
+                        durable: {
+                          aggregateID: stored.aggregateID,
+                          seq: stored.seq,
+                          version: durable.version,
+                        },
+                      })
+                    }
+                    if (projectAsBatch) {
+                      yield* Effect.forEach(
+                        projectorOrder,
+                        (projector) => {
+                          if (!projector.batch) return Effect.void
+                          const selected = result.filter((event) => event.type === projector.type)
+                          if (selected.length === 0) return Effect.void
+                          return projector.batch(selected)
+                        },
+                        { discard: true },
+                      )
+                    }
                     yield* db
                       .insert(EventSequenceTable)
                       .values([{ aggregate_id: aggregateID, seq: latest.seq }])
@@ -580,7 +634,7 @@ export const layerWith = (options?: LayerOptions) =>
                       .run()
                       .pipe(Effect.orDie)
                     yield* db.insert(EventTable).values(state.events).run().pipe(Effect.orDie)
-                    return committed
+                    return result
                   }),
                 { behavior: "immediate" },
               )
@@ -589,27 +643,6 @@ export const layerWith = (options?: LayerOptions) =>
                 Effect.tap(() => wakeDurable(aggregateID)),
               ),
           )
-          const result = new Array<Payload>()
-          for (const [index, item] of pending.entries()) {
-            const durable = item.definition.durable
-            const stored = committed[index]
-            if (!durable || !stored) {
-              return yield* Effect.die(
-                new InvalidDurableEventError({
-                  type: item.event.type,
-                  message: "Durable batch event was not committed",
-                }),
-              )
-            }
-            result.push({
-              ...item.event,
-              durable: {
-                aggregateID: stored.aggregateID,
-                seq: stored.seq,
-                version: durable.version,
-              },
-            })
-          }
           yield* Effect.forEach(result, (event) => notify(event, true), { discard: true })
           return result
         })
@@ -789,11 +822,23 @@ export const layerWith = (options?: LayerOptions) =>
           })
         })
 
-      const project = <D extends Definition>(definition: D, projector: Subscriber<D>): Effect.Effect<void> =>
+      const project = <D extends Definition>(
+        definition: D,
+        projector: Subscriber<D>,
+        batchProjector?: BatchSubscriber<D>,
+      ): Effect.Effect<void> =>
         Effect.sync(() => {
           const list = projectors.get(definition.type) ?? []
-          list.push((event) => projector(event as Payload<D>))
+          const registration = {
+            type: definition.type,
+            single: (event: Payload) => projector(event as Payload<D>),
+            ...(batchProjector
+              ? { batch: (events: readonly Payload[]) => batchProjector(events as readonly Payload<D>[]) }
+              : {}),
+          }
+          list.push(registration)
           projectors.set(definition.type, list)
+          projectorOrder.push(registration)
         })
 
       return Service.of({

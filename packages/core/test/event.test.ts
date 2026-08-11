@@ -356,6 +356,35 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("uses batch projectors only when every projector opts in", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const projected = new Array<string>()
+      yield* events.project(
+        SyncMessage,
+        (event) => Effect.sync(() => projected.push(`single:${event.data.text}`)),
+        (batch) => Effect.sync(() => projected.push(`batch:${batch.map((event) => event.data.text).join(",")}`)),
+      )
+
+      const firstAggregateID = EventV2.ID.create()
+      yield* events.publishBatch([
+        { definition: SyncMessage, data: { id: firstAggregateID, text: "first" } },
+        { definition: SyncMessage, data: { id: firstAggregateID, text: "second" } },
+      ])
+      expect(projected).toEqual(["batch:first,second"])
+
+      projected.length = 0
+      yield* events.project(SyncMessage, (event) => Effect.sync(() => projected.push(`legacy:${event.data.text}`)))
+      const aggregateID = EventV2.ID.create()
+      yield* events.publishBatch([
+        { definition: SyncMessage, data: { id: aggregateID, text: "third" } },
+        { definition: SyncMessage, data: { id: aggregateID, text: "fourth" } },
+      ])
+
+      expect(projected).toEqual(["single:third", "legacy:third", "single:fourth", "legacy:fourth"])
+    }),
+  )
+
   it.effect("rolls back a durable batch without notifying listeners", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
