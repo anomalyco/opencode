@@ -38,10 +38,16 @@ export const Plugin = define({
     })
 
     yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "session.agent.selected"),
+      Stream.filter((event) => event.type === "session.created" || event.type === "session.agent.selected"),
       Stream.runForEach((event) => {
-        if (event.data.agent === event.data.previous) return Effect.void
-        const text = event.data.agent === plan ? enter : event.data.previous === plan ? leave : undefined
+        if (event.type === "session.created" && event.data.agent !== plan) return Effect.void
+        if (event.type === "session.agent.selected" && event.data.agent === event.data.previous) return Effect.void
+        const text =
+          event.type === "session.created" || event.data.agent === plan
+            ? enter
+            : event.data.previous === plan
+              ? leave
+              : undefined
         if (!text) return Effect.void
         return ctx.session
           .synthetic({
