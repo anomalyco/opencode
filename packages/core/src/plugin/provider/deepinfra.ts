@@ -1,16 +1,10 @@
-import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { createProviderPlugin } from "./factory"
 
-export const DeepInfraPlugin = define({
+export const DeepInfraPlugin = createProviderPlugin({
   id: "opencode.provider.deepinfra",
-  effect: Effect.fn(function* (ctx) {
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/deepinfra") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/deepinfra"))
-        evt.sdk = mod.createDeepInfra(evt.options)
-      }),
-    )
-  }),
+  package: "@ai-sdk/deepinfra",
+  load: async () => {
+    const { createDeepInfra } = await import("@ai-sdk/deepinfra")
+    return (options) => createDeepInfra(options)
+  },
 })

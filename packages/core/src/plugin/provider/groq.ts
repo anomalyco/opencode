@@ -1,16 +1,10 @@
-import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { createProviderPlugin } from "./factory"
 
-export const GroqPlugin = define({
+export const GroqPlugin = createProviderPlugin({
   id: "opencode.provider.groq",
-  effect: Effect.fn(function* (ctx) {
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/groq") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/groq"))
-        evt.sdk = mod.createGroq(evt.options)
-      }),
-    )
-  }),
+  package: "@ai-sdk/groq",
+  load: async () => {
+    const { createGroq } = await import("@ai-sdk/groq")
+    return (options) => createGroq(options)
+  },
 })

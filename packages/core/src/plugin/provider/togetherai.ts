@@ -1,16 +1,10 @@
-import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { createProviderPlugin } from "./factory"
 
-export const TogetherAIPlugin = define({
+export const TogetherAIPlugin = createProviderPlugin({
   id: "opencode.provider.togetherai",
-  effect: Effect.fn(function* (ctx) {
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/togetherai") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/togetherai"))
-        evt.sdk = mod.createTogetherAI(evt.options)
-      }),
-    )
-  }),
+  package: "@ai-sdk/togetherai",
+  load: async () => {
+    const { createTogetherAI } = await import("@ai-sdk/togetherai")
+    return (options) => createTogetherAI(options)
+  },
 })
