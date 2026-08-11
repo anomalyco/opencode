@@ -84,7 +84,7 @@ export const Plugin = define({
                 ? { type: "available", files: [...sources.global, ...sources.project] }
                 : { type: "unavailable" }
             if (!file) return
-            yield* Effect.logInfo("instructions rescanned", {
+            yield* Effect.logDebug("instructions rescanned", {
               file,
               instructions:
                 loaded.current.type === "available" ? loaded.current.files.map((item) => item.path) : "unavailable",

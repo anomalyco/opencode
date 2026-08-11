@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import fs from "fs/promises"
-import os from "os"
 import path from "path"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Bus } from "@opencode-ai/core/bus"
@@ -14,6 +13,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { tempGlobalLayer } from "./fixture/global"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { readInitial, readUpdate, state } from "./lib/instructions"
@@ -23,7 +23,7 @@ import { host } from "./plugin/host"
 const it = testEffect(Layer.empty)
 
 const instructionLayer = (input: {
-  config: string
+  config?: string
   locationServiceLayer: Layer.Layer<Location.Service>
   filesystemLayer?: Layer.Layer<FSUtil.Service>
   project?: boolean
@@ -34,7 +34,7 @@ const instructionLayer = (input: {
       LayerNode.group([InstructionDiscovery.node, Bus.node, FSUtil.node, Global.node, Location.node, Watcher.node]),
       [
         [InstructionDiscovery.node, InstructionDiscovery.configured({ project: input.project })],
-        [Global.node, Global.layerWith({ config: input.config })],
+        [Global.node, input.config ? Global.layerWith({ config: input.config }) : tempGlobalLayer],
         [Location.node, input.locationServiceLayer],
         [Watcher.node, watcher],
         ...(input.filesystemLayer ? [[FSUtil.node, input.filesystemLayer] as const] : []),
@@ -279,7 +279,6 @@ describe("ConfigInstructionPlugin.Plugin", () => {
     }).pipe(
       Effect.provide(
         instructionLayer({
-          config: path.join(os.tmpdir(), "opencode-instruction-failure"),
           filesystemLayer: failingFS,
           locationServiceLayer: Layer.succeed(
             Location.Service,
@@ -315,7 +314,6 @@ describe("ConfigInstructionPlugin.Plugin", () => {
     }).pipe(
       Effect.provide(
         instructionLayer({
-          config: path.join(os.tmpdir(), "opencode-instruction-race"),
           filesystemLayer: racingFS,
           locationServiceLayer: Layer.succeed(
             Location.Service,
@@ -344,7 +342,6 @@ describe("ConfigInstructionPlugin.Plugin", () => {
       yield* start().pipe(
         Effect.provide(
           instructionLayer({
-            config: path.join(os.tmpdir(), "opencode-instruction-canonical"),
             filesystemLayer: observingFS,
             locationServiceLayer: Layer.succeed(
               Location.Service,
@@ -358,7 +355,6 @@ describe("ConfigInstructionPlugin.Plugin", () => {
       yield* start().pipe(
         Effect.provide(
           instructionLayer({
-            config: path.join(os.tmpdir(), "opencode-instruction-canonical"),
             filesystemLayer: observingFS,
             project: false,
             locationServiceLayer: Layer.succeed(
@@ -371,7 +367,6 @@ describe("ConfigInstructionPlugin.Plugin", () => {
       yield* start().pipe(
         Effect.provide(
           instructionLayer({
-            config: path.join(os.tmpdir(), "opencode-instruction-canonical"),
             filesystemLayer: observingFS,
             locationServiceLayer: Layer.succeed(
               Location.Service,
