@@ -60,7 +60,9 @@ Plugins are loaded from all sources and all hooks run in sequence. The load orde
 3. Global plugin directory (`~/.config/opencode/plugins/`)
 4. Project plugin directory (`.opencode/plugins/`)
 
-Duplicate npm packages with the same name and version are loaded once. However, a local plugin and an npm plugin with similar names are both loaded separately.
+Duplicate npm packages with the same name are loaded once. However, a local plugin and an npm plugin with similar names are both loaded separately.
+
+If the same plugin is declared in both global and project config, the project-local declaration wins and its options replace the global ones. Plugins declared in [managed config](/docs/config#managed-settings) take precedence over both and cannot be overridden by project config.
 
 ---
 
