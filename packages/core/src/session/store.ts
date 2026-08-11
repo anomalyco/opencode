@@ -1,6 +1,6 @@
 export * as SessionStore from "./store"
 
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
@@ -18,9 +18,25 @@ export interface Interface {
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
-  /** Clears suspension, reporting whether this caller consumed it. At most one concurrent caller receives true. */
+  /** Clears the claim, reporting whether this caller consumed it. At most one concurrent caller receives true. */
   readonly consumeSuspended: (sessionID: Session.ID) => Effect.Effect<boolean>
-  readonly suspend: (sessionIDs: Iterable<Session.ID>) => Effect.Effect<void>
+  /**
+   * Records the execution claim: the durable write-ahead intent that a turn is
+   * (or was) in flight. Set when execution starts; a claim that survives to the
+   * next boot is the signature of a process that died without teardown.
+   */
+  readonly claim: (sessionID: Session.ID) => Effect.Effect<void>
+  /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
+  readonly release: (sessionID: Session.ID) => Effect.Effect<void>
+  /** Durably counts one more resume of an orphaned claim, returning the new total. */
+  readonly countResume: (sessionID: Session.ID) => Effect.Effect<number>
+  /**
+   * When the Session's messages last changed, or undefined for an empty
+   * Session. Message rows update as a live drain streams, so recent activity
+   * suggests another process may still own the turn. Event persistence is
+   * opt-in, so this deliberately reads messages, not the event log.
+   */
+  readonly lastActivityAt: (sessionID: Session.ID) => Effect.Effect<number | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStore") {}
@@ -75,16 +91,42 @@ const layer = Layer.effect(
             .pipe(Effect.orDie)) !== undefined
         )
       }),
-      suspend: Effect.fn("SessionStore.suspend")(function* (sessionIDs) {
-        const ids = Array.from(sessionIDs)
-        if (ids.length === 0) return
-        // The null guard preserves the original suspension time if a Session is somehow suspended twice.
+      claim: Effect.fn("SessionStore.claim")(function* (sessionID) {
+        // The null guard preserves the original claim time if a claimed Session drains again
+        // before the sweep saw it (a user prompt beat the recovery to the wake-up).
         yield* db
           .update(SessionTable)
           .set({ time_suspended: Date.now() })
-          .where(and(inArray(SessionTable.id, ids), isNull(SessionTable.time_suspended)))
+          .where(and(eq(SessionTable.id, sessionID), isNull(SessionTable.time_suspended)))
           .run()
           .pipe(Effect.orDie)
+      }),
+      release: Effect.fn("SessionStore.release")(function* (sessionID) {
+        yield* db
+          .update(SessionTable)
+          .set({ time_suspended: null, resume_attempts: 0 })
+          .where(eq(SessionTable.id, sessionID))
+          .run()
+          .pipe(Effect.orDie)
+      }),
+      countResume: Effect.fn("SessionStore.countResume")(function* (sessionID) {
+        const row = yield* db
+          .update(SessionTable)
+          .set({ resume_attempts: sql`${SessionTable.resume_attempts} + 1` })
+          .where(eq(SessionTable.id, sessionID))
+          .returning({ attempts: SessionTable.resume_attempts })
+          .get()
+          .pipe(Effect.orDie)
+        return row?.attempts ?? 0
+      }),
+      lastActivityAt: Effect.fn("SessionStore.lastActivityAt")(function* (sessionID) {
+        const row = yield* db
+          .select({ updatedAt: sql<number | null>`max(${SessionMessageTable.time_updated})` })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        return row?.updatedAt ?? undefined
       }),
     })
   }),

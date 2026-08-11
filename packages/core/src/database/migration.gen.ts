@@ -40,6 +40,7 @@ import m37 from "./migration/20260622202450_simplify_session_input"
 import m38 from "./migration/20260804233008_loose_psylocke"
 import m39 from "./migration/20260805200742_import_legacy_credentials"
 import m40 from "./migration/20260808023530_workspace_domain"
+import m41 from "./migration/20260811161259_execution_claim_attempts"
 
 export const migrations = [
   m00,
@@ -83,4 +84,5 @@ export const migrations = [
   m38,
   m39,
   m40,
+  m41,
 ] satisfies DatabaseMigration.Migration[]

@@ -59,6 +59,7 @@ export const SessionTable = sqliteTable(
     time_compacting: integer(),
     time_archived: integer(),
     time_suspended: integer(),
+    resume_attempts: integer().notNull().default(0),
   },
   (table) => [
     index("session_v2_project_idx").on(table.project_id),

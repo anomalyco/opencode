@@ -56,16 +56,22 @@ export const layer = Layer.effect(
         ),
         Effect.asVoid,
       )
-    // Starting or finishing on its own clears stale suspension; interruption preserves it because
-    // managed-server teardown suspends active Sessions immediately before interrupting their drains.
-    const clearSuspensionOnCommit = (sessionID: SessionSchema.ID) => ({
-      commit: () => Effect.asVoid(store.consumeSuspended(sessionID)),
+    // Write-ahead claim: starting records the durable intent that a turn is in flight, in the same
+    // transaction as the started event. Terminals release it — except shutdown interruption, which
+    // preserves the claim so the next server start resumes the turn. A claim that survives with no
+    // terminal is the signature of a process that died without teardown (crash, SIGKILL, eviction);
+    // recovery is a property of the database, never of a shutdown hook that may not run.
+    const claimOnCommit = (sessionID: SessionSchema.ID) => ({
+      commit: () => store.claim(sessionID),
+    })
+    const releaseOnCommit = (sessionID: SessionSchema.ID) => ({
+      commit: () => store.release(sessionID),
     })
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
       started: (sessionID) =>
         reportLifecycle(
           sessionID,
-          bus.publish(SessionEvent.Execution.Started, { sessionID }, clearSuspensionOnCommit(sessionID)),
+          bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
         ),
       drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, force) {
         const session = yield* store.get(sessionID)
@@ -86,11 +92,17 @@ export const layer = Layer.effect(
           Effect.gen(function* () {
             const outcome = terminal(exit, reason)
             if (outcome.type === "succeeded") {
-              yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, clearSuspensionOnCommit(sessionID))
+              yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID))
               return
             }
             if (outcome.type === "interrupted") {
-              yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: outcome.reason })
+              // A user cancel (or a superseding execution) releases the claim: the turn must not
+              // resurrect at the next boot. Shutdown interruption keeps it for restart continuity.
+              yield* bus.publish(
+                SessionEvent.Execution.Interrupted,
+                { sessionID, reason: outcome.reason },
+                outcome.reason === "shutdown" ? undefined : releaseOnCommit(sessionID),
+              )
               return
             }
             yield* bus.publish(
@@ -99,7 +111,7 @@ export const layer = Layer.effect(
                 sessionID,
                 error: outcome.error,
               },
-              clearSuspensionOnCommit(sessionID),
+              releaseOnCommit(sessionID),
             )
           }),
         ),
