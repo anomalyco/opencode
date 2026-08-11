@@ -569,4 +569,83 @@ describe("tool.registry", () => {
       expect(ids).toContain("cowsay")
     }),
   )
+
+  it.instance("executes a plugin tool whose execute returns a plain string synchronously", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tools = path.join(test.directory, ".opencode", "tools")
+      yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "sync-string.ts"),
+          [
+            "export default {",
+            "  description: 'sync string tool',",
+            "  args: { msg: { type: 'string' } },",
+            "  execute({ msg }) {",
+            "    return `echo: ${msg}`",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "sync-string")
+      if (!loaded) throw new Error("sync-string tool was not loaded")
+      const agents = yield* Agent.Service
+      const result = yield* loaded.execute({ msg: "hello" }, {
+        sessionID: SessionID.make("ses_test"),
+        messageID: MessageID.make("msg_test"),
+        agent: (yield* agents.defaultInfo()).name,
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      } satisfies Tool.Context)
+
+      expect(result.output).toBe("echo: hello")
+    }),
+  )
+
+  it.instance("executes a plugin tool whose execute returns a structured object synchronously", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tools = path.join(test.directory, ".opencode", "tools")
+      yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "sync-object.ts"),
+          [
+            "export default {",
+            "  description: 'sync object tool',",
+            "  args: {},",
+            "  execute() {",
+            "    return { output: 'ok', title: 'sync' }",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "sync-object")
+      if (!loaded) throw new Error("sync-object tool was not loaded")
+      const agents = yield* Agent.Service
+      const result = yield* loaded.execute({}, {
+        sessionID: SessionID.make("ses_test"),
+        messageID: MessageID.make("msg_test"),
+        agent: (yield* agents.defaultInfo()).name,
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      } satisfies Tool.Context)
+
+      expect(result.output).toBe("ok")
+      expect(result.title).toBe("sync")
+    }),
+  )
 })
