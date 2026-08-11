@@ -545,7 +545,7 @@ export function Autocomplete(props: {
   })
 
   const supplementalDirectoryOptions = createMemo((): AutocompleteOption[] => {
-    if (store.visible !== "directory") return []
+    if (store.visible !== "directory" || files.loading || visibleFiles().failed) return []
     const width = props.anchor().width - 4
     return (props.directoryOptions?.(search()) ?? []).map((item) => {
       const value = item.value
