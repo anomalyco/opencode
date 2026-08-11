@@ -334,27 +334,23 @@ export function Autocomplete(props: {
           ? directoryAutocompleteSearch(base, input.location?.directory ?? paths.cwd, paths.home)
           : undefined
 
-      const result = await client.api.file
-        .find({
-          query: directorySearch?.query ?? base,
-          type: input.visible === "directory" ? "directory" : undefined,
-          limit: 20,
-          location: {
-            directory: directorySearch?.directory ?? input.location?.directory,
-            workspace: input.location?.workspaceID ?? data.location.default().workspaceID,
-          },
-        })
-        .then(
-          (result) => result,
-          () => undefined,
-        )
+      const requestLocation = {
+        directory: directorySearch?.directory ?? input.location?.directory,
+        workspace: input.location?.workspaceID ?? data.location.default().workspaceID,
+      }
+      const result = await (
+        input.visible === "directory"
+          ? client.api.file.list({ location: requestLocation })
+          : client.api.file.find({ query: base, limit: 20, location: requestLocation })
+      ).then(
+        (result) => result,
+        () => undefined,
+      )
 
       if (!result) return { options: [], failed: true }
 
       const options: AutocompleteOption[] = []
 
-      // Add file options. Trust the order returned by fff (frecency, fuzzy
-      // score, filename bonus, etc. are already factored in).
       const width = props.anchor().width - 4
       const exact = directorySearch ? directoryAutocompleteExactValue(base, directorySearch) : undefined
       if (exact) {
@@ -367,8 +363,16 @@ export function Autocomplete(props: {
           onSelect: () => insertDirectory(exact),
         })
       }
+      const entries =
+        input.visible === "directory"
+          ? result.data.filter(
+              (item) =>
+                item.type === "directory" &&
+                item.path.toLowerCase().startsWith((directorySearch?.query ?? "").toLowerCase()),
+            )
+          : result.data
       options.push(
-        ...result.data.map((item): AutocompleteOption => {
+        ...entries.map((item): AutocompleteOption => {
           if (input.visible === "directory") {
             const directory = directorySearch ? directoryAutocompleteResultValue(item.path, directorySearch) : item.path
             return {

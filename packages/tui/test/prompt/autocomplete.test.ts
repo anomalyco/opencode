@@ -43,6 +43,11 @@ describe("directoryAutocompleteSearch", () => {
       prefix: "~/",
       query: "pro",
     })
+    expect(directoryAutocompleteSearch("~/projects/open", "/project", "/home/user")).toEqual({
+      directory: "/home/user/projects",
+      prefix: "~/projects/",
+      query: "open",
+    })
   })
 
   test("searches from parent prefixes", () => {
@@ -68,6 +73,16 @@ describe("directoryAutocompleteSearch", () => {
       directory: "/project",
       prefix: "",
       query: "src",
+    })
+    expect(directoryAutocompleteSearch("packages/core", "/project", "/home/user")).toEqual({
+      directory: "/project/packages",
+      prefix: "packages/",
+      query: "core",
+    })
+    expect(directoryAutocompleteSearch("/root/pro", "/project", "/home/user")).toEqual({
+      directory: "/root",
+      prefix: "/root/",
+      query: "pro",
     })
   })
 })

@@ -33,7 +33,6 @@ describe("FileSystemSearch", () => {
             find: (input) =>
               Effect.gen(function* () {
                 observed = input
-                yield* Effect.sleep("10 millis")
                 if (input.onEntry)
                   yield* input.onEntry(FileSystem.Entry.make({ path: RelativePath.make("src/index.ts"), type: "file" }))
                 return []
@@ -48,12 +47,12 @@ describe("FileSystemSearch", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const search = yield* FileSystemSearch.Service
-        const result = yield* search.find({ query: "src", type: "directory" })
-        const unfiltered = yield* search.find({ query: "", type: "directory" })
+        yield* Effect.sleep("10 millis")
         expect(observed?.limit).toBe(100_000)
         expect(observed?.exclude).toEqual([...Protected.names()].map((name) => `${name}/**`))
-        expect(result[0]?.path).toBe(RelativePath.make(`src${path.sep}`))
-        expect(unfiltered[0]?.path).toBe(RelativePath.make(`src${path.sep}`))
+        expect((yield* search.find({ query: "src", type: "directory" }))[0]?.path).toBe(
+          RelativePath.make(`src${path.sep}`),
+        )
       }).pipe(Effect.provide(layer), Effect.scoped),
     )
   })

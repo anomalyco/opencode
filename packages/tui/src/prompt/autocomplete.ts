@@ -22,27 +22,23 @@ export function slashArgumentAutocomplete(value: string, offset: number, command
 }
 
 export function directoryAutocompleteSearch(query: string, directory: string, home: string) {
-  if (query === "~" || query.startsWith("~/")) {
-    return {
-      directory: home,
-      prefix: "~/",
-      query: query === "~" ? "" : query.slice(2),
-    }
-  }
+  if (query === "~") return { directory: home, prefix: "~/", query: "" }
+  if (query.startsWith("~/")) return directorySearch(query.slice(2), home, "~/")
+  if (/^(?:\.\.\/)*\.\.$/.test(query))
+    return { directory: path.resolve(directory, query), prefix: query + "/", query: "" }
+  if (query.startsWith("/")) return directorySearch(query.slice(1), path.parse(directory).root, "/")
+  return directorySearch(query, directory, "")
+}
 
-  const parts = query.split("/")
-  const parents = parts.findIndex((part) => part !== "..")
-  const count = parents === -1 ? parts.length : parents
-  if (count > 0) {
-    const prefix = "../".repeat(count)
-    return {
-      directory: path.resolve(directory, prefix),
-      prefix,
-      query: parts.slice(count).join("/"),
-    }
+function directorySearch(query: string, root: string, prefix: string) {
+  const separator = query.lastIndexOf("/")
+  if (separator === -1) return { directory: root, prefix, query }
+  const parent = query.slice(0, separator + 1)
+  return {
+    directory: path.resolve(root, parent),
+    prefix: prefix + parent,
+    query: query.slice(separator + 1),
   }
-
-  return { directory, prefix: "", query }
 }
 
 export function directoryAutocompleteResultValue(
