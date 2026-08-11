@@ -26,6 +26,8 @@ export type Data = {
 
 export type Draft = {
   list: () => readonly Types.DeepMutable<File>[]
+  // Map insertion order is render order: config adds global then nearest-to-farthest project files;
+  // sibling contributors interleave by transform registration order.
   add: (file: File) => void
   update: (path: string, update: (file: Types.DeepMutable<File>) => void) => void
   remove: (path: string) => void
@@ -33,6 +35,8 @@ export type Draft = {
 }
 
 export interface Interface extends State.Transformable<Draft> {
+  // Discovery policy lives here because internal plugins have no per-composition options channel.
+  // Move it into plugin config once plugins can consume their own options.
   readonly project: boolean
   readonly list: () => Effect.Effect<File[] | Instructions.Unavailable>
   readonly load: () => Effect.Effect<Instructions.List>

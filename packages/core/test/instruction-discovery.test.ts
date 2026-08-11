@@ -386,7 +386,8 @@ describe("ConfigInstructionPlugin.Plugin", () => {
         ),
       )
 
-      expect(observed.values).toEqual([{ targets: ["AGENTS.md"], start: "/repo", stop: "/repo" }])
+      const repo = path.resolve("/repo")
+      expect(observed.values).toEqual([{ targets: ["AGENTS.md"], start: repo, stop: repo }])
     }),
   )
 })
