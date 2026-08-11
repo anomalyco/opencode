@@ -10,6 +10,11 @@ const dir = import.meta.dirname
 function rawTextPlugin(): Plugin {
   return {
     name: "opencode:raw-text",
+    // "pre" is load-bearing for .txt: Vite's built-in asset plugin claims
+    // known asset types (.txt among them) ahead of normal-priority plugins,
+    // replacing the import with an asset URL string instead of the content.
+    // .md only ever worked without it because .md is not a known asset type.
+    enforce: "pre",
     async load(id) {
       if (!id.endsWith(".md") && !id.endsWith(".txt")) return
       return `export default ${JSON.stringify(await readFile(id, "utf8"))}`

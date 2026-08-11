@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { chmod, copyFile, mkdir, mkdtemp, realpath, rename, rm, stat, writeFile } from "node:fs/promises"
+import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { build } from "vite"
@@ -57,6 +57,25 @@ const builder =
     : undefined
 const appArchive = await buildAppArchive(Script.channel)
 
+// Vite silently rewrites text imports of known asset types (.txt) to asset
+// URL strings when the raw-text plugin doesn't intercept them first — the
+// bundle still builds and `--help` still runs, so only content assertions
+// catch it. Guards the models.dev snapshot and the prompt/tool description
+// text that ships inside the bundle.
+async function assertTextImportsInlined(bundlePath: string) {
+  const bundle = await readFile(bundlePath, "utf8")
+  const markers = [
+    { marker: '"zhipuai"', source: "models-dev snapshot" },
+    { marker: "/assets/snapshot", source: "models-dev snapshot inlined as asset URL", forbidden: true },
+    { marker: '="/assets/', source: "text import inlined as asset URL", forbidden: true },
+  ]
+  for (const { marker, source, forbidden } of markers) {
+    const present = bundle.includes(marker)
+    if (forbidden ? present : !present)
+      throw new Error(`${bundlePath}: ${source} — text imports are not inlined as content (marker ${marker})`)
+  }
+}
+
 for (const target of targets) {
   console.log(`building cli-node-${targetName(target)}`)
   const assets = await collectNodeAssets(target)
@@ -71,6 +90,7 @@ for (const target of targets) {
   }
   await copyNodeAssets(assets)
   await build(mainConfig(input))
+  await assertTextImportsInlined("dist-node/opencode.mjs")
 
   const host = target.platform === process.platform && target.arch === process.arch
   if (host) {

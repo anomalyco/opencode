@@ -12,10 +12,13 @@ if (!response.ok) {
 }
 const text = await response.text()
 const parsed: unknown = JSON.parse(text)
-if (typeof parsed !== "object" || parsed === null || Object.keys(parsed).length === 0) {
-  console.error("Fetched catalog is empty; refusing to write snapshot")
+// A floor, not equality: guards against committing an error page or a
+// truncated body that still parses as a small object.
+const MINIMUM_PROVIDERS = 100
+if (typeof parsed !== "object" || parsed === null || Object.keys(parsed).length < MINIMUM_PROVIDERS) {
+  console.error(`Fetched catalog has fewer than ${MINIMUM_PROVIDERS} providers; refusing to write snapshot`)
   process.exit(1)
 }
 const target = new URL("../src/models-dev/snapshot.txt", import.meta.url)
 await Bun.write(target, text)
-console.log(`Wrote ${Object.keys(parsed).length} providers (${text.length} bytes) to ${target.pathname}`)
+console.log(`Wrote ${Object.keys(parsed).length} providers (${text.length} bytes) to ${Bun.fileURLToPath(target)}`)
