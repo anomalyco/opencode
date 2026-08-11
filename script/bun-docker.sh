@@ -19,7 +19,14 @@ fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 UID_GID="$(id -u):$(id -g)"
-LOCAL_IMAGE="opencode-bun:1.3.14-1"
+BUN_VERSION="$(sed -nE 's/.*"packageManager"[[:space:]]*:[[:space:]]*"bun@([^"]+)".*/\1/p' "$ROOT/package.json" | head -n1)"
+if [[ "$BUN_VERSION" == "" ]]; then
+  echo "Unable to determine Bun version from package.json packageManager field." >&2
+  exit 1
+fi
+
+LOCAL_IMAGE="opencode-bun:${BUN_VERSION}-build"
+BASE_IMAGE="oven/bun:${BUN_VERSION}"
 
 TTY_ARGS=()
 if [[ -t 0 && -t 1 ]]; then
@@ -27,8 +34,8 @@ if [[ -t 0 && -t 1 ]]; then
 fi
 
 if ! docker image inspect "$LOCAL_IMAGE" >/dev/null 2>&1; then
-  docker build -t "$LOCAL_IMAGE" -f - "$ROOT" <<'EOF'
-FROM oven/bun:1.3.14
+  docker build -t "$LOCAL_IMAGE" -f - "$ROOT" <<EOF
+FROM ${BASE_IMAGE}
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ git \
   && rm -rf /var/lib/apt/lists/*

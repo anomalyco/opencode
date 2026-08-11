@@ -48,8 +48,9 @@ script/bun-docker.sh --version
 script/bun-docker.sh install
 ```
 
-On first run this script builds a local image (`opencode-bun:1.3.14-1`) with
-`python3`, `make`, `g++`, and `git` so native package installs work.
+On first run this script builds a local image (`opencode-bun:<bun-version>-build`)
+using the Bun version from `package.json` (`packageManager`), with `python3`,
+`make`, `g++`, and `git` so native package installs work.
 
 Run package-scoped checks the same way:
 
