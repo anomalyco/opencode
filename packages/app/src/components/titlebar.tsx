@@ -39,6 +39,7 @@ import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 import { normalizeSessionInfo } from "@/utils/session"
+import { useMenuFallbackCommands } from "./use-menu-fallback-commands"
 
 const legacyTitlebarHeight = 40
 const v2TitlebarHeight = 36
@@ -68,6 +69,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const language = useLanguage()
   const settings = useSettings()
   const server = useServer()
+  useMenuFallbackCommands()
   const navigate = useNavigate()
   const location = useLocation()
   const params = useParams()
