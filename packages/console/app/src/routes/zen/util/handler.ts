@@ -786,8 +786,8 @@ export async function handler(
     )
 
     if (!data) throw new AuthError(t("zen.api.error.invalidApiKey"))
+    if (data.workspace.isBlocked) throw new AuthError(t("zen.api.error.workspaceBlocked"))
     if (
-      data.workspace.isBlocked ||
       (data.workspace.isFlaggedByAnthropic && modelInfo.id.startsWith("claude-")) ||
       (data.workspace.isFlaggedByOpenAI && modelInfo.id.startsWith("gpt-"))
     )
