@@ -29,30 +29,37 @@ interface ToolDraft {
 
 interface ToolHooks {
   readonly "execute.before": {
-    readonly tool: string
-    readonly sessionID: Session.ID
-    readonly agent: Agent.ID
-    readonly messageID: SessionMessage.ID
-    readonly id: Tool.CallID
-    input: unknown
+    readonly event: {
+      readonly tool: string
+      readonly sessionID: Session.ID
+      readonly agent: Agent.ID
+      readonly messageID: SessionMessage.ID
+      readonly id: Tool.CallID
+      input: unknown
+    }
+    // Throwing rejects the call before the tool runs.
+    readonly failure: Tool.Error
   }
   readonly "execute.after": {
-    readonly tool: string
-    readonly sessionID: Session.ID
-    readonly agent: Agent.ID
-    readonly messageID: SessionMessage.ID
-    readonly id: Tool.CallID
-    readonly input: unknown
-  } & (
-    | {
-        readonly status: "completed"
-        result: Tool.Result
-      }
-    | {
-        readonly status: "error"
-        error: Tool.Error
-      }
-  )
+    readonly event: {
+      readonly tool: string
+      readonly sessionID: Session.ID
+      readonly agent: Agent.ID
+      readonly messageID: SessionMessage.ID
+      readonly id: Tool.CallID
+      readonly input: unknown
+    } & (
+      | {
+          readonly status: "completed"
+          result: Tool.Result
+        }
+      | {
+          readonly status: "error"
+          error: Tool.Error
+        }
+    )
+    readonly failure: never
+  }
 }
 
 export interface ToolDomain {

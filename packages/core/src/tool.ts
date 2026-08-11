@@ -88,7 +88,7 @@ const layer = Layer.effect(
       input: unknown,
       context: Tool.Context,
     ) {
-      const beforeEvent: PluginHooks.Domains["tool"]["execute.before"] = {
+      const beforeEvent: PluginHooks.Domains["tool"]["execute.before"]["event"] = {
         tool: name,
         sessionID: context.sessionID,
         agent: context.agent,
@@ -110,7 +110,7 @@ const layer = Layer.effect(
         input: beforeEvent.input,
       }
       if ("failure" in execution) {
-        const afterEvent: PluginHooks.Domains["tool"]["execute.after"] = {
+        const afterEvent: PluginHooks.Domains["tool"]["execute.after"]["event"] = {
           ...base,
           status: "error",
           error: execution.failure,
@@ -118,7 +118,7 @@ const layer = Layer.effect(
         yield* hooks.trigger("tool", "execute.after", afterEvent)
         return yield* afterEvent.error
       }
-      const afterEvent: PluginHooks.Domains["tool"]["execute.after"] = {
+      const afterEvent: PluginHooks.Domains["tool"]["execute.after"]["event"] = {
         ...base,
         status: "completed",
         result: {

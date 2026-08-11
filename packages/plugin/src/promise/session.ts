@@ -31,9 +31,9 @@ export interface SessionHttpResponse {
 }
 
 export interface SessionHooks {
-  readonly context: SessionContext
-  readonly "http.request": SessionHttpRequest
-  readonly "http.response": SessionHttpResponse
+  readonly context: { readonly event: SessionContext; readonly failure: never }
+  readonly "http.request": { readonly event: SessionHttpRequest; readonly failure: never }
+  readonly "http.response": { readonly event: SessionHttpResponse; readonly failure: never }
 }
 
 export type SessionDomain = Pick<

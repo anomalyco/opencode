@@ -9,7 +9,7 @@ export interface ShellCreateBefore {
 }
 
 export interface ShellHooks {
-  readonly "create.before": ShellCreateBefore
+  readonly "create.before": { readonly event: ShellCreateBefore; readonly failure: never }
 }
 
 export interface ShellDomain {

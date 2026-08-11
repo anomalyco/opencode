@@ -4,16 +4,22 @@ import type { Hooks } from "./registration.js"
 
 export interface AISDKHooks {
   sdk: {
-    readonly model: Model.Info
-    readonly package: string
-    readonly options: Record<string, any>
-    sdk?: any
+    readonly event: {
+      readonly model: Model.Info
+      readonly package: string
+      readonly options: Record<string, any>
+      sdk?: any
+    }
+    readonly failure: never
   }
   language: {
-    readonly model: Model.Info
-    readonly sdk: any
-    readonly options: Record<string, any>
-    language?: LanguageModelV3
+    readonly event: {
+      readonly model: Model.Info
+      readonly sdk: any
+      readonly options: Record<string, any>
+      language?: LanguageModelV3
+    }
+    readonly failure: never
   }
 }
 

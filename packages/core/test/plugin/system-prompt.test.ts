@@ -25,7 +25,7 @@ const makeHost = Effect.gen(function* () {
   return yield* PluginHost.make(plugins)
 })
 
-const context = (id: string, system = fallback): SessionHooks["context"] => ({
+const context = (id: string, system = fallback): SessionHooks["context"]["event"] => ({
   sessionID: Session.ID.make("ses_system_prompt"),
   agent: Agent.ID.make("build"),
   model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make(id) }),

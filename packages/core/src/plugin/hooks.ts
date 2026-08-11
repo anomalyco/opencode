@@ -3,7 +3,8 @@ export * as PluginHooks from "./hooks"
 import type { AISDKHooks } from "@opencode-ai/plugin/effect/aisdk"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import type { ShellHooks } from "@opencode-ai/plugin/effect/shell"
-import type { ToolFailures, ToolHooks } from "@opencode-ai/plugin/effect/tool"
+import type { HookSpec } from "@opencode-ai/plugin/effect/registration"
+import type { ToolHooks } from "@opencode-ai/plugin/effect/tool"
 import { Context, Effect, Layer, Scope } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { State } from "../state"
@@ -15,29 +16,23 @@ export interface Domains {
   readonly tool: ToolHooks
 }
 
-type NoFailures<Spec> = { readonly [Name in keyof Spec]: never }
-
-// Failure channel for each hook event. Only tool execute.before may fail: a Tool.Error rejects the call before it runs.
-interface Failures extends Record<keyof Domains, unknown> {
-  readonly aisdk: NoFailures<AISDKHooks>
-  readonly session: NoFailures<SessionHooks>
-  readonly shell: NoFailures<ShellHooks>
-  readonly tool: ToolFailures
-}
+// Each hook event carries its own failure channel in its spec. The HookSpec intersection
+// only tells the checker that generic lookups have event and failure keys.
+type Spec<Domain extends keyof Domains, Name extends keyof Domains[Domain]> = Domains[Domain][Name] & HookSpec
 
 type Callback<Event, Error> = (event: Event) => Effect.Effect<void, Error>
 
 export interface Interface {
-  readonly register: <Domain extends keyof Domains, Name extends keyof Domains[Domain] & keyof Failures[Domain]>(
+  readonly register: <Domain extends keyof Domains, Name extends keyof Domains[Domain]>(
     domain: Domain,
     name: Name,
-    callback: Callback<Domains[Domain][Name], Failures[Domain][Name]>,
+    callback: Callback<Spec<Domain, Name>["event"], Spec<Domain, Name>["failure"]>,
   ) => Effect.Effect<State.Registration, never, Scope.Scope>
-  readonly trigger: <Domain extends keyof Domains, Name extends keyof Domains[Domain] & keyof Failures[Domain]>(
+  readonly trigger: <Domain extends keyof Domains, Name extends keyof Domains[Domain]>(
     domain: Domain,
     name: Name,
-    event: Domains[Domain][Name],
-  ) => Effect.Effect<Domains[Domain][Name], Failures[Domain][Name]>
+    event: Spec<Domain, Name>["event"],
+  ) => Effect.Effect<Spec<Domain, Name>["event"], Spec<Domain, Name>["failure"]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PluginHooks") {}
@@ -66,9 +61,11 @@ const layer = Layer.effect(
 
     const trigger: Interface["trigger"] = Effect.fn("PluginHooks.trigger")(function* (domain, name, event) {
       for (const callback of callbacks.get(key(domain, name)) ?? []) {
-        const result: Effect.Effect<void, Failures[typeof domain][typeof name]> = Reflect.apply(callback, undefined, [
-          event,
-        ])
+        const result: Effect.Effect<void, Spec<typeof domain, typeof name>["failure"]> = Reflect.apply(
+          callback,
+          undefined,
+          [event],
+        )
         yield* result
       }
       return event

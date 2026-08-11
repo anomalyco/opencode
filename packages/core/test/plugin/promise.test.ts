@@ -207,7 +207,7 @@ describe("fromPromise", () => {
           },
         }),
       ).effect(host)
-      const event: SessionHooks["context"] = {
+      const event: SessionHooks["context"]["event"] = {
         sessionID: Session.ID.make("ses_promise_session_context"),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("model") }),
