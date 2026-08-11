@@ -116,6 +116,7 @@ test("preserves temperature support from existing provider models", async () => 
 
   expect(models["gpt-4o"].capabilities.temperature).toBe(true)
   expect(models["brand-new"].capabilities.temperature).toBe(true)
+  expect(result.pickerEnabled.has("auto")).toBe(true)
 })
 
 test("converts Copilot AIC token prices to USD per million tokens", async () => {
@@ -185,6 +186,32 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
   })
   expect(models["incomplete-internal-model"]).toBeUndefined()
   expect(models["ignored-non-chat-record"]).toBeUndefined()
+})
+
+test("keeps sparse Copilot auto model selectable", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "auto",
+              name: "Auto",
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const result = await CopilotModels.get("https://api.githubcopilot.com")
+
+  expect(result.models.auto.api.id).toBe("auto")
+  expect(result.models.auto.api.npm).toBe("@ai-sdk/github-copilot")
+  expect(result.models.auto.capabilities.toolcall).toBe(true)
+  expect(result.pickerEnabled.has("auto")).toBe(true)
 })
 
 test("uses zero cost when Copilot reports a zero billing batch size", async () => {
@@ -274,9 +301,74 @@ test("records Copilot advertised responses endpoint for non-GPT model IDs", asyn
     ),
   ) as unknown as typeof fetch
 
-  const model = (await CopilotModels.get("https://api.githubcopilot.com")).models["mai-code-1-flash-picker"]
+  const result = await CopilotModels.get("https://api.githubcopilot.com")
+  const model = result.models["mai-code-1-flash-picker"]
 
   expect("endpoint" in model.api ? model.api.endpoint : undefined).toBe("responses")
+  expect(result.models.auto.options.endpoints).toEqual({ "mai-code-1-flash-picker": "responses" })
+})
+
+test("falls back to auto when Copilot picker flags are all false", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: false,
+              id: "gpt-5.4-mini",
+              name: "GPT-5.4 mini",
+              version: "gpt-5.4-mini",
+              policy: {
+                state: "enabled",
+              },
+              capabilities: {
+                family: "gpt-5.4-mini",
+                limits: {
+                  max_context_window_tokens: 400000,
+                  max_output_tokens: 128000,
+                  max_prompt_tokens: 272000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+            {
+              model_picker_enabled: false,
+              id: "gpt-5.5",
+              name: "GPT-5.5",
+              version: "gpt-5.5",
+              policy: {
+                state: "disabled",
+              },
+              capabilities: {
+                family: "gpt-5.5",
+                limits: {
+                  max_context_window_tokens: 400000,
+                  max_output_tokens: 128000,
+                  max_prompt_tokens: 272000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const result = await CopilotModels.get("https://api.githubcopilot.com")
+
+  expect(result.models.auto.api.id).toBe("auto")
+  expect(result.pickerEnabled.has("auto")).toBe(true)
+  expect(result.pickerEnabled.has("gpt-5.4-mini")).toBe(false)
+  expect(result.models["gpt-5.5"]).toBeUndefined()
 })
 
 test("clears existing variants so refreshed models calculate provider-specific variants", async () => {
