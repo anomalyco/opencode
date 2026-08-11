@@ -14,6 +14,7 @@ import { GitLabPlugin } from "./provider/gitlab"
 import { GoogleVertexPlugin } from "./provider/google-vertex"
 import { GroqPlugin } from "./provider/groq"
 import { KiloPlugin } from "./provider/kilo"
+import { KimiForCodingPlugin } from "./provider/kimi-for-coding"
 import { LLMGatewayPlugin } from "./provider/llmgateway"
 import { MistralPlugin } from "./provider/mistral"
 import { NvidiaPlugin } from "./provider/nvidia"
@@ -34,6 +35,7 @@ import type { PluginInternal } from "./internal"
 export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   AlibabaPlugin,
   AmazonBedrockPlugin,
+  KimiForCodingPlugin,
   AnthropicPlugin,
   AzurePlugin,
   CerebrasPlugin,
