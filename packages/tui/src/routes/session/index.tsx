@@ -2455,7 +2455,6 @@ function InlineTool(props: {
   children: JSX.Element
   part: SessionMessageAssistantTool
   onClick?: () => void
-  onErrorClick?: () => void
 }) {
   const theme = useTheme()
   const renderer = useRenderer()
@@ -2504,7 +2503,6 @@ function InlineTool(props: {
         if (renderer.getSelection()?.getSelectedText()) return
         if (failed()) {
           setErrorExpanded((value) => !value)
-          props.onErrorClick?.()
           return
         }
         props.onClick?.()
@@ -3021,15 +3019,73 @@ function executeCalls(value: unknown): ExecuteCall[] {
   })
 }
 
-export function executeDisplay(value: unknown, expanded: boolean) {
-  if (!expanded) return "execute"
-  return [
-    "execute",
-    ...executeCalls(value).map((call) => {
-      const args = primitiveInputSummary(call.input ?? {})
-      return `↳ ${call.tool}${args ? ` ${args}` : ""}${call.status === "error" ? " (failed)" : ""}`
-    }),
-  ].join("\n")
+export function executeCallSummary(call: ExecuteCall) {
+  const args = primitiveInputSummary(call.input ?? {})
+  return `↳ ${call.tool}${call.status === "error" ? " (failed)" : ""}${args ? ` ${args}` : ""}`
+}
+
+function ExecuteCallView(props: { call: ExecuteCall; error?: string }) {
+  const theme = useTheme()
+  const renderer = useRenderer()
+  const [expanded, setExpanded] = createSignal(false)
+  const [hover, setHover] = createSignal(false)
+  const input = createMemo(() => Object.entries(props.call.input ?? {}))
+  const expandable = createMemo(() => input().length > 0 || Boolean(props.error))
+  const labelWidth = createMemo(() => Math.min(16, Math.max(8, ...input().map(([key]) => key.length + 2))))
+
+  return (
+    <box
+      paddingLeft={6}
+      onMouseOver={() => expandable() && setHover(true)}
+      onMouseOut={() => setHover(false)}
+      onMouseUp={() => {
+        if (!expandable() || renderer.getSelection()?.getSelectedText()) return
+        setExpanded((value) => !value)
+      }}
+    >
+      <text
+        wrapMode="none"
+        truncate
+        fg={
+          props.call.status === "error"
+            ? theme.text.feedback.error.default
+            : hover()
+              ? theme.text.default
+              : theme.text.subdued
+        }
+      >
+        {executeCallSummary(props.call)}
+      </text>
+      <Show when={expanded()}>
+        <box paddingLeft={2} paddingTop={1} gap={1}>
+          <For each={input()}>
+            {([key, value]) => (
+              <box flexDirection="row">
+                <text width={labelWidth()} flexShrink={0} fg={theme.text.subdued}>
+                  {key}
+                </text>
+                <text flexGrow={1} wrapMode="word" fg={theme.text.default}>
+                  {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
+                </text>
+              </box>
+            )}
+          </For>
+          <Show when={props.error}>
+            {(error) => (
+              <box flexDirection="row">
+                <text width={labelWidth()} flexShrink={0} fg={theme.text.feedback.error.default}>
+                  error
+                </text>
+                <text flexGrow={1} wrapMode="word" fg={theme.text.feedback.error.default}>
+                  {error()}
+                </text>
+              </box>
+            )}
+          </Show>
+        </box>
+      </Show>
+    </box>
+  )
 }
 
 // The `execute` tool streams child tool calls through metadata, not a child session like Task.
@@ -3042,9 +3098,6 @@ function Execute(props: ToolProps) {
   const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
   const showOutput = createMemo(() => output() && hasRuntimeError())
-  const [expanded, setExpanded] = createSignal(false)
-  const expandable = createMemo(() => calls().length > 0 || Boolean(showOutput()))
-  const toggle = () => setExpanded((value) => !value)
 
   return (
     <>
@@ -3055,12 +3108,13 @@ function Execute(props: ToolProps) {
         pending="execute"
         complete={true}
         part={props.part}
-        onClick={expandable() ? toggle : undefined}
-        onErrorClick={expandable() ? toggle : undefined}
       >
-        {executeDisplay(props.metadata.toolCalls, expanded())}
+        execute
       </InlineTool>
-      <Show when={expanded() && showOutput()}>
+      <For each={calls()}>
+        {(call) => <ExecuteCallView call={call} error={call.status === "error" ? outputPreview() : undefined} />}
+      </For>
+      <Show when={calls().length === 0 && showOutput()}>
         <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (

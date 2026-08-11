@@ -3,7 +3,7 @@ import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
 import {
   InlineToolRow,
-  executeDisplay,
+  executeCallSummary,
   isBackgroundSubagent,
   parseApplyPatchFiles,
   parseDiagnostics,
@@ -183,15 +183,16 @@ describe("TUI inline tool wrapping", () => {
     expect(parseQuestionAnswers({})).toBeUndefined()
   })
 
-  test("collapses execute calls until expanded", () => {
-    const calls = [
-      { tool: "session.prompt", status: "completed", input: { sessionID: "ses_example", notify: true } },
-      { tool: "session.get", status: "error", input: { nested: { hidden: true } } },
-    ]
-
-    expect(executeDisplay(calls, false)).toBe("execute")
-    expect(executeDisplay(calls, true)).toBe(
-      "execute\n↳ session.prompt [sessionID=ses_example, notify=true]\n↳ session.get (failed)",
+  test("summarizes execute calls on one line", () => {
+    expect(
+      executeCallSummary({
+        tool: "session.prompt",
+        status: "completed",
+        input: { sessionID: "ses_example", notify: true },
+      }),
+    ).toBe("↳ session.prompt [sessionID=ses_example, notify=true]")
+    expect(executeCallSummary({ tool: "session.get", status: "error", input: { nested: { hidden: true } } })).toBe(
+      "↳ session.get (failed)",
     )
   })
 
