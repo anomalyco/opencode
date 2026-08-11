@@ -1652,7 +1652,12 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
   const ctx = use()
   const theme = useTheme()
   const text = () => {
-    if (props.message.type === "agent-switched") return `Switched agent to ${props.message.agent}`
+    if (props.message.type === "agent-switched") {
+      const agent = Locale.titlecase(props.message.agent)
+      if (props.message.previous && props.message.previous !== props.message.agent)
+        return `Switched agent from ${Locale.titlecase(props.message.previous)} to ${agent}`
+      return `Switched agent to ${agent}`
+    }
     if (props.message.type === "model-switched")
       return switchLabel(props.message.model, ctx.models(), props.message.previous)
     return ""

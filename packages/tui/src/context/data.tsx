@@ -386,7 +386,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             },
           }))
           break
-        case "session.agent.selected":
+        case "session.agent.selected": {
+          const previous = store.session.info[event.data.sessionID]?.agent
           if (store.session.info[event.data.sessionID])
             setStore("session", "info", event.data.sessionID, "agent", event.data.agent)
           message.update(event.data.sessionID, (draft, index) => {
@@ -394,10 +395,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               id: messageIDFromEvent(event.id),
               type: "agent-switched",
               agent: event.data.agent,
+              previous,
               time: { created: event.created },
             })
           })
           break
+        }
         case "session.model.selected":
           if (store.session.info[event.data.sessionID])
             setStore("session", "info", event.data.sessionID, "model", event.data.model)
