@@ -178,6 +178,8 @@ export const dict = {
   "command.session.redo.description": "إعادة الرسالة التي تم التراجع عنها",
   "command.session.compact": "ضغط الجلسة",
   "command.session.compact.description": "تلخيص الجلسة لتقليل حجم السياق",
+  "command.session.background": "تشغيل الوكلاء الفرعيين في الخلفية",
+  "command.session.background.description": "افصل الوكلاء الفرعيين الذين يحجبون هذه الجلسة وتابع تشغيلهم في الخلفية",
   "command.session.fork": "تشعب من الرسالة",
   "command.session.fork.description": "إنشاء جلسة جديدة من رسالة سابقة",
   "command.session.share": "مشاركة الجلسة",
@@ -617,6 +619,7 @@ export const dict = {
   "toast.session.export.success.description": "تم حفظ الجلسة في \u2068{{filename}}\u2069",
   "toast.session.export.failed.title": "فشل تصدير الجلسة",
   "toast.session.export.failed.description": "حدث خطأ أثناء تصدير الجلسة",
+  "toast.session.background.failed.title": "تعذر تشغيل الوكلاء الفرعيين في الخلفية",
 
   "toast.session.listFailed.title": "فشل تحميل الجلسات لـ {{project}}",
   "toast.update.title": "تحديث متاح",

@@ -178,6 +178,9 @@ export const dict = {
   "command.session.redo.description": "元に戻したメッセージをやり直す",
   "command.session.compact": "セッションを圧縮",
   "command.session.compact.description": "セッションを要約してコンテキストサイズを削減",
+  "command.session.background": "サブエージェントをバックグラウンドで実行",
+  "command.session.background.description":
+    "このセッションをブロックしているサブエージェントを切り離し、バックグラウンドで続行します",
   "command.session.fork": "メッセージからフォーク",
   "command.session.fork.description": "以前のメッセージから新しいセッションを作成",
   "command.session.share": "セッションを共有",
@@ -619,6 +622,7 @@ export const dict = {
   "toast.session.export.success.description": "セッションを {{filename}} に保存しました",
   "toast.session.export.failed.title": "セッションのエクスポートに失敗しました",
   "toast.session.export.failed.description": "セッションのエクスポート中にエラーが発生しました",
+  "toast.session.background.failed.title": "サブエージェントをバックグラウンドに移行できませんでした",
 
   "toast.session.listFailed.title": "{{project}}のセッション読み込みに失敗しました",
   "toast.update.title": "アップデートが利用可能です",

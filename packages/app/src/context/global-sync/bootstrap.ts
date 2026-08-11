@@ -28,7 +28,7 @@ import { getFilename } from "@opencode-ai/core/util/path"
 import { retry } from "@opencode-ai/core/util/retry"
 import { batch } from "solid-js"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
-import type { State, VcsCache } from "./types"
+import { CAPABILITIES_DEFAULT, type ExperimentalCapabilities, type State, type VcsCache } from "./types"
 import type { ServerSession } from "../server-session"
 import {
   cmp,
@@ -325,6 +325,18 @@ export const loadReferencesQuery = (
         return api.list({ location: { directory } }).then((result) => result.data)
       }).catch(() => []),
     placeholderData: [],
+  })
+
+export const loadCapabilitiesQuery = (scope: ServerScope, directory: string, sdk: OpencodeClient) =>
+  queryOptions<ExperimentalCapabilities>({
+    queryKey: [scope, directory, "capabilities"] as const,
+    // Older servers do not expose /experimental/capabilities; treat any failure as "no capabilities".
+    queryFn: () =>
+      sdk.experimental.capabilities
+        .get()
+        .then((result) => ({ backgroundSubagents: result.data?.backgroundSubagents === true }))
+        .catch(() => CAPABILITIES_DEFAULT),
+    placeholderData: CAPABILITIES_DEFAULT,
   })
 
 export async function bootstrapDirectory(input: {

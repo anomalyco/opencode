@@ -172,6 +172,9 @@ export const dict = {
   "command.session.redo.description": "Obnoviť poslednú vrátenú správu",
   "command.session.compact": "Zhutniť reláciu",
   "command.session.compact.description": "Zhrnúť reláciu na zmenšenie kontextu",
+  "command.session.background": "Spustiť podagentov na pozadí",
+  "command.session.background.description":
+    "Odpojte podagentov blokujúcich túto reláciu a nechajte ich pokračovať na pozadí",
   "command.session.fork": "Vytvoriť vetvu zo správy",
   "command.session.fork.description": "Vytvoriť novú reláciu z predchádzajúcej správy",
   "command.session.share": "Zdieľať reláciu",
@@ -619,6 +622,7 @@ export const dict = {
   "toast.session.export.success.description": "Relácia uložená do {{filename}}",
   "toast.session.export.failed.title": "Export relácie zlyhal",
   "toast.session.export.failed.description": "Pri exporte relácie došlo k chybe",
+  "toast.session.background.failed.title": "Nepodarilo sa spustiť podagentov na pozadí",
   "toast.session.listFailed.title": "Nepodarilo sa načítať relácie pre {{project}}",
   "toast.project.reloadFailed.title": "Nepodarilo sa znovu načítať {{project}}",
   "toast.update.title": "Dostupná aktualizácia",

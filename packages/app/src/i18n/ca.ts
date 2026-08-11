@@ -174,6 +174,9 @@ export const dict = {
   "command.session.redo.description": "Torna a fer l'últim missatge desfet",
   "command.session.compact": "Sessió compacta",
   "command.session.compact.description": "Resumeix la sessió per reduir la mida del context",
+  "command.session.background": "Subagents en segon pla",
+  "command.session.background.description":
+    "Desvincula els subagents que bloquegen aquesta sessió i continua'ls en segon pla",
   "command.session.fork": "Bifurcació del missatge",
   "command.session.fork.description": "Crea una sessió nova a partir d'un missatge anterior",
   "command.session.share": "Compartir sessió",
@@ -624,6 +627,7 @@ export const dict = {
   "toast.session.export.success.description": "Sessió desada a {{filename}}",
   "toast.session.export.failed.title": "No s'ha pogut exportar la sessió",
   "toast.session.export.failed.description": "S'ha produït un error en exportar la sessió",
+  "toast.session.background.failed.title": "No s'han pogut passar els subagents a segon pla",
   "toast.session.listFailed.title": "No s'han pogut carregar les sessions de {{project}}",
   "toast.project.reloadFailed.title": "No s'ha pogut tornar a carregar {{project}}",
   "toast.update.title": "Actualització disponible",

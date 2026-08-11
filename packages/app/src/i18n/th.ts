@@ -184,6 +184,8 @@ export const dict = {
   "command.session.redo.description": "ทำซ้ำข้อความที่ถูกยกเลิกล่าสุด",
   "command.session.compact": "บีบอัดเซสชัน",
   "command.session.compact.description": "สรุปเซสชันเพื่อลดขนาดบริบท",
+  "command.session.background": "รันซับเอเจนต์ในเบื้องหลัง",
+  "command.session.background.description": "ปลดซับเอเจนต์ที่กำลังบล็อกเซสชันนี้และให้ทำงานต่อในเบื้องหลัง",
   "command.session.fork": "แตกแขนงจากข้อความ",
   "command.session.fork.description": "สร้างเซสชันใหม่จากข้อความก่อนหน้า",
   "command.session.share": "แชร์เซสชัน",
@@ -661,6 +663,7 @@ export const dict = {
   "toast.session.export.success.description": "บันทึกเซสชันไปยัง {{filename}} แล้ว",
   "toast.session.export.failed.title": "ไม่สามารถส่งออกเซสชัน",
   "toast.session.export.failed.description": "เกิดข้อผิดพลาดขณะส่งออกเซสชัน",
+  "toast.session.background.failed.title": "ไม่สามารถรันซับเอเจนต์ในเบื้องหลังได้",
 
   "toast.session.listFailed.title": "ไม่สามารถโหลดเซสชันสำหรับ {{project}}",
 

@@ -173,6 +173,9 @@ export const dict = {
   "command.session.redo.description": "Επανάληψη του τελευταίου μηνύματος που αναιρέθηκε",
   "command.session.compact": "Συμπαγής συνεδρία",
   "command.session.compact.description": "Συνοψήστε τη συνεδρία για να μειώσετε το μέγεθος του περιβάλλοντος",
+  "command.session.background": "Υποπράκτορες στο παρασκήνιο",
+  "command.session.background.description":
+    "Αποσυνδέστε τους υποπράκτορες που μπλοκάρουν αυτή τη συνεδρία και συνεχίστε τους στο παρασκήνιο",
   "command.session.fork": "Διακλάδωση από μήνυμα",
   "command.session.fork.description": "Δημιουργία νέας συνεδρίας από προηγούμενο μήνυμα",
   "command.session.share": "Κοινή χρήση συνεδρίας",
@@ -624,6 +627,7 @@ export const dict = {
   "toast.session.export.success.description": "Η συνεδρία αποθηκεύτηκε στο {{filename}}",
   "toast.session.export.failed.title": "Αποτυχία εξαγωγής συνεδρίας",
   "toast.session.export.failed.description": "Παρουσιάστηκε σφάλμα κατά την εξαγωγή της συνεδρίας",
+  "toast.session.background.failed.title": "Αποτυχία μεταφοράς των υποπρακτόρων στο παρασκήνιο",
   "toast.session.listFailed.title": "Αποτυχία φόρτωσης συνεδριών για {{project}}",
   "toast.project.reloadFailed.title": "Αποτυχία επαναφόρτωσης του {{project}}",
   "toast.update.title": "Διαθέσιμη ενημέρωση",

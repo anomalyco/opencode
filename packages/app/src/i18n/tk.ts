@@ -173,6 +173,9 @@ export const dict = {
   "command.session.redo.description": "Iň soňky yzyna gaýtarylan habary yzyna gaýtaryň",
   "command.session.compact": "Ykjam sessiýa",
   "command.session.compact.description": "Kontekstiň ululygyny azaltmak üçin sessiýany jemläň",
+  "command.session.background": "Kömekçi agentleri arka planda işlet",
+  "command.session.background.description":
+    "Bu sessiýany petikleýän kömekçi agentleri aýryň we olary arka planda dowam etdiriň",
   "command.session.fork": "Habardan şahalandyr",
   "command.session.fork.description": "Öňki habardan täze sessiýa dörediň",
   "command.session.share": "Sessiýa paýlaş",
@@ -621,6 +624,7 @@ export const dict = {
   "toast.session.export.success.description": "Sessiýa {{filename}}-de saklandy",
   "toast.session.export.failed.title": "Sessiýa eksport edip bilmedi",
   "toast.session.export.failed.description": "Sessiýa eksport edilende säwlik ýüze çykdy",
+  "toast.session.background.failed.title": "Kömekçi agentleri arka planda işletmek başartmady",
   "toast.session.listFailed.title": "{{project}} üçin sessiýalary ýükläp bilmedi",
   "toast.project.reloadFailed.title": "{{project}} ýükläp bilmedi",
   "toast.update.title": "Täzelenme elýeterli",
