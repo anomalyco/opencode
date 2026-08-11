@@ -3,6 +3,38 @@ import type { SessionConfigOption } from "@agentclientprotocol/sdk"
 import { makeACPFixture, makeSession, secondModel } from "./service-fixture"
 
 describe("acp service lifecycle", () => {
+  test("does not persist the first catalog variant when no explicit default exists", async () => {
+    const model = { ...secondModel, variants: [{ id: "none" }, { id: "high" }] }
+    await using fixture = makeACPFixture({
+      models: [model],
+      defaultModel: model,
+      fetch(request) {
+        if (request.method === "POST" && request.path === "/api/session") {
+          return Response.json({
+            data: makeSession("ses_default_variant", {
+              model: { providerID: model.providerID, id: model.id },
+            }),
+          })
+        }
+        return undefined
+      },
+    })
+
+    const created = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+
+    expect(fixture.requests).toContainEqual({
+      method: "POST",
+      path: "/api/session",
+      query: {},
+      body: {
+        location: { directory: "/workspace" },
+        agent: "build",
+        model: { providerID: "test", id: "second-model" },
+      },
+    })
+    expect(currentValue(created, "effort")).toBe("none")
+  })
+
   test("loads and forks with paginated replay while resume does not replay", async () => {
     await using fixture = makeACPFixture({
       fetch(request) {
