@@ -2,14 +2,24 @@ export * as PlanPlugin from "./plan"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Effect } from "effect"
+import { Effect, Stream } from "effect"
 import { Agent } from "../agent"
+
+const plan = Agent.ID.make("plan")
+
+const enter = `<system-reminder>
+You are in Plan mode. This is a read-only mode. Do not modify files or take other write actions. Do not delegate work to a subagent that can make edits. Investigate, ask questions, and propose a plan.
+</system-reminder>`
+
+const leave = `<system-reminder>
+You are no longer in Plan mode. The previous read-only restrictions no longer apply. You may edit files and use write tools again.
+</system-reminder>`
 
 export const Plugin = define({
   id: "opencode.plan",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.agent.transform((draft) => {
-      draft.update(Agent.ID.make("plan"), (item) => {
+      draft.update(plan, (item) => {
         item.name = Agent.Name.make("Plan")
         item.description = "Read-only agent for exploring the codebase and planning work before implementation."
         item.mode = "primary"
@@ -18,11 +28,28 @@ export const Plugin = define({
     })
 
     yield* ctx.tool.hook("execute.before", (event) => {
-      if (event.agent !== Agent.ID.make("plan")) return Effect.void
+      if (event.agent !== plan) return Effect.void
       if (event.tool !== "edit" && event.tool !== "write" && event.tool !== "patch") return Effect.void
       return new ToolFailure({
         message: `Cannot use ${event.tool} in Plan mode. You are in a read-only mode and must not modify files.`,
       })
     })
+
+    yield* ctx.event.subscribe().pipe(
+      Stream.filter((event) => event.type === "session.agent.selected"),
+      Stream.runForEach((event) => {
+        if (event.data.agent === event.data.previous) return Effect.void
+        const text = event.data.agent === plan ? enter : event.data.previous === plan ? leave : undefined
+        if (!text) return Effect.void
+        return ctx.session
+          .synthetic({
+            sessionID: event.data.sessionID,
+            text,
+            resume: false,
+          })
+          .pipe(Effect.catch(() => Effect.void))
+      }),
+      Effect.forkScoped({ startImmediately: true }),
+    )
   }),
 })
