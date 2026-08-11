@@ -25,10 +25,16 @@ import { Skill } from "@opencode-ai/schema/skill"
 import { stringWidth } from "../../util/string-width"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
 import { moveSelection, revealSelectionOffset } from "../../ui/select-controller"
+import {
+  directoryAutocompleteExactValue,
+  directoryAutocompleteResultValue,
+  directoryAutocompleteSearch,
+  slashArgumentAutocomplete,
+} from "../../prompt/autocomplete"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
-  visible: false | "@" | "/"
+  visible: false | "@" | "/" | "directory"
 }
 
 export type AutocompleteOption = {
@@ -40,12 +46,15 @@ export type AutocompleteOption = {
   isDirectory?: boolean
   onSelect?: () => void
   path?: string
+  absolute?: string
+  destructive?: { id: string; confirm: string; run: () => void }
   kind?: "skill"
 }
 
 export function Autocomplete(props: {
   value: string
   sessionID?: string
+  directoryOptions?: (query: string) => AutocompleteOption[]
   setPrompt: (input: (prompt: PromptInfo) => void) => void
   setExtmark: (part: PromptPartRef, extmarkId: number) => void
   anchor: () => BoxRenderable
@@ -76,6 +85,8 @@ export function Autocomplete(props: {
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
+  const [dismissedValue, setDismissedValue] = createSignal<string>()
+  const [confirming, setConfirming] = createSignal<string>()
 
   createEffect(() => {
     if (!store.visible) return
@@ -119,7 +130,9 @@ export function Autocomplete(props: {
     // Track props.value to make memo reactive to text changes
     props.value // <- there surely is a better way to do this, like making .input() reactive
 
-    return props.input().getTextRange(store.index + 1, props.input().cursorOffset)
+    return props
+      .input()
+      .getTextRange(store.visible === "directory" ? store.index : store.index + 1, props.input().cursorOffset)
   })
 
   // filter() reads reactive props.value plus non-reactive cursor/text state.
@@ -266,7 +279,7 @@ export function Autocomplete(props: {
   const references = createMemo(() => data.location.reference.list() ?? [])
 
   const referenceMatch = createMemo(() => {
-    if (!store.visible || store.visible === "/") return
+    if (store.visible !== "@") return
     const base = parseFileLineRange(search()).base
     const slash = base.indexOf("/")
     const alias = slash === -1 ? base : base.slice(0, slash)
@@ -299,19 +312,35 @@ export function Autocomplete(props: {
     insertPart(filename, part)
   }
 
+  function insertDirectory(directory: string) {
+    const input = props.input()
+    const cursorOffset = input.cursorOffset
+    input.cursorOffset = store.index
+    const start = input.logicalCursor
+    input.cursorOffset = cursorOffset
+    const end = input.logicalCursor
+    input.deleteRange(start.row, start.col, end.row, end.col)
+    input.insertText(directory)
+  }
+
   const [files] = createResource(
     () => ({ query: search(), location: location.current, visible: store.visible }),
     async (input) => {
       if (!input.visible || input.visible === "/") return { options: [], failed: false }
       if (referenceMatch()) return { options: [], failed: false }
       const { lineRange, base } = parseFileLineRange(input.query ?? "")
+      const directorySearch =
+        input.visible === "directory"
+          ? directoryAutocompleteSearch(base, input.location?.directory ?? paths.cwd, paths.home)
+          : undefined
 
       const result = await client.api.file
         .find({
-          query: base,
+          query: directorySearch?.query ?? base,
+          type: input.visible === "directory" ? "directory" : undefined,
           limit: 20,
           location: {
-            directory: input.location?.directory,
+            directory: directorySearch?.directory ?? input.location?.directory,
             workspace: input.location?.workspaceID ?? data.location.default().workspaceID,
           },
         })
@@ -327,8 +356,30 @@ export function Autocomplete(props: {
       // Add file options. Trust the order returned by fff (frecency, fuzzy
       // score, filename bonus, etc. are already factored in).
       const width = props.anchor().width - 4
+      const exact = directorySearch ? directoryAutocompleteExactValue(base, directorySearch) : undefined
+      if (exact) {
+        options.push({
+          display: Locale.truncateMiddle(exact, width),
+          value: exact,
+          isDirectory: true,
+          path: exact,
+          absolute: result.location.directory,
+          onSelect: () => insertDirectory(exact),
+        })
+      }
       options.push(
         ...result.data.map((item): AutocompleteOption => {
+          if (input.visible === "directory") {
+            const directory = directorySearch ? directoryAutocompleteResultValue(item.path, directorySearch) : item.path
+            return {
+              display: Locale.truncateMiddle(directory, width),
+              value: directory,
+              isDirectory: true,
+              path: directory,
+              absolute: path.resolve(result.location.directory, item.path),
+              onSelect: () => insertDirectory(directory),
+            }
+          }
           const { filename, part } = createFilePart(item, path.join(result.location.directory, item.path), lineRange)
           return {
             display: Locale.truncateMiddle(filename, width),
@@ -350,7 +401,7 @@ export function Autocomplete(props: {
   )
 
   const mcpResources = createMemo(() => {
-    if (!store.visible || store.visible === "/") return []
+    if (store.visible !== "@") return []
 
     const options: AutocompleteOption[] = []
     const width = props.anchor().width - 4
@@ -474,6 +525,19 @@ export function Autocomplete(props: {
     }))
   })
 
+  const supplementalDirectoryOptions = createMemo((): AutocompleteOption[] => {
+    if (store.visible !== "directory") return []
+    const width = props.anchor().width - 4
+    return (props.directoryOptions?.(search()) ?? []).map((item) => {
+      const value = item.value
+      return {
+        ...item,
+        display: Locale.truncateMiddle(item.display, width),
+        onSelect: item.onSelect ?? (value ? () => insertDirectory(value) : undefined),
+      }
+    })
+  })
+
   const options = createMemo(() => {
     const fileSearch = files()
     const referenceMatchValue = referenceMatch()
@@ -481,6 +545,12 @@ export function Autocomplete(props: {
     const referenceAliasesValue = referenceAliases()
     const commandsValue = commands()
     const searchValue = search()
+
+    if (store.visible === "directory") {
+      const supplemental = supplementalDirectoryOptions()
+      const paths = new Set(supplemental.map((item) => item.absolute))
+      return [...supplemental, ...fileSearch.options.filter((item) => !paths.has(item.absolute))]
+    }
 
     if (store.visible === "@" && referenceMatchValue) {
       return referenceAliasesValue.filter((item) => item.display === `@${referenceMatchValue.name}`)
@@ -528,6 +598,7 @@ export function Autocomplete(props: {
   createEffect(() => {
     filter()
     setStore("selected", 0)
+    setConfirming(undefined)
   })
 
   function move(direction: -1 | 1) {
@@ -537,6 +608,7 @@ export function Autocomplete(props: {
   }
 
   function moveTo(next: number) {
+    if (next !== store.selected) setConfirming(undefined)
     setStore("selected", next)
     if (!scroll) return
     const offset = revealSelectionOffset(scroll.scrollTop, {
@@ -551,8 +623,26 @@ export function Autocomplete(props: {
   function select() {
     const selected = options()[store.selected]
     if (!selected) return
-    hide(true)
+    if (store.visible !== "directory") {
+      hide(true)
+      selected.onSelect?.()
+      return
+    }
     selected.onSelect?.()
+    setDismissedValue(props.input().plainText)
+    hide(true)
+  }
+
+  function triggerDestructive() {
+    const action = options()[store.selected]?.destructive
+    if (!action) return false
+    if (confirming() !== action.id) {
+      setConfirming(action.id)
+      return
+    }
+    action.run()
+    setStore("selected", Math.max(0, Math.min(store.selected, options().length - 2)))
+    setConfirming(undefined)
   }
 
   function expandDirectory() {
@@ -563,7 +653,13 @@ export function Autocomplete(props: {
     const currentCursorOffset = input.cursorOffset
 
     const displayText = (selected.value ?? selected.display).trimEnd()
-    const path = displayText.startsWith("@") ? displayText.slice(1) : displayText
+    const selectedPath = displayText.startsWith("@") ? displayText.slice(1) : displayText
+
+    if (store.visible === "directory") {
+      insertDirectory(selectedPath.endsWith(path.sep) ? selectedPath : selectedPath + path.sep)
+      setStore("selected", 0)
+      return
+    }
 
     input.cursorOffset = store.index
     const startCursor = input.logicalCursor
@@ -571,7 +667,7 @@ export function Autocomplete(props: {
     const endCursor = input.logicalCursor
 
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
-    input.insertText("@" + path + "/")
+    input.insertText("@" + selectedPath + "/")
 
     setStore("selected", 0)
   }
@@ -629,13 +725,20 @@ export function Autocomplete(props: {
           select()
         },
       },
+      {
+        id: "prompt.autocomplete.destructive",
+        title: "Confirm autocomplete action",
+        group: "Autocomplete",
+        bind: "ctrl+d",
+        run: triggerDestructive,
+      },
     ],
   }))
 
-  function show(mode: "@" | "/") {
+  function show(mode: Exclude<AutocompleteRef["visible"], false>, index = props.input().cursorOffset) {
     setStore({
       visible: mode,
-      index: props.input().cursorOffset,
+      index,
     })
   }
 
@@ -653,6 +756,7 @@ export function Autocomplete(props: {
         draft.text = input.plainText
       })
     }
+    setConfirming(undefined)
     setStore("visible", false)
   }
 
@@ -670,6 +774,15 @@ export function Autocomplete(props: {
         return store.visible
       },
       onInput(value) {
+        if (dismissedValue() === value) return
+        setDismissedValue(undefined)
+        const offset = props.input().cursorOffset
+        const argument = slashArgumentAutocomplete(value, offset, keymapCommands())
+        if (argument?.type === "directory") {
+          show("directory", argument.index)
+          return
+        }
+
         if (store.visible) {
           if (
             // Typed text before the trigger
@@ -683,7 +796,6 @@ export function Autocomplete(props: {
         }
 
         // Check if autocomplete should reopen (e.g., after backspace deleted a space)
-        const offset = props.input().cursorOffset
         if (offset === 0) return
 
         const slash = slashTriggerIndex(value, offset)
@@ -714,6 +826,11 @@ export function Autocomplete(props: {
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const emptyMessage = createMemo(() => {
     if (store.visible === "/") return "No matching commands"
+    if (store.visible === "directory") {
+      if (files.loading) return "Searching…"
+      if (files().failed) return "Could not search directories. Keep typing to try again."
+      return "No matching directories"
+    }
     if (files.loading) return "Searching…"
     if (files().failed) return "Could not search files. Keep typing to try again."
     return "No matching files, agents, or references"
@@ -746,41 +863,60 @@ export function Autocomplete(props: {
             </box>
           }
         >
-          {(option, index) => (
-            <box
-              paddingLeft={1}
-              paddingRight={1}
-              backgroundColor={index === store.selected ? theme.background.action.primary.focused : undefined}
-              flexDirection="row"
-              onMouseMove={() => {
-                setStore("input", "mouse")
-              }}
-              onMouseOver={() => {
-                if (store.input !== "mouse") return
-                moveTo(index)
-              }}
-              onMouseDown={() => {
-                setStore("input", "mouse")
-                moveTo(index)
-              }}
-              onMouseUp={() => select()}
-            >
-              <text
-                fg={index === store.selected ? theme.text.action.primary.focused : theme.text.default}
-                flexShrink={0}
+          {(option, index) => {
+            const destructive = () => option().destructive
+            const confirmingAction = () => {
+              const action = destructive()
+              return action !== undefined && action.id === confirming()
+            }
+            return (
+              <box
+                paddingLeft={1}
+                paddingRight={1}
+                backgroundColor={
+                  confirmingAction()
+                    ? theme.background.action.destructive.focused
+                    : index === store.selected
+                      ? theme.background.action.primary.focused
+                      : undefined
+                }
+                flexDirection="row"
+                onMouseMove={() => {
+                  setStore("input", "mouse")
+                }}
+                onMouseOver={() => {
+                  if (store.input !== "mouse") return
+                  moveTo(index)
+                }}
+                onMouseDown={() => {
+                  setStore("input", "mouse")
+                  moveTo(index)
+                }}
+                onMouseUp={() => select()}
               >
-                {option().display}
-              </text>
-              <Show when={option().description}>
                 <text
-                  fg={index === store.selected ? theme.text.action.primary.focused : theme.text.subdued}
-                  wrapMode="none"
+                  fg={
+                    confirmingAction()
+                      ? theme.text.action.destructive.focused
+                      : index === store.selected
+                        ? theme.text.action.primary.focused
+                        : theme.text.default
+                  }
+                  flexShrink={0}
                 >
-                  {" " + option().description?.trimStart()}
+                  {confirmingAction() ? destructive()?.confirm : option().display}
                 </text>
-              </Show>
-            </box>
-          )}
+                <Show when={!confirmingAction() && option().description}>
+                  <text
+                    fg={index === store.selected ? theme.text.action.primary.focused : theme.text.subdued}
+                    wrapMode="none"
+                  >
+                    {" " + option().description?.trimStart()}
+                  </text>
+                </Show>
+              </box>
+            )
+          }}
         </Index>
       </scrollbox>
     </box>

@@ -372,6 +372,8 @@ export interface KeymapCommand {
     readonly aliases?: string[]
     /** Keeps the slash command in the prompt and passes its raw input to run. */
     readonly arguments?: true
+    /** Completes the command's argument using a built-in completion source. */
+    readonly autocomplete?: "directory"
   }
   /** Promotes the command in discovery UI. */
   readonly suggested?: boolean | (() => boolean)

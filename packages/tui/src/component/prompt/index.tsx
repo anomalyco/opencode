@@ -33,7 +33,7 @@ import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
-import { type AutocompleteRef, Autocomplete } from "./autocomplete"
+import { type AutocompleteOption, type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
@@ -66,6 +66,8 @@ import {
   promptAttachmentLabel,
 } from "../../prompt/attachment"
 import { DialogImagePreview } from "../dialog-image-preview"
+import { useDirectoryRecents } from "../../prompt/directory-recents"
+import { directoryRecentValue } from "../../prompt/autocomplete"
 
 export type PromptProps = {
   sessionID?: string
@@ -159,6 +161,7 @@ export function Prompt(props: PromptProps) {
   const editor = useEditorContext()
   const route = useRoute()
   const data = useData()
+  const directoryRecents = useDirectoryRecents()
   const keymapCommands = Keymap.useCommands()
   const currentLocation = useLocation()
   const config = useConfig().data
@@ -220,34 +223,41 @@ export function Prompt(props: PromptProps) {
       {
         id: "session.cd",
         title: "Change working directory",
-        slash: { name: "cd", arguments: true },
+        slash: { name: "cd", arguments: true, autocomplete: "directory" },
         run: async (input) => {
           if (!input?.trim()) {
             toast.show({ message: "Directory is required", variant: "error" })
             return
           }
           const sessionID = props.sessionID
+          const session = sessionID ? data.session.get(sessionID) : undefined
+          const sourceProjectID = session?.projectID ?? data.location.info()?.project.id
+          const value = input.trim()
+          const expanded =
+            value === "~" ? paths.home : value.startsWith("~/") ? path.join(paths.home, value.slice(2)) : value
+          const directory = path.resolve(
+            session?.location.directory ?? currentLocation.current?.directory ?? data.location.default().directory,
+            expanded,
+          )
           if (!sessionID) {
-            const value = input.trim()
-            const expanded =
-              value === "~" ? paths.home : value.startsWith("~/") ? path.join(paths.home, value.slice(2)) : value
-            const directory = path.resolve(
-              currentLocation.current?.directory ?? data.location.default().directory,
-              expanded,
-            )
             const location = await client.api.location.get({ location: { directory } }).catch((error) => {
               toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" })
               return undefined
             })
             if (!location) return
+            if (sourceProjectID) directoryRecents.touch(sourceProjectID, location.directory)
             currentLocation.set(location)
             return
           }
-          await client.api.session
-            .move({ sessionID, directory: input })
-            .catch((error) =>
-              toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" }),
-            )
+          const error = await client.api.session.move({ sessionID, directory: input }).then(
+            () => undefined,
+            (error) => error,
+          )
+          if (error) {
+            toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" })
+            return
+          }
+          if (sourceProjectID) directoryRecents.touch(sourceProjectID, directory)
         },
       },
     ],
@@ -1855,6 +1865,29 @@ export function Prompt(props: PromptProps) {
       </box>
       <Autocomplete
         sessionID={props.sessionID}
+        directoryOptions={(query): AutocompleteOption[] => {
+          if (query !== "") return []
+          const projectID =
+            (props.sessionID ? data.session.get(props.sessionID)?.projectID : undefined) ??
+            data.location.info()?.project.id
+          if (!projectID) return []
+          return directoryRecents.list(projectID).map((item) => {
+            const value = directoryRecentValue(item.directory, paths.home)
+            return {
+              display: value,
+              value,
+              description: "recent",
+              isDirectory: true,
+              path: value,
+              absolute: item.directory,
+              destructive: {
+                id: item.directory,
+                confirm: "Press ctrl+d to confirm",
+                run: () => directoryRecents.remove(projectID, item.directory),
+              },
+            }
+          })
+        }}
         ref={(r) => {
           setAuto(() => r)
         }}

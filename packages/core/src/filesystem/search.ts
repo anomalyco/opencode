@@ -2,7 +2,7 @@ export * as FileSystemSearch from "./search.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, Schema, Scope } from "effect"
+import { Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem.js"
@@ -31,7 +31,7 @@ export const ripgrepLayer = Layer.effect(
     const files: string[] = []
     const directories = new Set<string>()
     const home = Protected.isHome(location.directory)
-    yield* ripgrep
+    const indexing = yield* ripgrep
       .find({
         cwd: location.directory,
         pattern: "*",
@@ -44,18 +44,21 @@ export const ripgrepLayer = Layer.effect(
             parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
           }),
       })
-      .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
+      .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope, { startImmediately: true }))
     return Service.of({
       find: (input) =>
         Effect.gen(function* () {
+          yield* Fiber.join(indexing)
           const items =
             input.type === "file"
               ? files
               : input.type === "directory"
                 ? Array.from(directories)
                 : [...files, ...directories]
-          return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
-            const relative = item.target
+          const matches = input.query
+            ? fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => item.target)
+            : items.slice(0, input.limit ?? 50)
+          return matches.map((relative) => {
             const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
             return FileSystem.Entry.make({
               path: RelativePath.make(relative),
