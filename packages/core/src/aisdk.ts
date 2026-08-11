@@ -508,8 +508,23 @@ function toolOutput(result: ToolResultValue) {
     case "text":
     case "error":
       return { type: "text" as const, value: messageValue(result.value) }
+    case "content":
+      return {
+        type: "content" as const,
+        value: result.value.map((item) => {
+          if (item.type === "text") return { type: "text" as const, text: item.text }
+          const data = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(item.uri)?.[1]
+          const image = item.mime.toLowerCase().startsWith("image/")
+          if (data !== undefined)
+            return image
+              ? { type: "image-data" as const, data, mediaType: item.mime }
+              : { type: "file-data" as const, data, mediaType: item.mime, filename: item.name }
+          return image ? { type: "image-url" as const, url: item.uri } : { type: "file-url" as const, url: item.uri }
+        }),
+      }
+    case "json":
+      return { type: "json" as const, value: jsonValue(result.value) }
   }
-  return { type: "json" as const, value: jsonValue(result.value) }
 }
 
 function tool(input: ToolDefinition): LanguageModelV3FunctionTool {

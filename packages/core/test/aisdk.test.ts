@@ -275,6 +275,71 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   }),
 )
 
+it.effect("preserves tool result content in AI SDK prompts", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model(model("test-ai-sdk"))
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        messages: [
+          Message.tool({
+            id: "call_1",
+            name: "read",
+            result: {
+              type: "content",
+              value: [
+                { type: "text", text: "attachments" },
+                { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "pixel.png" },
+                {
+                  type: "file",
+                  uri: "data:application/pdf;charset=utf-8;base64,JVBERg==",
+                  mime: "application/pdf",
+                  name: "document.pdf",
+                },
+                { type: "file", uri: "https://example.com/pixel.png", mime: "image/png" },
+                { type: "file", uri: "https://example.com/document.pdf", mime: "application/pdf" },
+              ],
+            },
+          }),
+        ],
+      }),
+    )
+
+    expect(prepared.body.prompt).toEqual([
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_1",
+            toolName: "read",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "attachments" },
+                { type: "image-data", data: "AAAA", mediaType: "image/png" },
+                {
+                  type: "file-data",
+                  data: "JVBERg==",
+                  mediaType: "application/pdf",
+                  filename: "document.pdf",
+                },
+                { type: "image-url", url: "https://example.com/pixel.png" },
+                { type: "file-url", url: "https://example.com/document.pdf" },
+              ],
+            },
+          },
+        ],
+      },
+    ])
+  }),
+)
+
 it.effect("emits malformed AI SDK tool input without executing it", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
