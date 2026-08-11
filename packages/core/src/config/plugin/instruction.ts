@@ -27,8 +27,10 @@ export const Plugin = define({
       const changes = yield* PubSub.sliding<string>(1)
       const lock = Semaphore.makeUnsafe(1)
       const start = yield* fs.resolve(location.directory)
-      const stop = yield* fs.resolve(location.project.directory)
-      const project = discovery.project && FSUtil.contains(stop, start)
+      const root = yield* fs.resolve(location.project.directory)
+      const home = yield* fs.resolve(global.home)
+      const project = discovery.project && FSUtil.contains(root, start)
+      const stop = FSUtil.contains(home, start) ? home : root
       const globalFile = yield* fs.resolve(join(global.config, "AGENTS.md"))
       const loaded: { current: Loaded } = { current: { type: "available", files: [] } }
 
