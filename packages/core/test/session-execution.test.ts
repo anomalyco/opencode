@@ -14,11 +14,10 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { UserInterruptedError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
-import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Schema, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -51,18 +50,20 @@ describe("SessionExecution lifecycle", () => {
     })
   })
 
-  it.effect("atomically consumes each claim at most once", () =>
+  it.effect("the sweep only lists claimed top-level Sessions", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const store = yield* SessionStore.Service
-      const first = Session.ID.make("ses_recover_first")
-      const second = Session.ID.make("ses_recover_second")
-      yield* seedSessions(database, [first, second], { time_suspended: Date.now() })
+      const parent = Session.ID.make("ses_recover_parent")
+      const child = Session.ID.make("ses_recover_child")
+      const idle = Session.ID.make("ses_recover_idle")
+      yield* seedSessions(database, [parent], { time_suspended: Date.now() })
+      yield* seedSessions(database, [idle])
+      // An orphaned child is never resumed: the resumed parent re-runs its
+      // tool call and spawns a fresh child instead.
+      yield* seedSessions(database, [child], { time_suspended: Date.now(), parent_id: parent })
 
-      expect(yield* store.consumeSuspended(first)).toBe(true)
-      expect(yield* store.consumeSuspended(first)).toBe(false)
-      expect(yield* store.consumeSuspended(second)).toBe(true)
-      expect(yield* claims(database)).toEqual({ [first]: false, [second]: false })
+      expect(yield* store.listSuspended()).toEqual([parent])
     }),
   )
 
@@ -162,14 +163,22 @@ describe("SessionExecution lifecycle", () => {
       yield* seedSessions(database, [first, second], { time_suspended: Date.now() })
 
       const drained: string[] = []
+      const bothDraining = yield* Deferred.make<void>()
       const continued: SessionEvent.Synthetic[] = []
       const scope = yield* Scope.make()
-      const context = yield* buildExecution(scope, ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)))
+      const context = yield* buildExecution(scope, ({ sessionID }) =>
+        Effect.sync(() => {
+          drained.push(sessionID)
+          if (drained.length === 2) Deferred.doneUnsafe(bothDraining, Effect.void)
+        }),
+      )
       const execution = Context.get(context, SessionExecution.Service)
       const restart = Context.get(context, SessionRestart.Service)
       yield* bus.project(SessionEvent.Synthetic, (event) => Effect.sync(() => void continued.push(event)))
 
+      // The sweep forks resumed drains, so completion is observed through the executions.
       yield* restart.resumeSuspendedSessions
+      yield* Deferred.await(bothDraining)
       yield* Effect.forEach([first, second], execution.awaitIdle, { discard: true })
       expect(drained.toSorted()).toEqual([first, second])
       expect(continued.map((event) => event.data).toSorted((a, b) => a.sessionID.localeCompare(b.sessionID))).toEqual(
@@ -219,7 +228,7 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
-  it.effect("counts every resume durably before the turn runs", () =>
+  it.effect("counts every resume durably and never consumes the claim it recovers", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const sessionID = Session.ID.make("ses_resume_counted")
@@ -236,45 +245,60 @@ describe("SessionExecution lifecycle", () => {
       yield* restart.resumeSuspendedSessions.pipe(Effect.forkIn(scope))
       yield* Deferred.await(draining)
 
+      // The attempt is durable before the drain runs, and the claim is held
+      // throughout: a crash anywhere in the resume path leaves both intact.
+      expect(yield* attempts(database, sessionID)).toBe(1)
+      expect((yield* claims(database))[sessionID]).toBe(true)
+
+      // Teardown (a graceful shutdown's interrupt) preserves both, so the next
+      // boot counts attempt 2 against the same turn.
+      yield* Scope.close(scope, Exit.void)
+      expect((yield* claims(database))[sessionID]).toBe(true)
       expect(yield* attempts(database, sessionID)).toBe(1)
     }),
   )
 
-  it.live("defers claims whose Session has recent message activity", () =>
+  it.effect("the sweep leaves Sessions already draining in this process untouched", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
-      const sessionID = Session.ID.make("ses_resume_deferred")
-      yield* seedSessions(database, [sessionID], { time_suspended: Date.now() })
-      // Fresh message activity: another process may still be draining this turn.
-      yield* seedMessage(database, sessionID, Date.now())
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_resume_local_active")
+      yield* seedSessions(database, [sessionID])
 
-      const drained: string[] = []
+      const draining = yield* Deferred.make<void>()
+      const continued: SessionEvent.Synthetic[] = []
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-      const context = yield* buildExecution(
-        scope,
-        ({ sessionID: id }) => Effect.sync(() => void drained.push(id)),
-        { graceMs: 60_000, redriveDelayMs: 0 },
+      const context = yield* buildExecution(scope, () =>
+        Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never)),
       )
+      const execution = Context.get(context, SessionExecution.Service)
       const restart = Context.get(context, SessionRestart.Service)
+      yield* bus.project(SessionEvent.Synthetic, (event) => Effect.sync(() => void continued.push(event)))
 
+      // A live local turn holds a claim; the sweep must not count, continue, or terminalize it.
+      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+      yield* Deferred.await(draining)
       yield* restart.resumeSuspendedSessions
-      expect(drained).toEqual([])
-      // The claim survives for the next start.
+
+      expect(continued).toEqual([])
+      expect(yield* attempts(database, sessionID)).toBe(0)
       expect((yield* claims(database))[sessionID]).toBe(true)
     }),
   )
+
 })
 
 function seedSessions(
   database: Database.Service["Service"],
   sessionIDs: ReadonlyArray<Session.ID>,
-  values: { time_suspended?: number; resume_attempts?: number } = {},
+  values: { time_suspended?: number; resume_attempts?: number; parent_id?: Session.ID } = {},
 ) {
   return Effect.gen(function* () {
     yield* database.db
       .insert(ProjectTable)
       .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
     yield* database.db
@@ -293,21 +317,6 @@ function seedSessions(
       .run()
       .pipe(Effect.orDie)
   })
-}
-
-function seedMessage(database: Database.Service["Service"], sessionID: Session.ID, timeUpdated: number) {
-  const id = SessionMessage.ID.create()
-  const { id: _, type, ...data } = Schema.encodeSync(SessionMessage.Info)({
-    id,
-    type: "synthetic",
-    text: "live turn output",
-    time: { created: DateTime.makeUnsafe(timeUpdated) },
-  })
-  return database.db
-    .insert(SessionMessageTable)
-    .values({ id, session_id: sessionID, type, seq: 0, time_created: timeUpdated, time_updated: timeUpdated, data })
-    .run()
-    .pipe(Effect.orDie)
 }
 
 function claims(database: Database.Service["Service"]) {
@@ -354,7 +363,7 @@ function buildExecution(
       ),
     )
     return yield* Layer.buildWithScope(
-      SessionRestart.layer({ graceMs: 0, redriveDelayMs: 0, ...options }).pipe(
+      SessionRestart.layer(options).pipe(
         Layer.provideMerge(SessionExecution.layer),
         Layer.provide(Layer.succeed(Database.Service, database)),
         Layer.provide(Layer.succeed(Bus.Service, bus)),

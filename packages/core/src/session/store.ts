@@ -17,9 +17,12 @@ export interface Interface {
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
+  /**
+   * Top-level Sessions holding an execution claim. Child (subagent) Sessions
+   * are excluded: a resumed parent re-runs its tool call and spawns fresh
+   * children, so resuming orphaned children would duplicate their work.
+   */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
-  /** Clears the claim, reporting whether this caller consumed it. At most one concurrent caller receives true. */
-  readonly consumeSuspended: (sessionID: Session.ID) => Effect.Effect<boolean>
   /**
    * Records the execution claim: the durable write-ahead intent that a turn is
    * (or was) in flight. Set when execution starts; a claim that survives to the
@@ -30,13 +33,6 @@ export interface Interface {
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
   /** Durably counts one more resume of an orphaned claim, returning the new total. */
   readonly countResume: (sessionID: Session.ID) => Effect.Effect<number>
-  /**
-   * When the Session's messages last changed, or undefined for an empty
-   * Session. Message rows update as a live drain streams, so recent activity
-   * suggests another process may still own the turn. Event persistence is
-   * opt-in, so this deliberately reads messages, not the event log.
-   */
-  readonly lastActivityAt: (sessionID: Session.ID) => Effect.Effect<number | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStore") {}
@@ -73,23 +69,12 @@ const layer = Layer.effect(
         return yield* db
           .select({ sessionID: SessionTable.id })
           .from(SessionTable)
-          .where(isNotNull(SessionTable.time_suspended))
+          .where(and(isNotNull(SessionTable.time_suspended), isNull(SessionTable.parent_id)))
           .all()
           .pipe(
             Effect.orDie,
             Effect.map((rows) => rows.map((row) => row.sessionID)),
           )
-      }),
-      consumeSuspended: Effect.fn("SessionStore.consumeSuspended")(function* (sessionID) {
-        return (
-          (yield* db
-            .update(SessionTable)
-            .set({ time_suspended: null })
-            .where(and(eq(SessionTable.id, sessionID), isNotNull(SessionTable.time_suspended)))
-            .returning({ sessionID: SessionTable.id })
-            .get()
-            .pipe(Effect.orDie)) !== undefined
-        )
       }),
       claim: Effect.fn("SessionStore.claim")(function* (sessionID) {
         // The null guard preserves the original claim time if a claimed Session drains again
@@ -118,15 +103,6 @@ const layer = Layer.effect(
           .get()
           .pipe(Effect.orDie)
         return row?.attempts ?? 0
-      }),
-      lastActivityAt: Effect.fn("SessionStore.lastActivityAt")(function* (sessionID) {
-        const row = yield* db
-          .select({ updatedAt: sql<number | null>`max(${SessionMessageTable.time_updated})` })
-          .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.session_id, sessionID))
-          .get()
-          .pipe(Effect.orDie)
-        return row?.updatedAt ?? undefined
       }),
     })
   }),
