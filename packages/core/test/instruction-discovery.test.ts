@@ -132,7 +132,9 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           const watcher = yield* Watcher.Test
           expect(yield* watcher.subscriptions()).toEqual([
             { path: globalFile, type: "file" },
-            { path: project, type: "directory" },
+            { path: packageFile, type: "file" },
+            { path: path.join(project, "packages", "AGENTS.md"), type: "file" },
+            { path: projectFile, type: "file" },
           ])
           const initialized = yield* readInitial(yield* discovery.load())
           expect(initialized.text).toBe(
@@ -210,6 +212,50 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           ),
         ),
       ),
+    ),
+  )
+
+  it.live("discovers a newly created instruction file in an intermediate directory", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const project = path.join(tmp.path, "project")
+        const intermediate = path.join(project, "packages", "AGENTS.md")
+        const directory = path.join(project, "packages", "core")
+        const projectFile = path.join(project, "AGENTS.md")
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+          yield* Effect.promise(() => fs.writeFile(projectFile, "project"))
+          const discovery = yield* start()
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(`Instructions from: ${projectFile}\nproject`)
+
+          yield* Effect.promise(() => fs.writeFile(intermediate, "intermediate"))
+          yield* emitAndWait({ type: "create", path: intermediate })
+
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(
+            [`Instructions from: ${intermediate}\nintermediate`, `Instructions from: ${projectFile}\nproject`].join(
+              "\n\n",
+            ),
+          )
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: path.join(tmp.path, "global"),
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(
+                  location(
+                    { directory: AbsolutePath.make(directory) },
+                    { projectDirectory: AbsolutePath.make(project) },
+                  ),
+                ),
+              ),
+            }),
+          ),
+        )
+      }),
     ),
   )
 

@@ -3,13 +3,17 @@ export * as ConfigInstructionPlugin from "./instruction"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
-import { isAbsolute, join, relative, sep } from "path"
+import { dirname, join } from "path"
 import { Effect, PubSub, Semaphore, Stream } from "effect"
 import { Watcher } from "../../filesystem/watcher"
 import { InstructionDiscovery } from "../../instruction-discovery"
 import { Instructions } from "../../instructions/index"
 import { Location } from "../../location"
 import { AbsolutePath } from "../../schema"
+
+type Loaded =
+  | { readonly type: "available"; readonly files: InstructionDiscovery.File[] }
+  | { readonly type: "unavailable" }
 
 export const Plugin = define({
   id: "opencode.config.instruction",
@@ -24,35 +28,29 @@ export const Plugin = define({
       const lock = Semaphore.makeUnsafe(1)
       const start = yield* fs.resolve(location.directory)
       const stop = yield* fs.resolve(location.project.directory)
-      const fromProject = relative(stop, start)
-      const insideProject =
-        fromProject === "" || (fromProject !== ".." && !fromProject.startsWith(`..${sep}`) && !isAbsolute(fromProject))
-      const project = discovery.project && insideProject
+      const project = discovery.project && FSUtil.contains(stop, start)
       const globalFile = yield* fs.resolve(join(global.config, "AGENTS.md"))
-      const loaded: { files: InstructionDiscovery.File[] | Instructions.Unavailable } = { files: [] }
+      const loaded: { current: Loaded } = { current: { type: "available", files: [] } }
 
       const publish = (update: Watcher.Update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid)
-      const globalUpdates = yield* watcher.subscribe({ path: globalFile, type: "file" })
-      yield* globalUpdates.pipe(Stream.runForEach(publish), Effect.forkScoped({ startImmediately: true }))
-      if (project) {
-        const projectUpdates = yield* watcher.subscribe({ path: stop, type: "directory" })
-        yield* projectUpdates.pipe(
-          Stream.filter((update) => FSUtil.contains(stop, update.path) && update.path.endsWith(`${sep}AGENTS.md`)),
-          Stream.runForEach(publish),
-          Effect.forkScoped({ startImmediately: true }),
-        )
+      const candidates = [
+        globalFile,
+        ...(project ? ancestorDirectories(start, stop).map((directory) => join(directory, "AGENTS.md")) : []),
+      ]
+      for (const path of new Set(candidates)) {
+        const updates = yield* watcher.subscribe({ path, type: "file" })
+        yield* updates.pipe(Stream.runForEach(publish), Effect.forkScoped({ startImmediately: true }))
       }
 
-      const read = Effect.fn("ConfigInstructionPlugin.read")(function* (path: string, required: boolean) {
+      const read = Effect.fn("ConfigInstructionPlugin.read")(function* (path: string) {
         const content = yield* fs.readFileStringSafe(path)
         if (content !== undefined) return new InstructionDiscovery.File({ path: AbsolutePath.make(path), content })
-        yield* Effect.logDebug("instruction file skipped", { path, reason: "missing" })
-        if (required) return Instructions.unavailable
+        yield* Effect.logDebug("instruction file skipped", { path, reason: "unavailable" })
       })
 
       const globalSource = Effect.fn("ConfigInstructionPlugin.globalSource")(function* () {
-        const file = yield* read(globalFile, false)
-        return file instanceof InstructionDiscovery.File ? [file] : []
+        const file = yield* read(globalFile)
+        return file ? [file] : []
       })
 
       const projectSource = Effect.fn("ConfigInstructionPlugin.projectSource")(function* () {
@@ -60,8 +58,8 @@ export const Plugin = define({
         const discovered = new Set(
           yield* Effect.forEach(yield* fs.up({ targets: ["AGENTS.md"], start, stop }), fs.resolve),
         )
-        const files = yield* Effect.forEach(discovered, (path) => read(path, true), { concurrency: "unbounded" })
-        if (files.some((file) => file === Instructions.unavailable)) return Instructions.unavailable
+        const files = yield* Effect.forEach(discovered, read, { concurrency: "unbounded" })
+        if (files.some((file) => file === undefined)) return Instructions.unavailable
         return files.filter((file): file is InstructionDiscovery.File => file !== undefined)
       })
 
@@ -81,14 +79,15 @@ export const Plugin = define({
               global: isolate("global", globalSource()),
               project: isolate("project", projectSource()),
             })
-            loaded.files =
+            loaded.current =
               Array.isArray(sources.global) && Array.isArray(sources.project)
-                ? [...sources.global, ...sources.project]
-                : Instructions.unavailable
+                ? { type: "available", files: [...sources.global, ...sources.project] }
+                : { type: "unavailable" }
             if (!file) return
             yield* Effect.logInfo("instructions rescanned", {
               file,
-              instructions: Array.isArray(loaded.files) ? loaded.files.map((item) => item.path) : "unavailable",
+              instructions:
+                loaded.current.type === "available" ? loaded.current.files.map((item) => item.path) : "unavailable",
             })
           }),
         )
@@ -100,11 +99,11 @@ export const Plugin = define({
       )
       yield* refresh()
       yield* discovery.transform((draft) => {
-        if (!Array.isArray(loaded.files)) {
+        if (loaded.current.type === "unavailable") {
           draft.unavailable()
           return
         }
-        for (const file of loaded.files) draft.add(file)
+        for (const file of loaded.current.files) draft.add(file)
       })
     }).pipe(
       Effect.catchCause((cause) =>
@@ -116,3 +115,8 @@ export const Plugin = define({
     )
   }),
 })
+
+function ancestorDirectories(start: string, stop: string): string[] {
+  if (start === stop) return [start]
+  return [start, ...ancestorDirectories(dirname(start), stop)]
+}
