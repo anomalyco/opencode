@@ -52,7 +52,6 @@ const Handlers = Runtime.handlers(Commands, {
     unset: () => import("./commands/handlers/service/unset"),
   },
   serve: () => import("./commands/handlers/serve"),
-  web: () => import("./commands/handlers/web"),
 })
 
 Effect.logInfo("cli starting", {

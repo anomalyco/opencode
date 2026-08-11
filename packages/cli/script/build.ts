@@ -8,7 +8,7 @@ import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 import type { BunPlugin } from "bun"
 import pkg from "../package.json"
 import { modelsData } from "./generate"
-import { buildAppAssets } from "./app-assets"
+import { buildAppArchive } from "./app-assets"
 
 const dir = path.resolve(import.meta.dirname, "..")
 const binary = "opencode2"
@@ -55,7 +55,7 @@ const targets = singleFlag
   : allTargets
 
 if (!skipInstall) await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
-const appAssets = await buildAppAssets(Script.channel)
+const appArchive = await buildAppArchive(Script.channel)
 const appAssetsPlugin: BunPlugin = {
   name: "opencode-app-assets",
   setup(build) {
@@ -65,11 +65,7 @@ const appAssetsPlugin: BunPlugin = {
     }))
     build.onLoad({ filter: /^opencode-app-assets$/, namespace: "opencode" }, () => ({
       loader: "js",
-      contents: `export default ${JSON.stringify(
-        Object.fromEntries(
-          appAssets.map((asset) => [asset.key, { content: asset.content, encoding: asset.encoding }]),
-        ),
-      )}`,
+      contents: `export default ${JSON.stringify(appArchive)}`,
     }))
   },
 }

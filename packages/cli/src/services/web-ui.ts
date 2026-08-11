@@ -1,6 +1,5 @@
-import type { Endpoint } from "@opencode-ai/client/effect/service"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Effect } from "effect"
+import { Effect, FileSystem } from "effect"
 import { HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
 import { load, type AssetMap } from "../app-assets"
@@ -8,27 +7,26 @@ import { load, type AssetMap } from "../app-assets"
 export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: {
   readonly assets?: AssetMap
 }) {
-  const assets = options?.assets ?? (yield* load())
+  const fileSystem = yield* FileSystem.FileSystem
+  const assets = options?.assets
+    ? Effect.succeed(options.assets)
+    : yield* Effect.cached(load().pipe(Effect.provideService(FileSystem.FileSystem, fileSystem)))
   return <E, R>(api: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
     api.pipe(
       Effect.catchIf(
         isRouteNotFound,
         () =>
           HttpServerRequest.HttpServerRequest.pipe(
-            Effect.flatMap((request) => serveUI(request, new URL(request.url, "http://localhost"), assets)),
+            Effect.flatMap((request) => {
+              const url = new URL(request.url, "http://localhost")
+              if (url.pathname === "/api" || url.pathname.startsWith("/api/"))
+                return Effect.succeed(HttpServerResponse.empty({ status: 404 }))
+              return assets.pipe(Effect.flatMap((files) => serveUI(request, url, files)))
+            }),
           ),
       ),
     )
 })
-
-export function url(endpoint: Endpoint) {
-  const target = new URL(endpoint.url)
-  if (endpoint.auth) {
-    target.username = endpoint.auth.username
-    target.password = endpoint.auth.password
-  }
-  return target.toString()
-}
 
 function serveUI(
   request: HttpServerRequest.HttpServerRequest,
@@ -57,7 +55,7 @@ function isRouteNotFound(error: unknown) {
 }
 
 function csp(hash = "") {
-  return `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; media-src 'self' data:; connect-src * data: blob:`
+  return `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; media-src 'self' data:; connect-src 'self'`
 }
 
 function cspForHtml(body: string) {

@@ -34,8 +34,6 @@ describe("web UI", () => {
                 const request = yield* HttpServerRequest.HttpServerRequest
                 const pathname = new URL(request.url, "http://localhost").pathname
                 if (pathname === "/api/health") return HttpServerResponse.jsonUnsafe({ healthy: true })
-                if (pathname === "/api/missing")
-                  return HttpServerResponse.jsonUnsafe({ code: "missing" }, { status: 404 })
                 return yield* Effect.fail(
                   new HttpServerError.HttpServerError({
                     reason: new HttpServerError.RouteNotFound({ request }),
@@ -51,7 +49,7 @@ describe("web UI", () => {
 
           const missing = yield* Effect.promise(() => fetch(`${origin}/api/missing`))
           expect(missing.status).toBe(404)
-          expect(yield* Effect.promise(() => missing.json())).toEqual({ code: "missing" })
+          expect(yield* Effect.promise(() => missing.text())).toBe("")
 
           const script = yield* Effect.promise(() => fetch(`${origin}/app.js`))
           expect(yield* Effect.promise(() => script.text())).toBe("console.log('embedded')")
@@ -62,21 +60,9 @@ describe("web UI", () => {
           const fallback = yield* Effect.promise(() => fetch(`${origin}/workspace/example`))
           expect(yield* Effect.promise(() => fallback.text())).toContain("embedded")
           expect(fallback.headers.get("content-security-policy")).toContain("default-src 'self'")
-          expect(fallback.headers.get("content-security-policy")).toContain("connect-src * data: blob:")
+          expect(fallback.headers.get("content-security-policy")).toContain("connect-src 'self'")
         }),
       ).pipe(Effect.provide(NodeFileSystem.layer)),
     )
-  })
-
-  test("adds server credentials to browser URL userinfo", () => {
-    const target = new URL(
-      WebUi.url({
-        url: "http://localhost:4096",
-        auth: { type: "basic", username: "opencode", password: "secret" },
-      }),
-    )
-    expect(target.username).toBe("opencode")
-    expect(target.password).toBe("secret")
-    expect(target.searchParams.has("auth_token")).toBe(false)
   })
 })

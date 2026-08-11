@@ -4,13 +4,12 @@ import { run } from "@opencode-ai/tui"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
-import { Context, Effect, FileSystem, Option, Ref, Scope } from "effect"
+import { Context, Effect, FileSystem, Option } from "effect"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
 import { Npm } from "@opencode-ai/util/npm"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
-import { WebUi } from "../../services/web-ui"
 
 export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
@@ -38,13 +37,11 @@ export default Runtime.handler(Commands, (input) =>
       ),
     )
     preflight.loading()
-    const endpoint = yield* Ref.make(server.endpoint)
-    const web = Ref.get(endpoint).pipe(Effect.map(WebUi.url))
     const config = yield* Config.Service
     const npm = yield* Npm.Service
     const fileSystem = yield* FileSystem.FileSystem
     const runServicePromise = Effect.runPromiseWith(Context.make(FileSystem.FileSystem, fileSystem))
-    const context = yield* Effect.context<FileSystem.FileSystem | Scope.Scope>()
+    const context = yield* Effect.context<FileSystem.FileSystem>()
     const runFork = Effect.runForkWith(context)
     const runPromise = Effect.runPromiseWith(context)
     const service = server.service
@@ -58,16 +55,11 @@ export default Runtime.handler(Commands, (input) =>
         endpoint: server.endpoint,
         service: service
           ? {
-              reconnect: (signal) =>
-                runServicePromise(
-                  service.reconnect().pipe(Effect.tap((next) => Ref.set(endpoint, next))),
-                  { signal },
-                ),
+              reconnect: (signal) => runServicePromise(service.reconnect(), { signal }),
               restart: () => runServicePromise(service.restart()),
             }
           : undefined,
       },
-      web: () => runPromise(web),
       args: {
         continue: input.continue,
         sessionID: Option.getOrUndefined(input.session),
