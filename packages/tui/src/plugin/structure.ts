@@ -4,15 +4,12 @@
 // last-enabled-wins, missing-target degradation) is testable as a data
 // transform.
 
-// Mirrors the public SlotClaim type (plugin package) with target paths erased
-// to strings so the resolver stays independent of the slot map. Keep the two
-// unions' variants in sync.
-export type Placement =
-  | { readonly prepend: string }
-  | { readonly append: string }
-  | { readonly before: string }
-  | { readonly after: string }
-  | { readonly replace: string }
+export type PlacementKind = "prepend" | "append" | "before" | "after" | "replace"
+
+// Normalized from the public SlotClaim shape by the plugin API: exactly one
+// placement kind, the target path erased to a string so the resolver stays
+// independent of the slot map.
+export type Placement = { readonly kind: PlacementKind; readonly target: string }
 
 // One plugin's registered slot claim, in enable order within the claims array.
 export type Claim<Render> = {
@@ -51,6 +48,12 @@ export function emptySlotted<Render>(): Slotted<Render> {
   return EMPTY
 }
 
+// The tree's one containment rule: a path contains every path it prefixes.
+// Shared with the <Slot> mount assertion so the spellings cannot drift.
+export function contains(ancestor: string, path: string) {
+  return path.startsWith(ancestor + ".")
+}
+
 // `paths` is the set of currently mounted slot paths; `claims` is every
 // active claim in plugin enable order. The result maps each targeted path to
 // its placement buckets — untargeted paths are absent and render as empty.
@@ -70,18 +73,18 @@ export function resolveSlots<Render>(input: {
   // regardless of enable order (hierarchy beats timeline).
   const winners = new Map<string, Claim<Render>>()
   for (const claim of input.claims) {
-    if (!("replace" in claim.placement)) continue
-    if (!input.paths.has(claim.placement.replace)) {
+    if (claim.placement.kind !== "replace") continue
+    if (!input.paths.has(claim.placement.target)) {
       suppressed.push({ claim })
       continue
     }
-    const prior = winners.get(claim.placement.replace)
+    const prior = winners.get(claim.placement.target)
     if (prior) suppressed.push({ claim: prior, by: claim })
-    winners.set(claim.placement.replace, claim)
+    winners.set(claim.placement.target, claim)
   }
   const boundaries = new Map<string, Claim<Render>>()
   const containing = (path: string) => {
-    for (const [boundary, winner] of boundaries) if (path.startsWith(boundary + ".")) return winner
+    for (const [boundary, winner] of boundaries) if (contains(boundary, path)) return winner
     return undefined
   }
   // Shallow boundaries first, so a nested replacement meets its container.
@@ -109,37 +112,30 @@ export function resolveSlots<Render>(input: {
     return fresh
   }
   for (const claim of input.claims) {
-    if ("replace" in claim.placement) continue
-    const [kind, path] =
-      "prepend" in claim.placement
-        ? (["prepend", claim.placement.prepend] as const)
-        : "append" in claim.placement
-          ? (["append", claim.placement.append] as const)
-          : "before" in claim.placement
-            ? (["before", claim.placement.before] as const)
-            : (["after", claim.placement.after] as const)
+    const kind = claim.placement.kind
+    if (kind === "replace") continue
+    const target = claim.placement.target
     // Inside placements targeting a replaced boundary are part of its
     // contents; sibling placements on the boundary itself stay outside it.
-    const inside = kind === "prepend" || kind === "append" ? boundaries.get(path) : undefined
-    const outer = inside ?? containing(path)
+    const inside = kind === "prepend" || kind === "append" ? boundaries.get(target) : undefined
+    const outer = inside ?? containing(target)
     if (outer) {
       suppressed.push({ claim, by: outer })
       continue
     }
-    if (input.paths.has(path)) {
-      bucket(path)[kind].push(claim)
+    if (input.paths.has(target)) {
+      bucket(target)[kind].push(claim)
       continue
     }
-    const ancestor = survivingAncestor(path, input.paths)
+    const ancestor = survivingAncestor(target, input.paths)
     if (ancestor === undefined) {
       suppressed.push({ claim })
       continue
     }
-    const boundary = boundaries.get(ancestor)
-    if (boundary) {
-      suppressed.push({ claim, by: boundary })
-      continue
-    }
+    // The ancestor is never a replaced boundary (containing() caught that).
+    // Appending is load-bearing: a parent slot registers before its children
+    // and <Slot> renders append after them, so the transient degradation
+    // during a nested mount never instantiates anything.
     degraded.push({ claim, to: ancestor })
     bucket(ancestor).append.push(claim)
   }

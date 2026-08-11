@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { SlotClaim } from "@opencode-ai/plugin/tui/context"
-import { resolveSlots, type Claim, type Placement } from "../src/plugin/structure"
+import { resolveSlots, type Claim, type PlacementKind } from "../src/plugin/structure"
 
 // Type-level canaries, checked by `bun typecheck`: exactly one placement key,
 // absolute paths only, and the render input follows the targeted path.
@@ -20,9 +20,11 @@ export const canaries = () => {
 }
 
 // The resolver is generic over render values; strings make layout assertions
-// read as layouts.
-function claim(plugin: string, placement: Placement, render: string): Claim<string> {
-  return { key: `${plugin}/${render}`, plugin, placement, render }
+// read as layouts. Placements are written in the public claim shape and
+// normalized here, like the plugin API does.
+function claim(plugin: string, placement: Partial<Record<PlacementKind, string>>, render: string): Claim<string> {
+  const kind = (["prepend", "append", "before", "after", "replace"] as const).find((item) => placement[item])!
+  return { key: `${plugin}/${render}`, plugin, placement: { kind, target: placement[kind]! }, render }
 }
 
 // A host slot tree for tests: a node's children are its child slots, a leaf's

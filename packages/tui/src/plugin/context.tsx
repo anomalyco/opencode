@@ -421,14 +421,15 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         const cached = slotItems.get(slot.render)
         if (cached) return cached
         // Placements are immutable once registered; unwrap the store proxy
-        // so the resolver's `in` checks hit plain objects instead of
-        // subscribing tracked scopes to every key probe.
+        // so resolver reads don't subscribe tracked scopes.
         const item = { key: `${id}/${key}`, plugin: id, placement: unwrap(slot.placement), render: slot.render }
         slotItems.set(slot.render, item)
         return item
       }),
     ),
   )
+  // Object.keys tracks the store's keys node only: refcount changes on an
+  // already-mounted path (a second tab's composer) skip re-resolution.
   const resolved = createMemo(() => resolveSlots({ paths: new Set(Object.keys(mounted)), claims: claims() }))
   createEffect(
     on(

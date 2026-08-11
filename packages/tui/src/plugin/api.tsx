@@ -1,17 +1,7 @@
 import { PluginContextProvider } from "@opencode-ai/plugin/tui"
 import type { JSX } from "solid-js"
 import type { Context, Dialog, Page, SlotClaim, SlotMap, SlotPath, Toast } from "@opencode-ai/plugin/tui/context"
-import type { Placement } from "./structure"
-
-// Slot inputs erased to their union: the registry stores one render shape
-// regardless of which path a claim targets.
-export type SlotRender = (input: SlotMap[SlotPath]) => JSX.Element
-
-// A registered claim as stored by the plugin provider's registry.
-export type RegisteredSlot = {
-  readonly placement: Placement
-  readonly render: SlotRender
-}
+import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { useClient } from "../context/client"
@@ -33,6 +23,18 @@ import { useSessionTabs } from "../context/session-tabs"
 import { abbreviateHome } from "../util/path-format"
 
 export type Dispose = () => Promise<void>
+
+// Slot inputs erased to their union: the registry stores one render shape
+// regardless of which path a claim targets.
+export type SlotRender = (input: SlotMap[SlotPath]) => JSX.Element
+
+// A registered claim as stored by the plugin provider's registry.
+export type RegisteredSlot = {
+  readonly placement: Placement
+  readonly render: SlotRender
+}
+
+const placements = ["prepend", "append", "before", "after", "replace"] as const satisfies readonly PlacementKind[]
 
 // The provider's registration store, narrowed to what a plugin context needs:
 // route/slot registration lands there, but ordering and lifecycle stay owned
@@ -200,21 +202,12 @@ export function createPluginContext(input: {
         // Keys are counter-suffixed so one plugin may claim several places;
         // order within the plugin is registration order.
         const key = `slot#${claims++}`
-        // Rebuilt field-by-field rather than rest-spread so malformed input
-        // from untyped plugins normalizes to exactly one placement key — a
-        // claim carrying two keys would match twice in the resolver.
-        const placement: Placement =
-          value.prepend !== undefined
-            ? { prepend: value.prepend }
-            : value.append !== undefined
-              ? { append: value.append }
-              : value.before !== undefined
-                ? { before: value.before }
-                : value.after !== undefined
-                  ? { after: value.after }
-                  : { replace: value.replace }
+        // Exactly one placement kind, enforced at runtime for untyped plugins.
+        const kinds = placements.filter((item) => value[item] !== undefined)
+        if (kinds.length !== 1) throw new Error("Slot claim requires exactly one placement key")
+        const kind = kinds[0]
         input.registry.set("slots", key, {
-          placement,
+          placement: { kind, target: value[kind] as string },
           // The registration map erases the path-specific input type.
           render: (slotInput) => provide(() => (value.render as SlotRender)(slotInput)),
         })

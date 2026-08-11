@@ -150,6 +150,8 @@ export interface Page {
   readonly render: (input: { readonly data?: Record<string, any> }) => JSX.Element
 }
 
+type PromptFooterInput = { readonly sessionID?: string; readonly mode: "normal" | "shell" }
+
 /**
  * The host UI's slot tree. Every path is one slot: a named boundary a plugin
  * may render around, inside, or take over. Paths are absolute and
@@ -158,16 +160,15 @@ export interface Page {
  *
  * Each slot publishes an input: reactive props passed to every claim render
  * targeting it. Inputs carry only what the SDK cannot answer — instance
- * identity (which composer, which session) and client-local state — never
- * data derivable through the client. Paths and their inputs are documented
+ * identity and client-local state. Paths and their inputs are documented
  * API: coarse, few, and kept stable across host refactors.
  */
 export interface SlotMap {
   readonly app: Readonly<Record<string, never>>
   readonly "home.footer": Readonly<Record<string, never>>
-  readonly "prompt.footer": { readonly sessionID?: string; readonly mode: "normal" | "shell" }
-  readonly "prompt.footer.status": { readonly sessionID?: string; readonly mode: "normal" | "shell" }
-  readonly "prompt.footer.file": { readonly sessionID?: string; readonly mode: "normal" | "shell" }
+  readonly "prompt.footer": PromptFooterInput
+  readonly "prompt.footer.status": PromptFooterInput
+  readonly "prompt.footer.file": PromptFooterInput
   readonly "session.composer.top": { readonly sessionID: string }
   readonly "sidebar.content": { readonly sessionID: string }
   readonly "sidebar.footer": Readonly<Record<string, never>>

@@ -1469,6 +1469,7 @@ export function Prompt(props: PromptProps) {
     animationsEnabled,
   )
   const borderHighlight = createMemo(() => tint(theme.border.default, highlight(), agentMetaAlpha()))
+  const footerInput = () => ({ sessionID: props.sessionID, mode: store.mode })
 
   const placeholderText = createMemo(() => {
     if (props.showPlaceholder === false) return undefined
@@ -1778,8 +1779,8 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
-          <Slot path="prompt.footer" input={{ sessionID: props.sessionID, mode: store.mode }}>
-            <Slot path="prompt.footer.status" input={{ sessionID: props.sessionID, mode: store.mode }}>
+          <Slot path="prompt.footer" input={footerInput()}>
+            <Slot path="prompt.footer.status" input={footerInput()}>
               <box flexGrow={1} flexShrink={1} minWidth={0}>
                 <Switch>
                   <Match when={status() === "running"}>
@@ -1835,7 +1836,7 @@ export function Prompt(props: PromptProps) {
                 </Switch>
               </box>
             </Slot>
-            <Slot path="prompt.footer.file" input={{ sessionID: props.sessionID, mode: store.mode }}>
+            <Slot path="prompt.footer.file" input={footerInput()}>
               <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
                 {(file) => (
                   <text
