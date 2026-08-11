@@ -56,6 +56,8 @@ type AutocompleteResults = {
   options: AutocompleteOption[]
   failed: boolean
   mode: AutocompleteRef["visible"]
+  query: string
+  resolved: boolean
 }
 
 export function Autocomplete(props: {
@@ -333,8 +335,10 @@ export function Autocomplete(props: {
   const [files] = createResource(
     () => ({ query: search(), location: location.current, visible: store.visible }),
     async (input, info): Promise<AutocompleteResults> => {
-      if (!input.visible || input.visible === "/") return { options: [], failed: false, mode: input.visible }
-      if (referenceMatch()) return { options: [], failed: false, mode: input.visible }
+      if (!input.visible || input.visible === "/")
+        return { options: [], failed: false, mode: input.visible, query: input.query, resolved: true }
+      if (referenceMatch())
+        return { options: [], failed: false, mode: input.visible, query: input.query, resolved: true }
       const { lineRange, base } = parseFileLineRange(input.query ?? "")
       const directorySearch =
         input.visible === "directory"
@@ -357,7 +361,7 @@ export function Autocomplete(props: {
       if (!result)
         return info.value?.mode === input.visible
           ? { ...info.value, failed: true }
-          : { options: [], failed: true, mode: input.visible }
+          : { options: [], failed: true, mode: input.visible, query: input.query, resolved: false }
 
       const options: AutocompleteOption[] = []
 
@@ -406,17 +410,23 @@ export function Autocomplete(props: {
         }),
       )
 
-      return { options, failed: false, mode: input.visible }
+      return { options, failed: false, mode: input.visible, query: input.query, resolved: true }
     },
     {
-      initialValue: { options: [], failed: false, mode: false as AutocompleteRef["visible"] },
+      initialValue: {
+        options: [],
+        failed: false,
+        mode: false as AutocompleteRef["visible"],
+        query: "",
+        resolved: false,
+      },
     },
   )
 
   const visibleFiles = createMemo(() => {
     const value = files.loading ? files.latest : files()
     if (value?.mode === store.visible) return value
-    return { options: [], failed: false }
+    return { options: [], failed: false, query: "", resolved: false }
   })
 
   const mcpResources = createMemo(() => {
@@ -545,9 +555,10 @@ export function Autocomplete(props: {
   })
 
   const supplementalDirectoryOptions = createMemo((): AutocompleteOption[] => {
-    if (store.visible !== "directory" || files.loading || visibleFiles().failed) return []
+    const results = visibleFiles()
+    if (store.visible !== "directory" || !results.resolved) return []
     const width = props.anchor().width - 4
-    return (props.directoryOptions?.(search()) ?? []).map((item) => {
+    return (props.directoryOptions?.(results.query) ?? []).map((item) => {
       const value = item.value
       return {
         ...item,
