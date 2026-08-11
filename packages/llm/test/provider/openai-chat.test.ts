@@ -462,6 +462,35 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("surfaces the original filename alongside image media", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          id: "req_media_named",
+          model,
+          messages: [
+            Message.user([
+              { type: "media", mediaType: "image/png", data: "AAECAw==", filename: "IMG_3480.JPG" },
+              { type: "media", mediaType: "image/jpeg", data: "data:image/jpeg;base64,/9j/" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "[Image: IMG_3480.JPG]" },
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAECAw==" } },
+            { type: "image_url", image_url: { url: "data:image/jpeg;base64,/9j/" } },
+          ],
+        },
+      ])
+    }),
+  )
+
+
   it.effect("lowers reasoning-only assistant history", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(

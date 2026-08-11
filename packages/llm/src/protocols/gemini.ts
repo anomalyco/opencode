@@ -220,6 +220,10 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       for (const part of message.content) {
         if (!ProviderShared.supportsContent(part, ["text", "media"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "user", ["text", "media"])
+        if (part.type === "media") {
+          const caption = ProviderShared.mediaCaption(part)
+          if (caption !== undefined) parts.push({ text: caption })
+        }
         parts.push(yield* lowerUserPart(part))
       }
       contents.push({ role: "user", parts })

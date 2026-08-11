@@ -218,6 +218,8 @@ const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (mes
       continue
     }
     if (part.type === "media") {
+      const caption = ProviderShared.mediaCaption(part)
+      if (caption !== undefined) content.push({ type: "text", text: caption })
       content.push(yield* lowerMedia(part))
       continue
     }

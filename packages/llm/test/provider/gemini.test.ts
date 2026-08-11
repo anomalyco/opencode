@@ -182,6 +182,33 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("surfaces the original filename alongside image media", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user([
+              { type: "media", mediaType: "image/png", data: "AAECAw==", filename: "IMG_3480.JPG" },
+              { type: "media", mediaType: "image/jpeg", data: "data:image/jpeg;base64,/9j/" },
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "user",
+          parts: [
+            { text: "[Image: IMG_3480.JPG]" },
+            { inlineData: { mimeType: "image/png", data: "AAECAw==" } },
+            { inlineData: { mimeType: "image/jpeg", data: "/9j/" } },
+          ],
+        },
+      ])
+    }),
+  )
+
+
   for (const [name, media] of [
     ["mismatched data URL MIME", { mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" }],
     ["malformed base64", { mediaType: "image/png", data: "%%%=" }],

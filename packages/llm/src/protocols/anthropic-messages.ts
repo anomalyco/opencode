@@ -430,6 +430,8 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           continue
         }
         if (part.type === "media") {
+          const caption = ProviderShared.mediaCaption(part)
+          if (caption !== undefined) content.push({ type: "text", text: caption })
           content.push(yield* lowerImage(part))
           continue
         }

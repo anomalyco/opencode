@@ -171,6 +171,15 @@ export interface ValidatedMedia {
   readonly bytes: Uint8Array
 }
 
+/**
+ * Caption text exposing a media part's original filename to the model. The
+ * filename survives attachment ingestion (TUI -> core -> MediaPart.filename)
+ * but provider wire formats have no native field for it, so it is surfaced as
+ * a text part alongside the media content.
+ */
+export const mediaCaption = (part: MediaPart): string | undefined =>
+  part.filename === undefined || part.filename === "" ? undefined : `[Image: ${part.filename}]`
+
 export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function* (
   route: string,
   part: MediaPart,

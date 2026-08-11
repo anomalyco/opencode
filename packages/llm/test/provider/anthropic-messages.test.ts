@@ -82,6 +82,33 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("surfaces the original filename alongside image media", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user([
+              { type: "media", mediaType: "image/png", data: "AAECAw==", filename: "IMG_3480.JPG" },
+              { type: "media", mediaType: "image/jpeg", data: "data:image/jpeg;base64,/9j/" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "[Image: IMG_3480.JPG]" },
+            { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "/9j/" } },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("lowers chronological system updates to wrapped user text for unsupported Anthropic models", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(

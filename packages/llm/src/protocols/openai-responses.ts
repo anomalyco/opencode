@@ -308,14 +308,16 @@ const hostedToolItemID = (part: ToolResultPart) => {
 const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function* (
   part: LLMRequest["messages"][number]["content"][number],
 ) {
-  if (part.type === "text") return { type: "input_text" as const, text: part.text }
+  if (part.type === "text") return [{ type: "input_text" as const, text: part.text }]
   if (part.type === "media") {
     const media = yield* ProviderShared.validateMedia(
       "OpenAI Responses",
       part,
       new Set<string>(ProviderShared.IMAGE_MIMES),
     )
-    return { type: "input_image" as const, image_url: media.dataUrl }
+    const image = { type: "input_image" as const, image_url: media.dataUrl }
+    const caption = ProviderShared.mediaCaption(part)
+    return caption === undefined ? [image] : [{ type: "input_text" as const, text: caption }, image]
   }
   return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text", "media"])
 })
@@ -363,7 +365,10 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
     }
 
     if (message.role === "user") {
-      input.push({ role: "user", content: yield* Effect.forEach(message.content, lowerUserContent) })
+      input.push({
+        role: "user",
+        content: (yield* Effect.forEach(message.content, lowerUserContent)).flat(),
+      })
       continue
     }
 
