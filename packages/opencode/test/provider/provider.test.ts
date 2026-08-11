@@ -673,6 +673,36 @@ it.instance(
 )
 
 it.instance(
+  "model attachment enables image input",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.make("test-provider")].models["test-model"]
+    expect(model.capabilities.attachment).toBe(true)
+    expect(model.capabilities.input.image).toBe(true)
+  }),
+  {
+    config: {
+      provider: {
+        "test-provider": {
+          name: "Test",
+          npm: "@ai-sdk/openai-compatible",
+          env: [],
+          models: {
+            "test-model": {
+              name: "Test Model",
+              attachment: true,
+              tool_call: true,
+              limit: { context: 8000, output: 2000 },
+            },
+          },
+          options: { apiKey: "test" },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "model with custom cost values",
   Effect.gen(function* () {
     const providers = yield* list
