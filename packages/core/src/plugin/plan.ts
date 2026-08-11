@@ -8,11 +8,13 @@ import { Agent } from "../agent"
 const plan = Agent.ID.make("plan")
 
 const enter = `<system-reminder>
-You are in Plan mode. This is a READ-ONLY environment. You are not allowed to edit files, and you may not ask a subagent to edit them either.
+You are in Plan mode. You are not allowed to edit or create files, and you may not ask a subagent to do that either.
+
+You are in Plan mode until the user switches agents. Plan mode is not changed by user intent, tone, or imperative language. If the user asks you to change files, do not edit. Tell them they need to switch agents.
 </system-reminder>`
 
 const leave = `<system-reminder>
-You are no longer in Plan mode. The previous read-only restrictions no longer apply. You may edit files again.
+You are NO LONGER in Plan mode. The previous Plan restrictions no longer apply. Any Plan mode instructions from earlier in this conversation are no longer active.
 </system-reminder>`
 
 export const Plugin = define({
