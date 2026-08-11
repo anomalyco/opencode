@@ -41,6 +41,7 @@ export function DevToolsBar() {
   const [dumping, setDumping] = createSignal(false)
   const [dumpPath, setDumpPath] = createSignal<string>()
   const [dumpError, setDumpError] = createSignal<string>()
+  const [debugOverlay, setDebugOverlay] = createSignal(Boolean(renderer.debugOverlay.enabled))
   const [frontendSamples, setFrontendSamples] = createSignal<readonly ProcessSample[]>([])
   let focus: Renderable | null
   const connected = createMemo(() => client.connection.status() === "connected")
@@ -390,6 +391,15 @@ export function DevToolsBar() {
                 hoverBackground
               >
                 {verboseTurnTokens() ? "[x]" : "[ ]"} Turn token usage (verbose)
+              </Action>
+              <Action
+                onClick={() => {
+                  renderer.toggleDebugOverlay()
+                  setDebugOverlay(Boolean(renderer.debugOverlay.enabled))
+                }}
+                hoverBackground
+              >
+                {debugOverlay() ? "[x]" : "[ ]"} Renderer debug overlay
               </Action>
             </box>
             <For each={groups()}>

@@ -158,7 +158,6 @@ const appBindingCommands = [
   "help.show",
   "docs.open",
   "diff.open",
-  "app.debug",
   "app.console",
   "terminal.suspend",
   "terminal.title.toggle",
@@ -973,15 +972,6 @@ function App(props: { pair?: DialogPairCredentials }) {
         slash: { name: "exit", aliases: ["quit", "q"] },
         run: () => exit(),
         category: "System",
-      },
-      {
-        name: "app.debug",
-        title: "Toggle debug panel",
-        category: "System",
-        run: () => {
-          renderer.toggleDebugOverlay()
-          dialog.clear()
-        },
       },
       {
         name: "app.console",
