@@ -8,13 +8,14 @@ import { createUpdaterPlatform } from "./updater-platform"
 
 const key = "ready"
 
-export function setupAutoUpdater() {
+export function setupAutoUpdater(prepareToRestart: () => Promise<void>) {
   const logger = getLogger()
   const store = getStore("opencode.updater")
   return createUpdaterController({
     enabled: UPDATER_ENABLED,
     currentVersion: app.getVersion(),
-    platform: createUpdaterPlatform(logger),
+    platform: UPDATER_ENABLED ? createUpdaterPlatform(logger) : undefined,
+    lifecycle: { prepareToRestart },
     persistence: {
       get() {
         const value = store.get(key)

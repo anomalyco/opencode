@@ -5,15 +5,20 @@ import { setAppQuitting } from "./windows"
 import type { UpdaterPlatform } from "./updater-controller"
 
 const updateClient = pkg.autoUpdater
+const restartTimeout = 10_000
 
 export function createUpdaterPlatform(logger: ReturnType<typeof getLogger>): UpdaterPlatform {
   configureUpdater(logger)
   autoUpdater.on("before-quit-for-update", () => setAppQuitting())
 
   return {
-    checkForUpdate: () => updateClient.checkForUpdates(),
+    async checkForUpdate() {
+      const result = await updateClient.checkForUpdates()
+      if (!result?.isUpdateAvailable) return
+      return result.updateInfo.version
+    },
     stageUpdate,
-    installAndRestart,
+    installAndRestart: () => installAndRestart(logger),
   }
 }
 
@@ -55,14 +60,25 @@ function stageUpdate() {
   })
 }
 
-function installAndRestart() {
+function installAndRestart(logger: ReturnType<typeof getLogger>) {
   return new Promise<never>((_resolve, reject) => {
+    const timeout = setTimeout(() => {
+      logger.error("update restart did not start")
+      fail(new Error())
+    }, restartTimeout)
+    const started = () => {
+      clearTimeout(timeout)
+      autoUpdater.removeListener("before-quit-for-update", started)
+    }
     const fail = (error: Error) => {
+      clearTimeout(timeout)
+      autoUpdater.removeListener("before-quit-for-update", started)
       updateClient.removeListener("error", fail)
       setAppQuitting(false)
       reject(error)
     }
 
+    autoUpdater.once("before-quit-for-update", started)
     updateClient.once("error", fail)
     try {
       updateClient.quitAndInstall()

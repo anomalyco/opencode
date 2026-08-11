@@ -253,7 +253,7 @@ const main = Effect.gen(function* () {
   app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
   setDockIcon()
-  const updater = setupAutoUpdater()
+  const updater = setupAutoUpdater(stopSidecars)
   const menuDeps = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
