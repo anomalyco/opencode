@@ -127,6 +127,9 @@ export function createPathHelpers(scope: () => string) {
     if (path.startsWith("/") || path.startsWith("\\")) {
       path = path.slice(1)
     }
+    if (windows) {
+      path = path.replace(/\\/g, "/")
+    }
     return path
   }
 
