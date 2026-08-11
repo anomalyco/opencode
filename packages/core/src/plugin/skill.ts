@@ -6,10 +6,7 @@ import { define, type Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
 import { AbsolutePath } from "../schema"
 import { Skill } from "../skill"
-import { Config } from "../config"
 import { ConfigPluginSource } from "../config/plugin/source"
-import { Location } from "../location"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import os from "os"
 import opencodeContent from "./skill/opencode.md" with { type: "text" }
 import reportContent from "./skill/report.md" with { type: "text" }
@@ -71,10 +68,8 @@ const reportContentWithDiagnostics = Effect.fn("SkillPlugin.reportContentWithDia
 })
 
 const configuredPlugins = Effect.fn("SkillPlugin.configuredPlugins")(function* () {
-  const config = yield* Config.Service
-  const fs = yield* FSUtil.Service
-  const location = yield* Location.Service
-  return (yield* ConfigPluginSource.scan(fs, location, yield* config.entries()))
+  const sources = yield* ConfigPluginSource.Service
+  return (yield* sources.operations())
     .map((operation) => (operation.type === "remove" ? `-${operation.target}` : operation.target))
     .toSorted()
 })

@@ -17,6 +17,7 @@ import { ConfigProviderPlugin } from "../config/plugin/provider"
 import { ConfigPolicyPlugin } from "../config/plugin/policy"
 import { ConfigReferencePlugin } from "../config/plugin/reference"
 import { ConfigSkillPlugin } from "../config/plugin/skill"
+import { ConfigPluginSource } from "../config/plugin/source"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch"
 import { Bus } from "../bus"
 import { Environment } from "../environment"
@@ -76,6 +77,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const command = yield* Command.Service
   const config = yield* Config.Service
   const credential = yield* Credential.Service
+  const pluginSources = yield* ConfigPluginSource.Service
   const bus = yield* Bus.Service
   const environment = yield* Environment.Service
   const mutation = yield* FileMutation.Service
@@ -112,6 +114,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Command.Service, command),
     Context.make(Config.Service, config),
     Context.make(Credential.Service, credential),
+    Context.make(ConfigPluginSource.Service, pluginSources),
     Context.make(Bus.Service, bus),
     Context.make(Environment.Service, environment),
     Context.make(FileMutation.Service, mutation),
@@ -155,6 +158,7 @@ export const requirements = LayerNode.group([
   Command.node,
   Config.node,
   Credential.node,
+  ConfigPluginSource.node,
   Bus.node,
   Environment.node,
   FileMutation.node,
