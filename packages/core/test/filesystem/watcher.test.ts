@@ -1,28 +1,15 @@
-import { $ } from "bun"
 import { describe, expect } from "bun:test"
-import fs from "fs/promises"
 import path from "path"
-import { Deferred, Duration, Effect, Fiber, Layer, Option, Schedule, Stream } from "effect"
-import { Config } from "@opencode-ai/core/config"
+import { Deferred, Effect, Fiber, Layer, Schedule, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { LocationWatcher } from "@opencode-ai/core/filesystem/location-watcher"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
-import { FileSystem } from "@opencode-ai/schema/filesystem"
-import { Location } from "@opencode-ai/core/location"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
-type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 const describeNative = process.env.CI ? describe.skip : describe
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([FSUtil.node, Bus.node])))
-
-const configLayer = Config.testLayer()
+const it = testEffect(AppNodeBuilder.build(FSUtil.node))
 
 describe("Watcher.testLayer", () => {
   it.effect("records subscriptions and broadcasts emitted updates through the service", () =>
@@ -40,7 +27,6 @@ describe("Watcher.testLayer", () => {
       yield* test.emit({ type: "update", path: "/root/file.md" })
 
       expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "update", path: "/root/file.md" }])
-      // subscriptions() reports acquired watches, so paths come back resolved.
       expect(yield* test.subscriptions()).toEqual([{ path: path.resolve("/root"), type: "directory" }])
     }).pipe(Effect.provide(Watcher.testLayer)),
   )
@@ -126,167 +112,20 @@ describe("Watcher lifecycle", () => {
         expect(counts.unsubscribes).toBe(0)
         return consumer
       }).pipe(withNative(native))
-      // Closing the layer scope tears the native subscription down while the
-      // consumer still holds a reference; the consumer's own release as its
-      // stream ends must not tear it down a second time.
       yield* Fiber.join(consumer)
       expect(counts.unsubscribes).toBe(1)
     })
   })
 })
 
-function provide(directory: string, vcs?: Location.Interface["vcs"], watcher?: Layer.Layer<Watcher.Service>) {
-  const locationLayer = Layer.succeed(
-    Location.Service,
-    Location.Service.of(location({ directory: AbsolutePath.make(directory) }, { vcs })),
-  )
-  const built = AppNodeBuilder.build(LocationWatcher.node, [
-    [Config.node, configLayer],
-    [Location.node, locationLayer],
-    ...(watcher ? ([[Watcher.node, watcher]] as const) : []),
-  ])
-  return Effect.provide(built)
-}
-
-function withTmp<A, E, R>(
-  f: (directory: string, vcs?: Location.Interface["vcs"]) => Effect.Effect<A, E, R>,
-  options?: {
-    vcs?: "git" | "hg"
-    init?: (directory: string) => Promise<void>
-    watcher?: Layer.Layer<Watcher.Service>
-  },
-) {
+function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
   return Effect.acquireRelease(
-    Effect.promise(async () => {
-      const tmp = await tmpdir()
-      if (options?.vcs === "hg") {
-        await fs.mkdir(path.join(tmp.path, ".hg"))
-        return { tmp, vcs: { type: "hg" as const, store: AbsolutePath.make(path.join(tmp.path, ".hg")) } }
-      }
-      if (options?.vcs !== "git") return { tmp, vcs: undefined }
-      await $`git init`.cwd(tmp.path).quiet()
-      await $`git config core.fsmonitor false`.cwd(tmp.path).quiet()
-      await $`git config commit.gpgsign false`.cwd(tmp.path).quiet()
-      await $`git config user.email test@opencode.test`.cwd(tmp.path).quiet()
-      await $`git config user.name Test`.cwd(tmp.path).quiet()
-      await $`git commit --allow-empty -m root`.cwd(tmp.path).quiet()
-      await options.init?.(tmp.path)
-      return { tmp, vcs: { type: "git" as const, store: AbsolutePath.make(path.join(tmp.path, ".git")) } }
-    }),
-    ({ tmp }) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap(({ tmp, vcs }) => f(tmp.path, vcs).pipe(provide(tmp.path, vcs, options?.watcher))))
+    Effect.promise(() => tmpdir()),
+    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
 }
 
-describe("LocationWatcher subscriptions", () => {
-  it.live("watches only exact Git branch metadata", () => {
-    const subscriptions: Watcher.WatchInput[] = []
-    const watcher = Layer.succeed(
-      Watcher.Service,
-      Watcher.Service.of({
-        subscribe: (input) => Effect.sync(() => subscriptions.push(input)).pipe(Effect.as(Stream.empty)),
-      }),
-    )
-    return withTmp(
-      (directory) =>
-        Effect.gen(function* () {
-          yield* LocationWatcher.Service
-          yield* Effect.sync(() => subscriptions.length).pipe(
-            Effect.filterOrFail((count) => count > 0),
-            Effect.retry(Schedule.spaced("10 millis")),
-          )
-          yield* Effect.sleep("10 millis")
-          expect(subscriptions).toEqual([{ path: path.join(directory, ".git", "HEAD"), type: "file" }])
-        }),
-      { vcs: "git", watcher },
-    )
-  })
-
-  it.live("watches only exact Hg branch metadata", () => {
-    const subscriptions: Watcher.WatchInput[] = []
-    const watcher = Layer.succeed(
-      Watcher.Service,
-      Watcher.Service.of({
-        subscribe: (input) => Effect.sync(() => subscriptions.push(input)).pipe(Effect.as(Stream.empty)),
-      }),
-    )
-    return withTmp(
-      (directory) =>
-        Effect.gen(function* () {
-          yield* LocationWatcher.Service
-          yield* Effect.sync(() => subscriptions.length).pipe(
-            Effect.filterOrFail((count) => count > 0),
-            Effect.retry(Schedule.spaced("10 millis")),
-          )
-          yield* Effect.sleep("10 millis")
-          expect(subscriptions).toEqual([{ path: path.join(directory, ".hg", "branch"), type: "file" }])
-        }),
-      { vcs: "hg", watcher },
-    )
-  })
-})
-
-function wait(check: (event: WatcherEvent) => boolean) {
-  return Effect.gen(function* () {
-    const bus = yield* Bus.Service
-    const deferred = yield* Deferred.make<WatcherEvent>()
-    const fiber = yield* bus.subscribe(FileSystem.Event.Changed).pipe(
-      Stream.runForEach((event) => {
-        if (!check(event.data)) return Effect.void
-        return Deferred.succeed(deferred, event.data).pipe(Effect.asVoid)
-      }),
-      Effect.forkScoped,
-    )
-    yield* Effect.yieldNow
-    return { deferred, fiber }
-  })
-}
-
-function maybeNextUpdate<E>(
-  check: (event: WatcherEvent) => boolean,
-  trigger: Effect.Effect<void, E>,
-  timeout: Duration.Input = "5 seconds",
-) {
-  return Effect.acquireUseRelease(
-    wait(check),
-    ({ deferred }) => trigger.pipe(Effect.andThen(Deferred.await(deferred)), Effect.timeoutOption(timeout)),
-    ({ fiber }) => Fiber.interrupt(fiber),
-  )
-}
-
-function nextUpdate<E>(check: (event: WatcherEvent) => boolean, trigger: Effect.Effect<void, E>) {
-  return Effect.gen(function* () {
-    const result = yield* maybeNextUpdate(check, trigger)
-    if (Option.isSome(result)) return result.value
-    return yield* Effect.fail(new Error("timed out waiting for file watcher update"))
-  })
-}
-
-function eventuallyUpdate<E>(check: (event: WatcherEvent) => boolean, trigger: () => Effect.Effect<void, E>) {
-  return Effect.gen(function* () {
-    while (true) {
-      const result = yield* maybeNextUpdate(check, trigger(), "250 millis")
-      if (Option.isSome(result)) return result.value
-    }
-  }).pipe(
-    Effect.timeoutOrElse({
-      duration: "5 seconds",
-      orElse: () => Effect.fail(new Error("timed out waiting for file watcher readiness")),
-    }),
-  )
-}
-
-function ready(file: string, eventFile = file) {
-  return Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    const content = (yield* fs.readFileStringSafe(file)) ?? `ready-${Math.random()}`
-    yield* eventuallyUpdate(
-      (event) => event.file === eventFile,
-      () => fs.writeFileString(file, content),
-    ).pipe(Effect.asVoid)
-  })
-}
-
-describeNative("LocationWatcher", () => {
+describeNative("Watcher", () => {
   it.live("limits file watches to the exact target", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -331,70 +170,6 @@ describeNative("LocationWatcher", () => {
 
         expect(event.valueOrUndefined?.path).toBe(target)
       }).pipe(Effect.provide(AppNodeBuilder.build(Watcher.node))),
-    ),
-  )
-
-  it.live("publishes .git/HEAD events", () =>
-    withTmp(
-      (directory) =>
-        Effect.gen(function* () {
-          const fs = yield* FSUtil.Service
-          const head = path.join(directory, ".git", "HEAD")
-          const branch = `watch-${Math.random().toString(36).slice(2)}`
-          yield* ready(head)
-          yield* Effect.promise(() => $`git branch ${branch}`.cwd(directory).quiet())
-          expect(
-            yield* nextUpdate((event) => event.file === head, fs.writeFileString(head, `ref: refs/heads/${branch}\n`)),
-          ).toEqual({ file: head, event: "change" })
-        }),
-      { vcs: "git" },
-    ),
-  )
-
-  const describeSymlink = process.platform !== "win32" ? describe : describe.skip
-  describeSymlink("symlinked .git", () => {
-    it.live("publishes .git/HEAD events through a symlinked .git directory", () =>
-      withTmp(
-        (directory) =>
-          Effect.gen(function* () {
-            const afs = yield* FSUtil.Service
-            const actual = path.join(directory, "..", `actual_${path.basename(directory)}`)
-            yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(actual, { recursive: true, force: true })))
-            const head = path.join(directory, ".git", "HEAD")
-            yield* ready(head, path.join(actual, "HEAD"))
-            const branch = `watch-${Math.random().toString(36).slice(2)}`
-            yield* Effect.promise(() => $`git branch ${branch}`.cwd(directory).quiet())
-            expect(
-              yield* nextUpdate(
-                (event) => event.file === path.join(actual, "HEAD"),
-                afs.writeFileString(head, `ref: refs/heads/${branch}\n`),
-              ),
-            ).toEqual({ file: path.join(actual, "HEAD"), event: "change" })
-          }),
-        {
-          vcs: "git",
-          init: async (directory) => {
-            const actual = path.join(directory, "..", `actual_${path.basename(directory)}`)
-            await fs.rename(path.join(directory, ".git"), actual)
-            await fs.symlink(actual, path.join(directory, ".git"))
-          },
-        },
-      ),
-    )
-  })
-
-  it.live("publishes .hg/branch events", () =>
-    withTmp(
-      (directory) =>
-        Effect.gen(function* () {
-          const fs = yield* FSUtil.Service
-          const branch = path.join(directory, ".hg", "branch")
-          yield* ready(branch)
-          expect(
-            yield* nextUpdate((event) => event.file === branch, fs.writeFileString(branch, "feature\n")),
-          ).toMatchObject({ file: branch })
-        }),
-      { vcs: "hg" },
     ),
   )
 })

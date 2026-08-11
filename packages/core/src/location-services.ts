@@ -15,7 +15,6 @@ import { FileSystemSearch } from "./filesystem/search"
 import { Generate } from "./generate"
 import { Form } from "./form"
 import { Image } from "./image"
-import { LocationWatcher } from "./filesystem/location-watcher"
 import { Integration } from "./integration"
 import { Location } from "./location"
 import { LocationMutation } from "./location-mutation"
@@ -99,8 +98,6 @@ const locationServiceNodes = [
   Snapshot.node,
   SessionRunnerLLM.node,
   Vcs.node,
-  // Start repository watches only after boot-critical filesystem and Git work.
-  LocationWatcher.node,
 ] as const satisfies readonly Node.LocationNode<unknown, unknown>[]
 
 export const locationServices = LayerNode.group<typeof locationServiceNodes>(locationServiceNodes)

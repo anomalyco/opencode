@@ -8,7 +8,6 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Vcs } from "@opencode-ai/core/vcs"
-import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
@@ -42,7 +41,9 @@ const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
 
 const withHg = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
   withTmp((directory) =>
-    Effect.promise(() => hg(directory, "init")).pipe(Effect.andThen(f(directory).pipe(provide(directory)))),
+    Effect.promise(() => hg(directory, "init")).pipe(
+      Effect.andThen(f(directory).pipe(provide(directory))),
+    ),
   )
 
 async function hg(directory: string, ...args: string[]) {
@@ -124,13 +125,7 @@ describeHg("Vcs mercurial", () => {
           .subscribe(VcsEvent.BranchUpdated)
           .pipe(Stream.take(1), Stream.runHead, Effect.forkScoped({ startImmediately: true }))
         yield* Effect.promise(() => hg(directory, "branch", "-q", "feature"))
-        expect(yield* vcs.info()).toEqual({ branch: { current: "default", default: "default" } })
-
-        yield* bus.publish(FileSystem.Event.Changed, {
-          file: path.join(directory, ".hg", "branch"),
-          event: "change",
-        })
-        expect(yield* Fiber.join(updated)).toMatchObject({
+        expect(yield* Fiber.join(updated).pipe(Effect.timeout("5 seconds"))).toMatchObject({
           _tag: "Some",
           value: { location: { directory }, data: { branch: "feature" } },
         })

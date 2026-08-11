@@ -8,27 +8,66 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Vcs } from "@opencode-ai/core/vcs"
-import { FileSystem } from "@opencode-ai/schema/filesystem"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
+const describeNative = process.env.CI ? describe.skip : describe
+
+const locationLayer = (directory: string, git?: boolean) =>
+  Layer.succeed(
+    Location.Service,
+    Location.Service.of(
+      location(
+        { directory: AbsolutePath.make(directory) },
+        git ? { vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) } } : {},
+      ),
+    ),
+  )
+
 const provide = (directory: string, input: { git?: boolean } = {}) =>
   Effect.provide(
+    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node]), [[Location.node, locationLayer(directory, input.git)]]),
+  )
+
+function fakeWatcher() {
+  const subscriptions: Watcher.WatchInput[] = []
+  const active = new Set<(update: Watcher.Update) => void>()
+  const native = Watcher.Native.of({
+    subscribe: (input) =>
+      Effect.sync(() => {
+        subscriptions.push(
+          input.type === "file"
+            ? { path: input.target, type: "file" }
+            : input.ignore.length > 0
+              ? { path: input.target, type: "directory", ignore: input.ignore }
+              : { path: input.target, type: "directory" },
+        )
+        active.add(input.publish)
+        return {
+          unsubscribe: () => {
+            active.delete(input.publish)
+            return Promise.resolve()
+          },
+        }
+      }),
+  })
+  return {
+    subscriptions: () => [...subscriptions],
+    emit: (update: Watcher.Update) => {
+      for (const publish of active) publish(update)
+    },
+    layer: Watcher.layer().pipe(Layer.provide(Layer.succeed(Watcher.Native, native))),
+  }
+}
+
+const provideFake = (directory: string, fake: ReturnType<typeof fakeWatcher>, git = true) =>
+  Effect.provide(
     LayerNode.compile(LayerNode.group([Vcs.node, Bus.node]), [
-      [
-        Location.node,
-        Layer.succeed(
-          Location.Service,
-          Location.Service.of(
-            location(
-              { directory: AbsolutePath.make(directory) },
-              input.git ? { vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) } } : {},
-            ),
-          ),
-        ),
-      ],
+      [Location.node, locationLayer(directory, git)],
+      [Watcher.node, fake.layer],
     ]),
   )
 
@@ -93,34 +132,83 @@ describe("Vcs", () => {
     ),
   )
 
-  it.live("caches branch info and publishes HEAD changes", () =>
-    withGit((directory) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(async () => {
-          await fs.writeFile(path.join(directory, "file.txt"), "one\n")
-          await commitAll(directory, "initial")
-        })
-        const vcs = yield* Vcs.Service
-        const bus = yield* Bus.Service
-        expect(yield* vcs.info()).toEqual({ branch: { current: "main", default: undefined } })
-
-        const updated = yield* bus
-          .subscribe(VcsEvent.BranchUpdated)
-          .pipe(Stream.take(1), Stream.runHead, Effect.forkScoped({ startImmediately: true }))
-        yield* Effect.promise(() => $`git checkout -q -b feature`.cwd(directory).quiet())
-
-        yield* bus.publish(FileSystem.Event.Changed, { file: path.join(directory, "HEAD"), event: "change" })
-        expect(yield* vcs.info()).toEqual({ branch: { current: "main", default: undefined } })
-
-        yield* bus.publish(FileSystem.Event.Changed, { file: path.join(directory, ".git", "HEAD"), event: "change" })
-        expect(yield* Fiber.join(updated)).toMatchObject({
-          _tag: "Some",
-          value: { location: { directory }, data: { branch: "feature" } },
-        })
-        expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "main" } })
-      }),
-    ),
+  it.live("watches git branch metadata", () =>
+    withTmp((directory) => {
+      const fake = fakeWatcher()
+      return Effect.promise(() => initRepo(directory)).pipe(
+        Effect.andThen(
+          Effect.gen(function* () {
+            yield* Vcs.Service
+            expect(fake.subscriptions()).toHaveLength(1)
+            const git = fake.subscriptions()[0]
+            if (git?.type !== "directory") throw new Error("expected a directory watch")
+            expect(git.path).toBe(path.join(directory, ".git"))
+            expect(git.ignore ?? []).not.toContain("HEAD")
+            expect(git.ignore ?? []).toContain("objects")
+          }).pipe(provideFake(directory, fake)),
+        ),
+      )
+    }),
   )
+
+  it.live("caches branch info and publishes HEAD changes", () =>
+    withTmp((directory) => {
+      const fake = fakeWatcher()
+      return Effect.promise(async () => {
+        await initRepo(directory)
+        await fs.writeFile(path.join(directory, "file.txt"), "one\n")
+        await commitAll(directory, "initial")
+      }).pipe(
+        Effect.andThen(
+          Effect.gen(function* () {
+            const vcs = yield* Vcs.Service
+            const bus = yield* Bus.Service
+            expect(yield* vcs.info()).toMatchObject({ branch: { current: "main" } })
+
+            const updated = yield* bus
+              .subscribe(VcsEvent.BranchUpdated)
+              .pipe(Stream.take(1), Stream.runHead, Effect.forkScoped({ startImmediately: true }))
+            yield* Effect.promise(() => $`git checkout -q -b feature`.cwd(directory).quiet())
+            fake.emit({ type: "update", path: path.join(directory, ".git", "index.lock") })
+            expect(yield* vcs.info()).toMatchObject({ branch: { current: "main" } })
+
+            fake.emit({ type: "update", path: path.join(directory, ".git", "HEAD.lock") })
+            expect(yield* Fiber.join(updated)).toMatchObject({
+              _tag: "Some",
+              value: { location: { directory }, data: { branch: "feature" } },
+            })
+            expect(yield* vcs.info()).toMatchObject({ branch: { current: "feature" } })
+          }).pipe(provideFake(directory, fake)),
+        ),
+      )
+    }),
+  )
+
+  describeNative("native watches", () => {
+    it.live("publishes branch updates on git checkout", () =>
+      withGit((directory) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.writeFile(path.join(directory, "file.txt"), "one\n")
+            await commitAll(directory, "initial")
+          })
+          const vcs = yield* Vcs.Service
+          const bus = yield* Bus.Service
+          expect(yield* vcs.info()).toMatchObject({ branch: { current: "main" } })
+          const updated = yield* bus
+            .subscribe(VcsEvent.BranchUpdated)
+            .pipe(Stream.take(1), Stream.runHead, Effect.forkScoped({ startImmediately: true }))
+          yield* Effect.promise(() => $`git checkout -q -b feature`.cwd(directory).quiet())
+          expect(yield* Fiber.join(updated).pipe(Effect.timeout("5 seconds"))).toMatchObject({
+            _tag: "Some",
+            value: { data: { branch: "feature" } },
+          })
+          expect(yield* vcs.info()).toMatchObject({ branch: { current: "feature" } })
+        }),
+      ),
+      { timeout: 15_000 },
+    )
+  })
 
   it.live("diffs the working copy against HEAD with patches", () =>
     withGit((directory) =>
