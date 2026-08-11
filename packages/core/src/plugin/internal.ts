@@ -12,6 +12,7 @@ import { Config } from "../config"
 import { Credential } from "../credential"
 import { ConfigAgentPlugin } from "../config/plugin/agent"
 import { ConfigCommandPlugin } from "../config/plugin/command"
+import { ConfigInstructionPlugin } from "../config/plugin/instruction"
 import { ConfigProviderPlugin } from "../config/plugin/provider"
 import { ConfigPolicyPlugin } from "../config/plugin/policy"
 import { ConfigReferencePlugin } from "../config/plugin/reference"
@@ -26,6 +27,7 @@ import { FileSystem } from "../filesystem"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { Image } from "../image"
+import { InstructionDiscovery } from "../instruction-discovery"
 import { Integration } from "../integration"
 import { KV } from "../kv"
 import { Location } from "../location"
@@ -83,6 +85,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
   const global = yield* Global.Service
   const http = yield* HttpClient.HttpClient
   const image = yield* Image.Service
+  const instructionDiscovery = yield* InstructionDiscovery.Service
   const integration = yield* Integration.Service
   const kv = yield* KV.Service
   const location = yield* Location.Service
@@ -118,6 +121,7 @@ const services = Effect.fn("PluginInternal.services")(function* () {
     Context.make(Global.Service, global),
     Context.make(HttpClient.HttpClient, http),
     Context.make(Image.Service, image),
+    Context.make(InstructionDiscovery.Service, instructionDiscovery),
     Context.make(Integration.Service, integration),
     Context.make(KV.Service, kv),
     Context.make(Location.Service, location),
@@ -160,6 +164,7 @@ export const requirements = LayerNode.group([
   Global.node,
   httpClient,
   Image.node,
+  InstructionDiscovery.node,
   Integration.node,
   KV.node,
   Location.node,
@@ -209,6 +214,7 @@ const pre = [
 ] as const satisfies readonly InternalPlugin[]
 
 const post = [
+  ConfigInstructionPlugin.Plugin,
   ConfigReferencePlugin.Plugin,
   ConfigAgentPlugin.Plugin,
   ConfigCommandPlugin.Plugin,
