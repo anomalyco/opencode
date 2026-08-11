@@ -62,13 +62,9 @@ function createMarquee(hovered: () => string | undefined, animations: () => bool
   const leading = createAnimatable({ opacity: 0 }, { enabled: animations, transition: tween({ duration: 0.25 }) })
 
   createEffect(() => {
-    if (!hovered()) {
-      setOffset(0)
-      leading.jump({ opacity: 0 })
-      return
-    }
     setOffset(0)
     leading.jump({ opacity: 0 })
+    if (!hovered()) return
     let interval: ReturnType<typeof setInterval> | undefined
     const delay = setTimeout(() => {
       setOffset(1)
