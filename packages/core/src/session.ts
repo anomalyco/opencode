@@ -207,6 +207,7 @@ export interface Interface {
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: Agent.ID }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: Model.Ref }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
+  readonly archive: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly move: (input: {
     sessionID: SessionSchema.ID
     directory: AbsolutePath
@@ -728,6 +729,11 @@ const layer = Layer.effect(
           sessionID: input.sessionID,
           title: input.title,
         })
+      }),
+      archive: Effect.fn("Session.archive")(function* (sessionID) {
+        const session = yield* result.get(sessionID)
+        if (session.time.archived) return
+        yield* bus.publish(SessionEvent.Archived, { sessionID })
       }),
       move: Effect.fn("Session.move")(function* (input) {
         const current = yield* result.get(input.sessionID)

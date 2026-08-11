@@ -526,6 +526,7 @@ test("session methods use the public HTTP contract", async () => {
     sessionID: "ses_test",
     model: { id: "claude", providerID: "anthropic" },
   })
+  await client.session.archive({ sessionID: "ses_test" })
   const admitted = await client.session.prompt({
     sessionID: "ses_test",
     text: "Hello",
@@ -561,6 +562,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session"],
     ["POST", "http://localhost:3000/api/session/ses_test/agent"],
     ["POST", "http://localhost:3000/api/session/ses_test/model"],
+    ["POST", "http://localhost:3000/api/session/ses_test/archive"],
     ["POST", "http://localhost:3000/api/session/ses_test/prompt"],
     ["POST", "http://localhost:3000/api/session/ses_test/generate"],
     ["POST", "http://localhost:3000/api/session/ses_test/synthetic"],
