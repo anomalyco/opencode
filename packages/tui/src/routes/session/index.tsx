@@ -3034,11 +3034,10 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string; last: boole
   const title = createMemo(
     () => `${props.last ? "└─" : "├─"} ${props.call.tool}${props.call.status === "error" ? " (failed)" : ""}`,
   )
-  const rail = createMemo(() => (props.last ? "   " : "│  "))
 
   return (
     <box
-      paddingLeft={6}
+      paddingLeft={3 + INLINE_TOOL_ICON_WIDTH}
       onMouseOver={() => expandable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -3060,13 +3059,14 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string; last: boole
         {expanded() ? title() : executeCallSummary(props.call, props.last)}
       </text>
       <Show when={expanded()}>
-        <box paddingLeft={2}>
+        <box
+          border={props.last ? undefined : ["left"]}
+          borderColor={theme.text.subdued}
+          paddingLeft={props.last ? 3 : 2}
+        >
           <For each={input()}>
             {([key, value]) => (
               <box flexDirection="row">
-                <text flexShrink={0} fg={theme.text.subdued}>
-                  {rail()}
-                </text>
                 <text flexShrink={0} fg={theme.text.subdued}>
                   {key}:{" "}
                 </text>
@@ -3079,9 +3079,6 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string; last: boole
           <Show when={props.error}>
             {(error) => (
               <box flexDirection="row">
-                <text flexShrink={0} fg={theme.text.feedback.error.default}>
-                  {rail()}
-                </text>
                 <text flexShrink={0} fg={theme.text.feedback.error.default}>
                   error:{" "}
                 </text>
