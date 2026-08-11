@@ -5,7 +5,13 @@ import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
 import { hasPtyConnectTicketURL } from "@opencode-ai/protocol/groups/pty"
 import { Cause, Context, Deferred, Effect, Exit, Layer, Option, Ref, Schema, Scope } from "effect"
-import { HttpMiddleware, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import {
+  HttpMiddleware,
+  HttpRouter,
+  HttpServer,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/unstable/http"
 import { randomUUID } from "node:crypto"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
@@ -31,6 +37,8 @@ type App = Effect.Effect<
   HttpServerRequest.HttpServerRequest | Scope.Scope
 >
 
+export type Transform = (app: App) => App
+
 const errorResponseLogger = HttpMiddleware.make((app) =>
   HttpMiddleware.logger(
     Effect.tap(app, (response) =>
@@ -42,6 +50,7 @@ const errorResponseLogger = HttpMiddleware.make((app) =>
 export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   options: ServerOptions,
   lifecycle?: Lifecycle<E, R>,
+  transform?: Transform,
 ) {
   const password = options.password
   if (!password) return yield* Effect.fail(new Error("Missing server password"))
@@ -101,7 +110,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
         Effect.provideService(Scope.Scope, applicationScope),
       )
     }
-    yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
+    const app = Context.get(context, HttpRouter.HttpRouter).asHttpEffect()
+    yield* Ref.set(application, Option.some(transform ? transform(app) : app))
     yield* status.ready
     return { address: bound.http.address, shutdown: Deferred.await(shutdown) }
   }).pipe(

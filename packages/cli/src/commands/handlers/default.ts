@@ -39,7 +39,7 @@ export default Runtime.handler(Commands, (input) =>
     )
     preflight.loading()
     const endpoint = yield* Ref.make(server.endpoint)
-    const web = yield* Effect.cached(WebUi.start(endpoint))
+    const web = Ref.get(endpoint).pipe(Effect.map(WebUi.url))
     const config = yield* Config.Service
     const npm = yield* Npm.Service
     const fileSystem = yield* FileSystem.FileSystem
