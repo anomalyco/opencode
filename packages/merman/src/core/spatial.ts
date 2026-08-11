@@ -77,20 +77,21 @@ export function spatialPathSpans(points: readonly DiagramPoint[]): SpatialSpan[]
     .sort(([left], [right]) => left - right)
     .flatMap(([y, xs]) => {
       const sorted = [...xs].sort((left, right) => left - right)
+      const [first, ...rest] = sorted
+      if (first === undefined) return []
       const spans: SpatialSpan[] = []
-      let start = sorted[0]
-      let end = start
-      if (start === undefined) return spans
-      for (const x of sorted.slice(1)) {
-        if (x === end! + 1) {
+      let start = first
+      let end = first
+      for (const x of rest) {
+        if (x === end + 1) {
           end = x
           continue
         }
-        spans.push(normalizedSpan(y, start, end!))
+        spans.push(normalizedSpan(y, start, end))
         start = x
         end = x
       }
-      spans.push(normalizedSpan(y, start, end!))
+      spans.push(normalizedSpan(y, start, end))
       return spans
     })
 }
