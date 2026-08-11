@@ -1,11 +1,8 @@
-import path from "path"
-import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
+import { Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Money } from "@opencode-ai/schema/money"
 import { App } from "./app"
-import { Global } from "@opencode-ai/util/global"
-import { Flock } from "@opencode-ai/util/flock"
 import { Hash } from "@opencode-ai/util/hash"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bus } from "./bus"
@@ -13,6 +10,7 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { Model } from "./model"
 import { Provider } from "./provider"
+import { KV } from "./kv"
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
@@ -537,6 +535,12 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
+const Cache = Schema.Struct({
+  updatedAt: Schema.Number,
+  body: Schema.String,
+})
+const CatalogJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+
 export const layer = (options?: Options) =>
   Layer.effect(
     Service,
@@ -544,7 +548,7 @@ export const layer = (options?: Options) =>
       const fs = yield* FSUtil.Service
       const bus = yield* Bus.Service
       const app = yield* App.Metadata
-      const global = yield* Global.Service
+      const kv = yield* KV.Service
       const http = HttpClient.filterStatusOk(
         (yield* HttpClient.HttpClient).pipe(
           HttpClient.retryTransient({
@@ -558,18 +562,32 @@ export const layer = (options?: Options) =>
       const source = options?.url || "https://models.opencode.ai"
       const fetch = options?.fetch ?? true
       const userAgent = App.useragent(app)
-      const filepath = path.join(
-        global.cache,
-        source === "https://models.opencode.ai" ? "models.json" : `models-${Hash.fast(source)}.json`,
-      )
+      const cacheKey =
+        source === "https://models.opencode.ai" ? "models-dev:catalog" : `models-dev:catalog:${Hash.fast(source)}`
       const ttl = Duration.minutes(5)
-      const lockKey = `models-dev:${filepath}`
+      const lock = Semaphore.makeUnsafe(1)
+
+      const loadFromCache = Effect.fnUntraced(function* () {
+        const value = yield* kv.get(cacheKey)
+        if (!Schema.is(Cache)(value)) {
+          if (value !== undefined) yield* kv.remove(cacheKey)
+          return
+        }
+        const catalog = Schema.decodeUnknownOption(CatalogJson)(value.body)
+        if (Option.isNone(catalog)) {
+          yield* kv.remove(cacheKey)
+          return
+        }
+        return {
+          catalog: catalog.value as Record<string, SourceProvider>,
+          updatedAt: value.updatedAt,
+        }
+      })
 
       const fresh = Effect.fnUntraced(function* () {
-        const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
-        if (!stat) return false
-        const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
-        return Date.now() - mtime < Duration.toMillis(ttl)
+        const cached = yield* loadFromCache()
+        if (!cached) return false
+        return Date.now() - cached.updatedAt < Duration.toMillis(ttl)
       })
 
       const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
@@ -581,15 +599,12 @@ export const layer = (options?: Options) =>
         )
       })
 
-      const loadFromDisk = fs.readJson(options?.file ?? filepath).pipe(
-        Effect.map((input) => input as Record<string, SourceProvider>),
-        Effect.catch((error) => {
-          if (options?.file === undefined && error._tag === "FileSystemError" && error.method === "readJson") {
-            return fs.remove(filepath, { force: true }).pipe(Effect.ignore, Effect.as(undefined))
-          }
-          return Effect.succeed(undefined)
-        }),
-      )
+      const loadFromFile = options?.file
+        ? fs.readJson(options.file).pipe(
+            Effect.map((input) => input as Record<string, SourceProvider>),
+            Effect.catch(() => Effect.succeed(undefined)),
+          )
+        : Effect.succeed(undefined)
 
       const loadSnapshot = Effect.sync(() =>
         typeof OPENCODE_MODELS_DEV === "undefined" ? undefined : OPENCODE_MODELS_DEV,
@@ -597,33 +612,27 @@ export const layer = (options?: Options) =>
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const text = yield* fetchApi()
-        const tempfile = `${filepath}.${process.pid}.${Date.now()}.tmp`
-        yield* fs.writeWithDirs(tempfile, text).pipe(
-          Effect.andThen(fs.rename(tempfile, filepath)),
-          Effect.catch((error) =>
-            Effect.gen(function* () {
-              yield* fs.remove(tempfile, { force: true }).pipe(Effect.ignore)
-              return yield* Effect.fail(error)
-            }),
-          ),
-        )
-        return text
+        const catalog = (yield* Schema.decodeUnknownEffect(CatalogJson)(text)) as Record<string, SourceProvider>
+        yield* kv.set(cacheKey, { updatedAt: Date.now(), body: text })
+        return catalog
       })
 
       const populate = Effect.gen(function* () {
-        const fromDisk = yield* loadFromDisk
-        if (fromDisk) return normalize(fromDisk)
+        const fromFile = yield* loadFromFile
+        if (fromFile) return normalize(fromFile)
+        const cached = options?.file ? undefined : yield* loadFromCache()
+        if (cached) return normalize(cached.catalog)
         const bundled = yield* loadSnapshot
         if (bundled) return normalize(bundled)
         if (!fetch) return []
-        // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
-        const text = yield* Effect.scoped(
+        const catalog = yield* lock.withPermit(
           Effect.gen(function* () {
-            yield* Flock.effect(lockKey)
+            const stored = options?.file ? undefined : yield* loadFromCache()
+            if (stored) return stored.catalog
             return yield* fetchAndWrite()
           }),
         )
-        return normalize(JSON.parse(text) as Record<string, SourceProvider>)
+        return normalize(catalog)
       }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
       const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
@@ -632,20 +641,19 @@ export const layer = (options?: Options) =>
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
         if (!force && (yield* fresh())) return
-        yield* Effect.scoped(
-          Effect.gen(function* () {
-            yield* Flock.effect(lockKey)
-            // Re-check under the lock: another process may have refreshed between
-            // our outer check and lock acquisition.
-            if (!force && (yield* fresh())) return
-            yield* fetchAndWrite()
-            yield* invalidate
-            yield* bus.publish(ModelsDev.Event.Refreshed, {})
-          }),
-        ).pipe(
-          Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
-          Effect.ignore,
-        )
+        yield* lock
+          .withPermit(
+            Effect.gen(function* () {
+              if (!force && (yield* fresh())) return
+              yield* fetchAndWrite()
+              yield* invalidate
+              yield* bus.publish(ModelsDev.Event.Refreshed, {})
+            }),
+          )
+          .pipe(
+            Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
+            Effect.ignore,
+          )
       })
 
       if (fetch && !process.argv.includes("--get-yargs-completions")) {
@@ -661,7 +669,7 @@ export function configured(options?: Options) {
   return makeGlobalNode({
     service: Service,
     layer: layer(options),
-    deps: [FSUtil.node, Bus.node, App.node, Global.node, httpClient],
+    deps: [FSUtil.node, Bus.node, App.node, KV.node, httpClient],
   })
 }
 
