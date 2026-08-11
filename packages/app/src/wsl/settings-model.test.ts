@@ -48,7 +48,7 @@ describe("WSL server settings presentation", () => {
         matchesDesktop: null,
         error: null,
       }),
-    ).toBe("Install OpenCode")
+    ).toBe("wsl.onboarding.installOpencode")
     expect(
       wslOpencodeAction({
         distro: "Debian",
@@ -58,7 +58,7 @@ describe("WSL server settings presentation", () => {
         matchesDesktop: false,
         error: null,
       }),
-    ).toBe("Update OpenCode")
+    ).toBe("wsl.onboarding.updateOpencode")
     expect(
       wslOpencodeAction({
         distro: "Debian",

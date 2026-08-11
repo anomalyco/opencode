@@ -121,6 +121,7 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
     <Kobalte<T, { category: string; options: T[] }>
       {...others}
       multiple={false}
+      allowDuplicateSelectionEvents={false}
       disabled={local.disabled}
       data-component="select-v2-root"
       placement={local.placement ?? (inline() ? "bottom-end" : "bottom-start")}
