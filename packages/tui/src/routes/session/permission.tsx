@@ -87,6 +87,43 @@ function EditBody(props: { request: PermissionRequest }) {
   )
 }
 
+function ScrollableBody(props: { children: JSX.Element }) {
+  const { theme } = useTheme()
+  const tuiConfig = useTuiConfig()
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+
+  return (
+    <box paddingLeft={1} flexGrow={1} minHeight={0}>
+      <scrollbox
+        height="100%"
+        scrollAcceleration={scrollAcceleration()}
+        verticalScrollbarOptions={{
+          trackOptions: {
+            backgroundColor: theme.background,
+            foregroundColor: theme.borderActive,
+          },
+        }}
+      >
+        {props.children}
+      </scrollbox>
+    </box>
+  )
+}
+
+function ScrollableText(props: { text: string; prefix?: string; muted?: boolean }) {
+  const { theme } = useTheme()
+
+  return (
+    <Show when={props.text}>
+      <ScrollableBody>
+        <text fg={props.muted ? theme.textMuted : theme.text} wrapMode="word" width="100%">
+          {(props.prefix ?? "") + props.text}
+        </text>
+      </ScrollableBody>
+    </Show>
+  )
+}
+
 function TextBody(props: { title: string; description?: string; icon?: string }) {
   const { theme } = useTheme()
   return (
@@ -100,9 +137,7 @@ function TextBody(props: { title: string; description?: string; icon?: string })
         <text fg={theme.textMuted}>{props.title}</text>
       </box>
       <Show when={props.description}>
-        <box paddingLeft={1}>
-          <text fg={theme.text}>{props.description}</text>
-        </box>
+        <ScrollableText text={props.description ?? ""} />
       </Show>
     </>
   )
@@ -212,13 +247,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               return {
                 icon: "→",
                 title: `Read ${pathFormatter.format(filePath)}`,
-                body: (
-                  <Show when={filePath}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Path: " + pathFormatter.format(filePath)}</text>
-                    </box>
-                  </Show>
-                ),
+                body: <ScrollableText text={pathFormatter.format(filePath)} prefix="Path: " muted />,
               }
             }
 
@@ -227,13 +256,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               return {
                 icon: "✱",
                 title: `Glob "${pattern}"`,
-                body: (
-                  <Show when={pattern}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
-                    </box>
-                  </Show>
-                ),
+                body: <ScrollableText text={pattern} prefix="Pattern: " muted />,
               }
             }
 
@@ -242,13 +265,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               return {
                 icon: "✱",
                 title: `Grep "${pattern}"`,
-                body: (
-                  <Show when={pattern}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Pattern: " + pattern}</text>
-                    </box>
-                  </Show>
-                ),
+                body: <ScrollableText text={pattern} prefix="Pattern: " muted />,
               }
             }
 
@@ -258,13 +275,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               return {
                 icon: "→",
                 title: `List ${pathFormatter.format(dir)}`,
-                body: (
-                  <Show when={dir}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Path: " + pathFormatter.format(dir)}</text>
-                    </box>
-                  </Show>
-                ),
+                body: <ScrollableText text={pathFormatter.format(dir)} prefix="Path: " muted />,
               }
             }
 
@@ -273,13 +284,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               return {
                 icon: "#",
                 title: "Shell command",
-                body: (
-                  <Show when={command}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.text}>{"$ " + command}</text>
-                    </box>
-                  </Show>
-                ),
+                body: <ScrollableText text={command} prefix="$ " />,
               }
             }
 
@@ -289,13 +294,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               return {
                 icon: "#",
                 title: `${Locale.titlecase(type)} Task`,
-                body: (
-                  <Show when={desc}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.text}>{"◉ " + desc}</text>
-                    </box>
-                  </Show>
-                ),
+                body: <ScrollableText text={desc} prefix="◉ " />,
               }
             }
 
@@ -304,13 +303,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               return {
                 icon: "%",
                 title: `WebFetch ${url}`,
-                body: (
-                  <Show when={url}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"URL: " + url}</text>
-                    </box>
-                  </Show>
-                ),
+                body: <ScrollableText text={url} prefix="URL: " muted />,
               }
             }
 
@@ -319,13 +312,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               return {
                 icon: "◈",
                 title: `${webSearchProviderLabel(data.provider)} "${query}"`,
-                body: (
-                  <Show when={query}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Query: " + query}</text>
-                    </box>
-                  </Show>
-                ),
+                body: <ScrollableText text={query} prefix="Query: " muted />,
               }
             }
 
