@@ -300,6 +300,10 @@
     margin: 1.5rem 0;
     display: block;
   }
+
+  [data-component="markdown-image"] {
+    cursor: zoom-in;
+  }
 }
 
 [data-component="markdown"] > * {

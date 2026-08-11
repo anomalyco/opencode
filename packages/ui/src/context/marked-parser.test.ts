@@ -9,6 +9,18 @@ test("renders links with application attributes", async () => {
   )
 })
 
+test("renders markdown images for assistant messages", async () => {
+  expect(await parser.parse('![Generated chart](data:image/png;base64,AAECAw== "Chart")')).toBe(
+    '<p><img src="data:image/png;base64,AAECAw==" alt="Generated chart" title="Chart" loading="lazy" decoding="async" data-component="markdown-image"></p>\n',
+  )
+})
+
+test("escapes image attributes", async () => {
+  expect(await parser.parse('![<chart>](https://example.com/chart.png "a & b")')).toContain(
+    'alt="&lt;chart&gt;" title="a &amp; b"',
+  )
+})
+
 test("renders inline and block math", async () => {
   expect(await parser.parse("\\(x^2\\)")).toContain('<span class="katex">')
   expect(await parser.parse("$$\nx^2\n$$\n")).toContain('<span class="katex-display">')
