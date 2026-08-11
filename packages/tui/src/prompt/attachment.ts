@@ -25,14 +25,14 @@ function deduplicateByIdentity<T>(
   items: readonly T[],
   identity: (item: T) => { metadata: string; payload: string } | undefined,
 ) {
-  const seen = new Map<string, string[]>()
+  const seen = new Map<string, Set<string>>()
   return items.filter((item) => {
     const key = identity(item)
     if (!key) return true
-    const matches = seen.get(key.metadata)
-    if (matches?.includes(key.payload)) return false
-    if (matches) matches.push(key.payload)
-    if (!matches) seen.set(key.metadata, [key.payload])
+    const payloads = seen.get(key.metadata) ?? new Set<string>()
+    if (payloads.has(key.payload)) return false
+    payloads.add(key.payload)
+    seen.set(key.metadata, payloads)
     return true
   })
 }
@@ -42,7 +42,7 @@ export function deduplicatePromptImages(files: readonly PromptFile[] | undefined
   return deduplicateByIdentity(files, (file) =>
     file.uri.startsWith("data:image/") && file.mention?.text
       ? {
-          metadata: JSON.stringify([attachmentMetadata(file), file.mention.text]),
+          metadata: JSON.stringify([file.name ?? null, file.description ?? null, file.mention.text]),
           payload: file.uri,
         }
       : undefined,
