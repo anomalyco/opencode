@@ -4,6 +4,7 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Agent } from "../agent"
+import { SessionEvent } from "../session/event"
 
 const plan = Agent.ID.make("plan")
 
@@ -38,16 +39,12 @@ export const Plugin = define({
     })
 
     yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "session.created" || event.type === "session.agent.selected"),
+      Stream.filter(
+        (event): event is SessionEvent.Created | SessionEvent.AgentSelected =>
+          event.type === "session.created" || event.type === "session.agent.selected",
+      ),
       Stream.runForEach((event) => {
-        if (event.type === "session.created" && event.data.agent !== plan) return Effect.void
-        if (event.type === "session.agent.selected" && event.data.agent === event.data.previous) return Effect.void
-        const text =
-          event.type === "session.created" || event.data.agent === plan
-            ? enter
-            : event.data.previous === plan
-              ? leave
-              : undefined
+        const text = reminder(event)
         if (!text) return Effect.void
         return ctx.session
           .synthetic({
@@ -61,3 +58,13 @@ export const Plugin = define({
     )
   }),
 })
+
+function reminder(event: SessionEvent.Created | SessionEvent.AgentSelected) {
+  if (event.type === "session.created") {
+    if (event.data.agent !== plan) return
+    return enter
+  }
+  if (event.data.agent === event.data.previous) return
+  if (event.data.agent === plan) return enter
+  if (event.data.previous === plan) return leave
+}
