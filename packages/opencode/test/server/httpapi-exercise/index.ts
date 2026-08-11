@@ -583,6 +583,10 @@ const scenarios: Scenario[] = [
     check("backgroundSubagents" in body, "capabilities should report background subagents")
   }),
   http.protected
+    .post("/experimental/voice/transcribe", "experimental.voice.transcribe")
+    .at((ctx) => ({ path: "/experimental/voice/transcribe", headers: ctx.headers(), body: {} }))
+    .status(400),
+  http.protected
     .post("/experimental/session/{sessionID}/background", "experimental.session.background")
     .mutating()
     .seeded((ctx) => ctx.session({ title: "Background route owner" }))

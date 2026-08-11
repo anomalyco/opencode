@@ -406,6 +406,21 @@ export const dict = {
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Detener",
 
+  "voice.action.startRecording": "Iniciar entrada de voz",
+  "voice.action.stopRecording": "Detener grabación",
+  "voice.action.cancelTranscription": "Cancelar transcripción",
+  "voice.action.downloadModel": "Descargar",
+  "voice.action.removeModel": "Eliminar",
+  "voice.action.cancelDownloadProgress": "Cancelar descarga ({{progress}}%)",
+  "voice.error.title": "Falló la entrada de voz",
+  "voice.error.microphonePermission":
+    "Permite el acceso al micrófono en los ajustes del sistema y vuelve a intentarlo.",
+  "voice.error.microphoneUnavailable": "No se pudo iniciar el micrófono en este dispositivo.",
+  "voice.error.modelUnavailable": "Elige un modelo de transcripción disponible en Ajustes.",
+  "voice.error.transcriptionFailed": "No se pudo transcribir la grabación.",
+  "voice.error.emptyTranscript": "No se detectó voz en la grabación.",
+  "voice.error.downloadFailed": "La descarga del modelo no superó la validación de integridad o se interrumpió.",
+
   "prompt.toast.pasteUnsupported.title": "Adjunto no compatible",
   "prompt.toast.attachmentDuplicate.title": "Este archivo ya se ha subido",
   "prompt.toast.pasteUnsupported.description":
@@ -914,6 +929,26 @@ export const dict = {
   "settings.general.section.sounds": "Efectos de sonido",
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Pantalla",
+  "settings.general.section.voice": "Entrada de voz",
+
+  "voice.settings.enabled.title": "Entrada de voz",
+  "voice.settings.enabled.description": "Mostrar un botón de micrófono en el editor de prompts",
+  "voice.settings.backend.title": "Motor de transcripción",
+  "voice.settings.backend.description": "Elige dónde se transcriben las grabaciones",
+  "voice.backend.local": "Whisper local",
+  "voice.backend.ai": "Modelo de IA",
+  "voice.settings.localModel.title": "Modelo Whisper",
+  "voice.settings.localModel.description":
+    "Funciona sin conexión tras una descarga única de {{size}} MB. Las grabaciones nunca salen de este dispositivo.",
+  "voice.settings.runtimeUnavailable": "La transcripción local no está disponible en esta versión de escritorio.",
+  "voice.settings.aiModel.title": "Modelo de IA",
+  "voice.settings.aiModel.description":
+    "Envía las grabaciones al proveedor seleccionado. Solo se muestran los modelos que ofrecen entrada de audio.",
+  "voice.settings.aiModel.empty": "Ningún modelo conectado ofrece entrada de audio.",
+  "voice.model.tiny": "Tiny",
+  "voice.model.base": "Base (Recomendado)",
+  "voice.model.small": "Small",
+  "voice.model.turbo": "Large V3 Turbo (Q5)",
 
   "settings.general.row.language.title": "Idioma",
   "settings.general.row.language.description": "Cambiar el idioma de visualización para OpenCode",

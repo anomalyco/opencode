@@ -1,4 +1,5 @@
-import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, onCleanup, onMount, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
@@ -10,6 +11,7 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
+import { useModels } from "@/context/models"
 import { usePermission } from "@/context/permission"
 import { usePlatform, type DisplayBackend } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
@@ -29,6 +31,8 @@ import {
 } from "@/context/settings"
 import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
+import { showToast } from "@/utils/toast"
+import { LOCAL_VOICE_MODELS, type LocalVoiceModel, type LocalVoiceState } from "@/voice"
 import { ExternalLink } from "./external-link"
 import { SettingsList } from "./settings-list"
 
@@ -90,6 +94,7 @@ export const SettingsGeneral: Component = () => {
   const dialog = useDialog()
   const params = useParams()
   const settings = useSettings()
+  const models = useModels()
 
   const updater = useUpdaterAction()
 
@@ -120,6 +125,62 @@ export const SettingsGeneral: Component = () => {
     permission.disableAutoAccept(params.id, value)
   }
   const desktop = createMemo(() => platform.platform === "desktop")
+  const [localVoice, setLocalVoice] = createStore<LocalVoiceState>({
+    runtime: false,
+    transcribing: false,
+    models: Object.fromEntries(
+      LOCAL_VOICE_MODELS.map((model) => [model, { size: 0, installed: false }]),
+    ) as LocalVoiceState["models"],
+  })
+  const audioModels = createMemo(() => models.list().filter((model) => model.capabilities.input.audio))
+  const voiceBackendOptions = createMemo(() => [
+    { id: "local", value: "local" as const, label: language.t("voice.backend.local") },
+    { id: "ai", value: "ai" as const, label: language.t("voice.backend.ai") },
+  ])
+  const localVoiceModelLabel = (model: LocalVoiceModel) => {
+    if (model === "tiny") return language.t("voice.model.tiny")
+    if (model === "base") return language.t("voice.model.base")
+    if (model === "small") return language.t("voice.model.small")
+    return language.t("voice.model.turbo")
+  }
+  const localVoiceModelOptions = createMemo(() =>
+    LOCAL_VOICE_MODELS.map((model) => ({ id: model, value: model, label: localVoiceModelLabel(model) })),
+  )
+  const aiVoiceModelOptions = createMemo(() =>
+    audioModels().map((model) => ({
+      id: `${model.provider.id}/${model.id}`,
+      label: `${model.provider.name} · ${model.name}`,
+      model,
+    })),
+  )
+  const selectedLocalVoice = () => localVoice.models[settings.voice.localModel()]
+  const voiceModelActionLabel = () => {
+    const current = selectedLocalVoice()
+    if (current.download) {
+      const progress = Math.min(99, Math.floor((current.download.received / current.download.total) * 100))
+      return language.t("voice.action.cancelDownloadProgress", { progress })
+    }
+    if (current.installed) return language.t("voice.action.removeModel")
+    return language.t("voice.action.downloadModel")
+  }
+  const runVoiceModelAction = async () => {
+    const voice = platform.localVoice
+    if (!voice) return
+    const model = settings.voice.localModel()
+    const current = localVoice.models[model]
+    const task = current.download
+      ? voice.cancelDownload(model)
+      : current.installed
+        ? voice.remove(model)
+        : voice.download(model)
+    await task.catch(() =>
+      showToast({
+        variant: "error",
+        title: language.t("voice.error.title"),
+        description: language.t("voice.error.downloadFailed"),
+      }),
+    )
+  }
 
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
@@ -152,6 +213,17 @@ export const SettingsGeneral: Component = () => {
 
   onMount(() => {
     void theme.loadThemes()
+  })
+
+  onMount(() => {
+    const voice = platform.localVoice
+    if (!voice) return
+    void voice
+      .state()
+      .then(setLocalVoice)
+      .catch(() => undefined)
+    const unsubscribe = voice.subscribe(setLocalVoice)
+    onCleanup(unsubscribe)
   })
 
   const autoOption = { id: "auto", value: "", label: language.t("settings.general.row.shell.autoDefault") }
@@ -739,6 +811,114 @@ export const SettingsGeneral: Component = () => {
     </Show>
   )
 
+  const VoiceSection = () => (
+    <Show when={desktop()}>
+      <div class="flex flex-col gap-1">
+        <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.voice")}</h3>
+
+        <SettingsList>
+          <SettingsRow
+            title={language.t("voice.settings.enabled.title")}
+            description={language.t("voice.settings.enabled.description")}
+          >
+            <div data-action="settings-voice-enabled">
+              <Switch checked={settings.voice.enabled()} onChange={settings.voice.setEnabled} />
+            </div>
+          </SettingsRow>
+
+          <SettingsRow
+            title={language.t("voice.settings.backend.title")}
+            description={language.t("voice.settings.backend.description")}
+          >
+            <Select
+              data-action="settings-voice-backend"
+              options={voiceBackendOptions()}
+              current={voiceBackendOptions().find((option) => option.value === settings.voice.backend())}
+              value={(option) => option.id}
+              label={(option) => option.label}
+              onSelect={(option) => option && settings.voice.setBackend(option.value)}
+              variant="secondary"
+              size="small"
+              triggerVariant="settings"
+            />
+          </SettingsRow>
+
+          <Show when={settings.voice.backend() === "local"}>
+            <SettingsRow
+              title={language.t("voice.settings.localModel.title")}
+              description={
+                localVoice.runtime
+                  ? language.t("voice.settings.localModel.description", {
+                      size: Math.round(selectedLocalVoice().size / 1024 / 1024),
+                    })
+                  : language.t("voice.settings.runtimeUnavailable")
+              }
+            >
+              <div class="flex items-center gap-2">
+                <Select
+                  data-action="settings-voice-local-model"
+                  options={localVoiceModelOptions()}
+                  current={localVoiceModelOptions().find((option) => option.value === settings.voice.localModel())}
+                  value={(option) => option.id}
+                  label={(option) => option.label}
+                  onSelect={(option) => option && settings.voice.setLocalModel(option.value)}
+                  variant="secondary"
+                  size="small"
+                  triggerVariant="settings"
+                />
+                <Button
+                  size="small"
+                  variant="secondary"
+                  disabled={!localVoice.runtime || localVoice.transcribing}
+                  onClick={() => void runVoiceModelAction()}
+                >
+                  {voiceModelActionLabel()}
+                </Button>
+              </div>
+            </SettingsRow>
+          </Show>
+
+          <Show when={settings.voice.backend() === "ai"}>
+            <SettingsRow
+              title={language.t("voice.settings.aiModel.title")}
+              description={
+                audioModels().length
+                  ? language.t("voice.settings.aiModel.description")
+                  : language.t("voice.settings.aiModel.empty")
+              }
+            >
+              <Show when={aiVoiceModelOptions().length > 0}>
+                <div dir="auto">
+                  <Select
+                    data-action="settings-voice-ai-model"
+                    options={aiVoiceModelOptions()}
+                    current={aiVoiceModelOptions().find((option) => {
+                      const selected = settings.voice.aiModel()
+                      return selected?.providerID === option.model.provider.id && selected.modelID === option.model.id
+                    })}
+                    value={(option) => option.id}
+                    label={(option) => option.label}
+                    children={(option) => <span dir="auto">{option?.label}</span>}
+                    onSelect={(option) =>
+                      option &&
+                      settings.voice.setAIModel({
+                        providerID: option.model.provider.id,
+                        modelID: option.model.id,
+                      })
+                    }
+                    variant="secondary"
+                    size="small"
+                    triggerVariant="settings"
+                  />
+                </div>
+              </Show>
+            </SettingsRow>
+          </Show>
+        </SettingsList>
+      </div>
+    </Show>
+  )
+
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
@@ -763,6 +943,8 @@ export const SettingsGeneral: Component = () => {
         <NotificationsSection />
 
         <SoundsSection />
+
+        <VoiceSection />
 
         <UpdatesSection />
 

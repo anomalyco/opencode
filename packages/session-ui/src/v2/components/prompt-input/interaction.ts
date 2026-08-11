@@ -298,6 +298,9 @@ export function createPromptInputV2Controller(input: {
     value() {
       return draft.state.prompt.map((part) => ("content" in part ? part.content : "")).join("")
     },
+    cursor() {
+      return draft.state.cursor
+    },
     parts() {
       return draft.state.prompt
     },

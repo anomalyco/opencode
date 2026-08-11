@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import type { Configuration } from "electron-builder"
+import { resolveWhisperTarget } from "./scripts/package"
 
 const legacyDesktopEntry = "resources/linux/opencode-desktop.desktop"
 
@@ -71,6 +72,29 @@ test("bundles the CLI outside the dev app archive", async () => {
     to: "",
     filter: ["opencode-cli*"],
   })
+})
+
+test("bundles the local voice runtime outside the app archive", async () => {
+  const module = await import("./electron-builder.config.ts?voice-resource")
+  const config = module.default as Configuration
+
+  expect(config.files).toContain("!resources/whisper/**")
+  expect(config.extraResources).toContainEqual({
+    from: "resources/whisper/",
+    to: "whisper/",
+    filter: ["whisper-cli*", "LICENSE.whisper.cpp", "runtime.json"],
+  })
+  expect(config.mac?.binaries).toContain("Contents/Resources/whisper/whisper-cli")
+  expect(config.mac?.extendInfo?.NSMicrophoneUsageDescription).toBeTruthy()
+})
+
+test("matches the local voice runtime to the requested package architecture", () => {
+  expect(resolveWhisperTarget(["--mac", "--x64"], "darwin", "arm64")).toBe("x86_64-apple-darwin")
+  expect(resolveWhisperTarget(["--windows", "--arm64"], "win32", "x64")).toBe("aarch64-pc-windows-msvc")
+  expect(() => resolveWhisperTarget(["--linux", "--arm64"], "linux", "x64")).toThrow("cannot be cross-compiled")
+  expect(() => resolveWhisperTarget(["--mac", "--x64", "--arm64"], "darwin", "arm64")).toThrow("only one architecture")
+  expect(() => resolveWhisperTarget(["--mac", "zip:x64"], "darwin", "arm64")).toThrow("Architecture-qualified")
+  expect(() => resolveWhisperTarget(["-mwl"], "darwin", "arm64")).toThrow("only one platform")
 })
 
 for (const channel of ["beta", "prod"] as const) {

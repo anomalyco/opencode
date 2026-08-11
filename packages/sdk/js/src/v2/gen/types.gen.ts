@@ -2150,6 +2150,26 @@ export type ToolList = Array<ToolListItem>
 
 export type ToolIds = Array<string>
 
+export type VoiceTranscriptionPayload = {
+  providerID: string
+  modelID: string
+  mime: "audio/wav"
+  audio: string
+}
+
+export type VoiceTranscriptionResult = {
+  text: string
+}
+
+export type VoiceInputError = {
+  code: "invalid_audio" | "model_not_found" | "audio_not_supported"
+  message: string
+}
+
+export type VoiceProviderError = {
+  message: string
+}
+
 export type WorktreeError = {
   name:
     | "WorktreeNotGitError"
@@ -7679,6 +7699,40 @@ export type ToolIdsResponses = {
 }
 
 export type ToolIdsResponse = ToolIdsResponses[keyof ToolIdsResponses]
+
+export type ExperimentalVoiceTranscribeData = {
+  body?: VoiceTranscriptionPayload
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/voice/transcribe"
+}
+
+export type ExperimentalVoiceTranscribeErrors = {
+  /**
+   * VoiceInputError | InvalidRequestError
+   */
+  400: VoiceInputError | InvalidRequestError
+  /**
+   * VoiceProviderError
+   */
+  502: VoiceProviderError
+}
+
+export type ExperimentalVoiceTranscribeError =
+  ExperimentalVoiceTranscribeErrors[keyof ExperimentalVoiceTranscribeErrors]
+
+export type ExperimentalVoiceTranscribeResponses = {
+  /**
+   * Voice transcript
+   */
+  200: VoiceTranscriptionResult
+}
+
+export type ExperimentalVoiceTranscribeResponse =
+  ExperimentalVoiceTranscribeResponses[keyof ExperimentalVoiceTranscribeResponses]
 
 export type WorktreeRemoveData = {
   body?: WorktreeRemoveInput

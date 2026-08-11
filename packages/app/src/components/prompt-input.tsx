@@ -50,6 +50,8 @@ import { useCommand } from "@/context/command"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { VoiceInputButton } from "@/components/voice-input"
+import { withVoiceTranscriptSpacing } from "@/voice"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
@@ -1228,6 +1230,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       onSubmit: props.onSubmit,
       model: props.controls.model.selection,
     })
+  let cancelVoice: () => void = () => undefined
+  const submit = (event: Event) => {
+    cancelVoice()
+    return handleSubmit(event)
+  }
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {
@@ -1390,7 +1397,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       ) {
         return
       }
-      void handleSubmit(event)
+      void submit(event)
     }
   }
 
@@ -1461,7 +1468,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       />
       <DockShellForm
         data-dock-border-underlay="legacy"
-        onSubmit={handleSubmit}
+        onSubmit={submit}
         classList={{
           "group/prompt-input": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
@@ -1501,7 +1508,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onMouseDown={(e) => {
             const target = e.target
             if (!(target instanceof HTMLElement)) return
-            if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
+            if (
+              target.closest(
+                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-voice"]',
+              )
+            ) {
               return
             }
             editorRef?.focus()
@@ -1575,6 +1586,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
 
             <div class="flex items-center gap-1 pointer-events-auto">
+              <Show when={store.mode === "normal"}>
+                <VoiceInputButton
+                  insert={(transcript) => {
+                    const text = prompt
+                      .current()
+                      .map((part) => ("content" in part ? part.content : ""))
+                      .join("")
+                    const content = withVoiceTranscriptSpacing(text, prompt.cursor(), transcript)
+                    addPart({ type: "text", content, start: 0, end: content.length })
+                  }}
+                  restoreFocus={() => editorRef?.focus()}
+                  bindCancel={(cancel) => (cancelVoice = cancel)}
+                />
+              </Show>
               <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                 <IconButton
                   data-action="prompt-submit"

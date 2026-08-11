@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import type { ElectronAPI, WslServersEvent } from "./types"
+import type { LocalVoiceState } from "@opencode-ai/app/voice"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 
 const updaterCallbacks = new Set<(state: UpdaterState) => void>()
@@ -8,6 +9,11 @@ let updaterSubscription: Promise<void> | undefined
 const updaterHandler = (_: unknown, state: UpdaterState) => {
   updaterState = state
   updaterCallbacks.forEach((callback) => callback(state))
+}
+const localVoiceCallbacks = new Set<(state: LocalVoiceState) => void>()
+let localVoiceSubscribed = false
+const localVoiceHandler = (_: unknown, state: LocalVoiceState) => {
+  localVoiceCallbacks.forEach((callback) => callback(state))
 }
 
 const api: ElectronAPI = {
@@ -55,6 +61,29 @@ const api: ElectronAPI = {
     },
     check: () => ipcRenderer.invoke("updater-check"),
     install: () => ipcRenderer.invoke("updater-install"),
+  },
+  localVoice: {
+    state: () => ipcRenderer.invoke("local-voice-state"),
+    subscribe: (cb) => {
+      localVoiceCallbacks.add(cb)
+      if (!localVoiceSubscribed) {
+        localVoiceSubscribed = true
+        ipcRenderer.on("local-voice-state", localVoiceHandler)
+        void ipcRenderer.invoke("local-voice-subscribe")
+      }
+      return () => {
+        localVoiceCallbacks.delete(cb)
+        if (localVoiceCallbacks.size > 0) return
+        localVoiceSubscribed = false
+        ipcRenderer.removeListener("local-voice-state", localVoiceHandler)
+        void ipcRenderer.invoke("local-voice-unsubscribe")
+      }
+    },
+    download: (model) => ipcRenderer.invoke("local-voice-download", model),
+    cancelDownload: (model) => ipcRenderer.invoke("local-voice-cancel-download", model),
+    remove: (model) => ipcRenderer.invoke("local-voice-remove", model),
+    transcribe: (input) => ipcRenderer.invoke("local-voice-transcribe", input),
+    cancelTranscription: () => ipcRenderer.invoke("local-voice-cancel-transcription"),
   },
   consumeInitialDeepLinks: () => ipcRenderer.invoke("consume-initial-deep-links"),
   getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),

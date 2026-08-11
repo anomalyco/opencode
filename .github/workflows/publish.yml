@@ -299,7 +299,7 @@ jobs:
         run: |
           mkdir -p ~/apt-cache && chmod -R a+rw ~/apt-cache
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends -o dir::cache::archives="$HOME/apt-cache" rpm
+          sudo apt-get install -y --no-install-recommends -o dir::cache::archives="$HOME/apt-cache" build-essential cmake rpm
           sudo chmod -R a+rw ~/apt-cache
 
       - name: Setup git committer
@@ -331,6 +331,13 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
+          RUST_TARGET: ${{ matrix.settings.target }}
+
+      - name: Build local voice runtime
+        run: bun ./scripts/build-whisper.ts
+        working-directory: packages/desktop
+        env:
+          RUST_TARGET: ${{ matrix.settings.target }}
 
       - name: Package
         if: needs.version.outputs.release

@@ -44,6 +44,8 @@ export type PromptInputV2Props = {
   variantControlVisible?: boolean
   attachKeybind?: string[]
   attachShortcut?: string
+  voiceControl?: JSX.Element
+  beforeSubmit?: () => void
 }
 
 export function PromptInputV2(props: PromptInputV2Props) {
@@ -62,6 +64,10 @@ export function PromptInputV2(props: PromptInputV2Props) {
     "pointer-events": mode() === "normal" ? ("auto" as const) : ("none" as const),
     transition: "opacity 200ms ease",
   }))
+  const submit = () => {
+    props.beforeSubmit?.()
+    props.controller.submit()
+  }
 
   createEffect(() => {
     const parts = props.controller.parts()
@@ -117,7 +123,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
         }}
         onSubmit={(event) => {
           event.preventDefault()
-          if (!props.disabled) props.controller.submit()
+          if (!props.disabled) submit()
         }}
         onDragEnter={props.controller.onDragEnter}
         onDragOver={props.controller.onDragOver}
@@ -174,7 +180,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
               if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
                 event.preventDefault()
                 if (event.repeat) return
-                props.controller.submit()
+                submit()
               }
             }}
             onKeyUp={updateCursor}
@@ -254,13 +260,14 @@ export function PromptInputV2(props: PromptInputV2Props) {
               )}
             </Show>
           </div>
+          {props.voiceControl}
           <PromptInputV2SubmitButton
             mode={state.mode}
             stopping={view.submit.stopping()}
             disabled={!props.controller.canSubmit()}
             sendLabel={i18n.t("ui.promptInput.send")}
             stopLabel={i18n.t("ui.promptInput.stop")}
-            onSubmit={props.controller.submit}
+            onSubmit={submit}
             onStop={props.controller.stop}
           />
         </div>

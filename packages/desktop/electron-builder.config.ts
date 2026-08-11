@@ -55,7 +55,7 @@ const getBase = (appId: string): Configuration => ({
   extraMetadata: {
     desktopName: `${appId}.desktop`,
   },
-  files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
+  files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*", "!resources/whisper/**"],
   extraResources: [
     ...(channel === "dev"
       ? [
@@ -71,6 +71,11 @@ const getBase = (appId: string): Configuration => ({
       to: "native/",
       filter: ["index.js", "index.d.ts", "build/Release/mac_window.node", "swift-build/**"],
     },
+    {
+      from: "resources/whisper/",
+      to: "whisper/",
+      filter: ["whisper-cli*", "LICENSE.whisper.cpp", "runtime.json"],
+    },
   ],
   mac: {
     category: "public.app-category.developer-tools",
@@ -80,6 +85,10 @@ const getBase = (appId: string): Configuration => ({
     entitlements: "resources/entitlements.plist",
     entitlementsInherit: "resources/entitlements.plist",
     notarize: true,
+    binaries: ["Contents/Resources/whisper/whisper-cli"],
+    extendInfo: {
+      NSMicrophoneUsageDescription: "OpenCode uses the microphone only when you start voice input.",
+    },
     target: ["dmg", "zip"],
   },
   dmg: {

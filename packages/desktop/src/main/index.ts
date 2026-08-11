@@ -6,7 +6,7 @@ import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, net } from "electron"
 
 import { Deferred, Effect, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
@@ -49,6 +49,7 @@ import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
+import { createLocalVoice } from "./local-voice"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -272,6 +273,17 @@ const main = Effect.gen(function* () {
   registerRendererProtocol()
   setDockIcon()
   const updater = setupAutoUpdater(stopSidecars)
+  const localVoice = createLocalVoice({
+    root: join(app.getPath("userData"), "voice"),
+    runtime: app.isPackaged
+      ? join(process.resourcesPath, "whisper", process.platform === "win32" ? "whisper-cli.exe" : "whisper-cli")
+      : join(
+          import.meta.dirname,
+          "../../resources/whisper",
+          process.platform === "win32" ? "whisper-cli.exe" : "whisper-cli",
+        ),
+    fetch: net.fetch,
+  })
   const menuDeps = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
@@ -310,6 +322,7 @@ const main = Effect.gen(function* () {
     setNativeTranslations: (bundle) => {
       if (setNativeTranslations(bundle)) createMenu(menuDeps)
     },
+    localVoice,
   })
   registerWslIpcHandlers(wslServers)
   void updater.start()

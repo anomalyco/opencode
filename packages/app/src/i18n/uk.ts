@@ -407,6 +407,21 @@ export const dict = {
   "prompt.action.send": "Надіслати",
   "prompt.action.stop": "Зупинити",
 
+  "voice.action.startRecording": "Почати голосове введення",
+  "voice.action.stopRecording": "Зупинити запис",
+  "voice.action.cancelTranscription": "Скасувати транскрибацію",
+  "voice.action.downloadModel": "Завантажити",
+  "voice.action.removeModel": "Видалити",
+  "voice.action.cancelDownloadProgress": "Скасувати завантаження ({{progress}}%)",
+  "voice.error.title": "Голосове введення не вдалося",
+  "voice.error.microphonePermission":
+    "Дозвольте доступ до мікрофона в налаштуваннях системи, а потім спробуйте ще раз.",
+  "voice.error.microphoneUnavailable": "Не вдалося запустити мікрофон на цьому пристрої.",
+  "voice.error.modelUnavailable": "Виберіть доступну модель транскрибації в налаштуваннях.",
+  "voice.error.transcriptionFailed": "Не вдалося транскрибувати запис.",
+  "voice.error.emptyTranscript": "У записі не виявлено мовлення.",
+  "voice.error.downloadFailed": "Завантаження моделі не пройшло перевірку цілісності або було перервано.",
+
   "prompt.toast.pasteUnsupported.title": "Непідтримуване вкладення",
   "prompt.toast.attachmentDuplicate.title": "Цей файл уже завантажено",
   "prompt.toast.pasteUnsupported.description": "Сюди можна прикріплювати лише зображення, PDF або текстові файли.",
@@ -1016,6 +1031,26 @@ export const dict = {
   "settings.general.section.sounds": "Звукові ефекти",
   "settings.general.section.feed": "Стрічка",
   "settings.general.section.display": "Дисплей",
+  "settings.general.section.voice": "Голосове введення",
+
+  "voice.settings.enabled.title": "Голосове введення",
+  "voice.settings.enabled.description": "Показувати кнопку мікрофона в редакторі запиту",
+  "voice.settings.backend.title": "Сервіс транскрибації",
+  "voice.settings.backend.description": "Виберіть, де транскрибуються записи",
+  "voice.backend.local": "Локальний Whisper",
+  "voice.backend.ai": "Модель ШІ",
+  "voice.settings.localModel.title": "Модель Whisper",
+  "voice.settings.localModel.description":
+    "Працює офлайн після одноразового завантаження розміром {{size}} МБ. Записи ніколи не залишають цей пристрій.",
+  "voice.settings.runtimeUnavailable": "Локальна транскрибація недоступна в цій версії Desktop.",
+  "voice.settings.aiModel.title": "Модель ШІ",
+  "voice.settings.aiModel.description":
+    "Надсилає записи вибраному провайдеру. Показано лише моделі, що заявляють підтримку аудіовведення.",
+  "voice.settings.aiModel.empty": "Жодна підключена модель не заявляє підтримку аудіовведення.",
+  "voice.model.tiny": "Tiny",
+  "voice.model.base": "Base (рекомендовано)",
+  "voice.model.small": "Small",
+  "voice.model.turbo": "Large V3 Turbo (Q5)",
 
   "settings.general.row.language.title": "Мова",
   "settings.general.row.language.description": "Змінити мову інтерфейсу OpenCode",

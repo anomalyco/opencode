@@ -27,6 +27,8 @@ import { useSync } from "@/context/sync"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { showToast } from "@/utils/toast"
 import { PromptInputV2, type PromptInputV2Suggestion } from "@opencode-ai/session-ui/v2/prompt-input"
+import { VoiceInputButton } from "@/components/voice-input"
+import { withVoiceTranscriptSpacing } from "@/voice"
 import {
   createPromptInputV2Controller,
   createPromptInputV2State,
@@ -48,6 +50,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
+  let cancelVoice: () => void = () => undefined
 
   return (
     <div class="flex flex-col gap-3">
@@ -58,6 +61,24 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         variantControlVisible={!props.controller.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
+        beforeSubmit={() => cancelVoice()}
+        voiceControl={
+          <Show when={props.controller.state.mode === "normal"}>
+            <VoiceInputButton
+              variant="v2"
+              insert={(transcript) => {
+                const content = withVoiceTranscriptSpacing(
+                  props.controller.value(),
+                  props.controller.cursor(),
+                  transcript,
+                )
+                props.controller.addPart({ type: "text", content, start: 0, end: content.length })
+              }}
+              restoreFocus={props.controller.restoreFocus}
+              bindCancel={(cancel) => (cancelVoice = cancel)}
+            />
+          </Show>
+        }
         modelControl={
           <PromptInputV2ModelControl
             loading={props.controller.model.loading}
