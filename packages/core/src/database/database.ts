@@ -42,10 +42,10 @@ const databaseLayer = Layer.effect(
 export function layer(options: Options = { path: ":memory:" }) {
   return Layer.unwrap(
     Effect.gen(function* () {
-      const global = yield* Global.Service
       const provide = (filename: string) => databaseLayer.pipe(Layer.provide(sqliteLayer({ filename })))
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:" || isAbsolute(filename)) return provide(filename)
+      const global = yield* Global.Service
       return provide(join(global.data, filename))
     }),
   )
