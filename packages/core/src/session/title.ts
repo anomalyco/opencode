@@ -1,6 +1,7 @@
 export * as SessionTitle from "./title"
 
 import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
+import type { StreamOptions } from "@opencode-ai/ai/route"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
 import { Agent } from "../agent"
 import { Database } from "../database/database"
@@ -9,9 +10,11 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { isExactRootFallback } from "@opencode-ai/util/session-title-fallback"
 import { App } from "../app"
 import { llmClient } from "../effect/app-node-platform"
+import { PluginHooks } from "../plugin/hooks"
 import { SessionEvent } from "./event"
 import { SessionHistory } from "./history"
 import { SessionModelHeaders } from "./model-headers"
+import { SessionModelHttp } from "./model-http"
 import { SessionRunnerModel } from "./runner/model"
 import { SessionSchema } from "./schema"
 import { SessionUsage } from "./usage"
@@ -24,11 +27,12 @@ type Dependencies = {
   readonly app: App.Info
   readonly bus: Bus.Interface
   readonly llm: {
-    readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, AIError>
+    readonly stream: (request: LLMRequest, options?: StreamOptions) => Stream.Stream<LLMEvent, AIError>
   }
   readonly agents: Agent.Interface
   readonly models: SessionRunnerModel.Interface
   readonly store: SessionStore.Interface
+  readonly hooks: PluginHooks.Interface
 }
 
 export interface Interface {
@@ -85,6 +89,13 @@ const make = (dependencies: Dependencies) => {
           messages: [Message.user(firstUser.text)],
           tools: [],
         }),
+        {
+          http: SessionModelHttp.middleware(dependencies.hooks, {
+            sessionID: session.id,
+            agent: agent.id,
+            model: resolved.ref,
+          }),
+        },
       )
       .pipe(
         Stream.runForEach((event) => {
@@ -135,7 +146,8 @@ export const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const database = yield* Database.Service
     const app = yield* App.Metadata
-    const title = make({ bus, llm, agents, models, store, app })
+    const hooks = yield* PluginHooks.Service
+    const title = make({ bus, llm, agents, models, store, app, hooks })
     return Service.of({
       generateForFirstPrompt: (sessionID) => title.generateForFirstPrompt(database.db, sessionID),
     })
@@ -145,5 +157,14 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, llmClient, Agent.node, SessionRunnerModel.node, SessionStore.node, Database.node, App.node],
+  deps: [
+    Bus.node,
+    llmClient,
+    Agent.node,
+    SessionRunnerModel.node,
+    SessionStore.node,
+    Database.node,
+    App.node,
+    PluginHooks.node,
+  ],
 })

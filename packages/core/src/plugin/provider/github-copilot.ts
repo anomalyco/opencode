@@ -5,6 +5,7 @@ import { Credential } from "../../credential"
 import { Bus } from "../../bus"
 import { CopilotModels } from "../../github-copilot/models"
 import { App } from "../../app"
+import { Agent } from "../../agent"
 import { Integration } from "../../integration"
 import { Model } from "../../model"
 import { define } from "@opencode-ai/plugin/effect/plugin"
@@ -242,6 +243,8 @@ export const GithubCopilotPlugin = define({
     yield* ctx.session.hook("http.request", (evt) =>
       Effect.gen(function* () {
         if (evt.model.providerID !== Provider.ID.githubCopilot) return
+        if (evt.agent === Agent.ID.make("title"))
+          evt.request.headers.set("X-Interaction-Type", "conversation-background")
         const token = evt.request.headers.get("x-api-key")
         if (!token) return
         const text = yield* Effect.promise(() => evt.request.clone().text())

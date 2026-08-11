@@ -4,8 +4,7 @@ import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import type { Content } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Cause, Config, Context, Effect, Layer, Result, Stream } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Cause, Config, Context, Effect, Layer, Result } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app"
 import { Model } from "../model"
@@ -15,6 +14,7 @@ import { QuestionTool } from "../tool/plugin/question"
 import { Tool } from "../tool"
 import { SessionContext } from "./context"
 import { SessionModelHeaders } from "./model-headers"
+import { SessionModelHttp } from "./model-http"
 import { SessionPromptCacheKey } from "./prompt-cache-key"
 import { PromptCacheDiagnostics } from "./prompt-cache-diagnostics"
 import { MAX_STEPS_PROMPT } from "./runner/max-steps"
@@ -227,36 +227,11 @@ export const layer = Layer.effect(
         toolChoice: stepLimitReached ? "none" : undefined,
       })
       const options: StreamOptions = {
-        http: (request, handler) =>
-          Effect.gen(function* () {
-            const before = yield* hooks.trigger("session", "http.request", {
-              sessionID: session.id,
-              agent: agent.id,
-              model: resolved.ref,
-              request: yield* HttpClientRequest.toWeb(request),
-            })
-            let sent = HttpClientRequest.fromWeb(before.request)
-            if (before.request.body)
-              sent = HttpClientRequest.bodyUint8Array(
-                sent,
-                new Uint8Array(yield* Effect.promise(() => before.request.clone().arrayBuffer())),
-                before.request.headers.get("content-type") ?? undefined,
-              )
-            const response = yield* handler(sent)
-            const after = yield* hooks.trigger("session", "http.response", {
-              sessionID: session.id,
-              agent: agent.id,
-              model: resolved.ref,
-              request: before.request,
-              response: new Response(
-                [204, 205, 304].includes(response.status)
-                  ? null
-                  : yield* Stream.toReadableStreamEffect(response.stream),
-                { status: response.status, headers: response.headers },
-              ),
-            })
-            return HttpClientResponse.fromWeb(sent, after.response)
-          }).pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause))))),
+        http: SessionModelHttp.middleware(hooks, {
+          sessionID: session.id,
+          agent: agent.id,
+          model: resolved.ref,
+        }),
       }
       if (promptCacheSnapshots) {
         const current = PromptCacheDiagnostics.snapshot(request)
