@@ -10,6 +10,9 @@ import type { Agent } from "./agent"
  *    permissions determine its capabilities.
  * 2. Default `todowrite` and `task` denies if the subagent's own ruleset
  *    doesn't already permit them.
+ * 3. A catch-all deny rule so that unmatched permissions resolve to
+ *    "deny" instead of the default "ask".  Subagents have no attached
+ *    human, so an interactive ask would hang forever.
  */
 export function deriveSubagentSessionPermission(input: {
   parentSessionPermission: PermissionV1.Ruleset
@@ -23,5 +26,6 @@ export function deriveSubagentSessionPermission(input: {
     ),
     ...(canTodo ? [] : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
     ...(canTask ? [] : [{ permission: "task" as const, pattern: "*" as const, action: "deny" as const }]),
+    { permission: "*" as const, pattern: "*" as const, action: "deny" as const },
   ]
 }
