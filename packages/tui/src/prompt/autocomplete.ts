@@ -53,6 +53,12 @@ export function directoryAutocompleteExactValue(value: string, search: ReturnTyp
   return value
 }
 
+export function directoryAutocompleteMatches(directory: string, query: string) {
+  const value = directory.replace(/^[\\/]+/, "")
+  if (!query && value.startsWith(".")) return false
+  return value.toLowerCase().startsWith(query.toLowerCase())
+}
+
 export function directoryRecentValue(directory: string, home: string) {
   const relative = path.relative(home, directory)
   if (!relative) return "~"

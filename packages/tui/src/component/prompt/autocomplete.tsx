@@ -27,6 +27,7 @@ import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
 import { moveSelection, revealSelectionOffset } from "../../ui/select-controller"
 import {
   directoryAutocompleteExactValue,
+  directoryAutocompleteMatches,
   directoryAutocompleteResultValue,
   directoryAutocompleteSearch,
   slashArgumentAutocomplete,
@@ -367,8 +368,7 @@ export function Autocomplete(props: {
         input.visible === "directory"
           ? result.data.filter(
               (item) =>
-                item.type === "directory" &&
-                item.path.toLowerCase().startsWith((directorySearch?.query ?? "").toLowerCase()),
+                item.type === "directory" && directoryAutocompleteMatches(item.path, directorySearch?.query ?? ""),
             )
           : result.data
       options.push(

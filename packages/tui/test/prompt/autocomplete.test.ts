@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { KeymapCommand } from "@opencode-ai/plugin/tui/context"
 import {
   directoryAutocompleteExactValue,
+  directoryAutocompleteMatches,
   directoryAutocompleteResultValue,
   directoryAutocompleteSearch,
   directoryRecentValue,
@@ -120,6 +121,19 @@ describe("directoryAutocompleteExactValue", () => {
     expect(
       directoryAutocompleteExactValue("", directoryAutocompleteSearch("", "/project", "/home/user")),
     ).toBeUndefined()
+  })
+})
+
+describe("directoryAutocompleteMatches", () => {
+  test("hides dot directories for an empty component", () => {
+    expect(directoryAutocompleteMatches("src/", "")).toBe(true)
+    expect(directoryAutocompleteMatches(".git/", "")).toBe(false)
+  })
+
+  test("shows dot directories when explicitly filtered", () => {
+    expect(directoryAutocompleteMatches(".git/", ".")).toBe(true)
+    expect(directoryAutocompleteMatches(".github/", ".gi")).toBe(true)
+    expect(directoryAutocompleteMatches(".zed/", ".gi")).toBe(false)
   })
 })
 
