@@ -27,6 +27,8 @@ import { marqueeText } from "../util/marquee"
 
 // A long title fades out over its last cells instead of cutting hard.
 const FADE_WIDTH = 4
+// The add button renders as " + " at the end of the strip, so the tab layout leaves it room.
+const ADD_TAB_WIDTH = 3
 const MARQUEE_DELAY = 600
 const MARQUEE_INTERVAL = 100
 
@@ -42,6 +44,7 @@ export const EMPTY_SESSION_TAB_STATUS: SessionTabsStatus = {
 }
 export type SessionTabsController = Pick<ContextController, "tabs" | "current" | "select" | "close" | "move"> & {
   newTab?: () => boolean
+  add?: () => void
   status(sessionID: string): SessionTabsStatus
 }
 
@@ -103,6 +106,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
   const separatorUpperPulseColor = createMemo(() => tint(theme.background.default, theme.text.default, 0.04))
   const separatorLowerPulseColor = createMemo(() => tint(theme.background.default, theme.text.default, 0.05))
   const [hovered, setHovered] = createSignal<string>()
+  const [addHovered, setAddHovered] = createSignal(false)
   const marquee = createMarquee(hovered, animations)
   const [dragging, setDragging] = createSignal<string>()
   const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
@@ -417,6 +421,29 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               )
             }}
           </For>
+          <Show when={tabs.add}>
+            <box
+              height={1}
+              width="100%"
+              flexDirection="row"
+              paddingLeft={1}
+              backgroundColor={addHovered() ? theme.background.action.primary.hovered : theme.background.default}
+              onMouseOver={() => setAddHovered(true)}
+              onMouseOut={() => setAddHovered(false)}
+              onMouseUp={() => tabs.add?.()}
+            >
+              <text width={2} fg={addHovered() ? theme.text.default : idleNumber()} selectable={false}>
+                +
+              </text>
+              <text
+                fg={addHovered() ? theme.text.default : theme.text.subdued}
+                wrapMode="none"
+                selectable={false}
+              >
+                {NEW_SESSION_TAB_TITLE}
+              </text>
+            </box>
+          </Show>
         </box>
       </scrollbox>
     </box>
@@ -431,6 +458,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
   const config = useConfig().data
   const animations = () => props.animations ?? config.animations ?? true
   const [hovered, setHovered] = createSignal<string>()
+  const [addHovered, setAddHovered] = createSignal(false)
   const marquee = createMarquee(hovered, animations)
   const [dragging, setDragging] = createSignal<string>()
   // A drag reorders a local preview and persists one move on release instead of writing
@@ -457,7 +485,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
     if (index === -1 || index === Math.min(pending.index, tabs.tabs().length - 1)) setPreview(undefined)
   })
   const layout = createMemo((previous: ReturnType<typeof adaptiveSessionTabLayout> | undefined) =>
-    adaptiveSessionTabLayout(items(), activeID(), dimensions().width, previous?.start),
+    adaptiveSessionTabLayout(items(), activeID(), dimensions().width - (tabs.add ? ADD_TAB_WIDTH : 0), previous?.start),
   )
   const statuses = createMemo(
     () =>
@@ -744,6 +772,19 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
       <Show when={layout().after > 0}>
         <text width={sessionTabOverflowWidth(layout().after)} fg={theme.text.subdued} selectable={false}>
           {" " + layout().after}›
+        </text>
+      </Show>
+      <Show when={tabs.add}>
+        <text
+          width={ADD_TAB_WIDTH}
+          fg={addHovered() ? theme.text.default : theme.text.subdued}
+          bg={addHovered() ? theme.background.action.primary.hovered : undefined}
+          selectable={false}
+          onMouseOver={() => setAddHovered(true)}
+          onMouseOut={() => setAddHovered(false)}
+          onMouseUp={() => tabs.add?.()}
+        >
+          {" + "}
         </text>
       </Show>
     </box>

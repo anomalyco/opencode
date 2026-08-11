@@ -105,9 +105,21 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     }
   }
 
+  const addTab = () => {
+    const next = FIXTURE_TABS.find((fixture) => !tabs().some((tab) => tab.sessionID === fixture.sessionID))
+    if (!next) {
+      setLastEvent("all fixture tabs are open")
+      return
+    }
+    setItems([...tabs().map((tab) => ({ ...tab })), { sessionID: next.sessionID }])
+    select(next.sessionID)
+    setLastEvent(`tab ${number(next.sessionID)} opened untitled; run it to earn its title`)
+  }
+
   const controller = {
     tabs,
     current: active,
+    add: addTab,
     status(sessionID) {
       return statuses()[sessionID] ?? EMPTY_SESSION_TAB_STATUS
     },
@@ -283,21 +295,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           startRun(current)
         },
       },
-      {
-        bind: "t",
-        title: "Add tab",
-        group: "Storybook",
-        run() {
-          const next = FIXTURE_TABS.find((fixture) => !tabs().some((tab) => tab.sessionID === fixture.sessionID))
-          if (!next) {
-            setLastEvent("all fixture tabs are open")
-            return
-          }
-          setItems([...tabs().map((tab) => ({ ...tab })), { sessionID: next.sessionID }])
-          select(next.sessionID)
-          setLastEvent(`tab ${number(next.sessionID)} opened untitled; run it to earn its title`)
-        },
-      },
+      { bind: "t", title: "Add tab", group: "Storybook", run: addTab },
       { bind: "d", title: "Close tab", group: "Storybook", run: () => controller.close() },
       {
         bind: "r",
