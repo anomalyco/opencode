@@ -7,7 +7,7 @@ import { SessionV1 } from "@opencode-ai/schema/session-v1"
 import { SessionMessage } from "../session/message"
 import { SessionSchema } from "../session/schema"
 import { KVTable } from "../kv/sql"
-import { EventSequenceTable, EventTable } from "../event/sql"
+import { EventSequenceTable } from "../event/sql"
 import { eq, sql } from "drizzle-orm"
 import { Global } from "@opencode-ai/util/global"
 import { existsSync } from "node:fs"
@@ -161,6 +161,7 @@ type NextMessage = {
 
 const lock = Semaphore.makeUnsafe(1)
 const MIGRATION_STATE_KEY = "migration.v1-v2"
+const EVENT_DELETE_BATCH_SIZE = 1_000
 const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 const decodeMessage = Schema.decodeUnknownOption(SessionV1.Info)
 const decodePart = Schema.decodeUnknownOption(SessionV1.Part)
@@ -485,7 +486,15 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
           yield* db
             .transaction((tx) =>
               Effect.gen(function* () {
-                yield* tx.delete(EventTable).run()
+                while (true) {
+                  yield* tx.run(sql`
+                    DELETE FROM event
+                    WHERE rowid IN (SELECT rowid FROM event LIMIT ${EVENT_DELETE_BATCH_SIZE})
+                  `)
+                  const deleted = (yield* tx.get<{ value: number }>(sql`SELECT changes() AS value`))?.value ?? 0
+                  if (deleted < EVENT_DELETE_BATCH_SIZE) break
+                  yield* Effect.yieldNow
+                }
                 yield* tx
                   .insert(KVTable)
                   .values({ key: MIGRATION_STATE_KEY, value: { phase: "sessions" } })

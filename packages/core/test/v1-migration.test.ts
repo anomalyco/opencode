@@ -11,7 +11,7 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/util/global"
-import { Effect, Layer, Logger, Schedule, Schema, Scope } from "effect"
+import { Effect, Fiber, Layer, Logger, Schedule, Schema, Scope } from "effect"
 import { eq, sql } from "drizzle-orm"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 import { tmpdir } from "./fixture/tmpdir"
@@ -794,6 +794,35 @@ describe("V1Migration database workflow", () => {
         expect(yield* V1Migration.run()).toEqual({ status: "completed" })
         expect(yield* V1Migration.status()).toEqual({ status: "completed" })
         expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+      }),
+    )
+  })
+
+  test("yields while clearing stale events in batches", async () => {
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('stale', 2500)`)
+        yield* db.run(sql`
+          WITH RECURSIVE rows(value) AS (
+            VALUES(1)
+            UNION ALL
+            SELECT value + 1 FROM rows WHERE value < 2500
+          )
+          INSERT INTO event (id, aggregate_id, seq, created, type, data)
+          SELECT printf('event_%04d', value), 'stale', value, 1, 'session.renamed.1', '{}'
+          FROM rows
+        `)
+        let yielded = false
+        const heartbeat = yield* Effect.yieldNow.pipe(
+          Effect.andThen(Effect.sync(() => (yielded = true))),
+          Effect.forkChild({ startImmediately: true }),
+        )
+
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yielded).toBe(true)
+        yield* Fiber.join(heartbeat)
+        expect(yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM event`)).toEqual({ value: 0 })
       }),
     )
   })
