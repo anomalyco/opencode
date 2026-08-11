@@ -273,6 +273,35 @@ describe("AISDKNative", () => {
     })
   })
 
+  test("maps Vertex Anthropic settings to native Messages", () => {
+    expect(
+      map("@ai-sdk/google-vertex/anthropic", {
+        accessToken: "vertex-token",
+        baseURL: "https://vertex.example/v1",
+        headers: { "x-test": "value" },
+        location: "eu",
+        project: "vertex-project",
+        thinking: { type: "adaptive", display: "summarized" },
+        effort: "high",
+      }),
+    ).toEqual({
+      package: "@opencode-ai/ai/providers/google-vertex/messages",
+      settings: {
+        accessToken: "vertex-token",
+        baseURL: "https://vertex.example/v1",
+        location: "eu",
+        project: "vertex-project",
+        providerOptions: {
+          anthropic: {
+            thinking: { type: "adaptive", display: "summarized" },
+            effort: "high",
+          },
+        },
+      },
+      headers: { "x-test": "value" },
+    })
+  })
+
   test("maps supported xAI settings", () => {
     expect(
       map("@ai-sdk/xai", {

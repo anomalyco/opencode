@@ -51,6 +51,18 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapGoogleOptions(input.settings),
         },
       }
+    case "@ai-sdk/google-vertex/anthropic":
+      return {
+        package: "@opencode-ai/ai/providers/google-vertex/messages",
+        settings: {
+          ...baseSettings,
+          ...(typeof input.settings.accessToken === "string" ? { accessToken: input.settings.accessToken } : {}),
+          ...(typeof input.settings.location === "string" ? { location: input.settings.location } : {}),
+          ...(typeof input.settings.project === "string" ? { project: input.settings.project } : {}),
+          ...mapAnthropicOptions(input.settings),
+        },
+        ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
+      }
     case "@openrouter/ai-sdk-provider":
       return mapOpenRouter(input.settings, baseSettings)
     case "@ai-sdk/xai":
@@ -225,6 +237,15 @@ function mapGoogleOptions(settings: Readonly<Record<string, unknown>>) {
   }
   if (Object.keys(options).length === 0) return {}
   return { providerOptions: { gemini: options } }
+}
+
+function mapAnthropicOptions(settings: Readonly<Record<string, unknown>>) {
+  const options = {
+    ...(isRecord(settings.thinking) ? { thinking: settings.thinking } : {}),
+    ...(typeof settings.effort === "string" ? { effort: settings.effort } : {}),
+  }
+  if (Object.keys(options).length === 0) return {}
+  return { providerOptions: { anthropic: options } }
 }
 
 function mapOpenRouter(

@@ -763,6 +763,57 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("routes Vertex Anthropic catalog models through native Messages", () =>
+    Effect.gen(function* () {
+      const native = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/openai")))
+      const credential = Credential.OAuth.make({
+        type: "oauth",
+        methodID: Integration.MethodID.make("device"),
+        access: "vertex-token",
+        refresh: "refresh",
+        expires: Date.now() + 60_000,
+      })
+
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/google-vertex/anthropic"), {
+          modelID: "claude-sonnet-4-6",
+          settings: {
+            location: "eu",
+            project: "vertex-project",
+            thinking: { type: "adaptive", display: "summarized" },
+            effort: "high",
+          },
+        }),
+        credential,
+        {
+          loadPackage: (specifier) => {
+            expect(specifier).toBe("@opencode-ai/ai/providers/google-vertex/messages")
+            return Effect.succeed({
+              model: (modelID, settings) => {
+                expect(modelID).toBe("claude-sonnet-4-6")
+                expect(settings).toMatchObject({
+                  accessToken: "vertex-token",
+                  location: "eu",
+                  project: "vertex-project",
+                  providerOptions: {
+                    anthropic: {
+                      thinking: { type: "adaptive", display: "summarized" },
+                      effort: "high",
+                    },
+                  },
+                })
+                return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
+              },
+            })
+          },
+          loadAISDK: () => Effect.die("AI SDK loader should not be called"),
+        },
+      )
+
+      expect(resolved).toMatchObject({ id: "claude-sonnet-4-6", provider: "test-provider" })
+    }),
+  )
+
   it.effect("merges mapped OpenRouter headers and body with catalog overlays", () =>
     ModelResolver.fromCatalogModel(
       model(Provider.aisdk("@openrouter/ai-sdk-provider"), {
