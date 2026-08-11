@@ -101,16 +101,6 @@ export const Plugin = define({
         item.permissions.push({ action: "question", resource: "*", effect: "allow" })
       })
 
-      draft.update(Agent.ID.make("plan"), (item) => {
-        item.name = Agent.Name.make("Plan")
-        item.description = "Plan mode. Disallows all edit tools."
-        item.mode = "primary"
-        item.permissions.push(
-          { action: "question", resource: "*", effect: "allow" },
-          { action: "edit", resource: "*", effect: "deny" },
-        )
-      })
-
       draft.update(Agent.ID.make("general"), (item) => {
         item.name = Agent.Name.make("General")
         item.description =
