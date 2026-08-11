@@ -10,6 +10,7 @@ import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import * as Selection from "./util/selection"
 import { createCliRenderer, MouseButton } from "@opentui/core"
+import { startTermuxResizeFix } from "./termux-resize-fix"
 import { RouteProvider, useRoute } from "./context/route"
 import {
   Switch,
@@ -211,6 +212,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             destroyRenderer(renderer)
           }),
       )
+      const stopResizeFix = startTermuxResizeFix(renderer)
       win32DisableProcessedInput()
       const keymap = createDefaultOpenTuiKeymap(renderer)
       yield* Effect.acquireRelease(
@@ -233,7 +235,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         Effect.sync(() => process.on("SIGHUP", onSighup)),
         () => Effect.sync(() => process.off("SIGHUP", onSighup)),
       )
-      renderer.once("destroy", () => Deferred.doneUnsafe(shutdown, Effect.void))
+      renderer.once("destroy", () => { stopResizeFix(); Deferred.doneUnsafe(shutdown, Effect.void) })
       const pluginRuntime = createPluginRuntime()
 
       yield* Effect.tryPromise(async () => {
