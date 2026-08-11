@@ -194,6 +194,9 @@ describe("TUI inline tool wrapping", () => {
     expect(executeCallSummary({ tool: "session.get", status: "error", input: { nested: { hidden: true } } })).toBe(
       "↳ session.get (failed)",
     )
+    expect(
+      executeCallSummary({ tool: "session.prompt", status: "completed", input: { text: "first line\nsecond line" } }),
+    ).toBe("↳ session.prompt [text=first line second line]")
   })
 
   test("ignores diagnostics with malformed nested ranges", () => {

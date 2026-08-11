@@ -5,6 +5,7 @@ import {
   createMemo,
   createSignal,
   For,
+  Index,
   Match,
   on,
   onCleanup,
@@ -12,6 +13,7 @@ import {
   Show,
   Switch,
   useContext,
+  type Accessor,
 } from "solid-js"
 import path from "node:path"
 import { EOL, tmpdir } from "node:os"
@@ -3020,18 +3022,18 @@ function executeCalls(value: unknown): ExecuteCall[] {
 }
 
 export function executeCallSummary(call: ExecuteCall) {
-  const args = primitiveInputSummary(call.input ?? {})
+  const args = primitiveInputSummary(call.input ?? {}).replace(/\s+/g, " ")
   return `↳ ${call.tool}${call.status === "error" ? " (failed)" : ""}${args ? ` ${args}` : ""}`
 }
 
-function ExecuteCallView(props: { call: ExecuteCall; error?: string }) {
+function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
   const theme = useTheme()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
   const [hover, setHover] = createSignal(false)
-  const input = createMemo(() => Object.entries(props.call.input ?? {}))
-  const expandable = createMemo(() => input().length > 0 || Boolean(props.error))
-  const title = createMemo(() => `↳ ${props.call.tool}${props.call.status === "error" ? " (failed)" : ""}`)
+  const input = createMemo(() => Object.entries(props.call().input ?? {}))
+  const expandable = createMemo(() => input().length > 0)
+  const title = createMemo(() => `↳ ${props.call().tool}${props.call().status === "error" ? " (failed)" : ""}`)
 
   return (
     <box
@@ -3047,14 +3049,14 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string }) {
         wrapMode="none"
         truncate
         fg={
-          props.call.status === "error"
+          props.call().status === "error"
             ? theme.text.feedback.error.default
             : hover()
               ? theme.text.default
               : theme.text.subdued
         }
       >
-        {expanded() ? title() : executeCallSummary(props.call)}
+        {expanded() ? title() : executeCallSummary(props.call())}
       </text>
       <Show when={expanded()}>
         <box paddingLeft={2}>
@@ -3070,18 +3072,6 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string }) {
               </box>
             )}
           </For>
-          <Show when={props.error}>
-            {(error) => (
-              <box flexDirection="row">
-                <text flexShrink={0} fg={theme.text.feedback.error.default}>
-                  error:{" "}
-                </text>
-                <text flexGrow={1} wrapMode="word" fg={theme.text.feedback.error.default}>
-                  {error()}
-                </text>
-              </box>
-            )}
-          </Show>
         </box>
       </Show>
     </box>
@@ -3111,10 +3101,8 @@ function Execute(props: ToolProps) {
       >
         execute
       </InlineTool>
-      <For each={calls()}>
-        {(call) => <ExecuteCallView call={call} error={call.status === "error" ? outputPreview() : undefined} />}
-      </For>
-      <Show when={calls().length === 0 && showOutput()}>
+      <Index each={calls()}>{(call) => <ExecuteCallView call={call} />}</Index>
+      <Show when={showOutput()}>
         <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (
