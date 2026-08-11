@@ -167,14 +167,11 @@ interface MockCache {
 }
 
 const makeMockKV = (cache: MockCache) =>
-  Layer.succeed(
-    KV.Service,
-    KV.Service.of({
-      get: (key) => Effect.sync(() => cache.values.get(key)),
-      set: (key, value) => Effect.sync(() => cache.values.set(key, value)).pipe(Effect.asVoid),
-      remove: (key) => Effect.sync(() => cache.values.delete(key)).pipe(Effect.asVoid),
-    }),
-  )
+  Layer.mock(KV.Service, {
+    get: (key) => Effect.sync(() => cache.values.get(key)),
+    set: (key, value) => Effect.sync(() => cache.values.set(key, value)).pipe(Effect.asVoid),
+    remove: (key) => Effect.sync(() => cache.values.delete(key)).pipe(Effect.asVoid),
+  })
 
 const buildLayer = (state: Ref.Ref<MockState>, cache: MockCache, options: ModelsDev.Options = { fetch: false }) =>
   // Layer.fresh is required because the ModelsDev implementation is a module-level Layer constant,
@@ -265,19 +262,15 @@ describe("ModelsDev Service", () => {
   it.live("get() is single-flight under concurrent calls", () =>
     Effect.gen(function* () {
       const cache = makeCache()
-      writeCache(cache, fixture)
       const state = yield* Ref.make(initialState)
-      const results = yield* provided(
-        state,
-        cache,
-        Effect.gen(function* () {
-          const svc = yield* ModelsDev.Service
-          return yield* Effect.all([svc.get(), svc.get(), svc.get(), svc.get(), svc.get()], {
-            concurrency: "unbounded",
-          })
-        }),
-      )
+      const results = yield* Effect.gen(function* () {
+        const svc = yield* ModelsDev.Service
+        return yield* Effect.all([svc.get(), svc.get(), svc.get(), svc.get(), svc.get()], {
+          concurrency: "unbounded",
+        })
+      }).pipe(Effect.provide(buildLayer(state, cache, { fetch: true })))
       for (const result of results) expect(result).toEqual(fixtureSnapshot)
+      expect((yield* Ref.get(state)).calls.length).toBe(1)
     }),
   )
 

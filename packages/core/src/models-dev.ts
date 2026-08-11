@@ -535,11 +535,17 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
+const CatalogJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
 const Cache = Schema.Struct({
   updatedAt: Schema.Number,
-  body: Schema.String,
+  body: CatalogJson,
 })
-const CatalogJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+const defaultSource = "https://models.opencode.ai"
+
+function cacheKey(source: string) {
+  if (source === defaultSource) return "models-dev:catalog"
+  return `models-dev:catalog:${Hash.fast(source)}`
+}
 
 export const layer = (options?: Options) =>
   Layer.effect(
@@ -559,29 +565,22 @@ export const layer = (options?: Options) =>
         ),
       )
 
-      const source = options?.url || "https://models.opencode.ai"
+      const source = options?.url || defaultSource
       const fetch = options?.fetch ?? true
       const userAgent = App.useragent(app)
-      const cacheKey =
-        source === "https://models.opencode.ai" ? "models-dev:catalog" : `models-dev:catalog:${Hash.fast(source)}`
+      const key = cacheKey(source)
       const ttl = Duration.minutes(5)
       const lock = Semaphore.makeUnsafe(1)
 
       const loadFromCache = Effect.fnUntraced(function* () {
-        const value = yield* kv.get(cacheKey)
-        if (!Schema.is(Cache)(value)) {
-          if (value !== undefined) yield* kv.remove(cacheKey)
-          return
-        }
-        const catalog = Schema.decodeUnknownOption(CatalogJson)(value.body)
-        if (Option.isNone(catalog)) {
-          yield* kv.remove(cacheKey)
-          return
-        }
-        return {
-          catalog: catalog.value as Record<string, SourceProvider>,
-          updatedAt: value.updatedAt,
-        }
+        const value = yield* kv.get(key)
+        const cached = Schema.decodeUnknownOption(Cache)(value)
+        if (Option.isSome(cached))
+          return {
+            catalog: cached.value.body as Record<string, SourceProvider>,
+            updatedAt: cached.value.updatedAt,
+          }
+        if (value !== undefined) yield* kv.remove(key)
       })
 
       const fresh = Effect.fnUntraced(function* () {
@@ -613,7 +612,7 @@ export const layer = (options?: Options) =>
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const text = yield* fetchApi()
         const catalog = (yield* Schema.decodeUnknownEffect(CatalogJson)(text)) as Record<string, SourceProvider>
-        yield* kv.set(cacheKey, { updatedAt: Date.now(), body: text })
+        yield* kv.set(key, { updatedAt: Date.now(), body: text })
         return catalog
       })
 
@@ -640,7 +639,6 @@ export const layer = (options?: Options) =>
       const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
-        if (!force && (yield* fresh())) return
         yield* lock
           .withPermit(
             Effect.gen(function* () {
