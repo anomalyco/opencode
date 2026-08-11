@@ -475,12 +475,12 @@ export const {
         bootstrapTimeout,
       ])
         .then(async () => {
-          const providersResponse = providersPromise.then((x) => x.data!)
-          const providerListResponse = providerListPromise.then((x) => x.data!)
+          const providersResponse = providersPromise.then((x) => x.data).catch(() => undefined)
+          const providerListResponse = providerListPromise.then((x) => x.data).catch(() => undefined)
           const capabilitiesResponse = capabilitiesPromise
           const consoleStateResponse = consoleStatePromise
-          const agentsResponse = agentsPromise.then((x) => x.data ?? [])
-          const configResponse = configPromise.then((x) => x.data!)
+          const agentsResponse = agentsPromise.then((x) => x.data ?? []).catch(() => [])
+          const configResponse = configPromise.then((x) => x.data).catch(() => undefined)
           const sessionListResponse = args.continue ? sessionListPromise : undefined
 
           return Promise.all([
@@ -492,12 +492,12 @@ export const {
             configResponse,
             ...(sessionListResponse ? [sessionListResponse] : []),
           ]).then((responses) => {
-            const providers = responses[0]
-            const providerList = responses[1]
+            const providers = responses[0] ?? { providers: [], default: {} }
+            const providerList = responses[1] ?? []
             const capabilities = responses[2]
             const consoleState = responses[3]
-            const agents = responses[4]
-            const config = responses[5]
+            const agents = responses[4] ?? []
+            const config = responses[5] ?? {}
             const sessions = responses[6]
 
             batch(() => {
