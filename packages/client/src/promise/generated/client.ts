@@ -1740,7 +1740,7 @@ export function make(options: ClientOptions) {
         request<ProjectCopyCreateOutput>(
           {
             method: "POST",
-            path: `/experimental/project/${encodeURIComponent(input.projectID)}/copy`,
+            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/copy`,
             query: { location: input["location"] },
             body: { strategy: input["strategy"], directory: input["directory"], name: input["name"] },
             successStatus: 200,
@@ -1753,7 +1753,7 @@ export function make(options: ClientOptions) {
         request<ProjectCopyRemoveOutput>(
           {
             method: "DELETE",
-            path: `/experimental/project/${encodeURIComponent(input.projectID)}/copy`,
+            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/copy`,
             query: { location: input["location"] },
             body: { directory: input["directory"], force: input["force"] },
             successStatus: 204,
@@ -1766,7 +1766,7 @@ export function make(options: ClientOptions) {
         request<ProjectCopyRefreshOutput>(
           {
             method: "POST",
-            path: `/experimental/project/${encodeURIComponent(input.projectID)}/copy/refresh`,
+            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/copy/refresh`,
             query: { location: input["location"] },
             successStatus: 204,
             declaredStatuses: [400, 401],
