@@ -454,6 +454,12 @@ Recent work
               name: "image.png",
               mention: { start: 0, end: 9, text: "[Image 1]" },
             }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+            }),
           ],
           time: { created },
         }),
@@ -461,7 +467,7 @@ Recent work
       model,
     )
 
-    expect(messages[0]?.content.filter((part) => part.type === "media")).toHaveLength(3)
+    expect(messages[0]?.content.filter((part) => part.type === "media")).toHaveLength(4)
   })
 
   test("replays durable tool media into canonical tool messages without structured base64", () => {

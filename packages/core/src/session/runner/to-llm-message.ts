@@ -60,15 +60,20 @@ const attachmentContent = (file: FileAttachment): ContentPart[] => {
 }
 
 const userAttachmentContent = (files: readonly FileAttachment[]) => {
-  const seen = new Map<string, Set<string>>()
+  const eligible = files.filter(
+    (file) => imageMimes.has(file.mime) && file.source.type === "inline" && file.mention?.text,
+  )
+  if (eligible.length < 2) return files.flatMap(attachmentContent)
+
+  const seen = new Map<string, string[]>()
   return files.flatMap((file) => {
     if (!imageMimes.has(file.mime) || file.source.type !== "inline" || !file.mention?.text)
       return attachmentContent(file)
     const metadata = JSON.stringify([file.mime, file.name ?? null, file.description ?? null, file.mention.text])
-    const matches = seen.get(file.data)
-    if (matches?.has(metadata)) return []
-    if (matches) matches.add(metadata)
-    if (!matches) seen.set(file.data, new Set([metadata]))
+    const matches = seen.get(metadata)
+    if (matches?.includes(file.data)) return []
+    if (matches) matches.push(file.data)
+    if (!matches) seen.set(metadata, [file.data])
     return attachmentContent(file)
   })
 }

@@ -9,12 +9,29 @@ import {
 describe("prompt attachments", () => {
   test("deduplicates identical inline images while preserving other attachments", () => {
     const files = [
-      { uri: "data:image/png;base64,AAA", name: "first.png" },
+      {
+        uri: "data:image/png;base64,AAA",
+        name: "first.png",
+        mention: { start: 0, end: 9, text: "[Image 1]" },
+      },
       { uri: "file:///same", name: "first.txt" },
       { uri: "data:application/pdf;base64,CCC", name: "first.pdf" },
-      { uri: "data:image/png;base64,BBB", name: "second.png" },
-      { uri: "data:image/png;base64,AAA", name: "first.png" },
-      { uri: "data:image/png;base64,AAA", name: "first.png", description: "alternate use" },
+      {
+        uri: "data:image/png;base64,BBB",
+        name: "second.png",
+        mention: { start: 10, end: 19, text: "[Image 2]" },
+      },
+      {
+        uri: "data:image/png;base64,AAA",
+        name: "first.png",
+        mention: { start: 20, end: 29, text: "[Image 1]" },
+      },
+      {
+        uri: "data:image/png;base64,AAA",
+        name: "first.png",
+        description: "alternate use",
+        mention: { start: 30, end: 39, text: "[Image 1]" },
+      },
       { uri: "file:///same", name: "second.txt" },
       { uri: "data:application/pdf;base64,CCC", name: "first.pdf" },
     ]
@@ -62,14 +79,27 @@ describe("prompt attachments", () => {
 
   test("preserves mentionless attachments when tracked mentions are synchronized", () => {
     const mentionless = { uri: "data:image/png;base64,AAA" }
+    const emptyMention = {
+      uri: "data:image/png;base64,CCC",
+      mention: { start: 0, end: 0, text: "" },
+    }
     const mentioned = {
       uri: "data:image/png;base64,BBB",
       mention: { start: 0, end: 9, text: "[Image 1]" },
     }
 
-    expect(preserveMentionlessPromptAttachments([mentionless, mentioned], [mentioned])).toEqual([
-      mentioned,
+    const restored = preserveMentionlessPromptAttachments([mentionless, emptyMention, mentioned], [mentioned])
+    expect(restored).toEqual([mentionless, emptyMention, mentioned])
+    expect(restored.indexOf(mentioned)).toBe(2)
+
+    const another = {
+      uri: "data:image/png;base64,DDD",
+      mention: { start: 10, end: 19, text: "[Image 2]" },
+    }
+    expect(preserveMentionlessPromptAttachments([mentioned, mentionless, another], [another, mentioned])).toEqual([
+      another,
       mentionless,
+      mentioned,
     ])
   })
 
@@ -85,5 +115,11 @@ describe("prompt attachments", () => {
 
     expect(deduplicateVisibleImages(files)).toEqual([file])
     expect(files).toHaveLength(2)
+
+    const distinct = [
+      { ...file, mention: { text: "[Image 2]" } },
+      { ...file, mention: undefined },
+    ]
+    expect(deduplicateVisibleImages([file, ...distinct])).toEqual([file, ...distinct])
   })
 })

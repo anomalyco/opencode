@@ -741,6 +741,7 @@ export function Prompt(props: PromptProps) {
     setStore(
       produce((draft) => {
         const newMap = new Map<number, PromptPartRef>()
+        const fileExtmarks = new Map<number, NonNullable<PromptInfo["files"]>[number]>()
         const files: NonNullable<PromptInfo["files"]> = []
         const agents: NonNullable<PromptInfo["agents"]> = []
         const skills: NonNullable<PromptInfo["skills"]> = []
@@ -754,9 +755,8 @@ export function Prompt(props: PromptProps) {
             if (!part?.mention) continue
             part.mention.start = extmark.start
             part.mention.end = extmark.end
-            const index = files.length
             files.push(part)
-            newMap.set(extmark.id, { type: "file", index })
+            fileExtmarks.set(extmark.id, part)
             continue
           }
           if (ref.type === "agent") {
@@ -789,6 +789,11 @@ export function Prompt(props: PromptProps) {
         }
 
         const nextFiles = preserveMentionlessPromptAttachments(draft.prompt.files, files)
+        const fileIndices = new Map(nextFiles.map((file, index) => [file, index]))
+        for (const [extmark, file] of fileExtmarks) {
+          const index = fileIndices.get(file)
+          if (index !== undefined) newMap.set(extmark, { type: "file", index })
+        }
 
         draft.extmarkToPart = newMap
         if (

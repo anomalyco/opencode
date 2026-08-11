@@ -21,38 +21,56 @@ function attachmentMetadata(file: PromptFileIdentity) {
   return JSON.stringify([file.name ?? null, file.description ?? null])
 }
 
-export function deduplicatePromptImages(files: readonly PromptFile[] | undefined) {
-  if (!files || files.length < 2) return files
-  const seen = new Map<string, Set<string>>()
-  return files.filter((file) => {
-    if (!file.uri.startsWith("data:image/")) return true
-    const metadata = attachmentMetadata(file)
-    const matches = seen.get(file.uri)
-    if (matches?.has(metadata)) return false
-    if (matches) matches.add(metadata)
-    if (!matches) seen.set(file.uri, new Set([metadata]))
+function deduplicateByIdentity<T>(
+  items: readonly T[],
+  identity: (item: T) => { metadata: string; payload: string } | undefined,
+) {
+  const seen = new Map<string, string[]>()
+  return items.filter((item) => {
+    const key = identity(item)
+    if (!key) return true
+    const matches = seen.get(key.metadata)
+    if (matches?.includes(key.payload)) return false
+    if (matches) matches.push(key.payload)
+    if (!matches) seen.set(key.metadata, [key.payload])
     return true
   })
+}
+
+export function deduplicatePromptImages(files: readonly PromptFile[] | undefined) {
+  if (!files || files.length < 2) return files
+  return deduplicateByIdentity(files, (file) =>
+    file.uri.startsWith("data:image/") && file.mention?.text
+      ? {
+          metadata: JSON.stringify([attachmentMetadata(file), file.mention.text]),
+          payload: file.uri,
+        }
+      : undefined,
+  )
 }
 
 export function preserveMentionlessPromptAttachments(
   files: readonly PromptFile[] | undefined,
   mentioned: PromptFile[],
 ) {
-  return [...mentioned, ...(files?.filter((file) => !file.mention) ?? [])]
+  if (!files) return mentioned
+  const tracked = mentioned.values()
+  return files.flatMap((file) => {
+    if (!file.mention?.text) return [file]
+    const next = tracked.next()
+    return next.done ? [] : [next.value]
+  })
 }
 
 export function deduplicateVisibleImages<T extends ProjectedFile>(files: readonly T[]) {
-  const seen = new Map<string, Set<string>>()
-  return files.filter((file) => {
-    if (!file.mime.startsWith("image/") || file.source.type !== "inline" || !file.mention?.text) return true
-    const metadata = JSON.stringify([file.mime, file.name ?? null, file.description ?? null, file.mention.text])
-    const matches = seen.get(file.data)
-    if (matches?.has(metadata)) return false
-    if (matches) matches.add(metadata)
-    if (!matches) seen.set(file.data, new Set([metadata]))
-    return true
-  })
+  return deduplicateByIdentity(files, (file) =>
+    file.mime.startsWith("image/") && file.source.type === "inline" && file.mention?.text
+      ? {
+          metadata: JSON.stringify([file.mime, file.name ?? null, file.description ?? null, file.mention.text]),
+          payload: file.data,
+        }
+      : undefined,
+  )
 }
 
 export function promptAttachmentLabel(files: readonly PromptFile[] | undefined, file: PromptFileIdentity) {
