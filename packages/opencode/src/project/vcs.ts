@@ -1,5 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Context, Schema, Scope } from "effect"
+import path from "node:path"
 import { formatPatch, structuredPatch } from "diff"
 import { InstanceState } from "@/effect/instance-state"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
@@ -240,6 +241,8 @@ export const Event = VcsEvent
 export const Info = Schema.Struct({
   branch: Schema.optional(Schema.String),
   default_branch: Schema.optional(Schema.String),
+  dirty: Schema.optional(Schema.Boolean),
+  has_conflicts: Schema.optional(Schema.Boolean),
 }).annotate({ identifier: "VcsInfo" })
 export type Info = Schema.Schema.Type<typeof Info>
 
@@ -291,6 +294,8 @@ export interface Interface {
 interface State {
   current: string | undefined
   root: Git.Base | undefined
+  dirty: boolean
+  hasConflicts: boolean
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
@@ -305,30 +310,70 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Vcs.state")(function* (ctx) {
         if (ctx.project.vcs !== "git") {
-          return { current: undefined, root: undefined }
+          return { current: undefined, root: undefined, dirty: false, hasConflicts: false }
         }
 
         const get = Effect.fnUntraced(function* () {
           return yield* git.branch(ctx.directory)
         })
+        const getDirty = Effect.fnUntraced(function* () {
+          const items = yield* git.status(ctx.directory).pipe(Effect.orElseSucceed(() => []))
+          return items.length > 0
+        })
+        const getConflicts = Effect.fnUntraced(function* () {
+          const dirProc = yield* git.run(["rev-parse", "--git-dir"], { cwd: ctx.directory }).pipe(
+            Effect.orElseSucceed(() => ({
+              exitCode: 1,
+              text: () => "",
+              stdout: Buffer.alloc(0),
+              stderr: Buffer.alloc(0),
+              truncated: false,
+            })),
+          )
+          if (dirProc.exitCode !== 0) return false
+          const gitDir = dirProc.text().trim()
+          const resolveDir = path.isAbsolute(gitDir) ? gitDir : path.join(ctx.directory, gitDir)
+          const exists = (file: string) =>
+            Effect.promise(() => Bun.file(file).exists()).pipe(Effect.orElseSucceed(() => false))
+          const mergeHead = yield* exists(resolveDir + "/MERGE_HEAD")
+          const rebaseHead = yield* exists(resolveDir + "/REBASE_HEAD")
+          return mergeHead || rebaseHead
+        })
         const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
           concurrency: 2,
         })
-        const value = { current, root }
+        const value = { current, root, dirty: false, hasConflicts: false }
+
+        const publish = Effect.fnUntraced(function* () {
+          const dirty = yield* getDirty()
+          const hasConflicts = yield* getConflicts()
+          if (dirty !== value.dirty || hasConflicts !== value.hasConflicts) {
+            value.dirty = dirty
+            value.hasConflicts = hasConflicts
+          }
+          yield* events.publish(Event.BranchUpdated, {
+            branch: value.current,
+            dirty: value.dirty,
+            has_conflicts: value.hasConflicts,
+          })
+        })
 
         const unsubscribe = yield* events.listen((event) => {
           if (event.type !== Watcher.Event.Updated.type || event.location?.directory !== ctx.directory)
             return Effect.void
           const data = event.data as EventV2.Data<typeof Watcher.Event.Updated>
-          if (!data.file.endsWith("HEAD")) return Effect.void
+          if (!data.file.endsWith("HEAD") && !data.file.endsWith("index")) return Effect.void
           return Effect.gen(function* () {
-            const next = yield* get()
-            if (next !== value.current) {
-              value.current = next
-              yield* events.publish(Event.BranchUpdated, { branch: next })
+            if (data.file.endsWith("HEAD")) {
+              const next = yield* get()
+              if (next !== value.current) {
+                value.current = next
+              }
             }
+            yield* publish()
           })
         })
+        yield* publish()
         yield* Effect.addFinalizer(() => unsubscribe)
 
         return value
