@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
+import { Global } from "@opencode-ai/util/global"
 
 it.live("allows browser preflight requests without credentials", () =>
   Effect.gen(function* () {
@@ -40,5 +41,5 @@ it.live("allows browser preflight requests without credentials", () =>
     expect(health.status).toBe(200)
     expect(health.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
     expect(yield* Effect.promise(() => health.json())).toMatchObject({ version: "test-version" })
-  }),
+  }).pipe(Effect.provide(Global.layerWith({}))),
 )
