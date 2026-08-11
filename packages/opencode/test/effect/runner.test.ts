@@ -35,28 +35,6 @@ describe("Runner", () => {
   )
 
   it.live(
-    "concurrent callers share the same run",
-    Effect.gen(function* () {
-      const s = yield* Scope.Scope
-      const runner = Runner.make<string>(s)
-      const calls = yield* Ref.make(0)
-      const work = Effect.gen(function* () {
-        yield* Ref.update(calls, (n) => n + 1)
-        yield* Effect.sleep("10 millis")
-        return "shared"
-      })
-
-      const [a, b] = yield* Effect.all([runner.ensureRunning(work), runner.ensureRunning(work)], {
-        concurrency: "unbounded",
-      })
-
-      expect(a).toBe("shared")
-      expect(b).toBe("shared")
-      expect(yield* Ref.get(calls)).toBe(1)
-    }),
-  )
-
-  it.live(
     "concurrent callers all receive same error",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -87,29 +65,59 @@ describe("Runner", () => {
   )
 
   it.live(
-    "second ensureRunning ignores new work if already running",
+    "second ensureRunning interrupts the active run and replaces it",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const runner = Runner.make<string>(s)
+      const started = yield* Deferred.make<void>()
       const ran = yield* Ref.make<string[]>([])
 
       const first = Effect.gen(function* () {
         yield* Ref.update(ran, (a) => [...a, "first"])
-        yield* Effect.sleep("50 millis")
-        return "first-result"
+        yield* Deferred.succeed(started, void 0)
+        return yield* Effect.never.pipe(Effect.as("first-result"))
       })
       const second = Effect.gen(function* () {
         yield* Ref.update(ran, (a) => [...a, "second"])
         return "second-result"
       })
 
-      const [a, b] = yield* Effect.all([runner.ensureRunning(first), runner.ensureRunning(second)], {
-        concurrency: "unbounded",
+      const a = yield* runner.ensureRunning(first).pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      const b = yield* runner.ensureRunning(second).pipe(Effect.forkChild)
+
+      // The first caller is interrupted; the second caller gets the new result.
+      const exitA = yield* Fiber.await(a)
+      const exitB = yield* Fiber.await(b)
+      expect(Exit.isFailure(exitA)).toBe(true)
+      expect(Exit.isSuccess(exitB)).toBe(true)
+      if (Exit.isSuccess(exitB)) expect(exitB.value).toBe("second-result")
+      expect(yield* Ref.get(ran)).toEqual(["first", "second"])
+    }),
+  )
+
+  it.live(
+    "interrupted first caller resolves through onInterrupt",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s, { onInterrupt: Effect.succeed("interrupted") })
+      const started = yield* Deferred.make<void>()
+
+      const first = Effect.gen(function* () {
+        yield* Deferred.succeed(started, void 0)
+        return yield* Effect.never.pipe(Effect.as("first-result"))
       })
 
-      expect(a).toBe("first-result")
-      expect(b).toBe("first-result")
-      expect(yield* Ref.get(ran)).toEqual(["first"])
+      const a = yield* runner.ensureRunning(first).pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      const b = yield* runner.ensureRunning(Effect.succeed("second-result")).pipe(Effect.forkChild)
+
+      const exitA = yield* Fiber.await(a)
+      const exitB = yield* Fiber.await(b)
+      expect(Exit.isSuccess(exitA)).toBe(true)
+      if (Exit.isSuccess(exitA)) expect(exitA.value).toBe("interrupted")
+      expect(Exit.isSuccess(exitB)).toBe(true)
+      if (Exit.isSuccess(exitB)) expect(exitB.value).toBe("second-result")
     }),
   )
 
