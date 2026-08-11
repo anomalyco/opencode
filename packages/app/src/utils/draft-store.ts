@@ -22,10 +22,13 @@ function blobUrl(id: string, blob: Blob) {
 }
 
 async function blobID(blob: Blob) {
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
-  return id
+  if (globalThis.crypto?.subtle) {
+    const id = Array.from(new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", await blob.arrayBuffer())))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
+    return id
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
 export async function createBlobReference(blob: Blob): Promise<BlobReference> {
