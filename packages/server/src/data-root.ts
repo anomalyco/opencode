@@ -1,7 +1,7 @@
 export * as DataRoot from "./data-root"
 
 import { Global } from "@opencode-ai/core/global"
-import { Config as EffectConfig, Context, Effect, Layer, Option } from "effect"
+import { Context, Effect, Layer } from "effect"
 import path from "path"
 
 // ─── DataRootConfig ────────────────────────────────────────────
@@ -34,6 +34,11 @@ export class DataRootConfig extends Context.Service<DataRootConfig, string>()("@
 // Used by session.create to determine the default location.directory.
 
 export function workspacePath(userID: string, dataRoot: string): string {
+  // Defense-in-depth: caller (deriveDefaultLocation) already guards against
+  // empty userID, but if someone calls this directly the result would be the
+  // workspace root with no subdirectory — multiple empty-userID callers would
+  // collide. Reject empty userID explicitly.
+  if (!userID) throw new TypeError("userID must not be empty")
   // encodeURIComponent does NOT encode "." or "..", so path-traversal
   // sequences like "../etc" would survive encoding. Strip them explicitly.
   const safe = encodeURIComponent(userID).replace(/\.\.?/g, (m) =>

@@ -2,11 +2,14 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import os from "os"
 
-// We test the workspacePath / sanitization logic directly since it's a pure function.
-// DataRootConfig is an Effect service that requires a Layer, tested in isolation below.
+// Test workspacePath directly from source (not a copy) so the test stays
+// in sync with the implementation.
+const { workspacePath: actualWorkspacePath } = await import("@opencode-ai/server/data-root")
 
-// Replicate workspacePath for testing (matches packages/server/src/data-root.ts)
+// Replicate workspacePath for testing path-traversal edge cases at the
+// pure-function level.
 function workspacePath(userID: string, dataRoot: string): string {
+  if (!userID) throw new TypeError("userID must not be empty")
   const safe = encodeURIComponent(userID).replace(/\.\.?/g, (m) =>
     m === ".." ? "%2E%2E" : "%2E",
   )
@@ -60,9 +63,12 @@ describe("workspace directory structure", () => {
     expect(result).toContain("/workspaces/user1")
   })
 
-  test("empty userID produces workspaces path without trailing separator", () => {
-    const result = workspacePath("", "/data")
-    expect(result).toBe("/data/workspaces")
+  test("empty userID throws (source function)", () => {
+    expect(() => actualWorkspacePath("", "/data")).toThrow("userID must not be empty")
+  })
+
+  test("empty userID throws (local replica)", () => {
+    expect(() => workspacePath("", "/data")).toThrow("userID must not be empty")
   })
 })
 
