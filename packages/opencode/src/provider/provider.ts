@@ -1218,7 +1218,10 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     api: {
       id: model.id,
       url: model.provider?.api ?? provider.api ?? "",
-      npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
+      npm:
+        model.provider?.shape === "responses"
+          ? "@ai-sdk/openai"
+          : (model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible"),
     },
     status: model.status ?? "active",
     headers: {},
@@ -1437,11 +1440,13 @@ const layer = Layer.effect(
             const existingModel = parsed.models[model.id ?? modelID]
             const apiID = model.id ?? existingModel?.api.id ?? modelID
             const apiNpm =
-              model.provider?.npm ??
-              provider.npm ??
-              existingModel?.api.npm ??
-              modelsDev[providerID]?.npm ??
-              "@ai-sdk/openai-compatible"
+              model.provider?.shape === "responses"
+                ? "@ai-sdk/openai"
+                : (model.provider?.npm ??
+                  provider.npm ??
+                  existingModel?.api.npm ??
+                  modelsDev[providerID]?.npm ??
+                  "@ai-sdk/openai-compatible")
             const name = iife(() => {
               if (model.name) return model.name
               if (model.id && model.id !== modelID) return modelID

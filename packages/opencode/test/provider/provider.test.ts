@@ -1483,6 +1483,36 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.release_date).toBe("")
 })
 
+test("models.dev response-shaped models use the OpenAI Responses provider", () => {
+  const provider = {
+    id: "deepseek",
+    name: "DeepSeek",
+    env: [],
+    npm: "@ai-sdk/openai-compatible",
+    api: "https://api.deepseek.com",
+    models: {
+      "deepseek-v4-flash": {
+        id: "deepseek-v4-flash",
+        name: "DeepSeek V4 Flash",
+        provider: { shape: "responses" },
+        limit: { context: 1_000_000, output: 384_000 },
+      },
+      "deepseek-v4-pro": {
+        id: "deepseek-v4-pro",
+        name: "DeepSeek V4 Pro",
+        limit: { context: 1_000_000, output: 384_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  const models = Provider.fromModelsDevProvider(provider).models
+  expect(models["deepseek-v4-flash"].api).toMatchObject({
+    npm: "@ai-sdk/openai",
+    url: "https://api.deepseek.com",
+  })
+  expect(models["deepseek-v4-pro"].api.npm).toBe("@ai-sdk/openai-compatible")
+})
+
 test("models.dev reasoning options replace generated variants and unsupported toggles fall back", () => {
   const provider = {
     id: "reasoning",

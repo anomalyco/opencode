@@ -76,6 +76,17 @@ describe("ModelsDevPlugin", () => {
                     },
                   },
                 },
+                "deepseek-v4-flash": {
+                  id: "deepseek-v4-flash",
+                  name: "DeepSeek V4 Flash",
+                  release_date: "2026-07-31",
+                  attachment: false,
+                  reasoning: true,
+                  temperature: true,
+                  tool_call: true,
+                  provider: { shape: "responses" },
+                  limit: { context: 1_000_000, output: 384_000 },
+                },
               },
             },
           } satisfies Record<string, ModelsDev.Provider>),
@@ -92,6 +103,7 @@ describe("ModelsDevPlugin", () => {
       const providerID = ProviderV2.ID.make("acme")
       const base = yield* catalog.model.get(providerID, ModelV2.ID.make("gpt-5.4"))
       const fast = yield* catalog.model.get(providerID, ModelV2.ID.make("gpt-5.4-fast"))
+      const deepseek = yield* catalog.model.get(providerID, ModelV2.ID.make("deepseek-v4-flash"))
 
       expect(base?.variants).toEqual([])
       expect(base?.request.body).toEqual({})
@@ -121,6 +133,12 @@ describe("ModelsDevPlugin", () => {
           cache: { read: 0.5, write: 0 },
         },
       ])
+      expect(deepseek?.api).toMatchObject({
+        id: "deepseek-v4-flash",
+        type: "aisdk",
+        package: "@ai-sdk/openai",
+        url: "https://api.acme.test/v1",
+      })
     }),
   )
 

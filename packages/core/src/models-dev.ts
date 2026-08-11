@@ -115,7 +115,11 @@ export const Model = Schema.Struct({
   ),
   status: Schema.optional(CatalogModelStatus),
   provider: Schema.optional(
-    Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
+    Schema.Struct({
+      npm: Schema.optional(Schema.String),
+      api: Schema.optional(Schema.String),
+      shape: Schema.optional(Schema.Literals(["responses", "completions"])),
+    }),
   ),
 })
 export type Model = Schema.Schema.Type<typeof Model>

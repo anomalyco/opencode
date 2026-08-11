@@ -84,19 +84,27 @@ function applyModel(
 ) {
   draft.name = input.name ?? model.name
   draft.family = model.family
-  draft.api = model.provider?.npm
-    ? {
-        id: model.id,
-        type: "aisdk",
-        package: model.provider.npm,
-        url: model.provider.api,
-      }
-    : {
-        id: model.id,
-        type: "native",
-        url: model.provider?.api,
-        settings: {},
-      }
+  draft.api =
+    model.provider?.shape === "responses"
+      ? {
+          id: model.id,
+          type: "aisdk",
+          package: "@ai-sdk/openai",
+          url: model.provider.api ?? draft.api.url,
+        }
+      : model.provider?.npm
+        ? {
+            id: model.id,
+            type: "aisdk",
+            package: model.provider.npm,
+            url: model.provider.api,
+          }
+        : {
+            id: model.id,
+            type: "native",
+            url: model.provider?.api,
+            settings: {},
+          }
   draft.capabilities = {
     tools: model.tool_call,
     input: [...(model.modalities?.input ?? [])],
