@@ -472,6 +472,38 @@ Recent work
     ])
   })
 
+  test("preserves unsupported image formats as text attachments instead of dropping them", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-avif-image"),
+          type: "user",
+          text: "Inspect this image",
+          files: [
+            FileAttachment.make({ data, mime: "image/avif", source: { type: "inline" }, name: "image.avif" }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect this image" },
+      {
+        type: "text",
+        text: "\n\nAttached image with unsupported format (image/avif): image.avif — content not included because model providers do not support this format",
+        metadata: {
+          attachment: {
+            source: { type: "inline" },
+            name: "image.avif",
+          },
+        },
+      },
+    ])
+  })
+
   test("does not add attachment location text for non-local provider media", () => {
     const data = Base64.make("AAECAw==")
     const messages = toLLMMessages(
