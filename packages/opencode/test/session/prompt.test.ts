@@ -417,7 +417,7 @@ const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { fi
   return { user: msg, assistant }
 })
 
-const addSubtask = (sessionID: SessionID, messageID: MessageID, model = ref) =>
+const addSubtask = (sessionID: SessionID, messageID: MessageID, model = ref, command?: string) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
     yield* session.updatePart({
@@ -429,6 +429,7 @@ const addSubtask = (sessionID: SessionID, messageID: MessageID, model = ref) =>
       description: "inspect bug",
       agent: "general",
       model,
+      command,
     })
   })
 
@@ -985,6 +986,53 @@ it.instance("subtask child inherits parent session external_directory allow", ()
     )
     expect(Permission.evaluate("external_directory", "/tmp/allowed/file", rules).action).toBe("allow")
     expect(Permission.evaluate("task", "anything", rules).action).toBe("deny")
+  }),
+)
+
+it.instance("command subtask injects scope-preserving synthetic user message", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* llm.text("review findings")
+    yield* llm.text("summary for user")
+    const msg = yield* user(chat.id, "hello")
+    yield* addSubtask(chat.id, msg.id, ref, "review")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    expect(yield* llm.calls).toBe(2)
+
+    const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+    const synthetic = msgs
+      .filter((item) => item.info.role === "user")
+      .flatMap((item) => item.parts)
+      .find((part): part is SessionV1.TextPart => part.type === "text" && part.synthetic === true)
+    expect(synthetic).toBeDefined()
+    expect(synthetic?.text).toContain("/review")
+    expect(synthetic?.text).not.toContain("continue with your task")
+  }),
+)
+
+it.instance("subtask without command adds no synthetic user message", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* llm.text("done")
+    const msg = yield* user(chat.id, "hello")
+    yield* addSubtask(chat.id, msg.id)
+
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+    const synthetic = msgs
+      .filter((item) => item.info.role === "user")
+      .flatMap((item) => item.parts)
+      .find((part) => part.type === "text" && part.synthetic === true)
+    expect(synthetic).toBeUndefined()
   }),
 )
 
