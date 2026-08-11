@@ -51,6 +51,7 @@ type Input = {
   assistantMessage: SessionV1.Assistant
   sessionID: SessionID
   model: Provider.Model
+  step: number
 }
 
 export interface Interface {
@@ -72,6 +73,11 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  /** True when at least one tool-call event was observed during this stream.
+   *  The AI SDK dispatches tools inline and injects tool-result events before
+   *  cleanup runs, so we can't rely on ctx.toolcalls being non-empty at the
+   *  return decision point. */
+  hasToolCall: boolean
 }
 
 type StreamEvent = LLMEvent
@@ -104,6 +110,7 @@ const layer = Layer.effect(
         assistantMessage: input.assistantMessage,
         sessionID: input.sessionID,
         model: input.model,
+        step: input.step,
         toolcalls: {},
         shouldBreak: false,
         snapshot: initialSnapshot,
@@ -111,6 +118,7 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        hasToolCall: false,
       }
       let aborted = false
 
@@ -329,6 +337,7 @@ const layer = Layer.effect(
           }
 
           case "tool-call": {
+            ctx.hasToolCall = true
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
@@ -454,6 +463,14 @@ const layer = Layer.effect(
               cost: usage.cost,
             })
             yield* session.updateMessage(ctx.assistantMessage)
+            // log step-finish event
+            yield* Effect.logDebug("processor: triage: step=" + ctx.step + " step-finish: MessageUpdated published", {
+              finish: value.reason,
+              messageID: ctx.assistantMessage.id,
+              sessionID: ctx.sessionID,
+              tokens: usage.tokens,
+              cost: usage.cost,
+            })
             if (ctx.snapshot) {
               const patch = yield* snapshot.patch(ctx.snapshot)
               if (patch.files.length) {
@@ -528,6 +545,13 @@ const layer = Layer.effect(
             }
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePart(ctx.currentText)
+            // log text-end event
+            yield* Effect.logDebug("processor: triage: step=" + ctx.step + " text-end: PartUpdated published", {
+              messageID: ctx.assistantMessage.id,
+              partID: ctx.currentText.id,
+              sessionID: ctx.sessionID,
+              textLength: ctx.currentText.text.length,
+            })
             ctx.currentText = undefined
             return
 
@@ -537,6 +561,20 @@ const layer = Layer.effect(
       })
 
       const cleanup = Effect.fn("SessionProcessor.cleanup")(function* () {
+        // log cleanup entry states
+        yield* Effect.logDebug("processor: triage: step=" + ctx.step + " cleanup() entry states", {
+          aborted,
+          assistantMessageError: !!ctx.assistantMessage.error,
+          assistantMessageFinish: ctx.assistantMessage.finish,
+          assistantMessageId: ctx.assistantMessage.id,
+          blocked: ctx.blocked,
+          currentText: !!ctx.currentText,
+          needsCompaction: ctx.needsCompaction,
+          reasoningMapLength: Object.keys(ctx.reasoningMap).length,
+          sessionID: ctx.sessionID,
+          toolcallsLength: Object.keys(ctx.toolcalls).length,
+        })
+
         if (ctx.snapshot) {
           const patch = yield* snapshot.patch(ctx.snapshot)
           if (patch.files.length) {
@@ -574,30 +612,65 @@ const layer = Layer.effect(
           { concurrency: "unbounded" },
         )
 
+        const toolsErrored: string[] = []
+        const toolsInterrupted: string[] = []
+
         for (const toolCallID of Object.keys(ctx.toolcalls)) {
           const match = yield* readToolCall(toolCallID)
           if (!match) continue
           const part = match.part
           const end = Date.now()
           const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
-          yield* session.updatePart({
-            ...part,
-            state: {
-              ...part.state,
-              status: "error",
-              error: "Tool execution aborted",
-              metadata: { ...metadata, interrupted: true },
-              time: { start: "time" in part.state ? part.state.time.start : end, end },
-            },
+          // if the stream was truthfully aborted then mark the tool as
+          // interrupted so toModelMessagesEffect can skip it. if the stream
+          // completed normally (incl. error) mark the tool as errored so the
+          // next iteration can still find it. the caduceus parts clearing in
+          // prompt.ts prevents stale tool parts from leaking into
+          // toModelMessagesEffect.
+          if (aborted) {
+            yield* session.updatePart({
+              ...part,
+              state: {
+                ...part.state,
+                status: "error",
+                error: "Tool execution aborted",
+                metadata: { ...metadata, interrupted: true },
+                time: { start: "time" in part.state ? part.state.time.start : end, end },
+              },
+            })
+            toolsInterrupted.push(toolCallID)
+          } else {
+            yield* session.updatePart({
+              ...part,
+              state: {
+                ...part.state,
+                status: "error",
+                error: "Tool execution aborted",
+                time: { start: "time" in part.state ? part.state.time.start : end, end },
+              },
+            })
+            toolsErrored.push(toolCallID)
+          }
+        }
+
+        if (toolsInterrupted.length > 0 || toolsErrored.length > 0) {
+          // log cleanup toolcall states
+          yield* Effect.logDebug("processor: triage: step=" + ctx.step + " cleanup() toolcall states", {
+            aborted,
+            assistantMessageError: !!ctx.assistantMessage.error,
+            assistantMessageFinish: ctx.assistantMessage.finish,
+            assistantMessageID: ctx.assistantMessage.id,
+            toolsErrored,
+            toolsInterrupted,
+            sessionID: ctx.sessionID,
           })
         }
+
         ctx.toolcalls = {}
-        ctx.assistantMessage.time.completed = Date.now()
-        yield* session.updateMessage(ctx.assistantMessage)
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
-        yield* Effect.logError("process", {
+        yield* Effect.logError("processor: process", {
           "session.id": input.sessionID,
           messageID: input.assistantMessage.id,
           error: errorMessage(e),
@@ -617,6 +690,7 @@ const layer = Layer.effect(
           return
         }
         ctx.assistantMessage.error = error
+        yield* session.updateMessage(ctx.assistantMessage)
         yield* events.publish(Session.Event.Error, {
           sessionID: ctx.assistantMessage.sessionID,
           error: ctx.assistantMessage.error,
@@ -625,7 +699,7 @@ const layer = Layer.effect(
       })
 
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
-        yield* Effect.logInfo("process", {
+        yield* Effect.logInfo("processor: process", {
           "session.id": input.sessionID,
           messageID: input.assistantMessage.id,
         })
@@ -648,9 +722,7 @@ const layer = Layer.effect(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
                 aborted = true
-                if (!ctx.assistantMessage.error) {
-                  yield* halt(new DOMException("Aborted", "AbortError"))
-                }
+                yield* halt(new DOMException("Aborted", "AbortError"))
               }),
             ),
             Effect.catchCauseIf(
@@ -678,6 +750,17 @@ const layer = Layer.effect(
 
           if (ctx.needsCompaction) return "compact"
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"
+          // conclusive finish — return stop unless there were tool calls observed
+          // during this stream. We use hasToolCall instead of checking
+          // ctx.toolcalls because the AI SDK dispatches tools inline and injects
+          // tool-result events that settle and remove entries before cleanup.
+          if (
+            ctx.assistantMessage.finish &&
+            ctx.assistantMessage.finish !== "tool-calls" &&
+            ctx.assistantMessage.finish !== "length" &&
+            !ctx.hasToolCall
+          )
+            return "stop"
           return "continue"
         })
       })

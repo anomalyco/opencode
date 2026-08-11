@@ -49,42 +49,6 @@ type CompletedCompaction = {
   summary: string | undefined
 }
 
-const truncate = (value: string) =>
-  value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
-
-const serialize = (message: SessionV1.WithParts) => {
-  if (message.info.role === "user") {
-    const text = message.parts
-      .filter((part): part is SessionV1.TextPart => part.type === "text" && !part.ignored)
-      .map((part) => part.text)
-      .filter(Boolean)
-      .join("\n")
-    const files = message.parts.flatMap((part) =>
-      part.type === "file" ? [`[Attached ${part.mime}: ${part.filename ?? "file"}]`] : [],
-    )
-    return [...(text ? [`[User]: ${text}`] : []), ...files].join("\n")
-  }
-  return message.parts
-    .flatMap((part) => {
-      if (part.type === "text") return part.text ? [`[Assistant]: ${part.text}`] : []
-      if (part.type === "reasoning") return part.text ? [`[Assistant reasoning]: ${part.text}`] : []
-      if (part.type !== "tool") return []
-      const call = `[Assistant tool call]: ${part.tool}(${JSON.stringify(part.state.input)})`
-      if (part.state.status === "completed") {
-        const attachments = (part.state.attachments ?? []).map(
-          (item) => `[Attached ${item.mime}: ${item.filename ?? "file"}]`,
-        )
-        const output = part.state.time.compacted
-          ? "[Old tool result content cleared]"
-          : truncate([part.state.output, ...attachments].join("\n"))
-        return [call, `[Tool result]: ${output}`]
-      }
-      if (part.state.status === "error") return [call, `[Tool error]: ${part.state.error}`]
-      return [call]
-    })
-    .join("\n")
-}
-
 function summaryText(message: SessionV1.WithParts) {
   const text = message.parts
     .filter((part): part is SessionV1.TextPart => part.type === "text")
@@ -93,6 +57,26 @@ function summaryText(message: SessionV1.WithParts) {
     .join("\n\n")
     .trim()
   return text || undefined
+}
+
+// Artemis (Option 2): did compaction interrupt an IN-FLIGHT (non-conclusive)
+// user turn? Derived from the PRE-compaction history. The runLoop already
+// determines post-compaction "pending continuation" via hasPendingUserContinuation;
+// this helper mirrors that on the pre-compaction state so the PRODUCER can
+// decide whether to emit a continuation user after a CLEAN-stop summary.
+//
+// The interrupted turn is the overflowing user whose assistant was mid-flight
+// (`finish=length` / `tool-calls` / unfinished) — i.e. real work that was
+// conceived but never delivered. Compaction must not drop it.
+function wasInFlightTurn(messages: SessionV1.WithParts[]): boolean {
+  const latest = MessageV2.latest(messages)
+  const a = latest.assistant
+  if (!a) return false
+  // a conclusive finish (stop/content-filter/error/unknown) means the last turn
+  // was resolved — nothing in flight to continue.
+  if (a.finish && a.finish !== "tool-calls" && a.finish !== "length") return false
+  // length / tool-calls / unfinished = the model still owed work when compaction hit.
+  return true
 }
 
 function completedCompactions(messages: SessionV1.WithParts[]) {
@@ -163,6 +147,23 @@ function splitTurn(input: {
   })
 }
 
+/**
+ * Result of a compaction run.
+ *
+ * `outcome: "continue"` — compaction made progress; the loop may continue.
+ * `outcome: "stop"` — compaction is terminal for THIS iteration, but the caller
+ * must know whether it actually failed (`errored: true`, e.g. the summary hit
+ * the context limit even after stripping media) or succeeded cleanly
+ * (`errored: false`, a real summary was written).
+ *
+ * The `errored` distinction lets the runLoop break immediately on a genuine
+ * compaction failure (avoiding a wasteful re-run of a still-too-large context)
+ * while still continuing to answer a pending user when compaction SUCCEEDED
+ * (previously a blanket `break` abandoned the unanswered user — see the phase 0b
+ * regression on ses_03cbe6aebffesU2wcJSIvKtFF8).
+ */
+export type CompactionResult = { outcome: "continue" } | { outcome: "stop"; errored: boolean }
+
 export interface Interface {
   readonly isOverflow: (input: {
     tokens: SessionV1.Assistant["tokens"]
@@ -175,7 +176,7 @@ export interface Interface {
     sessionID: SessionID
     auto: boolean
     overflow?: boolean
-  }) => Effect.Effect<"continue" | "stop">
+  }) => Effect.Effect<CompactionResult>
   readonly create: (input: {
     sessionID: SessionID
     agent: string
@@ -279,7 +280,7 @@ const layer = Layer.effect(
     const prune = Effect.fn("SessionCompaction.prune")(function* (input: { sessionID: SessionID }) {
       const cfg = yield* config.get()
       if (!cfg.compaction?.prune) return
-      yield* Effect.logInfo("pruning")
+      yield* Effect.logInfo("compaction: pruning")
 
       const msgs = yield* session
         .messages({ sessionID: input.sessionID })
@@ -310,7 +311,7 @@ const layer = Layer.effect(
         }
       }
 
-      yield* Effect.logInfo("found", { pruned, total })
+      yield* Effect.logInfo("compaction: found", { pruned, total })
       if (pruned > PRUNE_MINIMUM) {
         for (const part of toPrune) {
           if (part.state.status === "completed") {
@@ -318,7 +319,7 @@ const layer = Layer.effect(
             yield* session.updatePart(part)
           }
         }
-        yield* Effect.logInfo("pruned", { count: toPrune.length })
+        yield* Effect.logInfo("compaction: pruned", { count: toPrune.length })
       }
     })
 
@@ -384,7 +385,10 @@ const layer = Layer.effect(
       const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-      const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")
+      const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
+        stripMedia: true,
+        toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
+      })
       const ctx = yield* InstanceState.context
       const msg: SessionV1.Assistant = {
         id: MessageID.ascending(),
@@ -417,6 +421,7 @@ const layer = Layer.effect(
         assistantMessage: msg,
         sessionID: input.sessionID,
         model,
+        step: 0,
       })
       const result = yield* processor.process({
         user: userMessage,
@@ -425,16 +430,10 @@ const layer = Layer.effect(
         tools: {},
         system: [],
         messages: [
+          ...modelMessages,
           {
             role: "user",
-            content: [
-              {
-                type: "text",
-                text: [nextPrompt, "The following is the conversation history:", conversation]
-                  .filter(Boolean)
-                  .join("\n\n"),
-              },
-            ],
+            content: [{ type: "text", text: nextPrompt }],
           },
         ],
         model,
@@ -448,7 +447,7 @@ const layer = Layer.effect(
         }).toObject()
         processor.message.finish = "error"
         yield* session.updateMessage(processor.message)
-        return "stop"
+        return { outcome: "stop", errored: true } satisfies CompactionResult
       }
 
       if (compactionPart && selected.tail_start_id && compactionPart.tail_start_id !== selected.tail_start_id) {
@@ -458,7 +457,27 @@ const layer = Layer.effect(
         })
       }
 
-      if (result === "continue" && input.auto) {
+      // Artemis (Option 2): the continuation user is emitted when either
+      //  (a) the summary turn itself needs continuation (result === "continue",
+      //      tool-call path — pre-existing), OR
+      //  (b) the summary finished with a CLEAN stop but compaction interrupted an
+      //      IN-FLIGHT (non-conclusive) user turn — its intended work was never
+      //      delivered, so we materialize a continuation so the runLoop continues
+      //      and the model finishes it. This closes the gap chasmic proved
+      //      (postMessages=2, pendingContinuation=false on a length-overflowed user).
+      const interruptedInFlight = wasInFlightTurn(input.messages)
+      const emitContinuation = input.auto && (result === "continue" || (result === "stop" && interruptedInFlight))
+      if (emitContinuation) {
+        yield* Effect.logDebug(
+          "compaction: triage: emitting continuation (artemis) after compaction",
+          {
+            sessionID: input.sessionID,
+            result,
+            interruptedInFlight,
+            auto: input.auto,
+            overflow: input.overflow === true,
+          },
+        )
         if (replay) {
           const original = replay.info
           const replayMsg = yield* session.updateMessage({
@@ -542,11 +561,33 @@ const layer = Layer.effect(
         }
       }
 
-      if (processor.message.error) return "stop"
+      if (processor.message.error) {
+        // log the processor error
+        yield* Effect.logDebug("compaction: triage: processor.message.error, returning stop", {
+          error: processor.message.error,
+          finish: processor.message.finish,
+          result,
+          sessionID: input.sessionID,
+        })
+        return { outcome: "stop", errored: true } satisfies CompactionResult
+      }
       if (result === "continue") {
         yield* events.publish(Event.Compacted, { sessionID: input.sessionID })
+      } else {
+        // log the processor result if it is not "continue"
+        yield* Effect.logDebug("compaction: triage: processor.process returned non-continue", {
+          error: !!processor.message.error,
+          finish: processor.message.finish,
+          result,
+          sessionID: input.sessionID,
+        })
       }
-      return result
+      // map the processor result into the richer CompactionResult. "continue"
+      // means progress; an errored "stop" was handled above; a clean "stop"
+      // (no error) means the summary finished successfully -> errored:false so
+      // the runLoop continues to answer any still-pending user.
+      if (result === "continue") return { outcome: "continue" } satisfies CompactionResult
+      return { outcome: "stop", errored: false } satisfies CompactionResult
     })
 
     const create = Effect.fn("SessionCompaction.create")(function* (input: {

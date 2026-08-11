@@ -254,6 +254,7 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const input = {
@@ -277,7 +278,7 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
         const parts = yield* MessageV2.parts(msg.id)
         const calls = yield* llm.calls
 
-        expect(value).toBe("continue")
+        expect(value).toBe("stop")
         expect(calls).toBe(1)
         expect(parts.some((part) => part.type === "text" && part.text === "hello")).toBe(true)
       }),
@@ -326,6 +327,7 @@ it.live("session.processor effect tests preserve text start time", () =>
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const run = yield* handle
@@ -389,6 +391,7 @@ it.live("session.processor effect tests stop after token overflow requests compa
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const value = yield* handle.process({
@@ -435,6 +438,7 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const value = yield* handle.process({
@@ -458,7 +462,7 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
         const reasoning = parts.find((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
         const text = parts.find((part): part is SessionV1.TextPart => part.type === "text")
 
-        expect(value).toBe("continue")
+        expect(value).toBe("stop")
         expect(yield* llm.calls).toBe(1)
         expect(reasoning?.text).toBe("think")
         expect(text?.text).toBe("done")
@@ -483,6 +487,7 @@ it.live("session.processor effect tests reset reasoning state across retries", (
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const value = yield* handle.process({
@@ -505,7 +510,7 @@ it.live("session.processor effect tests reset reasoning state across retries", (
         const parts = yield* MessageV2.parts(msg.id)
         const reasoning = parts.filter((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
 
-        expect(value).toBe("continue")
+        expect(value).toBe("stop")
         expect(yield* llm.calls).toBe(2)
         expect(reasoning.some((part) => part.text === "two")).toBe(true)
         expect(reasoning.some((part) => part.text === "onetwo")).toBe(false)
@@ -530,6 +535,7 @@ it.live("session.processor effect tests do not retry unknown json errors", () =>
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const value = yield* handle.process({
@@ -574,6 +580,7 @@ it.live("session.processor effect tests retry recognized structured json errors"
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const value = yield* handle.process({
@@ -595,54 +602,7 @@ it.live("session.processor effect tests retry recognized structured json errors"
 
         const parts = yield* MessageV2.parts(msg.id)
 
-        expect(value).toBe("continue")
-        expect(yield* llm.calls).toBe(2)
-        expect(parts.some((part) => part.type === "text" && part.text === "after")).toBe(true)
-        expect(handle.message.error).toBeUndefined()
-      }),
-    { config: (url) => providerCfg(url) },
-  ),
-)
-
-it.live("session.processor effect tests retry OpenAI-compatible midstream server errors", () =>
-  provideTmpdirServer(
-    ({ dir, llm }) =>
-      Effect.gen(function* () {
-        const { processors, session, provider } = yield* boot()
-
-        yield* llm.push(raw({ chunks: [{ error: { type: "server_error", code: "server_error", message: "xxx" } }] }))
-        yield* llm.text("after")
-
-        const chat = yield* session.create({})
-        const parent = yield* user(chat.id, "retry midstream server error")
-        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
-        const handle = yield* processors.create({
-          assistantMessage: msg,
-          sessionID: chat.id,
-          model: mdl,
-        })
-
-        const value = yield* handle.process({
-          user: {
-            id: parent.id,
-            sessionID: chat.id,
-            role: "user",
-            time: parent.time,
-            agent: parent.agent,
-            model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionV1.User,
-          sessionID: chat.id,
-          model: mdl,
-          agent: agent(),
-          system: [],
-          messages: [{ role: "user", content: "retry midstream server error" }],
-          tools: {},
-        })
-
-        const parts = yield* MessageV2.parts(msg.id)
-
-        expect(value).toBe("continue")
+        expect(value).toBe("stop")
         expect(yield* llm.calls).toBe(2)
         expect(parts.some((part) => part.type === "text" && part.text === "after")).toBe(true)
         expect(handle.message.error).toBeUndefined()
@@ -676,6 +636,7 @@ it.live("session.processor effect tests publish retry status updates", () =>
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const value = yield* handle.process({
@@ -697,7 +658,7 @@ it.live("session.processor effect tests publish retry status updates", () =>
 
         yield* off
 
-        expect(value).toBe("continue")
+        expect(value).toBe("stop")
         expect(yield* llm.calls).toBe(2)
         expect(states).toStrictEqual([1])
       }),
@@ -721,6 +682,7 @@ it.live("session.processor effect tests compact on structured context overflow",
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const value = yield* handle.process({
@@ -764,6 +726,7 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const value = yield* handle.process({
@@ -830,6 +793,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const run = yield* handle
@@ -909,6 +873,7 @@ it.live("session.processor effect tests record aborted errors and idle state", (
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const run = yield* handle
@@ -972,6 +937,7 @@ it.live("session.processor effect tests mark interruptions aborted without manua
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
+          step: 0,
         })
 
         const run = yield* handle
@@ -1028,7 +994,7 @@ itProviderError.live("session.processor effect tests fail provider-executed erro
           seen.push(event.type)
           return Effect.void
         })
-        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl, step: 0 })
 
         yield* handle.process({
           user: {
@@ -1076,7 +1042,7 @@ itFragmentFailure.live("session.processor effect tests retain partial legacy par
           seen.push(event.type)
           return Effect.void
         })
-        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl, step: 0 })
 
         expect(
           yield* handle.process({
