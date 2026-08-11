@@ -1,102 +1,15 @@
-import {
-  FileFinder,
-  type DirItem,
-  type DirSearchResult,
-  type FileItem,
-  type InitOptions,
-  type MixedItem,
-  type MixedSearchResult,
-  type SearchResult,
-} from "@ff-labs/fff-bun"
+import { FileFinder } from "@ff-labs/fff-bun"
+import { bind } from "./fff"
+
+export type { Directory, DirSearch, File, Init, Mixed, MixedSearch, Picker, Result, Search } from "./fff"
 
 declare global {
   const FFF_LIBC: "gnu" | "musl"
 }
 
-export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
+const adapter = bind(FileFinder)
 
-export type Init = InitOptions
-
-export interface Search {
-  items: FileItem[]
-  scores: SearchResult["scores"]
-  totalMatched: number
-  totalFiles: number
-}
-
-export interface DirSearch {
-  items: DirItem[]
-  scores: DirSearchResult["scores"]
-  totalMatched: number
-  totalDirs: number
-}
-
-export interface MixedSearch {
-  items: MixedItem[]
-  scores: MixedSearchResult["scores"]
-  totalMatched: number
-  totalFiles: number
-  totalDirs: number
-}
-
-export type File = FileItem
-export type Directory = DirItem
-export type Mixed = MixedItem
-export interface Picker {
-  destroy(): void
-  isScanning(): boolean
-  waitForScan(timeoutMs?: number): Promise<Result<boolean>>
-  refreshGitStatus(): Result<number>
-  fileSearch(
-    query: string,
-    opts?: {
-      currentFile?: string
-      pageIndex?: number
-      pageSize?: number
-    },
-  ): Result<Search>
-  directorySearch(
-    query: string,
-    opts?: {
-      currentFile?: string
-      pageIndex?: number
-      pageSize?: number
-    },
-  ): Result<DirSearch>
-  mixedSearch(
-    query: string,
-    opts?: {
-      currentFile?: string
-      pageIndex?: number
-      pageSize?: number
-    },
-  ): Result<MixedSearch>
-  trackQuery(query: string, file: string): Result<boolean>
-  getHistoricalQuery(offset: number): Result<string | null>
-}
-
-export function available() {
-  return FileFinder.isAvailable()
-}
-
-export function create(opts: Init): Result<Picker> {
-  const made = FileFinder.create(opts)
-  if (!made.ok) return made
-  const pick = made.value
-  return {
-    ok: true,
-    value: {
-      destroy: () => pick.destroy(),
-      isScanning: () => pick.isScanning(),
-      waitForScan: (timeoutMs) => pick.waitForScan(timeoutMs),
-      refreshGitStatus: () => pick.refreshGitStatus(),
-      fileSearch: (query, next) => pick.fileSearch(query, next),
-      directorySearch: (query, next) => pick.directorySearch(query, next),
-      mixedSearch: (query, next) => pick.mixedSearch(query, next),
-      trackQuery: (query, file) => pick.trackQuery(query, file),
-      getHistoricalQuery: (offset) => pick.getHistoricalQuery(offset),
-    },
-  }
-}
+export const available = adapter.available
+export const create = adapter.create
 
 export * as Fff from "./fff.bun"
