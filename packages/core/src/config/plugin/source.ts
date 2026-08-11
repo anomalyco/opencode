@@ -153,10 +153,12 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
   })
 })
 
+const sourceDirectories = ["plugin", "plugins"] as const
+
 function discoverDirectory(fs: FSUtil.Interface, directory: string) {
   return Effect.gen(function* () {
     const files = yield* fs
-      .scan("{plugin,plugins}/*.{ts,js}", {
+      .scan(`{${sourceDirectories.join(",")}}/*.{ts,js}`, {
         cwd: directory,
         absolute: true,
         include: "file",
@@ -167,8 +169,6 @@ function discoverDirectory(fs: FSUtil.Interface, directory: string) {
     return files.sort().map((target): Operation => ({ type: "add", target, options: {} }))
   })
 }
-
-const sourceDirectories = ["plugin", "plugins"] as const
 
 function isPluginSource(entries: readonly Entry[], file: string) {
   return entries.some(
