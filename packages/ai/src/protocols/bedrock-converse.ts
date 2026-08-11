@@ -348,7 +348,10 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
           continue
         }
       }
-      messages.push({ role: "user", content })
+      const previous = messages.at(-1)
+      if (previous?.role === "user")
+        messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
+      else messages.push({ role: "user", content })
       continue
     }
 
@@ -392,7 +395,10 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
       const cachePoint = BedrockCache.block(breakpoints, part.cache)
       if (cachePoint) content.push(cachePoint)
     }
-    messages.push({ role: "user", content })
+    const previous = messages.at(-1)
+    if (previous?.role === "user")
+      messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
+    else messages.push({ role: "user", content })
   }
 
   return messages
