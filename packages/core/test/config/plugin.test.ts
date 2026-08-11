@@ -210,6 +210,7 @@ describe("PluginSupervisor config", () => {
         const plugins = yield* Plugin.Service
         const ids = (yield* plugins.list()).map((plugin) => String(plugin.id))
         expect(ids).toContain("contained-fallback")
+        expect(ids).toContain("symlink-fallback")
         expect(ids).not.toContain("escaped-entrypoint")
       }),
       false,
@@ -221,6 +222,16 @@ describe("PluginSupervisor config", () => {
           "contained",
           { exports: "../../escape.js" },
           { "index.js": "contained-fallback" },
+        )
+        await writeDiscoveredPackage(
+          directory,
+          "symlink",
+          { exports: "./entry.js" },
+          { "index.js": "symlink-fallback" },
+        )
+        await fs.symlink(
+          path.join(directory, ".opencode", "escape.js"),
+          path.join(directory, ".opencode", "plugins", "symlink", "entry.js"),
         )
       },
     ),

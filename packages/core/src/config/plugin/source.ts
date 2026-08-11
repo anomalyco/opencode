@@ -172,7 +172,7 @@ function discoverDirectory(fs: FSUtil.Interface, directory: string) {
       ),
     ))
       .flat()
-      .sort((a, b) => a.target.localeCompare(b.target))
+      .sort((a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0))
     const targets = yield* Effect.forEach(children, (entry) => discoverChild(fs, entry))
     return targets.flatMap(Option.toArray).map((target): Operation => ({ type: "add", target, options: {} }))
   })
@@ -192,6 +192,7 @@ function discoverChild(fs: FSUtil.Interface, entry: FSUtil.DirEntry & { target: 
 
 function discoverPackage(fs: FSUtil.Interface, directory: string) {
   return Effect.gen(function* () {
+    const root = yield* fs.resolve(directory)
     const manifest = yield* fs
       .readJson(path.join(directory, "package.json"))
       .pipe(Effect.map(decodePackage), Effect.orElseSucceed(Option.none))
@@ -203,7 +204,16 @@ function discoverPackage(fs: FSUtil.Interface, directory: string) {
         .filter((entry) => !path.isAbsolute(entry))
         .map((entry) => path.resolve(directory, entry))
         .filter((entry) => FSUtil.contains(directory, entry)),
-      fs.isFile,
+      (entry) =>
+        fs
+          .isFile(entry)
+          .pipe(
+            Effect.flatMap((exists) =>
+              exists
+                ? fs.resolve(entry).pipe(Effect.map((resolved) => FSUtil.contains(root, resolved)))
+                : Effect.succeed(false),
+            ),
+          ),
     )
   })
 }
