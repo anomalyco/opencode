@@ -36,6 +36,7 @@ export const ModelsDevPlugin = define({
           draft.integrationID = Integration.ID.make(provider.info.id)
         })
         for (const model of provider.models) {
+          if (model.status === "deprecated") continue
           catalog.model.update(provider.info.id, model.id, (draft) => Object.assign(draft, model))
         }
       }

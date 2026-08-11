@@ -215,6 +215,66 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
+  it.effect("omits deprecated models from the catalog", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const catalog = yield* Catalog.Service
+      const providerID = Provider.ID.make("acme")
+      const activeID = Model.ID.make("current")
+      const deprecatedID = Model.ID.make("legacy")
+      const model = {
+        modelID: activeID,
+        providerID,
+        name: "Current",
+        capabilities: { tools: true, input: [], output: [] },
+        variants: [],
+        time: { released: Date.parse("2026-01-01") },
+        cost: [],
+        status: "active",
+        enabled: true,
+        limit: { context: 128_000, output: 32_000 },
+      } satisfies Omit<Model.Info, "id">
+      const snapshots = [
+        {
+          info: {
+            id: providerID,
+            name: "Acme",
+            package: Provider.aisdk("@ai-sdk/openai-compatible"),
+          },
+          environment: [],
+          models: [
+            { id: activeID, ...model },
+            {
+              id: deprecatedID,
+              ...model,
+              modelID: deprecatedID,
+              name: "Legacy",
+              status: "deprecated" as const,
+            },
+          ],
+        },
+      ] satisfies readonly ModelsDev.Snapshot[]
+
+      yield* ModelsDevPlugin.effect(
+        host({
+          catalog: catalogHost(catalog),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({
+            get: () => Effect.succeed(snapshots),
+            refresh: () => Effect.void,
+          }),
+        ),
+      )
+
+      expect(yield* catalog.model.get(providerID, activeID)).toBeDefined()
+      expect(yield* catalog.model.get(providerID, deprecatedID)).toBeUndefined()
+    }),
+  )
+
   it.effect("registers key methods for providers with environment variables", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
