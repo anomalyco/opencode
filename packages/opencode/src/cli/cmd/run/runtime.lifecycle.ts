@@ -34,6 +34,74 @@ import { formatModelLabel } from "./variant.shared"
 
 const FOOTER_HEIGHT = 4
 
+// Some environments (Termux + proot, embedded terminals) never deliver
+// SIGWINCH to the Bun process, so Bun's process.stdout rows/columns stay
+// frozen at the startup value and the renderer never reflows. Poll the real
+// terminal size directly through ioctl(TIOCGWINSZ) and push it into the
+// renderer via resize(), bypassing the frozen process.stdout cache.
+const TIOCGWINSZ = 0x5413
+type Winsize = { rows: number; cols: number }
+
+let ioctlFn:
+  | ((fd: number, request: number, arg: unknown) => number)
+  | undefined
+let ffiPtr: ((buffer: ArrayBufferView) => unknown) | undefined
+try {
+  const ffi = await import("bun:ffi")
+  const candidates = [
+    "/lib/aarch64-linux-gnu/libc.so.6",
+    "/lib/x86_64-linux-gnu/libc.so.6",
+    "/usr/lib/x86_64-linux-gnu/libc.so.6",
+    "/lib/arm-linux-gnueabihf/libc.so.6",
+    "libc.so.6",
+  ]
+  for (const candidate of candidates) {
+    try {
+      const lib = ffi.dlopen(candidate, {
+        ioctl: { args: ["int", "int", "ptr"], returns: "int" },
+      })
+      ioctlFn = lib.symbols.ioctl as typeof ioctlFn
+      ffiPtr = ffi.ptr as typeof ffiPtr
+      break
+    } catch {
+      // try next libc candidate
+    }
+  }
+} catch {
+  ioctlFn = undefined
+}
+
+function readTerminalSize(): Winsize | undefined {
+  if (!ioctlFn || !ffiPtr) {
+    return undefined
+  }
+
+  const fds = [process.stdout.fd, 1, 0]
+  for (const fd of fds) {
+    if (typeof fd !== "number" || fd < 0) {
+      continue
+    }
+
+    try {
+      const winsize = new Uint16Array(4)
+      const rc = ioctlFn(fd, TIOCGWINSZ, ffiPtr(winsize))
+      if (rc < 0) {
+        continue
+      }
+
+      const rows = winsize[0]
+      const cols = winsize[1]
+      if (rows > 0 && cols > 0) {
+        return { rows, cols }
+      }
+    } catch {
+      // try next fd
+    }
+  }
+
+  return undefined
+}
+
 type SplashState = {
   entry: boolean
   exit: boolean
@@ -195,21 +263,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     })
     const theme = await resolveRunTheme(renderer)
     renderer.setBackgroundColor(theme.background)
-    // Slow-path resize fallback: in environments where SIGWINCH is never
-    // delivered (Termux + proot, stdio proxies), the renderer would otherwise
-    // keep drawing at its initial size. Poll the real terminal size and push
-    // changes into the renderer so layouts adapt to keyboard/rotation/splits.
-    let lastCols = process.stdout.columns ?? 0
-    let lastRows = process.stdout.rows ?? 0
-    const resizeTimer = setInterval(() => {
-      if (renderer.isDestroyed || !process.stdout.isTTY) return
-      const columns = process.stdout.columns ?? 0
-      const rows = process.stdout.rows ?? 0
-      if (columns <= 0 || rows <= 0 || (columns === lastCols && rows === lastRows)) return
-      lastCols = columns
-      lastRows = rows
-      renderer.resize(columns, rows)
-    }, 300)
     const keymap = createDefaultOpenTuiKeymap(renderer)
     unregisterKeymap = registerOpencodeKeymap(keymap, renderer, input.tuiConfig)
     const state: SplashState = {
@@ -243,6 +296,40 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
     const { RunFooter } = await footerTask
     let closed = false
     let sigintRegistered = false
+
+    // Fallback for environments that never deliver SIGWINCH (Termux/proot):
+    // poll the true terminal size via ioctl and resize the renderer when it
+    // changes. Ignored when the ioctl shim could not be loaded.
+    let pollTimer: ReturnType<typeof setInterval> | undefined
+    let lastPollSize: Winsize | undefined
+    const startSizePoll = () => {
+      if (pollTimer || !process.stdout.isTTY) {
+        return
+      }
+
+      pollTimer = setInterval(() => {
+        if (renderer.isDestroyed || closed) {
+          return
+        }
+
+        const size = readTerminalSize()
+        if (!size) {
+          return
+        }
+
+        if (
+          lastPollSize &&
+          lastPollSize.rows === size.rows &&
+          lastPollSize.cols === size.cols
+        ) {
+          return
+        }
+
+        lastPollSize = size
+        renderer.resize(size.cols, size.rows)
+      }, 300)
+    }
+    startSizePoll()
 
     const footer = new RunFooter(renderer, {
       directory: input.directory,
@@ -329,6 +416,10 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
 
       closed = true
       detachSigint()
+      if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = undefined
+      }
       let wroteExit = false
 
       try {
@@ -353,7 +444,6 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           await renderer.idle().catch(() => {})
         }
       } finally {
-        clearInterval(resizeTimer)
         footer.close()
         await footer.idle().catch(() => {})
         footer.destroy()
