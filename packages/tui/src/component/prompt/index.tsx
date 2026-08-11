@@ -60,6 +60,7 @@ import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
 import { PluginSlot } from "../../plugin/render"
 import type { SessionPending } from "@opencode-ai/schema/session-pending"
+import { deduplicatePromptFiles, promptAttachmentLabel } from "../../prompt/attachment"
 import { DialogImagePreview } from "../dialog-image-preview"
 
 export type PromptProps = {
@@ -331,7 +332,7 @@ export function Prompt(props: PromptProps) {
   }
 
   const imageAttachments = createMemo(() =>
-    (store.prompt.files ?? []).filter((file) => typeof file.uri === "string" && file.uri.startsWith("data:image/")),
+    (deduplicatePromptFiles(store.prompt.files) ?? []).filter((file) => file.uri.startsWith("data:image/")),
   )
   const imagePreviewHeight = createMemo(() => Math.max(4, Math.min(8, Math.floor(dimensions().height / 4))))
   const imagePreviewWidth = createMemo(() => imagePreviewHeight() * 2)
@@ -1138,6 +1139,7 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
+    const files = deduplicatePromptFiles(store.prompt.files)
 
     if (store.mode === "shell") {
       move.startSubmit()
@@ -1158,7 +1160,7 @@ export function Prompt(props: PromptProps) {
           arguments: slashHead.arguments,
           agent: agent.id,
           model,
-          files: store.prompt.files,
+          files,
           agents: store.prompt.agents,
           skills: store.prompt.skills?.length ? store.prompt.skills : undefined,
           delivery,
@@ -1225,7 +1227,7 @@ export function Prompt(props: PromptProps) {
         .prompt({
           sessionID,
           text: inputText,
-          files: store.prompt.files,
+          files,
           agents: store.prompt.agents,
           skills: store.prompt.skills?.length ? store.prompt.skills : undefined,
           delivery,
@@ -1376,13 +1378,7 @@ export function Prompt(props: PromptProps) {
   function pasteAttachment(file: { filename?: string; uri: string }) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
-    const pdf = file.uri.startsWith("data:application/pdf;")
-    const count = pdf
-      ? (store.prompt.files?.filter(
-          (attachment) => typeof attachment.uri === "string" && attachment.uri.startsWith("data:application/pdf;"),
-        ).length ?? 0)
-      : imageAttachments().length
-    const virtualText = pdf ? `[PDF ${count + 1}]` : `[Image ${count + 1}]`
+    const virtualText = promptAttachmentLabel(store.prompt.files, file.uri)
     const extmarkEnd = extmarkStart + virtualText.length
     const textToInsert = virtualText + " "
 
