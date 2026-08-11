@@ -374,7 +374,7 @@ export const dict = {
   "zen.api.error.missingApiKey": "Missing API key.",
   "zen.api.error.invalidApiKey": "Invalid API key.",
   "zen.api.error.requestBlockedByUpstreamProvider":
-    "This account has found to be committing fraud and/or terms of services and has been blocked. Authorities have been notified.",
+    "This account has found to be committing fraud and/or terms of services and has been blocked. If you believe this is a mistake please send an email to help@anoma.ly.",
   "zen.api.error.subscriptionQuotaExceeded": "Subscription quota exceeded. Retry in {{retryIn}}.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "5-hour usage limit reached. Resets in {{retryIn}}. To continue using this model now, enable usage from your available balance: {{consoleGoUrl}}",
