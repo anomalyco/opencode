@@ -104,6 +104,7 @@ function renderMemory(entries: ReadonlyArray<MemoryEntry>): string {
   lines.push(
     "",
     "Notebook memory is the map you and past sessions built. Trust its structure and summaries so you don't re-explore.",
+    "Write every notebook summary (folder, entry, relation) in English, even when the conversation is in another language — keep the map language-stable.",
     "Entries: ✓ safe to rely on · ⚠ suspect — its source changed, skim that one file to confirm · ✗ stale — its source is gone, treat as unverified.",
     "Re-read a file only to resolve a ⚠/✗ entry or when a note contradicts what you directly observe; then the code wins, point-wise.",
   )
