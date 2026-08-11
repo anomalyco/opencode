@@ -25,5 +25,5 @@ export function promptAttachmentLabel(files: readonly PromptFile[] | undefined, 
   const prefix = pdf ? "data:application/pdf;" : "data:image/"
   const attachments = deduplicatePromptAttachments(files)
   const count = attachments?.filter((file) => file.uri.startsWith(prefix)).length ?? 0
-  return `${pdf ? "PDF" : "Image"} ${count + 1}`
+  return `[${pdf ? "PDF" : "Image"} ${count + 1}]`
 }

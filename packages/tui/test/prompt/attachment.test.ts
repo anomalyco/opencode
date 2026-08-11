@@ -20,18 +20,21 @@ describe("prompt attachments", () => {
   test("reuses labels for identical image data", () => {
     const first = "data:image/png;base64,AAA"
     const second = "data:image/png;base64,BBB"
-    const files = [{ uri: first, mention: { start: 0, end: 7, text: "Image 1" } }]
+    const files = [{ uri: first, mention: { start: 0, end: 9, text: "[Image 1]" } }]
 
-    expect(promptAttachmentLabel(files, first)).toBe("Image 1")
-    expect(promptAttachmentLabel([...files, { ...files[0], mention: undefined }], second)).toBe("Image 2")
+    expect(promptAttachmentLabel(files, first)).toBe("[Image 1]")
+    expect(promptAttachmentLabel([...files, { ...files[0], mention: undefined }], second)).toBe("[Image 2]")
   })
 
   test("numbers PDFs independently from images", () => {
     const first = "data:application/pdf;base64,BBB"
     const second = "data:application/pdf;base64,CCC"
-    const files = [{ uri: "data:image/png;base64,AAA" }, { uri: first, mention: { start: 10, end: 15, text: "PDF 1" } }]
+    const files = [
+      { uri: "data:image/png;base64,AAA" },
+      { uri: first, mention: { start: 10, end: 17, text: "[PDF 1]" } },
+    ]
 
-    expect(promptAttachmentLabel(files, first)).toBe("PDF 1")
-    expect(promptAttachmentLabel([...files, { ...files[1], mention: undefined }], second)).toBe("PDF 2")
+    expect(promptAttachmentLabel(files, first)).toBe("[PDF 1]")
+    expect(promptAttachmentLabel([...files, { ...files[1], mention: undefined }], second)).toBe("[PDF 2]")
   })
 })
