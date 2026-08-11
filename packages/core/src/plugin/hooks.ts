@@ -4,6 +4,7 @@ import type { AISDKHooks } from "@opencode-ai/plugin/effect/aisdk"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import type { ShellHooks } from "@opencode-ai/plugin/effect/shell"
 import type { ToolHooks } from "@opencode-ai/plugin/effect/tool"
+import type { Tool } from "@opencode-ai/schema/tool"
 import { Context, Effect, Layer, Scope } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { State } from "../state"
@@ -15,19 +16,22 @@ export interface Domains {
   readonly tool: ToolHooks
 }
 
-type Callback<Event> = (event: Event) => Effect.Effect<void>
+// Only tool hooks may fail; a Tool.Error from execute.before rejects the call before it runs.
+type Failure<Domain extends keyof Domains> = Domain extends "tool" ? Tool.Error : never
+
+type Callback<Event, Error> = (event: Event) => Effect.Effect<void, Error>
 
 export interface Interface {
   readonly register: <Domain extends keyof Domains, Name extends keyof Domains[Domain]>(
     domain: Domain,
     name: Name,
-    callback: Callback<Domains[Domain][Name]>,
+    callback: Callback<Domains[Domain][Name], Failure<Domain>>,
   ) => Effect.Effect<State.Registration, never, Scope.Scope>
   readonly trigger: <Domain extends keyof Domains, Name extends keyof Domains[Domain]>(
     domain: Domain,
     name: Name,
     event: Domains[Domain][Name],
-  ) => Effect.Effect<Domains[Domain][Name]>
+  ) => Effect.Effect<Domains[Domain][Name], Failure<Domain>>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PluginHooks") {}
@@ -56,7 +60,7 @@ const layer = Layer.effect(
 
     const trigger: Interface["trigger"] = Effect.fn("PluginHooks.trigger")(function* (domain, name, event) {
       for (const callback of callbacks.get(key(domain, name)) ?? []) {
-        const result: Effect.Effect<void> = Reflect.apply(callback, undefined, [event])
+        const result: Effect.Effect<void, Failure<typeof domain>> = Reflect.apply(callback, undefined, [event])
         yield* result
       }
       return event

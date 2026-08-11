@@ -40,5 +40,5 @@ export interface ToolHooks {
 
 export interface ToolDomain {
   readonly transform: Transform<ToolDraft>
-  readonly hook: Hooks<ToolHooks>
+  readonly hook: Hooks<ToolHooks, Tool.Error>
 }
