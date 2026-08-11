@@ -8,11 +8,11 @@ import { Agent } from "../agent"
 const plan = Agent.ID.make("plan")
 
 const enter = `<system-reminder>
-You are in Plan mode. This is a read-only mode. Do not modify files or take other write actions. Do not delegate work to a subagent that can make edits. Investigate, ask questions, and propose a plan.
+You are in Plan mode. This is a READ-ONLY environment. You are not allowed to edit files, and you may not ask a subagent to edit them either.
 </system-reminder>`
 
 const leave = `<system-reminder>
-You are no longer in Plan mode. The previous read-only restrictions no longer apply. You may edit files and use write tools again.
+You are no longer in Plan mode. The previous read-only restrictions no longer apply. You may edit files again.
 </system-reminder>`
 
 export const Plugin = define({
