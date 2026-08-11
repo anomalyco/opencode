@@ -26,6 +26,7 @@ const capture = () => {
         })
         return event
       }),
+    publishBatch: () => Effect.succeed([]),
     subscribe: () => Stream.empty,
     all: () => Stream.empty,
     durable: () => Stream.empty,
