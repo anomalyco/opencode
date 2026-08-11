@@ -20784,6 +20784,14 @@
               "chunkTimeout": {
                 "type": "integer",
                 "exclusiveMinimum": 0
+              },
+              "retry": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "backoffDelay": {
+                "type": "integer",
+                "exclusiveMinimum": 0
               }
             },
             "additionalProperties": {}

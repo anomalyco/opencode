@@ -94,6 +94,17 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY)
   })
 
+  test("uses configured backoffDelay as the initial delay", () => {
+    const error = apiError()
+    const delays = Array.from({ length: 6 }, (_, index) => SessionRetry.delay(index + 1, error, 0, 1000))
+    expect(delays).toStrictEqual([1000, 2000, 4000, 8000, 16000, 30000])
+  })
+
+  test("prefers retry-after headers over configured backoffDelay", () => {
+    const error = apiError({ "retry-after-ms": "1500" })
+    expect(SessionRetry.delay(1, error, 0, 5000)).toBe(1500)
+  })
+
   it.instance("policy updates retry status and increments attempts", () =>
     Effect.gen(function* () {
       const sessionID = SessionID.make("session-retry-test")
@@ -144,6 +155,73 @@ describe("session.retry.delay", () => {
       )
 
       expect(attempts).toStrictEqual([1, 2, 3, 4, 5])
+    }),
+  )
+
+  it.instance("policy stops after the configured retry limit", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionID.make("session-retry-limit-test")
+      const error = apiError({ "retry-after-ms": "0" })
+      const status = yield* SessionStatus.Service
+
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: "test",
+          retry: 1,
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+          set: (info) =>
+            status.set(sessionID, {
+              type: "retry",
+              attempt: info.attempt,
+              message: info.message,
+              next: info.next,
+            }),
+        }),
+      )
+      yield* step(error)
+      const second = yield* step(error).pipe(Effect.exit)
+
+      expect(second._tag).toBe("Failure")
+      expect(yield* status.get(sessionID)).toMatchObject({
+        type: "retry",
+        attempt: 1,
+        message: "boom",
+      })
+    }),
+  )
+
+  it.instance("policy retry option can raise the attempt limit", () =>
+    Effect.gen(function* () {
+      const error = apiError({ "retry-after-ms": "0" })
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: "test",
+          retry: SessionRetry.RETRY_MAX_RETRIES + 2,
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+          set: () => Effect.void,
+        }),
+      )
+      for (let attempt = 1; attempt <= SessionRetry.RETRY_MAX_RETRIES + 2; attempt++) {
+        yield* step(error)
+      }
+      const exhausted = yield* step(error).pipe(Effect.exit)
+      expect(exhausted._tag).toBe("Failure")
+    }),
+  )
+
+  it.instance("policy with retry 0 never retries", () =>
+    Effect.gen(function* () {
+      const error = apiError({ "retry-after-ms": "0" })
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: "test",
+          retry: 0,
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+          set: () => Effect.void,
+        }),
+      )
+      const result = yield* step(error).pipe(Effect.exit)
+      expect(result._tag).toBe("Failure")
     }),
   )
 })

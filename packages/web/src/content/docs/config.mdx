@@ -374,7 +374,7 @@ You can configure the providers and models you want to use in your OpenCode conf
 
 The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
 
-Provider options can include `timeout`, `chunkTimeout`, and `setCacheKey`:
+Provider options can include `timeout`, `chunkTimeout`, `retry`, `backoffDelay`, and `setCacheKey`:
 
 ```json title="opencode.json"
 {
@@ -384,6 +384,8 @@ Provider options can include `timeout`, `chunkTimeout`, and `setCacheKey`:
       "options": {
         "timeout": 600000,
         "chunkTimeout": 30000,
+        "retry": 3,
+        "backoffDelay": 1000,
         "setCacheKey": true
       }
     }
@@ -393,6 +395,8 @@ Provider options can include `timeout`, `chunkTimeout`, and `setCacheKey`:
 
 - `timeout` - Request timeout in milliseconds (default: 300000). Set to `false` to disable.
 - `chunkTimeout` - Timeout in milliseconds between streamed response chunks. If no chunk arrives in time, the request is aborted.
+- `retry` - Maximum number of retries for retryable API errors like rate limits or server errors (default: 5). Set to `0` to disable retries.
+- `backoffDelay` - Initial delay in milliseconds for exponential backoff between retries (default: 2000). Ignored when the provider responds with `retry-after` headers.
 - `setCacheKey` - Ensure a cache key is always set for designated provider.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).

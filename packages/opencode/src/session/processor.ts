@@ -18,7 +18,7 @@ import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
@@ -86,6 +86,7 @@ const layer = Layer.effect(
     const snapshot = yield* Snapshot.Service
     const agents = yield* Agent.Service
     const llm = yield* LLM.Service
+    const provider = yield* Provider.Service
     const permission = yield* Permission.Service
     const plugin = yield* Plugin.Service
     const summary = yield* SessionSummary.Service
@@ -632,6 +633,10 @@ const layer = Layer.effect(
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
+        const options = (yield* provider.getProvider(input.model.providerID))?.options ?? {}
+        const retryOption = (key: "retry" | "backoffDelay") =>
+          typeof options[key] === "number" ? options[key] : undefined
+
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
@@ -660,6 +665,8 @@ const layer = Layer.effect(
             Effect.retry(
               SessionRetry.policy({
                 provider: input.model.providerID,
+                retry: retryOption("retry"),
+                backoffDelay: retryOption("backoffDelay"),
                 parse,
                 set: (info) => {
                   return status.set(ctx.sessionID, {
@@ -705,6 +712,7 @@ export const node = LayerNode.make({
     Snapshot.node,
     Agent.node,
     LLM.node,
+    Provider.node,
     Permission.node,
     Plugin.node,
     SessionSummary.node,
