@@ -1,7 +1,7 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, For, Match, Show, Switch, createSignal } from "solid-js"
 
-function View(props: { context: Plugin.Context; sessionID: string }) {
+export function McpSidebar(props: { context: Plugin.Context; sessionID: string }) {
   const [open, setOpen] = createSignal(true)
   const theme = props.context.theme
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
@@ -39,7 +39,14 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
         <Show when={list().length <= 2 || open()}>
           <For each={list()}>
             {(item) => (
-              <box flexDirection="row" gap={1}>
+              <box
+                flexDirection="row"
+                gap={1}
+                onMouseUp={() => {
+                  if (item.status.status !== "failed" && item.status.status !== "needs_client_registration") return
+                  props.context.keymap.dispatch("mcp.list", item.name)
+                }}
+              >
                 <text
                   flexShrink={0}
                   style={{
@@ -53,9 +60,7 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
                   <span style={{ fg: theme.text.subdued }}>
                     <Switch fallback={item.status.status}>
                       <Match when={item.status.status === "connected"}>Connected</Match>
-                      <Match when={item.status.status === "failed"}>
-                        <i>{item.status.status === "failed" ? item.status.error : undefined}</i>
-                      </Match>
+                      <Match when={item.status.status === "failed"}>Failed</Match>
                       <Match when={item.status.status === "disabled"}>Disabled</Match>
                       <Match when={item.status.status === "needs_auth"}>Needs auth</Match>
                     </Switch>
@@ -73,6 +78,6 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
 export default Plugin.define({
   id: "internal:sidebar-mcp",
   setup(context) {
-    context.ui.slot("sidebar.content", (props) => <View context={context} sessionID={props.sessionID} />)
+    context.ui.slot("sidebar.content", (props) => <McpSidebar context={context} sessionID={props.sessionID} />)
   },
 })

@@ -799,8 +799,8 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "MCP servers",
         category: "Agent",
         slash: { name: "mcps" },
-        run: () => {
-          dialog.replace(() => <DialogMcp />)
+        run: (server?: string) => {
+          dialog.replace(() => <DialogMcp server={server} />)
         },
       },
       {

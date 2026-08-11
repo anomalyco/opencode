@@ -35,7 +35,7 @@ function Status(props: { status: McpServer["status"]; loading: boolean }) {
   return <>Disabled ○</>
 }
 
-export function DialogMcp() {
+export function DialogMcp(props: { server?: string }) {
   const data = useData()
   const dialog = useDialog()
   const client = useClient()
@@ -44,6 +44,7 @@ export function DialogMcp() {
   const [focused, setFocused] = createSignal<string>()
   const [detail, setDetail] = createSignal<McpServer>()
   const [loading, setLoading] = createSignal<string | null>(null)
+  const [initial, setInitial] = createSignal(props.server)
 
   const statusColor = (status: McpServer["status"]) => {
     if (status.status === "connected") return theme.text.feedback.success.default
@@ -58,6 +59,16 @@ export function DialogMcp() {
       sortBy((server) => server.name),
     ),
   )
+
+  createEffect(() => {
+    const name = initial()
+    if (!name) return
+    const server = servers().find((entry) => entry.name === name)
+    if (!server) return
+    setInitial()
+    setFocused(name)
+    if (statusError(server.status)) setDetail(server)
+  })
 
   createEffect(() => {
     if (focused()) return
