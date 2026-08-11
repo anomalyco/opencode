@@ -13,8 +13,6 @@ export function adapterState() {
     reasoning: 0,
     currentTextID: undefined as string | undefined,
     currentReasoningID: undefined as string | undefined,
-    // Block ids for which a *-start event has already been emitted downstream.
-    // Used to synthesize a missing start when a provider streams orphan deltas.
     startedText: {} as Record<string, boolean>,
     startedReasoning: {} as Record<string, boolean>,
     toolNames: {} as Record<string, string>,
@@ -77,35 +75,13 @@ function currentReasoningID(state: ReturnType<typeof adapterState>, id: string |
   return state.currentReasoningID
 }
 
-// The AI SDK enqueues a non-fatal in-band error part
-//   { type: "error", error: `${"reasoning" | "text"} part ${id} not found` }
-// when a reasoning/text delta (or its end) arrives with no preceding *-start
-// block. This is common with OpenAI-compatible and Anthropic proxies that omit
-// the start events. The SDK returns and keeps streaming, so this must not be
-// promoted to a fatal turn failure. Verified against vercel/ai@6 stream-text.ts
-// (text part: L1171/L1190, reasoning part: L1220/L1239).
+// AI SDK reports missing stream starts in-band, then continues streaming.
 function isOrphanStreamStateError(error: unknown) {
   const message = errorMessage(error).trim()
   return message.endsWith(" not found") && (message.startsWith("reasoning part ") || message.startsWith("text part "))
 }
 
-// Some OpenAI-compatible and Anthropic proxies stream text/reasoning deltas
-// without ever emitting the matching *-start block. SessionProcessor requires a
-// start before it will create a part (`if (!ctx.currentText) return` for text,
-// `if (!(value.id in ctx.reasoningMap)) return` for reasoning), so those orphan
-// deltas - and any providerMetadata riding on them, including Anthropic thinking
-// signatures - are dropped entirely. Losing the signature breaks thinking-block
-// replay on subsequent requests.
-//
-// The adapter is the protocol-normalization layer (it already synthesizes block
-// ids via currentTextID/currentReasoningID), so repair it here: emit the missing
-// start before the delta and hand the processor a well-formed stream. Streams
-// that do emit starts are unaffected.
-function synthesizeStart(
-  started: Record<string, boolean>,
-  id: string,
-  make: () => LLMEvent,
-): LLMEvent[] {
+function synthesizeStart(started: Record<string, boolean>, id: string, make: () => LLMEvent): LLMEvent[] {
   if (started[id]) return []
   started[id] = true
   return [make()]
