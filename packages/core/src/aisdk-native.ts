@@ -51,6 +51,27 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapGoogleOptions(input.settings),
         },
       }
+    case "@ai-sdk/google-vertex/anthropic":
+      return {
+        package: "@opencode-ai/ai/providers/google-vertex/messages",
+        settings: {
+          ...baseSettings,
+          ...(typeof input.settings.accessToken === "string" ? { accessToken: input.settings.accessToken } : {}),
+          ...(typeof input.settings.location === "string" ? { location: input.settings.location } : {}),
+          ...(typeof input.settings.project === "string" ? { project: input.settings.project } : {}),
+          ...(isRecord(input.settings.thinking) || typeof input.settings.effort === "string"
+            ? {
+                providerOptions: {
+                  anthropic: {
+                    ...(isRecord(input.settings.thinking) ? { thinking: input.settings.thinking } : {}),
+                    ...(typeof input.settings.effort === "string" ? { effort: input.settings.effort } : {}),
+                  },
+                },
+              }
+            : {}),
+        },
+        ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
+      }
     case "@openrouter/ai-sdk-provider":
       return mapOpenRouter(input.settings, baseSettings)
     case "@ai-sdk/xai":
