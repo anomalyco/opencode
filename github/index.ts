@@ -116,8 +116,11 @@ type IssueQueryResponse = {
 function getGitHubURLs() {
   const serverUrl = (process.env.GITHUB_SERVER_URL || "https://github.com").replace(/\/+$/, "")
   const apiUrl = (process.env.GITHUB_API_URL || "https://api.github.com").replace(/\/+$/, "")
+  const graphqlUrl = (process.env.GITHUB_GRAPHQL_URL || "https://api.github.com")
+    .replace(/\/+$/, "")
+    .replace(/\/graphql$/, "")
   const host = new URL(serverUrl).host
-  return { serverUrl, apiUrl, host }
+  return { serverUrl, apiUrl, graphqlUrl, host }
 }
 
 function getNoreplyEmail(username: string, host: string) {
@@ -144,7 +147,7 @@ try {
   accessToken = await getAccessToken()
   octoRest = new Octokit({ auth: accessToken, baseUrl: ghUrls.apiUrl })
   octoGraph = graphql.defaults({
-    baseUrl: ghUrls.apiUrl,
+    baseUrl: ghUrls.graphqlUrl,
     headers: { authorization: `token ${accessToken}` },
   })
 

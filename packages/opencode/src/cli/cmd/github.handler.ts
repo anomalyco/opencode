@@ -3,8 +3,6 @@ import { exec } from "child_process"
 import { Filesystem } from "@/util/filesystem"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
-import { Octokit } from "@octokit/rest"
-import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context } from "@actions/github/lib/context"
@@ -32,7 +30,14 @@ import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError, getGitHubURLs, getNoreplyEmail, parseGitRemote } from "./github.shared"
+import {
+  createGitHubClients,
+  extractResponseText,
+  formatPromptTooLargeError,
+  getGitHubURLs,
+  getNoreplyEmail,
+  parseGitRemote,
+} from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -731,8 +736,8 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       const ghUrls = getGitHubURLs()
 
     let appToken: string
-    let octoRest: Octokit
-    let octoGraph: typeof graphql
+    let octoRest: Awaited<ReturnType<typeof createGitHubClients>>["rest"]
+    let octoGraph: Awaited<ReturnType<typeof createGitHubClients>>["graph"]
     let gitConfig: string
     let session: { id: SessionID; title: string; version: string }
     let shareId: string | undefined
@@ -785,11 +790,9 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         const actionToken = isMock ? args.token! : await getOidcToken()
         appToken = await exchangeForAppToken(actionToken)
       }
-      octoRest = new Octokit({ auth: appToken, baseUrl: ghUrls.apiUrl })
-      octoGraph = graphql.defaults({
-        baseUrl: ghUrls.apiUrl,
-        headers: { authorization: `token ${appToken}` },
-      })
+      const clients = await createGitHubClients(appToken)
+      octoRest = clients.rest
+      octoGraph = clients.graph
       githubClientReady = true
 
       const { userPrompt, promptFiles } = await getUserPrompt()
