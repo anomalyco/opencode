@@ -2,7 +2,7 @@ export * as Project from "./project"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { asc, desc, isNotNull, isNull, ne, or } from "drizzle-orm"
+import { asc, desc } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema"
 import { Database } from "./database/database"
@@ -13,7 +13,7 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Hash } from "@opencode-ai/util/hash"
 import { ProjectDirectories } from "./project/directories"
 import { ProjectSchema } from "./project/schema"
-import { ProjectTable } from "./project/sql"
+import { ProjectTable, upsertProject } from "./project/sql"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -98,19 +98,7 @@ const layer = Layer.effect(
       yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
-            const vcs = project.vcs?.type
-            yield* tx
-              .insert(ProjectTable)
-              .values({ id: project.id, worktree: project.canonical, vcs, sandboxes: [] })
-              .onConflictDoUpdate({
-                target: ProjectTable.id,
-                set: { worktree: project.canonical, vcs: vcs ?? null },
-                setWhere: or(
-                  ne(ProjectTable.worktree, project.canonical),
-                  vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
-                ),
-              })
-              .run()
+            yield* upsertProject(tx, project)
             if (!project.vcs) return
             yield* projectDirectories.create({ projectID: project.id, directory: project.canonical }, tx)
             if (project.directory === project.canonical) return

@@ -3,7 +3,7 @@ export * from "./session/schema"
 
 import { Effect, Layer, Schema, Context, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, ne, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { Project } from "./project"
 import { Workspace } from "./workspace"
 import { Model } from "./model"
@@ -21,7 +21,7 @@ import { Agent } from "./agent"
 import { Money } from "@opencode-ai/schema/money"
 import { App } from "./app"
 import { Slug } from "./util/slug"
-import { ProjectTable } from "./project/sql"
+import { upsertProject } from "./project/sql"
 import path from "path"
 import { fromRow } from "./session/info"
 import { SessionRunner } from "./session/runner/index"
@@ -309,22 +309,7 @@ const layer = Layer.effect(
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
-    const persistProject = (project: Project.Resolved) => {
-      const vcs = project.vcs?.type
-      return db
-        .insert(ProjectTable)
-        .values({ id: project.id, worktree: project.canonical, vcs, sandboxes: [] })
-        .onConflictDoUpdate({
-          target: ProjectTable.id,
-          set: { worktree: project.canonical, vcs: vcs ?? null },
-          setWhere: or(
-            ne(ProjectTable.worktree, project.canonical),
-            vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
-          ),
-        })
-        .run()
-        .pipe(Effect.orDie)
-    }
+    const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
         Effect.mapError(
