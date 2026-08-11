@@ -1,4 +1,4 @@
-import { Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
+import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Money } from "@opencode-ai/schema/money"
@@ -612,7 +612,16 @@ export const layer = (options?: Options) =>
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const text = yield* fetchApi()
         const catalog = (yield* Schema.decodeUnknownEffect(CatalogJson)(text)) as Record<string, SourceProvider>
-        yield* kv.set(key, { updatedAt: Date.now(), body: text })
+        // Best-effort: a cache-write failure must never kill catalog
+        // population. The payload has outgrown some KV backends' per-value
+        // limits (Durable Object SQLite caps values at 2 MB and api.json
+        // passed it in Aug 2026); a boot without a cache hit just refetches.
+        yield* kv.set(key, { updatedAt: Date.now(), body: text }).pipe(
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterruptsOnly(cause),
+            (cause) => Effect.logWarning("Failed to cache models.dev catalog", { cause }),
+          ),
+        )
         return catalog
       })
 
