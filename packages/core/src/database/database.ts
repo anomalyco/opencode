@@ -1,7 +1,7 @@
 export * as Database from "./database"
 
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
-import { sqliteLayer } from "#sqlite"
+import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Global } from "@opencode-ai/util/global"
 import { isAbsolute, join } from "path"
@@ -27,12 +27,15 @@ const databaseLayer = Layer.effect(
   Effect.gen(function* () {
     const db = yield* makeDatabase
 
-    yield* db.run("PRAGMA journal_mode = WAL")
-    yield* db.run("PRAGMA synchronous = NORMAL")
-    yield* db.run("PRAGMA busy_timeout = 5000")
-    yield* db.run("PRAGMA cache_size = -64000")
-    yield* db.run("PRAGMA foreign_keys = ON")
-    yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+    if (supportsTuningPragmas) {
+      yield* db.run("PRAGMA journal_mode = WAL")
+      yield* db.run("PRAGMA synchronous = NORMAL")
+      yield* db.run("PRAGMA busy_timeout = 5000")
+      yield* db.run("PRAGMA cache_size = -64000")
+      yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+    }
+    // Durable Object SQLite always enforces foreign keys and rejects the pragma.
+    if (supportsForeignKeyToggle) yield* db.run("PRAGMA foreign_keys = ON")
     yield* DatabaseMigration.apply(db)
 
     return { db }

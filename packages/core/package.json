@@ -25,6 +25,7 @@
   },
   "imports": {
     "#sqlite": {
+      "workerd": "./src/database/sqlite.workerd.ts",
       "bun": "./src/database/sqlite.bun.ts",
       "node": "./src/database/sqlite.node.ts",
       "default": "./src/database/sqlite.bun.ts"
