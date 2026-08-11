@@ -1,11 +1,27 @@
 import { OpenCode } from "@opencode-ai/client/effect"
+import { Credential } from "@opencode-ai/core/credential"
+import { Database } from "@opencode-ai/core/database/database"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { createEmbeddedRoutes } from "@opencode-ai/server/routes"
 import type { ServerOptions } from "@opencode-ai/server/options"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import { FetchHttpClient, HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http"
 
-export const create = Effect.fn("OpenCode.create")(function* (options: ServerOptions = {}) {
+export type CredentialSource = {
+  readonly path: string
+}
+
+export const Credentials = {
+  fromLocalDatabase: (input: Partial<CredentialSource> = {}): CredentialSource => ({
+    path: input.path ?? process.env.OPENCODE_DB ?? "opencode.db",
+  }),
+}
+
+export type CreateOptions = ServerOptions & {
+  readonly credentials?: CredentialSource
+}
+
+export const create = Effect.fn("OpenCode.create")(function* (options: CreateOptions = {}) {
   const runtime = yield* Effect.acquireRelease(
     Effect.sync(() =>
       ManagedRuntime.make(
@@ -19,6 +35,10 @@ export const create = Effect.fn("OpenCode.create")(function* (options: ServerOpt
     (runtime) => runtime.disposeEffect,
   )
   const context = yield* runtime.contextEffect
+  if (options.credentials) {
+    const database = Context.get(context, Database.Service)
+    yield* Credential.importFromDatabase(options.credentials).pipe(Effect.provideService(Database.Service, database))
+  }
   const plugins = Context.get(context, SdkPlugins.Service)
   const router = Context.get(context, HttpRouter.HttpRouter)
   const handler = HttpEffect.toWebHandler(router.asHttpEffect())

@@ -2,6 +2,9 @@ import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
 import { Deferred, Effect, Latch, Layer, Option, Ref, Schema, Stream } from "effect"
+import { Credential } from "@opencode-ai/core/credential"
+import { Database } from "@opencode-ai/core/database/database"
+import { LayerNode } from "../../util/src/effect/layer-node"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import type { OpenCodeEvent } from "../src"
@@ -24,6 +27,30 @@ const sessionID = (fixture: Fixture) => fixture.sdk.Session.ID.create()
 
 const location = (fixture: Fixture) =>
   fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make(fixture.directory) })
+
+it.live("starts with credentials copied from the local database", () =>
+  withEmbedded("opencode-embedded-credentials-", (fixture) =>
+    Effect.gen(function* () {
+      const filename = path.join(fixture.directory, "credentials.sqlite")
+      const integrationID = fixture.sdk.Integration.ID.make("snapshot-test")
+      yield* Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        yield* credentials.create({
+          integrationID,
+          label: "Local",
+          value: Credential.Key.make({ type: "key", key: "secret" }),
+        })
+      }).pipe(
+        Effect.provide(LayerNode.compile(Credential.node, [[Database.node, Database.configured({ path: filename })]])),
+        Effect.scoped,
+      )
+      const opencode = yield* fixture.sdk.OpenCode.create({
+        credentials: fixture.sdk.OpenCode.Credentials.fromLocalDatabase({ path: filename }),
+      })
+      expect((yield* opencode.health.get()).healthy).toBe(true)
+    }),
+  ),
+)
 
 it.live("exposes app metadata to plugins", () =>
   withEmbedded("opencode-embedded-app-", (fixture) =>

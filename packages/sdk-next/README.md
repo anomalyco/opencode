@@ -13,6 +13,22 @@ const session = yield * opencode.sessions.get({ sessionID })
 
 It also exports `Tool` for plugins that add tools with `ctx.tool.transform(...)`. Embedded plugins run through the ordinary discovery flow and register tools into each Location's `ToolRegistry` through the normal `Tools.Service.register(...)` path. Closing the owning Effect Scope releases router resources, location services, fibers, and scoped tool registrations.
 
+Use credentials already stored by the local OpenCode installation while keeping
+SDK sessions in memory:
+
+```ts
+const opencode =
+  yield *
+  OpenCode.create({
+    credentials: OpenCode.Credentials.fromLocalDatabase(),
+  })
+```
+
+The SDK copies credentials from `OPENCODE_DB` or `opencode.db` in OpenCode's
+data directory. The source database is never updated.
+OAuth credentials are copied without a usable refresh token; if the access
+token is rejected, re-authenticate with OpenCode and create a new SDK host.
+
 `sessions.events({ sessionID, after })` replays durable events after the optional aggregate sequence, then emits newly committed durable events. `sessions.interrupt(...)` targets execution owned by this host, and `sessions.message(...)` retrieves one projected Session message.
 
 The same constructor is available as a service Layer:

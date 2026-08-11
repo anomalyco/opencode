@@ -1,9 +1,12 @@
 export * as Credential from "./credential"
 
-import { asc, eq } from "drizzle-orm"
+import { asc, eq, sql } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
+import fs from "fs/promises"
+import path from "path"
 import { Credential } from "@opencode-ai/schema/credential"
 import { Integration } from "@opencode-ai/schema/integration"
+import { Global } from "@opencode-ai/util/global"
 import { Database } from "./database/database"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { CredentialTable } from "./credential/sql"
@@ -47,6 +50,47 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Credential") {}
+
+export const importFromDatabase = Effect.fn("Credential.importFromDatabase")(function* (input: {
+  readonly path: string
+}) {
+  const database = yield* Database.Service
+  const filename = path.isAbsolute(input.path) ? input.path : path.join(Global.Path.data, input.path)
+  yield* Effect.promise(() => fs.access(filename))
+  yield* database.db.run(sql`ATTACH DATABASE ${filename} AS credential_snapshot`).pipe(Effect.orDie)
+  yield* Effect.gen(function* () {
+    yield* database.db.run(sql`DELETE FROM credential`)
+    // Snapshot OAuth credentials are access-token-only so the embedded host never rotates the user's refresh token.
+    yield* database.db.run(sql`
+        INSERT INTO credential (
+          id,
+          integration_id,
+          label,
+          value,
+          connector_id,
+          method_id,
+          active,
+          time_created,
+          time_updated
+        )
+        SELECT
+          id,
+          integration_id,
+          label,
+          CASE
+            WHEN json_extract(value, '$.type') = 'oauth'
+            THEN json_set(value, '$.refresh', '', '$.expires', 8640000000000000)
+            ELSE value
+          END,
+          connector_id,
+          method_id,
+          active,
+          time_created,
+          time_updated
+        FROM credential_snapshot.credential
+      `)
+  }).pipe(Effect.orDie, Effect.ensuring(database.db.run(sql`DETACH DATABASE credential_snapshot`).pipe(Effect.orDie)))
+})
 
 const layer = Layer.effect(
   Service,
