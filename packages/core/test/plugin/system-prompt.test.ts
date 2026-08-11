@@ -35,6 +35,16 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
 })
 
 describe("SystemPromptPlugin", () => {
+  test("gives the default prompt one ordered exploration strategy", () => {
+    expect(PROMPT_DEFAULT).toContain(
+      "Use glob, grep, and read for targeted exploration. Use a subagent for broad or independent investigation",
+    )
+    expect(PROMPT_DEFAULT).toContain("Batch independent tool calls; keep dependent work sequential.")
+    expect(PROMPT_DEFAULT).not.toContain("search tools extensively")
+    expect(PROMPT_DEFAULT).not.toContain("prefer to use the subagent tool")
+    expect(PROMPT_DEFAULT).not.toContain("fewer than 4 lines")
+  })
+
   test("uses current vocabulary in the Meta prompt", () => {
     expect(PROMPT_META).toContain("`webfetch` tool")
     expect(PROMPT_META).toContain("`subagent` tool")
