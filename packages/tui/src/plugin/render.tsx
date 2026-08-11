@@ -1,5 +1,6 @@
 import {
   createComponent,
+  createContext,
   createMemo,
   ErrorBoundary,
   For,
@@ -7,6 +8,7 @@ import {
   onCleanup,
   onMount,
   Show,
+  useContext,
   type JSX,
   type ParentProps,
 } from "solid-js"
@@ -73,6 +75,9 @@ export function PluginRoute(props: { readonly fallback: (id: string, name: strin
 // Placement policy — boundary suppression, last-enabled-wins, missing-target
 // degradation — lives in resolveSlots; this component only renders its own
 // path's buckets.
+// The nearest enclosing slot's path. Root slots mount outside any provider.
+const SlotParent = createContext<string>()
+
 export function Slot<Path extends SlotPath>(
   props: ParentProps<{ readonly path: Path; readonly input?: SlotMap[Path] }>,
 ) {
@@ -81,6 +86,14 @@ export function Slot<Path extends SlotPath>(
   // reference-counted so the same path may be mounted several times (one
   // composer footer per session tab).
   const path = props.path
+  // Paths are declared, not inferred: nesting a slot under the wrong parent
+  // would silently publish a mislocated public path, so containment is
+  // asserted at mount. Only host code can trip this — plugins cannot mount
+  // slots — which makes it a programming error worth failing loudly on.
+  const parent = useContext(SlotParent)
+  if (parent !== undefined && !path.startsWith(parent + ".")) {
+    throw new Error(`Slot "${path}" is mounted inside "${parent}" but its path does not extend it`)
+  }
   onCleanup(plugins.slots.register(path))
   const slotted = createMemo(
     () => plugins.slots.resolved().slotted.get(path) ?? emptySlotted<SlotRender>(),
@@ -110,7 +123,7 @@ export function Slot<Path extends SlotPath>(
     </PluginBoundary>
   )
   return (
-    <>
+    <SlotParent.Provider value={path}>
       <For each={slotted().before}>{contribution}</For>
       <Show
         keyed
@@ -126,7 +139,7 @@ export function Slot<Path extends SlotPath>(
         {contribution}
       </Show>
       <For each={slotted().after}>{contribution}</For>
-    </>
+    </SlotParent.Provider>
   )
 }
 
