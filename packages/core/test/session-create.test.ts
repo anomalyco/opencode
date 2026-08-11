@@ -654,7 +654,7 @@ describe("Session.create", () => {
       expect(yield* session.get(created.id)).toMatchObject({ agent: "plan" })
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.drop(1), Stream.take(1), Stream.runCollect)),
-      ).toMatchObject([{ type: "session.agent.selected", data: { agent: "plan" } }])
+      ).toMatchObject([{ type: "session.agent.selected", data: { agent: "plan", previous: "build" } }])
       expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toMatchObject([
         { type: "agent-switched", agent: "plan", previous: "build" },
       ])
@@ -678,7 +678,12 @@ describe("Session.create", () => {
   it.effect("switches the selected model through the durable Session event", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
-      const created = yield* session.create({ location })
+      const previous = Model.Ref.make({
+        id: Model.ID.make("haiku"),
+        providerID: Provider.ID.anthropic,
+        variant: Model.VariantID.make("default"),
+      })
+      const created = yield* session.create({ location, model: previous })
       const model = Model.Ref.make({
         id: Model.ID.make("sonnet"),
         providerID: Provider.ID.anthropic,
@@ -692,7 +697,10 @@ describe("Session.create", () => {
         yield* logEvents(session, created.id, true).pipe(Stream.drop(1), Stream.take(1), Stream.runCollect),
       )
       expect(bus).toMatchObject([{ type: "session.model.selected" }])
-      expect(bus[0]?.data).toEqual({ sessionID: created.id, model })
+      expect(bus[0]?.data).toEqual({ sessionID: created.id, model, previous })
+      expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toMatchObject([
+        { type: "model-switched", model, previous },
+      ])
     }),
   )
 

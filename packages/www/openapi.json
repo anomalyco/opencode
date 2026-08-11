@@ -14300,7 +14300,13 @@
               "agent": {
                 "type": "string"
               },
+              "previous": {
+                "type": "string"
+              },
               "model": {
+                "$ref": "#/components/schemas/Model.Ref"
+              },
+              "previous": {
                 "$ref": "#/components/schemas/Model.Ref"
               },
               "version": {

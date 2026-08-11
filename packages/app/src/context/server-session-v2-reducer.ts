@@ -61,6 +61,12 @@ export function createV2SessionReducer() {
           type: "agent-switched",
           metadata: event.metadata,
           agent: event.data.agent,
+          previous:
+            event.data.previous ??
+            source.findLast(
+              (item): item is Extract<SessionMessageInfo, { type: "agent-switched" | "assistant" }> =>
+                item.type === "agent-switched" || item.type === "assistant",
+            )?.agent,
           time: { created: event.created },
         })
       case "session.model.selected":
@@ -69,10 +75,12 @@ export function createV2SessionReducer() {
           type: "model-switched",
           metadata: event.metadata,
           model: event.data.model,
-          previous: source.findLast(
-            (item): item is Extract<SessionMessageInfo, { type: "model-switched" | "assistant" }> =>
-              item.type === "model-switched" || item.type === "assistant",
-          )?.model,
+          previous:
+            event.data.previous ??
+            source.findLast(
+              (item): item is Extract<SessionMessageInfo, { type: "model-switched" | "assistant" }> =>
+                item.type === "model-switched" || item.type === "assistant",
+            )?.model,
           time: { created: event.created },
         })
       case "session.synthetic":

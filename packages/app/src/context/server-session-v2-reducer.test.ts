@@ -69,6 +69,63 @@ describe("v2 session reducer", () => {
     })
   })
 
+  test("prefers durable selection predecessors and derives them for older events", () => {
+    const source: SessionMessageInfo[] = [
+      { id: "msg_previous_agent", type: "agent-switched", agent: "build", time: { created: 1 } },
+      {
+        id: "msg_previous_model",
+        type: "model-switched",
+        model: { id: "old", providerID: "provider" },
+        time: { created: 1 },
+      },
+    ]
+    const reducer = createV2SessionReducer()
+
+    const agent = reducer.reduce(
+      source,
+      event({
+        ...base,
+        id: "evt_agent",
+        type: "session.agent.selected",
+        data: { sessionID: "ses_1", agent: "plan", previous: "review" },
+      }),
+    )
+    const model = reducer.reduce(
+      source,
+      event({
+        ...base,
+        id: "evt_model",
+        type: "session.model.selected",
+        data: {
+          sessionID: "ses_1",
+          model: { id: "new", providerID: "provider" },
+          previous: { id: "durable", providerID: "provider" },
+        },
+      }),
+    )
+    const legacyAgent = reducer.reduce(
+      source,
+      event({
+        ...base,
+        id: "evt_legacy_agent",
+        type: "session.agent.selected",
+        data: { sessionID: "ses_1", agent: "plan" },
+      }),
+    )
+
+    expect(agent?.messages.at(-1)).toMatchObject({ type: "agent-switched", agent: "plan", previous: "review" })
+    expect(model?.messages.at(-1)).toMatchObject({
+      type: "model-switched",
+      model: { id: "new" },
+      previous: { id: "durable" },
+    })
+    expect(legacyAgent?.messages.at(-1)).toMatchObject({
+      type: "agent-switched",
+      agent: "plan",
+      previous: "build",
+    })
+  })
+
   test("folds tool, retry, and completion events", () => {
     const reducer = createV2SessionReducer()
     let messages: SessionMessageInfo[] = []
