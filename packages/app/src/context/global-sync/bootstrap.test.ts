@@ -2,12 +2,13 @@ import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
 import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
-import type { AgentApi, CatalogApi, CommandApi, ProjectApi, ReferenceApi } from "@opencode-ai/client/promise"
+import type { AgentApi, CatalogApi, CommandApi, ReferenceApi } from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import {
   bootstrapDirectory,
   loadAgentsQuery,
   loadCommands,
+  loadGlobalConfigQuery,
   loadPathQuery,
   loadProjectsQuery,
   loadProvidersQuery,
@@ -16,6 +17,8 @@ import {
 import type { State, VcsCache } from "./types"
 import { ServerScope } from "@/utils/server-scope"
 import type { ServerApi } from "@/utils/server"
+
+type ProjectApi = ServerApi["project"]
 
 const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
 const api = {
@@ -73,14 +76,15 @@ function directoryState() {
 }
 
 describe("bootstrapDirectory", () => {
-  test("marks a loading directory partial during bootstrap and complete after success", async () => {
+  test("uses legacy MCP endpoints while refreshing a v1 directory", async () => {
+    const legacyConfigReads: string[] = []
     const mcpReads: string[] = []
     const [store, setStore] = directoryState()
 
     await bootstrapDirectory({
       directory: "/project",
       scope: ServerScope.local,
-      mcp: false,
+      mcp: true,
       global: {
         config: {} satisfies Config,
         path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
@@ -89,7 +93,13 @@ describe("bootstrapDirectory", () => {
       },
       sdk: {
         app: { agents: async () => ({ data: [{ name: "build", mode: "primary" }] }) },
-        config: { get: async () => ({ data: {} }) },
+        config: {
+          get: async () => {
+            legacyConfigReads.push("directory")
+            return { data: {} }
+          },
+        },
+        session: { status: async () => ({ data: {} }) },
         vcs: { get: async () => ({ data: undefined }) },
         command: {
           list: async () => {
@@ -106,6 +116,14 @@ describe("bootstrapDirectory", () => {
             return { data: {} }
           },
         },
+        experimental: {
+          resource: {
+            list: async () => {
+              mcpReads.push("resource")
+              return { data: {} }
+            },
+          },
+        },
         provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
       } as unknown as OpencodeClient,
       api,
@@ -115,6 +133,7 @@ describe("bootstrapDirectory", () => {
       loadSessions() {},
       translate: (key) => key,
       queryClient: new QueryClient(),
+      protocol: Promise.resolve("v1"),
     })
 
     expect(store.status).toBe("partial")
@@ -122,7 +141,87 @@ describe("bootstrapDirectory", () => {
     await new Promise((resolve) => setTimeout(resolve, 80))
 
     expect(store.status).toBe("complete")
-    expect(mcpReads).toEqual([])
+    expect(legacyConfigReads).toEqual(["directory"])
+    expect(mcpReads.sort()).toEqual(["command", "resource", "status"])
+  })
+
+  test("skips legacy config while refreshing a v2 directory", async () => {
+    const [store, setStore] = directoryState()
+
+    await bootstrapDirectory({
+      directory: "/project",
+      scope: ServerScope.local,
+      mcp: false,
+      global: {
+        config: {} satisfies Config,
+        path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
+        project: [{ id: "project", worktree: "/project" } as Project],
+        provider,
+      },
+      sdk: {
+        config: {
+          get: async () => {
+            throw new Error("legacy directory config should not be called")
+          },
+        },
+      } as unknown as OpencodeClient,
+      api,
+      store,
+      setStore,
+      vcsCache: { setStore() {} } as unknown as VcsCache,
+      loadSessions() {},
+      translate: (key) => key,
+      queryClient: new QueryClient(),
+      protocol: Promise.resolve("v2"),
+    })
+
+    expect(store.status).toBe("partial")
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(store.status).toBe("complete")
+  })
+})
+
+describe("config queries", () => {
+  test("skips legacy global config for v2 servers", async () => {
+    const sdk = {
+      global: {
+        config: {
+          get: async () => {
+            throw new Error("legacy global config should not be called")
+          },
+        },
+      },
+    } as unknown as OpencodeClient
+
+    const result = await new QueryClient().fetchQuery(
+      loadGlobalConfigQuery(ServerScope.local, sdk, Promise.resolve("v2")),
+    )
+
+    expect(result).toEqual({})
+  })
+
+  test("loads legacy global config for v1 servers", async () => {
+    const calls: string[] = []
+    const config = { shell: "zsh" } satisfies Config
+    const sdk = {
+      global: {
+        config: {
+          get: async () => {
+            calls.push("global")
+            return { data: config }
+          },
+        },
+      },
+    } as unknown as OpencodeClient
+
+    const result = await new QueryClient().fetchQuery(
+      loadGlobalConfigQuery(ServerScope.local, sdk, Promise.resolve("v1")),
+    )
+
+    expect(result).toEqual(config)
+    expect(calls).toEqual(["global"])
   })
 })
 
@@ -190,7 +289,7 @@ describe("query keys", () => {
         calls.push(input)
         return {
           location: {},
-          data: [{ name: "review", template: "Review files", source: "command" as const }],
+          data: [{ name: "review", template: "Review files" /* source: "command" as const */ }],
         }
       },
     } as unknown as CommandApi
@@ -198,7 +297,7 @@ describe("query keys", () => {
     const result = await loadCommands("/repo", api)
 
     expect(calls).toEqual([{ location: { directory: "/repo" } }])
-    expect(result).toEqual([{ name: "review", template: "Review files", source: "command" }])
+    expect(result).toEqual([{ name: "review", template: "Review files" /* source: "command" */ }])
   })
 
   test("loads projects from the current endpoint", async () => {

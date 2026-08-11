@@ -30,6 +30,8 @@ type KeybindMeta = {
 
 type KeybindMap = Record<string, string | undefined>
 type CommandContext = ReturnType<typeof useCommand>
+type LanguageContext = ReturnType<typeof useLanguage>
+type SettingsContext = ReturnType<typeof useSettings>
 
 const GROUPS: KeybindGroup[] = ["General", "Session", "Navigation", "Model and agent", "Terminal", "Prompt"]
 
@@ -122,7 +124,7 @@ function keybinds(value: unknown): KeybindMap {
   return value as KeybindMap
 }
 
-function listFor(command: CommandContext, map: KeybindMap, palette: string) {
+function listFor(command: Pick<CommandContext, "catalog" | "options">, map: KeybindMap, palette: string) {
   const out = new Map<string, KeybindMeta>()
   out.set(PALETTE_ID, { title: palette, group: "General" })
 
@@ -262,7 +264,274 @@ function useKeyCapture(input: {
   })
 }
 
+export function createKeybindSettingsController(
+  input: {
+    command: Pick<CommandContext, "catalog" | "options" | "keybinds">
+    settings: {
+      current: { keybinds: unknown }
+      keybinds: Pick<SettingsContext["keybinds"], "get" | "set" | "resetAll">
+    }
+    target?: Document
+    notify?: (toast: { title: string; description: string }) => void
+  },
+  language: Pick<LanguageContext, "locale" | "t"> = useLanguage(),
+) {
+  const [store, setStore] = createStore({ active: null as string | null })
+  const overrides = createMemo(() => keybinds(input.settings.current.keybinds))
+  const list = createMemo(() => {
+    language.locale()
+    return listFor(input.command, overrides(), language.t("command.palette"))
+  })
+  const grouped = createMemo(() => groupedFor(list()))
+  const title = (id: string) => list().get(id)?.title ?? ""
+  const effective = (id: string) => {
+    if (id === PALETTE_ID) return input.settings.keybinds.get(id) ?? DEFAULT_PALETTE_KEYBIND
+
+    const custom = input.settings.keybinds.get(id)
+    if (typeof custom === "string") return custom
+
+    const live = input.command.options.find((item) => item.id === id)
+    if (live?.keybind) return live.keybind
+    return input.command.catalog.find((item) => item.id === id)?.keybind
+  }
+  const used = createMemo(() => {
+    const value = new Map<string, { id: string; title: string }[]>()
+
+    for (const id of list().keys()) {
+      for (const signature of signatures(effective(id))) {
+        const items = value.get(signature)
+        if (items) {
+          items.push({ id, title: title(id) })
+          continue
+        }
+        value.set(signature, [{ id, title: title(id) }])
+      }
+    }
+
+    return value
+  })
+  const stop = () => {
+    if (!store.active) return
+    setStore("active", null)
+    input.command.keybinds(true)
+  }
+  const toggle = (id: string) => {
+    if (store.active === id) {
+      stop()
+      return
+    }
+    if (store.active) stop()
+    setStore("active", id)
+    input.command.keybinds(false)
+  }
+  const notify = input.notify ?? ((toast: { title: string; description: string }) => showToast(toast))
+
+  const handle = (event: KeyboardEvent) => {
+    const id = store.active
+    if (!id) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.stopImmediatePropagation()
+
+    if (event.key === "Escape") {
+      stop()
+      return
+    }
+
+    const clear =
+      (event.key === "Backspace" || event.key === "Delete") &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey
+    if (clear) {
+      input.settings.keybinds.set(id, "none")
+      stop()
+      return
+    }
+
+    const next = recordKeybind(event)
+    if (!next) return
+
+    const conflicts = new Map<string, string>()
+    for (const signature of signatures(next)) {
+      for (const item of used().get(signature) ?? []) {
+        if (item.id === id) continue
+        conflicts.set(item.id, item.title)
+      }
+    }
+
+    if (conflicts.size > 0) {
+      notify({
+        title: language.t("settings.shortcuts.conflict.title"),
+        description: language.t("settings.shortcuts.conflict.description", {
+          keybind: formatKeybind(next, language.t),
+          titles: [...conflicts.values()].join(", "),
+        }),
+      })
+      return
+    }
+
+    input.settings.keybinds.set(id, next)
+    stop()
+  }
+
+  const target = input.target ?? (typeof document === "object" ? document : undefined)
+  if (target) makeEventListener(target, "keydown", handle, { capture: true })
+
+  onCleanup(() => {
+    if (store.active) input.command.keybinds(true)
+  })
+
+  return {
+    catalog: {
+      groups: GROUPS,
+      filtered: (query: string) =>
+        filteredFor(query, list(), grouped(), (id) => formatKeybind(effective(id) ?? "", language.t)),
+      title,
+      keybind: (id: string) => formatKeybind(effective(id) ?? "", language.t),
+    },
+    capture: {
+      active: () => store.active,
+      toggle,
+    },
+    settings: {
+      hasOverrides: () => Object.values(overrides()).some((value) => typeof value === "string"),
+      reset: () => {
+        stop()
+        input.settings.keybinds.resetAll()
+        notify({
+          title: language.t("settings.shortcuts.reset.toast.title"),
+          description: language.t("settings.shortcuts.reset.toast.description"),
+        })
+      },
+    },
+  }
+}
+
+function SettingsKeybindsV2() {
+  const command = useCommand()
+  const settings = useSettings()
+  const controller = createKeybindSettingsController({
+    command,
+    settings,
+  })
+
+  return (
+    <SettingsKeybindsV2View
+      groups={controller.catalog.groups}
+      filtered={controller.catalog.filtered}
+      title={controller.catalog.title}
+      keybind={controller.catalog.keybind}
+      active={controller.capture.active}
+      onCapture={controller.capture.toggle}
+      hasOverrides={controller.settings.hasOverrides}
+      onReset={controller.settings.reset}
+    />
+  )
+}
+
+function SettingsKeybindsV2View(props: {
+  groups: KeybindGroup[]
+  filtered: (query: string) => Map<KeybindGroup, string[]>
+  title: (id: string) => string
+  keybind: (id: string) => string
+  active: () => string | null
+  onCapture: (id: string) => void
+  hasOverrides: () => boolean
+  onReset: () => void
+}) {
+  const language = useLanguage()
+  const [store, setStore] = createStore({ filter: "" })
+  const filtered = createMemo(() => props.filtered(store.filter))
+  const hasResults = createMemo(() => props.groups.some((group) => (filtered().get(group)?.length ?? 0) > 0))
+
+  return (
+    <>
+      <div class="settings-v2-tab-header settings-v2-tab-header--stacked">
+        <div class="settings-v2-tab-header-row">
+          <h2 class="settings-v2-tab-title">{language.t("settings.shortcuts.title")}</h2>
+          <ButtonV2 variant="ghost" onClick={props.onReset} disabled={!props.hasOverrides()}>
+            {language.t("settings.shortcuts.reset.button")}
+          </ButtonV2>
+        </div>
+        <div class="settings-v2-tab-search">
+          <TextInputV2
+            type="search"
+            appearance="base"
+            value={store.filter}
+            onInput={(event) => setStore("filter", event.currentTarget.value)}
+            placeholder={language.t("settings.shortcuts.search.placeholder")}
+            spellcheck={false}
+            autocorrect="off"
+            autocomplete="off"
+            autocapitalize="off"
+            aria-label={language.t("settings.shortcuts.search.placeholder")}
+          />
+          <Show when={store.filter}>
+            <IconButtonV2
+              type="button"
+              variant="ghost-muted"
+              size="small"
+              class="settings-v2-tab-search-clear"
+              icon={<IconV2 name="close" size="large" class="text-v2-icon-icon-muted" />}
+              onClick={() => setStore("filter", "")}
+            />
+          </Show>
+        </div>
+      </div>
+      <div class="settings-v2-tab-body">
+        <div class="settings-v2-shortcuts flex flex-col gap-8">
+          <For each={props.groups}>
+            {(group) => (
+              <Show when={(filtered().get(group) ?? []).length > 0}>
+                <div class="settings-v2-section">
+                  <h3 class="settings-v2-section-title">{language.t(groupKey[group])}</h3>
+                  <SettingsListV2>
+                    <For each={filtered().get(group) ?? []}>
+                      {(id) => (
+                        <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
+                          <span>{props.title(id)}</span>
+                          <button
+                            type="button"
+                            data-keybind-id={id}
+                            classList={{
+                              "settings-v2-keybind-button": true,
+                              "settings-v2-keybind-button--active": props.active() === id,
+                            }}
+                            onClick={() => props.onCapture(id)}
+                          >
+                            <Show
+                              when={props.active() === id}
+                              fallback={props.keybind(id) || language.t("settings.shortcuts.unassigned")}
+                            >
+                              {language.t("settings.shortcuts.pressKeys")}
+                            </Show>
+                          </button>
+                        </div>
+                      )}
+                    </For>
+                  </SettingsListV2>
+                </div>
+              </Show>
+            )}
+          </For>
+          <Show when={store.filter && !hasResults()}>
+            <div class="settings-v2-shortcuts-status">
+              <span>{language.t("settings.shortcuts.search.empty")}</span>
+              <span class="settings-v2-shortcuts-status-filter">&quot;{store.filter}&quot;</span>
+            </div>
+          </Show>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export const SettingsKeybinds: Component<{ v2?: boolean }> = (props) => {
+  if (props.v2) return <SettingsKeybindsV2 />
+
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
@@ -476,78 +745,37 @@ export const SettingsKeybinds: Component<{ v2?: boolean }> = (props) => {
   )
 
   return (
-    <Show
-      when={props.v2}
-      fallback={
-        <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
-          <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
-            <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
-              <div class="flex items-center justify-between gap-4">
-                <h2 class="text-16-medium text-text-strong">{language.t("settings.shortcuts.title")}</h2>
-                <Button size="small" variant="secondary" onClick={resetAll} disabled={!hasOverrides()}>
-                  {language.t("settings.shortcuts.reset.button")}
-                </Button>
-              </div>
-
-              <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface-base">
-                <Icon name="magnifying-glass" class="text-icon-weak-base flex-shrink-0" />
-                <TextField
-                  variant="ghost"
-                  type="text"
-                  value={store.filter}
-                  onChange={(v) => setStore("filter", v)}
-                  placeholder={language.t("settings.shortcuts.search.placeholder")}
-                  spellcheck={false}
-                  autocorrect="off"
-                  autocomplete="off"
-                  autocapitalize="off"
-                  class="flex-1"
-                />
-                <Show when={store.filter}>
-                  <IconButton icon="circle-x" variant="ghost" onClick={() => setStore("filter", "")} />
-                </Show>
-              </div>
-            </div>
-          </div>
-          {groups}
-        </div>
-      }
-    >
-      <>
-        <div class="settings-v2-tab-header settings-v2-tab-header--stacked">
-          <div class="settings-v2-tab-header-row">
-            <h2 class="settings-v2-tab-title">{language.t("settings.shortcuts.title")}</h2>
-            <ButtonV2 variant="ghost" onClick={resetAll} disabled={!hasOverrides()}>
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
+        <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
+          <div class="flex items-center justify-between gap-4">
+            <h2 class="text-16-medium text-text-strong">{language.t("settings.shortcuts.title")}</h2>
+            <Button size="small" variant="secondary" onClick={resetAll} disabled={!hasOverrides()}>
               {language.t("settings.shortcuts.reset.button")}
-            </ButtonV2>
+            </Button>
           </div>
-          <div class="settings-v2-tab-search">
-            <TextInputV2
-              type="search"
-              appearance="base"
+
+          <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface-base">
+            <Icon name="magnifying-glass" class="text-icon-weak-base flex-shrink-0" />
+            <TextField
+              variant="ghost"
+              type="text"
               value={store.filter}
-              onInput={(event) => setStore("filter", event.currentTarget.value)}
+              onChange={(v) => setStore("filter", v)}
               placeholder={language.t("settings.shortcuts.search.placeholder")}
               spellcheck={false}
               autocorrect="off"
               autocomplete="off"
               autocapitalize="off"
-              aria-label={language.t("settings.shortcuts.search.placeholder")}
+              class="flex-1"
             />
             <Show when={store.filter}>
-              <IconButtonV2
-                type="button"
-                variant="ghost-muted"
-                size="small"
-                class="settings-v2-tab-search-clear"
-                icon={<IconV2 name="close" size="large" class="text-v2-icon-icon-muted" />}
-                onClick={() => setStore("filter", "")}
-              />
+              <IconButton icon="circle-x" variant="ghost" onClick={() => setStore("filter", "")} />
             </Show>
           </div>
         </div>
-        <div class="settings-v2-tab-body">{groups}</div>
-      </>
-    </Show>
+      </div>
+      {groups}
+    </div>
   )
 }

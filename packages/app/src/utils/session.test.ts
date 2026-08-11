@@ -36,6 +36,14 @@ describe("normalizeSessionInfo", () => {
       revert: { messageID: "message-1", partID: "part-1", snapshot: "snapshot" },
     })
   })
+
+  test("supplies timestamped titles for untitled current sessions", () => {
+    const root = currentSession("session-1")
+    const child = currentSession("session-2", "session-1")
+
+    expect(normalizeSessionInfo(root).title).toBe("New session - 1970-01-01T00:00:00.000Z")
+    expect(normalizeSessionInfo(child).title).toBe("Child session - 1970-01-01T00:00:00.000Z")
+  })
 })
 
 describe("listAllSessions", () => {
@@ -89,6 +97,18 @@ function sessionInfo(id: string, archived = false) {
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 1, updated: 1, archived: archived ? 2 : undefined },
     title: id,
+    location: { directory: "/repo" },
+  } as SessionInfo
+}
+
+function currentSession(id: string, parentID?: string) {
+  return {
+    id,
+    parentID,
+    projectID: "project-1",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
     location: { directory: "/repo" },
   } as SessionInfo
 }

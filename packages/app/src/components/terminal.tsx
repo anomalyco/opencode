@@ -382,7 +382,11 @@ export const Terminal = (props: TerminalProps) => {
 
     event.preventDefault()
     event.stopImmediatePropagation()
-    platform.openLink(text)
+    if (URL.canParse(text) && new URL(text).protocol === "file:" && platform.openLocalFile) {
+      platform.openLocalFile(text)
+      return
+    }
+    platform.openExternal(text)
   }
 
   onMount(() => {
@@ -569,23 +573,16 @@ export const Terminal = (props: TerminalProps) => {
           if (!result) return
           if (result.response.status === 200 && result.data?.ticket) return result.data.ticket
           if (result.response.status === 404 || result.response.status === 405) return
-          if (result.response.status === 403)
-            throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
-          throw new Error(`PTY connect ticket failed with ${result.response.status}`)
+          if (result.response.status === 403) throw new Error(language.t("terminal.connectTicket.csrfError"))
+          throw new Error(language.t("terminal.connectTicket.statusError", { status: result.response.status }))
         }
-        return sdk()
-          .api.pty.connectToken({
-            ptyID: id,
-            location: { directory },
-            "x-opencode-ticket": "1",
-          })
-          .then((result) => result.data.ticket)
-          .catch((err: unknown) => {
-            if (err && typeof err === "object" && "_tag" in err && err._tag === "ForbiddenError") {
-              throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
-            }
-            throw err
-          })
+        // return sdk()
+        //   .api.pty.connectToken({
+        //     ptyID: id,
+        //     location: { directory },
+        //     "x-opencode-ticket": "1",
+        //   })
+        //   .then((result) => result.data.ticket)
       }
 
       const retry = (err: unknown) => {
@@ -616,7 +613,7 @@ export const Terminal = (props: TerminalProps) => {
           return undefined
         })
         const protocol = await sdk().protocol
-        if (protocol === "v2" && !ticket) return
+        // if (protocol === "v2" && !ticket) return
         if (once.value) return
         if (disposed) return
 
@@ -744,6 +741,7 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
+      dir="ltr"
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}

@@ -269,13 +269,18 @@ export function createV2SessionReducer() {
           ...tool,
           executed: event.data.executed,
           providerState: event.data.state,
-          state: { status: "running", input: event.data.input, structured: {}, content: [] },
+          // structured: {}, content: []
+          state: { status: "running", input: event.data.input, metadata: {} },
           time: { ...tool.time, ran: event.created },
         }))
       case "session.tool.progress":
         return updateTool(source, event.data.assistantMessageID, event.data.callID, sessionID, (tool) =>
           tool.state.status === "running"
-            ? { ...tool, state: { ...tool.state, structured: event.data.structured, content: event.data.content } }
+            ? {
+                ...tool,
+                // state: { ...tool.state, structured: event.data.structured, content: event.data.content },
+                state: { ...tool.state, metadata: event.data.metadata },
+              }
             : tool,
         )
       case "session.tool.success":
@@ -288,9 +293,10 @@ export function createV2SessionReducer() {
             state: {
               status: "completed",
               input: tool.state.input,
-              structured: event.data.structured,
+              // structured: event.data.structured,
+              metadata: event.data.metadata,
               content: event.data.content,
-              result: event.data.result,
+              // result: event.data.result,
             },
             time: { ...tool.time, completed: event.created },
           }
@@ -305,10 +311,11 @@ export function createV2SessionReducer() {
             state: {
               status: "error",
               input: typeof tool.state.input === "string" ? {} : tool.state.input,
-              structured: tool.state.status === "running" ? tool.state.structured : {},
-              content: tool.state.status === "running" ? tool.state.content : [],
+              // structured: tool.state.status === "running" ? tool.state.structured : {},
+              metadata: event.data.metadata ?? (tool.state.status === "running" ? tool.state.metadata : {}),
+              content: event.data.content,
               error: event.data.error,
-              result: event.data.result,
+              // result: event.data.result,
             },
             time: { ...tool.time, completed: event.created },
           }

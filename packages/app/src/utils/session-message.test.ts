@@ -49,7 +49,7 @@ describe("normalizeSessionMessages", () => {
             state: {
               status: "completed",
               input: { filePath: "note.txt" },
-              structured: { title: "note.txt" },
+              metadata: { title: "note.txt" },
               content: [{ type: "text", text: "hello" }],
             },
             time: { created: 5, ran: 6, completed: 7 },
@@ -170,7 +170,7 @@ describe("normalizeSessionMessages", () => {
               status: "completed",
               input: { path: "/repo/README.md", oldString: "old", newString: "new" },
               content: [{ type: "text", text: "Edited file successfully" }],
-              structured: {
+              metadata: {
                 files: [
                   {
                     file: "README.md",

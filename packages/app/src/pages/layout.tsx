@@ -33,8 +33,7 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { toaster } from "@opencode-ai/ui/toast"
-import { setV2Toast, showToast, ToastRegion } from "@/utils/toast"
+import { dismissToast, setV2Toast, showToast, ToastRegion } from "@/utils/toast"
 import { useServerSDK } from "@/context/server-sdk"
 import { normalizeProjectInfo } from "@/context/global-sync/utils"
 import { clearWorkspaceTerminals } from "@/context/terminal"
@@ -45,7 +44,6 @@ import { Binary } from "@opencode-ai/core/util/binary"
 import { retry } from "@opencode-ai/core/util/retry"
 import { playSoundById } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
-import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
@@ -119,8 +117,7 @@ export default function LegacyLayout(props: ParentProps) {
   const notification = useNotification()
   const permission = usePermission()
   const navigate = useNavigate()
-  setNavigate(navigate)
-  const providers = useProviders()
+  const providers = useProviders(() => undefined)
   const dialog = useDialog()
   const command = useCommand()
   const theme = useTheme()
@@ -385,7 +382,7 @@ export default function LegacyLayout(props: ParentProps) {
       const dismissSessionAlert = (sessionKey: string) => {
         const toastId = toastBySession.get(sessionKey)
         if (toastId === undefined) return
-        toaster.dismiss(toastId)
+        dismissToast(toastId)
         toastBySession.delete(sessionKey)
         alertedAtBySession.delete(sessionKey)
       }
@@ -450,13 +447,13 @@ export default function LegacyLayout(props: ParentProps) {
             void playSoundById(settings.sounds.permissions())
           }
           if (settings.notifications.permissions()) {
-            void platform.notify(title, description, href)
+            void platform.notify(title, description, () => navigate(href))
           }
         }
 
         if (e.details.type === "question.asked") {
           if (settings.notifications.agent()) {
-            void platform.notify(title, description, href)
+            void platform.notify(title, description, () => navigate(href))
           }
         }
 
@@ -873,12 +870,17 @@ export default function LegacyLayout(props: ParentProps) {
   }
 
   async function archiveSession(session: Session) {
+    if ((await serverSDK().protocol) !== "v1") return
     const [store, setStore] = serverSync().child(session.directory)
     const sessions = store.session ?? []
     const index = sessions.findIndex((s) => s.id === session.id)
     const nextSession = sessions[index + 1] ?? sessions[index - 1]
 
-    await serverSDK().api.session.archive({ sessionID: session.id, directory: session.directory })
+    await serverSDK().client.session.update({
+      sessionID: session.id,
+      directory: session.directory,
+      time: { archived: Date.now() },
+    })
     setStore(
       produce((draft) => {
         const match = Binary.search(draft.session, session.id, (s) => s.id)
@@ -1312,7 +1314,13 @@ export default function LegacyLayout(props: ParentProps) {
     const name = next === getFilename(project.worktree) ? "" : next
 
     if (project.id && project.id !== "global") {
-      const result = await serverSDK().api.project.update({ projectID: project.id, name })
+      const sdk = serverSDK()
+      if ((await sdk.protocol) !== "v1") return
+      const result = await sdk.client.project
+        .update({ projectID: project.id, directory: project.worktree, name })
+        .then((response) => response.data)
+      if (!result) return
+      // const result = await serverSDK().api.project.update({ projectID: project.id, name })
       serverSync().set("project", (items) =>
         items.map((item) => (item.id === result.id ? normalizeProjectInfo(result) : item)),
       )
@@ -1464,7 +1472,7 @@ export default function LegacyLayout(props: ParentProps) {
       title: language.t("workspace.resetting.title"),
       description: language.t("workspace.resetting.description"),
     })
-    const dismiss = () => toaster.dismiss(progress)
+    const dismiss = () => dismissToast(progress)
 
     const sessions = await listAllSessions(serverSDK().api.session, { directory, order: "desc" }).catch(() => [])
 
@@ -1495,15 +1503,20 @@ export default function LegacyLayout(props: ParentProps) {
       return
     }
 
-    await Promise.all(
-      sessions
-        .filter((session) => session.time.archived === undefined)
-        .map((session) =>
-          serverSDK()
-            .api.session.archive({ sessionID: session.id, directory: session.directory })
-            .catch(() => undefined),
-        ),
-    )
+    if ((await serverSDK().protocol) === "v1")
+      await Promise.all(
+        sessions
+          .filter((session) => session.time.archived === undefined)
+          .map((session) =>
+            serverSDK()
+              .client.session.update({
+                sessionID: session.id,
+                directory: session.directory,
+                time: { archived: Date.now() },
+              })
+              .catch(() => undefined),
+          ),
+      )
 
     setBusy(directory, false)
     dismiss()
@@ -2252,7 +2265,7 @@ export default function LegacyLayout(props: ParentProps) {
       settingsKeybind={() => command.keybind("settings.open")}
       onOpenSettings={openSettings}
       helpLabel={() => language.t("sidebar.help")}
-      onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+      onOpenHelp={() => platform.openExternal("https://opencode.ai/desktop-feedback")}
       renderPanel={() =>
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }
@@ -2281,7 +2294,7 @@ export default function LegacyLayout(props: ParentProps) {
               data-component="sidebar-nav-desktop"
               classList={{
                 "hidden xl:block": true,
-                "absolute inset-y-0 left-0": true,
+                "absolute inset-y-0 start-0": true,
                 "z-10": true,
               }}
               style={{ width: `${side()}px` }}
@@ -2304,7 +2317,7 @@ export default function LegacyLayout(props: ParentProps) {
             <Show when={layout.sidebar.opened()}>
               <div
                 class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
-                style={{ left: `${side()}px` }}
+                style={{ "inset-inline-start": `${side()}px` }}
                 onPointerDown={() => setState("sizing", true)}
               >
                 <ResizeHandle
@@ -2323,8 +2336,8 @@ export default function LegacyLayout(props: ParentProps) {
             </Show>
 
             <div
-              class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
-              style={{ left: "calc(4rem + 12px)" }}
+              class="hidden xl:block pointer-events-none absolute top-0 end-0 z-0 border-t border-border-weaker-base"
+              style={{ "inset-inline-start": "calc(4rem + 12px)" }}
             />
 
             <div class="xl:hidden">
@@ -2342,9 +2355,9 @@ export default function LegacyLayout(props: ParentProps) {
                 aria-label={language.t("sidebar.nav.projectsAndSessions")}
                 data-component="sidebar-nav-mobile"
                 classList={{
-                  "@container fixed top-10 bottom-0 left-0 z-50 w-full max-w-[400px] overflow-hidden border-r border-border-weaker-base bg-background-base transition-transform duration-200 ease-out": true,
+                  "@container fixed top-10 bottom-0 start-0 z-50 w-full max-w-[400px] overflow-hidden border-e border-border-weaker-base bg-background-base transition-transform duration-200 ease-out": true,
                   "translate-x-0": layout.mobileSidebar.opened(),
-                  "-translate-x-full": !layout.mobileSidebar.opened(),
+                  "ltr:-translate-x-full rtl:translate-x-full": !layout.mobileSidebar.opened(),
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -2355,9 +2368,9 @@ export default function LegacyLayout(props: ParentProps) {
             <div
               classList={{
                 "absolute inset-0": true,
-                "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
+                "xl:inset-y-0 xl:end-0 xl:start-[var(--main-left)]": true,
                 "z-20": true,
-                "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
+                "transition-[inset-inline-start] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[inset-inline-start] motion-reduce:transition-none":
                   !state.sizing,
               }}
               style={{
@@ -2366,7 +2379,7 @@ export default function LegacyLayout(props: ParentProps) {
             >
               <main
                 classList={{
-                  "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
+                  "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-s xl:rounded-ss-[12px]": true,
                 }}
               >
                 <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
@@ -2377,9 +2390,10 @@ export default function LegacyLayout(props: ParentProps) {
 
             <div
               classList={{
-                "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
+                "hidden xl:flex absolute inset-y-0 start-16 z-30": true,
                 "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
+                "opacity-0 ltr:-translate-x-2 rtl:translate-x-2 pointer-events-none":
+                  !state.peeked || layout.sidebar.opened(),
                 "transition-[opacity,transform] motion-reduce:transition-none": true,
                 "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
                 "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
@@ -2401,14 +2415,14 @@ export default function LegacyLayout(props: ParentProps) {
 
             <div
               classList={{
-                "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
+                "hidden xl:block pointer-events-none absolute inset-y-0 end-0 z-25 overflow-hidden": true,
                 "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
+                "opacity-0 ltr:-translate-x-2 rtl:translate-x-2": !state.peeked || layout.sidebar.opened(),
                 "transition-[opacity,transform] motion-reduce:transition-none": true,
                 "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
                 "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
               }}
-              style={{ left: `calc(4rem + ${panel()}px)` }}
+              style={{ "inset-inline-start": `calc(4rem + ${panel()}px)` }}
             >
               <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
             </div>
@@ -2450,7 +2464,7 @@ function UpdateAvailableToast(props: {
 
   onCleanup(() => {
     if (toastId === undefined) return
-    toaster.dismiss(toastId)
+    dismissToast(toastId)
   })
 
   return null

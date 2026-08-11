@@ -1,6 +1,5 @@
 import { createEffect, onMount, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useNavigate } from "@solidjs/router"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { DebugBar } from "@/components/debug-bar"
 import { TabsInfoPopup } from "@/components/help-button"
@@ -10,7 +9,6 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { ServerConnection, useServer } from "@/context/server"
 import { useTabs } from "@/context/tabs"
-import { setNavigate } from "@/utils/notification-click"
 import { setV2Toast, showToast, ToastRegion } from "@/utils/toast"
 import {
   collectNewSessionDeepLinks,
@@ -22,9 +20,7 @@ import {
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
-  const navigate = useNavigate()
   useDeepLinks()
-  setNavigate(navigate)
   const [state, setState] = createStore({ debugTools: true })
 
   createEffect(() => setV2Toast(true))

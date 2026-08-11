@@ -12,6 +12,14 @@ const emptyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write
 const emptyModel: { id: string; providerID: string; variant?: string } = { id: "", providerID: "" }
 const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
+export function compareMessages(a: Pick<Message, "id" | "time">, b: Pick<Message, "id" | "time">) {
+  const left = messageKey(a)
+  const right = messageKey(b)
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+export const messageKey = (message: Pick<Message, "id" | "time">) => message.time.created + message.id
+
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
 }
@@ -304,7 +312,8 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
       return {
         status: "running" as const,
         input: normalizeToolInput(tool.name, tool.state.input),
-        metadata: normalizeToolMetadata(tool.name, tool.state.structured),
+        // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
+        metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
         time: { start },
       }
     }
@@ -313,7 +322,8 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
         status: "error" as const,
         input: normalizeToolInput(tool.name, tool.state.input),
         error: tool.state.error.message,
-        metadata: normalizeToolMetadata(tool.name, tool.state.structured),
+        // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
+        metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
         time: { start, end: tool.time.completed ?? start },
       }
     }
@@ -337,7 +347,8 @@ function toolPart(sessionID: string, messageID: string, tool: SessionMessageAssi
       input: normalizeToolInput(tool.name, tool.state.input),
       output: tool.state.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n"),
       title: tool.name,
-      metadata: normalizeToolMetadata(tool.name, tool.state.structured),
+      // metadata: normalizeToolMetadata(tool.name, tool.state.structured),
+      metadata: normalizeToolMetadata(tool.name, tool.state.metadata ?? {}),
       time: { start, end: tool.time.completed ?? start },
       attachments: attachments.length ? attachments : undefined,
     }

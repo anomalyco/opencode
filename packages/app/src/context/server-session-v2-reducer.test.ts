@@ -114,7 +114,7 @@ describe("v2 session reducer", () => {
         sessionID: "ses_1",
         assistantMessageID: "msg_assistant",
         callID: "call_1",
-        structured: {},
+        metadata: {},
         content: [{ type: "text", text: "done" }],
         executed: true,
       },
