@@ -16,6 +16,11 @@ const RESUME_EXHAUSTED = {
   message: "Execution was interrupted repeatedly and will not be resumed automatically.",
 } as const
 
+const RESUME_STALE = {
+  type: "aborted",
+  message: "Execution was interrupted too long ago to resume automatically.",
+} as const
+
 export interface Options {
   /**
    * Times a single turn may be resumed before it is terminalized instead.
@@ -24,9 +29,20 @@ export interface Options {
    * never accumulate: the budget is per-turn, not per-session.
    */
   readonly maxAttempts?: number
+  /**
+   * Claims whose turn showed no sign of life for longer than this are
+   * terminalized instead of resumed. Staleness is measured from the turn's
+   * last durable message activity (falling back to the claim time), NOT from
+   * when the turn started — a long healthy turn interrupted mid-stream is
+   * seconds stale at the next boot. The cap exists for the other case: a
+   * server that died mid-turn and boots hours later should not surprise the
+   * user by silently continuing a turn they have moved past.
+   */
+  readonly maxAgeMs?: number
 }
 
 const DEFAULT_MAX_ATTEMPTS = 10
+const DEFAULT_MAX_AGE_MS = 10 * 60 * 1000
 
 export interface Interface {
   /**
@@ -64,20 +80,33 @@ export const layer = (options?: Options) =>
       const bus = yield* Bus.Service
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+      const maxAgeMs = options?.maxAgeMs ?? DEFAULT_MAX_AGE_MS
 
-      const resumeOne = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+      const terminalize = (sessionID: SessionSchema.ID, error: typeof RESUME_EXHAUSTED | typeof RESUME_STALE) =>
+        // The release hook clears the claim and resets the counter atomically
+        // with the terminal event.
+        bus.publish(SessionEvent.Execution.Failed, { sessionID, error }, { commit: () => store.release(sessionID) })
+
+      const resumeOne = Effect.fnUntraced(function* (claim: {
+        readonly sessionID: SessionSchema.ID
+        readonly claimedAt: number
+      }) {
+        const { sessionID, claimedAt } = claim
         // Durable before the resume runs, so a crash inside the resumed turn is
         // counted by the next sweep and the budget cannot be dodged.
         const attempts = yield* store.countResume(sessionID)
         if (attempts === undefined) return // the Session was deleted since listing
         if (attempts > maxAttempts) {
-          // Terminalize instead: the release hook clears the claim and resets the
-          // counter atomically with the terminal event.
-          yield* bus.publish(
-            SessionEvent.Execution.Failed,
-            { sessionID, error: RESUME_EXHAUSTED },
-            { commit: () => store.release(sessionID) },
-          )
+          yield* terminalize(sessionID, RESUME_EXHAUSTED)
+          return
+        }
+        // Staleness runs on the wall clock claims are written with (Date.now in
+        // the store), measured from the turn's last durable sign of life — not
+        // from when it started, so long healthy turns are not penalized.
+        const lastActivity = yield* store.lastActivityAt(sessionID)
+        const lastAlive = Math.max(claimedAt, lastActivity ?? 0)
+        if (Date.now() - lastAlive > maxAgeMs) {
+          yield* terminalize(sessionID, RESUME_STALE)
           return
         }
         yield* bus.publish(SessionEvent.Synthetic, {
@@ -101,7 +130,7 @@ export const layer = (options?: Options) =>
           const active = yield* execution.active
           // Sessions already draining in this process keep their claim; resuming
           // them would only inject a stray continuation into a live turn.
-          const orphaned = (yield* store.listSuspended()).filter((sessionID) => !active.has(sessionID))
+          const orphaned = (yield* store.listSuspended()).filter((claim) => !active.has(claim.sessionID))
           yield* Effect.forEach(orphaned, resumeOne, { concurrency: "unbounded", discard: true })
         }),
       })

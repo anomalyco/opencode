@@ -10,6 +10,8 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionMessageTable } from "@opencode-ai/core/session/sql"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { UserInterruptedError } from "@opencode-ai/core/session/error"
@@ -17,7 +19,7 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
+import { Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Schema, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -63,7 +65,7 @@ describe("SessionExecution lifecycle", () => {
       // tool call and spawns a fresh child instead.
       yield* seedSessions(database, [child], { time_suspended: Date.now(), parent_id: parent })
 
-      expect(yield* store.listSuspended()).toEqual([parent])
+      expect((yield* store.listSuspended()).map((claim) => claim.sessionID)).toEqual([parent])
 
       // The sweep clears orphaned child claims outright; parents keep theirs.
       yield* store.releaseChildClaims
@@ -262,6 +264,62 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("terminalizes a stale claim instead of resuming a turn the user has moved past", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_resume_stale")
+      // A claim from a process that died an hour ago, with no message activity since.
+      yield* seedSessions(database, [sessionID], { time_suspended: Date.now() - 60 * 60 * 1000 })
+
+      const drained: string[] = []
+      const failures: SessionEvent.Execution.Failed[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID: id }) => Effect.sync(() => void drained.push(id)),
+        { maxAgeMs: 10 * 60 * 1000 },
+      )
+      const restart = Context.get(context, SessionRestart.Service)
+      yield* bus.project(SessionEvent.Execution.Failed, (event) => Effect.sync(() => void failures.push(event)))
+
+      yield* restart.resumeSuspendedSessions
+      expect(drained).toEqual([])
+      expect(failures.map((event) => event.data.error)).toEqual([
+        { type: "aborted", message: "Execution was interrupted too long ago to resume automatically." },
+      ])
+      // The terminal released the claim and reset the counter atomically.
+      expect(yield* claims(database)).toEqual({ [sessionID]: false })
+      expect(yield* attempts(database, sessionID)).toBe(0)
+    }),
+  )
+
+  it.effect("staleness follows the turn's last durable activity, not when it started", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_resume_long_turn")
+      // A long-running turn: claimed an hour ago, but it was still writing
+      // durable message activity moments before the process died.
+      yield* seedSessions(database, [sessionID], { time_suspended: Date.now() - 60 * 60 * 1000 })
+      yield* seedMessage(database, sessionID, Date.now())
+
+      const draining = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Deferred.succeed(draining, undefined), {
+        maxAgeMs: 10 * 60 * 1000,
+      })
+      const execution = Context.get(context, SessionExecution.Service)
+      const restart = Context.get(context, SessionRestart.Service)
+
+      yield* restart.resumeSuspendedSessions
+      yield* Deferred.await(draining)
+      yield* execution.awaitIdle(sessionID)
+      expect((yield* claims(database))[sessionID]).toBe(false)
+    }),
+  )
+
   it.effect("the sweep leaves Sessions already draining in this process untouched", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -320,6 +378,26 @@ function seedSessions(
       .run()
       .pipe(Effect.orDie)
   })
+}
+
+/** Seeds one durable message row whose time_updated is the Session's "last sign of life". */
+function seedMessage(database: Database.Service["Service"], sessionID: Session.ID, updatedAt: number) {
+  const id = SessionMessage.ID.make(`msg_${sessionID}`)
+  const {
+    id: _,
+    type,
+    ...data
+  } = Schema.encodeSync(SessionMessage.Info)({
+    id,
+    type: "synthetic",
+    text: "durable activity",
+    time: { created: DateTime.makeUnsafe(updatedAt) },
+  })
+  return database.db
+    .insert(SessionMessageTable)
+    .values({ id, session_id: sessionID, type, seq: 0, time_created: updatedAt, time_updated: updatedAt, data })
+    .run()
+    .pipe(Effect.orDie)
 }
 
 function claims(database: Database.Service["Service"]) {

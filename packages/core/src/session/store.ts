@@ -18,11 +18,14 @@ export interface Interface {
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
   /**
-   * Top-level Sessions holding an execution claim. Child (subagent) Sessions
-   * are excluded: a resumed parent re-runs its tool call and spawns fresh
-   * children, so resuming orphaned children would duplicate their work.
+   * Top-level Sessions holding an execution claim, with when each claim was
+   * written. Child (subagent) Sessions are excluded: a resumed parent re-runs
+   * its tool call and spawns fresh children, so resuming orphaned children
+   * would duplicate their work.
    */
-  readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
+  readonly listSuspended: () => Effect.Effect<
+    ReadonlyArray<{ readonly sessionID: Session.ID; readonly claimedAt: number }>
+  >
   /**
    * Records the execution claim: the durable write-ahead intent that a turn is
    * (or was) in flight. Set when execution starts; a claim that survives to the
@@ -34,8 +37,8 @@ export interface Interface {
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
   /**
    * Clears orphaned child (subagent) claims. Children are never resumed
-   * independently, so a dead child's claim is noise no terminal will ever
-   * release.
+   * independently, so no terminal is otherwise coming to release a dead
+   * child's claim.
    */
   readonly releaseChildClaims: Effect.Effect<void>
   /**
@@ -43,6 +46,14 @@ export interface Interface {
    * total — or undefined when the Session no longer exists.
    */
   readonly countResume: (sessionID: Session.ID) => Effect.Effect<number | undefined>
+  /**
+   * When the Session's messages last changed, or undefined for an empty
+   * Session. Message rows update at durable part boundaries as a drain runs
+   * (streaming deltas are ephemeral), so this is the coarse "last sign of
+   * life" clock behind the resume staleness policy. Event persistence is
+   * opt-in, so this deliberately reads messages, not the event log.
+   */
+  readonly lastActivityAt: (sessionID: Session.ID) => Effect.Effect<number | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStore") {}
@@ -77,13 +88,13 @@ const layer = Layer.effect(
       }),
       listSuspended: Effect.fn("SessionStore.listSuspended")(function* () {
         return yield* db
-          .select({ sessionID: SessionTable.id })
+          .select({ sessionID: SessionTable.id, claimedAt: SessionTable.time_suspended })
           .from(SessionTable)
           .where(and(isNotNull(SessionTable.time_suspended), isNull(SessionTable.parent_id)))
           .all()
           .pipe(
             Effect.orDie,
-            Effect.map((rows) => rows.map((row) => row.sessionID)),
+            Effect.map((rows) => rows.map((row) => ({ sessionID: row.sessionID, claimedAt: row.claimedAt ?? 0 }))),
           )
       }),
       claim: Effect.fn("SessionStore.claim")(function* (sessionID) {
@@ -124,6 +135,15 @@ const layer = Layer.effect(
           .get()
           .pipe(Effect.orDie)
         return row?.attempts
+      }),
+      lastActivityAt: Effect.fn("SessionStore.lastActivityAt")(function* (sessionID) {
+        const row = yield* db
+          .select({ updatedAt: sql<number | null>`max(${SessionMessageTable.time_updated})` })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        return row?.updatedAt ?? undefined
       }),
     })
   }),
