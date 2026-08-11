@@ -3031,7 +3031,7 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string }) {
   const [hover, setHover] = createSignal(false)
   const input = createMemo(() => Object.entries(props.call.input ?? {}))
   const expandable = createMemo(() => input().length > 0 || Boolean(props.error))
-  const labelWidth = createMemo(() => Math.min(16, Math.max(8, ...input().map(([key]) => key.length + 2))))
+  const title = createMemo(() => `↳ ${props.call.tool}${props.call.status === "error" ? " (failed)" : ""}`)
 
   return (
     <box
@@ -3054,15 +3054,15 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string }) {
               : theme.text.subdued
         }
       >
-        {executeCallSummary(props.call)}
+        {expanded() ? title() : executeCallSummary(props.call)}
       </text>
       <Show when={expanded()}>
-        <box paddingLeft={2} paddingTop={1} gap={1}>
+        <box paddingLeft={2} paddingTop={1}>
           <For each={input()}>
             {([key, value]) => (
               <box flexDirection="row">
-                <text width={labelWidth()} flexShrink={0} fg={theme.text.subdued}>
-                  {key}
+                <text flexShrink={0} fg={theme.text.subdued}>
+                  {key}:{" "}
                 </text>
                 <text flexGrow={1} wrapMode="word" fg={theme.text.default}>
                   {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
@@ -3073,8 +3073,8 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string }) {
           <Show when={props.error}>
             {(error) => (
               <box flexDirection="row">
-                <text width={labelWidth()} flexShrink={0} fg={theme.text.feedback.error.default}>
-                  error
+                <text flexShrink={0} fg={theme.text.feedback.error.default}>
+                  error:{" "}
                 </text>
                 <text flexGrow={1} wrapMode="word" fg={theme.text.feedback.error.default}>
                   {error()}
