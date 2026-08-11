@@ -56,7 +56,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       draft.update("parallel", (integration) => (integration.name = "Parallel"))
       draft.method.update({
         integrationID: "parallel",
-        method: { type: "key", label: "API key (optional)" },
+        method: { type: "key" },
       })
       draft.method.update({
         integrationID: "parallel",

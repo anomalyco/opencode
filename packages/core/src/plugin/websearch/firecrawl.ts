@@ -41,7 +41,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       draft.update("firecrawl", (integration) => (integration.name = "Firecrawl"))
       draft.method.update({
         integrationID: "firecrawl",
-        method: { type: "key", label: "API key (optional)" },
+        method: { type: "key" },
       })
       draft.method.update({
         integrationID: "firecrawl",

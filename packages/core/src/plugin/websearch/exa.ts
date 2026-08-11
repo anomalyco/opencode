@@ -30,7 +30,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       draft.update("exa", (integration) => (integration.name = "Exa"))
       draft.method.update({
         integrationID: "exa",
-        method: { type: "key", label: "API key (optional)" },
+        method: { type: "key" },
       })
       draft.method.update({
         integrationID: "exa",
