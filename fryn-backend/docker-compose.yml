@@ -1,0 +1,13 @@
+services:
+  fryn-backend:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    env_file:
+      - .env
+    volumes:
+      - fryn_data:/data
+
+volumes:
+  fryn_data:
