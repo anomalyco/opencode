@@ -72,7 +72,7 @@ import { DialogOpen } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
 import { sessionTabsFitVertically } from "./ui/layout"
 import { ThemeErrorToast } from "./component/theme-error-toast"
-import { ThemeProvider, useTheme, useThemes } from "./context/theme"
+import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
 import { PromptHistoryProvider } from "./prompt/history"
@@ -372,7 +372,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                 <DataProvider>
                                                   <LocationProvider>
                                                     <SessionTabsProvider>
-                                                      <ThemeProvider mode={mode}>
+                                                      <ThemeProvider
+                                                        mode={mode}
+                                                        source={createThemeSource(global.config)}
+                                                      >
                                                         <ThemeErrorToast />
                                                         <LocalProvider>
                                                           <PromptStashProvider>

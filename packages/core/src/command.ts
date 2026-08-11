@@ -11,6 +11,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { Config } from "./config"
 import { Location } from "./location"
 import { ShellSelect } from "./shell/select"
+import { Global } from "@opencode-ai/util/global"
 
 export const Info = Command.Info
 export type Info = Command.Info
@@ -61,6 +62,7 @@ export const layer = (options?: ShellSelect.Options) =>
       const processes = yield* AppProcess.Service
       const config = yield* Config.Service
       const location = yield* Location.Service
+      const global = yield* Global.Service
       const state = State.create<Data, Draft>({
         name: "command",
         initial: () => ({ commands: new Map() }),
@@ -111,6 +113,7 @@ export const layer = (options?: ShellSelect.Options) =>
               location,
               processes,
               shell: options,
+              bin: global.bin,
             })
 
           const prompt = (yield* mcp.prompts()).find(
@@ -164,6 +167,7 @@ function evaluateTemplate(
     readonly location: Location.Info
     readonly processes: AppProcess.Interface
     readonly shell?: ShellSelect.Options
+    readonly bin: string
   },
 ) {
   return Effect.gen(function* () {
@@ -197,11 +201,16 @@ const evaluateShell = Effect.fnUntraced(function* (
     readonly location: Location.Info
     readonly processes: AppProcess.Interface
     readonly shell?: ShellSelect.Options
+    readonly bin: string
   },
 ) {
   const matches = Array.from(text.matchAll(shellRegex))
   if (matches.length === 0) return text
-  const shell = ShellSelect.preferred(Config.latest(yield* services.config.entries(), "shell"), services.shell)
+  const shell = ShellSelect.preferred(
+    Config.latest(yield* services.config.entries(), "shell"),
+    services.shell,
+    services.bin,
+  )
   const outputs = yield* Effect.forEach(
     matches,
     (match) => {
@@ -262,7 +271,7 @@ export function configured(options?: ShellSelect.Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [MCP.node, Bus.node, AppProcess.node, Config.node, Location.node],
+    deps: [MCP.node, Bus.node, AppProcess.node, Config.node, Location.node, Global.node],
   })
 }
 

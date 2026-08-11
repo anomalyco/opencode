@@ -4,6 +4,7 @@ import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
 import { Config } from "../../config"
 import { resolve } from "@opencode-ai/tui/config"
+import { Global } from "@opencode-ai/util/global"
 
 export default Runtime.handler(Commands.commands.mini, (input) =>
   Effect.gen(function* () {
@@ -16,6 +17,7 @@ export default Runtime.handler(Commands.commands.mini, (input) =>
       mismatch: "replace",
     })
     const config = yield* Config.Service
+    const global = yield* Global.Service
     const resolved = resolve(yield* config.get(), { terminalSuspend: process.platform !== "win32" })
     const fileSystem = yield* FileSystem.FileSystem
     const runServicePromise = Effect.runPromiseWith(Context.make(FileSystem.FileSystem, fileSystem))
@@ -39,6 +41,7 @@ export default Runtime.handler(Commands.commands.mini, (input) =>
         config: {
           update: (update) => runServicePromise(config.update(update)),
         },
+        paths: { home: global.home, state: global.state, log: global.log },
       }),
     )
   }),

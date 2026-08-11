@@ -5,6 +5,7 @@ import { Effect, Semaphore } from "effect"
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { migrations } from "./migration.gen"
 import schema from "./schema.gen"
+import { Global } from "@opencode-ai/util/global"
 
 type Database = EffectDrizzleSqlite.EffectSQLiteDatabase
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]
@@ -13,7 +14,7 @@ const lock = Semaphore.makeUnsafe(1)
 export type Migration = {
   id: string
   foreignKeys?: boolean
-  up: (tx: Transaction) => Effect.Effect<void, unknown>
+  up: (tx: Transaction) => Effect.Effect<void, unknown, Global.Service>
 }
 
 export function apply(db: Database) {
@@ -50,6 +51,7 @@ export function apply(db: Database) {
 
 export function applyOnly(db: Database, input: Migration[]) {
   return Effect.gen(function* () {
+    const global = yield* Global.Service
     yield* db.run(
       sql`CREATE TABLE IF NOT EXISTS ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
     )
@@ -80,7 +82,7 @@ export function applyOnly(db: Database, input: Migration[]) {
       yield* Effect.logInfo("database migration started", { migration: migration.id })
       const apply = db.transaction((tx) =>
         Effect.gen(function* () {
-          yield* migration.up(tx)
+          yield* migration.up(tx).pipe(Effect.provideService(Global.Service, global))
           yield* tx.run(
             sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
           )

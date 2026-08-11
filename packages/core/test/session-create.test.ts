@@ -543,11 +543,10 @@ describe("Session.create", () => {
         Effect.promise(() => tmpdir()),
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
-      const targetDatabase = Database.layer({ path: path.join(tmp.path, "target.sqlite") })
       const targetLayer = AppNodeBuilder.build(
         LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node]),
         [
-          [Database.node, targetDatabase],
+          [Database.node, Database.configured({ path: path.join(tmp.path, "target.sqlite") })],
           [Bus.node, Bus.configured({ persist: true })],
         ],
       )

@@ -9,6 +9,7 @@ import { Bus } from "./bus"
 import { Location } from "./location"
 import { PtyID } from "./pty/schema"
 import { ShellSelect } from "./shell/select"
+import { Global } from "@opencode-ai/util/global"
 import { lazy } from "./util/lazy"
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
@@ -96,6 +97,7 @@ export const layer = (options?: ShellSelect.Options) =>
       const bus = yield* Bus.Service
       const location = yield* Location.Service
       const config = yield* Config.Service
+      const global = yield* Global.Service
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
       const sessions = new Map<PtyID, Active>()
@@ -165,7 +167,8 @@ export const layer = (options?: ShellSelect.Options) =>
 
       const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
         const id = PtyID.ascending()
-        const command = input.command || ShellSelect.preferred(Config.latest(yield* config.entries(), "shell"), options)
+        const command =
+          input.command || ShellSelect.preferred(Config.latest(yield* config.entries(), "shell"), options, global.bin)
         const args = ShellSelect.login(command) ? [...(input.args ?? []), "-l"] : [...(input.args ?? [])]
         const cwd = input.cwd || location.directory
         const env = {
@@ -315,7 +318,11 @@ export const layer = (options?: ShellSelect.Options) =>
   )
 
 export function configured(options?: ShellSelect.Options) {
-  return makeLocationNode({ service: Service, layer: layer(options), deps: [Bus.node, Location.node, Config.node] })
+  return makeLocationNode({
+    service: Service,
+    layer: layer(options),
+    deps: [Bus.node, Location.node, Config.node, Global.node],
+  })
 }
 
 export const node = configured()

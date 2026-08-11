@@ -544,6 +544,7 @@ export const layer = (options?: Options) =>
       const fs = yield* FSUtil.Service
       const bus = yield* Bus.Service
       const app = yield* App.Metadata
+      const global = yield* Global.Service
       const http = HttpClient.filterStatusOk(
         (yield* HttpClient.HttpClient).pipe(
           HttpClient.retryTransient({
@@ -558,7 +559,7 @@ export const layer = (options?: Options) =>
       const fetch = options?.fetch ?? true
       const userAgent = App.useragent(app)
       const filepath = path.join(
-        Global.Path.cache,
+        global.cache,
         source === "https://models.opencode.ai" ? "models.json" : `models-${Hash.fast(source)}.json`,
       )
       const ttl = Duration.minutes(5)
@@ -660,7 +661,7 @@ export function configured(options?: Options) {
   return makeGlobalNode({
     service: Service,
     layer: layer(options),
-    deps: [FSUtil.node, Bus.node, App.node, httpClient],
+    deps: [FSUtil.node, Bus.node, App.node, Global.node, httpClient],
   })
 }
 

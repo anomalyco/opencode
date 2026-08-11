@@ -34,15 +34,15 @@ function stat(file: string) {
   return statSync(file, { throwIfNoEntry: false }) ?? undefined
 }
 
-function full(file: string, options?: Options) {
+function full(file: string, options?: Options, bin?: string) {
   if (process.platform !== "win32") return file
   const shell = FSUtil.windowsPath(file)
   if (path.win32.dirname(shell) !== ".") {
-    if (shell.startsWith("/") && name(shell) === "bash") return gitbash(options) || shell
+    if (shell.startsWith("/") && name(shell) === "bash") return gitbash(options, bin) || shell
     return shell
   }
-  if (name(shell) === "bash") return gitbash(options) || which(shell) || shell
-  return which(shell) || shell
+  if (name(shell) === "bash") return gitbash(options, bin) || which(shell, undefined, bin) || shell
+  return which(shell, undefined, bin) || shell
 }
 
 function meta(file: string) {
@@ -57,21 +57,26 @@ function rooted(file: string) {
   return path.isAbsolute(FSUtil.windowsPath(file))
 }
 
-function resolve(file: string, options?: Options) {
-  const shell = full(file, options)
+function resolve(file: string, options?: Options, bin?: string) {
+  const shell = full(file, options, bin)
   if (rooted(shell)) {
     if (stat(shell)?.isFile()) return shell
     return
   }
-  return which(shell) ?? undefined
+  return which(shell, undefined, bin) ?? undefined
 }
 
-function win(options?: Options) {
+function win(options?: Options, bin?: string) {
   return Array.from(
     new Set(
-      [which("pwsh"), which("powershell"), gitbash(options), process.env.COMSPEC || "cmd.exe"]
+      [
+        which("pwsh", undefined, bin),
+        which("powershell", undefined, bin),
+        gitbash(options, bin),
+        process.env.COMSPEC || "cmd.exe",
+      ]
         .filter((item): item is string => Boolean(item))
-        .map((file) => full(file, options)),
+        .map((file) => full(file, options, bin)),
     ),
   )
 }
@@ -82,27 +87,27 @@ async function unix() {
   return ["/bin/bash", "/bin/zsh", "/bin/sh"]
 }
 
-function select(file: string | undefined, options?: Options, opts?: { acceptable?: boolean }) {
+function select(file: string | undefined, options?: Options, opts?: { acceptable?: boolean }, bin?: string) {
   if (file && (!opts?.acceptable || ok(file))) {
-    const shell = resolve(file, options)
+    const shell = resolve(file, options, bin)
     if (shell) return shell
   }
-  if (process.platform === "win32") return win(options)[0]
-  return fallback()
+  if (process.platform === "win32") return win(options, bin)[0]
+  return fallback(bin)
 }
 
-export function gitbash(options?: Options) {
+export function gitbash(options?: Options, bin?: string) {
   if (process.platform !== "win32") return
   if (options?.gitbash) return options.gitbash
-  const git = which("git")
+  const git = which("git", undefined, bin)
   if (!git) return
   const file = path.join(git, "..", "..", "bin", "bash.exe")
   if (stat(file)?.size) return file
 }
 
-function fallback() {
+function fallback(bin?: string) {
   if (process.platform === "darwin") return "/bin/zsh"
-  const bash = which("bash")
+  const bash = which("bash", undefined, bin)
   if (bash) return bash
   return "/bin/sh"
 }
@@ -120,12 +125,12 @@ export function ps(file: string) {
   return meta(file)?.ps === true
 }
 
-function info(file: string, options?: Options): Item {
-  const item = full(file, options)
+function info(file: string, options?: Options, bin?: string): Item {
+  const item = full(file, options, bin)
   const n = name(item)
   return {
     path: item,
-    name: resolve(n, options) ? n : item,
+    name: resolve(n, options, bin) ? n : item,
     acceptable: ok(item),
   }
 }
@@ -139,30 +144,38 @@ export function args(file: string, command: string) {
   return ["-c", command]
 }
 
-let defaultPreferred: string | undefined
-let defaultAcceptable: string | undefined
+const defaultPreferred = new Map<string, string>()
+const defaultAcceptable = new Map<string, string>()
 
-export function preferred(configShell?: string, options?: Options) {
-  if (configShell) return select(configShell, options)
-  if (options?.gitbash) return select(process.env.SHELL, options)
-  defaultPreferred ??= select(process.env.SHELL)
-  return defaultPreferred
+export function preferred(configShell?: string, options?: Options, bin?: string) {
+  if (configShell) return select(configShell, options, undefined, bin)
+  if (options?.gitbash) return select(process.env.SHELL, options, undefined, bin)
+  const key = bin ?? ""
+  const cached = defaultPreferred.get(key)
+  if (cached) return cached
+  const value = select(process.env.SHELL, undefined, undefined, bin) ?? fallback(bin)
+  defaultPreferred.set(key, value)
+  return value
 }
 preferred.reset = () => {
-  defaultPreferred = undefined
+  defaultPreferred.clear()
 }
 
-export function acceptable(configShell?: string, options?: Options) {
-  if (configShell) return select(configShell, options, { acceptable: true })
-  if (options?.gitbash) return select(process.env.SHELL, options, { acceptable: true })
-  defaultAcceptable ??= select(process.env.SHELL, undefined, { acceptable: true })
-  return defaultAcceptable
+export function acceptable(configShell?: string, options?: Options, bin?: string) {
+  if (configShell) return select(configShell, options, { acceptable: true }, bin)
+  if (options?.gitbash) return select(process.env.SHELL, options, { acceptable: true }, bin)
+  const key = bin ?? ""
+  const cached = defaultAcceptable.get(key)
+  if (cached) return cached
+  const value = select(process.env.SHELL, undefined, { acceptable: true }, bin) ?? fallback(bin)
+  defaultAcceptable.set(key, value)
+  return value
 }
 acceptable.reset = () => {
-  defaultAcceptable = undefined
+  defaultAcceptable.clear()
 }
 
-export async function list(options?: Options): Promise<Item[]> {
-  const shells = process.platform === "win32" ? win(options) : await unix()
-  return shells.filter((shell) => resolve(shell, options)).map((shell) => info(shell, options))
+export async function list(options?: Options, bin?: string): Promise<Item[]> {
+  const shells = process.platform === "win32" ? win(options, bin) : await unix()
+  return shells.filter((shell) => resolve(shell, options, bin)).map((shell) => info(shell, options, bin))
 }

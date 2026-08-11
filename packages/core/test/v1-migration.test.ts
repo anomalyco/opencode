@@ -18,9 +18,14 @@ import { tmpdir } from "./fixture/tmpdir"
 import path from "path"
 
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
-const run = <A, E>(effect: Effect.Effect<A, E, SqlClient | Scope.Scope>) =>
+const run = <A, E>(effect: Effect.Effect<A, E, SqlClient | Scope.Scope | Global.Service>) =>
   Effect.runPromise(
-    Effect.scoped(effect.pipe(Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })))),
+    Effect.scoped(
+      effect.pipe(
+        Effect.provideService(Global.Service, Global.make({ data: path.join(process.cwd(), ".test-data") })),
+        Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })),
+      ),
+    ),
   )
 
 const session = (
@@ -935,6 +940,7 @@ describe("V1Migration database workflow", () => {
     await database(
       Effect.gen(function* () {
         const { db } = yield* Database.Service
+        const global = yield* Global.Service
         yield* db.run(
           sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_orphan', 'missing-project', 'orphan', '/tmp/orphan', 'Orphan', '1', 1, 2)`,
         )
@@ -944,7 +950,7 @@ describe("V1Migration database workflow", () => {
           project_id: "global",
         })
         expect(yield* db.get(sql`SELECT worktree FROM project WHERE id = 'global'`)).toEqual({
-          worktree: path.parse(Global.Path.data).root,
+          worktree: path.parse(global.data).root,
         })
         expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toEqual({
           value: '{"phase":"completed"}',

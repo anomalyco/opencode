@@ -143,7 +143,9 @@ export const layer = (options?: ShellSelect.Options) =>
       })
 
       const resolve = () =>
-        config.entries().pipe(Effect.map((entries) => ShellSelect.preferred(Config.latest(entries, "shell"), options)))
+        config
+          .entries()
+          .pipe(Effect.map((entries) => ShellSelect.preferred(Config.latest(entries, "shell"), options, global.bin)))
 
       const name = () => resolve().pipe(Effect.map(ShellSelect.name))
 

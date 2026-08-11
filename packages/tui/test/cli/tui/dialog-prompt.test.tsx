@@ -58,7 +58,7 @@ async function mountPrompt(input: {
       >
         <ConfigProvider config={resolvedConfig}>
           <Keymap.Provider>
-            <ThemeProvider mode="dark">
+            <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
               <ToastProvider>
                 <DialogProvider>
                   <Prompt />

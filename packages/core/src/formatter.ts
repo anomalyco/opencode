@@ -7,6 +7,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Npm } from "@opencode-ai/util/npm"
 import { AppProcess } from "@opencode-ai/util/process"
+import { Global } from "@opencode-ai/util/global"
 import { Config } from "./config"
 import { Location } from "./location"
 import { make, type Info } from "./formatter/builtins"
@@ -25,6 +26,7 @@ const layer = Layer.effect(
     const location = yield* Location.Service
     const npm = yield* Npm.Service
     const processes = yield* AppProcess.Service
+    const global = yield* Global.Service
     const commands = new Map<string, string[] | false>()
     let formatters: Info[] = []
 
@@ -42,6 +44,7 @@ const layer = Layer.effect(
           fs,
           npm,
           processes,
+          bin: global.bin,
         })
         formatters = builtIns
         if (configured === true) return
@@ -122,5 +125,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Config.node, FSUtil.node, Location.node, Npm.node, AppProcess.node],
+  deps: [Config.node, FSUtil.node, Location.node, Npm.node, AppProcess.node, Global.node],
 })

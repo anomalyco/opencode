@@ -40,16 +40,19 @@ const databaseLayer = Layer.effect(
 )
 
 export function layer(options: Options = { path: ":memory:" }) {
-  return Layer.suspend(() => {
-    const provide = (filename: string) => databaseLayer.pipe(Layer.provide(sqliteLayer({ filename })))
-    const filename = options.path ?? ":memory:"
-    if (filename === ":memory:" || isAbsolute(filename)) return provide(filename)
-    return provide(join(Global.Path.data, filename))
-  })
+  return Layer.unwrap(
+    Effect.gen(function* () {
+      const global = yield* Global.Service
+      const provide = (filename: string) => databaseLayer.pipe(Layer.provide(sqliteLayer({ filename })))
+      const filename = options.path ?? ":memory:"
+      if (filename === ":memory:" || isAbsolute(filename)) return provide(filename)
+      return provide(join(global.data, filename))
+    }),
+  )
 }
 
 export function configured(options?: Options) {
-  return makeGlobalNode({ service: Service, layer: layer(options), deps: [] })
+  return makeGlobalNode({ service: Service, layer: layer(options), deps: [Global.node] })
 }
 
 export const node = configured({ path: ":memory:" })

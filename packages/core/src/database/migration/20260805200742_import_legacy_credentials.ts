@@ -34,7 +34,10 @@ const wellKnownSourcesKey = "wellknown:sources"
 const migration: DatabaseMigration.Migration = {
   id: "20260805200742_import_legacy_credentials",
   up(tx) {
-    return importLegacyCredentials(tx, path.join(Global.Path.data, "auth.json"))
+    return Effect.gen(function* () {
+      const global = yield* Global.Service
+      return yield* importLegacyCredentials(tx, path.join(global.data, "auth.json"))
+    })
   },
 }
 

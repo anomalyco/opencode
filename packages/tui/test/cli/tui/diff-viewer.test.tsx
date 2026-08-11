@@ -224,7 +224,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
         <ConfigProvider config={config}>
           <Keymap.Provider>
             <ToastProvider>
-              <ThemeProvider mode="dark">
+              <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
                 <DialogProvider>
                   <Content />
                 </DialogProvider>

@@ -467,10 +467,11 @@ function updateProgress(progress: Progress) {
   if (runtimeState.status === "running") runtimeState = { status: "running", progress }
 }
 
-export function run(options: Options = {}): Effect.Effect<RunResult, never, Database.Service> {
+export function run(options: Options = {}): Effect.Effect<RunResult, never, Database.Service | Global.Service> {
   return lock.withPermit(
     Effect.gen(function* () {
       const { db } = yield* Database.Service
+      const global = yield* Global.Service
       const state = yield* readState(db)
       if (state?.phase === "completed") return { status: "completed" as const }
       if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
@@ -478,7 +479,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
         const now = Date.now()
         yield* db.run(sql`
           INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, sandboxes)
-          VALUES (${Project.ID.global}, ${path.parse(Global.Path.data).root}, ${now}, ${now}, '[]')
+          VALUES (${Project.ID.global}, ${path.parse(global.data).root}, ${now}, ${now}, '[]')
         `)
         if (state === undefined)
           yield* db
@@ -492,7 +493,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
               }),
             )
             .pipe(Effect.orDie)
-        const sourceTotal = yield* countNextSessions(nextPath(options))
+        const sourceTotal = yield* countNextSessions(nextPath(options, global.data))
         const legacyTotal = (yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session`))?.value ?? 0
         const cursor = state?.phase === "sessions" ? state.cursor : undefined
         const migrated =
@@ -502,7 +503,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
             : 0
         const denominator = sourceTotal + legacyTotal
         updateProgress({ label: "Migrating sessions", numerator: migrated, denominator })
-        yield* importNextDatabase(db, nextPath(options), (completed) => {
+        yield* importNextDatabase(db, nextPath(options, global.data), (completed) => {
           updateProgress({ label: "Migrating sessions", numerator: migrated + completed, denominator })
         })
         updateProgress({ label: "Migrating sessions", numerator: migrated + sourceTotal, denominator })
@@ -621,10 +622,10 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
   )
 }
 
-function nextPath(options: Options) {
+function nextPath(options: Options, data: string) {
   if (options.nextDatabasePath) return options.nextDatabasePath
   if (process.env.OPENCODE_DB === ":memory:") return undefined
-  return path.join(Global.Path.data, "opencode-next.db")
+  return path.join(data, "opencode-next.db")
 }
 
 function openNextDatabase(sourcePath: string) {
