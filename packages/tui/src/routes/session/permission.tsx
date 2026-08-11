@@ -537,7 +537,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
     selected: keys[0],
-    expanded: false,
+    expanded: props.fullscreen === true && tuiConfig.permission_prompt?.default_expanded === true,
   })
   const narrow = createMemo(() => dimensions().width < 80)
   const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
@@ -639,7 +639,7 @@ function Prompt<const T extends Record<string, string>>(props: {
         ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }
         : {
             top: 0,
-            maxHeight: 15,
+            maxHeight: tuiConfig.permission_prompt?.max_height ?? 15,
             bottom: 0,
             left: 0,
             right: 0,

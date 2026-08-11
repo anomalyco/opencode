@@ -57,6 +57,14 @@ export const Prompt = Schema.Struct({
     description: "Home prompt max width: a positive integer for a fixed cap, or 'auto' to scale with terminal width",
   }),
 }).annotate({ description: "Prompt size settings" })
+export const PermissionPrompt = Schema.Struct({
+  max_height: Schema.optional(PromptSize).annotate({
+    description: "Permission prompt max height when not fullscreen",
+  }),
+  default_expanded: Schema.optional(Schema.Boolean).annotate({
+    description: "Open the permission prompt in fullscreen mode by default",
+  }),
+}).annotate({ description: "Permission prompt size settings" })
 
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
@@ -67,6 +75,7 @@ export const Info = Schema.Struct({
   leader_timeout: Schema.optional(LeaderTimeout),
   attention: Schema.optional(Attention),
   prompt: Schema.optional(Prompt),
+  permission_prompt: Schema.optional(PermissionPrompt),
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
