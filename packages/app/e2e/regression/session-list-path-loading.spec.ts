@@ -16,8 +16,8 @@ test("shows loaded sessions before the directory path request resolves", async (
   const pathBlocked = new Promise<void>((resolve) => {
     releasePath = resolve
   })
-  await page.route("**/path?*", async (route) => {
-    if (!new URL(route.request().url()).searchParams.has("directory")) return route.fallback()
+  await page.route("**/api/path?*", async (route) => {
+    if (!new URL(route.request().url()).searchParams.has("location[directory]")) return route.fallback()
     await pathBlocked
     return route.fallback()
   })

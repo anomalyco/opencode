@@ -3,13 +3,21 @@ import * as Sentry from "@sentry/solid"
 import { I18nProvider } from "@opencode-ai/ui/context"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { File } from "@opencode-ai/session-ui/file"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router, useNavigate, useParams, useSearchParams } from "@solidjs/router"
+import {
+  type BaseRouterProps,
+  Navigate,
+  Route,
+  Router,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -29,6 +37,7 @@ import {
   Show,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
@@ -57,7 +66,8 @@ import { legacySessionHref, legacySessionServer, requireServerKey, sessionHref }
 import { createSessionLineage } from "@/pages/session/session-lineage"
 
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
-import { NewHome, LegacyHome } from "@/pages/home"
+import { NewHome } from "@/pages/home"
+import { LegacyHome } from "@/pages/home/legacy-home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
 
@@ -223,7 +233,37 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
-  return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
+  return (
+    <I18nProvider
+      value={{ locale: language.intl, layoutLocale: language.layoutLocale, t: language.t, plural: language.plural }}
+    >
+      {props.children}
+    </I18nProvider>
+  )
+}
+
+function LayoutCompatibility(props: ParentProps) {
+  const global = useGlobal()
+  const navigate = useNavigate()
+  const server = useServer()
+  const settings = useSettings()
+
+  createEffect(() => {
+    if (settings.general.newLayoutDesigns()) return
+    const current = server.current
+    if (!current) return
+    const protocol = global.ensureServerCtx(current).sdk.protocolKind()
+    if (protocol !== "v2") return
+    const next = global.servers.list().find((s) => {
+      if (ServerConnection.key(s) === ServerConnection.key(current)) return false
+      return global.ensureServerCtx(s).sdk.protocolKind() !== "v2"
+    })
+    if (!next) return
+    navigate("/")
+    queueMicrotask(() => server.setActive(ServerConnection.key(next)))
+  })
+
+  return <>{props.children}</>
 }
 
 declare global {
@@ -292,7 +332,7 @@ function DesktopCommands() {
     if (platform.platform === "desktop" && platform.exportDebugLogs) {
       commands.push({
         id: "logs.export",
-        title: "Export logs",
+        title: language.t("command.logs.export"),
         category: language.t("command.category.settings"),
         onSelect: () => {
           void platform.exportDebugLogs?.()
@@ -350,7 +390,12 @@ function DraftProviders(props: ParentProps) {
   )
 }
 
-export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
+export function AppBaseProviders(
+  props: ParentProps<{
+    locale?: Locale
+    onNativeTranslations?: Parameters<typeof LanguageProvider>[0]["onNativeTranslations"]
+  }>,
+) {
   return (
     <MetaProvider>
       <Font />
@@ -359,7 +404,7 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
           void window.api?.setTitlebar?.({ mode, scheme })
         }}
       >
-        <LanguageProvider locale={props.locale}>
+        <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>
           <UiI18nBridge>
             <ErrorBoundary
               fallback={(error) => {
@@ -370,9 +415,7 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
               <QueryProvider>
                 <WslServersProvider>
                   <DialogProvider>
-                    <MarkedProvider>
-                      <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                    </MarkedProvider>
+                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
                   </DialogProvider>
                 </WslServersProvider>
               </QueryProvider>

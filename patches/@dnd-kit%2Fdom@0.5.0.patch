@@ -1,0 +1,40 @@
+--- a/index.js
++++ b/index.js
+@@ -2195,6 +2195,17 @@
+       sensors,
+       modifiers
+     }));
++  }
++  get plugins() {
++    return super.plugins;
++  }
++  set plugins(plugins) {
++    super.plugins = [
++      ScrollListener,
++      Scroller,
++      StyleInjector,
++      ...plugins
++    ];
+   }
+ };
+ var _element_dec, _handle_dec, _c, _init5, _handle, _element;
+--- a/index.cjs
++++ b/index.cjs
+@@ -2196,6 +2196,17 @@
+       sensors,
+       modifiers
+     }));
++  }
++  get plugins() {
++    return super.plugins;
++  }
++  set plugins(plugins) {
++    super.plugins = [
++      ScrollListener,
++      Scroller,
++      StyleInjector,
++      ...plugins
++    ];
+   }
+ };
+ var _element_dec, _handle_dec, _c, _init5, _handle, _element;

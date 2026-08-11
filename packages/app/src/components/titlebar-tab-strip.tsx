@@ -1,4 +1,5 @@
-import { createEffect, createMemo, createResource, createRoot, For, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, createResource, createRoot, For, onCleanup, onMount, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
@@ -15,7 +16,10 @@ import { useCommand } from "@/context/command"
 import { useTabs } from "@/context/tabs"
 import { createTabPromptState } from "@/context/prompt"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { showToast } from "@/utils/toast"
 import { canStartTabDrag, isTabCloseTarget } from "./titlebar-tab-gesture"
+import { adjacentTabKey, mergeVisibleTabOrder } from "./titlebar-tab-order"
+import type { Session } from "@opencode-ai/sdk/v2"
 
 function SessionTabSlot(props: {
   tab: SessionTab
@@ -23,12 +27,12 @@ function SessionTabSlot(props: {
   index: () => number
   active: () => boolean
   forceTruncate: boolean
-  serverCtx: () => ServerCtx | undefined
+  session: () => Session | undefined
+  fallbackTitle?: string
+  onRename: (title: string) => Promise<void>
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
 }) {
-  const tabs = useTabs()
-  const language = useLanguage()
   const sortable = useSortable({
     get id() {
       return props.id
@@ -38,6 +42,47 @@ function SessionTabSlot(props: {
     },
   })
   let ref!: HTMLDivElement
+
+  return (
+    <div
+      ref={sortable.ref}
+      data-titlebar-tab-slot
+      data-tab-key={props.id}
+      data-active={props.active()}
+      class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
+    >
+      <TabNavItem
+        ref={(el) => {
+          ref = el
+        }}
+        href={tabHref(props.tab)}
+        server={props.tab.server}
+        session={props.session}
+        fallbackTitle={props.fallbackTitle}
+        onRename={props.onRename}
+        onNavigate={() => props.onNavigate(ref)}
+        onClose={props.onClose}
+        active={props.active()}
+        forceTruncate={props.forceTruncate}
+        dragging={sortable.isDragSource()}
+      />
+    </div>
+  )
+}
+
+function SessionTabEntry(props: {
+  tab: SessionTab
+  id: string
+  index: () => number
+  active: () => boolean
+  forceTruncate: boolean
+  serverCtx: () => ServerCtx | undefined
+  onVisibleChange: (visible: boolean) => void
+  onNavigate: (element: HTMLDivElement) => void
+  onClose: () => void
+}) {
+  const tabs = useTabs()
+  const language = useLanguage()
   const sdk = createMemo(() => props.serverCtx()?.sdk ?? null)
   const cachedSession = createMemo(() => props.serverCtx()?.sync.session.peek(props.tab.sessionId))
   const persisted = createMemo(() => tabs.info[props.id])
@@ -50,7 +95,29 @@ function SessionTabSlot(props: {
   )
   const session = createMemo(() => cachedSession() ?? loadedSession())
   const missingSession = createMemo(() => !!props.serverCtx() && !loadedSession.loading && !session())
+  const visible = createMemo(() => !!session() || missingSession() || !!persisted()?.title)
   let prefetched = false
+
+  const rename = async (title: string) => {
+    const value = session()
+    const ctx = props.serverCtx()
+    if (!value || !ctx) return
+
+    ctx.sync.session.remember({ ...value, title })
+    try {
+      await ctx.sdk.api.session.rename({ sessionID: value.id, title })
+    } catch (err) {
+      const current = session()
+      const currentCtx = props.serverCtx()
+      if (current && currentCtx) currentCtx.sync.session.remember({ ...current, title: value.title })
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : undefined,
+      })
+    }
+  }
+
+  createEffect(() => props.onVisibleChange(visible()))
 
   createEffect(() => {
     const ctx = props.serverCtx()
@@ -83,39 +150,20 @@ function SessionTabSlot(props: {
   })
 
   return (
-    <div
-      ref={sortable.ref}
-      data-titlebar-tab-slot
-      data-tab-key={props.id}
-      data-active={props.active()}
-      class="relative flex w-56 min-w-7 max-w-56 flex-shrink"
-      classList={{ hidden: !session() && !missingSession() && !persisted()?.title }}
-    >
-      <TabNavItem
-        ref={(el) => {
-          ref = el
-        }}
-        href={tabHref(props.tab)}
-        server={props.tab.server}
+    <Show when={visible()}>
+      <SessionTabSlot
+        tab={props.tab}
+        id={props.id}
+        index={props.index}
+        active={props.active}
+        forceTruncate={props.forceTruncate}
         session={session}
         fallbackTitle={persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined)}
-        onTitleChange={(title) => {
-          const value = session()
-          const ctx = props.serverCtx()
-          if (value && ctx) ctx.sync.session.remember({ ...value, title })
-        }}
-        onTitleChangeFailed={(title) => {
-          const value = session()
-          const ctx = props.serverCtx()
-          if (value && ctx) ctx.sync.session.remember({ ...value, title })
-        }}
-        onNavigate={() => props.onNavigate(ref)}
+        onRename={rename}
+        onNavigate={props.onNavigate}
         onClose={props.onClose}
-        active={props.active()}
-        forceTruncate={props.forceTruncate}
-        dragging={sortable.isDragSource()}
       />
-    </div>
+    </Show>
   )
 }
 
@@ -172,11 +220,39 @@ export function TitlebarTabStrip(props: {
 }) {
   const global = useGlobal()
   const language = useLanguage()
+  const command = useCommand()
   let scrollRef!: HTMLDivElement
   let listRef!: HTMLDivElement
   let resizeFrame: number | undefined
+  const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
+  const visibleTabs = createMemo(() => props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
+  const visibleTabIds = () => visibleTabs().map(tabKey)
 
-  const tabIds = () => props.tabs.map(tabKey)
+  command.register("titlebar-tab-cycle", () => [
+    {
+      id: `tab.prev`,
+      category: "tab",
+      title: "",
+      keybind: `mod+option+ArrowLeft,ctrl+shift+tab`,
+      hidden: true,
+      onSelect: () => selectAdjacentTab(-1),
+    },
+    {
+      id: `tab.next`,
+      category: "tab",
+      title: "",
+      keybind: `mod+option+ArrowRight,ctrl+tab`,
+      hidden: true,
+      onSelect: () => selectAdjacentTab(1),
+    },
+  ])
+
+  function selectAdjacentTab(offset: -1 | 1) {
+    const current = props.currentTab()
+    const key = adjacentTabKey(visibleTabIds(), current ? tabKey(current) : undefined, offset)
+    const next = props.tabs.find((tab) => tabKey(tab) === key)
+    if (next) props.onNavigate(next)
+  }
 
   function refreshOverflow() {
     if (!scrollRef) return
@@ -204,7 +280,7 @@ export function TitlebarTabStrip(props: {
 
   createEffect(() => {
     props.tabs.length
-    tabIds()
+    visibleTabIds()
     refreshOverflow()
   })
 
@@ -240,22 +316,29 @@ export function TitlebarTabStrip(props: {
             props.onNavigate(tab, tabEl ?? undefined)
           }}
           onDragEnd={(event) => {
-            const current = tabIds()
+            const current = visibleTabIds()
             const source = event.operation.source
             if (event.canceled || !isSortable(source)) return
 
             const { initialIndex, index } = source
             if (initialIndex !== index) {
-              props.onReorder(arrayMove(current, source.initialIndex, source.index))
+              props.onReorder(
+                mergeVisibleTabOrder(
+                  props.tabs.map(tabKey),
+                  current,
+                  arrayMove(current, source.initialIndex, source.index),
+                ),
+              )
             }
           }}
         >
           <div data-titlebar-tab-list class="flex w-full min-w-0 flex-row items-center" ref={listRef}>
             <For each={props.tabs}>
-              {(tab, index) => {
+              {(tab) => {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
-                useTabShortcut(index, () => props.onNavigate(tab, ref))
+                const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
+                useTabShortcut(visibleIndex, () => props.onNavigate(tab, ref))
                 const serverCtx = createMemo(() => {
                   if (tab.type !== "session") return
                   const conn = global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
@@ -264,13 +347,14 @@ export function TitlebarTabStrip(props: {
 
                 if (tab.type === "session") {
                   return (
-                    <SessionTabSlot
+                    <SessionTabEntry
                       tab={tab}
                       id={id}
-                      index={index}
+                      index={visibleIndex}
                       active={() => props.currentTab() === tab}
                       forceTruncate={props.forceTruncate}
                       serverCtx={serverCtx}
+                      onVisibleChange={(visible) => setVisibility(id, visible)}
                       onNavigate={(element) => {
                         ref = element
                         props.onNavigate(tab, element)
@@ -284,7 +368,7 @@ export function TitlebarTabStrip(props: {
                   <DraftTabSlot
                     tab={tab}
                     id={id}
-                    index={index}
+                    index={visibleIndex}
                     active={() => props.currentTab() === tab}
                     title={language.t("command.session.new")}
                     onNavigate={(element) => {
@@ -318,7 +402,7 @@ function useTabShortcut(index: () => number, onSelect: () => void) {
 
   command.register(() => {
     const number = index() + 1
-    if (number > 9) return []
+    if (number < 1 || number > 9) return []
     return [
       {
         id: `tab.${number}`,
