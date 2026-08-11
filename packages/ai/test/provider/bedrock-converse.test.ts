@@ -1216,4 +1216,39 @@ describe("Bedrock Converse recorded", () => {
       )
     }),
   )
+
+  recorded.effect.with("continues after parallel tool results", { tags: ["tool", "tool-loop", "parallel"] }, () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          id: "recorded_bedrock_parallel_tool_results",
+          model: recordedModel(),
+          system: "After receiving both tool results, reply exactly: Paris is sunny; London is rainy.",
+          messages: [
+            Message.user("Compare the weather in Paris and London."),
+            Message.assistant([
+              ToolCallPart.make({ id: "weather_paris", name: weatherToolName, input: { city: "Paris" } }),
+              ToolCallPart.make({ id: "weather_london", name: weatherToolName, input: { city: "London" } }),
+            ]),
+            Message.tool({
+              id: "weather_paris",
+              name: weatherToolName,
+              result: { temperature: 22, condition: "sunny" },
+            }),
+            Message.tool({
+              id: "weather_london",
+              name: weatherToolName,
+              result: { temperature: 14, condition: "rainy" },
+            }),
+          ],
+          tools: [weatherTool],
+          cache: "none",
+          generation: { maxTokens: 40, temperature: 0 },
+        }),
+      )
+
+      expect(response.text.trim()).toBe("Paris is sunny; London is rainy.")
+      expect(response.finishReason?.normalized).toBe("stop")
+    }),
+  )
 })
