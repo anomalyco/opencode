@@ -1,16 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import { deduplicatePromptFiles, promptAttachmentLabel } from "../../src/prompt/attachment"
+import { deduplicatePromptImages, promptAttachmentLabel } from "../../src/prompt/attachment"
 
 describe("prompt attachments", () => {
-  test("deduplicates identical attachment data while preserving order", () => {
+  test("deduplicates identical image data while preserving order", () => {
     const files = [
       { uri: "data:image/png;base64,AAA", name: "first.png" },
+      { uri: "file:///same", name: "first.txt" },
       { uri: "data:image/png;base64,BBB", name: "second.png" },
       { uri: "data:image/png;base64,AAA", name: "duplicate.png" },
+      { uri: "file:///same", name: "second.txt" },
     ]
 
-    expect(deduplicatePromptFiles(files)).toEqual(files.slice(0, 2))
-    expect(files).toHaveLength(3)
+    expect(deduplicatePromptImages(files)).toEqual([files[0], files[1], files[2], files[4]])
+    expect(files).toHaveLength(5)
   })
 
   test("reuses labels for identical image data", () => {

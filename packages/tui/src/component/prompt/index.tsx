@@ -60,7 +60,7 @@ import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
 import { PluginSlot } from "../../plugin/render"
 import type { SessionPending } from "@opencode-ai/schema/session-pending"
-import { deduplicatePromptFiles, promptAttachmentLabel } from "../../prompt/attachment"
+import { deduplicatePromptImages, promptAttachmentLabel } from "../../prompt/attachment"
 import { DialogImagePreview } from "../dialog-image-preview"
 
 export type PromptProps = {
@@ -332,7 +332,7 @@ export function Prompt(props: PromptProps) {
   }
 
   const imageAttachments = createMemo(() =>
-    (deduplicatePromptFiles(store.prompt.files) ?? []).filter((file) => file.uri.startsWith("data:image/")),
+    (store.prompt.files ?? []).filter((file) => file.uri.startsWith("data:image/")),
   )
   const imagePreviewHeight = createMemo(() => Math.max(4, Math.min(8, Math.floor(dimensions().height / 4))))
   const imagePreviewWidth = createMemo(() => imagePreviewHeight() * 2)
@@ -748,6 +748,11 @@ export function Prompt(props: PromptProps) {
           if (ref.type === "file") {
             const part = draft.prompt.files?.[ref.index]
             if (!part?.mention) continue
+            const duplicate = part.uri.startsWith("data:image/") ? files.findIndex((file) => file.uri === part.uri) : -1
+            if (duplicate >= 0) {
+              newMap.set(extmark.id, { type: "file", index: duplicate })
+              continue
+            }
             part.mention.start = extmark.start
             part.mention.end = extmark.end
             const index = files.length
@@ -1139,7 +1144,7 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
-    const files = deduplicatePromptFiles(store.prompt.files)
+    const files = deduplicatePromptImages(store.prompt.files)
 
     if (store.mode === "shell") {
       move.startSubmit()
@@ -1404,8 +1409,11 @@ export function Prompt(props: PromptProps) {
     setStore(
       produce((draft) => {
         const files = (draft.prompt.files ??= [])
-        const index = files.length
-        files.push(part)
+        const duplicate = file.uri.startsWith("data:image/")
+          ? files.findIndex((attachment) => attachment.uri === file.uri)
+          : -1
+        const index = duplicate >= 0 ? duplicate : files.length
+        if (duplicate < 0) files.push(part)
         draft.extmarkToPart.set(extmarkId, { type: "file", index })
       }),
     )
