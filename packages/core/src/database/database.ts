@@ -3,6 +3,7 @@ export * as Database from "./database"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
 import { Context, Effect, Layer, Schema } from "effect"
+import type { SqlClient } from "effect/unstable/sql"
 import { Global } from "@opencode-ai/util/global"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
@@ -45,7 +46,7 @@ const databaseLayer = Layer.effect(
 export function layer(options: Options = { path: ":memory:" }) {
   return Layer.unwrap(
     Effect.gen(function* () {
-      const provide = (filename: string) => databaseLayer.pipe(Layer.provide(sqliteLayer({ filename })))
+      const provide = (filename: string) => layerFromClient.pipe(Layer.provide(sqliteLayer({ filename })))
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:" || isAbsolute(filename)) return provide(filename)
       const global = yield* Global.Service
@@ -53,6 +54,12 @@ export function layer(options: Options = { path: ":memory:" }) {
     }),
   )
 }
+
+// The database service over an injected SqlClient, for runtimes that receive
+// database storage instead of opening a filesystem path. Any client provided
+// here still goes through the pragma guards and migrations; Global is required
+// because migrations may read it (the v1 import).
+export const layerFromClient: Layer.Layer<Service, never, SqlClient.SqlClient | Global.Service> = databaseLayer
 
 export function configured(options?: Options) {
   return makeGlobalNode({ service: Service, layer: layer(options), deps: [Global.node] })

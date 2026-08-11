@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { Database } from "bun:sqlite"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { SqlClient } from "effect/unstable/sql"
 import { SqlError } from "effect/unstable/sql/SqlError"
 import { sqliteLayer } from "@opencode-ai/core/database/sqlite.workerd"
 import type { DurableObjectStorage } from "@opencode-ai/core/database/sqlite.workerd"
+import { tempGlobalLayer } from "./fixture/global"
 
 // Emulates the Durable Object storage API over bun:sqlite so the adapter can
 // be verified without workerd or Cloudflare runtime dependencies.
@@ -118,5 +119,23 @@ describe("sqlite.workerd", () => {
       }),
     )
     expect(error).toBeInstanceOf(SqlError)
+  })
+
+  test("boots the full database layer with migrations over injected storage", async () => {
+    const storage = makeFakeStorage()
+    const core = await import("@opencode-ai/core/database/database")
+    await Effect.runPromise(
+      Effect.scoped(
+        Layer.build(
+          core.Database.layerFromClient.pipe(Layer.provide(sqliteLayer({ storage })), Layer.provide(tempGlobalLayer)),
+        ),
+      ),
+    )
+    const names = storage.sql
+      .exec("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+      .toArray()
+      .map((row) => row.name)
+    expect(names).toContain("migration")
+    expect(names).toContain("session_v2")
   })
 })
