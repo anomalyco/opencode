@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
-import { resetSessionModel, syncSessionModel } from "./session-model-helpers"
+import { resetSessionModel, restorePromptModel, syncPromptModel, syncSessionModel } from "./session-model-helpers"
 
-const message = (input?: Partial<Pick<UserMessage, "agent" | "model" | "variant">>) =>
+const message = (input?: { agent?: string; model?: UserMessage["model"] }) =>
   ({
     id: "msg",
     sessionID: "session",
@@ -10,149 +10,142 @@ const message = (input?: Partial<Pick<UserMessage, "agent" | "model" | "variant"
     time: { created: 1 },
     agent: input?.agent ?? "build",
     model: input?.model ?? { providerID: "anthropic", modelID: "claude-sonnet-4" },
-    variant: input?.variant,
   }) as UserMessage
 
 describe("syncSessionModel", () => {
-  test("restores the last message model and variant", () => {
+  test("restores the last message through session state", () => {
     const calls: unknown[] = []
 
     syncSessionModel(
       {
-        agent: {
-          current() {
-            return undefined
+        session: {
+          restore(value) {
+            calls.push(value)
           },
-          set(value) {
-            calls.push(["agent", value])
-          },
-        },
-        model: {
-          set(value) {
-            calls.push(["model", value])
-          },
-          current() {
-            return { id: "claude-sonnet-4", provider: { id: "anthropic" } }
-          },
-          variant: {
-            set(value) {
-              calls.push(["variant", value])
-            },
-          },
+          reset() {},
         },
       },
-      message({ variant: "high" }),
+      message({ model: { providerID: "anthropic", modelID: "claude-sonnet-4", variant: "high" } }),
     )
 
     expect(calls).toEqual([
-      ["agent", "build"],
-      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }],
-      ["variant", "high"],
-    ])
-  })
-
-  test("skips variant when the model falls back", () => {
-    const calls: unknown[] = []
-
-    syncSessionModel(
-      {
-        agent: {
-          current() {
-            return undefined
-          },
-          set(value) {
-            calls.push(["agent", value])
-          },
-        },
-        model: {
-          set(value) {
-            calls.push(["model", value])
-          },
-          current() {
-            return { id: "gpt-5", provider: { id: "openai" } }
-          },
-          variant: {
-            set(value) {
-              calls.push(["variant", value])
-            },
-          },
-        },
-      },
-      message({ variant: "high" }),
-    )
-
-    expect(calls).toEqual([
-      ["agent", "build"],
-      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }],
+      message({ model: { providerID: "anthropic", modelID: "claude-sonnet-4", variant: "high" } }),
     ])
   })
 })
 
 describe("resetSessionModel", () => {
-  test("restores the current agent defaults", () => {
-    const calls: unknown[] = []
+  test("clears draft session state", () => {
+    const calls: string[] = []
 
     resetSessionModel({
-      agent: {
-        current() {
-          return {
-            model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
-            variant: "high",
-          }
+      session: {
+        reset() {
+          calls.push("reset")
         },
-        set() {},
-      },
-      model: {
-        set(value) {
-          calls.push(["model", value])
-        },
-        current() {
-          return undefined
-        },
-        variant: {
-          set(value) {
-            calls.push(["variant", value])
-          },
-        },
+        restore() {},
       },
     })
 
-    expect(calls).toEqual([
-      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }],
-      ["variant", "high"],
-    ])
+    expect(calls).toEqual(["reset"])
+  })
+})
+
+describe("syncPromptModel", () => {
+  test("stores the effective session model in prompt state", () => {
+    const calls: unknown[] = []
+
+    syncPromptModel(
+      {
+        model: {
+          current: () => ({ id: "claude-sonnet-4", provider: { id: "anthropic" } }),
+          set() {},
+          variant: { current: () => "high", set() {} },
+        },
+      },
+      {
+        model: {
+          current: () => undefined,
+          set: (model) => calls.push(model),
+        },
+      },
+    )
+
+    expect(calls).toEqual([{ providerID: "anthropic", modelID: "claude-sonnet-4", variant: "high" }])
   })
 
-  test("clears the variant when the agent has none", () => {
+  test("does not rewrite an unchanged prompt model", () => {
     const calls: unknown[] = []
+    const model = { providerID: "anthropic", modelID: "claude-sonnet-4", variant: "high" }
 
-    resetSessionModel({
-      agent: {
-        current() {
-          return {
-            model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
-          }
+    syncPromptModel(
+      {
+        model: {
+          current: () => ({ id: model.modelID, provider: { id: model.providerID } }),
+          set() {},
+          variant: { current: () => model.variant, set() {} },
         },
-        set() {},
       },
-      model: {
-        set(value) {
-          calls.push(["model", value])
+      {
+        model: {
+          current: () => model,
+          set: (value) => calls.push(value),
         },
-        current() {
-          return undefined
-        },
-        variant: {
-          set(value) {
-            calls.push(["variant", value])
+      },
+    )
+
+    expect(calls).toEqual([])
+  })
+})
+
+describe("restorePromptModel", () => {
+  test("restores the persisted prompt model into session selection", () => {
+    const calls: unknown[] = []
+    const restored = restorePromptModel(
+      {
+        model: {
+          current: () => ({ id: "gpt", provider: { id: "openai" } }),
+          set: (model) => calls.push(model),
+          variant: {
+            current: () => undefined,
+            set: (variant) => calls.push(variant),
           },
         },
       },
-    })
+      {
+        model: {
+          current: () => ({ providerID: "anthropic", modelID: "claude", variant: "high" }),
+          set() {},
+        },
+      },
+    )
 
-    expect(calls).toEqual([
-      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }],
-      ["variant", undefined],
-    ])
+    expect(restored).toBe(true)
+    expect(calls).toEqual([{ providerID: "anthropic", modelID: "claude" }, "high"])
+  })
+
+  test("does nothing without a persisted prompt model", () => {
+    const calls: unknown[] = []
+    const restored = restorePromptModel(
+      {
+        model: {
+          current: () => ({ id: "gpt", provider: { id: "openai" } }),
+          set: (model) => calls.push(model),
+          variant: {
+            current: () => undefined,
+            set: (variant) => calls.push(variant),
+          },
+        },
+      },
+      {
+        model: {
+          current: () => undefined,
+          set() {},
+        },
+      },
+    )
+
+    expect(restored).toBe(false)
+    expect(calls).toEqual([])
   })
 })

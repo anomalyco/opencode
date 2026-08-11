@@ -68,12 +68,12 @@ nix run nixpkgs#opencode           # hoặc github:anomalyco/opencode cho nhánh
 
 OpenCode cũng có sẵn dưới dạng ứng dụng desktop. Tải trực tiếp từ [trang releases](https://github.com/anomalyco/opencode/releases) hoặc [opencode.ai/download](https://opencode.ai/download).
 
-| Nền tảng              | Tải xuống                             |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, hoặc AppImage         |
+| Nền tảng              | Tải xuống                          |
+| --------------------- | ---------------------------------- |
+| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
+| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
+| Windows               | `opencode-desktop-windows-x64.exe` |
+| Linux                 | `.deb`, `.rpm`, hoặc AppImage      |
 
 ```bash
 # macOS (Homebrew)
@@ -123,18 +123,6 @@ Nếu bạn muốn đóng góp cho OpenCode, vui lòng đọc [tài liệu hư�
 ### Xây dựng trên nền tảng OpenCode
 
 Nếu bạn đang làm việc trên một dự án liên quan đến OpenCode và sử dụng "opencode" như một phần của tên dự án, ví dụ "opencode-dashboard" hoặc "opencode-mobile", vui lòng thêm một ghi chú vào README của bạn để làm rõ rằng dự án đó không được xây dựng bởi đội ngũ OpenCode và không liên kết với chúng tôi dưới bất kỳ hình thức nào.
-
-### Các câu hỏi thường gặp (FAQ)
-
-#### OpenCode khác biệt thế nào so với Claude Code?
-
-Về mặt tính năng, nó rất giống Claude Code. Dưới đây là những điểm khác biệt chính:
-
-- 100% mã nguồn mở
-- Không bị ràng buộc với bất kỳ nhà cung cấp nào. Mặc dù chúng tôi khuyên dùng các mô hình được cung cấp qua [OpenCode Zen](https://opencode.ai/zen), OpenCode có thể được sử dụng với Claude, OpenAI, Google, hoặc thậm chí các mô hình chạy cục bộ. Khi các mô hình phát triển, khoảng cách giữa chúng sẽ thu hẹp lại và giá cả sẽ giảm, vì vậy việc không phụ thuộc vào nhà cung cấp là rất quan trọng.
-- Hỗ trợ LSP ngay từ đầu
-- Tập trung vào TUI (Giao diện người dùng dòng lệnh). OpenCode được xây dựng bởi những người dùng neovim và đội ngũ tạo ra [terminal.shop](https://terminal.shop); chúng tôi sẽ đẩy giới hạn của những gì có thể làm được trên terminal lên mức tối đa.
-- Kiến trúc client/server. Chẳng hạn, điều này cho phép OpenCode chạy trên máy tính của bạn trong khi bạn điều khiển nó từ xa qua một ứng dụng di động, nghĩa là frontend TUI chỉ là một trong những client có thể dùng.
 
 ---
 

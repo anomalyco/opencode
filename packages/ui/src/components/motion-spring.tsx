@@ -1,9 +1,8 @@
 import { attachSpring, motionValue } from "motion"
 import type { SpringOptions } from "motion"
-import { createEffect, createSignal, onCleanup } from "solid-js"
-import { prefersReducedMotion } from "../hooks/use-reduced-motion"
+import { createComputed, createEffect, createSignal, onCleanup } from "solid-js"
 
-type Opt = Pick<SpringOptions, "visualDuration" | "bounce" | "stiffness" | "damping" | "mass" | "velocity">
+type Opt = Partial<Pick<SpringOptions, "visualDuration" | "bounce" | "stiffness" | "damping" | "mass" | "velocity">>
 const eq = (a: Opt | undefined, b: Opt | undefined) =>
   a?.visualDuration === b?.visualDuration &&
   a?.bounce === b?.bounce &&
@@ -12,22 +11,26 @@ const eq = (a: Opt | undefined, b: Opt | undefined) =>
   a?.mass === b?.mass &&
   a?.velocity === b?.velocity
 
-export function useSpring(target: () => number, options?: Opt | (() => Opt)) {
+export function useSpring(target: () => number, options?: Opt | (() => Opt), snapKey?: () => unknown) {
   const read = () => (typeof options === "function" ? options() : options)
-  const reduce = prefersReducedMotion
   const [value, setValue] = createSignal(target())
   const source = motionValue(value())
   const spring = motionValue(value())
   let config = read()
-  let reduced = reduce()
-  let stop = reduced ? () => {} : attachSpring(spring, source, config)
-  let off = spring.on("change", (next) => setValue(next))
+  let snapValue = snapKey?.()
+  let stop = attachSpring(spring, source, config)
+  let off = spring.on("change", (next: number) => setValue(next))
 
-  createEffect(() => {
+  createComputed(() => {
     const next = target()
-    if (reduced) {
-      source.set(next)
-      spring.set(next)
+    const nextSnap = snapKey?.()
+    if (snapKey && nextSnap !== snapValue) {
+      // State boundaries should adopt their target without animating from the previous context.
+      snapValue = nextSnap
+      stop()
+      spring.jump(next)
+      source.jump(next)
+      stop = attachSpring(spring, source, config)
       setValue(next)
       return
     }
@@ -35,20 +38,12 @@ export function useSpring(target: () => number, options?: Opt | (() => Opt)) {
   })
 
   createEffect(() => {
+    if (!options) return
     const next = read()
-    const skip = reduce()
-    if (eq(config, next) && reduced === skip) return
+    if (eq(config, next)) return
     config = next
-    reduced = skip
     stop()
-    stop = skip ? () => {} : attachSpring(spring, source, next)
-    if (skip) {
-      const value = target()
-      source.set(value)
-      spring.set(value)
-      setValue(value)
-      return
-    }
+    stop = attachSpring(spring, source, next)
     setValue(spring.get())
   })
 

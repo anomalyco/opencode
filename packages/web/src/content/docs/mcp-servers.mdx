@@ -116,13 +116,14 @@ use the mcp_everything tool to add the number 3 and 4
 
 Here are all the options for configuring a local MCP server.
 
-| Option        | Type    | Required | Description                                                                         |
-| ------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type`        | String  | Y        | Type of MCP server connection, must be `"local"`.                                   |
-| `command`     | Array   | Y        | Command and arguments to run the MCP server.                                        |
-| `environment` | Object  |          | Environment variables to set when running the server.                               |
-| `enabled`     | Boolean |          | Enable or disable the MCP server on startup.                                        |
-| `timeout`     | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds). |
+| Option        | Type    | Required | Description                                                                              |
+| ------------- | ------- | -------- | ---------------------------------------------------------------------------------------- |
+| `type`        | String  | Y        | Type of MCP server connection, must be `"local"`.                                        |
+| `command`     | Array   | Y        | Command and arguments to run the MCP server.                                             |
+| `cwd`         | String  |          | Working directory for the MCP server process. Relative paths resolve from the workspace. |
+| `environment` | Object  |          | Environment variables to set when running the server.                                    |
+| `enabled`     | Boolean |          | Enable or disable the MCP server on startup.                                             |
+| `timeout`     | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds).      |
 
 ---
 

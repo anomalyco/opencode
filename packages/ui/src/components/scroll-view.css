@@ -1,21 +1,18 @@
 .scroll-view {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 
 .scroll-view__viewport {
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   overflow-y: auto;
   scrollbar-width: none;
   outline: none;
-  display: block;
-  overflow-anchor: none;
-}
-
-.scroll-view__viewport[data-reverse="true"] {
-  display: flex;
-  flex-direction: column-reverse;
 }
 
 .scroll-view__viewport::-webkit-scrollbar {
@@ -24,12 +21,13 @@
 
 .scroll-view__thumb {
   position: absolute;
-  right: 0;
+  inset-inline-end: 0;
   top: 0;
   width: 12px;
   transition: opacity 200ms ease;
   cursor: default;
   user-select: none;
+  pointer-events: auto;
   opacity: 0;
 }
 
@@ -49,6 +47,18 @@
 
 .scroll-view__thumb:hover::after,
 .scroll-view__thumb[data-dragging="true"]::after {
+  background-color: var(--border-strong-base);
+}
+
+.dark .scroll-view__thumb::after,
+[data-theme="dark"] .scroll-view__thumb::after {
+  background-color: var(--border-weak-base);
+}
+
+.dark .scroll-view__thumb:hover::after,
+[data-theme="dark"] .scroll-view__thumb:hover::after,
+.dark .scroll-view__thumb[data-dragging="true"]::after,
+[data-theme="dark"] .scroll-view__thumb[data-dragging="true"]::after {
   background-color: var(--border-strong-base);
 }
 

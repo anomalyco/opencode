@@ -1,4 +1,6 @@
 import "@opencode-ai/ui/styles/tailwind"
+import "@opencode-ai/session-ui/styles"
+import "@opencode-ai/ui/v2/styles/tailwind.css"
 
 import { createEffect, onCleanup, onMount } from "solid-js"
 import addonA11y from "@storybook/addon-a11y"
@@ -42,6 +44,17 @@ const Scheme = (props: { value?: unknown }) => {
   return null
 }
 
+const NewLayout = () => {
+  // Mirror app.tsx BodyDesignClass so stories render with v2 (new-layout) styles
+  // instead of the legacy `body:not([data-new-layout])` branch.
+  onMount(() => {
+    document.body.toggleAttribute("data-new-layout", true)
+    document.body.classList.add("font-(family-name:--font-family-text)", "text-[13px]", "font-[440]")
+    document.body.classList.remove("text-12-regular")
+  })
+  return null
+}
+
 const frame = createJSXDecorator((Story, context) => {
   const override = context.parameters?.themes?.themeOverride
   const selected = context.globals?.theme
@@ -52,6 +65,7 @@ const frame = createJSXDecorator((Story, context) => {
       <Font />
       <ThemeProvider>
         <Scheme value={scheme} />
+        <NewLayout />
         <DialogProvider>
           <MarkedProvider>
             <div

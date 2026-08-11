@@ -6,9 +6,26 @@ import {
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
-import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspaceKey } from "./helpers"
 import { type Session } from "@opencode-ai/sdk/v2/client"
-import { hasProjectPermissions, latestRootSession } from "./helpers"
+import {
+  childSessionOnPath,
+  closeHomeProject,
+  compareSessionTime,
+  displayName,
+  effectiveWorkspaceOrder,
+  errorMessage,
+  hasProjectPermissions,
+  homeProjectNavigation,
+  homeProjectDirectories,
+  homeSessionServerStatus,
+  latestRootSession,
+  sortedRootSessions,
+  toggleHomeProjectSelection,
+} from "./helpers"
+import { pathKey } from "@/utils/path-key"
+import { ServerConnection } from "@/context/server"
+
+const serverKey = ServerConnection.Key.make
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   ({
@@ -97,20 +114,20 @@ describe("layout deep links", () => {
 
 describe("layout workspace helpers", () => {
   test("normalizes trailing slash in workspace key", () => {
-    expect(workspaceKey("/tmp/demo///")).toBe("/tmp/demo")
-    expect(workspaceKey("C:\\tmp\\demo\\\\")).toBe("C:\\tmp\\demo")
+    expect(String(pathKey("/tmp/demo///"))).toBe("/tmp/demo")
+    expect(String(pathKey("C:\\tmp\\demo\\\\"))).toBe("C:/tmp/demo")
   })
 
   test("preserves posix and drive roots in workspace key", () => {
-    expect(workspaceKey("/")).toBe("/")
-    expect(workspaceKey("///")).toBe("/")
-    expect(workspaceKey("C:\\")).toBe("C:\\")
-    expect(workspaceKey("C:\\\\\\")).toBe("C:\\")
-    expect(workspaceKey("C:///")).toBe("C:/")
+    expect(String(pathKey("/"))).toBe("/")
+    expect(String(pathKey("///"))).toBe("/")
+    expect(String(pathKey("C:\\"))).toBe("C:/")
+    expect(String(pathKey("C://"))).toBe("C:/")
+    expect(String(pathKey("C:///"))).toBe("C:/")
   })
 
   test("keeps local first while preserving known order", () => {
-    const result = syncWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
+    const result = effectiveWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
     expect(result).toEqual(["/root", "/c", "/b"])
   })
 
@@ -136,6 +153,30 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("workspace")
+  })
+
+  test("sorts recent sessions by persisted update time instead of id", () => {
+    const result = sortedRootSessions(
+      {
+        path: { directory: "/workspace" },
+        session: [
+          session({ id: "ses_z", directory: "/workspace", time: { created: 1, updated: 2, archived: undefined } }),
+          session({ id: "ses_a", directory: "/workspace", time: { created: 1, updated: 3, archived: undefined } }),
+        ],
+      },
+      3,
+    )
+
+    expect(result.map((item) => item.id)).toEqual(["ses_a", "ses_z"])
+  })
+
+  test("uses id only to break equal session timestamps", () => {
+    const sessions = [
+      session({ id: "ses_z", directory: "/workspace", time: { created: 1, updated: 2, archived: undefined } }),
+      session({ id: "ses_a", directory: "/workspace", time: { created: 1, updated: 2, archived: undefined } }),
+    ]
+
+    expect(sessions.sort(compareSessionTime).map((item) => item.id)).toEqual(["ses_a", "ses_z"])
   })
 
   test("detects project permissions with a filter", () => {
@@ -192,15 +233,110 @@ describe("layout workspace helpers", () => {
     expect(result?.id).toBe("root")
   })
 
-  test("extracts draggable id safely", () => {
-    expect(getDraggableId({ draggable: { id: "x" } })).toBe("x")
-    expect(getDraggableId({ draggable: { id: 42 } })).toBeUndefined()
-    expect(getDraggableId(null)).toBeUndefined()
+  test("finds the direct child on the active session path", () => {
+    const list = [
+      session({ id: "root", directory: "/workspace" }),
+      session({ id: "child", directory: "/workspace", parentID: "root" }),
+      session({ id: "leaf", directory: "/workspace", parentID: "child" }),
+    ]
+
+    expect(childSessionOnPath(list, "root", "leaf")?.id).toBe("child")
+    expect(childSessionOnPath(list, "child", "leaf")?.id).toBe("leaf")
+    expect(childSessionOnPath(list, "root", "root")).toBeUndefined()
+    expect(childSessionOnPath(list, "root", "other")).toBeUndefined()
   })
 
   test("formats fallback project display name", () => {
     expect(displayName({ worktree: "/tmp/app" })).toBe("app")
     expect(displayName({ worktree: "/tmp/app", name: "My App" })).toBe("My App")
+    expect(displayName({ worktree: "/" })).toBe("/")
+  })
+
+  test("scopes home project selection by server", () => {
+    expect(
+      toggleHomeProjectSelection(undefined, serverKey("https://debian.example"), "/home/luke/repos/amazon"),
+    ).toEqual({
+      server: serverKey("https://debian.example"),
+      directory: "/home/luke/repos/amazon",
+    })
+    expect(
+      toggleHomeProjectSelection(
+        { server: serverKey("https://windows.example"), directory: "/home/luke/repos/amazon" },
+        serverKey("https://debian.example"),
+        "/home/luke/repos/amazon",
+      ),
+    ).toEqual({ server: serverKey("https://debian.example"), directory: "/home/luke/repos/amazon" })
+    expect(
+      toggleHomeProjectSelection(
+        { server: serverKey("https://debian.example"), directory: "/home/luke/repos/amazon" },
+        serverKey("https://debian.example"),
+        "/home/luke/repos/amazon",
+      ),
+    ).toEqual({ server: serverKey("https://debian.example") })
+  })
+
+  test("closes a home project through its server context", () => {
+    const closed: string[] = []
+
+    expect(
+      closeHomeProject(
+        { server: serverKey("https://windows.example"), directory: "/shared" },
+        serverKey("https://debian.example"),
+        { close: (directory) => closed.push(directory) },
+        "/shared",
+      ),
+    ).toEqual({ server: serverKey("https://windows.example"), directory: "/shared" })
+    expect(closed).toEqual(["/shared"])
+    expect(
+      closeHomeProject(
+        { server: serverKey("https://debian.example"), directory: "/shared" },
+        serverKey("https://debian.example"),
+        { close: (directory) => closed.push(directory) },
+        "/shared",
+      ),
+    ).toEqual({ server: serverKey("https://debian.example") })
+  })
+
+  test("defers home project navigation until its server is active", () => {
+    expect(
+      homeProjectNavigation(serverKey("sidecar"), serverKey("https://debian.example"), "/YW1hem9u/session"),
+    ).toEqual({
+      server: serverKey("https://debian.example"),
+      href: "/YW1hem9u/session",
+    })
+    expect(
+      homeProjectNavigation(
+        serverKey("https://debian.example"),
+        serverKey("https://debian.example"),
+        "/YW1hem9u/session",
+      ),
+    ).toEqual({
+      href: "/YW1hem9u/session",
+    })
+  })
+
+  test("preserves picker order when adding multiple projects", () => {
+    expect(homeProjectDirectories(["/first", "/second"])).toEqual(["/first", "/second"])
+    expect(homeProjectDirectories("/only")).toEqual(["/only"])
+    expect(homeProjectDirectories(null)).toEqual([])
+  })
+
+  test("hides status derived from an inactive server", () => {
+    let reads = 0
+    const status = () => {
+      reads++
+      return { working: true, tint: "red" }
+    }
+    expect(homeSessionServerStatus(false, status)).toEqual({
+      working: false,
+      tint: undefined,
+    })
+    expect(reads).toBe(0)
+    expect(homeSessionServerStatus(true, status)).toEqual({
+      working: true,
+      tint: "red",
+    })
+    expect(reads).toBe(1)
   })
 
   test("extracts api error message and fallback", () => {

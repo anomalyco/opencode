@@ -364,28 +364,57 @@ Možete prilagoditi TUI ponašanje putem `tui.json` (ili `tui.jsonc`).
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "opencode",
+  "leader_timeout": 2000,
   "keybinds": {
-    "leader": "ctrl+x"
+    "leader": "ctrl+x",
+    "command_list": "ctrl+p"
   },
   "scroll_speed": 3,
   "scroll_acceleration": {
-    "enabled": true
+    "enabled": false
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "./sounds/error.mp3"
+    }
+  }
 }
 ```
 
 Ovo je odvojeno od `opencode.json`, koji konfiguriše ponašanje servera/izvršavanja.
 
+`keybinds` se spaja s ugrađenim zadanim vrijednostima, tako da trebate konfigurisati samo prečice koje želite promijeniti.
+
 ### Opcije
 
 - `theme` - Postavlja vašu UI temu. [Saznajte više](/docs/themes).
 - `keybinds` - Prilagođava prečice na tastaturi. [Saznajte više](/docs/keybinds).
+- `leader_timeout` - Kontroliše koliko dugo OpenCode čeka nakon leader key. Podrazumijevano je `2000`.
 - `scroll_acceleration.enabled` - ​​Omogućite ubrzanje pomicanja u macOS stilu za glatko, prirodno pomicanje. Kada je omogućeno, brzina pomicanja se povećava brzim pokretima pomicanja i ostaje precizna za sporije pokrete. **Ova postavka ima prednost nad `scroll_speed` i nadjačava je kada je omogućena.**
 - `scroll_speed` - ​​Kontrolira koliko brzo TUI skroluje kada se koriste komande za pomeranje (minimum: `0.001`, podržava decimalne vrijednosti). Podrazumevano je `3`. **Napomena: Ovo se zanemaruje ako je `scroll_acceleration.enabled` postavljeno na `true`.**
 - `diff_style` - Kontrolira prikazivanje razlike. `"auto"` se prilagođava širini terminala, `"stacked"` uvijek prikazuje raspored u jednoj koloni.
+- `mouse` - Omogućava ili onemogućava hvatanje miša u TUI (podrazumijevano: `true`). Kada je onemogućeno, zadržava se izvorno ponašanje terminala za označavanje i pomicanje mišem.
+- `attention` - Konfiguriše desktop obavještenja i zvukove za TUI. Podrazumijevano je onemogućeno.
 
 Koristite `OPENCODE_TUI_CONFIG` da učitate prilagođenu putanju TUI konfiguracije.
+
+### Attention
+
+Attention omogućava da vas TUI obavijesti kada OpenCode čeka odgovor, treba odobrenje dozvole, prijavi grešku sesije ili završi sesiju. Omogućite ga pomoću `attention.enabled`; ugrađeni događaji reproduciraju zvuk kada se dogode. Desktop obavještenja se šalju samo kada prozor terminala nije u fokusu i ne koriste se za subagent događaje.
+
+- `enabled` - Omogućava sva obavještenja i zvukove za Attention. Podrazumijevano je `false`.
+- `notifications` - Kada je Attention omogućen, dozvoljava TUI-ju da šalje desktop obavještenja putem terminala. Podrazumijevano je `true`.
+- `sound` - Kada je Attention omogućen, dozvoljava zvukove upozorenja. Podrazumijevano je `true`.
+- `volume` - Podrazumijevana jačina zvukova upozorenja od `0` do `1`. Podrazumijevano je `0.4`.
+- `sound_pack` - Sound pack ID koji se koristi. Podrazumijevano je `opencode.default`.
+- `sounds` - Postavlja prilagođene zvučne datoteke za `default`, `question`, `permission`, `error`, `done` ili `subagent_done`. Putanje mogu biti apsolutne, `file://` URL-ovi ili relativne u odnosu na `tui.json`.
 
 ---
 

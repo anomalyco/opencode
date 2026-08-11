@@ -34,6 +34,10 @@
       background-color: var(--color-bg-surface);
     }
   }
+}
+
+[data-component="workspace-create-modal"] {
+  width: 100%;
 
   [data-slot="create-form"] {
     width: 100%;

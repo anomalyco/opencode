@@ -1,16 +1,15 @@
 import { EOL } from "os"
+import { Effect } from "effect"
 import { Skill } from "../../../skill"
-import { bootstrap } from "../../bootstrap"
-import { cmd } from "../cmd"
+import { effectCmd } from "../../effect-cmd"
 
-export const SkillCommand = cmd({
+export const SkillCommand = effectCmd({
   command: "skill",
   describe: "list all available skills",
   builder: (yargs) => yargs,
-  async handler() {
-    await bootstrap(process.cwd(), async () => {
-      const skills = await Skill.all()
-      process.stdout.write(JSON.stringify(skills, null, 2) + EOL)
-    })
-  },
+  handler: Effect.fn("Cli.debug.skill")(function* () {
+    const skill = yield* Skill.Service
+    const skills = yield* skill.all()
+    process.stdout.write(JSON.stringify(skills, null, 2) + EOL)
+  }),
 })

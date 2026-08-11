@@ -2,48 +2,44 @@ import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
-import { showToast } from "@opencode-ai/ui/toast"
-import { useGlobalSync } from "@/context/global-sync"
+import { showToast } from "@/utils/toast"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 
-export function createSessionComposerBlocked() {
-  const params = useParams()
-  const permission = usePermission()
-  const sdk = useSDK()
-  const sync = useSync()
-  const permissionRequest = createMemo(() =>
-    sessionPermissionRequest(sync.data.session, sync.data.permission, params.id, (item) => {
-      return !permission.autoResponds(item, sdk.directory)
-    }),
-  )
-  const questionRequest = createMemo(() => sessionQuestionRequest(sync.data.session, sync.data.question, params.id))
-
-  return createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return !!permissionRequest() || !!questionRequest()
-  })
+export const todoState = (input: {
+  count: number
+  done: boolean
+  live: boolean
+}): "hide" | "clear" | "open" | "close" => {
+  if (input.count === 0) return "hide"
+  if (!input.live) return "clear"
+  if (!input.done) return "open"
+  return "close"
 }
 
-export function createSessionComposerState(options?: { closeMs?: number | (() => number) }) {
+export const todoDockAtBoundary = (state: ReturnType<typeof todoState>) => state === "open"
+
+const idle = { type: "idle" as const }
+
+export function createSessionComposerController(options?: { closeMs?: number | (() => number) }) {
   const params = useParams()
   const sdk = useSDK()
   const sync = useSync()
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const language = useLanguage()
   const permission = usePermission()
 
   const questionRequest = createMemo((): QuestionRequest | undefined => {
-    return sessionQuestionRequest(sync.data.session, sync.data.question, params.id)
+    return sessionQuestionRequest(sync().data.session, sync().data.question, params.id)
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
-    return sessionPermissionRequest(sync.data.session, sync.data.permission, params.id, (item) => {
-      return !permission.autoResponds(item, sdk.directory)
+    return sessionPermissionRequest(sync().data.session, sync().data.permission, params.id, (item) => {
+      return !permission.autoResponds(item, sdk().directory)
     })
   })
 
@@ -56,12 +52,19 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   const todos = createMemo((): Todo[] => {
     const id = params.id
     if (!id) return []
-    return globalSync.data.session_todo[id] ?? []
+    return serverSync().session.data.todo[id] ?? []
   })
 
+  const done = createMemo(
+    () => todos().length > 0 && todos().every((todo) => todo.status === "completed" || todo.status === "cancelled"),
+  )
+
+  const live = createMemo(() => sync().data.session_working(params.id ?? "") || blocked())
+
   const [store, setStore] = createStore({
+    sessionID: params.id,
     responding: undefined as string | undefined,
-    dock: todos().length > 0,
+    dock: todos().length > 0 && !done() && live(),
     closing: false,
     opening: false,
   })
@@ -78,8 +81,8 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     if (store.responding === perm.id) return
 
     setStore("responding", perm.id)
-    sdk.client.permission
-      .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
+    sdk()
+      .api.permission.reply({ sessionID: perm.sessionID, requestID: perm.id, reply: response })
       .catch((err: unknown) => {
         const description = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description })
@@ -88,10 +91,6 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
         setStore("responding", (id) => (id === perm.id ? undefined : id))
       })
   }
-
-  const done = createMemo(
-    () => todos().length > 0 && todos().every((todo) => todo.status === "completed" || todo.status === "cancelled"),
-  )
 
   let timer: number | undefined
   let raf: number | undefined
@@ -111,21 +110,49 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     }, closeMs())
   }
 
+  // Keep stale turn todos from reopening if the model never clears them.
+  const clear = () => {
+    const id = params.id
+    if (!id) return
+    sync().set("todo", id, [])
+  }
+
   createEffect(
     on(
-      () => [todos().length, done()] as const,
-      ([count, complete], prev) => {
+      () => [params.id, todos().length, done(), live()] as const,
+      ([id, count, complete, active], previous) => {
         if (raf) cancelAnimationFrame(raf)
         raf = undefined
 
-        if (count === 0) {
+        const next = todoState({
+          count,
+          done: complete,
+          live: active,
+        })
+
+        if (!previous || previous[0] !== id) {
+          if (timer) window.clearTimeout(timer)
+          timer = undefined
+          setStore({ sessionID: id, dock: todoDockAtBoundary(next), closing: false, opening: false })
+          if (next === "clear") clear()
+          return
+        }
+
+        if (next === "hide") {
           if (timer) window.clearTimeout(timer)
           timer = undefined
           setStore({ dock: false, closing: false, opening: false })
           return
         }
 
-        if (!complete) {
+        if (next === "clear") {
+          if (timer) window.clearTimeout(timer)
+          timer = undefined
+          clear()
+          return
+        }
+
+        if (next === "open") {
           if (timer) window.clearTimeout(timer)
           timer = undefined
           const hidden = !store.dock || store.closing
@@ -142,13 +169,8 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
           return
         }
 
-        if (prev && prev[1]) {
-          if (store.closing && !timer) scheduleClose()
-          return
-        }
-
         setStore({ dock: true, opening: false, closing: true })
-        scheduleClose()
+        if (!timer) scheduleClose()
       },
     ),
   )
@@ -170,10 +192,13 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     permissionResponding,
     decide,
     todos,
-    dock: () => store.dock,
-    closing: () => store.closing,
-    opening: () => store.opening,
+    dock: () =>
+      store.sessionID === params.id
+        ? store.dock
+        : todoDockAtBoundary(todoState({ count: todos().length, done: done(), live: live() })),
+    closing: () => store.sessionID === params.id && store.closing,
+    opening: () => store.sessionID === params.id && store.opening,
   }
 }
 
-export type SessionComposerState = ReturnType<typeof createSessionComposerState>
+export type SessionComposerController = ReturnType<typeof createSessionComposerController>

@@ -30,7 +30,7 @@ export default function TermsOfService() {
               </p>
 
               <p>
-                Email: <a href="mailto:contact@anoma.ly">contact@anoma.ly</a>
+                Email: <a href="mailto:help@anoma.ly">help@anoma.ly</a>
               </p>
 
               <p>
@@ -114,7 +114,7 @@ export default function TermsOfService() {
                 attempt to register for or otherwise use the Services or send us any personal information. If we learn
                 we have collected personal information from a child under 13 years of age, we will delete that
                 information as quickly as possible. If you believe that a child under 13 years of age may have provided
-                us personal information, please contact us at <a href="mailto:contact@anoma.ly">contact@anoma.ly</a>.
+                us personal information, please contact us at <a href="mailto:help@anoma.ly">help@anoma.ly</a>.
               </p>
 
               <h2 id="what-are-the-basics">What are the basics of using OpenCode?</h2>
@@ -315,7 +315,7 @@ export default function TermsOfService() {
                 specified time of the trial. You must stop using a Paid Service before the end of the trial period in
                 order to avoid being charged for that Paid Service. If you cancel prior to the end of the trial period
                 and are inadvertently charged for a Paid Service, please contact us at{" "}
-                <a href="mailto:contact@anoma.ly">contact@anoma.ly</a>.
+                <a href="mailto:help@anoma.ly">help@anoma.ly</a>.
               </p>
 
               <h2 id="what-if-i-want-to-stop">What if I want to stop using the Services?</h2>

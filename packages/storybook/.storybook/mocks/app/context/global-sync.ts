@@ -24,7 +24,7 @@ const [store, setStore] = createStore({
   config: { permission: {} },
 })
 
-export function useGlobalSync() {
+export function useServerSync() {
   return {
     data: {
       provider,
@@ -38,5 +38,18 @@ export function useGlobalSync() {
         setStore("todo", sessionID, todos)
       },
     },
+  }
+}
+
+export function useQueryOptions() {
+  return {
+    agents: (directory: string) => ({
+      queryKey: [directory, "agents"],
+      queryFn: async () => [],
+    }),
+    providers: (directory: string | null) => ({
+      queryKey: [directory, "providers"],
+      queryFn: async () => provider,
+    }),
   }
 }
