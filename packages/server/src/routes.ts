@@ -46,6 +46,7 @@ import type { ServerOptions } from "./options"
 import { modalWorkspaceDriver, provider as modalProvider } from "./workspace/modal-workspace"
 
 const applicationServices = LayerNode.group([
+  Global.node,
   Database.node,
   Bus.node,
   EventLogger.node,

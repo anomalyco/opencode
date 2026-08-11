@@ -5,7 +5,7 @@ import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { onCleanup } from "solid-js"
-import { tmpdir } from "../../fixture/fixture"
+import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import type { TuiKeybind } from "../../../src/config/keybind"
 import { TestTuiContexts } from "../../fixture/tui-environment"
@@ -58,7 +58,7 @@ async function mountPrompt(input: {
       >
         <ConfigProvider config={resolvedConfig}>
           <Keymap.Provider>
-            <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
               <ToastProvider>
                 <DialogProvider>
                   <Prompt />

@@ -51,7 +51,6 @@ export function apply(db: Database) {
 
 export function applyOnly(db: Database, input: Migration[]) {
   return Effect.gen(function* () {
-    const global = yield* Global.Service
     yield* db.run(
       sql`CREATE TABLE IF NOT EXISTS ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
     )
@@ -82,7 +81,7 @@ export function applyOnly(db: Database, input: Migration[]) {
       yield* Effect.logInfo("database migration started", { migration: migration.id })
       const apply = db.transaction((tx) =>
         Effect.gen(function* () {
-          yield* migration.up(tx).pipe(Effect.provideService(Global.Service, global))
+          yield* migration.up(tx)
           yield* tx.run(
             sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
           )

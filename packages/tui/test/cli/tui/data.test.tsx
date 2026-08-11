@@ -16,6 +16,7 @@ import { ThemeProvider } from "../../../src/context/theme"
 import { Composer } from "../../../src/routes/session/composer"
 import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
 import { createApi, createEventStream, createFetch, directory, json, worktree } from "../../fixture/tui-client"
+import { emptyThemeSource } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
@@ -1979,7 +1980,7 @@ test("keeps shell state scoped to location", async () => {
     return (
       <RouteProvider initialRoute={{ type: "session", sessionID: "ses_shared" }}>
         <Keymap.Provider>
-          <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
+          <ThemeProvider mode="dark" source={emptyThemeSource}>
             <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
           </ThemeProvider>
         </Keymap.Provider>

@@ -10,6 +10,7 @@ import { ThemeProvider } from "../../../src/context/theme"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { TestTuiContexts } from "../../fixture/tui-environment"
+import { emptyThemeSource } from "../../fixture/fixture"
 
 test("searches settings globally and opens the matching setting", async () => {
   let current: Info = {}
@@ -53,7 +54,7 @@ test("searches settings globally and opens the matching setting", async () => {
       <TestTuiContexts>
         <ConfigProvider config={resolve(current, { terminalSuspend: true })} service={service}>
           <Keymap.Provider>
-            <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
               <ToastProvider>
                 <DialogProvider>
                   <Fixture />

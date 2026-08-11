@@ -7,7 +7,6 @@ import { HttpServer } from "effect/unstable/http"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
-import { Global } from "@opencode-ai/util/global"
 
 it.live("returns ordered config entries for the requested directory", () =>
   Effect.acquireUseRelease(
@@ -71,7 +70,7 @@ it.live("returns ordered config entries for the requested directory", () =>
         expect(mcp["servers"]["docs"]).not.toHaveProperty("oauth")
       }),
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.provide(Global.layerWith({}))),
+  ),
 )
 
 function isRecord(value: unknown): value is Record<string, unknown> {

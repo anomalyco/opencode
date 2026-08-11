@@ -35,6 +35,7 @@ export namespace RipgrepBinary {
       const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
       const spawner = yield* ChildProcessSpawner
       const global = yield* Global.Service
+      const findExecutable = (name: string) => which(name, undefined, global.bin)
 
       const run = Effect.fnUntraced(function* (command: string, args: string[]) {
         const handle = yield* spawner.spawn(ChildProcess.make(command, args, { extendEnv: true, stdin: "ignore" }))
@@ -58,9 +59,8 @@ export namespace RipgrepBinary {
 
         if (config.extension === "zip") {
           const shell =
-            (yield* Effect.sync(
-              () => which("powershell.exe", undefined, global.bin) ?? which("pwsh.exe", undefined, global.bin),
-            )) ?? "powershell.exe"
+            (yield* Effect.sync(() => findExecutable("powershell.exe") ?? findExecutable("pwsh.exe"))) ??
+            "powershell.exe"
           const result = yield* run(shell, [
             "-NoProfile",
             "-NonInteractive",
@@ -95,9 +95,7 @@ export namespace RipgrepBinary {
       return Service.of({
         filepath: yield* Effect.cached(
           Effect.gen(function* () {
-            const system = yield* Effect.sync(() =>
-              which(process.platform === "win32" ? "rg.exe" : "rg", undefined, global.bin),
-            )
+            const system = yield* Effect.sync(() => findExecutable(process.platform === "win32" ? "rg.exe" : "rg"))
             if (system && (yield* fs.isFile(system).pipe(Effect.orDie))) return system
 
             const target = path.join(global.bin, `rg${process.platform === "win32" ? ".exe" : ""}`)

@@ -16,6 +16,7 @@ import { ThemeProvider } from "../../../src/context/theme"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { createApi, createEventStream, createFetch, json, type FetchHandler } from "../../fixture/tui-client"
+import { emptyThemeSource } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
@@ -226,7 +227,7 @@ async function renderOpen(
                       <DataProvider>
                         <LocationProvider>
                           <SessionTabsProvider>
-                            <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
+                            <ThemeProvider mode="dark" source={emptyThemeSource}>
                               <DialogProvider>
                                 <Probe />
                               </DialogProvider>

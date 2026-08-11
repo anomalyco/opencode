@@ -12,6 +12,7 @@ import type {
   Slot,
 } from "@opencode-ai/plugin/tui/context"
 import { ThemeProvider, useThemes } from "../../../src/context/theme"
+import { emptyThemeSource } from "../../fixture/fixture"
 import { ConfigProvider } from "../../../src/config"
 import { TuiKeybind } from "../../../src/config/keybind"
 import { Keymap } from "../../../src/context/keymap"
@@ -224,7 +225,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
         <ConfigProvider config={config}>
           <Keymap.Provider>
             <ToastProvider>
-              <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({}) }}>
+              <ThemeProvider mode="dark" source={emptyThemeSource}>
                 <DialogProvider>
                   <Content />
                 </DialogProvider>

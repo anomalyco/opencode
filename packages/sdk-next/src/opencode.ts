@@ -4,7 +4,6 @@ import { createEmbeddedRoutes } from "@opencode-ai/server/routes"
 import type { ServerOptions } from "@opencode-ai/server/options"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import { FetchHttpClient, HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http"
-import { Global } from "@opencode-ai/util/global"
 
 export const create = Effect.fn("OpenCode.create")(function* (options: ServerOptions = {}) {
   const runtime = yield* Effect.acquireRelease(
@@ -14,7 +13,7 @@ export const create = Effect.fn("OpenCode.create")(function* (options: ServerOpt
           ...options,
           app: { ...options.app, name: options.app?.name ?? "sdk" },
           database: { path: ":memory:", ...options.database },
-        }).pipe(Layer.provide(HttpServer.layerServices), Layer.provide(Global.layerWith({}))),
+        }).pipe(Layer.provide(HttpServer.layerServices)),
       ),
     ),
     (runtime) => runtime.disposeEffect,
