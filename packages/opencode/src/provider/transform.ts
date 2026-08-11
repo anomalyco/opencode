@@ -551,6 +551,12 @@ export function topP(model: Provider.Model) {
   if (["minimax-m2", "kimi-k2.5", "kimi-k2p5", "kimi-k2-5"].some((s) => id.includes(s))) {
     return 0.95
   }
+  if (
+    ["deepseek-v4-flash-0731", "deepseek-v4-flash:0731"].some((name) => id.includes(name)) ||
+    (id.includes("deepseek-v4-flash") && (model.providerID === "deepseek" || model.providerID.startsWith("opencode")))
+  ) {
+    return 0.95
+  }
   return undefined
 }
 
