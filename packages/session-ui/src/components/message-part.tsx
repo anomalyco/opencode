@@ -61,6 +61,7 @@ import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
+import { partDefaultOpen } from "./part-default-open"
 import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
@@ -107,7 +108,7 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
   })
 
   return (
-    <span data-component="shell-submessage">
+    <span data-component="shell-submessage" dir="ltr">
       <span ref={widthRef} data-slot="shell-submessage-width" style={{ width: props.animate ? "0px" : undefined }}>
         <span data-slot="basic-tool-tool-subtitle">
           <span
@@ -459,10 +460,10 @@ function newLayout() {
   return typeof document !== "undefined" && document.body.hasAttribute("data-new-layout")
 }
 
-function webSearchProviderLabel(provider: unknown) {
-  if (provider === "parallel") return "Parallel Web Search"
-  if (provider === "exa") return "Exa Web Search"
-  return "Web Search"
+function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI18n>) {
+  const name = provider === "parallel" ? "Parallel" : provider === "exa" ? "Exa" : undefined
+  if (name) return i18n.t("ui.tool.websearch.provider", { provider: name })
+  return i18n.t("ui.tool.websearch")
 }
 
 export function getToolInfo(
@@ -505,7 +506,7 @@ export function getToolInfo(
     case "websearch":
       return {
         icon: "window-cursor",
-        title: webSearchProviderLabel(metadata?.provider),
+        title: webSearchProviderLabel(metadata?.provider, i18n),
         subtitle: input.query,
       }
     case "task": {
@@ -718,15 +719,7 @@ export function renderable(part: PartType, showReasoningSummaries = true) {
   return !!PART_MAPPING[part.type]
 }
 
-function toolDefaultOpen(tool: string, shell = false, edit = false) {
-  if (tool === "bash" || tool === "shell") return shell
-  if (tool === "edit" || tool === "write" || tool === "patch" || tool === "apply_patch") return edit
-}
-
-export function partDefaultOpen(part: PartType, shell = false, edit = false) {
-  if (part.type !== "tool") return
-  return toolDefaultOpen(part.tool, shell, edit)
-}
+export { partDefaultOpen } from "./part-default-open"
 
 export function AssistantParts(props: {
   messages: AssistantMessage[]
@@ -1097,22 +1090,16 @@ export function ContextToolGroup(props: {
               <AnimatedCountList
                 items={[
                   {
-                    key: "read",
+                    key: "ui.messagePart.context.read",
                     count: summary().read,
-                    one: i18n.t("ui.messagePart.context.read.one"),
-                    other: i18n.t("ui.messagePart.context.read.other"),
                   },
                   {
-                    key: "search",
+                    key: "ui.messagePart.context.search",
                     count: summary().search,
-                    one: i18n.t("ui.messagePart.context.search.one"),
-                    other: i18n.t("ui.messagePart.context.search.other"),
                   },
                   {
-                    key: "list",
+                    key: "ui.messagePart.context.list",
                     count: summary().list,
-                    one: i18n.t("ui.messagePart.context.list.one"),
-                    other: i18n.t("ui.messagePart.context.list.other"),
                   },
                 ]}
                 fallback=""
@@ -1140,10 +1127,10 @@ export function ContextToolGroup(props: {
                             <span data-slot="basic-tool-tool-title">
                               <TextShimmer text={trigger().title} active={running()} />
                             </span>
-                            <Show when={!running() && trigger().subtitle}>
+                            <Show when={trigger().subtitle}>
                               <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
                             </Show>
-                            <Show when={!running() && trigger().args?.length}>
+                            <Show when={trigger().args?.length}>
                               <For each={trigger().args}>
                                 {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
                               </For>
@@ -1315,7 +1302,7 @@ export function UserMessageDisplay(props: {
                   clickable={!!props.actions?.openAttachment}
                   onClick={() => props.actions?.openAttachment?.(file)}
                 >
-                  {typeLabel(name, file.mime)}
+                  {typeLabel(name, file.mime, i18n.t("ui.common.file"))}
                 </AttachmentCardV2>
               </Show>
             )
@@ -1337,7 +1324,11 @@ export function UserMessageDisplay(props: {
         }
       >
         <div data-slot="user-message-body">
-          <div data-slot="user-message-text" data-comments={messageComments().length > 0 ? "true" : undefined}>
+          <div
+            data-slot="user-message-text"
+            dir="auto"
+            data-comments={messageComments().length > 0 ? "true" : undefined}
+          >
             <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
             <Show when={messageComments().length > 0}>
               <UserMessageComments comments={messageComments()} bounded />
@@ -1596,7 +1587,9 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                 <ToolErrorCard
                   tool={part().tool}
                   error={error()}
-                  title={part().tool === "websearch" ? webSearchProviderLabel(partMetadata().provider) : undefined}
+                  title={
+                    part().tool === "websearch" ? webSearchProviderLabel(partMetadata().provider, i18n) : undefined
+                  }
                   defaultOpen={props.defaultOpen}
                   open={controlledOpen()}
                   onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
@@ -1739,9 +1732,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     <Show when={text()}>
       <div data-component="text-part" data-timeline-part-id={part().id}>
         <div data-slot="text-part-body">
-          <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
-            <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
-          </Show>
+          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
@@ -1776,9 +1767,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   return (
     <Show when={text()}>
       <div data-component="reasoning-part" data-timeline-part-id={part().id}>
-        <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
-          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
-        </Show>
+        <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
       </div>
     </Show>
   )
@@ -1962,12 +1951,13 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "websearch",
   render(props) {
+    const i18n = useI18n()
     const query = createMemo(() => {
       const value = props.input.query
       if (typeof value !== "string") return ""
       return value
     })
-    const title = createMemo(() => webSearchProviderLabel(props.metadata.provider))
+    const title = createMemo(() => webSearchProviderLabel(props.metadata.provider, i18n))
 
     return (
       <BasicTool
@@ -2132,7 +2122,7 @@ ToolRegistry.register({
           </div>
         )}
       >
-        <div data-component="bash-output">
+        <div data-component="bash-output" dir="ltr">
           <div data-slot="bash-copy">
             <TooltipV2 value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
               <IconButtonV2

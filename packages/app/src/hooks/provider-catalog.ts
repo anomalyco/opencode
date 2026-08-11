@@ -25,3 +25,13 @@ export function selectProviderCatalog(input: ProviderCatalogInput) {
   if (input.explicit) return emptyProviderCatalog
   return input.global
 }
+
+export function resolveDefaultModel(
+  current: NormalizedProviderListResponse["defaultModel"],
+  legacy: string | undefined,
+) {
+  if (current !== undefined) return current ?? undefined
+  if (!legacy) return undefined
+  const [providerID, modelID] = legacy.split("/")
+  return { providerID, modelID }
+}
