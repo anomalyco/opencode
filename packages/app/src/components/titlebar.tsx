@@ -247,11 +247,11 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 return
               }
               if (tab.type === "draft") {
-                document.title = formatWindowTitle(tab.directory, language.t("command.session.new"))
+                document.title = formatWindowTitle(language.t("command.session.new"), tab.directory)
                 return
               }
               const info = tabs.info[tabKey(tab)]
-              document.title = formatWindowTitle(info?.directory, info?.title)
+              document.title = formatWindowTitle(info?.title, info?.directory)
             })
             onCleanup(() => {
               if (platform.platform === "desktop") document.title = formatWindowTitle()
