@@ -38,7 +38,12 @@ export function loadSoundFile(file: string) {
 export function play(sound: AudioSound, options?: AudioPlayOptions) {
   const current = getAudio()
   if (!current) return null
-  if (!current.isStarted() && !current.start()) return null
+  if (!current.isStarted() && !current.start()) {
+    current.dispose()
+    audio = null
+    sounds.clear()
+    return null
+  }
   return current.play(sound, options)
 }
 
