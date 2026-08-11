@@ -52,6 +52,12 @@ export type AutocompleteOption = {
   kind?: "skill"
 }
 
+type AutocompleteResults = {
+  options: AutocompleteOption[]
+  failed: boolean
+  mode: AutocompleteRef["visible"]
+}
+
 export function Autocomplete(props: {
   value: string
   sessionID?: string
@@ -326,9 +332,9 @@ export function Autocomplete(props: {
 
   const [files] = createResource(
     () => ({ query: search(), location: location.current, visible: store.visible }),
-    async (input) => {
-      if (!input.visible || input.visible === "/") return { options: [], failed: false }
-      if (referenceMatch()) return { options: [], failed: false }
+    async (input, info): Promise<AutocompleteResults> => {
+      if (!input.visible || input.visible === "/") return { options: [], failed: false, mode: input.visible }
+      if (referenceMatch()) return { options: [], failed: false, mode: input.visible }
       const { lineRange, base } = parseFileLineRange(input.query ?? "")
       const directorySearch =
         input.visible === "directory"
@@ -348,7 +354,10 @@ export function Autocomplete(props: {
         () => undefined,
       )
 
-      if (!result) return { options: [], failed: true }
+      if (!result)
+        return info.value?.mode === input.visible
+          ? { ...info.value, failed: true }
+          : { options: [], failed: true, mode: input.visible }
 
       const options: AutocompleteOption[] = []
 
@@ -397,12 +406,18 @@ export function Autocomplete(props: {
         }),
       )
 
-      return { options, failed: false }
+      return { options, failed: false, mode: input.visible }
     },
     {
-      initialValue: { options: [], failed: false },
+      initialValue: { options: [], failed: false, mode: false as AutocompleteRef["visible"] },
     },
   )
+
+  const visibleFiles = createMemo(() => {
+    const value = files.loading ? files.latest : files()
+    if (value?.mode === store.visible) return value
+    return { options: [], failed: false }
+  })
 
   const mcpResources = createMemo(() => {
     if (store.visible !== "@") return []
@@ -543,7 +558,7 @@ export function Autocomplete(props: {
   })
 
   const options = createMemo(() => {
-    const fileSearch = files()
+    const fileSearch = visibleFiles()
     const referenceMatchValue = referenceMatch()
     const agentsValue = agents()
     const referenceAliasesValue = referenceAliases()
@@ -829,17 +844,18 @@ export function Autocomplete(props: {
   let scroll: ScrollBoxRenderable
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const emptyMessage = createMemo(() => {
+    const fileSearch = visibleFiles()
     if (store.visible === "/") return "No matching commands"
     if (store.visible === "directory") {
       if (files.loading) return "Searching…"
-      if (files().failed) return "Could not search directories. Keep typing to try again."
+      if (fileSearch.failed) return "Could not search directories. Keep typing to try again."
       return "No matching directories"
     }
     if (files.loading) return "Searching…"
-    if (files().failed) return "Could not search files. Keep typing to try again."
+    if (fileSearch.failed) return "Could not search files. Keep typing to try again."
     return "No matching files, agents, or references"
   })
-  const emptyError = createMemo(() => store.visible === "@" && !files.loading && files().failed)
+  const emptyError = createMemo(() => store.visible === "@" && !files.loading && visibleFiles().failed)
 
   return (
     <box
