@@ -64,6 +64,10 @@ describe("SessionExecution lifecycle", () => {
       yield* seedSessions(database, [child], { time_suspended: Date.now(), parent_id: parent })
 
       expect(yield* store.listSuspended()).toEqual([parent])
+
+      // The sweep clears orphaned child claims outright; parents keep theirs.
+      yield* store.releaseChildClaims
+      expect(yield* claims(database)).toEqual({ [parent]: true, [child]: false, [idle]: false })
     }),
   )
 
@@ -75,20 +79,20 @@ describe("SessionExecution lifecycle", () => {
       yield* seedSessions(database, [interrupted, completed])
 
       // Each drain signals once it runs; the claim commits before the drain starts.
-      const running = new Map(
-        [interrupted, completed].map((id) => [id, Deferred.makeUnsafe<void>()] as const),
-      )
+      const interruptedRunning = yield* Deferred.make<void>()
+      const completedRunning = yield* Deferred.make<void>()
       const release = yield* Deferred.make<void>()
       const scope = yield* Scope.make()
       const context = yield* buildExecution(scope, ({ sessionID }) =>
-        Deferred.succeed(running.get(sessionID)!, undefined).pipe(
-          Effect.andThen(sessionID === completed ? Deferred.await(release) : Effect.never),
-        ),
+        sessionID === completed
+          ? Deferred.succeed(completedRunning, undefined).pipe(Effect.andThen(Deferred.await(release)))
+          : Deferred.succeed(interruptedRunning, undefined).pipe(Effect.andThen(Effect.never)),
       )
       const execution = Context.get(context, SessionExecution.Service)
       yield* execution.resume(interrupted).pipe(Effect.forkScoped)
       const completing = yield* execution.resume(completed).pipe(Effect.forkIn(scope))
-      yield* Effect.forEach(running.values(), Deferred.await, { discard: true })
+      yield* Deferred.await(interruptedRunning)
+      yield* Deferred.await(completedRunning)
 
       // The write-ahead claim exists WHILE the turns run — no shutdown hook involved.
       expect(yield* claims(database)).toEqual({ [interrupted]: true, [completed]: true })
@@ -286,13 +290,12 @@ describe("SessionExecution lifecycle", () => {
       expect((yield* claims(database))[sessionID]).toBe(true)
     }),
   )
-
 })
 
 function seedSessions(
   database: Database.Service["Service"],
   sessionIDs: ReadonlyArray<Session.ID>,
-  values: { time_suspended?: number; resume_attempts?: number; parent_id?: Session.ID } = {},
+  values: Partial<Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id">> = {},
 ) {
   return Effect.gen(function* () {
     yield* database.db
@@ -338,7 +341,7 @@ function attempts(database: Database.Service["Service"], sessionID: Session.ID) 
     .get()
     .pipe(
       Effect.orDie,
-      Effect.map((row) => row?.attempts ?? -1),
+      Effect.map((row) => row?.attempts),
     )
 }
 

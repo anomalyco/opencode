@@ -26,13 +26,23 @@ export interface Interface {
   /**
    * Records the execution claim: the durable write-ahead intent that a turn is
    * (or was) in flight. Set when execution starts; a claim that survives to the
-   * next boot is the signature of a process that died without teardown.
+   * next boot marks a turn that never completed — its process crashed or shut
+   * down mid-turn.
    */
   readonly claim: (sessionID: Session.ID) => Effect.Effect<void>
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
-  /** Durably counts one more resume of an orphaned claim, returning the new total. */
-  readonly countResume: (sessionID: Session.ID) => Effect.Effect<number>
+  /**
+   * Clears orphaned child (subagent) claims. Children are never resumed
+   * independently, so a dead child's claim is noise no terminal will ever
+   * release.
+   */
+  readonly releaseChildClaims: Effect.Effect<void>
+  /**
+   * Durably counts one more resume of an orphaned claim, returning the new
+   * total — or undefined when the Session no longer exists.
+   */
+  readonly countResume: (sessionID: Session.ID) => Effect.Effect<number | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStore") {}
@@ -77,11 +87,13 @@ const layer = Layer.effect(
           )
       }),
       claim: Effect.fn("SessionStore.claim")(function* (sessionID) {
-        // The null guard preserves the original claim time if a claimed Session drains again
-        // before the sweep saw it (a user prompt beat the recovery to the wake-up).
+        // The null guard makes re-claiming a still-claimed Session a zero-row
+        // no-op (a resumed turn re-claims through the same started hook).
+        // Claim bookkeeping never counts as user activity: time_updated is
+        // pinned so session ordering only moves on real changes.
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: Date.now() })
+          .set({ time_suspended: Date.now(), time_updated: sql`${SessionTable.time_updated}` })
           .where(and(eq(SessionTable.id, sessionID), isNull(SessionTable.time_suspended)))
           .run()
           .pipe(Effect.orDie)
@@ -89,20 +101,29 @@ const layer = Layer.effect(
       release: Effect.fn("SessionStore.release")(function* (sessionID) {
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: null, resume_attempts: 0 })
+          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
           .where(eq(SessionTable.id, sessionID))
           .run()
           .pipe(Effect.orDie)
       }),
+      releaseChildClaims: db
+        .update(SessionTable)
+        .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+        .where(and(isNotNull(SessionTable.time_suspended), isNotNull(SessionTable.parent_id)))
+        .run()
+        .pipe(Effect.orDie, Effect.asVoid, Effect.withSpan("SessionStore.releaseChildClaims")),
       countResume: Effect.fn("SessionStore.countResume")(function* (sessionID) {
         const row = yield* db
           .update(SessionTable)
-          .set({ resume_attempts: sql`${SessionTable.resume_attempts} + 1` })
+          .set({
+            resume_attempts: sql`${SessionTable.resume_attempts} + 1`,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
           .where(eq(SessionTable.id, sessionID))
           .returning({ attempts: SessionTable.resume_attempts })
           .get()
           .pipe(Effect.orDie)
-        return row?.attempts ?? 0
+        return row?.attempts
       }),
     })
   }),
