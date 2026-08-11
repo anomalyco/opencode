@@ -152,6 +152,28 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("resolves the Bedrock Mantle catalog endpoint from the configured region", () =>
+    withEnv({ AWS_REGION: undefined }, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
+            providerID: Provider.ID.amazonBedrock,
+            modelID: "openai.gpt-oss-120b",
+            settings: {
+              region: "us-west-2",
+              baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
+            },
+          }),
+        )
+
+        expect(resolved.route).toMatchObject({
+          id: "bedrock-mantle-responses",
+          endpoint: { baseURL: "https://bedrock-mantle.us-west-2.api.aws/openai/v1" },
+        })
+      }),
+    ),
+  )
+
   it.effect("uses the API modelID instead of the catalog ID for native OpenAI routes", () =>
     Effect.gen(function* () {
       const catalog = model(Provider.aisdk("@ai-sdk/openai"), {

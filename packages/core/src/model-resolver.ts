@@ -254,7 +254,14 @@ function prepareRuntimeModel(model: Info, credential: Credential.Value | undefin
     if (credential?.type === "key" && credential.metadata !== undefined)
       draft.body = Provider.mergeOverlay(draft.body, credential.metadata)
     if (typeof draft.settings?.baseURL !== "string") return
+    const bedrockRegion =
+      Provider.isAISDK(draft.package) &&
+      Provider.packageName(draft.package) === "@ai-sdk/amazon-bedrock/mantle" &&
+      typeof draft.settings.region === "string"
+        ? draft.settings.region
+        : undefined
     draft.settings.baseURL = draft.settings.baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => {
+      if (name === "AWS_REGION" && bedrockRegion) return bedrockRegion
       return process.env[name] ?? placeholder
     })
   })
