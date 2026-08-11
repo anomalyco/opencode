@@ -3057,7 +3057,7 @@ function ExecuteCallView(props: { call: ExecuteCall; error?: string }) {
         {expanded() ? title() : executeCallSummary(props.call)}
       </text>
       <Show when={expanded()}>
-        <box paddingLeft={2} paddingTop={1}>
+        <box paddingLeft={2}>
           <For each={input()}>
             {([key, value]) => (
               <box flexDirection="row">
