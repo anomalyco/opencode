@@ -1285,9 +1285,6 @@ function TurnTokenUsage(props: {
             setExpanded((value) => !value)
           }}
         >
-          <text width={INLINE_TOOL_ICON_WIDTH} fg={theme.text.subdued}>
-            ◈
-          </text>
           <text fg={hover() ? theme.text.default : theme.text.subdued} wrapMode="none">
             <span>{expanded() ? "- " : "+ "}</span>
             <span style={{ attributes: TextAttributes.BOLD }}>Tokens</span>
