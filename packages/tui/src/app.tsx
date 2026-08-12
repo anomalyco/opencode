@@ -890,9 +890,9 @@ function App(props: { pair?: DialogPairCredentials }) {
         // secret /baldbeard incantation.
         name: "opencode.experiments",
         title: "Experiments",
-        description: "Arr. Here be experiments.",
+        description: "look is my devrel meme face",
         palette: undefined,
-        slash: { name: "baldbeard" },
+        slash: { name: "baldbeard", secret: true as const },
         run: () => {
           dialog.replace(() => <DialogExperiments />)
         },
