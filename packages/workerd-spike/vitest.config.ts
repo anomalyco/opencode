@@ -55,6 +55,14 @@ export default defineWorkersConfig({
   test: {
     testTimeout: 120_000,
 
+    // The patched pool's module fallback service handles /@fs ids with posix
+    // assumptions; Windows drive-letter paths (/@fs/C:/...) fall through and
+    // modules served as raw text (snapshot.txt?mf_vitest_force=Text) fail to
+    // resolve. The guard is platform-independent — the bundle graph proven
+    // pure on Linux is the same graph everywhere — so skip the suite on
+    // Windows instead of teaching the pinned pool about win32 paths.
+    ...(process.platform === "win32" ? { include: [], passWithNoTests: true } : {}),
+
     poolOptions: {
       workers: {
         singleWorker: true,
