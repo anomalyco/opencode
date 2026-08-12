@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { describe, expect } from "bun:test"
+import { describe, expect, spyOn } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { provideTmpdirInstance, testInstanceStoreLayer, TestInstance } from "../fixture/fixture"
@@ -11,6 +11,28 @@ import * as Formatter from "../../src/format/formatter"
 const it = testEffect(
   Layer.mergeAll(LayerNode.compile(LayerNode.group([Format.node, CrossSpawnSpawner.node])), NodeFileSystem.layer),
 )
+
+function withGofmt(
+  enabled: Formatter.Info["enabled"],
+  run: () => Effect.Effect<void, unknown, Format.Service | TestInstance>,
+) {
+  const original = {
+    extensions: Formatter.gofmt.extensions,
+    enabled: Formatter.gofmt.enabled,
+  }
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      Formatter.gofmt.extensions = [".cache"]
+      Formatter.gofmt.enabled = enabled
+    }),
+    run,
+    () =>
+      Effect.sync(() => {
+        Formatter.gofmt.extensions = original.extensions
+        Formatter.gofmt.enabled = original.enabled
+      }),
+  )
+}
 
 describe("Format", () => {
   it.instance("status() returns empty list when no formatters are configured", () =>
@@ -231,5 +253,170 @@ describe("Format", () => {
         },
       },
     },
+  )
+
+  it.instance(
+    "caches sequential formatter discovery misses",
+    () => {
+      let probes = 0
+      return withGofmt(
+        async () => {
+          probes++
+          return false
+        },
+        () =>
+          Effect.gen(function* () {
+            const test = yield* TestInstance
+            const file = `${test.directory}/test.cache`
+            yield* Effect.promise(() => Bun.write(file, "x"))
+            yield* Format.Service.use((fmt) => Effect.all([fmt.file(file), fmt.file(file)], { concurrency: 1 }))
+            expect(probes).toBe(1)
+          }),
+      )
+    },
+    { config: { formatter: { gofmt: {} } } },
+  )
+
+  it.instance(
+    "single-flights concurrent formatter discovery misses",
+    () => {
+      let probes = 0
+      return withGofmt(
+        async () => {
+          probes++
+          await Promise.resolve()
+          return false
+        },
+        () =>
+          Effect.gen(function* () {
+            const test = yield* TestInstance
+            const file = `${test.directory}/test.cache`
+            yield* Effect.promise(() => Bun.write(file, "x"))
+            yield* Format.Service.use((fmt) =>
+              Effect.all(
+                Array.from({ length: 20 }, () => fmt.file(file)),
+                { concurrency: "unbounded" },
+              ),
+            )
+            expect(probes).toBe(1)
+          }),
+      )
+    },
+    { config: { formatter: { gofmt: {} } } },
+  )
+
+  it.instance(
+    "retries a discovery miss after the negative cache TTL",
+    () => {
+      let now = 1_000
+      let probes = 0
+      const clock = spyOn(performance, "now").mockImplementation(() => now)
+      return withGofmt(
+        async () => {
+          probes++
+          return probes === 1 ? false : ["node", "-e", ""]
+        },
+        () =>
+          Effect.gen(function* () {
+            const test = yield* TestInstance
+            const file = `${test.directory}/test.cache`
+            yield* Effect.promise(() => Bun.write(file, "x"))
+            yield* Format.Service.use((fmt) =>
+              Effect.gen(function* () {
+                expect(yield* fmt.file(file)).toBe(false)
+                now += 5_000
+                expect(yield* fmt.file(file)).toBe(true)
+              }),
+            )
+            expect(probes).toBe(2)
+          }).pipe(Effect.ensuring(Effect.sync(() => clock.mockRestore()))),
+      )
+    },
+    { config: { formatter: { gofmt: {} } } },
+  )
+
+  it.instance(
+    "keeps successful formatter discovery cached beyond the negative TTL",
+    () => {
+      let now = 1_000
+      let probes = 0
+      const clock = spyOn(performance, "now").mockImplementation(() => now)
+      return withGofmt(
+        async () => {
+          probes++
+          return ["node", "-e", ""]
+        },
+        () =>
+          Effect.gen(function* () {
+            const test = yield* TestInstance
+            const file = `${test.directory}/test.cache`
+            yield* Effect.promise(() => Bun.write(file, "x"))
+            yield* Format.Service.use((fmt) =>
+              Effect.gen(function* () {
+                expect(yield* fmt.file(file)).toBe(true)
+                now += 10_000
+                expect(yield* fmt.file(file)).toBe(true)
+              }),
+            )
+            expect(probes).toBe(1)
+          }).pipe(Effect.ensuring(Effect.sync(() => clock.mockRestore()))),
+      )
+    },
+    { config: { formatter: { gofmt: {} } } },
+  )
+
+  it.instance(
+    "retries formatter discovery after rejection",
+    () => {
+      let probes = 0
+      return withGofmt(
+        async () => {
+          probes++
+          if (probes === 1) throw new Error("discovery failed")
+          return false
+        },
+        () =>
+          Effect.gen(function* () {
+            const test = yield* TestInstance
+            const file = `${test.directory}/test.cache`
+            yield* Effect.promise(() => Bun.write(file, "x"))
+            yield* Format.Service.use((fmt) =>
+              Effect.gen(function* () {
+                expect((yield* Effect.exit(fmt.file(file)))._tag).toBe("Failure")
+                expect(yield* fmt.file(file)).toBe(false)
+              }),
+            )
+            expect(probes).toBe(2)
+          }),
+      )
+    },
+    { config: { formatter: { gofmt: {} } } },
+  )
+
+  it.instance(
+    "shares formatter discovery between status() and file()",
+    () => {
+      let probes = 0
+      return withGofmt(
+        async () => {
+          probes++
+          return false
+        },
+        () =>
+          Effect.gen(function* () {
+            const test = yield* TestInstance
+            const file = `${test.directory}/test.cache`
+            yield* Effect.promise(() => Bun.write(file, "x"))
+            yield* Format.Service.use((fmt) =>
+              Effect.gen(function* () {
+                yield* fmt.status()
+                expect(yield* fmt.file(file)).toBe(false)
+              }),
+            )
+            expect(probes).toBe(1)
+          }),
+      )
+    },
+    { config: { formatter: { gofmt: {} } } },
   )
 })

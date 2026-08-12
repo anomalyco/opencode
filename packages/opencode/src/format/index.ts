@@ -37,16 +37,35 @@ const layer = Layer.effect(
 
     const state = yield* InstanceState.make(
       Effect.fn("Format.state")(function* (ctx) {
-        const commands: Record<string, string[] | false> = {}
+        const commands: Record<
+          string,
+          {
+            value: Promise<string[] | false>
+            expires?: number
+          }
+        > = {}
         const formatters: Record<string, Formatter.Info> = {}
 
         async function getCommand(item: Formatter.Info) {
-          let cmd = commands[item.name]
-          if (cmd === false || cmd === undefined) {
-            cmd = await item.enabled({ ...ctx, experimentalOxfmt: flags.experimentalOxfmt })
-            commands[item.name] = cmd
-          }
-          return cmd
+          const cached = commands[item.name]
+          if (cached && (cached.expires === undefined || cached.expires > performance.now())) return cached.value
+
+          const entry = {
+            value: Promise.resolve()
+              .then(() => item.enabled({ ...ctx, experimentalOxfmt: flags.experimentalOxfmt }))
+              .then(
+                (cmd) => {
+                  if (cmd === false) entry.expires = performance.now() + 5_000
+                  return cmd
+                },
+                (error) => {
+                  if (commands[item.name] === entry) delete commands[item.name]
+                  throw error
+                },
+              ),
+          } as { value: Promise<string[] | false>; expires?: number }
+          commands[item.name] = entry
+          return entry.value
         }
 
         async function isEnabled(item: Formatter.Info) {
