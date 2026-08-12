@@ -209,7 +209,31 @@ export const read = Effect.fn("ReadTool.read")(function* (
           mime,
         }
       }
-      if (startsWith(first, [0x25, 0x50, 0x44, 0x46]) || extensions.has(path.extname(resource).toLowerCase()))
+      if (startsWith(first, [0x25, 0x50, 0x44, 0x46])) {
+        if (info.size > MAX_MEDIA_INGEST_BYTES)
+          return yield* Effect.fail(new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES }))
+        const chunks = [first]
+        let total = first.length
+        while (total <= MAX_MEDIA_INGEST_BYTES) {
+          const chunk = yield* file.readAlloc(Math.min(64 * 1024, MAX_MEDIA_INGEST_BYTES + 1 - total))
+          if (Option.isNone(chunk)) break
+          chunks.push(chunk.value)
+          total += chunk.value.length
+        }
+        if (total > MAX_MEDIA_INGEST_BYTES)
+          return yield* Effect.fail(new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES }))
+        return {
+          uri: pathToFileURL(real).href,
+          name: path.basename(real),
+          content: Buffer.concat(
+            chunks.map((chunk) => Buffer.from(chunk)),
+            total,
+          ).toString("base64"),
+          encoding: "base64" as const,
+          mime: "application/pdf",
+        }
+      }
+      if (extensions.has(path.extname(resource).toLowerCase()))
         return yield* Effect.fail(new BinaryFileError({ resource }))
       const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
       if (!paged) {

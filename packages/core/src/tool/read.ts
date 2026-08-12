@@ -39,16 +39,22 @@ const layer = Layer.effectDiscard(
       .register({
         [name]: Tool.make({
           description:
-            "Read a text file or supported image, page through a large UTF-8 text file by line offset, or list a directory page. Relative paths resolve from the current location; absolute paths inside it are accepted, while external absolute paths require external_directory approval.",
+            "Read a text file, supported image, or PDF; page through a large UTF-8 text file by line offset; or list a directory page. Relative paths resolve from the current location; absolute paths inside it are accepted, while external absolute paths require external_directory approval.",
           input: Input,
           output: Output,
           toModelOutput: ({ input, output }) => {
-            if (!("encoding" in output) || output.encoding !== "base64" || !SUPPORTED_IMAGE_MIMES.has(output.mime))
-              return []
-            return [
-              { type: "text", text: "Image read successfully" },
-              { type: "file", data: output.content, mime: output.mime, name: input.path },
-            ]
+            if (!("encoding" in output) || output.encoding !== "base64") return []
+            if (SUPPORTED_IMAGE_MIMES.has(output.mime))
+              return [
+                { type: "text", text: "Image read successfully" },
+                { type: "file", data: output.content, mime: output.mime, name: input.path },
+              ]
+            if (output.mime === "application/pdf")
+              return [
+                { type: "text", text: "PDF read successfully" },
+                { type: "file", data: output.content, mime: output.mime, name: input.path },
+              ]
+            return []
           },
           execute: (input, context) => {
             return Effect.gen(function* () {
@@ -88,7 +94,7 @@ const layer = Layer.effectDiscard(
                   .normalize(resource, { ...content, encoding: "base64" })
                   .pipe(Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(content)))
               }
-              if ("encoding" in content && content.encoding === "base64")
+              if ("encoding" in content && content.encoding === "base64" && content.mime !== "application/pdf")
                 return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError({ resource }))
               return content
             }).pipe(
