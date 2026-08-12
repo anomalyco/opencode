@@ -383,6 +383,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--thinking"}</code></nobr> |       | Show thinking blocks                                                       |
 | <nobr><code>{"--auto"}</code></nobr>     |       | Auto-approve permissions that are not explicitly denied                    |
 
+#### Exit codes
+
+`opencode run` exits `0` on success and `1` on failure. No other codes are used.
+
+| Code | Meaning                                                                   |
+| ---- | ------------------------------------------------------------------------- |
+| `0`  | The session ran to completion.                                             |
+| `1`  | Startup or argument validation failed, or the session reported an error.   |
+
+Exit `1` covers argument and startup failures — an unreadable `--dir`, a missing
+`--file`, an empty message, `--fork` without `--continue` or `--session`, or an
+unknown `--session` id — and runtime failures, where the session emits an error or
+the prompt request itself fails.
+
+A run whose tool calls were denied by the [permission](/docs/permissions) system
+still exits `0`, because a denied tool call is reported back to the model rather
+than raised as a session error. When scripting against `opencode run`, read the
+event stream from `--format json` as well as the exit code.
+
 ---
 
 ### serve
