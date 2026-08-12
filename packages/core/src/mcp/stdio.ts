@@ -14,6 +14,7 @@ const CLOSE_GRACE = Duration.seconds(2)
 /** Mirrors StdioClientTransport: escalate SIGTERM to SIGKILL after this long. */
 const FORCE_KILL_AFTER = Duration.seconds(2)
 const OUTGOING_CAPACITY = 64
+const MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 export interface Options {
   /** Server name; only used to attribute logs. */
@@ -42,26 +43,42 @@ export interface Options {
  */
 export const make = Effect.fnUntraced(function* (options: Options) {
   const environment = yield* Environment.Service
-  const context = yield* Effect.context<Scope.Scope>()
+  const scope = yield* Effect.scope
   // Outgoing frames are queued rather than written to `handle.stdin` directly: the sink closes the
   // stream it is run with, and stdin must stay open across the whole session.
   const outgoing = yield* Queue.bounded<string, Cause.Done>(OUTGOING_CAPACITY)
   const buffer = new ReadBuffer()
   const state: { phase: "ready" | "starting" | "open" | "closed"; handle?: ChildProcessHandle } = { phase: "ready" }
+  let startup: Promise<void> | undefined
+  let closing: Promise<void> | undefined
+  let trailingBytes = 0
 
   const stop = (handle: ChildProcessHandle) =>
     Effect.gen(function* () {
-      Queue.endUnsafe(outgoing)
       const exit = yield* Effect.timeoutOption(handle.exitCode, CLOSE_GRACE)
       if (exit._tag === "Some") return
-      yield* handle.kill({ killSignal: "SIGTERM", forceKillAfter: FORCE_KILL_AFTER })
+      const terminated = yield* Effect.timeoutOption(handle.kill({ killSignal: "SIGTERM" }), FORCE_KILL_AFTER)
+      if (terminated._tag === "None") yield* handle.kill({ killSignal: "SIGKILL" })
     }).pipe(Effect.ignore)
+
+  const close = () =>
+    (closing ??= Effect.runPromise(
+      Effect.gen(function* () {
+        state.phase = "closed"
+        Queue.endUnsafe(outgoing)
+        if (startup) yield* Effect.promise(() => startup!.catch(() => undefined))
+        const handle = state.handle
+        if (!handle) return
+        state.handle = undefined
+        yield* stop(handle)
+      }).pipe(Effect.ensuring(Queue.shutdown(outgoing)), Effect.ensuring(Effect.sync(() => buffer.clear()))),
+    ))
 
   const transport: Transport = {
     start: () => {
       if (state.phase !== "ready") return Promise.reject(new Error("Stdio transport already started"))
       state.phase = "starting"
-      return Effect.runPromiseWith(context)(
+      startup = Effect.runPromise(
         Effect.gen(function* () {
           const handle = yield* environment.spawner.spawn(
             ChildProcess.make(options.command, [...options.args], {
@@ -81,8 +98,9 @@ export const make = Effect.fnUntraced(function* (options: Options) {
           }
           state.phase = "open"
           yield* startOutput(handle)
-        }),
+        }).pipe(Scope.provide(scope)),
       )
+      return startup
     },
     send: (message: JSONRPCMessage) =>
       state.phase !== "open"
@@ -92,21 +110,15 @@ export const make = Effect.fnUntraced(function* (options: Options) {
               Effect.flatMap((offered) => (offered ? Effect.void : Effect.fail(new Error("Not connected")))),
             ),
           ),
-    close: () =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          state.phase = "closed"
-          Queue.endUnsafe(outgoing)
-          const handle = state.handle
-          if (!handle) return
-          state.handle = undefined
-          yield* stop(handle)
-        }).pipe(Effect.ensuring(Effect.sync(() => buffer.clear()))),
-      ),
+    close,
   }
 
   const deliver = (chunk: Uint8Array) =>
     Effect.gen(function* () {
+      for (const byte of chunk) {
+        trailingBytes = byte === 10 ? 0 : trailingBytes + 1
+        if (trailingBytes > MAX_FRAME_BYTES) return yield* Effect.fail(new Error("MCP stdio frame exceeded 16 MiB"))
+      }
       buffer.append(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength))
       while (true) {
         // `undefined` means the frame failed to parse: the buffer has already advanced past it, so
@@ -143,8 +155,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
           Effect.ensuring(
             Effect.gen(function* () {
               const unexpected = state.phase !== "closed"
-              state.phase = "closed"
-              if (unexpected) yield* stop(handle)
+              if (unexpected) yield* Effect.promise(close)
               transport.onclose?.()
             }),
           ),

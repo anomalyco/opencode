@@ -460,16 +460,8 @@ export const layer = (options?: Options) =>
         connection.onClose(() =>
           live(
             Effect.gen(function* () {
-              const scope = entry.scope
-              entry.scope = undefined
-              entry.client = undefined
-              entry.tools = undefined
-              entry.prompts = undefined
               entry.status = { status: "failed", error: "Connection closed" }
-              if (scope) yield* Scope.close(scope, Exit.void)
-              yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
-              yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
-              yield* bus.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
+              yield* stopServer(name, entry)
               yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
             }),
           ),

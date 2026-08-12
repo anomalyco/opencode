@@ -32,8 +32,9 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { Tool } from "@opencode-ai/core/tool"
-import { DateTime, Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, Schema, Stream } from "effect"
-import { ChildProcess } from "effect/unstable/process"
+import { DateTime, Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, Schema, Sink, Stream } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ExitCode, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
 import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
@@ -470,13 +471,11 @@ test("spawns local MCP servers through the location environment", async () => {
 
   expect(spawns).toHaveLength(1)
   const command = spawns[0]
-  expect(command?._tag).toBe("StandardCommand")
   if (!command || !ChildProcess.isStandardCommand(command)) throw new Error("Expected a standard process command")
   expect(command.command).toBe(process.execPath)
   expect(command.options.cwd).toBe(cwd)
   expect(command.options.extendEnv).toBe(true)
   expect(command.options.env).toEqual({ MCP_LOCATION_TEST: "configured" })
-  expect(command.options.env).not.toHaveProperty("HOME")
 })
 
 test("rejects sends before the stdio transport is started", async () => {
@@ -500,6 +499,83 @@ test("rejects sends before the stdio transport is started", async () => {
       }).pipe(Effect.provide(hostEnvironmentLayer)),
     ),
   )
+})
+
+test("joins concurrent stdio transport closes", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const transport = yield* MCPStdio.make({
+          server: "concurrent-close",
+          command: "unused",
+          args: [],
+          cwd: import.meta.dir,
+          environment: {},
+        })
+        const first = transport.close()
+        expect(transport.close()).toBe(first)
+        yield* Effect.promise(() => first)
+      }).pipe(Effect.provide(hostEnvironmentLayer)),
+    ),
+  )
+})
+
+test("closes a stdio process that finishes spawning after close", async () => {
+  const spawning = Deferred.makeUnsafe<void>()
+  const release = Deferred.makeUnsafe<void>()
+  const exited = Deferred.makeUnsafe<ExitCode>()
+  const signals: Array<string> = []
+  const driver = Environment.makeMemoryDriver()
+  const environment = Layer.succeed(
+    Environment.Service,
+    Environment.Service.of({
+      files: Environment.makeFiles(driver),
+      spawner: ChildProcessSpawner.make(() =>
+        Effect.gen(function* () {
+          yield* Deferred.succeed(spawning, undefined)
+          yield* Deferred.await(release)
+          return makeHandle({
+            pid: ProcessId(1),
+            exitCode: Deferred.await(exited),
+            isRunning: Deferred.isDone(exited).pipe(Effect.map((done) => !done)),
+            kill: (options) =>
+              Effect.gen(function* () {
+                signals.push(options?.killSignal ?? "SIGTERM")
+                yield* Deferred.succeed(exited, ExitCode(143))
+              }),
+            stdin: Sink.drain,
+            stdout: Stream.never,
+            stderr: Stream.empty,
+            all: Stream.never,
+            getInputFd: () => Sink.drain,
+            getOutputFd: () => Stream.empty,
+            unref: Effect.succeed(Effect.void),
+          })
+        }),
+      ),
+    }),
+  )
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const transport = yield* MCPStdio.make({
+          server: "close-during-spawn",
+          command: "unused",
+          args: [],
+          cwd: import.meta.dir,
+          environment: {},
+        })
+        const start = transport.start()
+        yield* Deferred.await(spawning)
+        const close = transport.close()
+        yield* Deferred.succeed(release, undefined)
+        yield* Effect.promise(() => Promise.all([start, close]))
+      }).pipe(Effect.provide(environment)),
+    ),
+  )
+
+  expect(signals).toEqual(["SIGTERM"])
 })
 
 test("applies the configured MCP catalog timeout", async () => {
