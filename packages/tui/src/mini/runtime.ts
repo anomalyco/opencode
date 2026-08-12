@@ -11,6 +11,7 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { LocationRef } from "@opencode-ai/client/promise"
 import type { Config } from "../config"
+import { newSessionLocation } from "../config/new-session-location"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
 import {
   resolveMiniSettings,
@@ -48,6 +49,7 @@ type Reconnect = (signal: AbortSignal) => Promise<RunInput["sdk"]>
 
 type RunRuntimeInput = {
   host: MiniHost
+  directory: string
   boot: () => Promise<BootContext>
   resolveSession: (sdk: RunInput["sdk"], signal: AbortSignal) => Promise<ResolvedSession>
   createSession?: CreateSession
@@ -941,7 +943,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
               const created = await createSession(
                 state.sdk,
                 {
-                  location: state.location,
+                  location: newSessionLocation(
+                    (await tuiConfigTask).session.new_location,
+                    input.directory,
+                    state.location,
+                  ),
                   agent: state.agent,
                   model: state.model,
                   variant: state.activeVariant,
@@ -1099,6 +1105,7 @@ export async function runInteractiveDeferredMode(input: RunDeferredInput, deps?:
   return runInteractiveRuntime(
     {
       host: input.host,
+      directory: input.directory,
       files: input.files,
       initialInput: input.initialInput,
       thinking: input.thinking,

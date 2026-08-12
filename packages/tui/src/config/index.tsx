@@ -137,6 +137,9 @@ export const Info = Schema.Struct({
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
       }),
+      new_location: Schema.optional(Schema.Literals(["launch", "inherit"])).annotate({
+        description: "Start new sessions in the TUI launch directory or inherit the active session location",
+      }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
   tabs: Schema.optional(
@@ -202,7 +205,7 @@ export const Info = Schema.Struct({
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader" | "mouse" | "tabs"> & {
+export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader" | "mouse" | "session" | "tabs"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -217,6 +220,9 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   cursor?: {
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
+  }
+  session: Omit<NonNullable<Info["session"]>, "new_location"> & {
+    new_location: "launch" | "inherit"
   }
   tabs: {
     enabled: boolean
@@ -259,6 +265,10 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
           blinking: input.cursor.blinking ?? true,
         }
       : undefined,
+    session: {
+      ...input.session,
+      new_location: input.session?.new_location ?? "launch",
+    },
     tabs: {
       ...input.tabs,
       enabled: input.tabs?.enabled ?? true,
