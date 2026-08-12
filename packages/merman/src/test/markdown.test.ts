@@ -361,3 +361,28 @@ timeline
   expect(frame).toContain("First release")
   expect(frame).not.toContain("timeline")
 })
+
+test("renders a Mermaid GitGraph fence inside MarkdownRenderable", async () => {
+  const testRenderer = await createTestRenderer({ width: 80, height: 18 })
+  renderer = testRenderer.renderer
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-gitgraph",
+    content: `\`\`\`mermaid
+gitGraph
+  commit id: "baseline"
+  branch feature
+  commit id: "ship"
+\`\`\``,
+    syntaxStyle,
+    treeSitterClient,
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+
+  const frame = testRenderer.captureCharFrame()
+  expect(frame).toContain("baseline")
+  expect(frame).toContain("ship")
+  expect(frame).not.toContain("gitGraph")
+})

@@ -1,4 +1,4 @@
-export type MermaidDiagramKind = "flowchart" | "sequence" | "state" | "timeline"
+export type MermaidDiagramKind = "flowchart" | "sequence" | "state" | "timeline" | "gitGraph"
 
 /** An otherwise valid diagram contains syntax that this renderer does not support. */
 export class MermaidSyntaxError extends Error {

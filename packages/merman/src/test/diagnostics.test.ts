@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { MermaidSyntaxError } from "../diagnostics.js"
+import { renderGitGraphDiagram } from "../gitgraph/diagram.js"
 import { parseMermaidFlowchartDiagram } from "../flowchart/parser.js"
 import { parseMermaidSequenceDiagram } from "../sequence/parser.js"
 import { parseMermaidStateDiagram } from "../state/parser.js"
@@ -108,6 +109,12 @@ describe("parser diagnostics", () => {
   test("reports malformed timeline continuations with timeline diagnostics", () => {
     expect(() => renderTimelineDiagram("timeline\n  : orphan event")).toThrow(
       'Timeline continuation requires a preceding period in timeline diagram at line 2: ": orphan event"',
+    )
+  })
+
+  test("reports unsupported GitGraph operations with source diagnostics", () => {
+    expect(() => renderGitGraphDiagram("gitGraph\n  cherry-pick id: missing")).toThrow(
+      'Cherry-pick is not supported in gitGraph diagram at line 2: "cherry-pick id: missing"',
     )
   })
 
