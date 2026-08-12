@@ -1707,6 +1707,133 @@ unixNoLLMServer(
   30_000,
 )
 
+unixNoLLMServer(
+  "shell batches frequent running output updates while preserving cumulative output",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const events = yield* EventV2Bridge.Service
+        const { prompt, chat } = yield* boot()
+        const command = "i=0; while [ $i -lt 20 ]; do printf '%02d\\n' $i; i=$((i + 1)); sleep 0.02; done"
+        const updates: Array<{ part: SessionV1.ToolPart; bytes: number }> = []
+        const off = yield* events.listen((event) => {
+          if (event.type !== MessageV2.Event.PartUpdated.type) return Effect.void
+          const data = event.data as typeof MessageV2.Event.PartUpdated.data.Type
+          const part = data.part as SessionV1.Part
+          if (part.type === "tool" && part.state.input.command === command) {
+            updates.push({ part: structuredClone(part), bytes: Buffer.byteLength(JSON.stringify(event.data)) })
+          }
+          return Effect.void
+        })
+
+        const result = yield* prompt.shell({ sessionID: chat.id, agent: "build", command })
+        yield* off
+        const running = updates.flatMap((update) =>
+          update.part.state.status === "running" && update.part.state.metadata?.output
+            ? [{ output: update.part.state.metadata.output }]
+            : [],
+        )
+        const tool = completedTool(result.parts)
+        if (!tool) return
+
+        expect(running.length).toBeGreaterThanOrEqual(2)
+        expect(running.length).toBeLessThan(10)
+        expect(running[0]?.output).toStartWith("00\n")
+        expect(tool.state.output).toBe(
+          Array.from({ length: 20 }, (_, index) => `${index.toString().padStart(2, "0")}\n`).join(""),
+        )
+        expect(tool.state.metadata.output).toBe(tool.state.output)
+
+        if (Bun.env.OPENCODE_PROMPT_SHELL_BENCH === "1") {
+          console.log(
+            `PROMPT_SHELL_BENCH ${JSON.stringify({
+              writes: 20,
+              legacyRunningUpdateUpperBound: 20,
+              runningUpdates: running.length,
+              totalUpdates: updates.length,
+              durablePayloadBytes: updates.reduce((sum, update) => sum + update.bytes, 0),
+              outputBytes: Buffer.byteLength(tool.state.output),
+              outputCorrect: tool.state.output.endsWith("19\n"),
+            })}`,
+          )
+        }
+      }),
+    ),
+  { config: cfg },
+  30_000,
+)
+
+unixNoLLMServer(
+  "shell completion contains the final byte and is never followed by a running update",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const events = yield* EventV2Bridge.Service
+        const { prompt, chat } = yield* boot()
+        const command = "printf first; sleep 0.15; printf Z"
+        const states: Array<{ status: SessionV1.ToolPart["state"]["status"]; output?: string }> = []
+        const off = yield* events.listen((event) => {
+          if (event.type !== MessageV2.Event.PartUpdated.type) return Effect.void
+          const part = (event.data as typeof MessageV2.Event.PartUpdated.data.Type).part as SessionV1.Part
+          if (part.type === "tool" && part.state.input.command === command) {
+            states.push({
+              status: part.state.status,
+              output:
+                part.state.status === "running"
+                  ? part.state.metadata?.output
+                  : part.state.status === "completed"
+                    ? part.state.output
+                    : undefined,
+            })
+          }
+          return Effect.void
+        })
+
+        const result = yield* prompt.shell({ sessionID: chat.id, agent: "build", command })
+        const countAtCompletion = states.length
+        yield* Effect.sleep("200 millis")
+        yield* off
+        const tool = completedTool(result.parts)
+        if (!tool) return
+
+        expect(tool.state.output).toBe("firstZ")
+        expect(states.length).toBe(countAtCompletion)
+        expect(states.at(-1)).toEqual({ status: "completed", output: "firstZ" })
+        const completed = states.findIndex((state) => state.status === "completed")
+        expect(states.slice(completed + 1).some((state) => state.status === "running")).toBe(false)
+      }),
+    ),
+  { config: cfg },
+  30_000,
+)
+
+unixNoLLMServer(
+  "shell does not publish idle running updates for a quiet command",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const events = yield* EventV2Bridge.Service
+        const { prompt, chat } = yield* boot()
+        const command = "sleep 0.25"
+        const states: SessionV1.ToolPart["state"][] = []
+        const off = yield* events.listen((event) => {
+          if (event.type !== MessageV2.Event.PartUpdated.type) return Effect.void
+          const part = (event.data as typeof MessageV2.Event.PartUpdated.data.Type).part as SessionV1.Part
+          if (part.type === "tool" && part.state.input.command === command) states.push(structuredClone(part.state))
+          return Effect.void
+        })
+
+        yield* prompt.shell({ sessionID: chat.id, agent: "build", command })
+        yield* off
+
+        expect(states.map((state) => state.status)).toEqual(["running", "completed"])
+        expect(states.some((state) => state.status === "running" && state.metadata !== undefined)).toBe(false)
+      }),
+    ),
+  { config: cfg },
+  30_000,
+)
+
 it.instance(
   "loop waits while shell runs and starts after shell exits",
   () =>

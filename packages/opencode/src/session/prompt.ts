@@ -42,7 +42,7 @@ import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
+import { Cause, Effect, Exit, Fiber, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
@@ -523,6 +523,8 @@ const layer = Layer.effect(
           const sh = Shell.preferred(cfg.shell)
           const args = Shell.args(sh, input.command, cwd)
           let output = ""
+          let outputVersion = 0
+          let publishedVersion = 0
           let aborted = false
 
           const finish = Effect.uninterruptible(
@@ -564,16 +566,25 @@ const layer = Layer.effect(
                 forceKillAfter: "3 seconds",
               })
               const handle = yield* spawner.spawn(cmd)
+              const updates = yield* Effect.gen(function* () {
+                while (true) {
+                  yield* Effect.sleep("100 millis")
+                  const version = outputVersion
+                  if (version === publishedVersion || part.state.status !== "running") continue
+                  part.state.metadata = { output }
+                  yield* sessions.updatePart(part)
+                  // Output received during the durable update keeps a newer version dirty.
+                  publishedVersion = version
+                }
+              }).pipe(Effect.forkScoped)
               yield* Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
-                Effect.gen(function* () {
+                Effect.sync(() => {
                   output += chunk
-                  if (part.state.status === "running") {
-                    part.state.metadata = { output }
-                    yield* sessions.updatePart(part)
-                  }
+                  outputVersion++
                 }),
               )
               yield* handle.exitCode
+              yield* Fiber.interrupt(updates)
             }).pipe(Effect.scoped, Effect.orDie),
           ).pipe(Effect.exit)
 
