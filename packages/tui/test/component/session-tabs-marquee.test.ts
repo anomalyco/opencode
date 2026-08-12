@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, jest, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { createMarquee } from "../../src/component/session-tabs"
+import { createMarquee, createTabMarquee } from "../../src/component/session-tabs"
 
 afterEach(() => jest.useRealTimers())
 
@@ -47,6 +47,21 @@ describe("session tab marquee", () => {
     expect(scope.marquee.active()).toBeUndefined()
     expect(scope.marquee.offset()).toBe(0)
     expect(scope.marquee.leading()).toBe(0)
+    scope.dispose()
+  })
+
+  test("resets when the pointer leaves the tab rail", () => {
+    jest.useFakeTimers()
+    const scope = createRoot((dispose) => ({ marquee: createTabMarquee(() => false), dispose }))
+
+    scope.marquee.enter("first", "opencode", 6)
+    jest.advanceTimersByTime(700)
+    scope.marquee.leaveHovered()
+    jest.advanceTimersByTime(0)
+
+    expect(scope.marquee.hovered()).toBeUndefined()
+    expect(scope.marquee.active()).toBeUndefined()
+    expect(scope.marquee.offset()).toBe(0)
     scope.dispose()
   })
 })

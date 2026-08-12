@@ -121,7 +121,7 @@ export function createMarquee(animations: () => boolean) {
   return { offset, active, enter, leave, reset, leading: () => leading.value().opacity }
 }
 
-function createTabMarquee(animations: () => boolean) {
+export function createTabMarquee(animations: () => boolean) {
   const [hovered, setHovered] = createSignal<string>()
   const marquee = createMarquee(animations)
   let hoverClear: ReturnType<typeof setTimeout> | undefined
@@ -139,6 +139,10 @@ function createTabMarquee(animations: () => boolean) {
       marquee.leave(sessionID)
     })
   }
+  const leaveHovered = () => {
+    const sessionID = hovered()
+    if (sessionID) leave(sessionID)
+  }
   const reset = () => {
     if (hoverClear) clearTimeout(hoverClear)
     hoverClear = undefined
@@ -149,7 +153,7 @@ function createTabMarquee(animations: () => boolean) {
     if (hoverClear) clearTimeout(hoverClear)
   })
 
-  return { ...marquee, hovered, enter, leave, reset }
+  return { ...marquee, hovered, enter, leave, leaveHovered, reset }
 }
 
 function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsController; onClose: () => void }) {
@@ -334,6 +338,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
       position="relative"
       paddingTop={1}
       backgroundColor={theme.background.default}
+      onMouseOut={marquee.leaveHovered}
     >
       <scrollbox ref={(element) => (scroll = element)} flexGrow={1} scrollbarOptions={{ visible: false }}>
         <box flexShrink={0} flexDirection="column" gap={1}>
@@ -833,6 +838,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
       position="relative"
       flexDirection="row"
       zIndex={1}
+      onMouseOut={marquee.leaveHovered}
       renderAfter={function (buffer) {
         const x = Math.max(0, this.screenX)
         const y = this.screenY + this.height
