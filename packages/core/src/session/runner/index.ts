@@ -16,13 +16,20 @@ export type RunError =
   | UserInterruptedError
   | Instructions.InitializationBlocked
 
+export type Continuation = { readonly step: number }
+
+export type DrainResult =
+  | { readonly type: "complete" }
+  | { readonly type: "moved"; readonly continuation?: Continuation }
+
 /** Runs one local continuation from already-recorded Session history. */
 export interface Interface {
-  /** Drains eligible durable work. Explicit runs make one model call even when no work is eligible. */
+  /** Drains eligible durable work, returning transient state when execution must continue at a new Location. */
   readonly drain: (input: {
     readonly sessionID: SessionSchema.ID
     readonly force: boolean
-  }) => Effect.Effect<void, RunError>
+    readonly continuation?: Continuation
+  }) => Effect.Effect<DrainResult, RunError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunner") {}

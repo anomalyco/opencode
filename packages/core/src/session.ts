@@ -748,7 +748,7 @@ const layer = Layer.effect(
             projectID: project.id,
             subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
           },
-          delivery: input.delivery ?? "queue",
+          delivery: input.delivery ?? "steer",
         })
         const inboxID = SessionMessage.ID.create()
         yield* SessionInbox.admit(db, bus, {

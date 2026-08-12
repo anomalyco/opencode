@@ -55,7 +55,7 @@ describe("Session.move", () => {
           expect(yield* session.inbox(created.id)).toMatchObject([
             {
               type: "move",
-              delivery: "queue",
+              delivery: "steer",
               payload: {
                 location: { directory: destination },
                 projectID: Project.ID.global,
@@ -69,8 +69,8 @@ describe("Session.move", () => {
           const steered = yield* session.create({
             location: Location.Ref.make({ directory: AbsolutePath.make(path.join(tmp.path, "other")) }),
           })
-          yield* session.move({ sessionID: steered.id, directory: destination, delivery: "steer" })
-          expect(yield* session.inbox(steered.id)).toMatchObject([{ type: "move", delivery: "steer" }])
+          yield* session.move({ sessionID: steered.id, directory: destination, delivery: "queue" })
+          expect(yield* session.inbox(steered.id)).toMatchObject([{ type: "move", delivery: "queue" }])
         }),
       ),
     ),

@@ -346,14 +346,19 @@ function attempts(database: Database.Service["Service"], sessionID: Session.ID) 
 /** Builds the local execution layer plus the restart actions against the test harness services. */
 function buildExecution(
   scope: Scope.Closeable,
-  drain: SessionRunner.Interface["drain"],
+  drain: (
+    input: Parameters<SessionRunner.Interface["drain"]>[0],
+  ) => Effect.Effect<void, SessionRunner.RunError>,
   options?: SessionRestart.Options,
 ) {
   return Effect.gen(function* () {
     const database = yield* Database.Service
     const bus = yield* Bus.Service
     const store = yield* SessionStore.Service
-    const runner = Layer.succeed(SessionRunner.Service, SessionRunner.Service.of({ drain }))
+    const runner = Layer.succeed(
+      SessionRunner.Service,
+      SessionRunner.Service.of({ drain: (input) => drain(input).pipe(Effect.as({ type: "complete" as const })) }),
+    )
     const locations = Layer.effect(
       LocationServiceMap.Service,
       LayerMap.make(

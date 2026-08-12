@@ -387,8 +387,19 @@ const execution = Layer.effect(
   SessionExecution.Service,
   Effect.gen(function* () {
     const sessionRunner = yield* SessionRunner.Service
+    function drain(
+      sessionID: Session.ID,
+      force: boolean,
+      continuation?: SessionRunner.Continuation,
+    ): Effect.Effect<void, SessionRunner.RunError> {
+      return sessionRunner.drain({ sessionID, force, continuation }).pipe(
+        Effect.flatMap((result) =>
+          result.type === "complete" ? Effect.void : drain(sessionID, false, result.continuation),
+        ),
+      )
+    }
     const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError>({
-      drain: (sessionID, force) => sessionRunner.drain({ sessionID, force }),
+      drain: (sessionID, force) => drain(sessionID, force),
     })
     return SessionExecution.Service.of({
       active: coordinator.active,
@@ -1258,6 +1269,41 @@ describe("SessionRunnerLLM", () => {
           .limit(2)
           .all()).map((event) => event.type),
       ).toEqual([Bus.versionedType(SessionEvent.Moved.type, 1), Bus.versionedType(SessionEvent.InboxDelivered.type, 1)])
+    }),
+  )
+
+  it.effect("preserves a tool continuation across a steered move", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      yield* admit(session, "Echo before moving")
+      yield* TestLLM.push(
+        TestLLM.tool("call-move", "echo", { text: "moving" }),
+        TestLLM.text("Done", "text-after-move"),
+      )
+      const tools = yield* blockTools()
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* tools.started
+      yield* SessionInbox.admit(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        item: {
+          type: "move",
+          payload: {
+            location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+            projectID: Project.ID.global,
+          },
+          delivery: "steer",
+        },
+      })
+
+      yield* tools.release
+      yield* Fiber.join(run)
+
+      expect(requests).toHaveLength(2)
+      expect(requests.map(messageRoles).at(1)?.slice(0, 3)).toEqual(["user", "assistant", "tool"])
+      expect(yield* session.inbox(sessionID)).toEqual([])
     }),
   )
 

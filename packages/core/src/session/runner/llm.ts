@@ -23,7 +23,7 @@ import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionTitle } from "../title.js"
-import { Service } from "./index.js"
+import { Service, type Continuation } from "./index.js"
 import { createLLMEventPublisher, type StepRecord } from "./publish-llm-event.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -124,19 +124,25 @@ const layer = Layer.effect(
     const drain = Effect.fn("SessionRunner.drain")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
+      readonly continuation?: Continuation
     }) {
       let force = input.force
-      if (!force && !(yield* SessionInbox.has(db, input.sessionID, "any"))) return
+      let continuation = input.continuation
+      if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, "any")))
+        return { type: "complete" as const }
       yield* settleStaleToolCalls(input.sessionID)
       while (true) {
         if (yield* runPendingCompaction(input.sessionID)) {
           force = false
           continue
         }
-        if (yield* runPendingMove(input.sessionID)) return
-        if (!force && !(yield* SessionInbox.has(db, input.sessionID, "input"))) return
-        if (yield* runSteps(input.sessionID)) return
+        if (yield* runPendingMove(input.sessionID, "input")) return { type: "moved" as const }
+        if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, "input")))
+          return { type: "complete" as const }
+        const result = yield* runSteps(input.sessionID, continuation)
+        if (result.type === "moved") return result
         force = false
+        continuation = undefined
       }
     })
 
@@ -144,15 +150,21 @@ const layer = Layer.effect(
      * Runs logical steps until no tool result or newly admitted steer requires another
      * model call. Queued inputs remain pending until the current model work reaches idle.
      */
-    const runSteps = Effect.fn("SessionRunner.runSteps")(function* (sessionID: SessionSchema.ID) {
+    const runSteps = Effect.fn("SessionRunner.runSteps")(function* (
+      sessionID: SessionSchema.ID,
+      continuation?: Continuation,
+    ) {
       // Fresh work may promote queued input; later steps absorb steers only.
-      let promotable: SessionInbox.Promotable = "input"
-      let step = 1
+      let promotable: SessionInbox.Promotable = continuation ? "steer" : "input"
+      let step = continuation?.step ?? 1
+      let next = continuation
       while (true) {
         if (yield* runPendingCompaction(sessionID)) continue
-        if (yield* runPendingMove(sessionID)) return true
+        if (yield* runPendingMove(sessionID, "steer")) return { type: "moved" as const, continuation: next }
         const result = yield* runStep(sessionID, promotable, step)
-        if (!result.needsContinuation && !(yield* SessionInbox.has(db, sessionID, "steer"))) return false
+        next = result.needsContinuation ? { step: result.step + 1 } : undefined
+        if (!result.needsContinuation && !(yield* SessionInbox.has(db, sessionID, "steer")))
+          return { type: "complete" as const }
         promotable = "steer"
         step = result.step + 1
       }
@@ -530,12 +542,16 @@ const layer = Layer.effect(
       )
     })
 
-    const runPendingMove = Effect.fn("SessionRunner.runPendingMove")(function* (sessionID: SessionSchema.ID) {
+    const runPendingMove = Effect.fn("SessionRunner.runPendingMove")(function* (
+      sessionID: SessionSchema.ID,
+      promotable: SessionInbox.Promotable,
+    ) {
       return yield* SessionInbox.serialized(
         sessionID,
         Effect.gen(function* () {
           const pending =
-            (yield* SessionInbox.nextSteer(db, sessionID)) ?? (yield* SessionInbox.nextQueued(db, sessionID))
+            (yield* SessionInbox.nextSteer(db, sessionID)) ??
+            (promotable === "input" ? yield* SessionInbox.nextQueued(db, sessionID) : undefined)
           if (pending?.type !== "move") return false
           yield* bus.publishAll([
             [SessionEvent.InboxDelivered, { sessionID, inboxID: pending.id }],
