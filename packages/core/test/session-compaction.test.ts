@@ -22,9 +22,9 @@ test("compaction prompt gives update instructions for a prior summary", () => {
   })
 
   expect(prompt.indexOf("<conversation>")).toBeLessThan(prompt.indexOf("<prior-summary>"))
-  expect(prompt.indexOf("<prior-summary>")).toBeLessThan(prompt.indexOf("Update the <prior-summary>"))
+  expect(prompt.indexOf("</prior-summary>")).toBeLessThan(prompt.indexOf("The <prior-summary> summarizes"))
   expect(prompt).toContain(
-    "Preserve relevant information from the <prior-summary>, revising or removing anything outdated or contradicted by the <conversation>.",
+    "Carry forward objectives, constraints, user directives, decisions, and parallel workstreams from the <prior-summary>",
   )
   expect(prompt).toContain('Move completed work from "Active" to "Completed".')
   expect(prompt).toContain('Update "Objective" and "Next Move" to reflect the current work state.')
