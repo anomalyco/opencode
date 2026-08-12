@@ -334,6 +334,7 @@ export function App({ catalog }: AppProps) {
   }, [])
 
   useEffect(() => {
+    if (ui.viewerOpen) return
     window.history.replaceState(
       null,
       "",
@@ -349,17 +350,21 @@ export function App({ catalog }: AppProps) {
         states: ui.facets.state,
       }),
     )
-  }, [activeVariant.id, ui.facets, ui.mode, ui.query, ui.screenLabels, ui.uiElements])
+  }, [activeVariant.id, ui.facets, ui.mode, ui.query, ui.screenLabels, ui.uiElements, ui.viewerOpen])
 
   useEffect(() => {
     if (!ui.viewerOpen || !selectedScreen) return
-    window.history.replaceState(
-      null,
-      "",
+    const url = new URL(
       catalogDeepLink(selectedScreen.id, {
         flowId: ui.mode === "flows" ? activeFlow?.id : undefined,
         variantId: activeVariant.id,
       }),
+    )
+    if (window.location.hash.startsWith("#annotations=")) url.hash = window.location.hash
+    window.history.replaceState(
+      null,
+      "",
+      url,
     )
   }, [activeVariant.id, activeFlow?.id, selectedScreen, ui.mode, ui.viewerOpen])
 
@@ -483,6 +488,7 @@ export function App({ catalog }: AppProps) {
       </main>
       {ui.viewerOpen && selectedScreen ? (
         <Viewer
+          key={`${selectedScreen.id}:${activeVariant.id}`}
           screen={selectedScreen}
           identifier={
             ui.mode === "flows" && activeFlow?.replayable ? `${activeFlow.id}/${selectedScreen.id}` : selectedScreen.id

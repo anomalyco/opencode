@@ -114,7 +114,7 @@ a {
 }
 
 :focus-visible {
-  outline: 1px solid var(--kit-accent);
+  outline: 1px solid var(--kit-fg-faint);
   outline-offset: -1px;
 }
 
@@ -224,7 +224,7 @@ kbd {
 .catalog-tabs button:focus-visible,
 .viewer-button:focus-visible,
 .command-trigger:focus-visible {
-  outline: 1px solid var(--catalog-accent);
+  outline: 1px solid var(--kit-fg-faint);
   outline-offset: -1px;
 }
 
@@ -692,20 +692,35 @@ kbd {
 }
 
 .variant-switcher select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   appearance: none;
   border: 0;
   padding: 0;
-  background: transparent;
-  color: inherit;
-  font-family: inherit;
-  font-size: inherit;
+  opacity: 0;
   outline: 0;
   cursor: pointer;
 }
 
-.variant-switcher .variant-chevron {
+.variant-switcher:has(select:focus-visible) {
+  outline: 1px solid var(--kit-fg-faint);
+  outline-offset: -1px;
+}
+
+.variant-switcher .variant-hint {
   color: var(--kit-fg-faint);
-  font-size: 0.58rem;
+}
+
+.variant-switcher .variant-name {
+  color: inherit;
+}
+
+.variant-switcher .variant-chevron {
+  margin-left: -0.15rem;
+  color: var(--kit-fg-faint);
+  font-size: 0.55rem;
 }
 
 .capture-open:hover .capture-frame,
@@ -718,7 +733,7 @@ kbd {
 }
 
 .capture-open:focus-visible .capture-frame {
-  outline: 1px solid var(--catalog-accent);
+  outline: 1px solid var(--kit-fg-faint);
   outline-offset: 0.3rem;
 }
 
@@ -746,6 +761,11 @@ kbd {
   letter-spacing: 0.08em;
   list-style: none;
   cursor: pointer;
+  user-select: none;
+}
+
+.capture-actions > summary:focus:not(:focus-visible) {
+  outline: 0;
 }
 
 .capture-actions > summary::-webkit-details-marker {
@@ -1071,7 +1091,7 @@ kbd {
 }
 
 .flow-open:focus-visible .flow-frame {
-  outline: 1px solid var(--catalog-accent);
+  outline: 1px solid var(--kit-fg-faint);
   outline-offset: 0.3rem;
 }
 
@@ -1188,6 +1208,27 @@ kbd {
   gap: 0.5rem;
 }
 
+.viewer-button kbd {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--kit-fg-faint);
+}
+
+.viewer-button-count {
+  display: inline-grid;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.28rem;
+  border-radius: 999px;
+  place-items: center;
+  background: var(--catalog-mark);
+  color: var(--catalog-mark-ink);
+  font-size: 0.56rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .viewer-actions .viewer-button {
   border-left: 1px solid var(--kit-line);
 }
@@ -1233,6 +1274,257 @@ kbd {
   max-height: calc(100dvh - 13rem);
   user-select: none;
   -webkit-user-drag: none;
+}
+
+.annotation-layer {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+}
+
+.annotation-pin,
+.annotation-list-pin {
+  display: grid;
+  place-items: center;
+  border: 2px solid #17120a;
+  border-radius: 999px;
+  background: var(--catalog-mark);
+  color: var(--catalog-mark-ink);
+  font-family: var(--kit-mono);
+  font-size: 0.65rem;
+  font-weight: 750;
+  line-height: 1;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 60%);
+}
+
+.annotation-pin {
+  position: absolute;
+  width: 1.55rem;
+  height: 1.55rem;
+  transform: translate(-50%, -50%);
+}
+
+.annotation-pin:hover,
+.annotation-pin:focus-visible,
+.annotation-pin.selected {
+  outline: 2px solid #fff2d8;
+  outline-offset: 2px;
+}
+
+.annotation-composer {
+  position: absolute;
+  z-index: 6;
+  display: grid;
+  width: 18rem;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  transform: translate(-50%, 1.2rem);
+  border-radius: 0.85rem;
+  background: #1a1a1a;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 55%), 0 0 0 1px rgb(255 255 255 / 9%);
+  cursor: default;
+  animation: annotation-composer-in 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.annotation-composer.above {
+  transform: translate(-50%, calc(-100% - 1.2rem));
+}
+
+.annotation-composer header,
+.annotation-composer footer {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.annotation-composer header {
+  justify-content: space-between;
+  color: var(--kit-fg-faint);
+  font-family: var(--kit-mono);
+  font-size: 0.62rem;
+}
+
+.annotation-composer header small {
+  font-size: 0.54rem;
+}
+
+.annotation-composer textarea {
+  width: 100%;
+  resize: none;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.5rem;
+  outline: none;
+  padding: 0.55rem 0.65rem;
+  background: rgb(255 255 255 / 5%);
+  color: var(--kit-fg-strong);
+  font-family: var(--kit-sans);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.annotation-composer textarea:focus {
+  border-color: var(--catalog-mark);
+}
+
+.annotation-composer footer {
+  justify-content: flex-end;
+}
+
+.annotation-composer footer button {
+  min-height: 1.8rem;
+  padding: 0 0.65rem;
+  border-radius: 0.45rem;
+  color: var(--kit-fg-muted);
+  font-family: var(--kit-sans);
+  font-size: 0.7rem;
+}
+
+.annotation-composer footer > :first-child {
+  margin-right: auto;
+}
+
+.annotation-composer .annotation-composer-delete {
+  color: #ff8585;
+}
+
+.annotation-composer .annotation-composer-save {
+  background: var(--catalog-mark);
+  color: var(--catalog-mark-ink);
+  font-weight: 700;
+}
+
+.annotation-composer .annotation-composer-save:disabled {
+  opacity: 0.4;
+}
+
+@keyframes annotation-composer-in {
+  from {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+
+.annotation-panel {
+  position: fixed;
+  z-index: 4;
+  top: 3rem;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  width: min(22rem, 34vw);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-left: 1px solid var(--kit-line-strong);
+  background: #0b0b0b;
+  box-shadow: -24px 0 64px rgb(0 0 0 / 35%);
+}
+
+.annotation-panel > header,
+.annotation-panel > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+}
+
+.annotation-panel > header {
+  border-bottom: 1px solid var(--kit-line);
+}
+
+.annotation-panel > header div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.annotation-panel strong,
+.annotation-panel > header button,
+.annotation-panel > footer button {
+  font-family: var(--kit-mono);
+  font-size: 0.68rem;
+}
+
+.annotation-panel > header span,
+.annotation-panel > footer span,
+.annotation-list section > div > span {
+  color: var(--kit-fg-faint);
+  font-family: var(--kit-mono);
+  font-size: 0.56rem;
+}
+
+.annotation-panel > header button {
+  padding: 0.4rem 0.55rem;
+  color: var(--kit-fg-muted);
+}
+
+.annotation-list {
+  overflow-y: auto;
+}
+
+.annotation-list-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 1.65rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--kit-line);
+  text-align: left;
+}
+
+.annotation-list-pin {
+  width: 1.55rem;
+  height: 1.55rem;
+}
+
+.annotation-list-row > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.annotation-list-row small {
+  color: var(--kit-fg-faint);
+  font-family: var(--kit-mono);
+  font-size: 0.53rem;
+}
+
+.annotation-list-row strong {
+  overflow: hidden;
+  color: var(--kit-fg-muted);
+  font-size: 0.72rem;
+  font-weight: 450;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotation-list-row:hover,
+.annotation-list-row:focus-visible {
+  background: rgb(255 255 255 / 3%);
+}
+
+.annotation-panel > footer {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 0.45rem;
+  border-top: 1px solid var(--kit-line);
+}
+
+.annotation-issue {
+  display: grid;
+  place-items: center;
+  min-height: 2.3rem;
+  padding: 0 0.85rem;
+  background: var(--catalog-mark);
+  color: var(--catalog-mark-ink);
+  font-weight: 700;
+}
+
+.annotation-issue[aria-disabled="true"] {
+  background: var(--kit-bg-hover);
+  color: var(--kit-fg-faint);
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .viewer-variant {
@@ -1494,6 +1786,25 @@ kbd {
 }
 
 @media (max-width: 760px) {
+  .annotation-panel {
+    top: auto;
+    width: 100%;
+    height: min(48dvh, 25rem);
+    border-top: 1px solid var(--kit-line-strong);
+    border-left: 0;
+    box-shadow: 0 -24px 64px rgb(0 0 0 / 45%);
+  }
+
+  .annotation-pin {
+    width: 1.9rem;
+    height: 1.9rem;
+    font-size: 0.75rem;
+  }
+
+  .annotation-composer textarea {
+    font-size: 1rem;
+  }
+
   :root {
     --catalog-header-height: 10.5rem;
   }
