@@ -1,4 +1,4 @@
-import path from "node:path"
+﻿import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
@@ -341,7 +341,17 @@ const layer = Layer.effect(
       key: string,
       mcp: ConfigMCPV1.Info & { type: "local" },
     ) {
-      const [cmd, ...args] = mcp.command
+      const isWslMode = process.platform === "win32" && process.env.OPENCODE_WSL_ENABLED === "true"
+      let [cmd, ...args] = mcp.command
+      const originalCmd = cmd
+      // When the desktop sidecar runs on Windows with WSL mode enabled,
+      // MCP commands need to execute inside WSL where the expected
+      // Linux executables and environment exist. Wrap the command with
+      // wsl.exe so it runs in the default WSL distribution.
+      if (isWslMode) {
+        args = ["-e", cmd, ...args]
+        cmd = "wsl.exe"
+      }
       const baseDir = yield* InstanceState.directory
       const cwd = mcp.cwd ? path.resolve(baseDir, mcp.cwd) : baseDir
       const transport = new StdioClientTransport({
@@ -351,7 +361,7 @@ const layer = Layer.effect(
         cwd,
         env: {
           ...process.env,
-          ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+          ...(originalCmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },
       })
