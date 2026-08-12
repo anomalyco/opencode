@@ -1,6 +1,5 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
-import { domAnimation, LazyMotion } from "motion/react"
 import "@fontsource/commit-mono/400.css"
 import "@fontsource/commit-mono/400-italic.css"
 import "@fontsource/commit-mono/700.css"
@@ -24,8 +23,6 @@ if (!root) throw new Error("Missing #root element")
 
 createRoot(root).render(
   <StrictMode>
-    <LazyMotion features={domAnimation}>
-      <App catalog={catalog} />
-    </LazyMotion>
+    <App catalog={catalog} />
   </StrictMode>,
 )

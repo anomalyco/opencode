@@ -471,7 +471,7 @@ async function prepareCaptureSets(options: ReturnType<typeof parseCaptureOptions
     for (const [revision, preparedRevision] of revisions) {
       for (const theme of options.themes) {
         variants.push({
-          id: captureSetId(revision, theme),
+          id: captureSetId(revision, theme, revisions.size > 1),
           label: captureSetLabel(revision, theme),
           source: captureSource(options.opencode),
           revision,

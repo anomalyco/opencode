@@ -1,5 +1,5 @@
-const revision = process.argv[2] ?? "2a0ccdbfd4589ba2181624f25c55ed4ac0546b2d"
-const opencode = process.argv[3] ?? "/Users/kit/code/open-source/opencode"
+const revision = process.argv[2] ?? "HEAD"
+const opencode = process.argv[3] ?? new URL("../../../../", import.meta.url).pathname
 const startedAt = performance.now()
 const child = Bun.spawn([
   process.execPath,

@@ -730,10 +730,6 @@ kbd {
   min-width: 0;
 }
 
-.capture-caption .id-chip {
-  flex: 0 1 auto;
-}
-
 .capture-actions {
   position: relative;
   flex: 0 0 auto;
@@ -823,58 +819,6 @@ kbd {
 
 .capture-card.selected .capture-title {
   color: var(--kit-fg-strong);
-}
-
-/* --------------------------------- id chip -------------------------------- */
-
-.id-chip {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--kit-fg-faint);
-  font-family: var(--kit-mono);
-  font-size: 0.6rem;
-  line-height: 1.5;
-}
-
-.id-chip:hover,
-.id-chip:focus-visible {
-  color: var(--kit-fg-strong);
-}
-
-.id-chip-glyph {
-  width: 0.7rem;
-  height: 0.7rem;
-  flex: none;
-  opacity: 0.6;
-}
-
-.id-chip-text {
-  position: relative;
-  display: grid;
-  min-width: 0;
-}
-
-.id-chip-text > span {
-  grid-area: 1 / 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.id-chip-end .id-chip-text {
-  justify-items: end;
-}
-
-.id-chip-measure {
-  visibility: hidden;
-}
-
-.id-chip-value {
-  position: absolute;
-  inset: 0;
 }
 
 .empty-state {
@@ -1165,10 +1109,6 @@ kbd {
   min-width: 0;
 }
 
-.flow-step-title .id-chip {
-  flex: 0 1 auto;
-}
-
 .flow-step-meta strong {
   min-width: 0;
   overflow: hidden;
@@ -1250,10 +1190,6 @@ kbd {
 
 .viewer-actions .viewer-button {
   border-left: 1px solid var(--kit-line);
-}
-
-.viewer-actions .id-chip {
-  max-width: 20rem;
 }
 
 .viewer-body {

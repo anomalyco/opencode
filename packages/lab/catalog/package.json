@@ -24,7 +24,6 @@
     "@fontsource/noto-sans-math": "5.2.8",
     "@fontsource/noto-sans-symbols": "5.2.8",
     "@fontsource/noto-sans-symbols-2": "5.2.8",
-    "motion": "^12.42.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
@@ -34,7 +33,6 @@
     "@types/react-dom": "^19.2.3",
     "effect": "catalog:",
     "opencode-drive": "workspace:*",
-    "oxlint": "1.60.0",
     "typescript": "^7.0.2",
     "wrangler": "4.110.0"
   }

@@ -4,7 +4,7 @@ Internal deployment: <https://dev.opencode.ai/lab/catalog>
 
 Capture a reproducible catalog of OpenCode terminal states from local checkouts, browse every state in one web app, and flip between themes or branches without changing the selected screen.
 
-The catalog currently contains 63 scripted states covering navigation, sessions, assistant responses, questions, subagents, shell, file patches, reads, project search, web tools, permissions, toasts, and review surfaces.
+The generated manifest is the source of truth for the current state count. It covers navigation, sessions, assistant responses, questions, subagents, shell, file patches, reads, project search, web tools, permissions, notifications, and review surfaces.
 
 ## Prerequisites
 
@@ -95,7 +95,7 @@ Capture any refs available in one OpenCode checkout:
 ```bash
 bun run capture -- \
   --opencode $HOME/code/opencode \
-  --revision main \
+  --revision origin/v2 \
   --revision v2
 
 bun run generate
@@ -118,7 +118,7 @@ Themes and checkout comparisons can be combined:
 ```bash
 bun run capture -- \
   --opencode $HOME/code/opencode \
-  --revision main \
+  --revision origin/v2 \
   --revision v2 \
   --theme nord \
   --theme rosepine

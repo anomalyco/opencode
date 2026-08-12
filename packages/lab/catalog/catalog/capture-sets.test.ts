@@ -39,6 +39,7 @@ describe("capture revision sets", () => {
   test("derives stable theme IDs and labels", () => {
     expect(captureSetId("ABCDEF1234567890", undefined)).toBe("abcdef123456")
     expect(captureSetId("ABCDEF1234567890", "One Dark")).toBe("one-dark")
+    expect(captureSetId("ABCDEF1234567890", "One Dark", true)).toBe("abcdef123456-one-dark")
     expect(captureSetLabel("abcdef1234567890", "opencode")).toBe("Opencode")
     expect(captureSetLabel("abcdef1234567890", "tokyonight")).toBe("Tokyo Night")
     expect(captureSetLabel("abcdef1234567890", "everforest")).toBe("Everforest")

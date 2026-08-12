@@ -40,7 +40,7 @@ Executable states have canonical `<flow-id>/<state-id>` addresses. The catalog v
 Resolve and reproduce an executable state with:
 
 ```bash
-bun run catalog:reproduce -- patch-success-lifecycle/permission-prompt \
+bun run reproduce -- patch-success-lifecycle/permission-prompt \
   --opencode /path/to/opencode
 ```
 
@@ -76,10 +76,11 @@ Variants are independent capture environments, not duplicated screen definitions
 
 ```bash
 bun run capture -- \
-  --variant baseline=/path/to/opencode \
-  --theme baseline=opencode \
-  --variant candidate=/path/to/opencode \
-  --theme candidate=rosepine
+  --opencode /path/to/opencode \
+  --revision v2~1 \
+  --revision v2 \
+  --theme opencode \
+  --theme rosepine
 ```
 
 Each variant must have:
@@ -115,7 +116,7 @@ If OpenCode UI copy drifts, inspect the current target checkout and update exact
 
 - The annotation system was deliberately removed. Do not restore annotation routes, storage, KV bindings, or markup UI without an explicit product decision.
 - OpenCode Drive is the generic published package in this monorepo (`packages/drive`); this app owns everything OpenCode-catalog-specific, and the package must not import the app.
-- The catalog repository is private because its state suite and review workflow are Anomaly application concerns.
+- The catalog package is private and deployed only as internal developer tooling under `dev.opencode.ai/lab`.
 
 ## Verification
 

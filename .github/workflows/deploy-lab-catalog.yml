@@ -28,8 +28,12 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Validate
-        working-directory: packages/lab/catalog
-        run: bun run lint && bun typecheck && bun run test
+        run: |
+          bun --cwd packages/drive run check
+          bun --cwd packages/drive run test
+          bun --cwd packages/lab/catalog run lint
+          bun --cwd packages/lab/catalog typecheck
+          bun --cwd packages/lab/catalog run test
 
       - name: Deploy
         working-directory: packages/lab/catalog
