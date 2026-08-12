@@ -8,8 +8,6 @@ import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
 import * as ConfigPaths from "@/config/paths"
 
-const TUI_SCHEMA_URL = "https://opencode.ai/tui.json"
-
 const decodeTheme = Schema.decodeUnknownOption(Schema.String)
 const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))
 const decodeScrollSpeed = Schema.decodeUnknownOption(TuiConfig.ScrollSpeed)
@@ -88,9 +86,7 @@ export async function migrateTuiConfig(input: MigrateInput) {
     if (!contributors.length) continue
     if (theme === undefined && keybinds === undefined && !tui) continue
 
-    const payload: Record<string, unknown> = {
-      $schema: TUI_SCHEMA_URL,
-    }
+    const payload: Record<string, unknown> = {}
     if (theme !== undefined) payload.theme = theme
     if (keybinds !== undefined) payload.keybinds = keybinds
     if (tui) Object.assign(payload, tui)

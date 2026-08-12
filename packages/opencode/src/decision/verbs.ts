@@ -9,6 +9,7 @@ import {
   type Receipt,
   type Target,
 } from "./receipt"
+import { appendLedger } from "./ledger"
 
 export type CommitInput = {
   action: string
@@ -76,6 +77,7 @@ export async function commit(input: CommitInput): Promise<CommitResult> {
     source: input.source,
   }
   await appendReceipt(receipt, cwd)
+  await appendLedger(receipt, cwd)
   return { receipt, path: receiptFile(resolveReceiptDir(cwd)) }
 }
 
@@ -155,6 +157,7 @@ export async function push(input: PushInput): Promise<PushResult> {
     source: input.source,
   }
   await appendReceipt(receipt, cwd)
+  await appendLedger(receipt, cwd)
   return { ok: true, receipt, path }
 }
 

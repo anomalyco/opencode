@@ -15,8 +15,8 @@ import { HomeSessionDestinationProvider } from "./home/session-destination"
 
 let once = false
 const placeholder = {
-  normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
-  shell: ["ls -la", "git status", "pwd"],
+  normal: ["Score this resume against the req", "Draft outreach for the shortlist", "Open a req with /init"],
+  shell: ["moks status", "ls .moks", "pwd"],
 }
 
 export function Home() {

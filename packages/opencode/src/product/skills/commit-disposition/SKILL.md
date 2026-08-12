@@ -17,6 +17,10 @@ Recommend a hiring disposition and show how to record it with moks decision verb
 
 Adverse actions: reject, offer, hire. Push requires `--confirm` for those.
 
+## Before recommending
+
+Look for `.moks/req/scores/<slug>.md` and cite it. If no score file exists, say so and prefer running **score-candidate** first unless the user wants a `note`.
+
 ## Output format
 
 ```markdown
@@ -25,7 +29,7 @@ Adverse actions: reject, offer, hire. Push requires `--confirm` for those.
 ## Recommendation
 - Action: <action>
 - Rationale: ...
-- Evidence: bullets with source paths
+- Evidence: bullets with source paths (include `.moks/req/scores/<slug>.md` when present)
 
 ## Risks
 - ...
@@ -34,7 +38,7 @@ Adverse actions: reject, offer, hire. Push requires `--confirm` for those.
 
 Run (dry-run default):
 
-moks commit --action <action> --target-kind candidate --target-id <id-or-name> --reason "<one line>"
+moks commit --action <action> --target-kind candidate --target-id <slug-or-id> --reason "<one line>" --meta '{"score":".moks/req/scores/<slug>.md"}'
 
 Inspect:
 
@@ -54,6 +58,7 @@ moks push --commit-id <id> --confirm   # reject | offer | hire
 ## Rules
 
 - Always end with the concrete `moks commit --action ...` command filled in for this case
+- The one-liner must include `--target-kind candidate --target-id <slug-or-id>` and `--meta` with the score path
 - Prefer bash to run commit when the user asks you to record it
 - If evidence is thin, recommend gathering more context instead of adverse action
 - Mention that push for adverse actions needs `--confirm`

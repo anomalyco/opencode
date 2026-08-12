@@ -434,7 +434,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.close",
       title: "Close diff viewer",
-      category: "VCS",
+      category: "Files",
       run() {
         const returnRoute = params()?.returnRoute
         props.api.ui.dialog.clear()
@@ -448,7 +448,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.down",
       title: "Move diff viewer down",
-      category: "VCS",
+      category: "Files",
       run: focusRunner({
         files() {
           moveFileSelection(1)
@@ -462,7 +462,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.up",
       title: "Move diff viewer up",
-      category: "VCS",
+      category: "Files",
       run: focusRunner({
         files() {
           moveFileSelection(-1)
@@ -476,7 +476,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.page.down",
       title: "Page diff viewer down",
-      category: "VCS",
+      category: "Files",
       run: focusRunner({
         files() {
           moveFileSelection(8)
@@ -490,7 +490,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.page.up",
       title: "Page diff viewer up",
-      category: "VCS",
+      category: "Files",
       run: focusRunner({
         files() {
           moveFileSelection(-8)
@@ -504,7 +504,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.toggle",
       title: "Toggle diff viewer item",
-      category: "VCS",
+      category: "Files",
       run: focusRunner({
         files() {
           toggleSelectedFileTreeRow()
@@ -515,7 +515,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.expand",
       title: "Expand diff viewer item",
-      category: "VCS",
+      category: "Files",
       run: focusRunner({
         files() {
           const highlighted = highlightedFileNode()
@@ -533,7 +533,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.expand_all",
       title: "Expand all diff viewer folders",
-      category: "VCS",
+      category: "Files",
       run: focusRunner({
         files() {
           setExpandedFileNodes(allExpandedFileTreeDirectories(fileTree()))
@@ -544,7 +544,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.collapse",
       title: "Collapse diff viewer item",
-      category: "VCS",
+      category: "Files",
       run: focusRunner({
         files() {
           const highlighted = highlightedFileNode()
@@ -563,7 +563,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.next_hunk",
       title: "Jump to next diff hunk",
-      category: "VCS",
+      category: "Files",
       run() {
         jumpRelativeHunk(1)
       },
@@ -571,7 +571,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.previous_hunk",
       title: "Jump to previous diff hunk",
-      category: "VCS",
+      category: "Files",
       run() {
         jumpRelativeHunk(-1)
       },
@@ -579,7 +579,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.next_file",
       title: "Jump to next diff file",
-      category: "VCS",
+      category: "Files",
       run() {
         jumpRelativePatchFile(1)
       },
@@ -587,7 +587,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.previous_file",
       title: "Jump to previous diff file",
-      category: "VCS",
+      category: "Files",
       run() {
         jumpRelativePatchFile(-1)
       },
@@ -595,7 +595,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.mark_reviewed",
       title: "Toggle selected diff file reviewed",
-      category: "VCS",
+      category: "Files",
       run() {
         toggleSelectedFileReviewed()
       },
@@ -603,7 +603,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.switch_focus",
       title: "Switch diff viewer focus",
-      category: "VCS",
+      category: "Files",
       run() {
         if (!showFileTree()) return
         setFocus((current) => {
@@ -616,7 +616,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.toggle_file_tree",
       title: "Toggle diff viewer file tree",
-      category: "VCS",
+      category: "Files",
       run() {
         const next = !fileTreeEnabled()
         if (!next) setFocus("patches")
@@ -627,7 +627,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.single_patch",
       title: "Toggle single patch view",
-      category: "VCS",
+      category: "Files",
       run() {
         setSelectedHunk(undefined)
         if (!singlePatch()) {
@@ -654,7 +654,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.switch_source",
       title: "Switch diff viewer source",
-      category: "VCS",
+      category: "Files",
       run() {
         openSwitchDiffDialog()
       },
@@ -662,7 +662,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.toggle_view",
       title: "Toggle diff viewer split or unified view",
-      category: "VCS",
+      category: "Files",
       run() {
         if (!splitAvailable()) return
         setSelectedHunk(undefined)
@@ -674,7 +674,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     {
       name: "diff.help",
       title: "Show more diff viewer shortcuts",
-      category: "VCS",
+      category: "Files",
       run() {
         openHelpDialog()
       },
@@ -687,14 +687,14 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       {
         title: "Working tree",
         value: "git" as const,
-        description: "Show current git changes",
+        description: "Show current local changes",
       },
       ...(vcs?.branch && vcs.default_branch && vcs.branch !== vcs.default_branch
         ? [
             {
               title: "Main branch",
               value: "branch" as const,
-              description: "Show changes compared to main branch",
+              description: "Show changes compared to main",
             },
           ]
         : []),
@@ -1056,7 +1056,7 @@ const tui: TuiPlugin = async (api) => {
         name: "diff.open",
         title: "Open diff viewer",
         slashName: "diff",
-        category: "VCS",
+        category: "Files",
         namespace: "palette",
         run() {
           api.route.navigate(ROUTE, {

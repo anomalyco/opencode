@@ -20,7 +20,24 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { EventV2 } from "@opencode-ai/core/event"
 
-const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
+const disabled =
+  process.env["MOKS_DISABLE_SHARE"] === "true" ||
+  process.env["MOKS_DISABLE_SHARE"] === "1" ||
+  process.env["OPENCODE_DISABLE_SHARE"] === "true" ||
+  process.env["OPENCODE_DISABLE_SHARE"] === "1"
+
+const OPENCODE_SHARE_ERROR = "session sharing to OpenCode hosts is disabled in moks"
+
+function isOpenCodeShareHost(baseUrl: string) {
+  const host = URL.parse(baseUrl)?.hostname
+  if (!host) return false
+  return (
+    host === "opncd.ai" ||
+    host.endsWith(".opncd.ai") ||
+    host === "opencode.ai" ||
+    host.endsWith(".opencode.ai")
+  )
+}
 
 export type Api = {
   create: string
@@ -256,6 +273,7 @@ const layer = Layer.effect(
       if (!share) return
 
       const req = yield* request()
+      if (isOpenCodeShareHost(req.baseUrl)) return
       const res = yield* HttpClientRequest.post(`${req.baseUrl}${req.api.sync(share.id)}`).pipe(
         HttpClientRequest.setHeaders(req.headers),
         HttpClientRequest.bodyJson({ secret: share.secret, data: Array.from(queued.values()) }),
@@ -311,6 +329,7 @@ const layer = Layer.effect(
       if (disabled) return { id: "", url: "", secret: "" }
       yield* Effect.logInfo("creating share", { sessionID: sessionID })
       const req = yield* request()
+      if (isOpenCodeShareHost(req.baseUrl)) throw new Error(OPENCODE_SHARE_ERROR)
       const result = yield* HttpClientRequest.post(`${req.baseUrl}${req.api.create}`).pipe(
         HttpClientRequest.setHeaders(req.headers),
         HttpClientRequest.bodyJson({ sessionID }),

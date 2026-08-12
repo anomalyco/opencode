@@ -120,9 +120,12 @@ describe("AgentV2", () => {
         "explore",
         "general",
         "plan",
+        "recruit",
         "summary",
         "title",
       ])
+      expect(yield* agent.default()).toMatchObject({ id: "recruit", hidden: false, mode: "primary" })
+      expect(yield* agent.get(AgentV2.ID.make("build"))).toMatchObject({ hidden: true, mode: "primary" })
       for (const item of agents) {
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }

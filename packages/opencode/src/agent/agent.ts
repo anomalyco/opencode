@@ -16,6 +16,7 @@ import PROMPT_GENERAL from "./prompt/general.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_RECRUIT from "@/product/agents/recruit.txt"
+import PROMPT_PLAN from "@/product/agents/plan.txt"
 import { ashbyPermissionDefaults } from "@/product/ashby-edge"
 import { HiringFixturesDir } from "@/product/fixtures"
 import { Permission } from "@/permission"
@@ -237,6 +238,7 @@ const layer = Layer.effect(
             name: "plan",
             description:
               "Plan hiring strategy without recording decisions or mass-editing the workspace. Edits only the plan file.",
+            prompt: PROMPT_PLAN,
             options: {},
             permission: Permission.merge(
               defaults,

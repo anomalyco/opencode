@@ -1,4 +1,4 @@
-Create and maintain a structured task list for the current coding session. Tracks progress, organizes multi-step work, and surfaces status to the user.
+Create and maintain a structured task list for the current session. Tracks progress, organizes multi-step work, and surfaces status to the user.
 
 ## When to use
 Use proactively when:
@@ -32,13 +32,13 @@ Skip when:
 ## Examples
 
 Use it:
-- "Add a dark mode toggle and run the tests" -> multi-step feature + explicit verification
-- "Rename getCwd -> getCurrentWorkingDirectory across the repo" -> grep reveals 15 occurrences in 8 files
-- "Implement registration, catalog, cart, checkout" -> multiple complex features
+- "Score a candidate against the req and write the score file" -> score + persist result
+- "Draft outreach then record a disposition" -> write then record
+- "Research several folders and summarize findings" -> multi-step research
 
 Skip it:
-- "How do I print Hello World in Python?" -> informational
-- "Add a comment to calculateTotal" -> single edit
-- "Run npm install and tell me what happened" -> one command
+- "What does this file say?" -> informational
+- "Fix a typo in one heading" -> single edit
+- "Run this one command and tell me what happened" -> one command
 
 When in doubt, use it.

@@ -270,7 +270,7 @@ const TIPS: Tip[] = [
   "Run {highlight}moks debug config{/highlight} to troubleshoot configuration",
   "Use {highlight}--print-logs{/highlight} flag to see detailed logs in stderr",
   (shortcuts) => `Use ${commandText("/timeline", shortcuts.sessionTimeline())} to jump to specific messages`,
-  (shortcuts) => press(shortcuts.messagesToggleConceal(), "to toggle code block visibility in messages"),
+  (shortcuts) => press(shortcuts.messagesToggleConceal(), "to toggle fenced-block visibility in messages"),
   (shortcuts) => `Use ${commandText("/status", shortcuts.statusView())} to see system status info`,
   "Enable {highlight}scroll_acceleration{/highlight} in {highlight}tui.json{/highlight} for smooth scrolling",
   (shortcuts) =>

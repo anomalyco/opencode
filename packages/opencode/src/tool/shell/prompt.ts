@@ -67,12 +67,12 @@ function chainGuidance(name: string) {
     return "If the commands depend on each other and must run sequentially, avoid '&&' in this shell because Windows PowerShell (5.1) does not support it. Use PowerShell conditionals such as `cmd1; if ($?) { cmd2 }` when later commands must depend on earlier success."
   }
   if (PS.has(name)) {
-    return "If the commands depend on each other and must run sequentially, use a single bash tool call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like New-Item before Copy-Item, Write before bash for git operations, or git add before git commit), run these operations sequentially instead."
+    return "If the commands depend on each other and must run sequentially, use a single bash tool call with '&&' to chain them together (e.g., `mkdir out && ls out`). For instance, if one operation must complete before another starts (like New-Item before Copy-Item), run these operations sequentially instead."
   }
   if (CMD.has(name)) {
     return "If the commands depend on each other and must run sequentially, use a single bash tool call with `&&` to chain them together (e.g., `mkdir out && dir out`). For instance, if one operation must complete before another starts, run these operations sequentially instead."
   }
-  return "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
+  return "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `mkdir out && ls out`). For instance, if one operation must complete before another starts (like mkdir before cp), run these operations sequentially instead."
 }
 
 function bashCommandSection(chain: string, limits: Limits, defaultTimeoutMs: number) {
@@ -105,16 +105,16 @@ Usage notes:
     - Write files: Use Write (NOT echo >/cat <<EOF)
     - Communication: Output text directly (NOT echo/printf)
   - When issuing multiple commands:
-    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two bash tool calls in parallel.
+    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "moks status" and "ls", send a single message with two bash tool calls in parallel.
     - ${chain}
     - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
   - AVOID using \`cd <directory> && <command>\`. Use the \`workdir\` parameter to change directories instead.
     <good-example>
-    Use workdir="/foo/bar" with command: pytest tests
+    Use workdir="/foo/bar" with command: ls
     </good-example>
     <bad-example>
-    cd /foo/bar && pytest tests
+    cd /foo/bar && ls
     </bad-example>`
 }
 
@@ -156,16 +156,16 @@ Usage notes:
     - Write files: Use Write (NOT Set-Content/Out-File or here-strings)
     - Communication: Output text directly (NOT Write-Output/Write-Host)
   - When issuing multiple commands:
-    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two bash tool calls in parallel.
+    - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "moks status" and "ls", send a single message with two bash tool calls in parallel.
     - ${chain}
     - Use \`;\` only when you need to run commands sequentially but don't care if earlier commands fail
     - DO NOT use newlines to separate commands (newlines are ok in quoted strings)
   - AVOID changing directories inside the command. Use the \`workdir\` parameter to change directories instead.
     <good-example>
-    Use workdir="project${pathSep}subdir" with command: pytest tests
+    Use workdir="project${pathSep}subdir" with command: ls
     </good-example>
     <bad-example>
-    ${name === "powershell" ? `Set-Location -LiteralPath "project${pathSep}subdir"; if ($?) { pytest tests }` : `Set-Location -LiteralPath "project${pathSep}subdir" && pytest tests`}
+    ${name === "powershell" ? `Set-Location -LiteralPath "project${pathSep}subdir"; if ($?) { ls }` : `Set-Location -LiteralPath "project${pathSep}subdir" && ls`}
     </bad-example>`
 }
 

@@ -107,4 +107,31 @@ describe("decision/verbs", () => {
     })
     expect(result.receipt.meta).toEqual({ note: "x" })
   })
+
+  test("commit in a .moks workspace writes/appends ledger.md and mentions the action", async () => {
+    await using tmp = await workspace()
+    await DecisionVerbs.commit({ action: "note", cwd: tmp.path })
+    await DecisionVerbs.commit({ action: "advance", cwd: tmp.path })
+    const text = await Bun.file(path.join(tmp.path, ".moks/req/ledger.md")).text()
+    expect(text).toContain("Local receipts only")
+    expect(text).toContain("does not write to an ATS")
+    expect(text).toContain("note")
+    expect(text).toContain("advance")
+  })
+
+  test("push success appends a pushed line", async () => {
+    await using tmp = await workspace()
+    const committed = await DecisionVerbs.commit({ action: "note", cwd: tmp.path })
+    const result = await DecisionVerbs.push({ commit_id: committed.receipt.id, cwd: tmp.path })
+    expect(result.ok).toBe(true)
+    const text = await Bun.file(path.join(tmp.path, ".moks/req/ledger.md")).text()
+    expect(text).toContain("pushed")
+  })
+
+  test("commit without .moks does not create a ledger at cwd root", async () => {
+    await using tmp = await tmpdir()
+    await DecisionVerbs.commit({ action: "note", cwd: tmp.path })
+    expect(await Bun.file(path.join(tmp.path, "ledger.md")).exists()).toBe(false)
+    expect(await Bun.file(path.join(tmp.path, ".moks/req/ledger.md")).exists()).toBe(false)
+  })
 })

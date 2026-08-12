@@ -16,8 +16,7 @@
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
   },
   "bin": {
-    "moks": "./bin/moks",
-    "opencode": "./bin/opencode"
+    "moks": "./bin/moks"
   },
   "exports": {
     "./*": "./src/*.ts"

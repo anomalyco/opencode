@@ -26,9 +26,18 @@ bun run --conditions=browser src/index.ts
 
 Default branch is `dev`. Day-to-day workflow is Bun (`bun install` / `bun dev`) — not npm/pnpm as the primary path.
 
-## Hiring quickstart (headless)
+## Hiring quickstart
 
 Default agent is **`recruit`**. Use `--agent build` for the hidden coding escape hatch.
+
+TUI first:
+
+```bash
+bun dev
+# then /init → add resume → /score-candidate → moks commit → moks push
+```
+
+Headless fixture run:
 
 ```bash
 cd packages/opencode
@@ -49,7 +58,8 @@ Record a disposition (receipts only — no ATS write):
 ```bash
 bun run --conditions=browser src/index.ts commit --action advance \
   --target-kind candidate --target-id jordan-lee \
-  --reason "strong event + postgres signal"
+  --reason "strong event + postgres signal" \
+  --meta '{"score":".moks/req/scores/jordan-lee.md"}'
 
 # weekly decision signal (local receipts; "real req" is still a human judgment)
 bun run --conditions=browser src/index.ts activity --days 7

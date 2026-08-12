@@ -17,12 +17,10 @@ import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
-  opencode: 0,
-  "opencode-go": 1,
-  openai: 2,
+  anthropic: 0,
+  openai: 1,
+  google: 2,
   "github-copilot": 3,
-  anthropic: 4,
-  google: 5,
 }
 
 const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"

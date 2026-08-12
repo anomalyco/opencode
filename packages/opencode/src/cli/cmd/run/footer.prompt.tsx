@@ -283,14 +283,14 @@ export function createPromptState(input: PromptInput): PromptState {
   const [shell, setShell] = createSignal(false)
   const placeholder = createMemo(() => {
     if (shell()) {
-      return new StyledText([fg(input.theme().muted)('Run a command... "git status"')])
+      return new StyledText([fg(input.theme().muted)('Run a command... "moks status"')])
     }
 
     if (!input.state().first) {
       return ""
     }
 
-    return new StyledText([fg(input.theme().muted)('Ask anything... "Fix a TODO in the codebase"')])
+    return new StyledText([fg(input.theme().muted)('Ask anything... "Score this resume against the req"')])
   })
 
   let history = createPromptHistory(input.history)
@@ -438,7 +438,7 @@ export function createPromptState(input: PromptInput): PromptState {
           ]
         : []),
       ...(input.commands() ?? [])
-        .filter((item) => item.source !== "skill" && !hidden.has(item.name))
+        .filter((item) => item.source !== "skill" && item.name !== "init-code" && !hidden.has(item.name))
         .map(
           (item) =>
             ({

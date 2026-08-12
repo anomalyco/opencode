@@ -44,6 +44,12 @@ Load JD + resume at minimum. Use scorecard dimensions when present; otherwise de
 - absolute or repo-relative paths used
 ```
 
+## Write the score file (required)
+
+After the table, write the full score markdown to `.moks/req/scores/<candidate-slug>.md` (slug: lowercase, hyphens). Create `.moks/req/scores/` if needed.
+
+Chat may show the same table; the file is the source of truth. You are not done until the file is written (unless the workspace is read-only or the user forbade writes).
+
 ## Rules
 
 - Every score row needs evidence + source path

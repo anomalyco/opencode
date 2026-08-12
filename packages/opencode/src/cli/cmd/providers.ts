@@ -369,13 +369,12 @@ export const ProvidersLoginCommand = effectCmd({
     const hooks = yield* pluginSvc.list()
 
     const priority: Record<string, number> = {
-      opencode: 0,
+      anthropic: 0,
       openai: 1,
-      "github-copilot": 2,
-      google: 3,
-      anthropic: 4,
-      openrouter: 5,
-      vercel: 6,
+      google: 2,
+      "github-copilot": 3,
+      openrouter: 4,
+      vercel: 5,
     }
     const pluginProviders = resolvePluginProviders({
       hooks,
@@ -396,7 +395,6 @@ export const ProvidersLoginCommand = effectCmd({
           label: x.name,
           value: x.id,
           hint: {
-            opencode: "recommended",
             openai: "ChatGPT Plus/Pro or API key",
           }[x.id],
         })),
@@ -465,7 +463,7 @@ export const ProvidersLoginCommand = effectCmd({
 
     if (provider === "opencode") {
       yield* Prompt.log.info(
-        "This stores credentials for the OpenCode hosted models provider (optional). Create a key at https://opencode.ai/auth",
+        "This stores credentials for an optional third-party hosted models provider (OpenCode), not the moks product. Create a key at https://opencode.ai/auth",
       )
     }
 

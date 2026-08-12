@@ -308,13 +308,13 @@ it.instance("falls back to generic username when system user info is unavailable
   }),
 )
 
-it.effect("creates global moks.jsonc config with schema when no global configs exist", () =>
+it.effect("creates global moks.jsonc config when no global configs exist", () =>
   withGlobalConfig({}, ({ dir }) =>
     Effect.gen(function* () {
       yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
       const content = yield* FSUtil.use.readFileString(path.join(dir, "moks.jsonc"))
-      expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
+      expect(content).not.toContain("opencode.ai/config.json")
       expect(yield* FSUtil.use.existsSafe(path.join(dir, "moks.json"))).toBe(false)
     }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
   ),
@@ -507,13 +507,12 @@ it.instance("handles environment variable substitution", () =>
   ),
 )
 
-it.instance("preserves env variables when adding $schema to config", () =>
+it.instance("preserves env variables when loading config without $schema", () =>
   withProcessEnv(
     "PRESERVE_VAR",
     "secret_value",
     Effect.gen(function* () {
       const test = yield* TestInstance
-      // Config without $schema - should trigger auto-add
       yield* FSUtil.use.writeWithDirs(
         path.join(test.directory, "moks.json"),
         JSON.stringify({ username: "{env:PRESERVE_VAR}" }),
@@ -521,11 +520,10 @@ it.instance("preserves env variables when adding $schema to config", () =>
       const config = yield* Config.use.get()
       expect(config.username).toBe("secret_value")
 
-      // Read the file to verify the env variable was preserved
       const content = yield* FSUtil.use.readFileString(path.join(test.directory, "moks.json"))
       expect(content).toContain("{env:PRESERVE_VAR}")
       expect(content).not.toContain("secret_value")
-      expect(content).toContain("$schema")
+      expect(content).not.toContain("$schema")
     }),
   ),
 )

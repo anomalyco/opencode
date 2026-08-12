@@ -178,7 +178,7 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
 export const PluginCommand = effectCmd({
   command: "plugin <module>",
   aliases: ["plug"],
-  describe: "install plugin and update config",
+  describe: false,
   builder: (yargs) =>
     yargs
       .positional("module", {

@@ -5,7 +5,7 @@ import { UI } from "../ui"
 
 export const PushCommand = effectCmd({
   command: "push",
-  describe: "push a committed decision (records receipt only; dry-run by default)",
+  describe: "record a local push receipt for a committed decision (no ATS write yet; dry-run by default)",
   instance: false,
   builder: (yargs) =>
     yargs

@@ -686,7 +686,7 @@ export function Session() {
       },
     },
     {
-      title: conceal() ? "Disable code concealment" : "Enable code concealment",
+      title: conceal() ? "Show markdown fences" : "Hide markdown fences",
       value: "session.toggle.conceal",
       category: "Session",
       run: () => {

@@ -18,7 +18,7 @@ import { V2Command } from "./v2"
 
 export const DebugCommand = cmd({
   command: "debug",
-  describe: "debugging and troubleshooting tools",
+  describe: false,
   builder: (yargs) =>
     yargs
       .command(ConfigCommand)

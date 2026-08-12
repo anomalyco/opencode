@@ -23,7 +23,7 @@ describe("providerOptions", () => {
         { id: "mistral", name: "Mistral" },
         { id: "aws", name: "AWS Bedrock" },
       ]).map((option) => option.value),
-    ).toEqual(["openai", "anthropic", "aws", "mistral", "custom-z", "__opencode_custom_provider__"])
+    ).toEqual(["anthropic", "openai", "aws", "mistral", "custom-z", "__opencode_custom_provider__"])
   })
 
   test("does not collide with a configured provider named other", () => {

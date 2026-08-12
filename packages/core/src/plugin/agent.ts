@@ -12,6 +12,14 @@ const TRUNCATION_GLOB = path.join(Global.Path.data, "tool-output", "*")
 const BUILD_SYSTEM =
   "You are an AI coding agent. Help the user accomplish software engineering tasks by inspecting the workspace, making targeted changes, and using tools according to the configured permissions."
 
+const RECRUIT_SYSTEM = `You are moks Recruit, the default hiring agent. You are not a coding agent.
+
+Help run hiring loops over local req materials (JD, resume, scorecard, notes). Score candidates, draft outreach (never send), and record dispositions via \`moks commit\` / \`moks push\`. Prefer files under \`.moks/\` over inventing ATS state.`
+
+const PLAN_SYSTEM = `You are moks Plan, the hiring strategy agent.
+
+Plan hiring next steps — req brief, score approach, outreach, dispositions. Do not execute score, outreach, or commit except writing the plan file. You do not write or implement software.`
+
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring req materials, fixture trees, notes, and related local files.
 
 Your strengths:
@@ -135,9 +143,9 @@ export const Plugin = define({
     ]
 
     yield* ctx.agent.transform((draft) => {
-      draft.update(AgentV2.defaultID, (item) => {
-        item.description = "The default agent. Executes tools based on configured permissions."
-        item.system ??= BUILD_SYSTEM
+      draft.update(AgentV2.ID.make("recruit"), (item) => {
+        item.description = "Recruiting agent. Hiring workflows over local req materials, skills, and decision verbs."
+        item.system ??= RECRUIT_SYSTEM
         item.mode = "primary"
         item.permissions.push(
           ...PermissionV2.merge(defaults, [
@@ -147,8 +155,25 @@ export const Plugin = define({
         )
       })
 
+      draft.update(AgentV2.ID.make("build"), (item) => {
+        item.description = "Coding agent escape hatch. Hidden from the default Recruit/Plan cast."
+        item.system ??= BUILD_SYSTEM
+        item.mode = "primary"
+        item.hidden = true
+        item.permissions.push(
+          ...PermissionV2.merge(defaults, [
+            { action: "question", resource: "*", effect: "allow" },
+            { action: "plan_enter", resource: "*", effect: "allow" },
+          ]),
+        )
+      })
+
+      draft.default(AgentV2.ID.make("recruit"))
+
       draft.update(AgentV2.ID.make("plan"), (item) => {
-        item.description = "Plan mode. Disallows all edit tools."
+        item.description =
+          "Plan hiring strategy without recording decisions or mass-editing the workspace. Edits only the plan file."
+        item.system = PLAN_SYSTEM
         item.mode = "primary"
         item.permissions.push(
           ...PermissionV2.merge(defaults, [

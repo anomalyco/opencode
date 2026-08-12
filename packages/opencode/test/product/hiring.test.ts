@@ -7,6 +7,8 @@ import { provideTmpdirInstance, testInstanceStoreLayer } from "../fixture/fixtur
 import { testEffect } from "../lib/effect"
 import { HiringSkills } from "../../src/product/hiring-skills"
 import { HiringFixtures } from "../../src/product/fixtures"
+import PROMPT_RECRUIT from "../../src/product/agents/recruit.txt"
+import PROMPT_INITIALIZE from "../../src/command/template/initialize.txt"
 import path from "path"
 
 const node = LayerNode.compile(CrossSpawnSpawner.node)
@@ -31,6 +33,23 @@ it.effect("HiringFixtures paths resolve to on-disk samples", () =>
       expect(await Bun.file(file).exists()).toBe(true)
       expect((await Bun.file(file).text()).length).toBeGreaterThan(0)
     }
+  }),
+)
+
+it.effect("score-candidate writes a score file path; commit-disposition cites it", () =>
+  Effect.sync(() => {
+    const score = HiringSkills.find((s) => s.name === "score-candidate")
+    const commit = HiringSkills.find((s) => s.name === "commit-disposition")
+    expect(score?.content).toContain(".moks/req/scores/<candidate-slug>.md")
+    expect(score?.content).toContain("You are not done until the file is written")
+    expect(commit?.content).toContain("--target-id")
+    expect(commit?.content).toContain("--meta")
+    expect(commit?.content).toContain('{"score":".moks/req/scores/<slug>.md"}')
+    expect(PROMPT_RECRUIT).toContain(".moks/req/scores/<slug>.md")
+    expect(PROMPT_RECRUIT).toContain("--meta")
+    expect(PROMPT_RECRUIT).not.toContain("packages/opencode/src/product/fixtures/hiring/")
+    expect(PROMPT_INITIALIZE).toContain(".moks/req/jd.md")
+    expect(PROMPT_INITIALIZE).toContain("Do not overwrite non-empty user content")
   }),
 )
 

@@ -25,6 +25,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import * as Stream from "effect/Stream"
 import { Command } from "../command"
+import { ReqWorkspace } from "@/product/req-workspace"
 import { pathToFileURL, fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { ConfigMarkdown } from "@/config/markdown"
@@ -1366,6 +1367,10 @@ const layer = Layer.effect(
         const error = new NamedError.Unknown({ message: `Command not found: "${input.command}".${hint}` })
         yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
         throw error
+      }
+      if (input.command === Command.Default.INIT) {
+        const ctx = yield* InstanceState.context
+        yield* Effect.promise(() => ReqWorkspace.scaffold(ctx.worktree))
       }
       const agentName = cmd.agent ?? input.agent
 

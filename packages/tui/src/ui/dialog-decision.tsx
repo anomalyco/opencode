@@ -1,3 +1,5 @@
+import { readdir, stat } from "node:fs/promises"
+import path from "node:path"
 import type { DialogContext } from "./dialog"
 import { DialogAlert } from "./dialog-alert"
 import { DialogConfirm } from "./dialog-confirm"
@@ -33,22 +35,36 @@ export async function runCommitFlow(input: { dialog: DialogContext; toast: Toast
   })
   if (reasonRaw === null) return
 
+  const inferred = input.cwd ? await newestScore(input.cwd) : undefined
   const args = ["commit", "--json", "--action", trimmedAction]
   const reason = reasonRaw.trim()
   if (reason) args.push("--reason", reason)
+  if (inferred) {
+    args.push("--target-kind", "candidate", "--target-id", inferred.slug)
+    args.push("--meta", JSON.stringify({ score: inferred.score }))
+  }
 
   const result = await call(args, input)
   const id = receiptId(result.json)
+  const ok = result.code === 0
   input.toast.show({
-    message: result.code === 0 ? (id ? `Committed ${id}` : "Commit complete") : "Commit failed",
-    variant: result.code === 0 ? "success" : "error",
+    message: ok
+      ? id
+        ? inferred
+          ? `Committed ${id} (${inferred.slug})`
+          : `Committed ${id}`
+        : inferred
+          ? `Committed ${inferred.slug}`
+          : "Commit complete"
+      : "Commit failed",
+    variant: ok ? "success" : "error",
   })
   await showResult(input.dialog, "Commit result", result)
 }
 
 export async function runPushFlow(input: { dialog: DialogContext; toast: Toast; cwd?: string }) {
   const commitRaw = await DialogPrompt.show(input.dialog, "Push decision", {
-    placeholder: "commit id",
+    placeholder: "dec_… from moks status",
   })
   if (commitRaw === null) return
   const commitID = commitRaw.trim()
@@ -70,7 +86,7 @@ export async function runPushFlow(input: { dialog: DialogContext; toast: Toast; 
   }
 
   input.toast.show({
-    message: result.code === 0 ? "Push complete" : "Push failed",
+    message: result.code === 0 ? "Recorded local push receipt (no ATS write)" : "Push failed",
     variant: result.code === 0 ? "success" : "error",
   })
   await showResult(input.dialog, "Push result", result)
@@ -101,4 +117,26 @@ async function call(args: string[], input: { toast: Toast; cwd?: string }) {
 async function showResult(dialog: DialogContext, title: string, result: DecisionCliResult) {
   const message = formatDecisionResult(result)
   await DialogAlert.show(dialog, title, message.length > 4000 ? `${message.slice(0, 4000)}\n…` : message)
+}
+
+async function newestScore(cwd: string) {
+  const dir = path.join(cwd, ".moks", "req", "scores")
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+  const names = entries.flatMap((entry) =>
+    entry.isFile() && entry.name.endsWith(".md") && entry.name !== ".gitkeep" ? [entry.name] : [],
+  )
+  if (names.length === 0) return
+  const rows = await Promise.all(
+    names.map(async (name) => ({
+      name,
+      mtime: await stat(path.join(dir, name))
+        .then((info) => info.mtimeMs)
+        .catch(() => 0),
+    })),
+  )
+  const newest = rows.reduce((a, b) => (b.mtime > a.mtime ? b : a))
+  return {
+    slug: path.basename(newest.name, ".md"),
+    score: `.moks/req/scores/${newest.name}`,
+  }
 }

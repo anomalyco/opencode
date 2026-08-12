@@ -80,7 +80,7 @@ const layer = Layer.effect(
       }
       commands[Default.INIT_CODE] = {
         name: Default.INIT_CODE,
-        description: "guided AGENTS.md setup for coding agents",
+        description: "escape hatch: coding AGENTS.md setup (not hiring)",
         source: "command",
         get template() {
           return PROMPT_INITIALIZE_CODE.replace("${path}", ctx.worktree)

@@ -53,7 +53,7 @@ const PathCommand = effectCmd({
 
 export const DbCommand = effectCmd({
   command: "db",
-  describe: "database tools",
+  describe: false,
   instance: false,
   builder: (yargs: Argv) => {
     return yargs.command(QueryCommand).command(PathCommand).demandCommand()
