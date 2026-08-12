@@ -186,9 +186,9 @@ it("runs a full prompt turn against a fake provider and reads the durable log", 
 
 it("fails a shell command through the no-execution-plane spawner and leaves the session usable", async () => {
   const sessionID = await createSession()
-  const shell = await request("/api/shell?directory=/tmp/project", {
+  const shell = await request(`/api/session/${sessionID}/shell`, {
     method: "POST",
-    body: JSON.stringify({ command: "pwd", timeout: 1_000 }),
+    body: JSON.stringify({ command: "pwd" }),
   })
   expect(shell.status).toBe(500)
 
