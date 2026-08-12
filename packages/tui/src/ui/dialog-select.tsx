@@ -141,7 +141,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           if (currentIndex >= 0) {
             setStore("selected", currentIndex)
             selection = flat()[currentIndex]
-            scrollAfterLayout(true, current)
           }
         }
       },
@@ -306,24 +305,21 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   createEffect(
-    on(
-      () => store.filter,
-      (filter) => {
-        if (filter.length > 0) {
-          resetSelection = true
-          const option = flat()[0]
-          if (!option) return
-          moveTo(0, true, false)
-          scrollAfterLayout(true, option.value)
-          return
-        }
-        if (!props.current || props.focusCurrent === false) return
-        const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
-        if (currentIndex < 0) return
-        moveTo(currentIndex, true)
-        scrollAfterLayout(true, props.current)
-      },
-    ),
+    on([() => store.filter, () => props.current], ([filter, current]) => {
+      if (filter.length > 0) resetSelection = true
+      if (filter.length > 0) {
+        const option = flat()[0]
+        if (!option) return
+        moveTo(0, true, false)
+        scrollAfterLayout(true, option.value)
+        return
+      }
+      if (!current || props.focusCurrent === false) return
+      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+      if (currentIndex < 0) return
+      moveTo(currentIndex, true)
+      scrollAfterLayout(true, current)
+    }),
   )
 
   function move(direction: number) {

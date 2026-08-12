@@ -117,7 +117,6 @@ export function DialogMcp() {
           <DialogSelect
             title="MCP servers"
             options={options()}
-            current={focused()}
             preserveSelection
             onMove={(option) => setFocused(option.value as string)}
             onSelect={(option) => open(option.value as string)}

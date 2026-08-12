@@ -21,17 +21,10 @@ function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePl
           title: plugin.id,
           value: plugin.id,
           category: "Built-in",
-          footer: (
-            <span
-              style={{
-                fg: plugin.active
-                  ? props.context.theme.text.feedback.success.default
-                  : props.context.theme.text.subdued,
-              }}
-            >
-              {plugin.active ? "active" : "inactive"}
-            </span>
-          ),
+          footer: plugin.active ? "active" : "inactive",
+          footerColor: plugin.active
+            ? props.context.theme.text.feedback.success.default
+            : props.context.theme.text.subdued,
         }),
       )
     const external = props.plugins
@@ -43,20 +36,13 @@ function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePl
           value: plugin.id ?? plugin.target,
           category: "External",
           searchText: plugin.target,
-          footer: (
-            <span
-              style={{
-                fg:
-                  plugin.status === "active"
-                    ? props.context.theme.text.feedback.success.default
-                    : plugin.status === "failed"
-                      ? props.context.theme.text.feedback.error.default
-                      : props.context.theme.text.subdued,
-              }}
-            >
-              {plugin.status}
-            </span>
-          ),
+          footer: plugin.status,
+          footerColor:
+            plugin.status === "active"
+              ? props.context.theme.text.feedback.success.default
+              : plugin.status === "failed"
+                ? props.context.theme.text.feedback.error.default
+                : props.context.theme.text.subdued,
         }),
       )
     return [...builtins, ...external].sort((a, b) => a.title.localeCompare(b.title))
@@ -107,7 +93,6 @@ function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePl
           <DialogSelect
             title="Plugins"
             options={options()}
-            current={focused()}
             locked={locked()}
             preserveSelection={true}
             onMove={(option) => setFocused(option.value)}
