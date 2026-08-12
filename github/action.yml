@@ -30,6 +30,11 @@ inputs:
     description: "Comma-separated list of trigger phrases (case-insensitive). Defaults to '/opencode,/oc'"
     required: false
 
+  allowed_bots:
+    description: "Comma-separated list of bot usernames allowed to trigger the action, or '*' to allow all bots. Bots are denied by default. Prefer explicit usernames, only use '*' in workflows with tightly restricted permissions."
+    required: false
+    default: ""
+
   variant:
     description: "Model variant for provider-specific reasoning effort (e.g., high, max, minimal)"
     required: false
@@ -75,5 +80,6 @@ runs:
         PROMPT: ${{ inputs.prompt }}
         USE_GITHUB_TOKEN: ${{ inputs.use_github_token }}
         MENTIONS: ${{ inputs.mentions }}
+        ALLOWED_BOTS: ${{ inputs.allowed_bots }}
         VARIANT: ${{ inputs.variant }}
         OIDC_BASE_URL: ${{ inputs.oidc_base_url }}

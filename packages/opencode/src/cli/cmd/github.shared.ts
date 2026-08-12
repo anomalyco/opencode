@@ -2,6 +2,22 @@ import type { SessionV1 } from "@opencode-ai/core/v1/session"
 
 export { parseGitHubRemote } from "@/util/repository"
 
+export function isBotActor(sender: { type: string }) {
+  return sender.type === "Bot"
+}
+
+export function isAllowedBot(sender: { login: string; type: string }, allowedBots: string) {
+  if (!isBotActor(sender)) return false
+  if (allowedBots.trim() === "*") return true
+
+  const name = sender.login.toLowerCase().replace(/\[bot\]$/, "")
+  return allowedBots
+    .split(",")
+    .map((bot) => bot.trim().toLowerCase().replace(/\[bot\]$/, ""))
+    .filter(Boolean) // remove empty strings
+    .includes(name)
+}
+
 /**
  * Extracts displayable text from assistant response parts.
  * Returns null for non-text responses (signals summary needed).
