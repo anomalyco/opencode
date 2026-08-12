@@ -9,6 +9,7 @@ import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -90,7 +91,13 @@ describe("Session.move", () => {
           const destination = AbsolutePath.make(tmp.path)
           const created = yield* session.create({ location: Location.Ref.make({ directory: previous }) })
 
-          yield* session.move({ sessionID: created.id, directory: destination })
+          // Moves are admitted through the inbox and applied by the drain;
+          // publish the applied move directly since execution is a no-op here.
+          yield* bus.publish(SessionEvent.Moved, {
+            sessionID: created.id,
+            location: Location.Ref.make({ directory: destination }),
+            projectID: Project.ID.global,
+          })
           // The former directory becomes a project after the session left it.
           yield* bus.publish(Event.Resolved, {
             projectID: Project.ID.make("adopting"),
