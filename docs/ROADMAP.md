@@ -79,6 +79,7 @@ We mold the OpenCode fork — we do not rebuild the harness from zero.
 - Multi-ATS write matrix  
 - Full package rename / monorepo prune  
 - Desktop, console, web, SST investment  
+- Own models catalog / hosting (keep third-party `models.opencode.ai` until post-WAU)  
 - Cloud GTM  
 
 ## Sequencing

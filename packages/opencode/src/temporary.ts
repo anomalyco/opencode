@@ -24,8 +24,8 @@ const cli = yargs(hideBin(process.argv))
     type: "boolean",
   })
   .middleware((opts) => {
-    if (opts.printLogs) process.env.OPENCODE_PRINT_LOGS = "1"
-    if (opts.logLevel) process.env.OPENCODE_LOG_LEVEL = opts.logLevel
+    if (opts.printLogs) process.env.MOKS_PRINT_LOGS = "1"
+    if (opts.logLevel) process.env.MOKS_LOG_LEVEL = opts.logLevel
   })
   .command(TuiThreadCommand)
   .parse()

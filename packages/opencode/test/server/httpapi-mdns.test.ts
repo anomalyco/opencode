@@ -26,14 +26,14 @@ void mock.module("bonjour-service", () => ({
 const { Server } = await import("../../src/server/server")
 
 const original = {
-  OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
-  OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
+  MOKS_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
+  MOKS_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
 }
 
 afterEach(async () => {
   events.length = 0
-  Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
-  Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
+  Flag.OPENCODE_SERVER_PASSWORD = original.MOKS_SERVER_PASSWORD
+  Flag.OPENCODE_SERVER_USERNAME = original.MOKS_SERVER_USERNAME
   await disposeAllInstances()
   await resetDatabase()
 })

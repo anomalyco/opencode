@@ -12,7 +12,7 @@ Read the highest-value sources first:
 - build, test, lint, formatter, typecheck, and codegen config
 - CI workflows and pre-commit / task runner config
 - existing instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules/`, `.cursorrules`, `.github/copilot-instructions.md`)
-- repo-local moks config such as `opencode.json`
+- repo-local moks config such as `moks.json`
 
 If architecture is still unclear after reading config and docs, inspect a small number of representative code files to find the real entrypoints, package boundaries, and execution flow. Prefer reading the files that explain how the system is wired together over random leaf files.
 
@@ -57,7 +57,7 @@ Exclude:
 - long tutorials or exhaustive file trees
 - obvious language conventions
 - speculative claims or anything you could not verify
-- content better stored in another file referenced via `opencode.json` `instructions`
+- content better stored in another file referenced via `moks.json` `instructions`
 
 When in doubt, omit.
 

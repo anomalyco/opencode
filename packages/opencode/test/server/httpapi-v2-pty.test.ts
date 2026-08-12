@@ -200,7 +200,7 @@ describe("v2 pty HttpApi", () => {
         )
         yield* Effect.promise(() =>
           Bun.write(
-            path.join(dir, "opencode.json"),
+            path.join(dir, "moks.json"),
             JSON.stringify({ plugin: [pathToFileURL(plugin).href], formatter: false, lsp: false }),
           ),
         )

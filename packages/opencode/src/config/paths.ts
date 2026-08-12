@@ -7,17 +7,13 @@ import { unique } from "remeda"
 import * as Effect from "effect/Effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 
-/** Project config dir basenames. `.opencode` first, `.moks` second so moks wins on name conflicts. */
-export const PROJECT_DIR_NAMES = [".opencode", ".moks"] as const
+/** Project config dir basename. OpenCode `.opencode/` is not loaded. */
+export const PROJECT_DIR_NAMES = [".moks"] as const
 
-/**
- * Nested / project config basenames loaded in this order (later wins merge).
- * Legacy opencode first, then moks; within each family json then jsonc so jsonc wins.
- */
-export const CONFIG_FILE_NAMES = ["opencode.json", "opencode.jsonc", "moks.json", "moks.jsonc"] as const
+/** Nested / project config basenames. json then jsonc so jsonc wins. */
+export const CONFIG_FILE_NAMES = ["moks.json", "moks.jsonc"] as const
 
-/** Config basenames without extension, legacy first so dual-load can prefer moks after. */
-export const CONFIG_STEMS = ["opencode", "moks"] as const
+export const CONFIG_STEMS = ["moks"] as const
 
 export function isProjectConfigDir(dir: string) {
   const base = path.basename(dir)
@@ -37,17 +33,14 @@ export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   })).toReversed()
 })
 
-/**
- * Dual-load project config files (opencode + moks), root-first.
- * Within each directory: opencode then moks so moks wins when both are present.
- */
+/** Project config files, root-first. Within a directory: json then jsonc. */
 export const projectConfigFiles = Effect.fn("ConfigPaths.projectConfigFiles")(function* (
   directory: string,
   worktree?: string,
 ) {
   const afs = yield* FSUtil.Service
   // Leaf-first discovery; group by dir so we can reverse only directory order.
-  // Within a directory `up` pushes targets in CONFIG_FILE_NAMES order (opencode then moks).
+  // Within a directory `up` pushes targets in CONFIG_FILE_NAMES order.
   const leafFirst = yield* afs.up({
     targets: [...CONFIG_FILE_NAMES],
     start: directory,
@@ -92,7 +85,7 @@ export function fileInDirectory(dir: string, name: string) {
   return [path.join(dir, `${name}.json`), path.join(dir, `${name}.jsonc`)]
 }
 
-/** opencode then moks config paths in a directory (for dual-load migrate / nested dirs). */
+/** moks config paths in a directory. */
 export function configFilesInDirectory(dir: string) {
   return CONFIG_STEMS.flatMap((name) => fileInDirectory(dir, name))
 }

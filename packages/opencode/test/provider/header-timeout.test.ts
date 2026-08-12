@@ -214,15 +214,15 @@ async function delayedBodyServer(delay: number): Promise<{ server: Server; url: 
 function withAuthContent<A, E, R>(self: Effect.Effect<A, E, R>, value: Record<string, unknown> = defaultAuthContent()) {
   return Effect.acquireUseRelease(
     Effect.sync(() => {
-      const previous = process.env.OPENCODE_AUTH_CONTENT
-      process.env.OPENCODE_AUTH_CONTENT = JSON.stringify(value)
+      const previous = process.env.MOKS_AUTH_CONTENT
+      process.env.MOKS_AUTH_CONTENT = JSON.stringify(value)
       return previous
     }),
     () => self,
     (previous) =>
       Effect.sync(() => {
-        if (previous === undefined) delete process.env.OPENCODE_AUTH_CONTENT
-        else process.env.OPENCODE_AUTH_CONTENT = previous
+        if (previous === undefined) delete process.env.MOKS_AUTH_CONTENT
+        else process.env.MOKS_AUTH_CONTENT = previous
       }),
   )
 }

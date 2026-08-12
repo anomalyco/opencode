@@ -4,7 +4,6 @@ import { Slug } from "@opencode-ai/core/util/slug"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
-import { existsSync } from "fs"
 import { BackgroundJob } from "@/background/job"
 import { Decimal } from "decimal.js"
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
@@ -332,11 +331,7 @@ export const Event = {
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {
   const name = [input.time.created, input.slug].join("-") + ".md"
   if (!instance.project.vcs) return path.join(Global.Path.data, "plans", name)
-  const preferred = path.join(instance.worktree, ".moks", "plans", name)
-  const legacy = path.join(instance.worktree, ".opencode", "plans", name)
-  // Dual-read: keep mid-flight plans under the legacy OpenCode path until migrated.
-  if (existsSync(legacy) && !existsSync(preferred)) return legacy
-  return preferred
+  return path.join(instance.worktree, ".moks", "plans", name)
 }
 
 export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?: ProviderMetadata }) => {

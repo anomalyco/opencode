@@ -39,8 +39,8 @@ const appLayer = AppNodeBuilder.build(
 const it = testEffect(Layer.mergeAll(appLayer, httpApiLayer))
 
 const original = {
-  OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
-  OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
+  MOKS_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
+  MOKS_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
 }
 
 type ServerPath = "default" | "raw"
@@ -285,7 +285,7 @@ function writeStandardFiles(dir: string) {
 function writeProjectSkill(dir: string) {
   return FSUtil.Service.use((fs) =>
     fs.writeWithDirs(
-      path.join(dir, ".opencode", "skills", "project-rest-skill", "SKILL.md"),
+      path.join(dir, ".moks", "skills", "project-rest-skill", "SKILL.md"),
       `---
 name: project-rest-skill
 description: A project skill visible to REST API prompts.
@@ -328,8 +328,8 @@ function seedMessage(directory: string, sessionID: string) {
 }
 
 afterEach(async () => {
-  Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
-  Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
+  Flag.OPENCODE_SERVER_PASSWORD = original.MOKS_SERVER_PASSWORD
+  Flag.OPENCODE_SERVER_USERNAME = original.MOKS_SERVER_USERNAME
   await disposeAllInstances()
   await resetDatabase()
 })

@@ -122,15 +122,13 @@ it.instance("build agent is hidden coding escape hatch", () =>
   }),
 )
 
-it.instance("plan agent denies edits except plan markdown under .moks/plans and legacy .opencode/plans", () =>
+it.instance("plan agent denies edits except plan markdown under .moks/plans", () =>
   Effect.gen(function* () {
     const plan = yield* load((svc) => svc.get("plan"))
     expect(plan).toBeDefined()
-    // Wildcard is denied
     expect(evalPerm(plan, "edit")).toBe("deny")
-    // Preferred and legacy plan paths are allowed
     expect(Permission.evaluate("edit", ".moks/plans/foo.md", plan!.permission).action).toBe("allow")
-    expect(Permission.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
+    expect(Permission.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("deny")
   }),
 )
 
@@ -652,7 +650,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
-      const skillDir = path.join(test.directory, ".opencode", "skill", "perm-skill")
+      const skillDir = path.join(test.directory, ".moks", "skill", "perm-skill")
       yield* Effect.promise(() =>
         Bun.write(
           path.join(skillDir, "SKILL.md"),
@@ -666,11 +664,11 @@ description: Permission skill.
         ),
       )
 
-      const home = process.env.OPENCODE_TEST_HOME
-      process.env.OPENCODE_TEST_HOME = test.directory
+      const home = process.env.MOKS_TEST_HOME
+      process.env.MOKS_TEST_HOME = test.directory
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
-          process.env.OPENCODE_TEST_HOME = home
+          process.env.MOKS_TEST_HOME = home
         }),
       )
 

@@ -218,8 +218,8 @@ const TIPS: Tip[] = [
     if (!items.length) return undefined
     return `Use ${items.map(shortcutText).join(" / ")} for parent/child sessions`
   },
-  // Config / workspace (prefer moks paths; dual-load still works)
-  "Create {highlight}moks.json{/highlight} (or {highlight}opencode.json{/highlight}) for server settings, and {highlight}tui.json{/highlight} for TUI",
+  // Config / workspace
+  "Create {highlight}moks.json{/highlight} for server settings, and {highlight}tui.json{/highlight} for TUI",
   "Place TUI settings in {highlight}tui.json{/highlight} next to your project config for local overrides",
   "Add {highlight}$schema{/highlight} to your config for autocomplete in your editor",
   "Configure {highlight}model{/highlight} in config to set your default model",

@@ -31,7 +31,7 @@ const SKILL_PATTERN = "**/SKILL.md"
 // touch moks config gives product-correct shapes instead of coding-agent guesses.
 const CUSTOMIZE_MOKS_SKILL_NAME = "customize-moks"
 const CUSTOMIZE_MOKS_SKILL_DESCRIPTION =
-  "Use ONLY when the user is editing or creating moks configuration: moks.json, opencode.json dual-load paths, files under .moks/, .opencode/, or global moks/opencode config. Also use when creating or fixing recruit/plan agents, hiring skills, decision verbs (commit/status/push), Ashby MCP edge, permissions, plugins, or MCP servers. Do not use for the user's own application code, or for any project that is not configuring moks."
+  "Use ONLY when the user is editing or creating moks configuration: moks.json, files under .moks/, or global ~/.config/moks. Also use when creating or fixing recruit/plan agents, hiring skills, decision verbs (commit/status/push), Ashby MCP edge, permissions, plugins, or MCP servers. Do not use for the user's own application code, or for any project that is not configuring moks."
 const CUSTOMIZE_MOKS_SKILL_BODY = SkillPlugin.CustomizeMoksContent
 
 export const Info = Schema.Struct({

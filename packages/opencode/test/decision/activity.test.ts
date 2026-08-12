@@ -30,9 +30,9 @@ async function moks(args: string[], cwd: string) {
     cwd,
     env: {
       ...process.env,
-      OPENCODE_PURE: "1",
-      OPENCODE_DISABLE_PROJECT_CONFIG: "1",
-      OPENCODE_TEST_HOME: Global.Path.home,
+      MOKS_PURE: "1",
+      MOKS_DISABLE_PROJECT_CONFIG: "1",
+      MOKS_TEST_HOME: Global.Path.home,
       HOME: Global.Path.home,
       XDG_DATA_HOME: process.env.XDG_DATA_HOME,
       XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,

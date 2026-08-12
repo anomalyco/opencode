@@ -68,17 +68,17 @@ const cli = yargs(args)
     type: "boolean",
   })
   .middleware(async (opts) => {
-    if (opts.printLogs) process.env.OPENCODE_PRINT_LOGS = "1"
-    if (opts.logLevel) process.env.OPENCODE_LOG_LEVEL = opts.logLevel
+    if (opts.printLogs) process.env.MOKS_PRINT_LOGS = "1"
+    if (opts.logLevel) process.env.MOKS_LOG_LEVEL = opts.logLevel
     if (opts.pure) {
-      process.env.OPENCODE_PURE = "1"
+      process.env.MOKS_PURE = "1"
     }
 
     Heap.start()
 
     process.env.AGENT = "1"
-    process.env.OPENCODE = "1"
-    process.env.OPENCODE_PID = String(process.pid)
+    process.env.MOKS = "1"
+    process.env.MOKS_PID = String(process.pid)
   })
   .usage("")
   .completion("completion", "generate shell completion script")

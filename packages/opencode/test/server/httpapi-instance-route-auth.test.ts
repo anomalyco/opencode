@@ -15,8 +15,8 @@ function app(input: { password?: string; username?: string }) {
       Layer.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({
-            OPENCODE_SERVER_PASSWORD: input.password,
-            OPENCODE_SERVER_USERNAME: input.username,
+            MOKS_SERVER_PASSWORD: input.password,
+            MOKS_SERVER_USERNAME: input.username,
           }),
         ),
       ),

@@ -7,7 +7,7 @@ import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
 
-const app = "opencode"
+const app = "moks"
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
@@ -16,7 +16,7 @@ const tmp = path.join(os.tmpdir(), app)
 
 const paths = {
   get home() {
-    return process.env.MOKS_TEST_HOME ?? process.env.OPENCODE_TEST_HOME ?? os.homedir()
+    return process.env.MOKS_TEST_HOME ?? os.homedir()
   },
   data,
   bin: path.join(cache, "bin"),

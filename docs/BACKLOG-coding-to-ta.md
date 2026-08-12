@@ -103,14 +103,14 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 | **explore** | Yes — `agent/prompt/explore.txt` | Req materials / fixtures / notes (done BL-005) |
 | **compaction / title / summary** | Yes | Session-history / hiring brief / mixed titles (done BL-006) |
 
-**Port implication:** doer + plan + subagents + tips + dual-load + req materials + provider identity headers are hiring-native. Residual: global app dir (BL-020 parked); own models catalog later.
+**Port implication:** doer + plan + subagents + tips + moks-only identity + req materials + provider identity headers are hiring-native. Residual: own models catalog later (deferred).
 
 ### Plan mode machinery (shipped G3 — keep; do not rebuild)
 
 | Piece | Role now | File(s) |
 |-------|----------|---------|
-| `plan` agent | Primary; edit only plan markdown (`.moks/plans` + legacy `.opencode/plans`) | `agent/agent.ts` |
-| Plan path | Prefer `.moks/plans/{created}-{slug}.md`; dual-read legacy `.opencode/plans` | `session/session.ts` `plan()` |
+| `plan` agent | Primary; edit only plan markdown (`.moks/plans`) | `agent/agent.ts` |
+| Plan path | `.moks/plans/{created}-{slug}.md` | `session/session.ts` `plan()` |
 | `plan_exit` tool | Question → synthetic user msg with **`agent: "recruit"`** + hiring execute text | `tool/plan.ts` |
 | Reminders | Inject hiring plan-mode; on leave-to-`recruit`, inject `doer-switch.txt` | `session/reminders.ts` |
 | Plan workflow text | Explore **req materials** → hiring strategy → artifacts → `plan_exit` | `session/prompt/plan-mode.txt` |
@@ -150,11 +150,12 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 - **AGENTS.md:** keep as workspace instruction injection (hiring norms, same as coding constitution). Not the hero bootstrap; not removed.
 - **LSP:** not a TA product surface (defaults off; chrome hidden when off; code kept only for optional `build` escape hatch).
 - **Diff:** keep and lean into — real-time visibility of local hiring deltas (like code changes).
-- **BL-020 global app dir:** **parked** — leave alone until we design migrate/coexistence with installed OpenCode more carefully.
+- **BL-020 global app dir:** **shipped isolate** (2026-08-12) — `app = "moks"`; no migrate/fallback; OpenCode dirs untouched.
 - **Shipped 2026-08-11 (dictionary wave):** BL-004, BL-007, BL-008, BL-013, BL-015 + verb rename propose→**commit**, apply→**push**.
 - **Shipped 2026-08-11 (helpers + front doors):** BL-005, BL-006, BL-009, BL-010, BL-011, BL-012, BL-014, BL-016.
 - **Shipped 2026-08-11 (tips + dual-load):** BL-003, BL-018, BL-019, BL-021.
-- **Shipped 2026-08-12 (req context + provider identity):** BL-023, BL-024. **Parked:** BL-020.
+- **Shipped 2026-08-12 (req context + provider identity):** BL-023, BL-024.
+- **Shipped 2026-08-12 (isolate):** BL-020 + drop dual-load (018/019/021 moks-only).
 
 ---
 
@@ -232,7 +233,7 @@ Default product path post-exit agent is `recruit` with hiring execute language. 
 
 ### Residual
 
-- Dead/unused `plan-reminder-anthropic.txt` still has coding copy (not imported on V1 path) — optional cleanup
+- Unused `plan-reminder-anthropic.txt` deleted (2026-08-12)
 - Explore prompt ported (BL-005 done) — plan parallel research stays hiring-oriented
 
 ### Acceptance (met)
@@ -258,7 +259,7 @@ Default plan mode reads as **req strategy**, not implementation design.
 - **`NO_MODELS_TIP`:** start hiring + `/init` (not “start coding”)
 - **AGENTS.md:** kept as **optional** tip for team hiring conventions (not codebase commit hero)
 - **Demoted:** LSP/formatter tips, PR review wording, codebase init
-- **Config paths:** prefer `moks.json` / `.moks/` with dual-load honesty (`or opencode.json`)
+- **Config paths:** `moks.json` / `.moks/` only
 
 ### Acceptance (met)
 
@@ -429,7 +430,7 @@ Default `/review` is **packet review**, not PR review.
 
 1. Skill id **`customize-moks`** in V1 (`skill/index.ts`) and V2 (`core/src/plugin/skill.ts`)
 2. Body: `packages/core/src/plugin/skill/customize-moks.md` (removed `customize-opencode.md`)
-3. Content: recruit default, `.moks/` workspace, hiring skills, commit/status/push, Ashby edge; honest dual-load notes for `opencode.json` / `.opencode/` today
+3. Content: recruit default, `.moks/` workspace, hiring skills, commit/status/push, Ashby edge; moks-only paths (`~/.config/moks`)
 4. No opencode.ai as primary moks config authority
 5. Test: `packages/core/test/plugin/skill.test.ts`
 
@@ -636,22 +637,21 @@ Theme picker doesn’t read only as “pick your coding agent skin.”
 
 | | |
 |--|--|
-| **Action** | IDENTITY → **DONE** (dual-load) |
+| **Action** | IDENTITY → **DONE** (moks-only; dual-load dropped 2026-08-12) |
 | **Priority** | P2 |
-| **Decision** | ☑ Dual-load; prefer moks (shipped) |
-| **Rec** | **Dual-load; prefer moks** — shipped |
+| **Decision** | ☑ **moks.json only**; `opencode.json` ignored |
+| **Rec** | Isolate — do not load OpenCode config files |
 
 ### Shipped (implementation)
 
-- Dual-load `moks.json(c)` + `opencode.json(c)` project + global + nested dirs (`config/config.ts`, `ConfigPaths.projectConfigFiles`)
-- Prefer moks when both present (merge after opencode)
-- New global seed prefers **`moks.jsonc`** (still under `~/.config/opencode/` until BL-020)
+- Load only `moks.json(c)` project + global + nested dirs
+- Global seed: **`~/.config/moks/moks.jsonc`**
 - Schema URL still `https://opencode.ai/config.json` (catalog identity later)
-- Tests in `test/config/config.test.ts`
+- Tests assert `opencode.json` is ignored
 
 ### Acceptance (met)
 
-Documented TA setup uses `moks.json`; `opencode.json` still works.
+Documented TA setup uses `moks.json`. Personal `opencode.json` does not affect moks.
 
 ---
 
@@ -659,21 +659,21 @@ Documented TA setup uses `moks.json`; `opencode.json` still works.
 
 | | |
 |--|--|
-| **Action** | IDENTITY → **DONE** (dual-discover) |
+| **Action** | IDENTITY → **DONE** (`.moks` only; dual-discover dropped 2026-08-12) |
 | **Priority** | P2 |
-| **Decision** | ☑ Dual-discover `.moks/` + `.opencode/` (shipped) |
-| **Rec** | **Dual-discover** — shipped |
+| **Decision** | ☑ **`.moks/` only**; `.opencode/` ignored by product |
+| **Rec** | Isolate — installed OpenCode keeps its own `.opencode/` |
 
 ### Shipped (implementation)
 
-- `ConfigPaths.directories`: targets `.opencode` then `.moks` (moks wins name conflicts)
-- `isProjectConfigDir` basename-safe for both
-- TUI config + theme discovery dual-scan `.moks` + `.opencode`
-- Monorepo `.opencode/` for **installed OpenCode** unchanged and still loads
+- `ConfigPaths.directories`: `.moks` only
+- TUI theme discovery: `.moks` only
+- Writers (mcp, agent, plugin install) emit `.moks/` + `moks.json`
+- Monorepo `.opencode/` still configures **installed OpenCode** — product moks does not load it
 
 ### Acceptance (met)
 
-User can put hiring skills under `.moks/skill` and they load.
+Hiring skills under `.moks/skill` load. `.opencode/` does not leak into product moks.
 
 ---
 
@@ -681,44 +681,27 @@ User can put hiring skills under `.moks/skill` and they load.
 
 | | |
 |--|--|
-| **Action** | IDENTITY |
-| **Priority** | P2 — **PARKED** |
-| **Decision** | ☑ **Leave alone for now** (2026-08-11). Needs more design before flip. |
-| **Rec** | **Do not ship** with 018/019/021; revisit after dual-load + clear migrate/coexistence story |
+| **Action** | IDENTITY → **DONE** (isolate; no migrate) |
+| **Priority** | P2 |
+| **Decision** | ☑ **Hard split** (2026-08-12). No migrate, no fallback, no dual-read. |
+| **Rec** | Isolate now — moks is a separate product |
 
-### Why parked
-
-moks and **installed OpenCode** both run on the same laptop. Global dirs today:
+### Shipped (implementation)
 
 ```ts
 // packages/core/src/global.ts
-const app = "opencode"
-// → ~/.config/opencode, ~/.local/share/opencode, cache, state, tmp
+const app = "moks"
+// → ~/.config/moks, ~/.local/share/moks, cache, state, tmp
 ```
 
-That **collides** with the coding agent we use to build moks. Flipping `app` without a deliberate migrate/read-fallback plan risks auth/session/config corruption. Dual-load of project config (018/019) and env (021) does **not** require changing the global app dir first.
+- DB: `moks.db` under the moks data dir
+- Fresh product identity; do **not** copy/move `~/.config/opencode` or `auth.json`
+- Uninstall / writers only touch moks paths
+- Installed OpenCode keeps `~/.config/opencode` untouched
 
-### When we reopen
+### Acceptance (met)
 
-| From | To |
-|------|-----|
-| App name `opencode` | App name **`moks`** |
-| Existing data | One-time **migrate or read-fallback**; never blindly clobber OpenCode install data |
-| DB / logs / auth | Live under moks paths after switch |
-
-### Wrong-port risks
-
-- Pointing moks at same dir forever → config/auth/session corruption across products.
-- Auto-move without backup → data loss.
-- Shipping app rename in the same wave as dual-load before coexistence is designed.
-
-### Touches (later)
-
-`packages/core/src/global.ts`, path helpers, install docs
-
-### Acceptance (when unparked)
-
-Running moks and OpenCode on the same machine uses different config/data dirs.
+Running moks and OpenCode on the same machine uses different config/data dirs. Changing personal OpenCode does not affect moks.
 
 ---
 
@@ -726,24 +709,21 @@ Running moks and OpenCode on the same machine uses different config/data dirs.
 
 | | |
 |--|--|
-| **Action** | IDENTITY → **DONE** (dual-accept) |
+| **Action** | IDENTITY → **DONE** (`MOKS_*` only; dual-accept dropped 2026-08-12) |
 | **Priority** | P2 |
-| **Decision** | ☑ Dual-accept (shipped) |
-| **Rec** | **GO** — shipped |
+| **Decision** | ☑ **`MOKS_*` only**; `OPENCODE_*` ignored |
+| **Rec** | Isolate — personal OpenCode env must not affect moks |
 
 ### Shipped (implementation)
 
-- `packages/core/src/flag/flag.ts`: `env` / `truthyDual` — `MOKS_*` primary, `OPENCODE_*` fallback; Flag property names stay `OPENCODE_*`
-- Logging + `MOKS_TEST_HOME` dual-read
-- `MOKS_*` false does not fall through to OPENCODE true
-
-### Residual
-
-Some non-Flag `process.env.OPENCODE_*` reads elsewhere; CLI may still *set* OPENCODE_ vars (works via fallback).
+- `flag.ts` / logging / runtime-flags / server auth: `MOKS_*` only
+- CLI sets `MOKS_*` (`PURE`, `PRINT_LOGS`, `LOG_LEVEL`, `CLIENT`, `PID`)
+- Flag property names stay `OPENCODE_*` (BL-025)
+- Some leftover raw `OPENCODE_*` reads (websearch provider, repo clone URL, hosted `OPENCODE_API_KEY`) are not personal-config dual-load
 
 ### Acceptance (met)
 
-`MOKS_CONFIG` / `MOKS_PURE` work; old env still works.
+`MOKS_CONFIG` / `MOKS_PURE` work. `OPENCODE_*` in the shell does not configure product moks.
 
 ---
 
@@ -760,18 +740,13 @@ Some non-Flag `process.env.OPENCODE_*` reads elsewhere; CLI may still *set* OPEN
 
 `session/session.ts` `plan()`:
 
-- Prefer `.moks/plans/{created}-{slug}.md` on VCS worktrees
-- Dual-read: if only legacy `.opencode/plans/...` exists, keep using it
-- Non-VCS: still `Global.Path.data/plans`
-- Plan agent edit allowlist: **both** `.moks/plans/*.md` and `.opencode/plans/*.md`
-
-### Residual
-
-Global data plans still under OpenCode app dir until BL-020 (`app = moks`).
+- `.moks/plans/{created}-{slug}.md` on VCS worktrees
+- Non-VCS: `Global.Path.data/plans` (now under moks app dir)
+- Plan agent edit allowlist: `.moks/plans/*.md` only
 
 ### Acceptance (met)
 
-New hiring plans land under `.moks/plans`.
+New hiring plans land under `.moks/plans`. Legacy `.opencode/plans` is ignored.
 
 ---
 
@@ -806,8 +781,8 @@ Opening a req folder gives hiring context without a coding AGENTS.md. AGENTS.md 
 |--|--|
 | **Action** | IDENTITY (copy now; catalog later) → **DONE** (copy/headers) |
 | **Priority** | P2 |
-| **Decision** | ☑ Copy/headers now (shipped); own catalog post-WAU still open |
-| **Rec** | **Neutral copy/headers now; own catalog later** — headers shipped |
+| **Decision** | ☑ Copy/headers now (shipped); own catalog **DEFER** (G8, post-WAU) |
+| **Rec** | **Neutral copy/headers now; own catalog later** — headers shipped; catalog deferred |
 
 ### Shipped (implementation)
 
@@ -816,9 +791,9 @@ Opening a req folder gives hiring context without a coding AGENTS.md. AGENTS.md 
 - Catalog default URL remains `https://models.opencode.ai` as **third-party list backend** (override via `MOKS_MODELS_URL` / `OPENCODE_MODELS_URL`)
 - Global app dir still `opencode` (BL-020)
 
-### Residual
+### Residual (deferred)
 
-Own models catalog / hosting post-WAU if needed. Console package identity out of product path.
+Own models catalog / hosting — **G8**, only if we productize hosting post-WAU. Console package identity out of product path.
 
 ### Acceptance (met for this wave)
 
@@ -833,7 +808,7 @@ No implied identity that moks *is* OpenCode model hosting in product HTTP header
 | | |
 |--|--|
 | **Action** | DROP (defer) |
-| **Rec** | **Do not start** until identity dual-load done and upstream merge strategy chosen |
+| **Rec** | **Do not start** until upstream merge strategy chosen |
 | **From** | `packages/opencode`, `@opencode-ai/*`, dual bin |
 | **To** | Deliberate hard-fork rename per ROADMAP |
 
@@ -937,7 +912,7 @@ Use this when reviewing any change:
 | Explore codebase | Explore **req materials / fixtures / notes** | Explore → web-only OSINT agent |
 | `/init` → AGENTS.md | `/init` → **new req workspace** | `/init` → still AGENTS.md with moks logo |
 | PR-style summary | **Hiring session brief** | “PR” wording with candidate names |
-| `opencode.json` / `.opencode/` | **`moks.json` / `.moks/`** (+ dual-load) | String-replace without dual-load |
+| `opencode.json` / `.opencode/` | **`moks.json` / `.moks/`** only | Keep loading OpenCode files “for convenience” |
 | LSP / formatters | **Not TA product** — defaults off; hide chrome | Invent TA-LSP metaphor; or delete subsystem |
 | Wide edit permissions | **Path-scoped** `.moks/**` | Ask-every-keystroke *or* leave `*: allow` |
 | OpenCode Go upsell | **Connect a provider** | White-label OpenCode commercial as moks |
@@ -958,9 +933,9 @@ Use this when reviewing any change:
 | **G6 Guardrails** | BL-015 path-scoped edit + bash policy | **Done** |
 | **G4 Subagents** | BL-005 explore, BL-016 general | **Done** |
 | **G1 Session helpers** | BL-003 tips, BL-006 title/summary/compaction | **Done** |
-| **G7 Identity + first impression** | BL-003, BL-018/019/021 | **Done** (BL-020 parked) |
-| **G7 residual** | BL-023, BL-024 | **Done** (own catalog later residual on 024) |
-| **G8 Later** | BL-017, BL-020, BL-025–030 | Defer / parked |
+| **G7 Identity + first impression** | BL-003, BL-018/019/020/021 | **Done** (moks-only isolate) |
+| **G7 residual** | BL-023, BL-024 | **Done** (own catalog deferred to G8) |
+| **G8 Later** | BL-017, BL-025–030; own models catalog | Defer |
 
 ---
 
@@ -975,10 +950,10 @@ Use this when reviewing any change:
 | **G1 helpers** | BL-006 | Titles/summaries/compaction not PR bots | **Done** |
 | **G5 remainder** | BL-009–012 | customize-moks; hide GH/console/generate; neutral CTAs | **Done** |
 | **G6 residual** | BL-014 | recruit: no lsp; no apply_patch prefer | **Done** |
-| **G7 — Identity + tips** | BL-003, BL-018/019/021 | Tips + dual-load paths/env | **Done** |
-| **Parked** | BL-020 global app dir | Coexist with installed OpenCode — design later | **Parked** |
+| **G7 — Identity + tips** | BL-003, BL-018/019/021 | Tips + moks-only paths/env | **Done** |
+| **Isolate** | BL-020 + drop dual-load | Separate XDG dirs; ignore OpenCode files/env | **Done** |
 | **G7 residual** | BL-023, BL-024 | Req materials attach; moks provider identity headers | **Done** |
-| **G8 — Later** | BL-017, BL-020, BL-025–030; own models catalog | Cosmetic, V2, hard-fork, catalog | Defer / residual |
+| **G8 — Later** | BL-017, BL-025–030; own models catalog | Cosmetic, V2, hard-fork, catalog | Defer |
 
 ---
 
@@ -1021,6 +996,7 @@ Mark when decided:
 - [x] **Cast** — `recruit` doer; Plan stays; `build` hidden forever (BL-027)
 - [x] **G3 / BL-001** — plan_exit → `recruit` + hiring execute synthetic
 - [x] **G3 / BL-002** — plan-mode / plan reminders = hiring strategy
+- [x] **BL-002 residual** — deleted unused `plan-reminder-anthropic.txt` (2026-08-12)
 - [x] **G3 / BL-022** — `.moks/plans` prefer + dual-read/allow legacy
 - [x] **Verbs** — `propose`/`apply` → **`commit`/`push`** (CLI, receipts, skills, TUI)
 - [x] **BL-004 shipped** — Keep Diff; hide LSP chrome when config off
@@ -1036,18 +1012,17 @@ Mark when decided:
 - [x] **BL-012 shipped** — neutral provider-limit UX; no OpenCode Go as moks
 - [x] **BL-014 shipped** — recruit: lsp deny; no apply_patch prefer
 - [x] **BL-003 shipped** — hiring-first tips; AGENTS.md optional hiring norms
-- [x] **BL-018 shipped** — dual-load moks.json + opencode.json (prefer moks)
-- [x] **BL-019 shipped** — dual-discover `.moks/` + `.opencode/`
-- [x] **BL-021 shipped** — `MOKS_*` primary, `OPENCODE_*` fallback
+- [x] **BL-018 shipped** — `moks.json` only; `opencode.json` ignored
+- [x] **BL-019 shipped** — `.moks/` only; `.opencode/` ignored by product
+- [x] **BL-020 shipped** — global app dir `moks`; no migrate/fallback
+- [x] **BL-021 shipped** — `MOKS_*` only; `OPENCODE_*` ignored
 - [x] **BL-023 shipped** — `.moks/req` jd/scorecard/notes attach; AGENTS.md kept
 - [x] **BL-024 shipped** — moks UA/Referer/X-Title; catalog URL still third-party models.opencode.ai
 
-### Open
-- [ ] **BL-002 residual** — optional delete/port unused `plan-reminder-anthropic.txt`
-- [ ] **Own models catalog** — post-WAU residual of BL-024 if productized hosting is needed
+### Defer
+- [x] **Own models catalog** — BL-024 residual; keep third-party `models.opencode.ai` until post-WAU hosting (2026-08-12)
 
 ### Parked
-- [x] **BL-020** — Global app dir rename **left alone** until migrate/coexistence design (2026-08-11)
 - [x] **Dev tool split** — build moks with **installed OpenCode**, not product moks (2026-08-11)
 
 ### Done (guardrails residual)
@@ -1059,6 +1034,9 @@ Mark when decided:
 
 | Date | Note |
 |------|------|
+| 2026-08-12 | **Isolate:** BL-020 shipped (`app = moks`); dual-load dropped (018/019/021/022 moks-only); no migrate |
+| 2026-08-12 | **BL-024 residual:** own models catalog deferred (G8 / post-WAU); Open list empty |
+| 2026-08-12 | **BL-002 residual:** deleted unused `plan-reminder-anthropic.txt` |
 | 2026-08-12 | **Bash residual:** recruit shell policy — verbs/light reads allow; default ask; destructive deny |
 | 2026-08-12 | **Req context + provider identity:** BL-023/024 shipped; AGENTS kept; resume not auto-injected; moks HTTP identity |
 | 2026-08-11 | **Tips + dual-load:** BL-003/018/019/021 shipped; customize-moks honesty; BL-020 still parked |

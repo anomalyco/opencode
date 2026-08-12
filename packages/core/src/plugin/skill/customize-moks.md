@@ -44,34 +44,28 @@ Document and prefer these when scaffolding new workspaces:
 
 Always gitignore `.moks/` in user repos (receipts and local req drafts stay local).
 
-### What actually loads today (honest dual-load)
+### What loads
 
-**Project config and dirs dual-load.** Prefer moks names; OpenCode names still work.
-When both exist at the same level, **moks wins** (merged after legacy).
+moks is a separate product. It does **not** read OpenCode files or `OPENCODE_*` env.
 
-| Scope | Paths that work **now** |
-| ----- | ----------------------- |
-| Project config | `moks.json(c)` and `opencode.json(c)` (walks up to worktree; moks preferred) |
-| Nested config | `.moks/` and `.opencode/` may contain `moks.json(c)` / `opencode.json(c)` |
-| Project dirs | `.moks/` **and** `.opencode/` for `agent(s)/`, `command(s)/`, `skill(s)/`, `plugin(s)/`, themes |
-| Global config files | Under **`~/.config/opencode/`** (global app dir not renamed yet): `moks.json(c)`, `opencode.json(c)`, `config.json` |
-| Env overrides | **`MOKS_*` primary**, `OPENCODE_*` fallback (e.g. `MOKS_CONFIG`, `MOKS_CONFIG_DIR`, `MOKS_PURE`) |
+| Scope | Paths |
+| ----- | ----- |
+| Project config | `moks.json(c)` (walks up to worktree) |
+| Nested config | `.moks/` may contain `moks.json(c)` |
+| Project dirs | `.moks/` for `agent(s)/`, `command(s)/`, `skill(s)/`, `plugin(s)/`, themes |
+| Global config | `~/.config/moks/moks.json(c)` |
+| Env overrides | `MOKS_*` only (e.g. `MOKS_CONFIG`, `MOKS_CONFIG_DIR`, `MOKS_PURE`) |
 
 **Also real today:**
 
 | Surface | Path / behavior |
 | ------- | --------------- |
 | Req materials | `.moks/req/{jd,resume,scorecard,notes}.md` |
-| Hiring plans | `.moks/plans/*.md` (legacy `.opencode/plans` still allowed for plan edits) |
+| Hiring plans | `.moks/plans/*.md` |
 | Decision receipts | `.moks/receipts/` when `.moks/` exists; else user data dir `…/receipts/` |
 | Built-in hiring skills | registered in-process (see below); disk skills can override by name |
 
-**Not dual-loaded yet:** global XDG app directory name is still `opencode`
-(`~/.config/opencode`, share/cache). That is intentional until a migrate design
-ships — product files can still be named `moks.json` *inside* that tree.
-
-Prefer scaffolding **`moks.json` / `.moks/`** for new TA workspaces. Keep reading
-and writing `opencode.json` / `.opencode/` when that is what the user already has.
+Do not read or write `opencode.json` / `.opencode/` / `~/.config/opencode` — those belong to installed OpenCode.
 
 Configs deep-merge; project overrides global. Unknown top-level keys are
 rejected with `ConfigInvalidError`.
@@ -84,8 +78,7 @@ restart moks**. The running session keeps the already-loaded config until then.
 
 ## moks config shape (shared schema summary)
 
-Every field is optional. Prefer file name **`moks.json` / `moks.jsonc`**;
-`opencode.json(c)` still loads.
+Every field is optional. File name is **`moks.json` / `moks.jsonc`**.
 
 ```json
 {
@@ -98,7 +91,7 @@ Every field is optional. Prefer file name **`moks.json` / `moks.jsonc`**;
   "instructions": ["AGENTS.md", "docs/style.md"],
 
   "skills": {
-    "paths": [".moks/skills", ".opencode/skills", "/abs/path/to/skills"],
+    "paths": [".moks/skills", "/abs/path/to/skills"],
     "urls": ["https://example.com/.well-known/skills/"]
   },
 
@@ -186,7 +179,9 @@ Scaffold with `/init` (product command) or create by hand:
   plans/
     {timestamp}-{slug}.md
   receipts/            # decision log when workspace is moks-local
-  # future: agent/, skill/, command/ under product dual-load
+  agent/
+  skill/
+  command/
 ```
 
 `recruit` may edit freely under `.moks/*`. Edits outside that tree ask first
@@ -197,7 +192,7 @@ Scaffold with `/init` (product command) or create by hand:
 | Agent | Role |
 | ----- | ---- |
 | **recruit** | Default primary doer — hiring loop over local materials + skills + decision verbs |
-| **plan** | Hiring strategy only; edits plan markdown under `.moks/plans` (legacy `.opencode/plans` still allowed) |
+| **plan** | Hiring strategy only; edits plan markdown under `.moks/plans` |
 | **build** | Hidden coding escape hatch |
 | **general** / **explore** | Subagents (research / parallel work) |
 | Internal | `compaction`, `title`, `summary` (hidden) |
@@ -207,14 +202,6 @@ or a file. Disable with `disable: true`. `default_agent` must point to a
 non-hidden primary-mode agent.
 
 ### File agents
-
-Preferred on disk today (discovered):
-
-```
-.opencode/agent/my-reviewer.md
-```
-
-Intended product path (document; may dual-load later):
 
 ```
 .moks/agent/my-reviewer.md
@@ -256,8 +243,7 @@ Registered before disk so a same-named disk skill overrides:
 Skill loader scans `**/SKILL.md` under skill directories:
 
 ```
-.opencode/skills/my-skill/SKILL.md   # works today
-.moks/skills/my-skill/SKILL.md       # intended product path; also add via skills.paths if needed
+.moks/skills/my-skill/SKILL.md
 ```
 
 ```markdown
@@ -372,8 +358,7 @@ Plan Mode: `plan` agent edits only plan markdown; no decision recording.
 Discovered as `**/*.md` under command directories:
 
 ```
-.opencode/command/deploy.md   # works today
-.moks/command/….md            # intended product path
+.moks/command/deploy.md
 ```
 
 ```markdown
@@ -401,7 +386,7 @@ Product built-in: **`init`** scaffolds a requisition under `.moks/`.
 ]
 ```
 
-Auto-discovered today: `*.ts` / `*.js` in `.opencode/plugin(s)/`.
+Auto-discovered: `*.ts` / `*.js` in `.moks/plugin(s)/`.
 
 A plugin exports `default` (or a named export) as
 `(input, options?) => Promise<Hooks>` — a function returning a hooks object
@@ -438,7 +423,7 @@ disables an inherited server.
 
 ## Escape hatches
 
-When config is broken and moks won't start (prefer **`MOKS_*`**; `OPENCODE_*` still works):
+When config is broken and moks won't start:
 
 - `MOKS_DISABLE_PROJECT_CONFIG=1` — skip project local config
 - `MOKS_CONFIG=/path/to/file.json` — extra explicit config
@@ -448,8 +433,7 @@ When config is broken and moks won't start (prefer **`MOKS_*`**; `OPENCODE_*` st
 ## When proposing edits
 
 - Prefer **moks product semantics**: `recruit`, `.moks/` workspace, hiring skills, commit/status/push, Ashby read-only edge.
-- Prefer writing **`moks.json` / `.moks/`**; keep `opencode.json` / `.opencode/` when that is the user's existing layout.
-- Note global data dir is still under `~/.config/opencode` until a future app-dir rename.
+- Write **`moks.json` / `.moks/`** and global **`~/.config/moks`**. Never OpenCode paths.
 - Do not send users to opencode.ai as the primary config authority for moks.
 - Preserve fields the user did not ask to change.
 - Prefer new agent/command/skill/plugin **files** over inlining everything in JSON.

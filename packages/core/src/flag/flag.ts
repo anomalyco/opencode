@@ -5,19 +5,13 @@ export function truthy(key: string) {
   return value === "true" || value === "1"
 }
 
-/** Dual-read MOKS_* (primary) then OPENCODE_* (fallback). `name` is the suffix after the prefix, e.g. "CONFIG". */
+/** Product env is MOKS_* only. OPENCODE_* must not leak personal OpenCode into moks. */
 function env(name: string): string | undefined {
-  return process.env[`MOKS_${name}`] ?? process.env[`OPENCODE_${name}`]
+  return process.env[`MOKS_${name}`]
 }
 
-/** Dual truthy: if MOKS_* is set it wins (even when false/0); else OPENCODE_*. */
 function truthyDual(name: string): boolean {
-  const moks = process.env[`MOKS_${name}`]
-  if (moks !== undefined) {
-    const v = moks.toLowerCase()
-    return v === "true" || v === "1"
-  }
-  return truthy(`OPENCODE_${name}`)
+  return truthy(`MOKS_${name}`)
 }
 
 function enabledByExperimental(name: string) {
@@ -30,20 +24,9 @@ function configTruthy(value: string) {
   return v === "true" || v === "yes" || v === "on" || v === "1" || v === "y"
 }
 
-/**
- * Dual boolean Config: MOKS_* wins when present (including empty/false/invalid).
- * Do not Config.orElse(boolean→boolean) — invalid primary values would fall through to OPENCODE.
- */
 function dualConfigBoolean(name: string) {
-  return Config.all({
-    moks: Config.option(Config.string(`MOKS_${name}`)),
-    open: Config.option(Config.string(`OPENCODE_${name}`)),
-  }).pipe(
-    Config.map((pair) => {
-      if (Option.isSome(pair.moks)) return configTruthy(pair.moks.value)
-      if (Option.isSome(pair.open)) return configTruthy(pair.open.value)
-      return false
-    }),
+  return Config.option(Config.string(`MOKS_${name}`)).pipe(
+    Config.map((value) => (Option.isSome(value) ? configTruthy(value.value) : false)),
   )
 }
 
@@ -56,8 +39,12 @@ export const Flag = {
 
   OPENCODE_AUTO_HEAP_SNAPSHOT: truthyDual("AUTO_HEAP_SNAPSHOT"),
   OPENCODE_GIT_BASH_PATH: env("GIT_BASH_PATH"),
-  OPENCODE_CONFIG: env("CONFIG"),
-  OPENCODE_CONFIG_CONTENT: env("CONFIG_CONTENT"),
+  get OPENCODE_CONFIG() {
+    return env("CONFIG")
+  },
+  get OPENCODE_CONFIG_CONTENT() {
+    return env("CONFIG_CONTENT")
+  },
   OPENCODE_DISABLE_AUTOUPDATE: truthyDual("DISABLE_AUTOUPDATE"),
   OPENCODE_ALWAYS_NOTIFY_UPDATE: truthyDual("ALWAYS_NOTIFY_UPDATE"),
   OPENCODE_DISABLE_PRUNE: truthyDual("DISABLE_PRUNE"),

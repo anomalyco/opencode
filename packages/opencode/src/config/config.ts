@@ -2,11 +2,9 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
-import { pathToFileURL } from "url"
 import os from "os"
 import { mergeDeep } from "remeda"
 import { Global } from "@opencode-ai/core/global"
-import fsNode from "fs/promises"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
@@ -137,10 +135,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Co
 export const use = serviceUse(Service)
 
 function globalConfigFile() {
-  // Prefer moks when present; seed new defaults as moks.jsonc. Legacy opencode/config still work.
-  const candidates = ["moks.jsonc", "moks.json", "opencode.jsonc", "opencode.json", "config.json"].map((file) =>
-    path.join(Global.Path.config, file),
-  )
+  const candidates = ["moks.jsonc", "moks.json"].map((file) => path.join(Global.Path.config, file))
   for (const file of candidates) {
     if (existsSync(file)) return file
   }
@@ -256,28 +251,8 @@ const layer = Layer.effect(
             .pipe(Effect.catch(() => Effect.void))
         }
       }
-      // Legacy first, then moks so moks wins when both are present.
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json"), env))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json"), env))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"), env))
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "moks.json"), env))
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "moks.jsonc"), env))
-
-      const legacy = path.join(Global.Path.config, "config")
-      if (existsSync(legacy)) {
-        yield* Effect.promise(() =>
-          import(pathToFileURL(legacy).href, { with: { type: "toml" } })
-            .then(async (mod) => {
-              const { provider, model, ...rest } = mod.default
-              if (provider && model) result.model = `${provider}/${model}`
-              result["$schema"] = "https://opencode.ai/config.json"
-              result = mergeConfig(result, rest)
-              await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
-              await fsNode.unlink(legacy)
-            })
-            .catch(() => {}),
-        )
-      }
 
       return result
     })
@@ -326,7 +301,7 @@ const layer = Layer.effect(
 
         const pluginScopeForSource = Effect.fnUntraced(function* (source: string) {
           if (source.startsWith("http://") || source.startsWith("https://")) return "global"
-          if (source === "OPENCODE_CONFIG_CONTENT") return "local"
+          if (source === "MOKS_CONFIG_CONTENT") return "local"
           if (containsPath(source, ctx)) return "local"
           return "global"
         })
@@ -469,16 +444,16 @@ const layer = Layer.effect(
           yield* mergePluginOrigins(dir, list)
         }
 
-        // Read env at access time (tests/SDK set this after Flag module load). Dual-read MOKS then OPENCODE.
-        const configContent = process.env.MOKS_CONFIG_CONTENT ?? process.env.OPENCODE_CONFIG_CONTENT
+        // Read env at access time (tests/SDK set this after Flag module load).
+        const configContent = Flag.OPENCODE_CONFIG_CONTENT
         if (configContent) {
-          const source = "OPENCODE_CONFIG_CONTENT"
+          const source = "MOKS_CONFIG_CONTENT"
           const next = yield* loadConfig(configContent, {
             dir: ctx.directory,
             source,
           })
           yield* merge(source, next, "local")
-          yield* Effect.logDebug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+          yield* Effect.logDebug("loaded custom config from MOKS_CONFIG_CONTENT")
         }
 
         const activeAccount = Option.getOrUndefined(
