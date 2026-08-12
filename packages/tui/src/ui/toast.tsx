@@ -1,6 +1,7 @@
-import { createContext, useContext, type ParentProps, Show } from "solid-js"
+import { createContext, onMount, useContext, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../context/theme"
+import { useSDK } from "../context/sdk"
 import { useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
@@ -14,8 +15,15 @@ type ToastInput = Omit<ToastOptions, "duration"> & { duration?: number }
 
 export function Toast() {
   const toast = useToast()
+  const sdk = useSDK()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
+
+  onMount(() => {
+    void sdk.client.tui
+      .publish({ body: { type: "tui.command.execute", properties: { command: "tui.toast.mount" } } })
+      .catch(() => {})
+  })
 
   return (
     <Show when={toast.currentToast}>
