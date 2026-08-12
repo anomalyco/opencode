@@ -1,6 +1,6 @@
 # Ashby MCP mock (read-first edge)
 
-Local stdio MCP server that serves fixture jobs/candidates so moks can exercise Ashby **read** tools without a live Ashby sandbox. Write tools exist so permission allowlists can deny them; calls return an error pointing at `moks propose` / `moks apply`.
+Local stdio MCP server that serves fixture jobs/candidates so moks can exercise Ashby **read** tools without a live Ashby sandbox. Write tools exist so permission allowlists can deny them; calls return an error pointing at `moks commit` / `moks push`.
 
 | File | Role |
 |------|------|
@@ -63,7 +63,7 @@ Example `opencode.json` (or merge `permission` + `mcp` from `opencode.ashby-mock
 }
 ```
 
-Programmatic defaults: `ashbyPermissionDefaults()` / `ashbyMockMcpConfig(command)` in `packages/opencode/src/product/ashby-edge.ts`. The native `ta` agent already denies Ashby write tool names and allows the four reads.
+Programmatic defaults: `ashbyPermissionDefaults()` / `ashbyMockMcpConfig(command)` in `packages/opencode/src/product/ashby-edge.ts`. The native `recruit` agent already denies Ashby write tool names and allows the four reads.
 
 ## Notes MCP
 

@@ -3,59 +3,58 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>moks — Backlog: coding → recruiting</title>
+  <title>moks — From coding agent to hiring agent</title>
   <style>
     :root {
-      --bg: #0c0f0d;
-      --bg2: #141a16;
-      --panel: #1a221c;
-      --line: #2a362e;
-      --text: #e8efe9;
-      --muted: #8a9a8e;
-      --dim: #5c6b60;
+      --bg: #0b0f0c;
+      --bg2: #121914;
+      --panel: #182018;
+      --panel2: #1e2820;
+      --line: #2c3a30;
+      --text: #eef4ef;
+      --muted: #8f9f93;
+      --dim: #5e6e62;
       --green: #3dd68c;
       --green-dim: #1f6b47;
+      --green-bg: rgba(61, 214, 140, 0.1);
       --amber: #e6b84d;
-      --amber-dim: #6b5420;
+      --amber-bg: rgba(230, 184, 77, 0.1);
       --blue: #6db3f2;
-      --blue-dim: #2a4060;
+      --blue-bg: rgba(109, 179, 242, 0.1);
       --red: #f07178;
-      --red-dim: #5a3035;
+      --red-bg: rgba(240, 113, 120, 0.08);
       --purple: #c4a1ff;
-      --purple-dim: #4a3a6b;
-      --radius: 12px;
+      --radius: 14px;
       --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
       --mono: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
+      --shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
     }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     html { scroll-behavior: smooth; }
-
     body {
       font-family: var(--font);
-      background:
-        radial-gradient(1200px 600px at 10% -10%, #1a3d2a 0%, transparent 55%),
-        radial-gradient(900px 500px at 100% 0%, #1a2a3d 0%, transparent 50%),
-        var(--bg);
       color: var(--text);
-      line-height: 1.45;
+      line-height: 1.55;
+      background:
+        radial-gradient(1000px 500px at 0% -10%, #163525 0%, transparent 55%),
+        radial-gradient(800px 400px at 100% 0%, #152536 0%, transparent 45%),
+        var(--bg);
       min-height: 100vh;
-      padding: 32px 20px 80px;
+      padding: 28px 18px 96px;
     }
+    .page { max-width: 920px; margin: 0 auto; }
 
-    .page { max-width: 1100px; margin: 0 auto; }
-
+    /* Header */
     header {
       border: 1px solid var(--line);
       background: linear-gradient(180deg, var(--panel), var(--bg2));
-      border-radius: 16px;
-      padding: 28px 32px 24px;
-      margin-bottom: 20px;
+      border-radius: 18px;
+      padding: 32px 28px 26px;
+      margin-bottom: 18px;
       position: relative;
       overflow: hidden;
+      box-shadow: var(--shadow);
     }
-
     header::before {
       content: "";
       position: absolute;
@@ -63,1362 +62,947 @@
       height: 3px;
       background: linear-gradient(90deg, var(--green), var(--blue), var(--amber));
     }
-
     .kicker {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 12px;
-      align-items: center;
-      margin-bottom: 14px;
       font-family: var(--mono);
       font-size: 11px;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
       color: var(--muted);
-    }
-
-    .pill {
-      display: inline-flex;
+      margin-bottom: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
       align-items: center;
-      gap: 6px;
-      border: 1px solid var(--line);
-      background: var(--bg);
+    }
+    .pill {
+      border: 1px solid var(--green-dim);
+      background: var(--green-bg);
       color: var(--green);
-      padding: 3px 10px;
+      padding: 4px 11px;
       border-radius: 999px;
       font-size: 11px;
     }
-
-    .pill::before {
-      content: "";
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 8px var(--green);
-    }
-
     h1 {
-      font-size: clamp(1.45rem, 3vw, 1.9rem);
+      font-size: clamp(1.55rem, 3.4vw, 2.05rem);
       font-weight: 650;
       letter-spacing: -0.03em;
-      line-height: 1.15;
-      margin-bottom: 12px;
+      line-height: 1.2;
+      margin-bottom: 14px;
     }
-
-    h1 span { color: var(--green); }
-
-    .thesis {
-      font-size: 1.02rem;
+    h1 em { font-style: normal; color: var(--green); }
+    .lede {
+      font-size: 1.08rem;
       color: var(--muted);
-      max-width: 72ch;
+      max-width: 52ch;
     }
+    .lede strong { color: var(--text); font-weight: 600; }
 
-    .thesis strong { color: var(--text); font-weight: 600; }
-
+    /* Sticky mini nav */
     .nav {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 18px;
+      margin-top: 22px;
     }
-
     .nav a {
-      font-family: var(--mono);
-      font-size: 11px;
+      font-size: 13px;
       color: var(--muted);
       text-decoration: none;
       border: 1px solid var(--line);
-      padding: 5px 10px;
+      padding: 7px 12px;
       border-radius: 999px;
       background: var(--bg);
-      transition: color 0.12s, border-color 0.12s;
     }
-
     .nav a:hover { color: var(--green); border-color: var(--green-dim); }
 
-    .grid { display: grid; gap: 16px; margin-bottom: 16px; }
-
-    @media (min-width: 800px) {
-      .grid.two { grid-template-columns: 1fr 1fr; }
-      .grid.legend { grid-template-columns: repeat(3, 1fr); }
-      .grid.waves { grid-template-columns: repeat(3, 1fr); }
-    }
-
-    section, .card {
+    /* Sections */
+    section {
       border: 1px solid var(--line);
       background: var(--panel);
       border-radius: var(--radius);
-      padding: 18px 20px;
+      padding: 22px 22px 20px;
       margin-bottom: 16px;
     }
-
     h2 {
-      font-size: 12px;
+      font-size: 1.15rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+    .section-sub {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 18px;
+      max-width: 60ch;
+    }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 8px;
+    }
+
+    p, li { font-size: 15px; }
+    .muted { color: var(--muted); }
+    strong.ok { color: var(--green); }
+    strong.warn { color: var(--amber); }
+
+    /* Big analogy */
+    .analogy {
+      display: grid;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    @media (min-width: 720px) {
+      .analogy { grid-template-columns: 1fr auto 1fr; align-items: stretch; }
+    }
+    .analogy-card {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px 16px;
+    }
+    .analogy-card.sw { border-color: #3a4550; }
+    .analogy-card.ta { border-color: var(--green-dim); background: linear-gradient(180deg, rgba(61,214,140,0.06), var(--bg)); }
+    .analogy-card h3 {
+      font-size: 13px;
       font-family: var(--mono);
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       color: var(--muted);
-      margin-bottom: 14px;
+      margin-bottom: 10px;
+    }
+    .analogy-card.ta h3 { color: var(--green); }
+    .analogy-card .big {
+      font-size: 1.35rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+    .analogy-card p { color: var(--muted); font-size: 14px; }
+    .analogy-vs {
       display: flex;
       align-items: center;
-      gap: 8px;
-    }
-
-    h2 .n {
-      display: inline-flex;
-      min-width: 18px;
-      height: 18px;
-      padding: 0 5px;
-      border-radius: 5px;
-      align-items: center;
       justify-content: center;
-      font-size: 10px;
-      background: var(--bg);
-      border: 1px solid var(--line);
-      color: var(--green);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--dim);
+      padding: 4px 0;
     }
 
-    p, li { font-size: 14px; color: var(--text); }
-    .muted { color: var(--muted); }
-    .dim { color: var(--dim); }
-
-    code {
+    /* Simple map table */
+    .map-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    .map-table th,
+    .map-table td {
+      text-align: left;
+      padding: 12px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      font-size: 14.5px;
+    }
+    .map-table th {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .map-table td:first-child { color: var(--muted); width: 38%; }
+    .map-table td:last-child { color: var(--text); font-weight: 500; }
+    .map-table tr:last-child td { border-bottom: none; }
+    .map-table .tag-push {
+      display: inline-block;
       font-family: var(--mono);
-      font-size: 11.5px;
-      background: var(--bg);
-      border: 1px solid var(--line);
-      padding: 1px 6px;
-      border-radius: 4px;
+      font-size: 11px;
       color: var(--green);
+      background: var(--green-bg);
+      border: 1px solid var(--green-dim);
+      padding: 1px 7px;
+      border-radius: 999px;
+      margin-left: 6px;
+      vertical-align: middle;
     }
 
-    .tag {
+    /* Callout */
+    .callout {
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-top: 16px;
+      font-size: 14.5px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+    }
+    .callout.do {
+      border-left: 4px solid var(--green);
+    }
+    .callout.dont {
+      border-left: 4px solid var(--amber);
+    }
+    .callout b { color: var(--text); }
+    .callout p + p { margin-top: 8px; color: var(--muted); }
+
+    /* Status strip */
+    .status-grid {
+      display: grid;
+      gap: 10px;
+    }
+    @media (min-width: 700px) {
+      .status-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    .stat {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 14px 12px;
+    }
+    .stat .n {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .stat.done .n { color: var(--green); }
+    .stat.open .n { color: var(--amber); }
+    .stat.next .n { color: var(--blue); }
+    .stat .l {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* Decision cards — plain language */
+    .band {
+      margin: 28px 4px 12px;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .band h2 {
+      margin: 0;
+      font-size: 1.05rem;
+    }
+    .band p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .decision {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .decision.locked {
+      border-color: var(--green-dim);
+      background: linear-gradient(180deg, rgba(61,214,140,0.05), var(--panel));
+    }
+    .decision.done {
+      opacity: 0.78;
+    }
+    .decision-head {
+      padding: 16px 18px 14px;
+      display: grid;
+      gap: 10px;
+    }
+    @media (min-width: 700px) {
+      .decision-head {
+        grid-template-columns: 1fr auto;
+        align-items: start;
+      }
+    }
+    .decision h3 {
+      font-size: 1.05rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      margin-bottom: 4px;
+    }
+    .decision .plain {
+      color: var(--muted);
+      font-size: 14.5px;
+      max-width: 58ch;
+    }
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: flex-start;
+    }
+    @media (min-width: 700px) {
+      .badges { justify-content: flex-end; }
+    }
+    .badge {
       font-family: var(--mono);
-      font-size: 10px;
-      padding: 2px 8px;
+      font-size: 10.5px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 4px 9px;
       border-radius: 999px;
       border: 1px solid var(--line);
       color: var(--muted);
       white-space: nowrap;
     }
+    .badge.locked { color: var(--green); border-color: var(--green-dim); background: var(--green-bg); }
+    .badge.done { color: var(--green); border-color: var(--green-dim); background: var(--green-bg); }
+    .badge.open { color: var(--amber); border-color: #6b5420; background: var(--amber-bg); }
+    .badge.port { color: var(--blue); border-color: #2a4060; background: var(--blue-bg); }
+    .badge.hide { color: var(--amber); border-color: #6b5420; }
+    .badge.keep { color: var(--green); border-color: var(--green-dim); }
 
-    .tag.port { color: var(--blue); border-color: var(--blue-dim); background: #121820; }
-    .tag.hide { color: var(--amber); border-color: var(--amber-dim); background: #1a1810; }
-    .tag.drop { color: var(--red); border-color: var(--red-dim); background: #1a1214; }
-    .tag.keep { color: var(--green); border-color: var(--green-dim); background: #122018; }
-    .tag.identity { color: var(--purple); border-color: var(--purple-dim); background: #16121a; }
-    .tag.v2 { color: var(--muted); border-color: var(--line); background: var(--bg); }
-    .tag.p0 { color: var(--red); border-color: var(--red-dim); }
-    .tag.p1 { color: var(--amber); border-color: var(--amber-dim); }
-    .tag.p2 { color: var(--blue); border-color: var(--blue-dim); }
-    .tag.p3 { color: var(--dim); border-color: var(--line); }
-    .tag.done { color: var(--green); border-color: var(--green-dim); background: #122018; }
-
-    .legend-item {
-      display: grid;
-      gap: 6px;
-      padding: 12px;
-      background: var(--bg2);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      font-size: 13px;
-    }
-
-    .legend-item .lbl {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    /* Issue cards */
-    .issue {
-      border: 1px solid var(--line);
-      background: var(--bg2);
-      border-radius: 10px;
-      margin-bottom: 12px;
-      overflow: hidden;
-    }
-
-    .issue-head {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px 12px;
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--line);
-      background: #121814;
-    }
-
-    .issue-id {
-      font-family: var(--mono);
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--green);
-    }
-
-    .issue-title {
-      font-size: 14px;
-      font-weight: 600;
-      flex: 1;
-      min-width: 200px;
-    }
-
-    .issue-body {
+    .decision-body {
+      border-top: 1px solid var(--line);
       display: grid;
       gap: 0;
     }
-
-    @media (min-width: 860px) {
-      .issue-body { grid-template-columns: 1fr 1fr; }
+    @media (min-width: 700px) {
+      .decision-body { grid-template-columns: 1fr 1fr; }
     }
-
-    .col {
+    .side {
       padding: 14px 16px;
-      font-size: 13px;
     }
-
-    .col + .col { border-top: 1px solid var(--line); }
-
-    @media (min-width: 860px) {
-      .col + .col {
+    .side + .side {
+      border-top: 1px solid var(--line);
+    }
+    @media (min-width: 700px) {
+      .side + .side {
         border-top: none;
         border-left: 1px solid var(--line);
       }
     }
-
-    .col.from { background: #1a1414; }
-    .col.to { background: #121a16; }
-
-    .col-label {
+    .side .label {
       font-family: var(--mono);
-      font-size: 10px;
+      font-size: 10.5px;
+      letter-spacing: 0.07em;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
       margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
     }
+    .side.from .label { color: var(--red); }
+    .side.to .label { color: var(--green); }
+    .side.from { background: var(--red-bg); }
+    .side.to { background: rgba(61, 214, 140, 0.04); }
+    .side p { font-size: 14px; color: var(--text); }
 
-    .col.from .col-label { color: var(--red); }
-    .col.to .col-label { color: var(--green); }
-
-    .col-label::before {
-      content: "";
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-    }
-
-    .col.from .col-label::before { background: var(--red); }
-    .col.to .col-label::before { background: var(--green); }
-
-    .col p { color: var(--muted); font-size: 13px; line-height: 1.5; }
-    .col p strong { color: var(--text); font-weight: 600; }
-
-    .issue-meta {
-      padding: 10px 14px 12px;
+    .decision-foot {
       border-top: 1px solid var(--line);
-      display: grid;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--dim);
-      background: var(--panel);
-    }
-
-    .issue-meta b {
-      font-family: var(--mono);
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--dim);
-      font-weight: 500;
-      margin-right: 6px;
-    }
-
-    .issue-meta code { font-size: 10.5px; }
-
-    /* Done table */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-
-    th, td {
-      text-align: left;
-      padding: 9px 10px;
-      border-bottom: 1px solid var(--line);
-      vertical-align: top;
-    }
-
-    th {
-      font-family: var(--mono);
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--dim);
-      font-weight: 500;
-    }
-
-    tr:last-child td { border-bottom: none; }
-    td.from-cell { color: var(--muted); }
-    td.to-cell { color: var(--text); }
-
-    .wave {
-      background: var(--bg2);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 12px 14px;
-      display: grid;
-      gap: 6px;
-    }
-
-    .wave b {
-      font-size: 13px;
-      color: var(--text);
-    }
-
-    .wave span {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .wave p {
-      font-size: 12.5px;
-      color: var(--dim);
-    }
-
-    .callout {
-      border-left: 3px solid var(--green);
-      background: #122018;
-      padding: 12px 14px;
-      border-radius: 0 8px 8px 0;
+      padding: 12px 16px;
       font-size: 13.5px;
       color: var(--muted);
-      margin-bottom: 16px;
+      background: var(--bg2);
     }
+    .decision-foot b { color: var(--text); }
+    .decision.done .decision-body,
+    .decision.done .decision-foot { display: none; }
+    .decision.done .plain { color: var(--dim); }
 
-    .callout strong { color: var(--text); }
-
-    .callout.amber {
-      border-left-color: var(--amber);
-      background: #1a1810;
-    }
-
-    .checklist {
+    /* Checklist */
+    .checks {
       list-style: none;
       display: grid;
       gap: 10px;
     }
-
-    .checklist li {
-      padding: 10px 12px;
-      background: var(--bg2);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      font-size: 13.5px;
+    .checks li {
       display: grid;
-      grid-template-columns: 22px 1fr;
+      grid-template-columns: 28px 1fr;
       gap: 10px;
       align-items: start;
+      padding: 12px 14px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font-size: 14.5px;
     }
-
-    .checklist li::before {
-      content: "☐";
-      font-family: var(--mono);
-      color: var(--green);
-      font-size: 14px;
-      line-height: 1.3;
-    }
-
-    .nongoals {
-      display: grid;
-      gap: 8px;
-    }
-
-    .nongoals div {
-      display: grid;
-      grid-template-columns: 1fr 1.4fr;
-      gap: 12px;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--line);
+    .checks li .mark {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       font-size: 13px;
+      font-weight: 700;
+      margin-top: 1px;
     }
+    .checks li.yes .mark {
+      background: var(--green-bg);
+      color: var(--green);
+      border: 1px solid var(--green-dim);
+    }
+    .checks li.soon .mark {
+      background: var(--amber-bg);
+      color: var(--amber);
+      border: 1px solid #6b5420;
+    }
+    .checks li .t { color: var(--text); font-weight: 550; }
+    .checks li .d { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
 
-    .nongoals div:last-child { border-bottom: none; }
-    .nongoals .what { color: var(--text); font-weight: 500; }
-    .nongoals .why { color: var(--muted); }
+    /* Waves simple */
+    .waves {
+      display: grid;
+      gap: 10px;
+    }
+    @media (min-width: 720px) {
+      .waves { grid-template-columns: 1fr 1fr; }
+    }
+    .wave {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 15px;
+    }
+    .wave.done { border-color: var(--green-dim); opacity: 0.8; }
+    .wave .top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .wave .name { font-weight: 650; font-size: 15px; }
+    .wave .st {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .wave.done .st { color: var(--green); }
+    .wave.next .st { color: var(--blue); }
+    .wave p { font-size: 13.5px; color: var(--muted); }
 
-    @media (max-width: 600px) {
-      .nongoals div { grid-template-columns: 1fr; gap: 4px; }
+    /* Glossary */
+    .glossary {
+      display: grid;
+      gap: 10px;
+    }
+    @media (min-width: 700px) {
+      .glossary { grid-template-columns: 1fr 1fr; }
+    }
+    .g-item {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .g-item dt {
+      font-weight: 650;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .g-item dd {
+      color: var(--muted);
+      font-size: 13.5px;
     }
 
     footer {
-      margin-top: 8px;
-      padding: 14px 4px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 18px;
-      justify-content: space-between;
-      font-family: var(--mono);
-      font-size: 11px;
+      margin-top: 28px;
+      font-size: 12.5px;
       color: var(--dim);
+      text-align: center;
     }
-
     footer a { color: var(--muted); }
-
-    @media print {
-      body { background: white; color: black; padding: 0; }
-      header, section, .issue { break-inside: avoid; }
-      .nav { display: none; }
-    }
   </style>
 </head>
 <body>
-  <div class="page">
-    <header>
-      <div class="kicker">
-        <span class="pill">review backlog</span>
-        <span>docs/backlog-coding-to-ta</span>
-        <span>·</span>
-        <span>companion to ROADMAP + gtm</span>
-      </div>
-      <h1>Coding / OpenCode <span>→</span> recruiting / moks</h1>
-      <p class="thesis">
-        Detailed issue list for molding the fork. Each item is <strong>from → to</strong>:
-        what the coding agent still does, and what the eng-TA product should do instead.
-        Principle: <strong>mold the harness, don’t rebuild</strong>.
-      </p>
-      <nav class="nav">
-        <a href="#legend">Legend</a>
-        <a href="#done">Already done</a>
-        <a href="#p0">P0 Feel</a>
-        <a href="#p1">P1 Front doors</a>
-        <a href="#p2">P2 Identity</a>
-        <a href="#p3">P3 Defer</a>
-        <a href="#waves">Waves</a>
-        <a href="#decisions">Your calls</a>
-      </nav>
-    </header>
+<div class="page">
 
-    <div class="callout">
-      <strong>Baseline today:</strong> product default agent is already <code>ta</code> with hiring skills,
-      fixtures, Ashby read-edge, and <code>propose</code>/<code>apply</code> receipts.
-      The gap is coding surface still competing for attention — plan→build, tips, explore, /init, /review, LSP chrome, OpenCode paths.
+  <header>
+    <div class="kicker">
+      <span class="pill">Product decisions</span>
+      <span>For anyone reviewing the hiring-agent direction</span>
+      <span>Updated Aug 11, 2026</span>
+    </div>
+    <h1>moks is to <em>hiring</em><br />what OpenCode is to <em>coding</em></h1>
+    <p class="lede">
+      Same kind of AI workbench. Different job.
+      We keep the engine — sessions, tools, permissions, plans —
+      and point it at <strong>requisitions and candidates</strong> instead of repositories and pull requests.
+    </p>
+    <nav class="nav">
+      <a href="#idea">The big idea</a>
+      <a href="#dictionary">Plain dictionary</a>
+      <a href="#locked">What we locked</a>
+      <a href="#open">Still open</a>
+      <a href="#order">Build order</a>
+      <a href="#words">Glossary</a>
+    </nav>
+  </header>
+
+  <!-- BIG IDEA -->
+  <section id="idea">
+    <div class="eyebrow">The big idea</div>
+    <h2>“Code is everything” — the workflow shape travels</h2>
+    <p class="section-sub">
+      Software teams already know how agents should feel: open a project, see local changes,
+      plan, review, then push to the remote. Hiring can feel the same — if we map the pieces carefully.
+    </p>
+
+    <div class="analogy">
+      <div class="analogy-card sw">
+        <h3>Software engineering</h3>
+        <div class="big">OpenCode</div>
+        <p>Help people ship software: explore a repo, write code, review a PR, push to GitHub.</p>
+      </div>
+      <div class="analogy-vs">maps to</div>
+      <div class="analogy-card ta">
+        <h3>Talent acquisition</h3>
+        <div class="big">moks</div>
+        <p>Help people fill roles: open a req, score candidates, draft outreach, review the packet, push decisions to the ATS.</p>
+      </div>
     </div>
 
-    <section id="legend">
-      <h2><span class="n">?</span> Legend &amp; priority</h2>
-      <div class="grid legend">
-        <div class="legend-item">
-          <div><span class="tag port">PORT</span></div>
-          <div class="lbl">Rewrite coding concept into TA equivalent</div>
-        </div>
-        <div class="legend-item">
-          <div><span class="tag hide">HIDE</span></div>
-          <div class="lbl">Soft-remove from default TA UX; keep code</div>
-        </div>
-        <div class="legend-item">
-          <div><span class="tag drop">DROP</span></div>
-          <div class="lbl">Quarantine from TA GTM / user-facing help</div>
-        </div>
-        <div class="legend-item">
-          <div><span class="tag keep">KEEP</span></div>
-          <div class="lbl">Already correct or generic infra</div>
-        </div>
-        <div class="legend-item">
-          <div><span class="tag identity">IDENTITY</span></div>
-          <div class="lbl">Paths / names / schemas still OpenCode</div>
-        </div>
-        <div class="legend-item">
-          <div><span class="tag v2">V2</span></div>
-          <div class="lbl">Required when Session V2 product path ships</div>
-        </div>
+    <div class="callout do">
+      <p><b>What we keep:</b> the harness — chat sessions, planning mode, skills, permissions, multi-model support.</p>
+      <p>What we change: defaults, wording, what “a project” means, and what “push” writes to.</p>
+    </div>
+    <div class="callout dont" style="margin-top:10px">
+      <p><b>What we refuse:</b> renaming the product to “moks” while it still behaves like a coding IDE
+      (AGENTS.md, PR review, language servers as the main story).</p>
+    </div>
+  </section>
+
+  <!-- DICTIONARY -->
+  <section id="dictionary">
+    <div class="eyebrow">Shared language</div>
+    <h2>Plain dictionary: coding → hiring</h2>
+    <p class="section-sub">
+      Use this table when anyone asks “what does this feature mean for recruiters?”
+      If a feature doesn’t fit a row, question whether it belongs on the hiring product path.
+    </p>
+
+    <table class="map-table">
+      <thead>
+        <tr>
+          <th>In coding tools…</th>
+          <th>In moks (hiring)…</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>The job</td>
+          <td>Fill requisitions; move candidates with evidence</td>
+        </tr>
+        <tr>
+          <td>A repo / project</td>
+          <td><strong>A requisition (req)</strong> — the unit of work you open</td>
+        </tr>
+        <tr>
+          <td>GitHub (the remote)</td>
+          <td><strong>The ATS</strong> (e.g. Ashby) — system of record</td>
+        </tr>
+        <tr>
+          <td>Files on your machine</td>
+          <td><strong>Local req folder</strong> (JD, scorecard, notes, drafts)</td>
+        </tr>
+        <tr>
+          <td>Live diff / “what changed?”</td>
+          <td><strong>Live diff of local candidate &amp; req changes</strong> — same muscle memory as watching code change</td>
+        </tr>
+        <tr>
+          <td>Review before merge</td>
+          <td><strong>Packet review</strong> — resume vs scorecard, outreach, disposition</td>
+        </tr>
+        <tr>
+          <td>Commit / stage intent</td>
+          <td><strong>Commit</strong> (<code>moks commit</code>) — write a receipt of intended ATS changes</td>
+        </tr>
+        <tr>
+          <td>Push to remote</td>
+          <td><strong>Push</strong> (<code>moks push</code>) — only then the remote write path</td>
+        </tr>
+        <tr>
+          <td>“Start a new project” (`/init`)</td>
+          <td><strong>Start a new req</strong> — scaffold the hiring workspace</td>
+        </tr>
+        <tr>
+          <td>Build agent (does the work)</td>
+          <td><strong>Recruit agent</strong> (Build stays hidden for developers)</td>
+        </tr>
+        <tr>
+          <td>Plan, then implement</td>
+          <td>Plan hiring strategy, then execute next steps</td>
+        </tr>
+        <tr>
+          <td>Language servers / IDE polish</td>
+          <td><strong>Not for hiring product</strong> — turn off by default</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout do" style="margin-top:16px">
+      <p><b>Important nuance:</b> Diff shows <em>local</em> work (notes, scores, drafts, pending commits) —
+      like uncommitted changes. Remote ATS updates when someone <strong>pushes</strong>, not on every keystroke.</p>
+    </div>
+  </section>
+
+  <!-- STATUS -->
+  <section>
+    <div class="eyebrow">Progress</div>
+    <h2>Where we are</h2>
+    <p class="section-sub">High-level only. Detail lives in the technical backlog if engineers need file paths.</p>
+    <div class="status-grid">
+      <div class="stat done">
+        <div class="n">Done</div>
+        <div class="l">Cast + plan mode already hiring-native (recruit doer, plan → execute hiring)</div>
       </div>
-      <div style="height:12px"></div>
-      <div class="grid two">
-        <div class="legend-item">
-          <div class="lbl">Priority bands</div>
-          <p>
-            <span class="tag p0">P0</span> Felt product — must not feel like coding agent<br />
-            <span class="tag p1">P1</span> Front-doors still advertising coding<br />
-            <span class="tag p2">P2</span> Identity so moks ≠ installed OpenCode<br />
-            <span class="tag p3">P3</span> Hard-fork polish only
-          </p>
-        </div>
-        <div class="legend-item">
-          <div class="lbl">Source markdown</div>
-          <p class="muted">Editable source: <code>docs/BACKLOG-coding-to-ta.md</code>. This HTML is the browser review surface.</p>
-        </div>
+      <div class="stat done">
+        <div class="n">Shipped</div>
+        <div class="l">Init / review / Diff / LSP hide / path-scoped edit / commit·push verbs</div>
       </div>
-    </section>
-
-    <section id="done">
-      <h2><span class="n">✓</span> Already done — baseline</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>From (coding / OpenCode)</th>
-            <th>To (recruiting / moks)</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="from-cell">Default agent <code>build</code></td>
-            <td class="to-cell">Default agent <code>ta</code> (product binary)</td>
-            <td><span class="tag done">done</span></td>
-          </tr>
-          <tr>
-            <td class="from-cell">SE-only system prompt</td>
-            <td class="to-cell"><code>product/agents/ta.txt</code> hiring persona</td>
-            <td><span class="tag done">done</span></td>
-          </tr>
-          <tr>
-            <td class="from-cell">No hiring skills</td>
-            <td class="to-cell">req-context · score-candidate · draft-outreach · propose-disposition</td>
-            <td><span class="tag done">done</span></td>
-          </tr>
-          <tr>
-            <td class="from-cell">Raw ATS writes as hero</td>
-            <td class="to-cell"><code>propose</code> → receipt → <code>apply</code> (+ confirm-adverse)</td>
-            <td><span class="tag done">done</span></td>
-          </tr>
-          <tr>
-            <td class="from-cell">No offline loop</td>
-            <td class="to-cell">JD/resume/scorecard fixtures + Ashby mock MCP</td>
-            <td><span class="tag done">done</span></td>
-          </tr>
-          <tr>
-            <td class="from-cell">Bin/chrome <code>opencode</code></td>
-            <td class="to-cell">User-facing <code>moks</code> (internal packages still OpenCode-named)</td>
-            <td><span class="tag done">done</span></td>
-          </tr>
-        </tbody>
-      </table>
-      <p class="muted" style="margin-top:12px;font-size:12.5px">
-        Note: monorepo <code>.opencode/opencode.jsonc</code> still forces <code>default_agent: build</code> — that configures the <em>installed</em> agent while building moks, not the product. Leave it.
-      </p>
-    </section>
-
-    <!-- ===================== P0 ===================== -->
-    <section id="p0">
-      <h2><span class="n">0</span> P0 — Felt product path</h2>
-      <p class="muted" style="margin-bottom:14px;font-size:13px">If eng-TA opens moks cold, these decide whether it feels like a hiring workplace or a misbranded IDE.</p>
-
-      <article class="issue" id="bl-001">
-        <div class="issue-head">
-          <span class="issue-id">BL-001</span>
-          <span class="issue-title">Plan exit targets implementer <code>build</code></span>
-          <span class="tag port">PORT</span>
-          <span class="tag p0">P0</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p><code>plan_exit</code> asks “switch to <strong>build</strong> and start implementing?” then hard-sets <code>agent: "build"</code>. Reminders and plan prompt files assume design → code implementation.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Plan exit offers TA next steps: <strong>score candidates / draft outreach / propose disposition</strong>; return to <code>ta</code>. No “implement code” language. Coding users still pick <code>build</code> via agent switcher.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>tool/plan.ts</code> · <code>tool/plan-enter.txt</code> · <code>session/reminders.ts</code> · <code>session/prompt/plan*.txt</code> · <code>build-switch.txt</code></div>
-          <div><b>Accept</b> Completing plan mode never names <code>build</code> or “implement”; default after exit is <code>ta</code>.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-002">
-        <div class="issue-head">
-          <span class="issue-id">BL-002</span>
-          <span class="issue-title"><code>plan</code> agent is a coding design mode</span>
-          <span class="tag port">PORT</span>
-          <span class="tag p0">P0</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Primary <code>plan</code>: deny most edits except <code>.opencode/plans/**</code>; software design-then-build; denies spawning <code>general</code> via task.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p><strong>Hiring plan mode</strong>: req strategy, interview loop, scorecard criteria, outreach sequence. Plans under <code>.moks/plans/**</code> (dual-path OK). Subagents may research candidates/materials.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>agent/agent.ts</code> plan block · plan permissions · plan prompts</div>
-          <div><b>Accept</b> Entering plan from product path reads as hiring strategy, not implementation design.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-003">
-        <div class="issue-head">
-          <span class="issue-id">BL-003</span>
-          <span class="issue-title">Home tips / onboarding teach coding agent</span>
-          <span class="tag port">PORT</span>
-          <span class="tag p0">P0</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Tips push <code>/init</code> (AGENTS.md), <code>/review</code>, LSP/formatters, coding config pedagogy.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Tips teach eng-TA loop: fixtures or <code>.moks/req/</code>, hiring skills, <code>moks propose</code>/<code>apply</code>, Ashby read-only, <code>/decisions</code>.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>tui/.../home/tips-view.tsx</code> · <code>dialog-status.tsx</code> copy · empty states</div>
-          <div><b>Accept</b> Fresh TUI tips never lead with AGENTS.md, git review, or LSP.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-004">
-        <div class="issue-head">
-          <span class="issue-id">BL-004</span>
-          <span class="issue-title">Coding chrome always visible (diff / files / LSP)</span>
-          <span class="tag hide">HIDE</span>
-          <span class="tag p0">P0</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Diff viewer (<code>/diff</code>), Modified Files sidebar, LSP sidebar are standing session chrome — IDE posture.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>When agent is <code>ta</code> and no pending file-edit permissions: <strong>demote/hide</strong> LSP; demote diff/modified-files unless session mutated files. Full chrome returns on <code>build</code>.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>diff-viewer*</code> · <code>sidebar/files.tsx</code> · <code>sidebar/lsp.tsx</code> · session layout</div>
-          <div><b>Accept</b> Default <code>ta</code> session looks like a hiring workplace, not an IDE.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-005">
-        <div class="issue-head">
-          <span class="issue-id">BL-005</span>
-          <span class="issue-title"><code>explore</code> subagent assumes codebases</span>
-          <span class="tag port">PORT</span>
-          <span class="tag p0">P0</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Description + prompt: codebase search; examples like <code>*.tsx</code>, source trees, implementation hunting.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Research subagent for <strong>req materials, fixtures, notes, scorecards, ATS dumps, public research</strong> (read + webfetch). Copy: “Explore hiring materials and local files.”</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>agent/agent.ts</code> · <code>agent/prompt/explore.txt</code> · task tool copy</div>
-          <div><b>Accept</b> Explore from <code>ta</code> never instructs “search the codebase for implementations.”</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-006">
-        <div class="issue-head">
-          <span class="issue-id">BL-006</span>
-          <span class="issue-title">Hidden prompts still say coding / PR</span>
-          <span class="tag port">PORT</span>
-          <span class="tag p0">P0</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p><code>compaction.txt</code> “coding sessions”; <code>summary.txt</code> “like a pull request description”; <code>title.txt</code> SE-heavy examples.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Domain-neutral or TA-aware: session history compaction; <strong>hiring session brief</strong>; titles like “Score Jordan Lee for SWE II”, “Outreach draft — Northline”.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>agent/prompt/{compaction,summary,title}.txt</code></div>
-          <div><b>Accept</b> Auto titles/summaries on <code>ta</code> sessions don’t sound like PR bots.</div>
-        </div>
-      </article>
-    </section>
-
-    <!-- ===================== P1 ===================== -->
-    <section id="p1">
-      <h2><span class="n">1</span> P1 — Front-doors still advertising coding</h2>
-      <p class="muted" style="margin-bottom:14px;font-size:13px">Slash commands, CLI help, skills, and CTAs that still teach “you are a coding agent.”</p>
-
-      <article class="issue" id="bl-007">
-        <div class="issue-head">
-          <span class="issue-id">BL-007</span>
-          <span class="issue-title"><code>/init</code> → AGENTS.md from repo</span>
-          <span class="tag port">PORT</span>
-          <span class="tag p1">P1</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Guided walk of repo/build/test/CI; writes coding <code>AGENTS.md</code>.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Scaffold hiring workspace: <code>.moks/</code>, <code>req/</code> (jd, scorecard, notes), gitignore, optional Ashby snippet, point at hiring skills. Coding init only via <code>build</code> or <code>/init-code</code>.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>command/template/initialize.txt</code> · command labels</div>
-          <div><b>Accept</b> Default <code>/init</code> is not “create AGENTS.md coding bible.”</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-008">
-        <div class="issue-head">
-          <span class="issue-id">BL-008</span>
-          <span class="issue-title"><code>/review</code> → git / PR code review</span>
-          <span class="tag port">PORT</span>
-          <span class="tag drop">or DROP</span>
-          <span class="tag p1">P1</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Reviews uncommitted/commit/branch/PR via git + <code>gh</code>.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p><strong>PORT:</strong> review candidate packet — resume vs JD/scorecard, outreach quality, disposition rationale.<br />
-            <strong>DROP alt:</strong> remove from default <code>ta</code> command list; keep only for <code>build</code>.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>command/template/review.txt</code> · registration · tips</div>
-          <div><b>Accept</b> Default <code>ta</code> slash menu does not offer “review this PR.” <em>Needs your call: PORT vs DROP.</em></div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-009">
-        <div class="issue-head">
-          <span class="issue-id">BL-009</span>
-          <span class="issue-title">Skill <code>customize-opencode</code></span>
-          <span class="tag port">PORT</span>
-          <span class="tag p1">P1</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Built-in skill teaches <code>opencode.json</code>, OpenCode agents/skills/MCP schemas and upstream docs.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p><code>customize-moks</code> (alias old name): workspace config, <code>ta</code> permissions, Ashby edge, hiring skills layout, dual-load <code>moks.json</code>.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>skill/index.ts</code> + skill content · skill ID refs</div>
-          <div><b>Accept</b> Skill picker is moks-oriented; not “go configure OpenCode.”</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-010">
-        <div class="issue-head">
-          <span class="issue-id">BL-010</span>
-          <span class="issue-title">CLI <code>github</code> / <code>pr</code> as product surface</span>
-          <span class="tag drop">DROP</span>
-          <span class="tag p1">P1</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p><code>moks github</code>, <code>moks pr &lt;n&gt;</code> — Actions coding agent + PR checkout workflow.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Hidden from TA help/GTM. Keep code for monorepo dogfooding if needed; document under contributor only.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>cli/cmd/github.ts</code> · <code>pr.ts</code> · help · README</div>
-          <div><b>Accept</b> <code>moks --help</code> for TA install does not feature GitHub coding agent.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-011">
-        <div class="issue-head">
-          <span class="issue-id">BL-011</span>
-          <span class="issue-title">CLI <code>generate</code>, <code>console</code> / account</span>
-          <span class="tag drop">DROP</span>
-          <span class="tag p1">P1</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>OpenAPI sample generator; OpenCode console/org login as product CLI.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Dev-only or removed from TA help. No console.opencode.ai as moks identity.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>cli/cmd/generate.ts</code> · <code>account.ts</code> · help text</div>
-          <div><b>Accept</b> TA help = run/TUI/verbs/MCP/providers/session — not SDK generate or upstream console.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-012">
-        <div class="issue-head">
-          <span class="issue-id">BL-012</span>
-          <span class="issue-title">Provider / commercial upsells to OpenCode</span>
-          <span class="tag port">PORT</span>
-          <span class="tag p1">P1</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>TUI upsells <code>opencode.ai/go</code>, console free models as primary CTA; referers/models host still OpenCode.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Neutral “connect a provider.” Optional backends clearly third-party. moks is not OpenCode commercial.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> session upsell · retry dialog · provider dialogs · opencode provider plugin copy</div>
-          <div><b>Accept</b> Empty-provider UX does not push OpenCode Go as <em>moks</em>.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-013">
-        <div class="issue-head">
-          <span class="issue-id">BL-013</span>
-          <span class="issue-title">Default product config: LSP + formatters on</span>
-          <span class="tag hide">HIDE</span>
-          <span class="tag p1">P1</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Bootstrap starts broad language-server matrix + formatters — full IDE coding agent.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Shipped TA defaults: <code>lsp: false</code>, <code>formatter: false</code>. Power users / <code>build</code> can re-enable.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> config defaults · project bootstrap · sample configs · status dialog</div>
-          <div><b>Accept</b> Fresh eng-TA install does not spawn typescript/gopls/etc.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-014">
-        <div class="issue-head">
-          <span class="issue-id">BL-014</span>
-          <span class="issue-title">Tools <code>lsp</code> / <code>apply_patch</code> prominence</span>
-          <span class="tag hide">HIDE</span>
-          <span class="tag p1">P1</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>LSP tool + multi-file <code>apply_patch</code> are first-class coding edit paths in the registry.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Not on default <code>ta</code> tool list; remain for <code>build</code>. Prefer light <code>read</code>/<code>edit</code>/<code>write</code> for notes.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>tool/registry.ts</code> · <code>ta</code> permission/tool profile</div>
-          <div><b>Accept</b> <code>ta</code> tool list excludes LSP; apply_patch not primary.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-015">
-        <div class="issue-head">
-          <span class="issue-id">BL-015</span>
-          <span class="issue-title"><code>ta</code> permission profile still coding-wide</span>
-          <span class="tag port">PORT</span>
-          <span class="tag p1">P1</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Broad <code>edit</code>/<code>write</code>/<code>bash</code> allow (some asks). Only Ashby writes special-cased deny.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p><code>ta</code> profile: read/skill/MCP-read/question allow; <code>edit</code>/<code>write</code> ask or allow only under <code>.moks/**</code> + fixtures; <code>bash</code> easy for <code>moks</code> verbs, ask destructive; keep Ashby write deny.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>agent/agent.ts</code> ta permissions · sample permission docs</div>
-          <div><b>Accept</b> Scoring a resume doesn’t silently rewrite the repo. <em>Needs your call: how tight?</em></div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-016">
-        <div class="issue-head">
-          <span class="issue-id">BL-016</span>
-          <span class="issue-title"><code>general</code> subagent falls through to coding prompts</span>
-          <span class="tag port">PORT</span>
-          <span class="tag p1">P1</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>No custom prompt → provider system prompts = “best coding agent / software engineer.”</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Domain-neutral prompt on <code>general</code>, <em>or</em> when parent is <code>ta</code>, inject TA-safe system text so tasks don’t revive SE persona.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>agent/agent.ts</code> · system prompt selection in session LLM request</div>
-          <div><b>Accept</b> <code>task</code> from <code>ta</code> does not become a coding agent mid-loop.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-017">
-        <div class="issue-head">
-          <span class="issue-id">BL-017</span>
-          <span class="issue-title">UI themes named build / plan / explore</span>
-          <span class="tag port">PORT</span>
-          <span class="tag p1">P1</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Theme IDs/names centered on coding agent cast (<code>v2-agent-build</code> etc.).</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Neutral or TA-flavored display names; keep IDs for compat if needed.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>packages/ui/src/theme/*</code></div>
-          <div><b>Accept</b> Theme picker isn’t only “pick your coding agent skin.”</div>
-        </div>
-      </article>
-    </section>
-
-    <!-- ===================== P2 ===================== -->
-    <section id="p2">
-      <h2><span class="n">2</span> P2 — Identity &amp; paths</h2>
-      <p class="muted" style="margin-bottom:14px;font-size:13px">So moks doesn’t share config/data with the installed OpenCode coding agent, and docs teach moks paths.</p>
-
-      <div class="callout amber">
-        <strong>Collision risk:</strong> global app name is still <code>opencode</code>
-        (<code>(~/.config/opencode</code>, share DB/logs). Building moks with installed OpenCode on the same machine is exactly the three-way confusion FORK.md warns about.
+      <div class="stat next">
+        <div class="n">Next</div>
+        <div class="l">Stop subagents from sounding like coding bots; then onboarding tips</div>
       </div>
+    </div>
+  </section>
 
-      <article class="issue" id="bl-018">
-        <div class="issue-head">
-          <span class="issue-id">BL-018</span>
-          <span class="issue-title">Config filename <code>opencode.json</code> only</span>
-          <span class="tag identity">IDENTITY</span>
-          <span class="tag p2">P2</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Loads <code>opencode.json(c)</code>; injects <code>$schema: https://opencode.ai/config.json</code>.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Dual-load <code>moks.json(c)</code> + <code>opencode.json(c)</code>; prefer moks; moks schema URL or local; errors/tips say moks.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>config/config.ts</code> · TUI errors · provider dialogs</div>
-          <div><b>Accept</b> TA setup docs use <code>moks.json</code>; old file still works.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-019">
-        <div class="issue-head">
-          <span class="issue-id">BL-019</span>
-          <span class="issue-title">Project dir <code>.opencode/</code> only</span>
-          <span class="tag identity">IDENTITY</span>
-          <span class="tag p2">P2</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Agents/skills/commands/tools discovered under <code>.opencode/</code>.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Dual-discover <code>.moks/</code> + <code>.opencode/</code>; product docs teach <code>.moks/</code>. Monorepo keeps <code>.opencode/</code> for installed dev agent.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> path discovery · skill/agent loaders · FORK/AGENTS clarity</div>
-          <div><b>Accept</b> Hiring skills under <code>.moks/skill</code> load.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-020">
-        <div class="issue-head">
-          <span class="issue-id">BL-020</span>
-          <span class="issue-title">Global app dir name <code>opencode</code></span>
-          <span class="tag identity">IDENTITY</span>
-          <span class="tag p2">P2</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p><code>Global</code> app = <code>"opencode"</code> → <code>~/.config/opencode</code>, share data/DB/logs with installed coding agent.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>App name <code>moks</code>; migrate/read-fallback where safe; never blindly clobber unrelated OpenCode install data.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>core/src/global.ts</code> · path helpers · install docs</div>
-          <div><b>Accept</b> moks and OpenCode on one machine use different config/data dirs. <em>Timing: now vs after WAU?</em></div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-021">
-        <div class="issue-head">
-          <span class="issue-id">BL-021</span>
-          <span class="issue-title">Env vars <code>OPENCODE_*</code></span>
-          <span class="tag identity">IDENTITY</span>
-          <span class="tag p2">P2</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Feature flags and paths via <code>OPENCODE_*</code>.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p><code>MOKS_*</code> primary; fall back <code>OPENCODE_*</code> for fork compat.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> env reads across opencode package</div>
-          <div><b>Accept</b> Docs show <code>MOKS_</code>; old env still works.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-022">
-        <div class="issue-head">
-          <span class="issue-id">BL-022</span>
-          <span class="issue-title">Plans path <code>.opencode/plans</code></span>
-          <span class="tag identity">IDENTITY</span>
-          <span class="tag port">PORT</span>
-          <span class="tag p2">P2</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Plan files live under <code>.opencode/plans</code>.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p><code>.moks/plans</code> with dual-read/write during transition (pairs with BL-002).</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> session plan paths · plan agent permissions</div>
-          <div><b>Accept</b> Hiring plans land in moks workspace dir.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-023">
-        <div class="issue-head">
-          <span class="issue-id">BL-023</span>
-          <span class="issue-title">Instruction files = AGENTS.md / CLAUDE.md only</span>
-          <span class="tag port">PORT</span>
-          <span class="tag p2">P2</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Project instruction discovery oriented to coding-agent markdown (AGENTS.md, etc.).</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Also load <code>.moks/req/</code> brief, scorecard, notes as first-class session context for <code>ta</code> — no AGENTS.md required.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>session/instruction.ts</code> · system context assembly</div>
-          <div><b>Accept</b> Opening a req folder gives hiring context without a coding AGENTS.md.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-024">
-        <div class="issue-head">
-          <span class="issue-id">BL-024</span>
-          <span class="issue-title">Models / provider host defaults</span>
-          <span class="tag identity">IDENTITY</span>
-          <span class="tag p2">P2</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Default catalog <code>models.opencode.ai</code>, OpenCode provider plugin, referers <code>opencode.ai</code>.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Neutral defaults or moks catalog when ready; OpenCode Zen optional and labeled third-party.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>models-dev.ts</code> · <code>plugin/provider/opencode.ts</code> · headers</div>
-          <div><b>Accept</b> Product doesn’t imply moks <em>is</em> OpenCode’s model service.</div>
-        </div>
-      </article>
-    </section>
-
-    <!-- ===================== P3 ===================== -->
-    <section id="p3">
-      <h2><span class="n">3</span> P3 — Defer / hard-fork only</h2>
-
-      <article class="issue" id="bl-025">
-        <div class="issue-head">
-          <span class="issue-id">BL-025</span>
-          <span class="issue-title">Mass rename packages / internals</span>
-          <span class="tag drop">DEFER</span>
-          <span class="tag p3">P3</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p><code>packages/opencode</code>, <code>@opencode-ai/*</code>, dual bin <code>opencode</code>.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Deliberate hard-fork rename later per ROADMAP. Not before P2 dual-load and merge strategy choice.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Accept</b> No drive-by package renames in v0.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-026">
-        <div class="issue-head">
-          <span class="issue-id">BL-026</span>
-          <span class="issue-title">Prune desktop / console / web / SST</span>
-          <span class="tag drop">DEFER</span>
-          <span class="tag p3">P3</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Full monorepo upstream packages present.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Leave unmaintained; no investment (ROADMAP locked).</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Accept</b> Don’t spend cycles pruning unless asked.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-027">
-        <div class="issue-head">
-          <span class="issue-id">BL-027</span>
-          <span class="issue-title">Delete <code>build</code> agent entirely</span>
-          <span class="tag hide">HIDE not delete</span>
-          <span class="tag p3">P3</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Native <code>build</code> always registered as coding primary.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Keep as escape hatch + monorepo dogfooding. Optional TA-only dist flag later. <strong>Recommended: never delete in v0.</strong></p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Accept</b> <code>build</code> remains; not the default; not in TA tips.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-028">
-        <div class="issue-head">
-          <span class="issue-id">BL-028</span>
-          <span class="issue-title">Delete LSP / formatter code trees</span>
-          <span class="tag hide">HIDE not delete</span>
-          <span class="tag p3">P3</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Large <code>src/lsp</code>, <code>src/format</code> trees.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Defaults off (BL-013). Delete only at hard fork if binary weight matters.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Accept</b> No mass deletion in v0; invest zero in new LSPs.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-029">
-        <div class="issue-head">
-          <span class="issue-id">BL-029</span>
-          <span class="issue-title">V2 agent plugin still coding-default</span>
-          <span class="tag v2">V2</span>
-          <span class="tag p3">P3</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p>Core AgentV2 <code>defaultID = "build"</code>; plugin seeds build/plan/general/explore — <strong>no <code>ta</code></strong>.</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>When V2 is product runtime: default <code>ta</code>, seed hiring agent + skills parity, plan→ta wiring.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Touches</b> <code>core/src/agent.ts</code> · <code>plugin/agent.ts</code> · migrations · <code>specs/v2/*</code></div>
-          <div><b>Accept</b> V2 product path stays hiring-native.</div>
-        </div>
-      </article>
-
-      <article class="issue" id="bl-030">
-        <div class="issue-head">
-          <span class="issue-id">BL-030</span>
-          <span class="issue-title">Web docs still OpenCode Build/Plan/Scout</span>
-          <span class="tag drop">DEFER</span>
-          <span class="tag p3">P3</span>
-        </div>
-        <div class="issue-body">
-          <div class="col from">
-            <div class="col-label">From · coding / OpenCode</div>
-            <p><code>packages/web</code> upstream docs (agents.mdx etc.).</p>
-          </div>
-          <div class="col to">
-            <div class="col-label">To · recruiting / moks</div>
-            <p>Ignore until web is in scope. README + <code>product/headless.md</code> are source of truth.</p>
-          </div>
-        </div>
-        <div class="issue-meta">
-          <div><b>Accept</b> No web docs investment for v0.</div>
-        </div>
-      </article>
-    </section>
-
-    <section id="nongoals">
-      <h2><span class="n">∅</span> Explicit non-goals</h2>
-      <div class="nongoals">
-        <div>
-          <div class="what">Session runner · permissions · MCP host · skill loader · multi-provider</div>
-          <div class="why">Kernel — KEEP; mold defaults only</div>
-        </div>
-        <div>
-          <div class="what">Decision verbs + receipts</div>
-          <div class="why">Already TA authority layer</div>
-        </div>
-        <div>
-          <div class="what">Monorepo <code>.opencode/</code> (build default, triage, Effect skill)</div>
-          <div class="why">Installed agent building moks — not product</div>
-        </div>
-        <div>
-          <div class="what"><code>packages/opencode</code> folder name</div>
-          <div class="why">Inherited; rename is hard-fork (BL-025)</div>
-        </div>
-      </div>
-    </section>
-
-    <section id="waves">
-      <h2><span class="n">→</span> Suggested implementation waves</h2>
-      <div class="grid waves">
-        <div class="wave">
-          <b>W1 — Feel</b>
-          <span>BL-003 · 004 · 006 · 013</span>
-          <p>Fresh <code>ta</code> session doesn’t look or teach IDE</p>
-        </div>
-        <div class="wave">
-          <b>W2 — Personas</b>
-          <span>BL-001 · 002 · 005 · 016</span>
-          <p>plan / explore / general don’t pull back to coding</p>
-        </div>
-        <div class="wave">
-          <b>W3 — Front doors</b>
-          <span>BL-007 · 008 · 009 · 010–012</span>
-          <p>Slash, CLI, skills, CTAs are hiring-shaped</p>
-        </div>
-        <div class="wave">
-          <b>W4 — Guardrails</b>
-          <span>BL-014 · 015</span>
-          <p><code>ta</code> tools + permissions safer for recruiters</p>
-        </div>
-        <div class="wave">
-          <b>W5 — Identity</b>
-          <span>BL-018 → 024</span>
-          <p>moks paths don’t fight installed OpenCode</p>
-        </div>
-        <div class="wave">
-          <b>W6 — Later</b>
-          <span>BL-017 · 025–030</span>
-          <p>Cosmetic, V2, hard-fork</p>
-        </div>
-      </div>
-    </section>
-
-    <section id="decisions">
-      <h2><span class="n">!</span> Decisions needed from you</h2>
-      <ul class="checklist">
-        <li>
-          <div>
-            <strong>BL-001 / 002 — Plan mode:</strong> port plan→<code>ta</code> hiring strategy, or kill/hide plan mode for v0 entirely?
-          </div>
-        </li>
-        <li>
-          <div>
-            <strong>BL-008 — <code>/review</code>:</strong> PORT to candidate-packet review, or DROP from default <code>ta</code> commands?
-          </div>
-        </li>
-        <li>
-          <div>
-            <strong>BL-015 — <code>ta</code> edit permissions:</strong> how aggressive? Ask on all edits vs allow under <code>.moks/**</code> only?
-          </div>
-        </li>
-        <li>
-          <div>
-            <strong>BL-020 — Global dir migrate:</strong> do now (cleaner identity) or after WAU (less migration risk)?
-          </div>
-        </li>
-        <li>
-          <div>
-            <strong>BL-027 — Keep <code>build</code> forever as escape hatch?</strong> Recommended: yes for v0.
-          </div>
-        </li>
-      </ul>
-    </section>
-
-    <footer>
-      <span>moks · coding → TA backlog</span>
-      <span>
-        <a href="./BACKLOG-coding-to-ta.md">markdown source</a>
-        ·
-        <a href="./ROADMAP.md">roadmap</a>
-        ·
-        <a href="./gtm.html">gtm</a>
-      </span>
-    </footer>
+  <!-- LOCKED DECISIONS -->
+  <div class="band" id="locked">
+    <h2>Decisions we locked</h2>
+    <p>Agreed product direction. Green <strong>Shipped</strong> cards are in the product path now.</p>
   </div>
+
+  <article class="decision locked done">
+    <div class="decision-head">
+      <div>
+        <h3>Primary agent is Recruit, not Build</h3>
+        <p class="plain">Hiring is the default path. Coding agent stays available for our own developers, but hidden from TA users.</p>
+      </div>
+      <div class="badges">
+        <span class="badge done">Shipped</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="decision locked done">
+    <div class="decision-head">
+      <div>
+        <h3>Plan mode ends in hiring work, not “implement the code”</h3>
+        <p class="plain">Strategy → switch to Recruit and score, outreach, commit. Plans live under the moks workspace.</p>
+      </div>
+      <div class="badges">
+        <span class="badge done">Shipped</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="decision locked done">
+    <div class="decision-head">
+      <div>
+        <h3>Commit then push (like git)</h3>
+        <p class="plain">Local work piles up with <strong>commit</strong> (receipt). <strong>Push</strong> is the remote write path. The agent must not silently write the ATS.</p>
+      </div>
+      <div class="badges">
+        <span class="badge done">Shipped</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="decision locked done">
+    <div class="decision-head">
+      <div>
+        <h3>Keep live Diff — watch candidate work change</h3>
+        <p class="plain">Local notes, scores, and drafts update in real time — same muscle as a code diff. Language-server panel is hidden when off.</p>
+      </div>
+      <div class="badges">
+        <span class="badge done">Shipped</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="decision locked done">
+    <div class="decision-head">
+      <div>
+        <h3>Language servers are not a hiring feature</h3>
+        <p class="plain">No TypeScript/Go language tools by default. No empty LSP chrome. Developers can turn them on for Build dogfood.</p>
+      </div>
+      <div class="badges">
+        <span class="badge done">Shipped</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="decision locked done">
+    <div class="decision-head">
+      <div>
+        <h3>“/init” starts a new requisition</h3>
+        <p class="plain">Scaffolds a <strong>req</strong> under <code>.moks/</code> (JD, scorecard, notes). Coding AGENTS.md setup is <code>/init-code</code>.</p>
+      </div>
+      <div class="badges">
+        <span class="badge done">Shipped</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="decision locked done">
+    <div class="decision-head">
+      <div>
+        <h3>“/review” reviews the candidate packet</h3>
+        <p class="plain">Scorecard fit, outreach quality, disposition consistency — not <code>git</code> / GitHub PR review. “Review before push” habit stays.</p>
+      </div>
+      <div class="badges">
+        <span class="badge done">Shipped</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="decision locked done">
+    <div class="decision-head">
+      <div>
+        <h3>Recruit edits freely in the req folder — not the whole machine</h3>
+        <p class="plain">Easy drafts under <code>.moks/</code>; edits elsewhere ask first. ATS writes stay blocked until push.</p>
+      </div>
+      <div class="badges">
+        <span class="badge done">Shipped</span>
+      </div>
+    </div>
+  </article>
+
+  <!-- OPEN -->
+  <div class="band" id="open">
+    <h2>Still open — needs build work (direction clear)</h2>
+    <p>These don’t need a new philosophy debate; they need implementation or a small remaining product choice.</p>
+  </div>
+
+  <article class="decision">
+    <div class="decision-head">
+      <div>
+        <h3>Research helpers still talk like codebase bots</h3>
+        <p class="plain">When Recruit asks a helper to “explore,” instructions still say “search the codebase.” They should say “search req materials, notes, and fixtures.”</p>
+      </div>
+      <div class="badges">
+        <span class="badge open">Open</span>
+        <span class="badge port">Next up</span>
+      </div>
+    </div>
+    <div class="decision-foot"><b>Why it matters:</b> Mid-loop, the product snaps back into sounding like a coding agent.</div>
+  </article>
+
+  <article class="decision">
+    <div class="decision-head">
+      <div>
+        <h3>First-run tips still teach coding habits</h3>
+        <p class="plain">Empty-state tips mention AGENTS.md, PR review, and language tools. Heroes should be: open a req, score a candidate, commit, push.</p>
+      </div>
+      <div class="badges">
+        <span class="badge open">Open</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="decision">
+    <div class="decision-head">
+      <div>
+        <h3>Auto titles &amp; summaries sound like pull requests</h3>
+        <p class="plain">Session names and recaps should read like hiring briefs (“Scored Jordan for SWE II”), not PR bots.</p>
+      </div>
+      <div class="badges">
+        <span class="badge open">Open</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="decision">
+    <div class="decision-head">
+      <div>
+        <h3>Help menus still advertise GitHub coding features</h3>
+        <p class="plain">CLI help and upsells should not feature GitHub agent install or OpenCode commercial as if they <em>are</em> moks. Hide or relabel for TA users.</p>
+      </div>
+      <div class="badges">
+        <span class="badge open">Open</span>
+        <span class="badge hide">Hide from TA</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="decision">
+    <div class="decision-head">
+      <div>
+        <h3>Folders and config still say “opencode”</h3>
+        <p class="plain">Longer-term identity: moks config and data dirs so installing both products on one laptop doesn’t collide. Dual-read old names during transition.</p>
+      </div>
+      <div class="badges">
+        <span class="badge open">Later</span>
+      </div>
+    </div>
+    <div class="decision-foot"><b>Open timing call:</b> when to migrate the global app data directory (now vs after more users).</div>
+  </article>
+
+  <!-- BUILD ORDER -->
+  <section id="order">
+    <div class="eyebrow">How we ship it</div>
+    <h2>Suggested order</h2>
+    <p class="section-sub">Each wave should make the product feel more like hiring and less like a renamed IDE.</p>
+    <div class="waves">
+      <div class="wave done">
+        <div class="top"><span class="name">Foundation</span><span class="st">Done</span></div>
+        <p>Recruit as doer · plan → hiring execute · commit/push authority · fixtures &amp; skills</p>
+      </div>
+      <div class="wave done">
+        <div class="top"><span class="name">Dictionary + ship</span><span class="st">Done</span></div>
+        <p>Init / review / Diff / LSP hide / path-scoped edit / commit·push verbs</p>
+      </div>
+      <div class="wave next">
+        <div class="top"><span class="name">Helpers stop coding</span><span class="st">Next</span></div>
+        <p>Explore + general subagents use hiring language</p>
+      </div>
+      <div class="wave">
+        <div class="top"><span class="name">First impression</span><span class="st">Open</span></div>
+        <p>Tips, titles, summaries feel like a hiring workplace</p>
+      </div>
+      <div class="wave">
+        <div class="top"><span class="name">Front doors remainder</span><span class="st">Open</span></div>
+        <p>Customize skill · quiet GitHub/console upsells · neutral provider CTAs</p>
+      </div>
+      <div class="wave">
+        <div class="top"><span class="name">Identity</span><span class="st">Later</span></div>
+        <p>moks paths &amp; config names without breaking developer setups</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHECKLIST -->
+  <section>
+    <div class="eyebrow">For the next review meeting</div>
+    <h2>Decision checklist</h2>
+    <p class="section-sub">Green = locked or shipped. Amber = still to implement or time later.</p>
+    <ul class="checks">
+      <li class="yes">
+        <span class="mark">✓</span>
+        <div>
+          <div class="t">Thesis: moks : hiring :: OpenCode : coding</div>
+          <div class="d">Workflow shape ports; job object is the req, not the git repo.</div>
+        </div>
+      </li>
+      <li class="yes">
+        <span class="mark">✓</span>
+        <div>
+          <div class="t">Commit then push (git metaphor)</div>
+          <div class="d"><code>moks commit</code> first; <code>moks push</code> for remote path; no silent ATS writes.</div>
+        </div>
+      </li>
+      <li class="yes">
+        <span class="mark">✓</span>
+        <div>
+          <div class="t">Keep Diff for local candidate / req changes</div>
+          <div class="d">Real-time visibility like watching code change.</div>
+        </div>
+      </li>
+      <li class="yes">
+        <span class="mark">✓</span>
+        <div>
+          <div class="t">LSP is not a TA product surface</div>
+          <div class="d">Defaults off; hide chrome on Recruit.</div>
+        </div>
+      </li>
+      <li class="yes">
+        <span class="mark">✓</span>
+        <div>
+          <div class="t">/init creates a new req</div>
+          <div class="d">Not AGENTS.md-as-hero.</div>
+        </div>
+      </li>
+      <li class="yes">
+        <span class="mark">✓</span>
+        <div>
+          <div class="t">/review runs packet review (skill), not PR review</div>
+          <div class="d">Keep the command; change the job.</div>
+        </div>
+      </li>
+      <li class="yes">
+        <span class="mark">✓</span>
+        <div>
+          <div class="t">Recruit edits freely inside the req workspace only</div>
+          <div class="d">Path-scoped permissions.</div>
+        </div>
+      </li>
+      <li class="soon">
+        <span class="mark">·</span>
+        <div>
+          <div class="t">Subagents + tips + titles no longer teach coding</div>
+          <div class="d">Next implementation waves.</div>
+        </div>
+      </li>
+      <li class="soon">
+        <span class="mark">·</span>
+        <div>
+          <div class="t">When to fully separate moks data folders from OpenCode</div>
+          <div class="d">Timing still open; design with dual-read.</div>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <!-- GLOSSARY -->
+  <section id="words">
+    <div class="eyebrow">If you’re not deep in the codebase</div>
+    <h2>Glossary</h2>
+    <p class="section-sub">Short definitions so the rest of the page stays readable.</p>
+    <dl class="glossary">
+      <div class="g-item">
+        <dt>Req / requisition</dt>
+        <dd>An open role you’re hiring for. In moks this is the “project” you work inside.</dd>
+      </div>
+      <div class="g-item">
+        <dt>ATS</dt>
+        <dd>Applicant Tracking System (e.g. Ashby). The remote system of record — like GitHub for code.</dd>
+      </div>
+      <div class="g-item">
+        <dt>Recruit</dt>
+        <dd>The default AI persona that does hiring work.</dd>
+      </div>
+      <div class="g-item">
+        <dt>Plan</dt>
+        <dd>Strategy mode: think and write a plan without recording final decisions yet.</dd>
+      </div>
+      <div class="g-item">
+        <dt>Commit</dt>
+        <dd><code>moks commit</code> — record intended ATS changes as a receipt (stage your intent).</dd>
+      </div>
+      <div class="g-item">
+        <dt>Push</dt>
+        <dd><code>moks push</code> — push a committed decision on the remote write path (confirm adverse actions).</dd>
+      </div>
+      <div class="g-item">
+        <dt>Diff</dt>
+        <dd>A live view of what changed locally (notes, scores, drafts) — same idea as a code diff.</dd>
+      </div>
+      <div class="g-item">
+        <dt>Packet review</dt>
+        <dd>Reading a candidate against the JD/scorecard and checking outreach or disposition quality before you push.</dd>
+      </div>
+      <div class="g-item">
+        <dt>LSP</dt>
+        <dd>Language server — IDE intelligence for programming languages. Useful for coding; not for the hiring product.</dd>
+      </div>
+      <div class="g-item">
+        <dt>Build (agent)</dt>
+        <dd>The old coding doer. Hidden in the product; kept so we can still build moks itself.</dd>
+      </div>
+      <div class="g-item">
+        <dt>Harness</dt>
+        <dd>The underlying agent engine (sessions, tools, permissions). We mold it; we don’t rewrite it from scratch.</dd>
+      </div>
+      <div class="g-item">
+        <dt>OpenCode</dt>
+        <dd>The open-source coding-agent project moks was forked from. Lineage only — not our product name or affiliation.</dd>
+      </div>
+    </dl>
+  </section>
+
+  <footer>
+    Technical source of truth:
+    <a href="./BACKLOG-coding-to-ta.md">docs/BACKLOG-coding-to-ta.md</a>
+    · Also see ROADMAP.md · FORK.md
+    · Updated 2026-08-11 (ontology ship)
+  </footer>
+</div>
 </body>
 </html>

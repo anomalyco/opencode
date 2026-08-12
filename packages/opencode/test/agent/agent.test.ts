@@ -13,6 +13,7 @@ import { Permission } from "../../src/permission"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider } from "../../src/provider/provider"
+import { HiringFixturesDir } from "../../src/product/fixtures"
 import { Skill } from "../../src/skill"
 import { Truncate } from "../../src/tool/truncate"
 
@@ -48,7 +49,7 @@ it.instance("returns default native agents when no config", () =>
   Effect.gen(function* () {
     const agents = yield* load((svc) => svc.list())
     const names = agents.map((a) => a.name)
-    expect(names).toContain("ta")
+    expect(names).toContain("recruit")
     expect(names).toContain("build")
     expect(names).toContain("plan")
     expect(names).toContain("general")
@@ -59,37 +60,66 @@ it.instance("returns default native agents when no config", () =>
   }),
 )
 
-it.instance("ta agent has correct default properties", () =>
+it.instance("recruit agent has correct default properties", () =>
   Effect.gen(function* () {
-    const ta = yield* load((svc) => svc.get("ta"))
-    expect(ta).toBeDefined()
-    expect(ta?.mode).toBe("primary")
-    expect(ta?.native).toBe(true)
-    expect(ta?.prompt).toBeTruthy()
-    expect(evalPerm(ta, "edit")).toBe("allow")
-    expect(evalPerm(ta, "bash")).toBe("allow")
-    expect(evalPerm(ta, "question")).toBe("allow")
+    const recruit = yield* load((svc) => svc.get("recruit"))
+    expect(recruit).toBeDefined()
+    expect(recruit?.mode).toBe("primary")
+    expect(recruit?.native).toBe(true)
+    expect(recruit?.hidden).not.toBe(true)
+    expect(recruit?.prompt).toBeTruthy()
+    // Path-scoped edit: wildcard asks; .moks/** and hiring fixtures allow
+    expect(evalPerm(recruit, "edit")).toBe("ask")
+    expect(Permission.evaluate("edit", ".moks/req/notes.md", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("edit", ".moks/plans/hiring.md", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("edit", "src/index.ts", recruit!.permission).action).toBe("ask")
+    expect(Permission.evaluate("edit", "jd.md", recruit!.permission).action).toBe("ask")
+    // /init may add `.moks/` to root gitignore outside the req tree
+    expect(Permission.evaluate("edit", ".gitignore", recruit!.permission).action).toBe("allow")
+    expect(evalPerm(recruit, "bash")).toBe("allow")
+    expect(evalPerm(recruit, "question")).toBe("allow")
   }),
 )
 
-it.instance("build agent has correct default properties", () =>
+it.instance("recruit agent allows edit under product hiring fixtures", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const recruit = yield* load((svc) => svc.get("recruit"))
+    expect(recruit).toBeDefined()
+    // edit/write pass worktree-relative paths; fixtures live outside tmp test dirs
+    const fixtureRel = path.join(path.relative(test.directory, HiringFixturesDir), "jd.md")
+    const monorepoRel = "packages/opencode/src/product/fixtures/hiring/jd.md"
+    expect(Permission.evaluate("edit", fixtureRel, recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("edit", monorepoRel, recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("edit", path.join(HiringFixturesDir, "jd.md"), recruit!.permission).action).toBe(
+      "allow",
+    )
+    expect(
+      Permission.evaluate("external_directory", path.join(HiringFixturesDir, "*"), recruit!.permission).action,
+    ).toBe("allow")
+  }),
+)
+
+it.instance("build agent is hidden coding escape hatch", () =>
   Effect.gen(function* () {
     const build = yield* load((svc) => svc.get("build"))
     expect(build).toBeDefined()
     expect(build?.mode).toBe("primary")
+    expect(build?.hidden).toBe(true)
     expect(build?.native).toBe(true)
     expect(evalPerm(build, "edit")).toBe("allow")
     expect(evalPerm(build, "bash")).toBe("allow")
   }),
 )
 
-it.instance("plan agent denies edits except .opencode/plans/*", () =>
+it.instance("plan agent denies edits except plan markdown under .moks/plans and legacy .opencode/plans", () =>
   Effect.gen(function* () {
     const plan = yield* load((svc) => svc.get("plan"))
     expect(plan).toBeDefined()
     // Wildcard is denied
     expect(evalPerm(plan, "edit")).toBe("deny")
-    // But specific path is allowed
+    // Preferred and legacy plan paths are allowed
+    expect(Permission.evaluate("edit", ".moks/plans/foo.md", plan!.permission).action).toBe("allow")
     expect(Permission.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
   }),
 )
@@ -660,25 +690,27 @@ it.instance(
   },
 )
 
-it.instance("defaultAgent returns ta when no default_agent config", () =>
+it.instance("defaultAgent returns recruit when no default_agent config", () =>
   Effect.gen(function* () {
     const agent = yield* load((svc) => svc.defaultAgent())
-    expect(agent).toBe("ta")
+    expect(agent).toBe("recruit")
   }),
 )
 
-it.instance("defaultInfo returns resolved ta agent when no default_agent config", () =>
+it.instance("defaultInfo returns resolved recruit agent when no default_agent config", () =>
   Effect.gen(function* () {
     const agent = yield* load((svc) => svc.defaultInfo())
-    expect(agent.name).toBe("ta")
+    expect(agent.name).toBe("recruit")
     expect(agent.mode).toBe("primary")
   }),
 )
 
 it.instance(
-  "defaultAgent respects default_agent config set to build",
+  "defaultAgent respects default_agent config set to build and unhides it",
   () =>
     Effect.gen(function* () {
+      const build = yield* load((svc) => svc.get("build"))
+      expect(build.hidden).not.toBe(true)
       const agent = yield* load((svc) => svc.defaultAgent())
       expect(agent).toBe("build")
     }),
@@ -733,8 +765,14 @@ it.instance(
 )
 
 it.instance(
-  "defaultAgent throws when default_agent points to hidden agent",
-  () => expectDefaultAgentError('default agent "compaction" is hidden'),
+  "default_agent unhides a previously hidden agent",
+  () =>
+    Effect.gen(function* () {
+      const compaction = yield* load((svc) => svc.get("compaction"))
+      expect(compaction.hidden).not.toBe(true)
+      const agent = yield* load((svc) => svc.defaultAgent())
+      expect(agent).toBe("compaction")
+    }),
   {
     config: {
       default_agent: "compaction",
@@ -753,16 +791,16 @@ it.instance(
 )
 
 it.instance(
-  "defaultAgent returns build when ta is disabled and default_agent not set",
+  "defaultAgent returns plan when recruit is disabled and default_agent not set",
   () =>
     Effect.gen(function* () {
       const agent = yield* load((svc) => svc.defaultAgent())
-      expect(agent).toBe("build")
+      expect(agent).toBe("plan")
     }),
   {
     config: {
       agent: {
-        ta: { disable: true },
+        recruit: { disable: true },
       },
     },
   },
@@ -774,10 +812,12 @@ it.instance(
   {
     config: {
       agent: {
-        ta: { disable: true },
+        recruit: { disable: true },
         build: { disable: true },
         plan: { disable: true },
       },
     },
   },
 )
+
+

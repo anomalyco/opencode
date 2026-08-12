@@ -31,12 +31,15 @@ export const PlanExitTool = Tool.define(
             sessionID: ctx.sessionID,
             questions: [
               {
-                question: `Plan at ${plan} is complete. Would you like to switch to the build agent and start implementing?`,
-                header: "Build Agent",
+                question: `Hiring plan at ${plan} is complete. Switch to recruit and execute it (score / outreach / commit as planned)?`,
+                header: "Recruit",
                 custom: false,
                 options: [
-                  { label: "Yes", description: "Switch to build agent and start implementing the plan" },
-                  { label: "No", description: "Stay with plan agent to continue refining the plan" },
+                  {
+                    label: "Yes",
+                    description: "Switch to recruit and run the hiring plan",
+                  },
+                  { label: "No", description: "Stay in plan mode and refine the strategy" },
                 ],
               },
             ],
@@ -55,7 +58,7 @@ export const PlanExitTool = Tool.define(
             sessionID: ctx.sessionID,
             role: "user",
             time: { created: Date.now() },
-            agent: "build",
+            agent: "recruit",
             model,
           }
           yield* session.updateMessage(msg)
@@ -64,13 +67,13 @@ export const PlanExitTool = Tool.define(
             messageID: msg.id,
             sessionID: ctx.sessionID,
             type: "text",
-            text: `The plan at ${plan} has been approved, you can now edit files. Execute the plan`,
+            text: `The hiring plan at ${plan} has been approved. Execute it as recruit: load req context, score with cited evidence, draft outreach when planned (never send), and record dispositions only via moks commit/push. Prefer skills and decision verbs; edit only notes under .moks/ if needed.`,
             synthetic: true,
           } satisfies SessionV1.TextPart)
 
           return {
-            title: "Switching to build agent",
-            output: "User approved switching to build agent. Wait for further instructions.",
+            title: "Switching to recruit",
+            output: "User approved switching to recruit to execute the hiring plan. Wait for further instructions.",
             metadata: {},
           }
         }).pipe(Effect.orDie),

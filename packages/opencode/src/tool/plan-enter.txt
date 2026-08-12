@@ -1,14 +1,14 @@
-Use this tool to suggest switching to plan agent when the user's request would benefit from planning before implementation.
+Use this tool to suggest switching to plan agent when the user's hiring request would benefit from strategy before action.
 
 If they explicitly mention wanting to create a plan ALWAYS call this tool first.
 
 This tool will ask the user if they want to switch to plan agent.
 
 Call this tool when:
-- The user's request is complex and would benefit from planning first
-- You want to research and design before making changes
-- The task involves multiple files or significant architectural decisions
+- The request is multi-step (req brief → score slate → outreach → dispositions)
+- Ambiguity on must-haves, level, process, or tone should be resolved before scoring or drafting
+- Multiple candidates or materials need a sequenced approach
 
 Do NOT call this tool:
-- For simple, straightforward tasks
-- When the user explicitly wants immediate implementation
+- For simple, single-shot asks (one score, one short draft) the user wants immediately
+- When the user explicitly wants immediate execution without planning

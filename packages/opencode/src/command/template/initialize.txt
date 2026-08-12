@@ -1,66 +1,56 @@
-Create or update `AGENTS.md` for this repository.
+Scaffold a new requisition workspace under `.moks/` at `${path}`.
 
-The goal is a compact instruction file that helps future moks sessions avoid mistakes and ramp up quickly. Every line should answer: "Would an agent likely miss this without help?" If not, leave it out.
+Default `/init` bootstraps a hiring req, not a coding AGENTS.md bible. (Coding AGENTS.md setup is `/init-code` / `build` agent — not this path.)
 
 User-provided focus or constraints (honor these):
 $ARGUMENTS
 
-## How to investigate
+## Goal
 
-Read the highest-value sources first:
-- `README*`, root manifests, workspace config, lockfiles
-- build, test, lint, formatter, typecheck, and codegen config
-- CI workflows and pre-commit / task runner config
-- existing instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules/`, `.cursorrules`, `.github/copilot-instructions.md`)
-- repo-local moks config such as `opencode.json`
+Create a local hiring workspace so recruit can load req materials, score candidates, draft outreach, and record dispositions.
 
-If architecture is still unclear after reading config and docs, inspect a small number of representative code files to find the real entrypoints, package boundaries, and execution flow. Prefer reading the files that explain how the system is wired together over random leaf files.
+## Steps
 
-Prefer executable sources of truth over prose. If docs conflict with config or scripts, trust the executable source and only keep what you can verify.
+1. Create directories if missing:
+   - `.moks/`
+   - `.moks/req/`
 
-## What to extract
+2. Scaffold stubs under `.moks/req/` when missing (do not overwrite non-empty files without asking):
+   - `jd.md` — role title, team, level, must-haves / nice-to-haves, location
+   - `scorecard.md` — dimensions and interview bar (1–5 or pass/fail)
+   - `notes.md` — process notes, owners, open questions
+   - Optional: `resume.md` placeholder when the user already has a candidate in mind
 
-Look for the highest-signal facts for an agent working in this repo:
-- exact developer commands, especially non-obvious ones
-- how to run a single test, a single package, or a focused verification step
-- required command order when it matters, such as `lint -> typecheck -> test`
-- monorepo or multi-package boundaries, ownership of major directories, and the real app/library entrypoints
-- framework or toolchain quirks: generated code, migrations, codegen, build artifacts, special env loading, dev servers, infra deploy flow
-- repo-specific style or workflow conventions that differ from defaults
-- testing quirks: fixtures, integration test prerequisites, snapshot workflows, required services, flaky or expensive suites
-- important constraints from existing instruction files worth preserving
+3. Gitignore: if a `.gitignore` exists at `${path}`, ensure a `.moks/` entry is present; add it if missing. Do not create a root `.gitignore` solely for this.
 
-Good `AGENTS.md` content is usually hard-earned context that took reading multiple files to infer.
+4. Fill stubs with role context from `$ARGUMENTS` or brief questions. Use the `question` tool sparingly — at most one short batch for missing **role title** and/or **team**. Prefer writing lightweight stubs over a long interview.
 
-## Questions
+5. After scaffolding, run or invoke **req-context** to synthesize a structured req brief and list missing context.
 
-Only ask the user questions if the repo cannot answer something important. Use the `question` tool for one short batch at most.
+## Hiring skills (use via skill tool)
 
-Good questions:
-- undocumented team conventions
-- branch / PR / release expectations
-- missing setup or test prerequisites that are known but not written down
+- **req-context** — structured req brief from JD/notes; list gaps
+- **score-candidate** — resume vs JD/scorecard with evidence citations
+- **draft-outreach** — recruiter email/LinkedIn drafts; never send
+- **commit-disposition** — recommend reject/offer/hire/advance; user records via decision verbs
 
-Do not ask about anything the repo already makes clear.
+## Decision verbs (authority)
 
-## Writing rules
+Dispositions are receipts only until push. Prefer bash for these CLIs:
 
-Include only high-signal, repo-specific guidance such as:
-- exact commands and shortcuts the agent would otherwise guess wrong
-- architecture notes that are not obvious from filenames
-- conventions that differ from language or framework defaults
-- setup requirements, environment quirks, and operational gotchas
-- references to existing instruction sources that matter
+- `moks commit` — record disposition intent (local receipt)
+- `moks status` — inspect pending / open commits
+- `moks push` — push a committed decision (records push receipt; adverse reject/offer/hire need confirm)
 
-Exclude:
-- generic software advice
-- long tutorials or exhaustive file trees
-- obvious language conventions
-- speculative claims or anything you could not verify
-- content better stored in another file referenced via `opencode.json` `instructions`
+Never invent ATS stage moves or claim a remote write happened.
 
-When in doubt, omit.
+## Samples
 
-Prefer short sections and bullets. If the repo is simple, keep the file simple. If the repo is large, summarize the few structural facts that actually change how an agent should work.
+If the user wants example materials, point at or copy from ship fixtures (reference only):
+`packages/opencode/src/product/fixtures/hiring/` (`jd.md`, `resume.md`, `scorecard.md`).
 
-If `AGENTS.md` already exists at `${path}`, improve it in place rather than rewriting blindly. Preserve verified useful guidance, delete fluff or stale claims, and reconcile it with the current codebase.
+## Done criteria
+
+- `.moks/req/` exists with at least `jd.md`, `scorecard.md`, `notes.md`
+- `.moks/` gitignored when a `.gitignore` is present
+- Short summary of what was created and the next step (e.g. add resume → score-candidate, or fill JD gaps)

@@ -1,0 +1,7 @@
+<system-reminder>
+Your operational mode has changed from plan to recruit.
+You are no longer in read-only plan mode.
+Execute the approved hiring plan using hiring skills and tools as needed:
+score candidates with evidence, draft outreach (never send), and record dispositions only via `moks commit` / `moks push`.
+Prefer read + skills + decision verbs; edit only for notes the user requested (typically under `.moks/`).
+</system-reminder>

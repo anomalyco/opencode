@@ -67,13 +67,13 @@ export function confirmMessage(json: unknown) {
     if (typeof row.message === "string" && row.message.trim()) return row.message.trim()
     if (typeof row.reason === "string" && row.reason.trim()) return row.reason.trim()
   }
-  return "This decision requires confirmation before apply."
+  return "This decision requires confirmation before push."
 }
 
 export function receiptId(json: unknown) {
   if (!json || typeof json !== "object") return
   const row = json as Record<string, unknown>
-  for (const key of ["id", "receipt_id", "proposal_id", "receiptId", "proposalId"]) {
+  for (const key of ["id", "receipt_id", "commit_id", "receiptId", "commitId"]) {
     const value = row[key]
     if (typeof value === "string" && value) return value
   }

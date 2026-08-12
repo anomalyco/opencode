@@ -4,6 +4,7 @@ import { define } from "./internal"
 import { Effect } from "effect"
 import { Location } from "../location"
 import PROMPT_INITIALIZE from "./command/initialize.txt"
+import PROMPT_INITIALIZE_CODE from "./command/initialize-code.txt"
 import PROMPT_REVIEW from "./command/review.txt"
 
 export const Plugin = define({
@@ -13,11 +14,15 @@ export const Plugin = define({
     yield* ctx.command.transform((draft) => {
       draft.update("init", (command) => {
         command.template = PROMPT_INITIALIZE.replace("${path}", location.project.directory)
-        command.description = "guided AGENTS.md setup"
+        command.description = "scaffold a new requisition workspace under .moks"
+      })
+      draft.update("init-code", (command) => {
+        command.template = PROMPT_INITIALIZE_CODE.replace("${path}", location.project.directory)
+        command.description = "guided AGENTS.md setup for coding agents"
       })
       draft.update("review", (command) => {
         command.template = PROMPT_REVIEW.replace("${path}", location.project.directory)
-        command.description = "review changes [commit|branch|pr], defaults to uncommitted"
+        command.description = "review candidate/req packet before commit/push"
         command.subtask = true
       })
     })

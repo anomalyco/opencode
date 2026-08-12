@@ -17,7 +17,7 @@ Resolve in order (stop when found):
 4. `.moks/req/jd.md`, `.moks/req/notes.md`, `.moks/req/scorecard.md`
 5. Samples only if nothing else: ship path under product fixtures/hiring
 
-Read every file or MCP payload you will cite. Never call Ashby write tools (`ashby_change_stage`, `ashby_create_note`); dispositions go through `moks propose` / `moks apply`.
+Read every file or MCP payload you will cite. Never call Ashby write tools (`ashby_change_stage`, `ashby_create_note`); dispositions go through `moks commit` / `moks push`.
 
 ## Output format
 

@@ -4,8 +4,8 @@ import { randomBytes } from "crypto"
 import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
 
-export type Verb = "propose" | "apply"
-export type State = "proposed" | "applied" | "blocked" | "needs_confirm" | "rejected"
+export type Verb = "commit" | "push"
+export type State = "committed" | "pushed" | "blocked" | "needs_confirm" | "rejected"
 
 export type Target = {
   kind: string
@@ -18,7 +18,7 @@ export type Receipt = {
   verb: Verb
   action: string
   target?: Target
-  proposal_id?: string
+  commit_id?: string
   dry_run: boolean
   state: State
   adverse: boolean

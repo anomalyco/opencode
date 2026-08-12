@@ -1,7 +1,7 @@
 import REQ_CONTEXT from "./skills/req-context/SKILL.md" with { type: "text" }
 import SCORE_CANDIDATE from "./skills/score-candidate/SKILL.md" with { type: "text" }
 import DRAFT_OUTREACH from "./skills/draft-outreach/SKILL.md" with { type: "text" }
-import PROPOSE_DISPOSITION from "./skills/propose-disposition/SKILL.md" with { type: "text" }
+import COMMIT_DISPOSITION from "./skills/commit-disposition/SKILL.md" with { type: "text" }
 
 function skill(raw: string) {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/)
@@ -16,5 +16,5 @@ export const HiringSkills = [
   skill(REQ_CONTEXT),
   skill(SCORE_CANDIDATE),
   skill(DRAFT_OUTREACH),
-  skill(PROPOSE_DISPOSITION),
+  skill(COMMIT_DISPOSITION),
 ] as const

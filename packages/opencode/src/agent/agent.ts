@@ -14,8 +14,9 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
-import PROMPT_TA from "@/product/agents/ta.txt"
+import PROMPT_RECRUIT from "@/product/agents/recruit.txt"
 import { ashbyPermissionDefaults } from "@/product/ashby-edge"
+import { HiringFixturesDir } from "@/product/fixtures"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
@@ -140,10 +141,11 @@ const layer = Layer.effect(
         const user = Permission.fromConfig(cfg.permission ?? {})
 
         const agents: Record<string, Info> = {
-          ta: {
-            name: "ta",
-            description: "Talent acquisition agent. Hiring workflows over local req fixtures and decision verbs.",
-            prompt: PROMPT_TA,
+          recruit: {
+            name: "recruit",
+            description:
+              "Recruiting agent. Hiring workflows over local req materials, skills, and decision verbs.",
+            prompt: PROMPT_RECRUIT,
             options: {},
             permission: Permission.merge(
               defaults,
@@ -151,6 +153,28 @@ const layer = Layer.effect(
                 question: "allow",
                 plan_enter: "allow",
                 ...ashbyPermissionDefaults(),
+                // Path-scoped edits: free under .moks/ + ship hiring fixtures; ask elsewhere.
+                // `edit` also gates write and apply_patch. Wildcard `*` matches nested path segments.
+                // Bash stays broadly allow this wave (decision verbs via shell); residual for BL-015.
+                external_directory: {
+                  [path.join(HiringFixturesDir, "*")]: "allow",
+                },
+                edit: {
+                  "*": "ask",
+                  [path.join(".moks", "*")]: "allow",
+                  // /init needs to add `.moks/` to root gitignore outside the req tree.
+                  ".gitignore": "allow",
+                  [path.join(HiringFixturesDir, "*")]: "allow",
+                  // Suffix match so ../-style relatives from arbitrary tmp worktrees still allow.
+                  "*product/fixtures/hiring/*": "allow",
+                  // Worktree-relative fixtures path only when relative is a real subpath
+                  // (never emit "*" / "." or findLast would re-open all edits).
+                  ...(() => {
+                    const rel = path.relative(ctx.worktree, HiringFixturesDir)
+                    if (!rel || rel === "." || path.isAbsolute(rel)) return {}
+                    return { [path.join(rel, "*")]: "allow" as const }
+                  })(),
+                },
               }),
               user,
             ),
@@ -159,7 +183,7 @@ const layer = Layer.effect(
           },
           build: {
             name: "build",
-            description: "The default coding agent. Executes tools based on configured permissions.",
+            description: "Coding agent escape hatch. Hidden from the default Recruit/Plan cast.",
             options: {},
             permission: Permission.merge(
               defaults,
@@ -171,10 +195,12 @@ const layer = Layer.effect(
             ),
             mode: "primary",
             native: true,
+            hidden: true,
           },
           plan: {
             name: "plan",
-            description: "Plan mode. Disallows all edit tools.",
+            description:
+              "Plan hiring strategy without recording decisions or mass-editing the workspace. Edits only the plan file.",
             options: {},
             permission: Permission.merge(
               defaults,
@@ -189,6 +215,7 @@ const layer = Layer.effect(
                 },
                 edit: {
                   "*": "deny",
+                  [path.join(".moks", "plans", "*.md")]: "allow",
                   [path.join(".opencode", "plans", "*.md")]: "allow",
                   [path.relative(ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
                 },
@@ -312,6 +339,11 @@ const layer = Layer.effect(
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
         }
 
+        // Explicit default unhides the agent so dogfood configs (e.g. default_agent: build) keep working.
+        if (cfg.default_agent && agents[cfg.default_agent]) {
+          agents[cfg.default_agent].hidden = false
+        }
+
         // Ensure Truncate.GLOB is allowed unless explicitly configured
         for (const name in agents) {
           const agent = agents[name]
@@ -338,7 +370,7 @@ const layer = Layer.effect(
             agents,
             values(),
             sortBy(
-              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "ta"), "desc"],
+              [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "recruit"), "desc"],
               [(x) => x.name, "asc"],
             ),
           )

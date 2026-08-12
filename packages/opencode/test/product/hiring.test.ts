@@ -12,7 +12,7 @@ import path from "path"
 const node = LayerNode.compile(CrossSpawnSpawner.node)
 const it = testEffect(Layer.mergeAll(LayerNode.compile(Skill.node), node, testInstanceStoreLayer))
 
-const HIRING_NAMES = ["req-context", "score-candidate", "draft-outreach", "propose-disposition"] as const
+const HIRING_NAMES = ["req-context", "score-candidate", "draft-outreach", "commit-disposition"] as const
 
 it.effect("HiringSkills exports four named packs with non-empty content", () =>
   Effect.sync(() => {

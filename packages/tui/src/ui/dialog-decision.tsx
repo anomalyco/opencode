@@ -16,8 +16,8 @@ type Toast = {
   error(error: unknown): void
 }
 
-export async function runProposeFlow(input: { dialog: DialogContext; toast: Toast; cwd?: string }) {
-  const action = await DialogPrompt.show(input.dialog, "Propose decision", {
+export async function runCommitFlow(input: { dialog: DialogContext; toast: Toast; cwd?: string }) {
+  const action = await DialogPrompt.show(input.dialog, "Commit decision", {
     placeholder: "action (e.g. note, reject, offer, hire)",
   })
   if (action === null) return
@@ -33,47 +33,47 @@ export async function runProposeFlow(input: { dialog: DialogContext; toast: Toas
   })
   if (reasonRaw === null) return
 
-  const args = ["propose", "--json", "--action", trimmedAction]
+  const args = ["commit", "--json", "--action", trimmedAction]
   const reason = reasonRaw.trim()
   if (reason) args.push("--reason", reason)
 
   const result = await call(args, input)
   const id = receiptId(result.json)
   input.toast.show({
-    message: result.code === 0 ? (id ? `Proposed ${id}` : "Propose complete") : "Propose failed",
+    message: result.code === 0 ? (id ? `Committed ${id}` : "Commit complete") : "Commit failed",
     variant: result.code === 0 ? "success" : "error",
   })
-  await showResult(input.dialog, "Propose result", result)
+  await showResult(input.dialog, "Commit result", result)
 }
 
-export async function runApplyFlow(input: { dialog: DialogContext; toast: Toast; cwd?: string }) {
-  const proposalRaw = await DialogPrompt.show(input.dialog, "Apply decision", {
-    placeholder: "proposal id",
+export async function runPushFlow(input: { dialog: DialogContext; toast: Toast; cwd?: string }) {
+  const commitRaw = await DialogPrompt.show(input.dialog, "Push decision", {
+    placeholder: "commit id",
   })
-  if (proposalRaw === null) return
-  const proposalID = proposalRaw.trim()
-  if (!proposalID) {
-    input.toast.show({ message: "Proposal id is required", variant: "error" })
+  if (commitRaw === null) return
+  const commitID = commitRaw.trim()
+  if (!commitID) {
+    input.toast.show({ message: "Commit id is required", variant: "error" })
     input.dialog.clear()
     return
   }
 
-  let result = await call(["apply", "--json", "--proposal-id", proposalID], input)
+  let result = await call(["push", "--json", "--commit-id", commitID], input)
   if (needsConfirm(result.json)) {
-    const ok = await DialogConfirm.show(input.dialog, "Confirm apply", confirmMessage(result.json))
+    const ok = await DialogConfirm.show(input.dialog, "Confirm push", confirmMessage(result.json))
     if (!ok) {
-      input.toast.show({ message: "Apply cancelled", variant: "info" })
+      input.toast.show({ message: "Push cancelled", variant: "info" })
       input.dialog.clear()
       return
     }
-    result = await call(["apply", "--json", "--proposal-id", proposalID, "--confirm"], input)
+    result = await call(["push", "--json", "--commit-id", commitID, "--confirm"], input)
   }
 
   input.toast.show({
-    message: result.code === 0 ? "Apply complete" : "Apply failed",
+    message: result.code === 0 ? "Push complete" : "Push failed",
     variant: result.code === 0 ? "success" : "error",
   })
-  await showResult(input.dialog, "Apply result", result)
+  await showResult(input.dialog, "Push result", result)
 }
 
 export async function runDecisionsFlow(input: { dialog: DialogContext; toast: Toast; cwd?: string }) {

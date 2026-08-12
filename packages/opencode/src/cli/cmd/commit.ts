@@ -3,9 +3,9 @@ import { effectCmd, fail } from "../effect-cmd"
 import { DecisionVerbs } from "@/decision/verbs"
 import { UI } from "../ui"
 
-export const ProposeCommand = effectCmd({
-  command: "propose",
-  describe: "record a decision proposal (dry-run by default)",
+export const CommitCommand = effectCmd({
+  command: "commit",
+  describe: "record a decision receipt (dry-run by default)",
   instance: false,
   builder: (yargs) =>
     yargs
@@ -44,7 +44,7 @@ export const ProposeCommand = effectCmd({
         type: "string",
         describe: "working directory override",
       }),
-  handler: Effect.fn("Cli.propose")(function* (args) {
+  handler: Effect.fn("Cli.commit")(function* (args) {
     let meta: unknown
     if (args.meta) {
       try {
@@ -58,7 +58,7 @@ export const ProposeCommand = effectCmd({
         ? { kind: args.targetKind ?? "unknown", id: args.targetId }
         : undefined
     const result = yield* Effect.promise(() =>
-      DecisionVerbs.propose({
+      DecisionVerbs.commit({
         action: args.action,
         target,
         reason: args.reason,
@@ -73,9 +73,10 @@ export const ProposeCommand = effectCmd({
       return
     }
     UI.println(
-      `${UI.Style.TEXT_SUCCESS_BOLD}proposed${UI.Style.TEXT_NORMAL} ${result.receipt.id} action=${result.receipt.action} dry_run=${result.receipt.dry_run}`,
+      `${UI.Style.TEXT_SUCCESS_BOLD}committed${UI.Style.TEXT_NORMAL} ${result.receipt.id} action=${result.receipt.action} dry_run=${result.receipt.dry_run}`,
     )
-    if (result.receipt.adverse) UI.println(`${UI.Style.TEXT_WARNING}adverse action — apply will require --confirm${UI.Style.TEXT_NORMAL}`)
+    if (result.receipt.adverse)
+      UI.println(`${UI.Style.TEXT_WARNING}adverse action — push will require --confirm${UI.Style.TEXT_NORMAL}`)
     UI.println(`${UI.Style.TEXT_DIM}${result.path}${UI.Style.TEXT_NORMAL}`)
   }),
 })

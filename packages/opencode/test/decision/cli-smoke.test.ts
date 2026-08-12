@@ -38,23 +38,23 @@ async function moks(args: string[], cwd: string) {
 }
 
 describe("decision cli smoke", () => {
-  test("propose → apply adverse needs confirm → apply with confirm", async () => {
+  test("commit → push adverse needs confirm → push with confirm", async () => {
     await using tmp = await tmpdir()
     await fs.mkdir(path.join(tmp.path, ".moks"))
 
-    const proposed = await moks(["propose", "--action", "reject", "--reason", "fit"], tmp.path)
-    expect(proposed.code).toBe(0)
-    const proposalId = (proposed.json as { receipt: { id: string } }).receipt.id
-    expect(proposalId.startsWith("dec_")).toBe(true)
+    const committed = await moks(["commit", "--action", "reject", "--reason", "fit"], tmp.path)
+    expect(committed.code).toBe(0)
+    const commitId = (committed.json as { receipt: { id: string } }).receipt.id
+    expect(commitId.startsWith("dec_")).toBe(true)
 
-    const blocked = await moks(["apply", "--proposal-id", proposalId], tmp.path)
+    const blocked = await moks(["push", "--commit-id", commitId], tmp.path)
     expect(blocked.code).toBe(2)
     expect((blocked.json as { error: string }).error).toBe("needs_confirm")
 
-    const applied = await moks(["apply", "--proposal-id", proposalId, "--confirm"], tmp.path)
-    expect(applied.code).toBe(0)
-    expect((applied.json as { ok: boolean; receipt: { state: string } }).ok).toBe(true)
-    expect((applied.json as { receipt: { state: string } }).receipt.state).toBe("applied")
+    const pushed = await moks(["push", "--commit-id", commitId, "--confirm"], tmp.path)
+    expect(pushed.code).toBe(0)
+    expect((pushed.json as { ok: boolean; receipt: { state: string } }).ok).toBe(true)
+    expect((pushed.json as { receipt: { state: string } }).receipt.state).toBe("pushed")
 
     const status = await moks(["status", "--limit", "10"], tmp.path)
     expect(status.code).toBe(0)

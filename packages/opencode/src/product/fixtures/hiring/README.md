@@ -8,7 +8,7 @@ Fake eng-TA sample materials so moks can run req → score → outreach → disp
 | `resume.md` | Candidate Jordan Lee |
 | `scorecard.md` | Simple 1–5 dimension card |
 
-## Discovery order (skills + TA agent)
+## Discovery order (skills + recruit agent)
 
 1. Paths you pass (`moks run -f …` or @ attachments)
 2. Cwd: `jd.md`, `resume.md`, `scorecard.md`
@@ -17,7 +17,7 @@ Fake eng-TA sample materials so moks can run req → score → outreach → disp
 
 ## Quick start
 
-Default agent is `ta`. Use `--agent build` only when you want the coding agent.
+Default agent is `recruit`. Use `--agent build` only when you want the hidden coding escape hatch.
 
 From repo (source / no install):
 
@@ -25,7 +25,7 @@ From repo (source / no install):
 cd packages/opencode
 FIXTURES=src/product/fixtures/hiring
 
-bun run --conditions=browser src/index.ts run --agent ta \
+bun run --conditions=browser src/index.ts run --agent recruit \
   -f "$FIXTURES/jd.md" -f "$FIXTURES/resume.md" -f "$FIXTURES/scorecard.md" \
   "Score this candidate using the score-candidate skill"
 ```
@@ -37,7 +37,7 @@ cp packages/opencode/src/product/fixtures/hiring/*.md .
 # or
 mkdir -p .moks/req && cp packages/opencode/src/product/fixtures/hiring/{jd,resume,scorecard}.md .moks/req/
 
-moks run --agent ta \
+moks run --agent recruit \
   -f jd.md -f resume.md -f scorecard.md \
   "Score this candidate using the score-candidate skill"
 ```
@@ -50,19 +50,19 @@ Mock-LLM E2E (no paid API): from `packages/opencode`,
 Disposition (receipts only, no ATS write):
 
 ```bash
-moks propose --action advance --target-kind candidate --target-id jordan-lee --reason "strong event + postgres signal"
+moks commit --action advance --target-kind candidate --target-id jordan-lee --reason "strong event + postgres signal"
 moks status
-moks apply --proposal-id <id>          # non-adverse
-moks apply --proposal-id <id> --confirm  # reject | offer | hire
+moks push --commit-id <id>          # non-adverse
+moks push --commit-id <id> --confirm  # reject | offer | hire
 ```
 
 Scriptable (`--json`, exit codes): see [`../../headless.md`](../../headless.md).
 
 ```bash
-moks propose --action advance --target-kind candidate --target-id jordan-lee --json
+moks commit --action advance --target-kind candidate --target-id jordan-lee --json
 moks status --json
-moks apply --proposal-id dec_… --json              # exit 2 if needs_confirm
-moks run --json --agent ta -f jd.md -f resume.md -- "Score this candidate"
+moks push --commit-id dec_… --json              # exit 2 if needs_confirm
+moks run --json --agent recruit -f jd.md -f resume.md -- "Score this candidate"
 ```
 
 All names and companies are fictional.

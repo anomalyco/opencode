@@ -93,7 +93,7 @@ export function DialogStatus() {
           </For>
         </box>
       </Show>
-      {sync.data.lsp.length > 0 && (
+      <Show when={sync.data.config.lsp && sync.data.lsp.length > 0}>
         <box>
           <text fg={theme.text}>{sync.data.lsp.length} LSP Servers</text>
           <For each={sync.data.lsp}>
@@ -117,28 +117,30 @@ export function DialogStatus() {
             )}
           </For>
         </box>
-      )}
-      <Show when={enabledFormatters().length > 0} fallback={<text fg={theme.text}>No Formatters</text>}>
-        <box>
-          <text fg={theme.text}>{enabledFormatters().length} Formatters</text>
-          <For each={enabledFormatters()}>
-            {(item) => (
-              <box flexDirection="row" gap={1}>
-                <text
-                  flexShrink={0}
-                  style={{
-                    fg: theme.success,
-                  }}
-                >
-                  •
-                </text>
-                <text wrapMode="word" fg={theme.text}>
-                  <b>{item.name}</b>
-                </text>
-              </box>
-            )}
-          </For>
-        </box>
+      </Show>
+      <Show when={sync.data.config.formatter}>
+        <Show when={enabledFormatters().length > 0} fallback={<text fg={theme.text}>No Formatters</text>}>
+          <box>
+            <text fg={theme.text}>{enabledFormatters().length} Formatters</text>
+            <For each={enabledFormatters()}>
+              {(item) => (
+                <box flexDirection="row" gap={1}>
+                  <text
+                    flexShrink={0}
+                    style={{
+                      fg: theme.success,
+                    }}
+                  >
+                    •
+                  </text>
+                  <text wrapMode="word" fg={theme.text}>
+                    <b>{item.name}</b>
+                  </text>
+                </box>
+              )}
+            </For>
+          </box>
+        </Show>
       </Show>
       <Show when={plugins().length > 0} fallback={<text fg={theme.text}>No Plugins</text>}>
         <box>

@@ -57,23 +57,23 @@ describe("decision/activity", () => {
     await using tmp = await workspace()
     const summary = await DecisionActivity.summarizeActivity({ cwd: tmp.path, days: 7 })
     expect(summary.signal).toBe("quiet")
-    expect(summary.proposes).toBe(0)
-    expect(summary.applies).toBe(0)
+    expect(summary.commits).toBe(0)
+    expect(summary.pushes).toBe(0)
     expect(summary.active_days).toBe(0)
-    expect(summary.open_proposals).toBe(0)
+    expect(summary.open_commits).toBe(0)
     expect(summary.days).toBe(7)
     expect(summary.path).toContain("decisions.jsonl")
     expect(summary.real_req_note.length).toBeGreaterThan(0)
   })
 
-  test("propose in window → active", async () => {
+  test("commit in window → active", async () => {
     await using tmp = await workspace()
-    await DecisionVerbs.propose({ action: "advance", cwd: tmp.path })
+    await DecisionVerbs.commit({ action: "advance", cwd: tmp.path })
     const summary = await DecisionActivity.summarizeActivity({ cwd: tmp.path, days: 7 })
     expect(summary.signal).toBe("active")
-    expect(summary.proposes).toBe(1)
+    expect(summary.commits).toBe(1)
     expect(summary.active_days).toBe(1)
-    expect(summary.open_proposals).toBe(1)
+    expect(summary.open_commits).toBe(1)
   })
 
   test("old receipts outside window ignored", async () => {
@@ -81,57 +81,57 @@ describe("decision/activity", () => {
     const now = new Date("2026-08-10T12:00:00.000Z")
     await appendReceipt(
       receipt({
-        verb: "propose",
+        verb: "commit",
         action: "note",
-        state: "proposed",
+        state: "committed",
         ts: "2026-07-01T12:00:00.000Z",
       }),
       tmp.path,
     )
     await appendReceipt(
       receipt({
-        verb: "propose",
+        verb: "commit",
         action: "advance",
-        state: "proposed",
+        state: "committed",
         ts: "2026-08-09T12:00:00.000Z",
       }),
       tmp.path,
     )
     const summary = await DecisionActivity.summarizeActivity({ cwd: tmp.path, days: 7, now })
     expect(summary.signal).toBe("active")
-    expect(summary.proposes).toBe(1)
+    expect(summary.commits).toBe(1)
     expect(summary.active_days).toBe(1)
   })
 
-  test("counts applies and needs_confirm in window", async () => {
+  test("counts pushes and needs_confirm in window", async () => {
     await using tmp = await workspace()
-    const proposed = await DecisionVerbs.propose({ action: "note", cwd: tmp.path })
-    await DecisionVerbs.apply({ proposal_id: proposed.receipt.id, cwd: tmp.path })
-    const adverse = await DecisionVerbs.propose({ action: "reject", cwd: tmp.path })
-    await DecisionVerbs.apply({ proposal_id: adverse.receipt.id, cwd: tmp.path })
+    const committed = await DecisionVerbs.commit({ action: "note", cwd: tmp.path })
+    await DecisionVerbs.push({ commit_id: committed.receipt.id, cwd: tmp.path })
+    const adverse = await DecisionVerbs.commit({ action: "reject", cwd: tmp.path })
+    await DecisionVerbs.push({ commit_id: adverse.receipt.id, cwd: tmp.path })
     const summary = await DecisionActivity.summarizeActivity({ cwd: tmp.path, days: 7 })
-    expect(summary.proposes).toBe(2)
-    expect(summary.applies).toBe(1)
+    expect(summary.commits).toBe(2)
+    expect(summary.pushes).toBe(1)
     expect(summary.needs_confirm).toBe(1)
-    expect(summary.adverse_proposes).toBe(1)
-    expect(summary.open_proposals).toBe(1)
+    expect(summary.adverse_commits).toBe(1)
+    expect(summary.open_commits).toBe(1)
     expect(summary.signal).toBe("active")
   })
 
   test("activity --json CLI smoke", async () => {
     await using tmp = await workspace()
-    await DecisionVerbs.propose({ action: "note", cwd: tmp.path })
+    await DecisionVerbs.commit({ action: "note", cwd: tmp.path })
     const result = await moks(["activity", "--days", "7"], tmp.path)
     expect(result.code).toBe(0)
     const json = result.json as {
       days: number
-      proposes: number
+      commits: number
       signal: string
       path: string
       real_req_note: string
     }
     expect(json.days).toBe(7)
-    expect(json.proposes).toBe(1)
+    expect(json.commits).toBe(1)
     expect(json.signal).toBe("active")
     expect(json.path).toContain("decisions.jsonl")
     expect(json.real_req_note).toContain("real req")

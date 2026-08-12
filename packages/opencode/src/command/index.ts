@@ -8,6 +8,7 @@ import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
+import PROMPT_INITIALIZE_CODE from "./template/initialize-code.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
 
@@ -45,6 +46,7 @@ export function hints(template: string) {
 
 export const Default = {
   INIT: "init",
+  INIT_CODE: "init-code",
   REVIEW: "review",
 } as const
 
@@ -69,16 +71,25 @@ const layer = Layer.effect(
 
       commands[Default.INIT] = {
         name: Default.INIT,
-        description: "guided AGENTS.md setup",
+        description: "scaffold a new requisition workspace under .moks",
         source: "command",
         get template() {
           return PROMPT_INITIALIZE.replace("${path}", ctx.worktree)
         },
         hints: hints(PROMPT_INITIALIZE),
       }
+      commands[Default.INIT_CODE] = {
+        name: Default.INIT_CODE,
+        description: "guided AGENTS.md setup for coding agents",
+        source: "command",
+        get template() {
+          return PROMPT_INITIALIZE_CODE.replace("${path}", ctx.worktree)
+        },
+        hints: hints(PROMPT_INITIALIZE_CODE),
+      }
       commands[Default.REVIEW] = {
         name: Default.REVIEW,
-        description: "review changes [commit|branch|pr], defaults to uncommitted",
+        description: "review candidate/req packet before commit/push",
         source: "command",
         get template() {
           return PROMPT_REVIEW.replace("${path}", ctx.worktree)

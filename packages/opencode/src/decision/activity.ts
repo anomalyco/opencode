@@ -4,12 +4,12 @@ import { status } from "./verbs"
 export type ActivitySummary = {
   days: number
   path: string
-  proposes: number
-  applies: number
+  commits: number
+  pushes: number
   needs_confirm: number
-  adverse_proposes: number
+  adverse_commits: number
   active_days: number
-  open_proposals: number
+  open_commits: number
   signal: "active" | "quiet"
   real_req_note: string
 }
@@ -33,10 +33,10 @@ export async function summarizeActivity(input: {
     if (Number.isNaN(ts)) return false
     return ts >= cutoff.getTime() && ts <= now.getTime()
   })
-  const proposes = windowed.filter((r) => r.verb === "propose").length
-  const applies = windowed.filter((r) => r.verb === "apply" && r.state === "applied").length
+  const commits = windowed.filter((r) => r.verb === "commit").length
+  const pushes = windowed.filter((r) => r.verb === "push" && r.state === "pushed").length
   const needs_confirm = windowed.filter((r) => r.state === "needs_confirm").length
-  const adverse_proposes = windowed.filter((r) => r.verb === "propose" && r.adverse).length
+  const adverse_commits = windowed.filter((r) => r.verb === "commit" && r.adverse).length
   const active_days = new Set(
     windowed.flatMap((r) => {
       const ts = Date.parse(r.ts)
@@ -48,13 +48,13 @@ export async function summarizeActivity(input: {
   return {
     days,
     path,
-    proposes,
-    applies,
+    commits,
+    pushes,
     needs_confirm,
-    adverse_proposes,
+    adverse_commits,
     active_days,
-    open_proposals: st.open.length,
-    signal: proposes > 0 ? "active" : "quiet",
+    open_commits: st.open.length,
+    signal: commits > 0 ? "active" : "quiet",
     real_req_note: REAL_REQ_NOTE,
   }
 }

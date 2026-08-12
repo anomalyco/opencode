@@ -13,7 +13,7 @@ We mold the OpenCode fork — we do not rebuild the harness from zero.
 | Rebrand | **User-facing now** (`moks` bin, README, TUI copy). **Keep** inherited package names (`packages/opencode`, `@opencode-ai/*`) until deliberate divergence. |
 | Unused packages | **Leave them.** Don’t invest in desktop/console/web/SST unless asked. |
 | Receipts | **Hybrid:** default user data dir; if cwd is a moks workspace (`.moks/`), use `.moks/receipts/`. Always gitignore `.moks/`. |
-| Skills vs MCP | **MCP = edge tools** (vendor read). **Skills = prompt packs** (hiring loop). **Verbs + receipts = authority** (`propose` / `apply` / confirm-adverse). |
+| Skills vs MCP | **MCP = edge tools** (vendor read). **Skills = prompt packs** (hiring loop). **Verbs + receipts = authority** (`commit` / `push` / confirm-adverse). |
 | CLI | Headless is a **mode of Open**, not a co-equal pillar. |
 
 ## Do not confuse
@@ -35,33 +35,33 @@ We mold the OpenCode fork — we do not rebuild the harness from zero.
 
 - [x] Local **decision receipts** (append-only JSONL; dry-run flag; no secrets in meta by default)
 - [x] Receipt paths: user data dir default · `.moks/receipts/` in a moks workspace
-- [x] Freeze shared write verbs: `propose` / `status` / `apply` (+ `--json`)
-- [x] TUI shells those verbs — no policy/apply eligibility forked into the client
+- [x] Freeze shared write verbs: `commit` / `status` / `push` (+ `--json`)
+- [x] TUI shells those verbs — no policy/push eligibility forked into the client
 - [x] **Dry-run default**; **confirm-on-adverse** (reject / offer / hire)
 - [x] Hero demo ≠ silent `advance_stage` (verbs record receipts only; no ATS write path)
 
 ### 3. Hiring-native agent (felt product)
 
-- [x] Default agents/skills for TA (not coding defaults) — native `ta` default; monorepo `.opencode` keeps `default_agent: build`
+- [x] Default agents/skills for TA (not coding defaults) — native `recruit` default; `build` hidden escape hatch; monorepo `.opencode` keeps `default_agent: build`
 - [x] Prompt packs v0:
   - [x] `req-context`
   - [x] `score-candidate`
   - [x] `draft-outreach`
-  - [x] `propose-disposition`
+  - [x] `commit-disposition`
 - [x] Fixture mode: JD / resume / scorecard as local files so loops work without ATS — `packages/opencode/src/product/fixtures/hiring/`
 - [x] One provider path E2E in the moks-branded binary — `test/product/hiring-e2e.test.ts` (TestLLMServer / cli-process)
 
 ### 4. Edges (read-first)
 
-- [x] Wire **Ashby MCP read** (config + allowlist) — sample `packages/opencode/src/product/fixtures/mcp/opencode.ashby-mock.json`; helpers `src/product/ashby-edge.ts`; `ta` agent merges allow-reads/deny-writes (live Ashby sandbox still TBD)
+- [x] Wire **Ashby MCP read** (config + allowlist) — sample `packages/opencode/src/product/fixtures/mcp/opencode.ashby-mock.json`; helpers `src/product/ashby-edge.ts`; `recruit` agent merges allow-reads/deny-writes (live Ashby sandbox still TBD)
 - [x] Until sandbox: mock MCP + fixtures — `src/product/fixtures/mcp/ashby-mock.ts` + `ashby-data.json`
-- [x] Deny MCP **writes** by default — `ashby_change_stage` / `ashby_create_note` deny on `ta` + sample config; mock returns error pointing at propose/apply
+- [x] Deny MCP **writes** by default — `ashby_change_stage` / `ashby_create_note` deny on `recruit` + sample config; mock returns error pointing at commit/push
 - [ ] Optional notes read later — don’t block v0
 
 ### 5. Headless mode (not a pillar)
 
 - [x] Same verbs via headless / `--json` (scriptable, exit codes)
-  - Decision: `propose|status|apply --json` (apply exit 2 = `needs_confirm`)
+  - Decision: `commit|status|push --json` (push exit 2 = `needs_confirm`)
   - Agent: `run --json` ≡ `--format json` (NDJSON events); still reject mini+json
   - Docs: `packages/opencode/src/product/headless.md` + README / fixtures notes
   - Smoke: `test/product/headless.test.ts` + existing `test/decision/cli-smoke.test.ts`
@@ -69,7 +69,7 @@ We mold the OpenCode fork — we do not rebuild the harness from zero.
 
 ### 6. Light success check
 
-- [x] Know (even manually) whether an eng-TA ran a real req this week — `moks activity --days 7` summarizes local decision receipts (propose/apply). Signal is light automation only; “real req” vs fixtures remains a human judgment in the TUI. No phone-home telemetry.
+- [x] Know (even manually) whether an eng-TA ran a real req this week — `moks activity --days 7` summarizes local decision receipts (commit/push). Signal is light automation only; “real req” vs fixtures remains a human judgment in the TUI. No phone-home telemetry.
 
 ## Explicitly defer
 
@@ -94,5 +94,5 @@ We mold the OpenCode fork — we do not rebuild the harness from zero.
 
 - Edges are adapters, not identity.  
 - Open may *feel* like an MCP host; it must not *become* a sovereign thin client we migrate off of.  
-- Writes prefer propose → receipt → apply (later: kernel), not raw vendor stage moves.  
+- Writes prefer commit → receipt → push (later: kernel), not raw vendor stage moves.  
 - Money later is org control of how agents run — not locking the TUI.  

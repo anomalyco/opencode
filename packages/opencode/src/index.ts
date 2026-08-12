@@ -28,9 +28,9 @@ import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
-import { ProposeCommand } from "./cli/cmd/propose"
+import { CommitCommand } from "./cli/cmd/commit"
 import { StatusCommand } from "./cli/cmd/status"
-import { ApplyCommand } from "./cli/cmd/apply"
+import { PushCommand } from "./cli/cmd/push"
 import { ActivityCommand } from "./cli/cmd/activity"
 import { Heap } from "./cli/heap"
 
@@ -105,9 +105,9 @@ const cli = yargs(args)
   .command(SessionCommand)
   .command(PluginCommand)
   .command(DbCommand)
-  .command(ProposeCommand)
+  .command(CommitCommand)
   .command(StatusCommand)
-  .command(ApplyCommand)
+  .command(PushCommand)
   .command(ActivityCommand)
   .fail((msg, err) => {
     if (

@@ -1,4 +1,4 @@
-// Subprocess E2E: moks-branded CLI entry → ta agent → fixture attaches → mock LLM.
+// Subprocess E2E: moks-branded CLI entry → recruit agent → fixture attaches → mock LLM.
 // Uses TestLLMServer via cli-process (no live paid API).
 import { expect } from "bun:test"
 import { Effect } from "effect"
@@ -9,7 +9,7 @@ import { HiringFixtures } from "../../src/product/fixtures"
 const FIXTURE_SENTINEL = "Northline Analytics"
 
 cliIt.concurrent(
-  "moks run --agent ta with hiring fixtures exits 0 against mock LLM",
+  "moks run --agent recruit with hiring fixtures exits 0 against mock LLM",
   ({ home, llm, opencode }) =>
     Effect.gen(function* () {
       const jd = path.join(home, "jd.md")
@@ -25,14 +25,14 @@ cliIt.concurrent(
 
       // `--` stops yargs from treating the prompt as another `--file` value.
       const result = yield* opencode.run("Score this candidate using the score-candidate skill", {
-        agent: "ta",
+        agent: "recruit",
         extraArgs: ["--file", jd, "--file", resume, "--file", scorecard, "--"],
         timeoutMs: 60_000,
       })
 
-      opencode.expectExit(result, 0, "moks run --agent ta")
+      opencode.expectExit(result, 0, "moks run --agent recruit")
       expect(result.stdout).toContain("score: yes")
-      expect(result.stderr).not.toContain('agent "ta" not found')
+      expect(result.stderr).not.toContain('agent "recruit" not found')
 
       const input = JSON.stringify(yield* llm.inputs)
       expect(input).toContain(FIXTURE_SENTINEL)
@@ -42,25 +42,25 @@ cliIt.concurrent(
 )
 
 cliIt.concurrent(
-  "moks run defaults to ta agent when --agent omitted",
+  "moks run defaults to recruit agent when --agent omitted",
   ({ llm, opencode }) =>
     Effect.gen(function* () {
-      yield* llm.text("default ta path ok")
+      yield* llm.text("default recruit path ok")
       const result = yield* opencode.run("ping", { timeoutMs: 45_000 })
       opencode.expectExit(result, 0, "moks run default agent")
-      expect(result.stdout).toContain("default ta path ok")
+      expect(result.stdout).toContain("default recruit path ok")
       expect(result.stderr).not.toContain("Falling back to default agent")
     }),
   60_000,
 )
 
 cliIt.live(
-  "agent list includes native ta",
+  "agent list includes native recruit",
   ({ opencode }) =>
     Effect.gen(function* () {
       const r = yield* opencode.spawn(["agent", "list"])
       opencode.expectExit(r, 0, "agent list")
-      expect(r.stdout.toLowerCase()).toContain("ta")
+      expect(r.stdout.toLowerCase()).toContain("recruit")
     }),
   60_000,
 )

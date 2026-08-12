@@ -10,7 +10,7 @@ import {
   type Target,
 } from "./receipt"
 
-export type ProposeInput = {
+export type CommitInput = {
   action: string
   target?: Target
   reason?: string
@@ -20,14 +20,14 @@ export type ProposeInput = {
   cwd?: string
 }
 
-export type ProposeResult = {
+export type CommitResult = {
   receipt: Receipt
   path: string
 }
 
 export type StatusInput = {
   id?: string
-  proposal_id?: string
+  commit_id?: string
   limit?: number
   cwd?: string
 }
@@ -38,8 +38,8 @@ export type StatusResult = {
   path: string
 }
 
-export type ApplyInput = {
-  proposal_id: string
+export type PushInput = {
+  commit_id: string
   dry_run?: boolean
   confirm?: boolean
   source?: string
@@ -47,11 +47,17 @@ export type ApplyInput = {
   meta?: unknown
 }
 
-export type ApplyResult =
+export type PushResult =
   | { ok: true; receipt: Receipt; path: string }
-  | { ok: false; code: "needs_confirm" | "not_found" | "not_open" | "already_applied"; receipt?: Receipt; path: string; message: string }
+  | {
+      ok: false
+      code: "needs_confirm" | "not_found" | "not_open" | "already_pushed"
+      receipt?: Receipt
+      path: string
+      message: string
+    }
 
-export async function propose(input: ProposeInput): Promise<ProposeResult> {
+export async function commit(input: CommitInput): Promise<CommitResult> {
   const cwd = input.cwd ?? process.cwd()
   const dry_run = input.dry_run ?? true
   const action = input.action
@@ -59,11 +65,11 @@ export async function propose(input: ProposeInput): Promise<ProposeResult> {
   const receipt: Receipt = {
     id: createId(),
     ts: new Date().toISOString(),
-    verb: "propose",
+    verb: "commit",
     action,
     target: input.target,
     dry_run,
-    state: "proposed",
+    state: "committed",
     adverse,
     reason: input.reason,
     meta: scrubMeta(input.meta),
@@ -79,49 +85,49 @@ export async function status(input: StatusInput = {}): Promise<StatusResult> {
   const newestFirst = all.slice().reverse()
   const filtered = newestFirst.filter((r) => {
     if (input.id && r.id !== input.id) return false
-    if (input.proposal_id && r.proposal_id !== input.proposal_id && r.id !== input.proposal_id) return false
+    if (input.commit_id && r.commit_id !== input.commit_id && r.id !== input.commit_id) return false
     return true
   })
   const limit = input.limit ?? 20
   const receipts = filtered.slice(0, limit)
-  const applied = new Set(
-    all.filter((r) => r.verb === "apply" && r.state === "applied" && r.proposal_id).map((r) => r.proposal_id!),
+  const pushed = new Set(
+    all.filter((r) => r.verb === "push" && r.state === "pushed" && r.commit_id).map((r) => r.commit_id!),
   )
   const open = all
-    .filter((r) => r.verb === "propose" && r.state === "proposed" && !applied.has(r.id))
+    .filter((r) => r.verb === "commit" && r.state === "committed" && !pushed.has(r.id))
     .slice()
     .reverse()
   return { receipts, open, path: receiptFile(resolveReceiptDir(cwd)) }
 }
 
-export async function apply(input: ApplyInput): Promise<ApplyResult> {
+export async function push(input: PushInput): Promise<PushResult> {
   const cwd = input.cwd ?? process.cwd()
   const path = receiptFile(resolveReceiptDir(cwd))
   const dry_run = input.dry_run ?? true
   const all = await readReceipts(cwd)
-  const proposal = all.find((r) => r.id === input.proposal_id && r.verb === "propose")
-  if (!proposal) {
-    return { ok: false, code: "not_found", path, message: `proposal not found: ${input.proposal_id}` }
+  const committed = all.find((r) => r.id === input.commit_id && r.verb === "commit")
+  if (!committed) {
+    return { ok: false, code: "not_found", path, message: `commit not found: ${input.commit_id}` }
   }
-  if (proposal.state !== "proposed") {
-    return { ok: false, code: "not_open", path, message: `proposal is not open: ${input.proposal_id}` }
+  if (committed.state !== "committed") {
+    return { ok: false, code: "not_open", path, message: `commit is not open: ${input.commit_id}` }
   }
-  const already = all.some((r) => r.verb === "apply" && r.state === "applied" && r.proposal_id === proposal.id)
+  const already = all.some((r) => r.verb === "push" && r.state === "pushed" && r.commit_id === committed.id)
   if (already) {
-    return { ok: false, code: "already_applied", path, message: `proposal already applied: ${input.proposal_id}` }
+    return { ok: false, code: "already_pushed", path, message: `commit already pushed: ${input.commit_id}` }
   }
-  if (proposal.adverse && !input.confirm) {
+  if (committed.adverse && !input.confirm) {
     const receipt: Receipt = {
       id: createId(),
       ts: new Date().toISOString(),
-      verb: "apply",
-      action: proposal.action,
-      target: proposal.target,
-      proposal_id: proposal.id,
+      verb: "push",
+      action: committed.action,
+      target: committed.target,
+      commit_id: committed.id,
       dry_run,
       state: "needs_confirm",
       adverse: true,
-      reason: proposal.reason,
+      reason: committed.reason,
       meta: scrubMeta(input.meta),
       source: input.source,
     }
@@ -131,20 +137,20 @@ export async function apply(input: ApplyInput): Promise<ApplyResult> {
       code: "needs_confirm",
       receipt,
       path,
-      message: `adverse action "${proposal.action}" requires --confirm`,
+      message: `adverse action "${committed.action}" requires --confirm`,
     }
   }
   const receipt: Receipt = {
     id: createId(),
     ts: new Date().toISOString(),
-    verb: "apply",
-    action: proposal.action,
-    target: proposal.target,
-    proposal_id: proposal.id,
+    verb: "push",
+    action: committed.action,
+    target: committed.target,
+    commit_id: committed.id,
     dry_run,
-    state: "applied",
-    adverse: proposal.adverse,
-    reason: proposal.reason,
+    state: "pushed",
+    adverse: committed.adverse,
+    reason: committed.reason,
     meta: scrubMeta(input.meta),
     source: input.source,
   }

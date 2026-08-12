@@ -1,6 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "build",
+  "agent": {
+    "build": {
+      "hidden": false,
+    },
+  },
   "provider": {},
   "permission": {},
   "references": {

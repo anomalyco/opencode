@@ -3,16 +3,16 @@ import { effectCmd, fail } from "../effect-cmd"
 import { DecisionVerbs } from "@/decision/verbs"
 import { UI } from "../ui"
 
-export const ApplyCommand = effectCmd({
-  command: "apply",
-  describe: "apply a proposed decision (records receipt only; dry-run by default)",
+export const PushCommand = effectCmd({
+  command: "push",
+  describe: "push a committed decision (records receipt only; dry-run by default)",
   instance: false,
   builder: (yargs) =>
     yargs
-      .option("proposal-id", {
+      .option("commit-id", {
         type: "string",
         demandOption: true,
-        describe: "proposal receipt id to apply",
+        describe: "commit receipt id to push",
       })
       .option("execute", {
         type: "boolean",
@@ -37,7 +37,7 @@ export const ApplyCommand = effectCmd({
         type: "string",
         describe: "working directory override",
       }),
-  handler: Effect.fn("Cli.apply")(function* (args) {
+  handler: Effect.fn("Cli.push")(function* (args) {
     let meta: unknown
     if (args.meta) {
       try {
@@ -47,8 +47,8 @@ export const ApplyCommand = effectCmd({
       }
     }
     const result = yield* Effect.promise(() =>
-      DecisionVerbs.apply({
-        proposal_id: args.proposalId,
+      DecisionVerbs.push({
+        commit_id: args.commitId,
         dry_run: !args.execute,
         confirm: args.confirm,
         source: "cli",
@@ -78,7 +78,7 @@ export const ApplyCommand = effectCmd({
       return
     }
     UI.println(
-      `${UI.Style.TEXT_SUCCESS_BOLD}applied${UI.Style.TEXT_NORMAL} ${result.receipt.id} action=${result.receipt.action} dry_run=${result.receipt.dry_run} proposal=${result.receipt.proposal_id}`,
+      `${UI.Style.TEXT_SUCCESS_BOLD}pushed${UI.Style.TEXT_NORMAL} ${result.receipt.id} action=${result.receipt.action} dry_run=${result.receipt.dry_run} commit=${result.receipt.commit_id}`,
     )
     UI.println(`${UI.Style.TEXT_DIM}${result.path}${UI.Style.TEXT_NORMAL}`)
   }),

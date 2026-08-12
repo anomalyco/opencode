@@ -3,7 +3,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
 
-const WRITE_DISABLED = "writes disabled in mock; use moks propose/apply"
+const WRITE_DISABLED = "writes disabled in mock; use moks commit/push"
 
 type Job = {
   id: string

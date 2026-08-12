@@ -36,11 +36,11 @@ export const ActivityCommand = effectCmd({
           {
             days: summary.days,
             path: summary.path,
-            proposes: summary.proposes,
-            applies: summary.applies,
+            commits: summary.commits,
+            pushes: summary.pushes,
             needs_confirm: summary.needs_confirm,
             active_days: summary.active_days,
-            open_proposals: summary.open_proposals,
+            open_commits: summary.open_commits,
             signal: summary.signal,
             real_req_note: summary.real_req_note,
           },
@@ -54,12 +54,12 @@ export const ActivityCommand = effectCmd({
       UI.println(
         `${UI.Style.TEXT_DIM}Last ${summary.days} days (receipts): no decision activity${UI.Style.TEXT_NORMAL}`,
       )
-      UI.println(`${UI.Style.TEXT_NORMAL_BOLD}Signal: quiet${UI.Style.TEXT_NORMAL} — no eng-TA propose in window`)
+      UI.println(`${UI.Style.TEXT_NORMAL_BOLD}Signal: quiet${UI.Style.TEXT_NORMAL} — no eng-TA commit in window`)
       UI.println(`${UI.Style.TEXT_DIM}Path: ${summary.path}${UI.Style.TEXT_NORMAL}`)
       return
     }
     UI.println(
-      `Last ${summary.days} days (receipts): ${summary.proposes} proposes, ${summary.applies} apply`,
+      `Last ${summary.days} days (receipts): ${summary.commits} commits, ${summary.pushes} push`,
     )
     UI.println(`Active days: ${summary.active_days}`)
     UI.println(

@@ -15,7 +15,7 @@ Score one candidate against the active req. Cite evidence; never invent employme
 4. `.moks/req/{jd,resume,scorecard}.md`
 5. Product fixture samples only as last resort
 
-Load JD + resume at minimum. Use scorecard dimensions when present; otherwise derive dimensions from JD must-haves. Never call Ashby write tools; stage moves use `moks propose` / `moks apply` only.
+Load JD + resume at minimum. Use scorecard dimensions when present; otherwise derive dimensions from JD must-haves. Never call Ashby write tools; stage moves use `moks commit` / `moks push` only.
 
 ## Output format
 
@@ -48,4 +48,4 @@ Load JD + resume at minimum. Use scorecard dimensions when present; otherwise de
 
 - Every score row needs evidence + source path
 - If a dimension is unknown from materials, score as N/A and list under gaps
-- Do not run disposition verbs here; use propose-disposition when recommending a stage move
+- Do not run disposition verbs here; use commit-disposition when recommending a stage move

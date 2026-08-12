@@ -94,7 +94,7 @@ describe("ashby mock handlers", () => {
     const stage = handleAshbyTool("change_stage", { candidate_id: "cand_jordan_lee", stage: "offer" })
     expect(stage.isError).toBe(true)
     expect(stage.content[0].text).toContain("writes disabled in mock")
-    expect(stage.content[0].text).toContain("moks propose/apply")
+    expect(stage.content[0].text).toContain("moks commit/push")
 
     const note = handleAshbyTool("create_note", { candidate_id: "cand_jordan_lee", body: "hi" })
     expect(note.isError).toBe(true)

@@ -62,38 +62,39 @@ describe("headless surface", () => {
     expect(help).toMatch(/--format/)
   })
 
-  test("propose / status / apply --json exit codes", async () => {
+  test("commit / status / push --json exit codes", async () => {
     await using tmp = await tmpdir()
     await fs.mkdir(path.join(tmp.path, ".moks"))
 
-    const proposed = await moks(["propose", "--action", "note", "--reason", "headless"], tmp.path)
-    expect(proposed.code).toBe(0)
-    expect(proposed.json).toBeDefined()
-    const proposalId = (proposed.json as { receipt: { id: string } }).receipt.id
-    expect(proposalId.startsWith("dec_")).toBe(true)
+    const committed = await moks(["commit", "--action", "note", "--reason", "headless"], tmp.path)
+    expect(committed.code).toBe(0)
+    expect(committed.json).toBeDefined()
+    const commitId = (committed.json as { receipt: { id: string } }).receipt.id
+    expect(commitId.startsWith("dec_")).toBe(true)
 
     const status = await moks(["status", "--limit", "5"], tmp.path)
     expect(status.code).toBe(0)
-    expect((status.json as { open: { id: string }[] }).open.some((r) => r.id === proposalId)).toBe(true)
+    expect((status.json as { open: { id: string }[] }).open.some((r) => r.id === commitId)).toBe(true)
 
-    const applied = await moks(["apply", "--proposal-id", proposalId], tmp.path)
-    expect(applied.code).toBe(0)
-    expect((applied.json as { ok: boolean }).ok).toBe(true)
+    const pushed = await moks(["push", "--commit-id", commitId], tmp.path)
+    expect(pushed.code).toBe(0)
+    expect((pushed.json as { ok: boolean }).ok).toBe(true)
   })
 
-  test("apply --json adverse needs_confirm exits 2", async () => {
+  test("push --json adverse needs_confirm exits 2", async () => {
     await using tmp = await tmpdir()
     await fs.mkdir(path.join(tmp.path, ".moks"))
 
-    const proposed = await moks(["propose", "--action", "reject", "--reason", "fit"], tmp.path)
-    expect(proposed.code).toBe(0)
-    const proposalId = (proposed.json as { receipt: { id: string } }).receipt.id
+    const committed = await moks(["commit", "--action", "reject", "--reason", "fit"], tmp.path)
+    expect(committed.code).toBe(0)
+    const commitId = (committed.json as { receipt: { id: string } }).receipt.id
 
-    const blocked = await moks(["apply", "--proposal-id", proposalId], tmp.path)
+    const blocked = await moks(["push", "--commit-id", commitId], tmp.path)
     expect(blocked.code).toBe(2)
     expect((blocked.json as { error: string }).error).toBe("needs_confirm")
   })
 })
+
 
 cliIt.concurrent(
   "run --json emits NDJSON events and exits 0",

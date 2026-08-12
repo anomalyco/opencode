@@ -63,10 +63,10 @@ describe("decision/receipt", () => {
     const receipt: Receipt = {
       id: createId(),
       ts: new Date().toISOString(),
-      verb: "propose",
+      verb: "commit",
       action: "note",
       dry_run: true,
-      state: "proposed",
+      state: "committed",
       adverse: false,
     }
     await appendReceipt(receipt, tmp.path)
@@ -89,20 +89,20 @@ describe("decision/receipt", () => {
         JSON.stringify({
           id: "dec_a",
           ts: "t",
-          verb: "propose",
+          verb: "commit",
           action: "note",
           dry_run: true,
-          state: "proposed",
+          state: "committed",
           adverse: false,
         }),
         "not-json",
         JSON.stringify({
           id: "dec_b",
           ts: "t",
-          verb: "propose",
+          verb: "commit",
           action: "note",
           dry_run: true,
-          state: "proposed",
+          state: "committed",
           adverse: false,
         }),
       ].join("\n") + "\n",

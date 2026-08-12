@@ -58,7 +58,7 @@ import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
-import { runApplyFlow, runDecisionsFlow, runProposeFlow } from "./ui/dialog-decision"
+import { runCommitFlow, runDecisionsFlow, runPushFlow } from "./ui/dialog-decision"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
 import { KVProvider, useKV } from "./context/kv"
@@ -771,12 +771,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "System",
       },
       {
-        name: "decision.propose",
-        title: "Propose decision",
-        slashName: "propose",
+        name: "decision.commit",
+        title: "Commit decision",
+        slashName: "commit",
         category: "Decision",
         run: () => {
-          void runProposeFlow({
+          void runCommitFlow({
             dialog,
             toast,
             cwd: project.instance.directory() || sdk.directory || undefined,
@@ -784,12 +784,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
-        name: "decision.apply",
-        title: "Apply decision",
-        slashName: "apply",
+        name: "decision.push",
+        title: "Push decision",
+        slashName: "push",
         category: "Decision",
         run: () => {
-          void runApplyFlow({
+          void runPushFlow({
             dialog,
             toast,
             cwd: project.instance.directory() || sdk.directory || undefined,

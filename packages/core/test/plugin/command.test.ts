@@ -34,14 +34,21 @@ describe("CommandPlugin.Plugin", () => {
 
       expect(yield* command.get("init")).toMatchObject({
         name: "init",
-        description: "guided AGENTS.md setup",
+        description: "scaffold a new requisition workspace under .moks",
       })
       expect((yield* command.get("init"))?.template).toContain("`/repo`")
+      expect((yield* command.get("init"))?.template).toContain(".moks/")
+      expect(yield* command.get("init-code")).toMatchObject({
+        name: "init-code",
+        description: "guided AGENTS.md setup for coding agents",
+      })
+      expect((yield* command.get("init-code"))?.template).toContain("AGENTS.md")
       expect(yield* command.get("review")).toMatchObject({
         name: "review",
-        description: "review changes [commit|branch|pr], defaults to uncommitted",
+        description: "review candidate/req packet before commit/push",
         subtask: true,
       })
+      expect((yield* command.get("review"))?.template).toContain("hiring packet")
     }),
   )
 })

@@ -66,9 +66,11 @@ export function Footer() {
                 {permissions().length > 1 ? "s" : ""}
               </text>
             </Show>
-            <text fg={theme.text}>
-              <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
-            </text>
+            <Show when={sync.data.config.lsp}>
+              <text fg={theme.text}>
+                <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
+              </text>
+            </Show>
             <Show when={mcp()}>
               <text fg={theme.text}>
                 <Switch>
