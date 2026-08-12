@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { marqueeText } from "../../src/util/marquee"
+import { marqueeCycleWidth, marqueeText } from "../../src/util/marquee"
 import { stringWidth } from "../../src/util/string-width"
 
 describe("marquee text", () => {
@@ -10,8 +10,14 @@ describe("marquee text", () => {
   test("starts clipped and scrolls through a long title", () => {
     expect(marqueeText("A long session title", 8, 0)).toBe("A long s")
     expect(marqueeText("A long session title", 8, 2)).toBe("long ses")
-    expect(marqueeText("A long session title", 8, 15)).toBe("title   ")
-    expect(marqueeText("A long session title", 8, 20)).toBe("    A lo")
+    expect(marqueeText("A long session title", 8, 15)).toBe("title · ")
+    expect(marqueeText("A long session title", 8, 20)).toBe(" · A lon")
+  })
+
+  test("loops after one spaced dot separator", () => {
+    const title = "A long session title"
+    expect(marqueeText(title, 8, marqueeCycleWidth(title) - 3)).toBe(" · A lon")
+    expect(marqueeText(title, 8, marqueeCycleWidth(title))).toBe("A long s")
   })
 
   test("clips wide graphemes to terminal cells", () => {

@@ -23,7 +23,7 @@ import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
 import { tint } from "../theme/color"
 import { SESSION_SIDEBAR_WIDTH } from "../ui/layout"
 import { projectName } from "../util/project"
-import { marqueeText } from "../util/marquee"
+import { marqueeCycleWidth, marqueeText } from "../util/marquee"
 
 // A long title fades out over its last cells instead of cutting hard.
 const FADE_WIDTH = 4
@@ -60,27 +60,63 @@ function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: nu
   return opacity === 0 ? color : tint(color, background, opacity)
 }
 
-function createMarquee(hovered: () => string | undefined, animations: () => boolean) {
+function createMarquee(animations: () => boolean) {
   const [offset, setOffset] = createSignal(0)
+  const [active, setActive] = createSignal<string>()
   const leading = createAnimatable({ opacity: 0 }, { enabled: animations, transition: tween({ duration: 0.25 }) })
+  let delay: ReturnType<typeof setTimeout> | undefined
+  let interval: ReturnType<typeof setInterval> | undefined
+  let returning = false
 
-  createEffect(() => {
+  const clear = () => {
+    if (delay) clearTimeout(delay)
+    if (interval) clearInterval(interval)
+    delay = undefined
+    interval = undefined
+  }
+  const scroll = () => {
+    interval = setInterval(() => setOffset((value) => value + 1), MARQUEE_INTERVAL)
+  }
+  const enter = (sessionID: string) => {
+    if (active() === sessionID && !returning) return
+    clear()
+    if (active() === sessionID) {
+      returning = false
+      return scroll()
+    }
+    setActive(sessionID)
     setOffset(0)
+    returning = false
     leading.jump({ opacity: 0 })
-    if (!hovered()) return
-    let interval: ReturnType<typeof setInterval> | undefined
-    const delay = setTimeout(() => {
+    delay = setTimeout(() => {
       setOffset(1)
       leading.animate({ opacity: 1 })
-      interval = setInterval(() => setOffset((value) => value + 1), MARQUEE_INTERVAL)
+      scroll()
     }, MARQUEE_DELAY)
-    onCleanup(() => {
-      clearTimeout(delay)
-      if (interval) clearInterval(interval)
-    })
-  })
+  }
+  const leave = (sessionID: string, cycleWidth: number) => {
+    if (active() !== sessionID) return
+    clear()
+    if (offset() === 0) {
+      setActive(undefined)
+      return
+    }
+    returning = true
+    interval = setInterval(() => {
+      setOffset((value) => {
+        const next = value + 1
+        if (next % cycleWidth !== 0) return next
+        clear()
+        returning = false
+        setActive(undefined)
+        leading.animate({ opacity: 0 })
+        return 0
+      })
+    }, MARQUEE_INTERVAL)
+  }
+  onCleanup(clear)
 
-  return { offset, leading: () => leading.value().opacity }
+  return { offset, active, enter, leave, leading: () => leading.value().opacity }
 }
 
 export function SessionTabs(
@@ -107,7 +143,24 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
   const separatorLowerPulseColor = createMemo(() => tint(theme.background.default, theme.text.default, 0.05))
   const [hovered, setHovered] = createSignal<string>()
   const [addHovered, setAddHovered] = createSignal(false)
-  const marquee = createMarquee(hovered, animations)
+  const marquee = createMarquee(animations)
+  let hoverClear: ReturnType<typeof setTimeout> | undefined
+  const enter = (sessionID: string) => {
+    if (hoverClear) clearTimeout(hoverClear)
+    setHovered(sessionID)
+    marquee.enter(sessionID)
+  }
+  const leave = (tab: SessionTab) => {
+    if (hoverClear) clearTimeout(hoverClear)
+    hoverClear = setTimeout(() => {
+      if (hovered() !== tab.sessionID) return
+      setHovered(undefined)
+      marquee.leave(tab.sessionID, marqueeCycleWidth(tab.title ?? "Untitled session"))
+    })
+  }
+  onCleanup(() => {
+    if (hoverClear) clearTimeout(hoverClear)
+  })
   const [dragging, setDragging] = createSignal<string>()
   const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
   const newTab = () => tabs.newTab?.() ?? false
@@ -185,7 +238,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const numberWidth = () => 2
               const titleWidth = () => Math.max(1, width() - numberWidth() - 2 - (hovered() === tab.sessionID ? 1 : 0))
               const title = () => tab.title ?? "Untitled session"
-              const scrolling = () => hovered() === tab.sessionID && marquee.offset() > 0
+              const scrolling = () => marquee.active() === tab.sessionID && marquee.offset() > 0
               const visibleTitle = createMemo(() =>
                 scrolling()
                   ? marqueeText(title(), titleWidth(), marquee.offset())
@@ -274,8 +327,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   position="relative"
                   flexDirection="column"
                   backgroundColor={background()}
-                  onMouseOver={() => setHovered(tab.sessionID)}
-                  onMouseOut={() => setHovered(undefined)}
+                  onMouseOver={() => enter(tab.sessionID)}
+                  onMouseOut={() => leave(tab)}
                   onMouseDown={() => {
                     setHovered(tab.sessionID)
                     setDragging(tab.sessionID)
@@ -494,7 +547,24 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
   const animations = () => props.animations ?? config.animations ?? true
   const [hovered, setHovered] = createSignal<string>()
   const [addHovered, setAddHovered] = createSignal(false)
-  const marquee = createMarquee(hovered, animations)
+  const marquee = createMarquee(animations)
+  let hoverClear: ReturnType<typeof setTimeout> | undefined
+  const enter = (sessionID: string) => {
+    if (hoverClear) clearTimeout(hoverClear)
+    setHovered(sessionID)
+    marquee.enter(sessionID)
+  }
+  const leave = (tab: SessionTab) => {
+    if (hoverClear) clearTimeout(hoverClear)
+    hoverClear = setTimeout(() => {
+      if (hovered() !== tab.sessionID) return
+      setHovered(undefined)
+      marquee.leave(tab.sessionID, marqueeCycleWidth(tab.title ?? "Untitled session"))
+    })
+  }
+  onCleanup(() => {
+    if (hoverClear) clearTimeout(hoverClear)
+  })
   const [dragging, setDragging] = createSignal<string>()
   // A drag reorders a local preview and persists one move on release instead of writing
   // per slot crossing; the preview holds after release until the store reflects the move,
@@ -682,7 +752,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           // Hovering reveals the close mark, so the title's right bound shifts left of it.
           const availableTitleWidth = () =>
             Math.max(1, width() - 1 - numberWidth() - (hovered() === tab.sessionID ? 2 : 0))
-          const scrolling = () => hovered() === tab.sessionID && marquee.offset() > 0
+          const scrolling = () => marquee.active() === tab.sessionID && marquee.offset() > 0
           const visibleTitle = createMemo(() =>
             scrolling()
               ? marqueeText(title(), availableTitleWidth(), marquee.offset())
@@ -741,8 +811,8 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
               position="relative"
               flexDirection="row"
               backgroundColor={background()}
-              onMouseOver={() => setHovered(tab.sessionID)}
-              onMouseOut={() => setHovered(undefined)}
+              onMouseOver={() => enter(tab.sessionID)}
+              onMouseOut={() => leave(tab)}
               onMouseDown={() => {
                 setHovered(tab.sessionID)
                 setDragging(tab.sessionID)

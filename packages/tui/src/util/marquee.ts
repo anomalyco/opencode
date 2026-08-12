@@ -1,14 +1,18 @@
 import { Locale } from "./locale"
 import { stringWidth } from "./string-width"
 
-const GAP = "    "
+const GAP = " · "
+
+export function marqueeCycleWidth(value: string) {
+  return stringWidth(value + GAP)
+}
 
 export function marqueeText(value: string, width: number, offset: number) {
   if (width <= 0) return ""
   if (stringWidth(value) <= width || offset <= 0) return Locale.takeWidth(value, width)
 
   const loop = value + GAP
-  const cursor = offset % stringWidth(loop)
+  const cursor = offset % marqueeCycleWidth(value)
   const segments = Locale.graphemes(loop + loop)
   const start = segments.reduce(
     (state, segment, index) =>
