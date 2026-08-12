@@ -617,7 +617,11 @@ function makeUsageService(sdk: OpencodeClient) {
         })
         .catch(() => undefined)
       limits.set(key, next)
-      return yield* Effect.promise(() => next)
+      const value = yield* Effect.promise(() => next)
+      // An unknown limit must not stick: evict the failed lookup so the next
+      // usage update retries instead of never reporting again.
+      if (value === undefined && limits.get(key) === next) limits.delete(key)
+      return value
     },
   )
 
@@ -796,16 +800,23 @@ function defaultModelFromConfig(
   const opencodeModel = opencodeProvider ? Provider.sort(Object.values(opencodeProvider.models))[0] : undefined
   if (opencodeProvider && opencodeModel) return { providerID: opencodeProvider.id, modelID: opencodeModel.id }
 
-  const best = Provider.sort(Object.values(providers).flatMap((provider) => Object.values(provider.models)))[0]
+  const best = Provider.sort(
+    automaticModels(Object.values(providers).flatMap((provider) => Object.values(provider.models))),
+  )[0]
   if (best) return { providerID: best.providerID, modelID: best.id }
   if (configured) return configured
 }
 
 function selectDefaultModel(snapshot: Directory.Snapshot) {
   if (snapshot.defaultModel) return snapshot.defaultModel
-  const model = snapshot.modelOptions[0]
+  const model = automaticModels(snapshot.modelOptions)[0]
   if (model) return { providerID: model.providerID, modelID: model.modelID }
   return { providerID: "unknown" as ProviderV2.ID, modelID: "unknown" as ModelV2.ID }
+}
+
+function automaticModels<T extends { providerID: ProviderV2.ID }>(models: readonly T[]) {
+  const withoutClaudeACP = models.filter((model) => model.providerID !== Provider.ClaudeACPProviderID)
+  return withoutClaudeACP.length > 0 ? withoutClaudeACP : [...models]
 }
 
 function detectSlashCommand(parts: ReturnType<typeof promptContentToParts>) {
@@ -877,6 +888,10 @@ function promptErrorMessage(error: AssistantError) {
   return "OpenCode prompt failed"
 }
 
+// One usage service per SDK client so the context-limit cache survives across
+// updates — rebuilding it per call would refetch providers on every update.
+const usageServices = new WeakMap<OpencodeClient, UsageService.Interface>()
+
 function sendUsageUpdate(
   usage: UsageService.Interface | undefined,
   sdk: OpencodeClient,
@@ -885,7 +900,12 @@ function sendUsageUpdate(
   directory: string,
 ) {
   if (!connection) return Effect.void
-  return (usage ?? makeUsageService(sdk)).sendUpdate({
+  let service = usage ?? usageServices.get(sdk)
+  if (!service) {
+    service = makeUsageService(sdk)
+    usageServices.set(sdk, service)
+  }
+  return service.sendUpdate({
     connection,
     sessionID,
     directory,
@@ -1040,7 +1060,10 @@ function restoreFromMessages(messages: readonly MessageInfo[]) {
   )
   if (user?.model?.providerID && user.model.modelID) {
     return {
-      model: { providerID: user.model.providerID as ProviderV2.ID, modelID: user.model.modelID as ModelV2.ID },
+      model: normalizeRestoredModel({
+        providerID: user.model.providerID as ProviderV2.ID,
+        modelID: user.model.modelID as ModelV2.ID,
+      }),
       variant: user.model.variant,
       modeId: user.agent,
     }
@@ -1049,13 +1072,23 @@ function restoreFromMessages(messages: readonly MessageInfo[]) {
   const assistant = messages.findLast((message) => message.providerID && message.modelID)
   if (assistant?.providerID && assistant.modelID) {
     return {
-      model: { providerID: assistant.providerID as ProviderV2.ID, modelID: assistant.modelID as ModelV2.ID },
+      model: normalizeRestoredModel({
+        providerID: assistant.providerID as ProviderV2.ID,
+        modelID: assistant.modelID as ModelV2.ID,
+      }),
       variant: assistant.variant,
       modeId: assistant.mode ?? assistant.agent,
     }
   }
 
   return {}
+}
+
+function normalizeRestoredModel(model: Directory.DefaultModel) {
+  if (model.providerID === Provider.ClaudeACPProviderID && model.modelID === ModelV2.ID.make("default")) {
+    return { providerID: Provider.ClaudeACPProviderID, modelID: Provider.ClaudeACPModelID }
+  }
+  return model
 }
 
 function isSdkResponse<T>(value: T | SdkResponse<T>): value is SdkResponse<T> {

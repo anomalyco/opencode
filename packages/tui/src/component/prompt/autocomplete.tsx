@@ -23,6 +23,8 @@ import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/sdk/v2"
+import { useLocal } from "../../context/local"
+import { ClaudeACPProviderID, ClaudeACPSlashCommands, isClaudeACPSlashCommand } from "../../util/claude-acp"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -89,6 +91,7 @@ export function Autocomplete(props: {
   const sync = useSync()
   const data = useData()
   const project = useProject()
+  const local = useLocal()
   const slashes = useCommandSlashes()
   const modeStack = useOpencodeModeStack()
   const { theme } = useTheme()
@@ -237,6 +240,14 @@ export function Autocomplete(props: {
     if (part.type === "file" && part.source && part.source.type === "file") {
       frecency.updateFrecency(part.source.path)
     }
+  }
+
+  function insertSlashCommand(name: string) {
+    const newText = "/" + name + " "
+    const cursor = props.input().logicalCursor
+    props.input().deleteRange(0, 0, cursor.row, cursor.col)
+    props.input().insertText(newText)
+    props.input().cursorOffset = Bun.stringWidth(newText)
   }
 
   function createFilePart(
@@ -444,22 +455,44 @@ export function Autocomplete(props: {
       ),
   )
 
+  const isClaudeACPSelected = createMemo(() => local.model.current()?.providerID === ClaudeACPProviderID)
+
+  const claudeACPSlashes = createMemo((): AutocompleteOption[] => {
+    if (!isClaudeACPSelected()) return []
+    return ClaudeACPSlashCommands.map((command) => ({
+      display: "/" + command.name,
+      description: command.hint ? `${command.hint} ${command.description}` : command.description,
+      onSelect: () => insertSlashCommand(command.name),
+    }))
+  })
+
+  function localSlashForClaudeACP(item: AutocompleteOption) {
+    if (!isClaudeACPSelected()) return item
+    if (isClaudeACPSlashCommand(item.display.trimEnd())) return
+    const aliases = item.aliases?.filter((alias) => !isClaudeACPSlashCommand(alias.trimEnd()))
+    return {
+      ...item,
+      aliases: aliases?.length ? aliases : undefined,
+    }
+  }
+
   const commands = createMemo((): AutocompleteOption[] => {
-    const results: AutocompleteOption[] = [...slashes()]
+    const results: AutocompleteOption[] = [
+      ...slashes().flatMap((item) => {
+        const slash = localSlashForClaudeACP(item)
+        return slash ? [slash] : []
+      }),
+      ...claudeACPSlashes(),
+    ]
 
     for (const serverCommand of sync.data.command) {
       if (serverCommand.source === "skill") continue
+      if (isClaudeACPSelected() && isClaudeACPSlashCommand(serverCommand.name)) continue
       const label = serverCommand.source === "mcp" ? ":mcp" : ""
       results.push({
         display: "/" + serverCommand.name + label,
         description: serverCommand.description,
-        onSelect: () => {
-          const newText = "/" + serverCommand.name + " "
-          const cursor = props.input().logicalCursor
-          props.input().deleteRange(0, 0, cursor.row, cursor.col)
-          props.input().insertText(newText)
-          props.input().cursorOffset = Bun.stringWidth(newText)
-        },
+        onSelect: () => insertSlashCommand(serverCommand.name),
       })
     }
 

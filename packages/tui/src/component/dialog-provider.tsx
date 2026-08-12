@@ -15,6 +15,7 @@ import { isConsoleManagedProvider } from "../util/provider-origin"
 import { useConnected } from "./use-connected"
 import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
+import { ClaudeACPProviderID } from "../util/claude-acp"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -61,6 +62,7 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
         description: {
           opencode: "(Recommended)",
           anthropic: "(API key)",
+          [ClaudeACPProviderID]: "(Claude Code)",
           openai: "(ChatGPT Plus/Pro or API key)",
           "opencode-go": "Low cost subscription for everyone",
         }[provider.id],
@@ -144,6 +146,14 @@ export function createDialogProviderOptions() {
           gutter: connected && onboarded() ? () => <text fg={theme.success}>✓</text> : undefined,
           async onSelect() {
             if (consoleManaged) return
+            if (providerID === ClaudeACPProviderID) {
+              toast.show({
+                variant: "info",
+                message: "Claude uses Claude Code auth. Select it from /models.",
+              })
+              dialog.clear()
+              return
+            }
 
             const methods = sync.data.provider_auth[providerID] ?? [
               {

@@ -83,8 +83,19 @@ export function messageLoaderFromSDK(sdk: SDK): MessageLoaderInterface {
 
 export const messageLoaderLayer = (sdk: SDK) => Layer.succeed(MessageLoader, messageLoaderFromSDK(sdk))
 
+// Context occupancy for ACP usage_update: prefer the provider-reported total
+// (for Claude-via-ACP this is the agent's own context measurement), otherwise
+// sum all token types — the current turn's output becomes the next turn's
+// input, matching the reference claude-agent-acp adapter's accounting.
 export function contextTokens(message: AssistantTokenCost): number {
-  return message.tokens.input + message.tokens.cache.read + message.tokens.cache.write
+  return (
+    message.tokens.total ??
+    message.tokens.input +
+      message.tokens.output +
+      message.tokens.reasoning +
+      message.tokens.cache.read +
+      message.tokens.cache.write
+  )
 }
 
 export function buildUsage(message: AssistantTokenCost): Usage {
@@ -151,12 +162,12 @@ const layer = Layer.effect(
       readonly providerID: ProviderV2.ID
       readonly modelID: ModelV2.ID
     }) {
-      return yield* SynchronizedRef.modifyEffect(
+      const [key, cached] = yield* SynchronizedRef.modifyEffect(
         limits,
         Effect.fnUntraced(function* (items) {
           const key = `${input.directory}\u0000${input.providerID}\u0000${input.modelID}`
           const current = items.get(key)
-          if (current) return [current, items] as const
+          if (current) return [[key, current] as const, items] as const
           const next = yield* Effect.cached(
             contextLimitLoader.providers(input.directory).pipe(
               Effect.map((providers) => findContextLimit(providers, input.providerID, input.modelID)),
@@ -167,9 +178,20 @@ const layer = Layer.effect(
               ),
             ),
           )
-          return [next, new Map(items).set(key, next)] as const
+          return [[key, next] as const, new Map(items).set(key, next)] as const
         }),
       )
+      const value = yield* cached
+      if (value !== undefined) return value
+      // An unknown limit must not stick: evict the failed lookup so the next
+      // usage update retries instead of never reporting again.
+      yield* SynchronizedRef.update(limits, (items) => {
+        if (items.get(key) !== cached) return items
+        const next = new Map(items)
+        next.delete(key)
+        return next
+      })
+      return value
     })
 
     const contextLimit = Effect.fn("ACPUsage.contextLimit")(function* (input: {
@@ -177,7 +199,7 @@ const layer = Layer.effect(
       readonly providerID: ProviderV2.ID
       readonly modelID: ModelV2.ID
     }) {
-      return yield* yield* cachedLimit(input)
+      return yield* cachedLimit(input)
     })
 
     const sendUpdate = Effect.fn("ACPUsage.sendUpdate")(function* (input: {

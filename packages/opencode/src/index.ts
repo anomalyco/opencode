@@ -30,6 +30,11 @@ import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 
+const launchCwd = process.env.OPENCODE_LAUNCH_CWD
+if (launchCwd) {
+  process.chdir(launchCwd)
+}
+
 const args = hideBin(process.argv)
 
 function show(out: string) {

@@ -1,7 +1,10 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
+import type { McpServer } from "@agentclientprotocol/sdk"
+import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
-import { Provider } from "@/provider/provider"
+import { ClaudeACPProviderID, Provider } from "@/provider/provider"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Context, Effect, Layer } from "effect"
@@ -17,6 +20,7 @@ import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { Permission } from "@/permission"
+import { Question } from "@/question"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Wildcard } from "@/util/wildcard"
@@ -27,14 +31,17 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
+import { ClaudeACP } from "./llm/claude-acp"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+import { Session } from "./session"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
 export type StreamInput = {
+  cwd?: string
   user: SessionV1.User
-  sessionID: string
+  sessionID: SessionID
   parentSessionID?: string
   model: Provider.Model
   agent: Agent.Info
@@ -59,6 +66,25 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/LL
 
 export const use = serviceUse(Service)
 
+export function claudeACPPromptBridge(input: {
+  readonly bridge: EffectBridge.Shape
+  readonly abort: AbortSignal
+  readonly permission: Permission.Interface
+  readonly question: Question.Interface
+}) {
+  return {
+    permission: {
+      ask: (request: PermissionV1.AskInput) =>
+        input.bridge.promise(input.permission.askWithReply(request), { signal: input.abort }),
+      reply: (request: PermissionV1.ReplyInput) => input.bridge.promise(input.permission.reply(request)),
+    },
+    question: {
+      ask: (request: Parameters<Question.Interface["ask"]>[0]) =>
+        input.bridge.promise(input.question.ask(request), { signal: input.abort }),
+    },
+  }
+}
+
 const live: Layer.Layer<
   Service,
   never,
@@ -67,9 +93,11 @@ const live: Layer.Layer<
   | Provider.Service
   | Plugin.Service
   | Permission.Service
+  | Question.Service
   | EventV2Bridge.Service
   | LLMClientService
   | RuntimeFlags.Service
+  | Session.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -78,9 +106,11 @@ const live: Layer.Layer<
     const provider = yield* Provider.Service
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
+    const question = yield* Question.Service
     const events = yield* EventV2Bridge.Service
     const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
+    const session = yield* Session.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       yield* Effect.logInfo("stream", {
@@ -91,6 +121,60 @@ const live: Layer.Layer<
         agent: input.agent.name,
         mode: input.agent.mode,
       })
+
+      if (input.model.providerID === ClaudeACPProviderID) {
+        const unsupported = claudeACPUnsupported(input)
+        if (unsupported) {
+          return {
+            type: "native" as const,
+            stream: Stream.fail(new Error(unsupported)),
+          }
+        }
+        if (!input.cwd) {
+          return {
+            type: "native" as const,
+            stream: Stream.fail(new Error("Claude ACP requires a session cwd")),
+          }
+        }
+        const cfg = yield* config.get()
+        const bridge = yield* EffectBridge.make()
+        const prompts = claudeACPPromptBridge({ bridge, abort: input.abort, permission: perm, question })
+        yield* Effect.logInfo("llm runtime selected", {
+          "llm.runtime": "claude-acp",
+          "llm.provider": input.model.providerID,
+          "llm.model": input.model.id,
+        })
+        return {
+          type: "native" as const,
+          stream: ClaudeACP.stream({
+            cwd: input.cwd,
+            sessionID: input.sessionID,
+            modelID: input.model.id,
+            agent: input.agent.name,
+            mcpServers: claudeMcpServers(cfg),
+            messages: claudeACPMessages(input.system, input.messages),
+            abort: input.abort,
+            // Claude ACP owns tool execution through Claude Code plus MCP servers;
+            // OpenCode AI SDK tools are intentionally not forwarded here.
+            ruleset: Permission.merge(input.agent.permission, input.permission ?? []),
+            permission: prompts.permission,
+            question: prompts.question,
+            onConfig: (config) =>
+              bridge.promise(
+                Effect.gen(function* () {
+                  const current = yield* session.get(input.sessionID)
+                  yield* session.setMetadata({
+                    sessionID: input.sessionID,
+                    metadata: {
+                      ...current.metadata,
+                      claudeAcp: config,
+                    },
+                  })
+                }),
+              ),
+          }),
+        }
+      }
 
       const [language, cfg, item, info] = yield* Effect.all(
         [
@@ -386,6 +470,58 @@ const live: Layer.Layer<
 
 export const hasToolCalls = LLMRequestPrep.hasToolCalls
 
+function claudeACPUnsupported(input: StreamRequest) {
+  if (input.toolChoice && input.toolChoice !== "auto") {
+    return `Claude ACP does not support toolChoice "${input.toolChoice}"`
+  }
+}
+
+function claudeACPMessages(system: string[], messages: ModelMessage[]) {
+  const text = system.map((item) => item.trim()).filter(Boolean).join("\n\n")
+  if (!text) return messages
+  return [{ role: "system" as const, content: text }, ...messages]
+}
+
+function claudeMcpServers(config: ConfigV1.Info): McpServer[] {
+  return Object.entries(config.mcp ?? {}).flatMap<McpServer>(([name, server]) => {
+    if (!isMcpConfigured(server) || server.enabled === false) return []
+
+    if (server.type === "local") {
+      const [command, ...args] = server.command
+      if (!command) return []
+      return [
+        {
+          name,
+          command,
+          args,
+          env: Object.entries(server.environment ?? {}).map(([name, value]) => ({ name, value })),
+        } satisfies McpServer,
+      ]
+    }
+
+    return [
+      {
+        type: remoteMcpType(server.url),
+        name,
+        url: server.url,
+        headers: Object.entries(server.headers ?? {}).map(([name, value]) => ({ name, value })),
+      } satisfies McpServer,
+    ]
+  })
+}
+
+function isMcpConfigured(server: NonNullable<ConfigV1.Info["mcp"]>[string]): server is ConfigMCPV1.Info {
+  return typeof server === "object" && server !== null && "type" in server
+}
+
+function remoteMcpType(url: string): "http" | "sse" {
+  try {
+    const parsed = new URL(url)
+    if (parsed.pathname.toLowerCase().endsWith("/sse")) return "sse"
+  } catch {}
+  return "http"
+}
+
 export const node = LayerNode.make({
   service: Service,
   layer: live,
@@ -395,9 +531,11 @@ export const node = LayerNode.make({
     Provider.node,
     Plugin.node,
     Permission.node,
+    Question.node,
     EventV2Bridge.node,
     llmClient,
     RuntimeFlags.node,
+    Session.node,
   ],
 })
 

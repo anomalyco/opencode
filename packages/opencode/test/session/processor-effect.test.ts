@@ -26,6 +26,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { LLMEvent } from "@opencode-ai/llm"
+import { ProviderTest } from "../fake/provider"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -226,6 +227,47 @@ const fragmentFailureLLM = Layer.succeed(
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
+const interruptedLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.concat(
+        Stream.make(
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-1" }),
+          LLMEvent.textDelta({ id: "text-1", text: "partial interrupted output" }),
+        ),
+        Stream.never,
+      ),
+  }),
+)
+const interruptedProvider = ProviderTest.fake({
+  model: ProviderTest.model({ id: ref.modelID, providerID: ref.providerID }),
+})
+const interruptedEnv = LayerNode.compile(root, [
+  ...replacements,
+  [LLM.node, interruptedLLM],
+  [Provider.node, interruptedProvider.layer],
+])
+const itInterrupted = testEffect(interruptedEnv)
+
+let capturedProcessorInput: (LLM.StreamInput & { cwd?: string }) | undefined
+const captureInputLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: (input) => {
+      capturedProcessorInput = input
+      return Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      )
+    },
+  }),
+)
+const captureInputEnv = LayerNode.compile(root, [...replacements, [LLM.node, captureInputLLM]])
+const itCaptureInput = testEffect(captureInputEnv)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -282,6 +324,126 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
         expect(parts.some((part) => part.type === "text" && part.text === "hello")).toBe(true)
       }),
     { config: (url) => providerCfg(url) },
+  ),
+)
+
+itCaptureInput.live("session.processor effect tests forward assistant cwd to llm input", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        capturedProcessorInput = undefined
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "cwd")
+        const sessionCwd = path.join(path.resolve(dir), "session-cwd")
+        const msg = yield* assistant(chat.id, parent.id, sessionCwd)
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "cwd" }],
+          tools: {},
+        })
+
+        expect(value).toBe("continue")
+        const captured = capturedProcessorInput as (LLM.StreamInput & { cwd?: string }) | undefined
+        expect(captured?.cwd).toBe(sessionCwd)
+        expect(captured?.cwd).not.toBe(process.cwd())
+      }),
+    { config: cfg },
+  ),
+)
+
+itInterrupted.live("estimates context usage for interrupted turns without provider usage", () =>
+  provideTmpdirInstance((dir) =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const { processors, session, provider } = yield* boot()
+
+      const chat = yield* session.create({})
+      const parent = yield* user(chat.id, "hi")
+      const msg = yield* session.updateMessage({
+        id: MessageID.ascending(),
+        role: "assistant",
+        sessionID: chat.id,
+        mode: "build",
+        agent: "build",
+        path: { cwd: path.resolve(dir), root: path.resolve(dir) },
+        cost: 0,
+        tokens: {
+          total: 0,
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        parentID: parent.id,
+        time: { created: Date.now() },
+      } satisfies SessionV1.Assistant)
+      const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+      const handle = yield* processors.create({
+        assistantMessage: msg,
+        sessionID: chat.id,
+        model: mdl,
+      })
+
+      const fiber = yield* handle
+        .process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "hi" }],
+          tools: {},
+        })
+        .pipe(Effect.forkChild)
+
+      yield* waitFor(
+        MessageV2.parts(msg.id).pipe(
+          Effect.map((parts) => (parts.some((part) => part.type === "text") ? parts : undefined)),
+          Effect.provideService(Database.Service, database),
+        ),
+        "partial text was not persisted",
+      )
+      yield* Fiber.interrupt(fiber)
+
+      const messages = yield* session.messages({ sessionID: chat.id })
+      const updated = messages.find((item) => item.info.id === msg.id)?.info
+      const parts = yield* MessageV2.parts(msg.id).pipe(Effect.provideService(Database.Service, database))
+
+      if (!updated || updated.role !== "assistant") throw new Error("missing assistant")
+      expect(updated.error?.name).toBe("MessageAbortedError")
+      expect(updated.tokens.input).toBeGreaterThan(0)
+      expect(updated.tokens.output).toBeGreaterThan(0)
+      expect(parts.some((part) => part.type === "step-finish" && part.tokens.input > 0)).toBe(true)
+    }),
   ),
 )
 
