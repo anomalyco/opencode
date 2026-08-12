@@ -1,6 +1,8 @@
 import { describe, expect } from "bun:test"
 import { asc, eq } from "drizzle-orm"
 import { Duration, Effect, Layer } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventRetention } from "@opencode-ai/core/event/retention"
@@ -14,9 +16,9 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { testEffect } from "./lib/effect"
 
 const databaseLayer = Database.layerFromPath(":memory:")
-const testLayer = Layer.mergeAll(EventV2.layer, EventRetention.layer, databaseLayer).pipe(
-  Layer.provideMerge(databaseLayer),
-)
+const testLayer = AppNodeBuilder.build(LayerNode.group([EventV2.node, EventRetention.node, Database.node]), [
+  [Database.node, databaseLayer],
+])
 const it = testEffect(testLayer)
 
 const projectID = ProjectSchema.ID.make("prj_retention")
@@ -189,7 +191,7 @@ describe("EventRetention", () => {
       }))
 
       const freshDatabase = Database.layerFromPath(":memory:")
-      const fresh = Layer.mergeAll(EventV2.layer, freshDatabase).pipe(Layer.provideMerge(freshDatabase))
+      const fresh = AppNodeBuilder.build(LayerNode.group([EventV2.node]), [[Database.node, freshDatabase]])
       yield* Effect.gen(function* () {
         const events = yield* EventV2.Service
         yield* events.replayAll(serialized)

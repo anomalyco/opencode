@@ -3,6 +3,7 @@ export * as EventRetention from "./retention"
 import { Clock, Context, Duration, Effect, Layer, Option, Schedule } from "effect"
 import { and, asc, eq, inArray, isNotNull, like, lt, sql } from "drizzle-orm"
 import { Config } from "../config"
+import { makeGlobalNode } from "../effect/app-node"
 import { Database } from "../database/database"
 import { SessionTable } from "../session/sql"
 import { EventSequenceTable, EventTable } from "./sql"
@@ -219,7 +220,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })
 
 /** Runs the journal sweep once at startup and hourly after, once globally rather than once per active Location. */
 export const sweepLayer = Layer.effectDiscard(
@@ -233,4 +234,6 @@ export const sweepLayer = Layer.effectDiscard(
   }),
 )
 
-export const defaultSweepLayer = Layer.merge(defaultLayer, sweepLayer.pipe(Layer.provide(defaultLayer)))
+// defaultSweepLayer existed only to pair the removed defaultLayer with
+// sweepLayer; node wiring provides the service now. sweepLayer above is
+// still the thing to schedule, and had no consumers either.
