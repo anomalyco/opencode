@@ -1061,6 +1061,82 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Provider" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
+export const ClaudeACPProviderID = ProviderV2.ID.make("claude-acp")
+export const ClaudeACPModelID = ModelV2.ID.make("claude")
+
+function claudeACPModel(id: string, name: string, context = 200_000): Model {
+  const modelID = ModelV2.ID.make(id)
+  return {
+    id: modelID,
+    providerID: ClaudeACPProviderID,
+    api: {
+      id: modelID,
+      npm: "@agentclientprotocol/sdk",
+      url: "acp://claude",
+    },
+    name,
+    family: "claude",
+    capabilities: {
+      temperature: false,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: {
+        text: true,
+        audio: false,
+        image: false,
+        video: false,
+        pdf: false,
+      },
+      output: {
+        text: true,
+        audio: false,
+        image: false,
+        video: false,
+        pdf: false,
+      },
+      interleaved: false,
+    },
+    cost: {
+      input: 0,
+      output: 0,
+      cache: {
+        read: 0,
+        write: 0,
+      },
+    },
+    limit: {
+      context,
+      output: 32_000,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2026-07-02",
+    variants: {},
+  }
+}
+
+function claudeACPProvider(): Info {
+  return {
+    id: ClaudeACPProviderID,
+    name: "Claude",
+    source: "custom",
+    env: [],
+    options: {},
+    models: {
+      [ClaudeACPModelID]: claudeACPModel(ClaudeACPModelID, "Claude Code"),
+      [ModelV2.ID.make("opus")]: claudeACPModel("opus", "Opus"),
+      [ModelV2.ID.make("opus[1m]")]: claudeACPModel("opus[1m]", "Opus (1M context)", 1_000_000),
+      [ModelV2.ID.make("sonnet")]: claudeACPModel("sonnet", "Sonnet"),
+      [ModelV2.ID.make("sonnet[1m]")]: claudeACPModel("sonnet[1m]", "Sonnet (1M context)", 1_000_000),
+      [ModelV2.ID.make("haiku")]: claudeACPModel("haiku", "Haiku"),
+      [ModelV2.ID.make("fable")]: claudeACPModel("fable", "Fable"),
+      [ModelV2.ID.make("fable[1m]")]: claudeACPModel("fable[1m]", "Fable (1M context)", 1_000_000),
+    },
+  }
+}
+
 const DefaultModelIDs = Schema.Record(Schema.String, Schema.String)
 
 export const ListResult = Schema.Struct({
@@ -1593,6 +1669,8 @@ const layer = Layer.effect(
           if (provider.options) partial.options = provider.options
           mergeProvider(providerID, partial)
         }
+
+        if (!disabled.has(ClaudeACPProviderID)) providers[ClaudeACPProviderID] = claudeACPProvider()
 
         const gitlab = ProviderV2.ID.make("gitlab")
         if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {

@@ -26,16 +26,30 @@ type Context = {
 }
 
 const tokenTotal = (msg: AssistantMessage) => {
-  return msg.tokens.input + msg.tokens.output + msg.tokens.reasoning + msg.tokens.cache.read + msg.tokens.cache.write
+  return (
+    msg.tokens.total ??
+    msg.tokens.input + msg.tokens.output + msg.tokens.reasoning + msg.tokens.cache.read + msg.tokens.cache.write
+  )
 }
 
+// Interrupted turns get locally estimated tokens (no provider-reported
+// `total`); an estimate must never displace a provider-reported value.
+const estimatedTokens = (msg: AssistantMessage) =>
+  msg.tokens.total === undefined && msg.error?.name === "MessageAbortedError"
+
+// Latest assistant message with reported usage, last write wins — reported
+// values move the meter in both directions (context shrinks when the provider
+// compacts its own history); estimates only ever fill a void.
 const lastAssistantWithTokens = (messages: Message[]) => {
+  let estimated: AssistantMessage | undefined
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
     if (msg.role !== "assistant") continue
     if (tokenTotal(msg) <= 0) continue
-    return msg
+    if (!estimatedTokens(msg)) return msg
+    estimated ??= msg
   }
+  return estimated
 }
 
 const build = (messages: Message[] = [], providers: Provider[] = []): Context | undefined => {

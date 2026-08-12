@@ -189,6 +189,19 @@ export const StepFinish = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.StepFinish" })
 export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 
+/**
+ * Mid-stream usage snapshot (ACP `usage_update` parity). Providers that
+ * report live context occupancy emit this as it changes; `usage` is a
+ * last-write-wins snapshot, not a delta — later events supersede earlier
+ * ones, and values may decrease (e.g. after the provider compacts its own
+ * context).
+ */
+export const UsageUpdate = Schema.Struct({
+  type: Schema.tag("usage"),
+  usage: Usage,
+}).annotate({ identifier: "LLM.Event.UsageUpdate" })
+export type UsageUpdate = Schema.Schema.Type<typeof UsageUpdate>
+
 export const Finish = Schema.Struct({
   type: Schema.tag("finish"),
   reason: FinishReason,
@@ -221,6 +234,7 @@ const llmEventTagged = Schema.Union([
   ToolResult,
   ToolError,
   StepFinish,
+  UsageUpdate,
   Finish,
   ProviderErrorEvent,
 ]).pipe(Schema.toTaggedUnion("type"))
@@ -267,6 +281,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
       ...input,
       usage: input.usage === undefined ? undefined : Usage.from(input.usage),
     }),
+  usage: (input: UsageInput) => UsageUpdate.make({ usage: Usage.from(input) }),
   finish: (input: WithUsage<Finish>) =>
     Finish.make({
       ...input,
@@ -288,6 +303,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     toolResult: llmEventTagged.guards["tool-result"],
     toolError: llmEventTagged.guards["tool-error"],
     stepFinish: llmEventTagged.guards["step-finish"],
+    usage: llmEventTagged.guards.usage,
     finish: llmEventTagged.guards.finish,
     providerError: llmEventTagged.guards["provider-error"],
   },

@@ -17,7 +17,7 @@ import { Effect } from "effect"
 import * as ACPService from "@/acp/service"
 import * as ACPError from "@/acp/error"
 import { UsageService } from "@/acp/usage"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 
 const providerID = ProviderV2.ID.make("test")
 const modelID = ModelV2.ID.make("test-model")
@@ -187,6 +187,40 @@ const provider: Provider.Info = {
       },
     },
   },
+}
+
+function cloneModel(nextProviderID: ProviderV2.ID, nextModelID: ModelV2.ID, name: string): Provider.Model {
+  const base = provider.models[modelID]!
+  return {
+    ...base,
+    id: nextModelID,
+    providerID: nextProviderID,
+    api: {
+      ...base.api,
+      id: nextModelID,
+    },
+    name,
+    variants: {},
+  }
+}
+
+function singleModelProvider(input: {
+  providerID: ProviderV2.ID
+  modelID: ModelV2.ID
+  name: string
+  modelName: string
+  source?: Provider.Info["source"]
+}): Provider.Info {
+  return {
+    id: input.providerID,
+    name: input.name,
+    source: input.source ?? "config",
+    env: [],
+    options: {},
+    models: {
+      [input.modelID]: cloneModel(input.providerID, input.modelID, input.modelName),
+    },
+  }
 }
 
 describe("ACP service sessions", () => {
@@ -769,6 +803,96 @@ describe("ACP service sessions", () => {
     expect(result.sessionId).toBe("test-model")
     expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("test/test-model")
     expect(historyCalls).toEqual([])
+  })
+
+  it("does not choose Claude ACP as the automatic fresh-session fallback when other models exist", async () => {
+    const fallbackProviderID = ProviderV2.ID.make("aaa")
+    const fallbackModelID = ModelV2.ID.make("aaa-model")
+    const fallbackProvider = singleModelProvider({
+      providerID: fallbackProviderID,
+      modelID: fallbackModelID,
+      name: "Fallback",
+      modelName: "Fallback Model",
+    })
+    const claudeProvider = singleModelProvider({
+      providerID: Provider.ClaudeACPProviderID,
+      modelID: Provider.ClaudeACPModelID,
+      name: "Claude",
+      modelName: "Claude Code",
+      source: "custom",
+    })
+    const sdk = {
+      config: {
+        providers: () => Promise.resolve({ data: { providers: [claudeProvider, fallbackProvider], default: {} } }),
+        get: () => Promise.resolve({ data: {} }),
+      },
+      app: {
+        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
+        skills: () => Promise.resolve({ data: [] }),
+      },
+      command: {
+        list: () => Promise.resolve({ data: [] }),
+      },
+      session: {
+        create: (input: { model?: { providerID?: string; id?: string } }) =>
+          Promise.resolve({ data: { id: `${input.model?.providerID}/${input.model?.id}` } }),
+        list: () => Promise.resolve({ data: [] }),
+      },
+      mcp: {
+        add: () => Promise.resolve({ data: {} }),
+      },
+    } as unknown as OpencodeClient
+    const service = ACPService.make({ sdk })
+
+    const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    expect(result.sessionId).toBe("aaa/aaa-model")
+    expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("aaa/aaa-model")
+  })
+
+  it("ignores the removed Claude ACP default alias from config", async () => {
+    const fallbackProviderID = ProviderV2.ID.make("aaa")
+    const fallbackModelID = ModelV2.ID.make("aaa-model")
+    const fallbackProvider = singleModelProvider({
+      providerID: fallbackProviderID,
+      modelID: fallbackModelID,
+      name: "Fallback",
+      modelName: "Fallback Model",
+    })
+    const claudeProvider = singleModelProvider({
+      providerID: Provider.ClaudeACPProviderID,
+      modelID: Provider.ClaudeACPModelID,
+      name: "Claude",
+      modelName: "Claude Code",
+      source: "custom",
+    })
+    const sdk = {
+      config: {
+        providers: () => Promise.resolve({ data: { providers: [claudeProvider, fallbackProvider], default: {} } }),
+        get: () => Promise.resolve({ data: { model: "claude-acp/default" } }),
+      },
+      app: {
+        agents: () => Promise.resolve({ data: [{ name: "build", mode: "primary", permission: [], options: {} }] }),
+        skills: () => Promise.resolve({ data: [] }),
+      },
+      command: {
+        list: () => Promise.resolve({ data: [] }),
+      },
+      session: {
+        create: (input: { model?: { providerID?: string; id?: string } }) =>
+          Promise.resolve({ data: { id: `${input.model?.providerID}/${input.model?.id}` } }),
+        list: () => Promise.resolve({ data: [] }),
+      },
+      mcp: {
+        add: () => Promise.resolve({ data: {} }),
+      },
+    } as unknown as OpencodeClient
+    const service = ACPService.make({ sdk })
+
+    const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    expect(result.sessionId).toBe("aaa/aaa-model")
+    expect(result.configOptions?.find((option) => option.id === "model")?.currentValue).toBe("aaa/aaa-model")
   })
 
   it("switches model and returns updated model and effort options", async () => {
