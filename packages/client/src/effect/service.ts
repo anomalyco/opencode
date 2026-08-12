@@ -10,6 +10,7 @@ import {
   spawnServiceContender,
 } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
+import { matchesVersion } from "../service-version.js"
 
 export * from "../service.js"
 /** Contents of the local service registration file. */
@@ -37,14 +38,14 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
   const info = yield* read(options.file)
   const found = info === undefined ? undefined : yield* probe({ ...info, url: options.url })
   if (found === undefined || found.legacy) return undefined
-  if (options.version !== undefined && found.version !== options.version) return undefined
+  if (!matchesVersion(found.version, options)) return undefined
   return { endpoint: found.endpoint, state: found.state }
 })
 
 const discoverLocal = Effect.fnUntraced(function* (options: DiscoverOptions) {
   const found = (yield* registered(options.file)).service
   if (found?.state !== "ready") return undefined
-  if (options.version !== undefined && found.version !== options.version) return undefined
+  if (!matchesVersion(found.version, options)) return undefined
   return found
 })
 
@@ -93,7 +94,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     } else timeouts = undefined
     if (service !== undefined) {
       spawnDelay = timing.spawnDelay
-      const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
+      const compatible = !service.legacy && matchesVersion(service.version, options)
       if (compatible && service.state === "ready") return Option.some(service)
       if (compatible && service.state === "failed")
         return yield* Effect.fail(new Error("Background service failed to start"))

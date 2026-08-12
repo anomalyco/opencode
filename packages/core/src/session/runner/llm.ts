@@ -113,8 +113,8 @@ const layer = Layer.effect(
     const compaction = yield* SessionCompaction.Service
     const title = yield* SessionTitle.Service
     const toolOutput = yield* ToolOutput.Service
-    // Title generation is a side effect of a successful step; it must not delay continuation.
-    // The in-flight set coalesces overlapping steps while title presence records success durably.
+    // Title generation starts once input is visible and must not delay model execution.
+    // The in-flight set coalesces overlapping prompts while title presence records success durably.
     const titlesRunning = new Set<SessionSchema.ID>()
     const forkTitle = yield* FiberSet.makeRuntime<never, void, never>()
     /**
@@ -144,7 +144,6 @@ const layer = Layer.effect(
       let step = 1
       while (true) {
         const result = yield* runStep(sessionID, promotable, step)
-        if (step === 1) yield* startTitle(sessionID)
         yield* runPendingCompaction(sessionID)
         if (!result.needsContinuation && !(yield* SessionPending.has(db, sessionID, "steer"))) return
         promotable = "steer"
@@ -236,6 +235,7 @@ const layer = Layer.effect(
       // a blocked first step leaves pending inputs untouched.
       yield* InstructionState.prepare(db, bus, selected.instructions, selected.session.id)
       const promoted = promotable ? yield* SessionPending.promote(db, bus, selected.session.id, promotable) : 0
+      if (promoted > 0) yield* startTitle(sessionID)
       // Promoted input opens a fresh step allowance.
       const currentStep = promoted > 0 ? 1 : step
       const loaded = yield* context.load(selected)

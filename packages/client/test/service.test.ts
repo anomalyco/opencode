@@ -47,6 +47,52 @@ test("a concurrent same-version start cannot invalidate a resolved endpoint", as
   expect(await health(resolved.url)).toEqual({ healthy: true, version: "test", pid: original.pid })
 })
 
+test("reuses a compatible registered service", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const existing = spawn(registration, "compatible")
+  await waitForFile(registration)
+
+  const starts: EnsureReason[] = []
+  const endpoint = await run(
+    ensure({
+      file: registration,
+      version: (version) => version.startsWith("2."),
+      command: [],
+      onStart: (reason) => starts.push(reason),
+    }),
+  )
+
+  expect(endpoint.url).toBe((await Bun.file(registration).json()).url)
+  expect(starts).toEqual([])
+  expect(existing.exitCode).toBe(null)
+})
+
+test("replaces an incompatible registered service", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const existing = spawn(registration, "incompatible")
+  await waitForFile(registration)
+
+  const starts: EnsureReason[] = []
+  const endpoint = await run(
+    ensure({
+      file: registration,
+      version: (version) => version.startsWith("2."),
+      command: [process.execPath, fixture, registration, "delayed-compatible", "10"],
+      onStart: (reason) => starts.push(reason),
+    }),
+  )
+  const replacement = await Bun.file(registration).json()
+
+  expect(await existing.exited).toBe(0)
+  expect(replacement.version).toBe("2.1.0-next.1")
+  expect(endpoint.url).toBe(replacement.url)
+  expect(starts).toEqual(["version-mismatch"])
+  process.kill(replacement.pid, "SIGTERM")
+  await waitForExit(replacement.pid)
+})
+
 test("waits for a registered service to finish starting", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")

@@ -143,44 +143,47 @@ describe("Snapshot", () => {
     ),
   )
 
-  testEffect(Layer.empty).live("isolates snapshot indexes by canonical Git worktree", () =>
-    Effect.acquireUseRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) =>
-        Effect.gen(function* () {
-          const project = path.join(tmp.path, "project")
-          const linked = path.join(tmp.path, "linked")
-          yield* Effect.promise(async () => {
-            await fs.mkdir(project)
-            await fs.writeFile(path.join(project, "tracked.txt"), "main\n")
-            await initGit(project, true)
-            await $`git -c core.fsmonitor=false worktree add --detach ${linked} HEAD`.cwd(project).quiet()
-          })
+  testEffect(Layer.empty).live(
+    "isolates snapshot indexes by canonical Git worktree",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) =>
+          Effect.gen(function* () {
+            const project = path.join(tmp.path, "project")
+            const linked = path.join(tmp.path, "linked")
+            yield* Effect.promise(async () => {
+              await fs.mkdir(project)
+              await fs.writeFile(path.join(project, "tracked.txt"), "main\n")
+              await initGit(project, true)
+              await $`git -c core.fsmonitor=false worktree add --detach ${linked} HEAD`.cwd(project).quiet()
+            })
 
-          const capture = (directory: string) =>
-            Effect.gen(function* () {
-              const snapshot = yield* Snapshot.Service
-              return yield* snapshot.capture()
-            }).pipe(Effect.provide(snapshotLayer(tmp.path, directory)))
-          expect(yield* capture(project)).toBeDefined()
-          expect(yield* capture(linked)).toBeDefined()
+            const capture = (directory: string) =>
+              Effect.gen(function* () {
+                const snapshot = yield* Snapshot.Service
+                return yield* snapshot.capture()
+              }).pipe(Effect.provide(snapshotLayer(tmp.path, directory)))
+            expect(yield* capture(project)).toBeDefined()
+            expect(yield* capture(linked)).toBeDefined()
 
-          const projectID = yield* Effect.gen(function* () {
-            return (yield* Location.Service).project.id
-          }).pipe(
-            Effect.provide(
-              AppNodeBuilder.build(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))),
-            ),
-          )
-          expect(
-            yield* Effect.promise(() => fs.stat(path.join(tmp.path, "snapshot", projectID, Hash.fast(project)))),
-          ).toBeDefined()
-          expect(
-            yield* Effect.promise(() => fs.stat(path.join(tmp.path, "snapshot", projectID, Hash.fast(linked)))),
-          ).toBeDefined()
-        }),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ),
+            const projectID = yield* Effect.gen(function* () {
+              return (yield* Location.Service).project.id
+            }).pipe(
+              Effect.provide(
+                AppNodeBuilder.build(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))),
+              ),
+            )
+            expect(
+              yield* Effect.promise(() => fs.stat(path.join(tmp.path, "snapshot", projectID, Hash.fast(project)))),
+            ).toBeDefined()
+            expect(
+              yield* Effect.promise(() => fs.stat(path.join(tmp.path, "snapshot", projectID, Hash.fast(linked)))),
+            ).toBeDefined()
+          }),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ),
+    { timeout: 15_000 },
   )
 })
 

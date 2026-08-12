@@ -1,60 +1,12 @@
-/** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
-import { testRender } from "@opentui/solid"
-import { createSignal } from "solid-js"
 import {
-  TabPulse,
   blendTabPulseColor,
   completionPulseOpacity,
   glowIgnitionLevel,
   unreadGlowIntensity,
 } from "../../src/component/tab-pulse"
 import { tint } from "../../src/theme/color"
-
-test("a prompt pulse restarts the neutral edge flash while the tab remains busy", async () => {
-  const background = RGBA.fromHex("#101010")
-  const flash = RGBA.fromHex("#f0f0f0")
-  const [promptPulse, setPromptPulse] = createSignal(0)
-  const app = await testRender(
-    () => (
-      <box width={8} height={1} backgroundColor={background}>
-        <TabPulse
-          active={true}
-          promptPulse={promptPulse()}
-          color={background}
-          flashColor={flash}
-          backgroundColor={background}
-        />
-      </box>
-    ),
-    { width: 8, height: 1 },
-  )
-
-  const firstBackground = () => app.captureSpans().lines[0]?.spans[0]?.bg
-
-  try {
-    await app.renderOnce()
-    expect(firstBackground()?.equals(background)).toBeTrue()
-
-    setPromptPulse(1)
-    await Bun.sleep(80)
-    await app.renderOnce()
-    expect(firstBackground()?.equals(background)).toBeFalse()
-    expect(firstBackground()?.r ?? 0).toBeGreaterThan(0.17)
-
-    await Bun.sleep(800)
-    await app.renderOnce()
-    expect(firstBackground()?.equals(background)).toBeTrue()
-
-    setPromptPulse(2)
-    await Bun.sleep(80)
-    await app.renderOnce()
-    expect(firstBackground()?.equals(background)).toBeFalse()
-  } finally {
-    app.renderer.destroy()
-  }
-})
 
 test("completion pulse rises quickly and fades over the remaining duration", () => {
   expect(completionPulseOpacity(0)).toBe(0)

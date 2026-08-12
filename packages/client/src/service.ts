@@ -17,8 +17,8 @@ export type Endpoint = {
 export type DiscoverOptions = {
   /** Absolute registration file path. Defaults to the XDG state directory. */
   readonly file?: string
-  /** Required service version. */
-  readonly version?: string
+  /** Required exact service version or compatibility predicate. */
+  readonly version?: string | ((version: string) => boolean)
 }
 
 /** Reason ensuring the service requires a new process. */

@@ -25,6 +25,19 @@ test("discovers a registered service", async () => {
   expect(await Service.discover({ file: registration, version: "other" })).toBeUndefined()
 })
 
+test("discovers a compatible registered service", async () => {
+  const registration = await setup("compatible")
+
+  expect(await Service.discover({ file: registration, version: "2.1.0" })).toBeUndefined()
+  expect(await Service.discover({ file: registration, version: "2.1.0-next.1" })).toEqual(
+    expect.objectContaining({ url: expect.stringMatching(/^http:\/\//) }),
+  )
+  expect(await Service.discover({ file: registration, version: (version) => version.startsWith("2.") })).toEqual(
+    expect.objectContaining({ url: expect.stringMatching(/^http:\/\//) }),
+  )
+  expect(await Service.discover({ file: registration, version: (version) => version.startsWith("3.") })).toBeUndefined()
+})
+
 test("ensures a missing service with native promises", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")

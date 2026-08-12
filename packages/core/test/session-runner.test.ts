@@ -816,7 +816,7 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
-  it.effect("retries title generation from the first prompt after execution and title failures", () =>
+  it.effect("generates the title while the first model step is still running", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const agents = yield* Agent.Service
@@ -831,16 +831,48 @@ describe("SessionRunnerLLM", () => {
       )
 
       yield* admit(session, "First prompt")
-      yield* TestLLM.push(Stream.fail(invalidRequest()))
+      yield* TestLLM.push(TestLLM.text("Generated title", "text-title"), Stream.never)
+      const bus = yield* Bus.Service
+      const renamed = yield* bus.subscribe(SessionEvent.Renamed).pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID),
+        Stream.take(1),
+        Stream.runDrain,
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      const runner = yield* SessionRunner.Service
+      const fiber = yield* runner.drain({ sessionID, force: true }).pipe(Effect.forkChild)
+      yield* Fiber.join(renamed)
+
+      expect((yield* session.get(sessionID)).title).toBe("Generated title")
+      yield* Fiber.interrupt(fiber)
+    }),
+  )
+
+  it.effect("retries title generation from the first prompt after title and execution failures", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const agents = yield* Agent.Service
+      const { db } = yield* Database.Service
+      yield* db.update(SessionTable).set({ title: null }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+      yield* agents.transform((draft) =>
+        draft.update(Agent.ID.make("title"), (agent) => {
+          agent.mode = "primary"
+          agent.hidden = true
+          agent.system = "Generate a title."
+        }),
+      )
+
+      yield* admit(session, "First prompt")
+      yield* TestLLM.push(Stream.fail(invalidRequest()), Stream.fail(invalidRequest()))
       expect((yield* session.resume(sessionID).pipe(Effect.exit))._tag).toBe("Failure")
 
       yield* admit(session, "Second prompt")
       const titleFailed = yield* Deferred.make<void>()
       yield* TestLLM.push(
-        TestLLM.text("Recovered", "text-recovered"),
         Stream.make(LLMEvent.providerError({ message: "Title provider unavailable" })).pipe(
           Stream.ensuring(Deferred.succeed(titleFailed, undefined)),
         ),
+        TestLLM.text("Recovered", "text-recovered"),
       )
       yield* session.resume(sessionID)
       yield* Deferred.await(titleFailed)
@@ -856,13 +888,13 @@ describe("SessionRunnerLLM", () => {
       )
       yield* admit(session, "Third prompt")
       yield* TestLLM.push(
-        TestLLM.text("Recovered again", "text-recovered-again"),
         TestLLM.text("Generated title", "text-title"),
+        TestLLM.text("Recovered again", "text-recovered-again"),
       )
       yield* session.resume(sessionID)
       yield* Fiber.join(renamed)
 
-      expect(requests).toHaveLength(5)
+      expect(requests).toHaveLength(6)
       expect(requests[2]?.messages).toContainEqual(Message.user("First prompt"))
       expect(requests[4]?.messages).toContainEqual(Message.user("First prompt"))
       expect((yield* session.get(sessionID)).title).toBe("Generated title")

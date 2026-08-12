@@ -283,22 +283,13 @@ export const settings: Setting[] = [
     keywords: ["selection", "clipboard"],
   },
   {
-    title: "DevTools",
+    title: "Developer tools",
     category: "Debug",
     path: ["debug", "devtools"],
     default: false,
     values: [false, true],
     labels: ["off", "on"],
     keywords: ["debug bar", "developer tools"],
-  },
-  {
-    title: "Turn token usage",
-    category: "Debug",
-    path: ["debug", "turn_tokens"],
-    default: false,
-    values: [false, true, "verbose"],
-    labels: ["off", "on", "verbose"],
-    keywords: ["tokens", "usage", "debug"],
   },
 ]
 

@@ -22,19 +22,24 @@ import { Bus } from "@opencode-ai/core/bus"
 import { ID, type Payload } from "@opencode-ai/schema/event"
 import { Form } from "@opencode-ai/core/form"
 import { Integration } from "@opencode-ai/core/integration"
+import { Environment } from "@opencode-ai/core/environment/index"
 import { Location } from "@opencode-ai/core/location"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { MCPClient } from "@opencode-ai/core/mcp/client"
+import { MCPStdio } from "@opencode-ai/core/mcp/stdio"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { Tool } from "@opencode-ai/core/tool"
-import { DateTime, Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, Schema, Sink, Stream } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ExitCode, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
 import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
+import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import { executeTool, toolDefinitions, toolIdentity, waitForCodeModeTool, waitForTool } from "./lib/tool"
 
 let assertion: Deferred.Deferred<Permission.AssertInput> | undefined
@@ -167,6 +172,7 @@ function resourceMcpLayer(
   overrides?: {
     entries?: Config.Interface["entries"]
     subscribe?: Bus.Interface["subscribe"]
+    environment?: Layer.Layer<Environment.Service>
   },
 ) {
   const directory = AbsolutePath.make(import.meta.dir)
@@ -229,10 +235,14 @@ function resourceMcpLayer(
           },
         }),
         Layer.mock(Credential.Service, {}),
+        overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),
   )
 }
+
+const connect = (server: string, config: typeof ConfigMCP.Server.Type, directory: string) =>
+  MCPClient.connect(server, config, directory).pipe(Effect.provide(hostEnvironmentLayer))
 
 const mcp = Layer.mock(MCP.Service, {
   tools: () =>
@@ -407,7 +417,7 @@ test("retains output schemas across paginated MCP discovery", async () => {
   const tools = await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "pagination",
           new ConfigMCP.Local({
             type: "local",
@@ -440,11 +450,139 @@ test("retains output schemas across paginated MCP discovery", async () => {
   ])
 })
 
+test("spawns local MCP servers through the location environment", async () => {
+  const spawns: Array<ChildProcess.Command> = []
+  const cwd = path.join(import.meta.dir, "fixture")
+  const config = new ConfigMCP.Local({
+    type: "local",
+    command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+    cwd: "fixture",
+    environment: { MCP_LOCATION_TEST: "configured" },
+  })
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* MCPClient.connect("environment", config, import.meta.dir)
+        yield* connection.tools()
+      }),
+    ).pipe(Effect.provide(recordingEnvironmentLayer(spawns))),
+  )
+
+  expect(spawns).toHaveLength(1)
+  const command = spawns[0]
+  if (!command || !ChildProcess.isStandardCommand(command)) throw new Error("Expected a standard process command")
+  expect(command.command).toBe(process.execPath)
+  expect(command.options.cwd).toBe(cwd)
+  expect(command.options.extendEnv).toBe(true)
+  expect(command.options.env).toEqual({ MCP_LOCATION_TEST: "configured" })
+})
+
+test("rejects sends before the stdio transport is started", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const transport = yield* MCPStdio.make({
+          server: "not-started",
+          command: process.execPath,
+          args: [path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+          cwd: import.meta.dir,
+          environment: {},
+        })
+        yield* Effect.tryPromise({
+          try: () => transport.send({ jsonrpc: "2.0", method: "notifications/initialized" }),
+          catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+        }).pipe(
+          Effect.flip,
+          Effect.tap((error) => Effect.sync(() => expect(error.message).toBe("Not connected"))),
+        )
+      }).pipe(Effect.provide(hostEnvironmentLayer)),
+    ),
+  )
+})
+
+test("joins concurrent stdio transport closes", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const transport = yield* MCPStdio.make({
+          server: "concurrent-close",
+          command: "unused",
+          args: [],
+          cwd: import.meta.dir,
+          environment: {},
+        })
+        const first = transport.close()
+        expect(transport.close()).toBe(first)
+        yield* Effect.promise(() => first)
+      }).pipe(Effect.provide(hostEnvironmentLayer)),
+    ),
+  )
+})
+
+test("closes a stdio process that finishes spawning after close", async () => {
+  const spawning = Deferred.makeUnsafe<void>()
+  const release = Deferred.makeUnsafe<void>()
+  const exited = Deferred.makeUnsafe<ExitCode>()
+  const signals: Array<string> = []
+  const driver = Environment.makeMemoryDriver()
+  const environment = Layer.succeed(
+    Environment.Service,
+    Environment.Service.of({
+      files: Environment.makeFiles(driver),
+      spawner: ChildProcessSpawner.make(() =>
+        Effect.gen(function* () {
+          yield* Deferred.succeed(spawning, undefined)
+          yield* Deferred.await(release)
+          return makeHandle({
+            pid: ProcessId(1),
+            exitCode: Deferred.await(exited),
+            isRunning: Deferred.isDone(exited).pipe(Effect.map((done) => !done)),
+            kill: (options) =>
+              Effect.gen(function* () {
+                signals.push(options?.killSignal ?? "SIGTERM")
+                yield* Deferred.succeed(exited, ExitCode(143))
+              }),
+            stdin: Sink.drain,
+            stdout: Stream.never,
+            stderr: Stream.empty,
+            all: Stream.never,
+            getInputFd: () => Sink.drain,
+            getOutputFd: () => Stream.empty,
+            unref: Effect.succeed(Effect.void),
+          })
+        }),
+      ),
+    }),
+  )
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const transport = yield* MCPStdio.make({
+          server: "close-during-spawn",
+          command: "unused",
+          args: [],
+          cwd: import.meta.dir,
+          environment: {},
+        })
+        const start = transport.start()
+        yield* Deferred.await(spawning)
+        const close = transport.close()
+        yield* Deferred.succeed(release, undefined)
+        yield* Effect.promise(() => Promise.all([start, close]))
+      }).pipe(Effect.provide(environment)),
+    ),
+  )
+
+  expect(signals).toEqual(["SIGTERM"])
+})
+
 test("applies the configured MCP catalog timeout", async () => {
   const result = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "catalog-timeout",
           new ConfigMCP.Local({
             type: "local",
@@ -466,7 +604,7 @@ test("applies the configured MCP execution timeout", async () => {
   const result = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "execution-timeout",
           new ConfigMCP.Local({
             type: "local",
@@ -487,7 +625,7 @@ test("applies the configured MCP execution timeout to prompts", async () => {
   const result = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "prompt-timeout",
           new ConfigMCP.Local({
             type: "local",
@@ -508,7 +646,7 @@ test("applies configured MCP timeouts to resource operations", async () => {
   const catalog = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "resource-catalog-timeout",
           new ConfigMCP.Local({
             type: "local",
@@ -527,7 +665,7 @@ test("applies configured MCP timeouts to resource operations", async () => {
   const read = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "resource-read-timeout",
           new ConfigMCP.Local({
             type: "local",
@@ -562,7 +700,7 @@ test("lists, reads, and reports MCP resource changes", async () => {
           },
           "templates-2": { items: [{ name: "Issue", uriTemplate: "issue://{id}", description: "Issue" }] },
         }
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "resources",
           new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
           import.meta.dir,
@@ -633,7 +771,7 @@ test("skips MCP resource requests when the capability is absent", async () => {
     Effect.scoped(
       Effect.gen(function* () {
         const server = yield* resourceServer({ resources: false })
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "resources",
           new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
           import.meta.dir,
