@@ -14,7 +14,7 @@ export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<boolean>
   readonly cancelOr: <A, E, R>(
     sessionID: SessionID,
-    onIdle: Effect.Effect<A, E, R>,
+    onStopped: Effect.Effect<A, E, R>,
   ) => Effect.Effect<CancelResult<A>, E, R>
   readonly ensureRunning: (
     sessionID: SessionID,
@@ -86,18 +86,18 @@ const layer = Layer.effect(
 
     const cancelOr = Effect.fn("SessionRunState.cancelOr")(function* <A, E, R>(
       sessionID: SessionID,
-      onIdle: Effect.Effect<A, E, R>,
+      onStopped: Effect.Effect<A, E, R>,
     ): Effect.Effect<CancelResult<A>, E, R> {
       const data = yield* InstanceState.get(state)
+      yield* cancelBackgroundJobs(background, sessionID)
       return yield* data.locks.withLock(sessionID)(
         Effect.gen(function* () {
-          yield* cancelBackgroundJobs(background, sessionID)
           const existing = data.runners.get(sessionID)
-          if (existing && (yield* existing.cancel)) {
-            return { _tag: "cancelled" } as const
-          }
-          yield* status.set(sessionID, { type: "idle" })
-          return { _tag: "idle", value: yield* onIdle } as const
+          const cancelled = existing ? yield* existing.cancel : false
+          if (!cancelled) yield* status.set(sessionID, { type: "idle" })
+          const value = yield* onStopped
+          if (cancelled) return { _tag: "cancelled" } as const
+          return { _tag: "idle", value } as const
         }),
       )
     })

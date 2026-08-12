@@ -895,14 +895,14 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
-    "leaves task cleanup to an active session runner",
+    "settles orphaned task parts after aborting an active unrelated run",
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
         const headers = { "x-opencode-directory": test.directory }
         const session = yield* createSession({ title: "active task" })
         const svc = yield* Session.Service
-        const { assistant, task } = yield* createAssistantWithTask(session.id, test.directory)
+        const { assistant, task, unrelated } = yield* createAssistantWithTask(session.id, test.directory)
         const result = { info: assistant, parts: [] } satisfies SessionV1.WithParts
         const started = yield* Deferred.make<void>()
         const runState = yield* SessionRunState.Service
@@ -930,9 +930,12 @@ describe("session HttpApi", () => {
           (message) => message.info.id === assistant.id,
         )
         const restoredTask = restored?.parts.find((part) => part.id === task.id)
-        expect(restored?.info.time.completed).toBeUndefined()
+        expect(restored?.info.time.completed).toBeDefined()
         expect(restoredTask?.type).toBe("tool")
-        if (restoredTask?.type === "tool") expect(restoredTask.state.status).toBe("running")
+        if (restoredTask?.type === "tool") expect(restoredTask.state.status).toBe("error")
+        const restoredUnrelated = restored?.parts.find((part) => part.id === unrelated.id)
+        expect(restoredUnrelated?.type).toBe("tool")
+        if (restoredUnrelated?.type === "tool") expect(restoredUnrelated.state.status).toBe("running")
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
