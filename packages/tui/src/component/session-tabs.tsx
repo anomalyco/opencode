@@ -72,7 +72,7 @@ function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: nu
   return opacity === 0 ? color : tint(color, background, opacity)
 }
 
-function createMarquee(animations: () => boolean) {
+export function createMarquee(animations: () => boolean) {
   const [offset, setOffset] = createSignal(0)
   const [active, setActive] = createSignal<string>()
   const leading = createAnimatable({ opacity: 0 }, { enabled: animations, transition: tween({ duration: 0.25 }) })
@@ -97,7 +97,10 @@ function createMarquee(animations: () => boolean) {
       returning = false
       return scroll()
     }
-    if (!marqueeOverflows(title, width)) return
+    if (!marqueeOverflows(title, width)) {
+      reset()
+      return
+    }
     cycleWidth = marqueeCycleWidth(title)
     setActive(sessionID)
     setOffset(0)
@@ -363,7 +366,9 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               })
               const numberWidth = () => 2
               const restingTitleWidth = () => Math.max(1, width() - numberWidth() - 2)
-              const titleWidth = () => Math.max(1, restingTitleWidth() - (hovered() === tab.sessionID ? 1 : 0))
+              const hoveredTitleWidth = () => Math.max(1, restingTitleWidth() - 1)
+              const titleWidth = () =>
+                hovered() === tab.sessionID ? hoveredTitleWidth() : restingTitleWidth()
               const title = () => tab.title ?? "Untitled session"
               const scrolling = () => marquee.active() === tab.sessionID && marquee.offset() > 0
               const visibleTitle = createMemo(() =>
@@ -373,7 +378,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               )
               const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
               const titleFades = createMemo(
-                () => marqueeOverflows(title(), restingTitleWidth()) && titleWidth() > FADE_WIDTH,
+                () => marqueeOverflows(title(), titleWidth()) && titleWidth() > FADE_WIDTH,
               )
               const detail = createMemo(() => {
                 const value = session()
@@ -456,7 +461,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   position="relative"
                   flexDirection="column"
                   backgroundColor={background()}
-                  onMouseOver={() => marquee.enter(tab.sessionID, title(), restingTitleWidth())}
+                  onMouseOver={() => marquee.enter(tab.sessionID, title(), hoveredTitleWidth())}
                   onMouseOut={() => marquee.leave(tab.sessionID)}
                   onMouseDown={(event) => {
                     if (event.button === RIGHT_MOUSE_BUTTON) {
@@ -472,7 +477,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       event.stopPropagation()
                       return
                     }
-                    marquee.enter(tab.sessionID, title(), restingTitleWidth())
+                    marquee.enter(tab.sessionID, title(), hoveredTitleWidth())
                     setDragging(tab.sessionID)
                   }}
                   onMouseUp={(event) => {
@@ -897,7 +902,9 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const numberWidth = () => 2
           // Hovering reveals the close mark, so the title's right bound shifts left of it.
           const restingTitleWidth = () => Math.max(1, width() - 1 - numberWidth())
-          const availableTitleWidth = () => Math.max(1, restingTitleWidth() - (hovered() === tab.sessionID ? 2 : 0))
+          const hoveredTitleWidth = () => Math.max(1, restingTitleWidth() - 2)
+          const availableTitleWidth = () =>
+            hovered() === tab.sessionID ? hoveredTitleWidth() : restingTitleWidth()
           const scrolling = () => marquee.active() === tab.sessionID && marquee.offset() > 0
           const visibleTitle = createMemo(() =>
             scrolling()
@@ -906,7 +913,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           )
           const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
           const titleFades = createMemo(
-            () => marqueeOverflows(title(), restingTitleWidth()) && availableTitleWidth() > FADE_WIDTH,
+            () => marqueeOverflows(title(), availableTitleWidth()) && availableTitleWidth() > FADE_WIDTH,
           )
           const foreground = () => {
             if (hovered() === tab.sessionID) return theme.text.default
@@ -957,7 +964,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
               position="relative"
               flexDirection="row"
               backgroundColor={background()}
-              onMouseOver={() => marquee.enter(tab.sessionID, title(), restingTitleWidth())}
+              onMouseOver={() => marquee.enter(tab.sessionID, title(), hoveredTitleWidth())}
               onMouseOut={() => marquee.leave(tab.sessionID)}
               onMouseDown={(event) => {
                 if (event.button === RIGHT_MOUSE_BUTTON) {
@@ -972,7 +979,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   event.stopPropagation()
                   return
                 }
-                marquee.enter(tab.sessionID, title(), restingTitleWidth())
+                marquee.enter(tab.sessionID, title(), hoveredTitleWidth())
                 setDragging(tab.sessionID)
               }}
               onMouseUp={(event) => {
