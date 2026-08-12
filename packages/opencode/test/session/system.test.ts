@@ -102,6 +102,13 @@ describe("session.system", () => {
     }
   })
 
+  test("MiniMax model IDs share the Kimi prompt for open-weight agentic models", () => {
+    const kimi = SystemPrompt.provider({ api: { id: "kimi-k2-thinking" } } as Provider.Model)[0]
+    for (const id of ["MiniMax/MiniMax-M3", "minimax/minimax-m2.5", "MiniMax-M1"]) {
+      expect(SystemPrompt.provider({ api: { id } } as Provider.Model)[0]).toBe(kimi)
+    }
+  })
+
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
