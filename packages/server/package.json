@@ -10,7 +10,8 @@
   },
   "scripts": {
     "test": "bun test --only-failures",
-    "typecheck": "tsgo -b"
+    "typecheck": "tsgo -b",
+    "probe:workerd": "bun run script/workerd-probe.ts"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",

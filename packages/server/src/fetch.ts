@@ -3,6 +3,7 @@ export * as ServerFetch from "./fetch"
 import { Context, Effect, Layer } from "effect"
 import { HttpEffect, HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
+import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { isAllowedCorsOrigin } from "./cors"
 import { createRoutes } from "./routes"
 import type { ServerOptions } from "./options"
@@ -28,9 +29,17 @@ import type { ServerOptions } from "./options"
  * the Node server process does: a runtime that dies without teardown — an evicted Durable
  * Object leaves the same durable signature as a killed process — replays orphaned turns on the
  * next boot, and the sweep is a no-op when nothing is suspended.
+ *
+ * `overrides` are layer replacements applied after the standard set, so a runtime profile can
+ * swap services the standard graph assumes are local — see `ServerWorkerd.replacements`.
  */
-export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOptions = {}) {
-  const context = yield* Layer.build(createRoutes(options, () => []).pipe(Layer.provide(HttpServer.layerServices)))
+export const make = Effect.fn("ServerFetch.make")(function* (
+  options: ServerOptions = {},
+  overrides: LayerNode.Replacements = [],
+) {
+  const context = yield* Layer.build(
+    createRoutes(options, () => [], overrides).pipe(Layer.provide(HttpServer.layerServices)),
+  )
   // Forked so the returned handler is never delayed; resumed drains are already
   // logged and durably recorded by the execution layer.
   yield* Effect.forkDetach(Context.get(context, SessionRestart.Service).resumeSuspendedSessions)
