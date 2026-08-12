@@ -5,7 +5,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { expect } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -703,6 +703,157 @@ it.instance("loop stops provider overflow instead of auto-compacting when disabl
     expect(messages.some((message) => message.parts.some((part) => part.type === "compaction"))).toBe(false)
   }),
 )
+
+describe("session.prompt idle auto-compaction", () => {
+  const creates: Array<Parameters<SessionCompaction.Interface["create"]>[0]> = []
+  const spyLayer = Layer.succeed(
+    SessionCompaction.Service,
+    SessionCompaction.Service.of({
+      isOverflow: () => Effect.succeed(false),
+      prune: () => Effect.void,
+      process: () => Effect.succeed("stop"),
+      create: (input) => {
+        creates.push(input)
+        return Effect.void
+      },
+    }),
+  )
+
+  function makeHttpIdle(
+    input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" },
+  ) {
+    const root = LayerNode.group([promptRoot, testLLMServerNode])
+    const replacements = [
+      [SessionSummary.node, summary],
+      [LSP.node, lsp],
+      [MCP.node, makeMcp(input?.mcpInstructions)],
+      [RuntimeFlags.node, runtimeFlags],
+      [SessionCompaction.node, spyLayer],
+    ] as const
+    if (input?.processor === "blocking") {
+      return LayerNode.compile(root, [...replacements, [SessionProcessor.node, blockingProcessor]])
+    }
+    return LayerNode.compile(root, replacements)
+  }
+
+  const itIdle = testEffect(makeHttpIdle())
+
+  const seedOldFinished = Effect.fn("test.seedOldFinished")(
+    function* (sessionID: SessionID, finishTime: number) {
+      const session = yield* Session.Service
+      const msg = yield* user(sessionID, "hello")
+      const assistant: SessionV1.Assistant = {
+        id: MessageID.ascending(),
+        role: "assistant",
+        parentID: msg.id,
+        sessionID,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: finishTime - 1000, completed: finishTime },
+        finish: "end_turn",
+      }
+      yield* session.updateMessage(assistant)
+      yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID: assistant.id,
+        sessionID,
+        type: "text",
+        text: "ok",
+      })
+    },
+  )
+
+  itIdle.instance("step1 triggers compaction.create once when idle >= threshold", () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        compaction: { idle_minutes: 1 },
+      }))
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      const oldTime = Date.now() - 7200_000
+      for (let i = 0; i < 10; i++) {
+        yield* seedOldFinished(chat.id, oldTime)
+      }
+
+      creates.length = 0
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.text("world")
+      yield* prompt.loop({ sessionID: chat.id })
+      expect(creates).toHaveLength(1)
+    }),
+  )
+
+  itIdle.instance("does not trigger compaction.create when idle < threshold", () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        compaction: { idle_minutes: 1 },
+      }))
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      const recentTime = Date.now() - 30_000
+      for (let i = 0; i < 10; i++) {
+        yield* seedOldFinished(chat.id, recentTime)
+      }
+
+      creates.length = 0
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.text("world")
+      yield* prompt.loop({ sessionID: chat.id })
+      expect(creates).toHaveLength(0)
+      expect(yield* llm.hits).toHaveLength(1)
+    }),
+  )
+
+  itIdle.instance("does not trigger compaction.create when idle_minutes is 0", () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        compaction: { idle_minutes: 0 },
+      }))
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      const oldTime = Date.now() - 7200_000
+      for (let i = 0; i < 10; i++) {
+        yield* seedOldFinished(chat.id, oldTime)
+      }
+
+      creates.length = 0
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.text("world")
+      yield* prompt.loop({ sessionID: chat.id })
+      expect(creates).toHaveLength(0)
+      expect(yield* llm.hits).toHaveLength(1)
+    }),
+  )
+})
 
 noLLMServer.instance.skip(
   "prompt emits v2 prompted and synthetic events (v2 projector disabled)",

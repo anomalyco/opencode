@@ -12,7 +12,7 @@ import { Provider } from "@/provider/provider"
 
 import { type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
-import { SessionCompaction } from "./compaction"
+import { SessionCompaction, DEFAULT_IDLE_COMPACT_MINUTES, IDLE_COMPACT_MIN_MESSAGES } from "./compaction"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
@@ -1165,6 +1165,30 @@ const layer = Layer.effect(
           ) {
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
             continue
+          }
+
+          if (
+            lastFinished &&
+            lastFinished.summary !== true &&
+            msgs.length >= IDLE_COMPACT_MIN_MESSAGES &&
+            step === 1
+          ) {
+            const idleMinutesThreshold =
+              (yield* config.get()).compaction?.idle_minutes ?? DEFAULT_IDLE_COMPACT_MINUTES
+            if (idleMinutesThreshold > 0) {
+              const lastActive = lastFinished.time.completed ?? lastFinished.time.created
+              const idle = Math.floor((Date.now() - lastActive) / 60_000)
+              if (idle >= idleMinutesThreshold) {
+                yield* Effect.logInfo("idle auto-compact", {
+                  "session.id": sessionID,
+                  idleMinutes: idle,
+                  idleMinutesThreshold,
+                  messages: msgs.length,
+                })
+                yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+                continue
+              }
+            }
           }
 
           const agent = yield* agents.get(lastUser.agent)

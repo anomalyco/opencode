@@ -164,6 +164,10 @@ export const Info = Schema.Struct({
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
       }),
+      idle_minutes: Schema.optional(NonNegativeInt).annotate({
+        description:
+          "Automatically compact a session when it is resumed after being idle for at least this many minutes and has enough history. Resuming a stale long session otherwise re-sends the full prefix every turn once the provider cache expires. Set to 0 to disable (default: 720)",
+      }),
     }),
   ),
   experimental: Schema.optional(

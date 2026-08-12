@@ -32,6 +32,15 @@ const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 8_000
+
+// Resuming a session after the provider cache TTL (~5 min) expires means the
+// whole prefix gets re-written every turn. For a long session resumed days
+// later, that re-sends the entire history at write pricing on each call. Auto-
+// compact such sessions up front so only the compacted summary + recent tail
+// rides in the prefix.
+export const DEFAULT_IDLE_COMPACT_MINUTES = 12 * 60
+export const IDLE_COMPACT_MIN_MESSAGES = 20
+
 type Turn = {
   start: number
   end: number
