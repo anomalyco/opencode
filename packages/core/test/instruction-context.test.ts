@@ -137,6 +137,62 @@ describe("InstructionContext", () => {
     ),
   )
 
+  it.live("attaches nearest .moks/req materials as ambient context", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          const directory = path.join(project, "packages", "core")
+          const agents = path.join(project, "AGENTS.md")
+          const jd = path.join(project, ".moks", "req", "jd.md")
+          const scorecard = path.join(project, ".moks", "req", "scorecard.md")
+          const notes = path.join(project, ".moks", "req", "notes.md")
+          const resume = path.join(project, ".moks", "req", "resume.md")
+          const nestedJd = path.join(directory, ".moks", "req", "jd.md")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(project, ".moks", "req"), { recursive: true })
+            await fs.mkdir(path.join(directory, ".moks", "req"), { recursive: true })
+            await fs.writeFile(agents, "norms")
+            await fs.writeFile(jd, "root-jd")
+            await fs.writeFile(scorecard, "score")
+            await fs.writeFile(notes, "notes")
+            await fs.writeFile(resume, "resume-should-not-inject")
+            await fs.writeFile(nestedJd, "nested-jd")
+          })
+
+          const context = yield* SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location(
+                      { directory: AbsolutePath.make(directory) },
+                      { projectDirectory: AbsolutePath.make(project) },
+                    ),
+                  ),
+                ),
+              }),
+            ),
+          )
+
+          const baseline = (yield* SystemContext.initialize(context)).baseline
+          expect(baseline).toContain(`Instructions from: ${agents}\nnorms`)
+          expect(baseline).toContain(`Req materials from: ${nestedJd}\nnested-jd`)
+          expect(baseline).not.toContain("root-jd")
+          expect(baseline).not.toContain("resume-should-not-inject")
+          expect(baseline).not.toContain(scorecard)
+          expect(baseline).not.toContain(notes)
+        }),
+      ),
+    ),
+  )
+
   it.effect("preserves admitted instructions while observation is unavailable", () =>
     Effect.gen(function* () {
       const failingFS = Layer.effect(
@@ -248,7 +304,7 @@ describe("InstructionContext", () => {
       )
 
       expect(observed).toEqual({
-        targets: ["AGENTS.md"],
+        targets: ["AGENTS.md", path.join(".moks", "req")],
         start: FSUtil.resolve("/repo"),
         stop: FSUtil.resolve("/repo"),
       })

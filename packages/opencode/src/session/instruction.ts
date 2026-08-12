@@ -14,6 +14,9 @@ import { Global } from "@opencode-ai/core/global"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
+const REQ_MATERIAL_NAMES = ["jd.md", "scorecard.md", "notes.md"] as const
+const MAX_INSTRUCTION_CHARS = 32_000
+
 function extract(messages: SessionV1.WithParts[]) {
   const paths = new Set<string>()
   for (const msg of messages) {
@@ -29,6 +32,22 @@ function extract(messages: SessionV1.WithParts[]) {
     }
   }
   return paths
+}
+
+function isReqMaterial(filepath: string) {
+  if (!(REQ_MATERIAL_NAMES as readonly string[]).includes(path.basename(filepath))) return false
+  const dir = path.dirname(filepath)
+  return path.basename(dir) === "req" && path.basename(path.dirname(dir)) === ".moks"
+}
+
+function truncateInstruction(content: string) {
+  if (content.length <= MAX_INSTRUCTION_CHARS) return content
+  return `${content.slice(0, MAX_INSTRUCTION_CHARS)}\n\n[truncated: file exceeds ${MAX_INSTRUCTION_CHARS} characters; use the read tool for full content]`
+}
+
+function formatInstruction(filepath: string, content: string) {
+  const label = isReqMaterial(filepath) ? "Req materials from" : "Instructions from"
+  return `${label}: ${filepath}\n${truncateInstruction(content)}`
 }
 
 export interface Interface {
@@ -149,6 +168,20 @@ const layer: Layer.Layer<
         }
       }
 
+      // Nearest `.moks/req` wins; attach bounded hiring materials (not resume.md by default).
+      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+        const reqDirs = yield* fs
+          .findUp(path.join(".moks", "req"), ctx.directory, ctx.worktree)
+          .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+        const reqDir = reqDirs[0]
+        if (reqDir) {
+          for (const name of REQ_MATERIAL_NAMES) {
+            const file = path.resolve(path.join(reqDir, name))
+            if (yield* fs.existsSafe(file)) paths.add(file)
+          }
+        }
+      }
+
       return paths
     })
 
@@ -163,7 +196,7 @@ const layer: Layer.Layer<
       const remote = yield* Effect.forEach(urls, fetch, { concurrency: 4 })
 
       return [
-        ...Array.from(paths).flatMap((item, i) => (files[i] ? [`Instructions from: ${item}\n${files[i]}`] : [])),
+        ...Array.from(paths).flatMap((item, i) => (files[i] ? [formatInstruction(item, files[i])] : [])),
         ...urls.flatMap((item, i) => (remote[i] ? [`Instructions from: ${item}\n${remote[i]}`] : [])),
       ]
     })

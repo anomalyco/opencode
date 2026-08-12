@@ -439,7 +439,7 @@ describe("plugin.xai", () => {
       expect(parsed.get("scope")).toContain("offline_access")
       expect(parsed.get("scope")).toContain("grok-cli:access")
       expect(parsed.get("scope")).toContain("api:access")
-      expect(parsed.get("referrer")).toBe("opencode")
+      expect(parsed.get("referrer")).toBe("moks")
       await expect(
         requestDeviceCode({ deviceAuthorizationUrl: new URL("/error", server.url).toString() }),
       ).rejects.toThrow(/429.*rate limited/)

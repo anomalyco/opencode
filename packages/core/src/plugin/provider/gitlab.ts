@@ -19,7 +19,7 @@ export const GitLabPlugin = define({
               : (process.env.GITLAB_INSTANCE_URL ?? "https://gitlab.com"),
           apiKey: typeof evt.options.apiKey === "string" ? evt.options.apiKey : process.env.GITLAB_TOKEN,
           aiGatewayHeaders: {
-            "User-Agent": `opencode/${InstallationVersion} gitlab-ai-provider/${mod.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+            "User-Agent": `moks/${InstallationVersion} gitlab-ai-provider/${mod.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
             "anthropic-beta": "context-1m-2025-08-07",
             ...evt.options.aiGatewayHeaders,
           },

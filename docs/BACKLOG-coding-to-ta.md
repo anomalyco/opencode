@@ -103,7 +103,7 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 | **explore** | Yes — `agent/prompt/explore.txt` | Req materials / fixtures / notes (done BL-005) |
 | **compaction / title / summary** | Yes | Session-history / hiring brief / mixed titles (done BL-006) |
 
-**Port implication:** doer + plan + subagents + tips + dual-load project identity are hiring-native. Residual: global app dir (BL-020 parked), req instruction attach (BL-023), provider catalog copy (BL-024).
+**Port implication:** doer + plan + subagents + tips + dual-load + req materials + provider identity headers are hiring-native. Residual: global app dir (BL-020 parked); own models catalog later.
 
 ### Plan mode machinery (shipped G3 — keep; do not rebuild)
 
@@ -153,7 +153,8 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 - **BL-020 global app dir:** **parked** — leave alone until we design migrate/coexistence with installed OpenCode more carefully.
 - **Shipped 2026-08-11 (dictionary wave):** BL-004, BL-007, BL-008, BL-013, BL-015 + verb rename propose→**commit**, apply→**push**.
 - **Shipped 2026-08-11 (helpers + front doors):** BL-005, BL-006, BL-009, BL-010, BL-011, BL-012, BL-014, BL-016.
-- **Shipped 2026-08-11 (tips + dual-load):** BL-003, BL-018, BL-019, BL-021. **Parked:** BL-020. **Still open:** BL-023/024, bash residual.
+- **Shipped 2026-08-11 (tips + dual-load):** BL-003, BL-018, BL-019, BL-021.
+- **Shipped 2026-08-12 (req context + provider identity):** BL-023, BL-024. **Parked:** BL-020.
 
 ---
 
@@ -780,47 +781,24 @@ New hiring plans land under `.moks/plans`.
 
 | | |
 |--|--|
-| **Action** | PORT |
+| **Action** | PORT → **DONE** |
 | **Priority** | P2 |
-| **Decision** | ☐ GO |
-| **Rec** | **GO** for `recruit` |
+| **Decision** | ☑ GO (shipped) |
+| **Rec** | **GO** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-`session/instruction.ts`:
+1. V1 `session/instruction.ts`: nearest `.moks/req` (directory → worktree); attach existing **`jd.md` / `scorecard.md` / `notes.md`**
+2. Labels: `Req materials from:` vs `Instructions from:` for AGENTS
+3. **Keep** AGENTS.md / CLAUDE.md / config.instructions
+4. **Skip** `resume.md` auto-inject (tool-read instead)
+5. Truncate at 32k chars with note to use read tool
+6. V2 twin: `packages/core/src/instruction-context.ts` same materials
+7. Tests: instruction + instruction-context
 
-- Project files: `AGENTS.md`, optional `CLAUDE.md`
-- Global: `~/.config/opencode/AGENTS.md`, `~/.claude/CLAUDE.md`
-- Plus `config.instructions` globs/URLs
+### Acceptance (met)
 
-No first-class load of `.moks/req/*`.
-
-**Note:** `recruit.txt` *tells* the model to read `.moks/req/` via tools — but instruction attachment does not auto-inject those files into system context.
-
-### Coding intent
-
-Repo-level agent constitution for SE work.
-
-### Correct port
-
-| Agent | Instructions |
-|-------|----------------|
-| **`recruit`** | Also treat **`.moks/req/`** (jd, scorecard, notes) as first-class context sources (attach or system paths) |
-| **`build`** | Keep AGENTS.md / CLAUDE.md behavior |
-| Both | `config.instructions` remains escape hatch |
-
-### Wrong-port risks
-
-- Replacing AGENTS.md entirely → users lose workspace-level hiring (or SE) constitution injection.
-- Auto-injecting huge resume PDFs into every turn → context blowups; prefer “discover + attach when relevant” with clear rules.
-
-### Touches
-
-`session/instruction.ts`, system context assembly
-
-### Acceptance
-
-Opening a req folder gives hiring context without a coding AGENTS.md.
+Opening a req folder gives hiring context without a coding AGENTS.md. AGENTS.md still injects workspace norms when present.
 
 ---
 
@@ -828,22 +806,25 @@ Opening a req folder gives hiring context without a coding AGENTS.md.
 
 | | |
 |--|--|
-| **Action** | IDENTITY (copy now; catalog later) |
+| **Action** | IDENTITY (copy now; catalog later) → **DONE** (copy/headers) |
 | **Priority** | P2 |
-| **Decision** | ☐ Copy now &nbsp; ☐ Own catalog post-WAU |
-| **Rec** | **Neutral copy/headers now; own catalog later** |
+| **Decision** | ☑ Copy/headers now (shipped); own catalog post-WAU still open |
+| **Rec** | **Neutral copy/headers now; own catalog later** — headers shipped |
 
-### Current
+### Shipped (implementation)
 
-Defaults and plugins still oriented to `models.opencode.ai`, OpenCode provider plugin, referers `opencode.ai`.
+- User-Agent / HTTP-Referer / X-Title (and related) brand **moks** across core + opencode providers/plugins/tools
+- Referer: `https://github.com/artemysone/moks`; X-Title: `moks`
+- Catalog default URL remains `https://models.opencode.ai` as **third-party list backend** (override via `MOKS_MODELS_URL` / `OPENCODE_MODELS_URL`)
+- Global app dir still `opencode` (BL-020)
 
-### Correct port
+### Residual
 
-Product does not imply moks *is* OpenCode’s model service. Zen/OpenCode remains optional labeled backend.
+Own models catalog / hosting post-WAU if needed. Console package identity out of product path.
 
-### Acceptance
+### Acceptance (met for this wave)
 
-No implied identity between moks and OpenCode model hosting.
+No implied identity that moks *is* OpenCode model hosting in product HTTP headers; catalog may still fetch third-party list.
 
 ---
 
@@ -980,7 +961,7 @@ Use this when reviewing any change:
 | **G4 Subagents** | BL-005 explore, BL-016 general | **Done** |
 | **G1 Session helpers** | BL-003 tips, BL-006 title/summary/compaction | **Done** |
 | **G7 Identity + first impression** | BL-003, BL-018/019/021 | **Done** (BL-020 parked) |
-| **G7 residual** | BL-023, BL-024 | Open |
+| **G7 residual** | BL-023, BL-024 | **Done** (own catalog later residual on 024) |
 | **G8 Later** | BL-017, BL-020, BL-025–030 | Defer / parked |
 
 ---
@@ -998,8 +979,8 @@ Use this when reviewing any change:
 | **G6 residual** | BL-014 | recruit: no lsp; no apply_patch prefer | **Done** |
 | **G7 — Identity + tips** | BL-003, BL-018/019/021 | Tips + dual-load paths/env | **Done** |
 | **Parked** | BL-020 global app dir | Coexist with installed OpenCode — design later | **Parked** |
-| **G7 residual** | BL-023, BL-024 | Req instruction attach; provider catalog copy | Open |
-| **G8 — Later** | BL-017, BL-025–030; bash patterns | Cosmetic, V2, hard-fork, tighter shell | Defer / residual |
+| **G7 residual** | BL-023, BL-024 | Req materials attach; moks provider identity headers | **Done** |
+| **G8 — Later** | BL-017, BL-020, BL-025–030; bash patterns; own models catalog | Cosmetic, V2, hard-fork, catalog | Defer / residual |
 
 ---
 
@@ -1060,11 +1041,13 @@ Mark when decided:
 - [x] **BL-018 shipped** — dual-load moks.json + opencode.json (prefer moks)
 - [x] **BL-019 shipped** — dual-discover `.moks/` + `.opencode/`
 - [x] **BL-021 shipped** — `MOKS_*` primary, `OPENCODE_*` fallback
+- [x] **BL-023 shipped** — `.moks/req` jd/scorecard/notes attach; AGENTS.md kept
+- [x] **BL-024 shipped** — moks UA/Referer/X-Title; catalog URL still third-party models.opencode.ai
 
 ### Open
-- [ ] **BL-023 / BL-024** — req instruction discovery; provider identity copy
 - [ ] **Bash residual** — tighter destructive patterns on recruit (not a numbered BL; residual of BL-015)
 - [ ] **BL-002 residual** — optional delete/port unused `plan-reminder-anthropic.txt`
+- [ ] **Own models catalog** — post-WAU residual of BL-024 if productized hosting is needed
 
 ### Parked
 - [x] **BL-020** — Global app dir rename **left alone** until migrate/coexistence design (2026-08-11)
@@ -1076,6 +1059,7 @@ Mark when decided:
 
 | Date | Note |
 |------|------|
+| 2026-08-12 | **Req context + provider identity:** BL-023/024 shipped; AGENTS kept; resume not auto-injected; moks HTTP identity |
 | 2026-08-11 | **Tips + dual-load:** BL-003/018/019/021 shipped; customize-moks honesty; BL-020 still parked |
 | 2026-08-11 | **Locks:** BL-020 parked; do not dogfood moks-for-coding-moks (use global OpenCode); keep AGENTS.md as workspace inject |
 | 2026-08-11 | **Helpers + front doors:** BL-005/006/009/010/011/012/014/016 shipped; BL-003 tips deferred to P2; HTML companion synced |

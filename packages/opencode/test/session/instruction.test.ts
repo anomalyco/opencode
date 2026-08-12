@@ -246,6 +246,113 @@ describe("Instruction.system", () => {
       )
     }),
   )
+
+  it.live("attaches .moks/req materials without AGENTS.md", () =>
+    withFiles(
+      {
+        ".moks/req/jd.md": "# Job Description",
+        ".moks/req/scorecard.md": "# Scorecard",
+        ".moks/req/notes.md": "# Notes",
+        ".moks/req/resume.md": "# Huge resume should not auto-inject",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const jd = path.join(dir, ".moks", "req", "jd.md")
+          const scorecard = path.join(dir, ".moks", "req", "scorecard.md")
+          const notes = path.join(dir, ".moks", "req", "notes.md")
+          const resume = path.join(dir, ".moks", "req", "resume.md")
+
+          const paths = yield* svc.systemPaths()
+          expect(paths.has(jd)).toBe(true)
+          expect(paths.has(scorecard)).toBe(true)
+          expect(paths.has(notes)).toBe(true)
+          expect(paths.has(resume)).toBe(false)
+          expect(paths.has(path.join(dir, "AGENTS.md"))).toBe(false)
+
+          const rules = yield* svc.system()
+          expect(rules).toContain(`Req materials from: ${jd}\n# Job Description`)
+          expect(rules).toContain(`Req materials from: ${scorecard}\n# Scorecard`)
+          expect(rules).toContain(`Req materials from: ${notes}\n# Notes`)
+          expect(rules.some((rule) => rule.includes("resume"))).toBe(false)
+        }),
+    ),
+  )
+
+  it.live("keeps AGENTS.md alongside req materials", () =>
+    withFiles(
+      {
+        "AGENTS.md": "# Hiring norms",
+        ".moks/req/jd.md": "# JD",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const agents = path.join(dir, "AGENTS.md")
+          const jd = path.join(dir, ".moks", "req", "jd.md")
+
+          const paths = yield* svc.systemPaths()
+          expect(paths.has(agents)).toBe(true)
+          expect(paths.has(jd)).toBe(true)
+
+          const rules = yield* svc.system()
+          expect(rules).toContain(`Instructions from: ${agents}\n# Hiring norms`)
+          expect(rules).toContain(`Req materials from: ${jd}\n# JD`)
+        }),
+    ),
+  )
+
+  it.live("uses nearest .moks/req when walking up from a nested directory", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* writeFiles(dir, {
+        ".moks/req/jd.md": "# Root JD",
+        "nested/.moks/req/jd.md": "# Nested JD",
+        "nested/work/file.txt": "x",
+      })
+      const nested = path.join(dir, "nested", "work")
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(dir, "nested", ".moks", "req", "jd.md"))).toBe(true)
+        expect(paths.has(path.join(dir, ".moks", "req", "jd.md"))).toBe(false)
+      }).pipe(provideInstance(nested), provideInstruction({ home: dir, config: dir }))
+    }),
+  )
+
+  it.live("truncates large req materials and skips empty ones", () =>
+    withFiles(
+      {
+        ".moks/req/jd.md": "J".repeat(32_001),
+        ".moks/req/scorecard.md": "",
+        ".moks/req/notes.md": "# short notes",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const jd = path.join(dir, ".moks", "req", "jd.md")
+          const scorecard = path.join(dir, ".moks", "req", "scorecard.md")
+          const notes = path.join(dir, ".moks", "req", "notes.md")
+
+          const paths = yield* svc.systemPaths()
+          expect(paths.has(jd)).toBe(true)
+          expect(paths.has(scorecard)).toBe(true)
+          expect(paths.has(notes)).toBe(true)
+
+          const rules = yield* svc.system()
+          const jdRule = rules.find((rule) => rule.includes(jd))
+          expect(jdRule).toBeDefined()
+          expect(jdRule!.startsWith(`Req materials from: ${jd}\n`)).toBe(true)
+          expect(jdRule!.includes("[truncated: file exceeds 32000 characters; use the read tool for full content]")).toBe(
+            true,
+          )
+          expect(jdRule!.length).toBeLessThan(32_001 + 200)
+          expect(rules.some((rule) => rule.includes(scorecard))).toBe(false)
+          expect(rules).toContain(`Req materials from: ${notes}\n# short notes`)
+        }),
+    ),
+  )
 })
 
 describe("Instruction.systemPaths global config", () => {
