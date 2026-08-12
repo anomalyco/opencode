@@ -605,7 +605,7 @@ class Interpreter<R> {
   // Enumerable namespace/tool names at a node of the host tool tree, threaded from
   // ToolRuntime.make like invokeTool: the interpreter never holds the tree itself.
   private readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
-  private readonly logs: Array<string>
+  private readonly logs: ConsoleLogCapture
   private lastValue: unknown
   // Caps how many eagerly forked tool calls run at once (the parallel-call concurrency cap).
   private readonly callPermits: Semaphore.Semaphore
@@ -617,7 +617,7 @@ class Interpreter<R> {
   constructor(
     invokeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
     toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>,
-    logs: Array<string> = [],
+    logs: ConsoleLogCapture,
   ) {
     const globalScope = new Map<string, Binding>()
     this.scopes = [globalScope]
@@ -1957,7 +1957,7 @@ class Interpreter<R> {
   private invokeConsole(name: string, args: Array<unknown>, node: AstNode): undefined {
     if (!consoleMethods.has(name))
       throw new InterpreterRuntimeError(`console.${name} is not available in CodeMode.`, node)
-    this.logs.push(publicErrorMessage(this.formatConsoleMessage(name, args, node)))
+    this.logs.add(publicErrorMessage(this.formatConsoleMessage(name, args, node)))
     return undefined
   }
 
@@ -3352,8 +3352,8 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
     searchIndex,
     hooks,
   )
-  const logs: Array<string> = []
-  const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
+  const logs = new ConsoleLogCapture(limits.maxOutputBytes)
+  const logged = () => (logs.lines.length > 0 ? { logs: [...logs.lines] } : {})
 
   if (options.code.trim().length === 0) {
     return Effect.succeed({
@@ -3402,11 +3402,39 @@ export const executeWithLimits = <const Tools extends Record<string, unknown>>(
             toolCalls: tools.calls,
           } satisfies Result),
     ),
-    Effect.map((result) => (limits.maxOutputBytes === undefined ? result : boundOutput(result, limits.maxOutputBytes))),
+    Effect.map((result) =>
+      limits.maxOutputBytes === undefined ? result : boundOutput(result, limits.maxOutputBytes, logs.totalLines),
+    ),
   )
 }
 
 const utf8ByteLength = (value: string): number => new TextEncoder().encode(value).byteLength
+
+class ConsoleLogCapture {
+  readonly lines: Array<string> = []
+  totalLines = 0
+  private retainedBytes = 0
+  private retaining = true
+
+  constructor(private readonly maxBytes: number | undefined) {}
+
+  add(line: string): void {
+    this.totalLines += 1
+    if (!this.retaining) return
+    if (this.maxBytes === undefined) {
+      this.lines.push(line)
+      return
+    }
+
+    const lineBytes = utf8ByteLength(line) + 1
+    if (this.retainedBytes + lineBytes > this.maxBytes) {
+      this.retaining = false
+      return
+    }
+    this.retainedBytes += lineBytes
+    this.lines.push(line)
+  }
+}
 
 // Truncates to a UTF-8 byte budget without splitting a code point (a split multi-byte
 // sequence decodes to a replacement character, which is dropped).
@@ -3424,7 +3452,7 @@ const utf8Truncate = (value: string, maxBytes: number): string => {
  * fails the execution; `truncated: true` marks affected results. Only runs when the host set
  * `maxOutputBytes` - with the limit absent, output passes through unbounded.
  */
-const boundOutput = (result: Result, maxOutputBytes: number): Result => {
+const boundOutput = (result: Result, maxOutputBytes: number, totalLogLines: number): Result => {
   let truncated = false
 
   let value: DataValue = null
@@ -3452,9 +3480,9 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
     logBytes += lineBytes
     kept.push(line)
   }
-  if (kept.length < logs.length) {
+  if (kept.length < totalLogLines) {
     truncated = true
-    kept.push(`[logs truncated: showing ${kept.length} of ${logs.length} lines]`)
+    kept.push(`[logs truncated: showing ${kept.length} of ${totalLogLines} lines]`)
   }
 
   if (!truncated) return result
