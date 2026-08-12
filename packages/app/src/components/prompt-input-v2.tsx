@@ -55,6 +55,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
+  const settings = useSettings()
 
   return (
     <div class="flex flex-col gap-3">
@@ -65,7 +66,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         variantControlVisible={!props.controller.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
-        voiceInput={props.controller.voiceInput}
+        voiceInput={settings.voice.enabled() ? props.controller.voiceInput : undefined}
         modelControl={
           <PromptInputV2ModelControl
             loading={props.controller.model.loading}

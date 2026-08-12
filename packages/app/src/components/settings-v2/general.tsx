@@ -298,6 +298,15 @@ const VoiceInputSection: Component = () => {
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.voice")}</h3>
       <SettingsListV2>
         <SettingsRowV2
+          title={language.t("settings.general.row.voiceEnabled.title")}
+          description={language.t("settings.general.row.voiceEnabled.description")}
+        >
+          <Switch
+            checked={settings.voice.enabled()}
+            onChange={(enabled) => settings.voice.setEnabled(enabled)}
+          />
+        </SettingsRowV2>
+        <SettingsRowV2
           title={language.t("settings.general.row.voiceProvider.title")}
           description={language.t("settings.general.row.voiceProvider.description")}
         >

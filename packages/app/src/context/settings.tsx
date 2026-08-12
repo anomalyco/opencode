@@ -56,6 +56,7 @@ export interface Settings {
   notifications: NotificationSettings
   sounds: SoundSettings
   voice: {
+    enabled: boolean
     provider: string
     model: string
     language: TranscriptionLanguage
@@ -228,6 +229,7 @@ const defaultSettings: Settings = {
     errors: "nope-03",
   },
   voice: {
+    enabled: false,
     provider: "local",
     model: "medium",
     language: "en",
@@ -556,6 +558,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       voice: {
+        enabled: withFallback(() => store.voice?.enabled, defaultSettings.voice.enabled),
+        setEnabled(value: boolean) {
+          setStore("voice", "enabled", value)
+        },
         provider: withFallback(() => store.voice?.provider, defaultSettings.voice.provider),
         setProvider(value: string) {
           setStore("voice", "provider", value)

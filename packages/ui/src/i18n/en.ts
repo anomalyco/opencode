@@ -144,6 +144,8 @@ export const dict: Record<string, string> = {
   "ui.promptInput.voice.error": "Voice input is unavailable.",
   "ui.promptInput.voice.unsupported": "Voice input requires HTTPS and microphone access.",
   "settings.general.section.voice": "Voice input",
+  "settings.general.row.voiceEnabled.title": "Enable voice input",
+  "settings.general.row.voiceEnabled.description": "Show the voice input button and enable audio transcription.",
   "settings.general.row.voiceProvider.title": "Transcription provider",
   "settings.general.row.voiceProvider.description": "Provider used to convert voice messages to text.",
   "settings.general.row.voiceProvider.local": "Local Whisper",
