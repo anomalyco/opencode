@@ -5,6 +5,7 @@ import {
   MouseEvent,
   PasteEvent,
   decodePasteBytes,
+  type ColorInput,
   type KeyEvent,
 } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
@@ -105,6 +106,22 @@ function randomIndex(count: number) {
 
 function fadeColor(color: RGBA, alpha: number) {
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
+}
+
+export function PromptInterruptStatus(props: {
+  armed: boolean
+  text: ColorInput
+  subdued: ColorInput
+  warning: ColorInput
+}) {
+  return (
+    <text fg={props.armed ? props.warning : props.text} wrapMode="none" truncate flexShrink={1}>
+      esc{" "}
+      <span style={{ fg: props.armed ? props.warning : props.subdued }}>
+        {props.armed ? "again to interrupt" : "interrupt"}
+      </span>
+    </text>
+  )
 }
 
 function hasEditorRangeSelection(selection: EditorSelection["ranges"][number]) {
@@ -1804,21 +1821,12 @@ export function Prompt(props: PromptProps) {
                           <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                         </Show>
                       </box>
-                      <text
-                        fg={store.interrupt > 0 ? theme.background.action.primary.default : theme.text.default}
-                        wrapMode="none"
-                        truncate
-                        flexShrink={1}
-                      >
-                        esc{" "}
-                        <span
-                          style={{
-                            fg: store.interrupt > 0 ? theme.background.action.primary.default : theme.text.subdued,
-                          }}
-                        >
-                          {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                        </span>
-                      </text>
+                      <PromptInterruptStatus
+                        armed={store.interrupt > 0}
+                        text={theme.text.default}
+                        subdued={theme.text.subdued}
+                        warning={theme.text.feedback.warning.default}
+                      />
                     </box>
                   </Match>
                   <Match when={move.progress()}>
