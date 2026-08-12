@@ -40,7 +40,7 @@ export interface DiagramCanvasRunOptions<Style extends string, Metadata extends 
   trimBottom?: boolean
 }
 
-const MAX_DIAGRAM_CELLS = 1_000_000
+const MAX_DIAGRAM_CELLS = 250_000
 
 export class DiagramCanvasSizeError extends Error {
   constructor(
@@ -122,7 +122,6 @@ export class DiagramCanvas<Style extends string, Metadata extends object = objec
     merge: boolean,
   ): void {
     if (y < 0 || y >= this.cells.length || x < 0 || x >= this.cells[y]!.length) return
-
     const incoming = { char, style, ...metadata } as DiagramCanvasCell<Style, Metadata>
     const cell = merge ? (this.mergeCell?.(this.cells[y]![x]!, incoming) ?? incoming) : incoming
     this.cells[y]![x] = cell
@@ -151,6 +150,10 @@ export class DiagramCanvas<Style extends string, Metadata extends object = objec
     let offset = 0
     for (const grapheme of diagramTextGraphemes(text)) {
       const width = Math.max(1, this.measure(grapheme))
+      if (x + offset < 0 || x + offset + width > this.width) {
+        offset += width
+        continue
+      }
       this.setCell(x + offset, y, grapheme, style, metadataAt(x + offset))
       for (let continuation = 1; continuation < width; continuation++) {
         this.setCell(x + offset + continuation, y, "", style, metadataAt(x + offset + continuation))

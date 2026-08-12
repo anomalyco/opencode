@@ -23,6 +23,7 @@ const ELSE_RE = /^else(?:\s+(.+))?$/i
 const LOOP_RE = /^loop\s+(.+)$/i
 const AUTONUMBER_RE = /^autonumber(?:\s+(\d+)(?:\s+(\d+))?)?$/i
 const UNSUPPORTED_BIDIRECTIONAL_MESSAGE_RE = /<<-{1,2}>>/
+const MESSAGE_OPERATOR_RE = /-->>|->>|--x|-x|--\)|-\)|-->|->/
 const CSS_COLOR_NAMES = new Set([
   "black",
   "white",
@@ -237,6 +238,9 @@ export function parseMermaidSequenceDiagram(content: string): SequenceDiagram {
       const arrow = messageMatch[2]!
       const activationMarker = messageMatch[3]!
       const to = stripQuotes(messageMatch[4]!)
+      if (MESSAGE_OPERATOR_RE.test(from) || MESSAGE_OPERATOR_RE.test(to)) {
+        throw new MermaidSyntaxError("sequence", source.lineNumber, line)
+      }
       const message: SequenceMessage = {
         from,
         to,

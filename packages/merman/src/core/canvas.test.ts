@@ -4,7 +4,7 @@ import { DiagramCanvas, DiagramCanvasSizeError, type DiagramCanvasCell } from ".
 
 describe("DiagramCanvas", () => {
   test("rejects canvases that exceed the rendering budget", () => {
-    expect(() => new DiagramCanvas(2_000, 1_000)).toThrow(DiagramCanvasSizeError)
+    expect(() => new DiagramCanvas(1_000, 251)).toThrow(DiagramCanvasSizeError)
   })
 
   test("rejects invalid canvas dimensions", () => {
@@ -36,6 +36,12 @@ describe("DiagramCanvas", () => {
 
     expect(canvas.toString()).toBe("a界b")
     expect(stringWidth(canvas.toString())).toBe(4)
+  })
+
+  test("does not emit partial wide graphemes", () => {
+    const clipped = new DiagramCanvas<"label">(1, 1)
+    clipped.setText(0, 0, "界", "label")
+    expect(clipped.toString()).toBe("")
   })
 
   test("keeps custom measurement for ASCII text", () => {

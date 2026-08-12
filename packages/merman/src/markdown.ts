@@ -37,6 +37,8 @@ interface PreparedDiagram {
 
 export interface MermaidMarkdownRendererOptions {
   compact?: boolean
+  /** Fold horizontal flowcharts that exceed this width. Defaults to 120 columns. */
+  layoutMaxWidth?: number
   colors?: {
     text?: ColorInput
     primary?: ColorInput
@@ -101,11 +103,19 @@ class StaticDiagramRenderable extends TextRenderable {
   }
 }
 
-function prepareDiagram(kind: DiagramKind, source: string, options: MermaidMarkdownRendererOptions): PreparedDiagram {
+function prepareDiagram(
+  kind: DiagramKind,
+  source: string,
+  options: MermaidMarkdownRendererOptions,
+  layoutMaxWidth: number,
+): PreparedDiagram {
   const colors = options.colors ?? {}
   switch (kind) {
     case "flowchart": {
-      const grid = drawFlowchartDiagramGrid(parseMermaidFlowchartDiagram(source), { compact: options.compact })
+      const grid = drawFlowchartDiagramGrid(parseMermaidFlowchartDiagram(source), {
+        compact: options.compact,
+        layoutMaxWidth,
+      })
       const size = grid.getTextSize({ trimTop: true, trimBottom: true })
       return {
         kind,
@@ -192,9 +202,11 @@ export function createMermaidCodeBlockRenderer(
     // OpenTUI's default block ID is the stable identity available for this fence across streaming updates.
     const key = context.defaultRender()?.id
     const options = typeof input === "function" ? input() : input
+    const configuredMaxWidth = options.layoutMaxWidth === undefined ? 120 : Math.max(1, Math.trunc(options.layoutMaxWidth))
+    const layoutMaxWidth = Math.min(configuredMaxWidth, Math.max(1, Math.trunc(ctx.width)))
 
     try {
-      const prepared = prepareDiagram(kind, token.text, options)
+      const prepared = prepareDiagram(kind, token.text, options, layoutMaxWidth)
       const diagram = new StaticDiagramRenderable(ctx, prepared)
       if (key) claimLastGood(key, prepared, diagram, lastGood)
       return diagram
